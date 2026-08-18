@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "product": {
     "id": "vakint",
     "title": "Vakint"
@@ -51,7 +51,7 @@
               "body": "Parses a Symbolica expression using Vakint's namespace by default or a caller-supplied namespace."
             },
             "summary": "Parses a Symbolica expression using Vakint's namespace by default or a caller-supplied namespace.",
-            "signature": "#[macro_export] macro_rules! vakint_parse\n{\n    ($s: expr) =>\n    {{ symbolica::try_parse!($s, default_namespace = $crate::NAMESPACE) }};\n    ($s: expr, $ns: expr) =>\n    {{ symbolica::try_parse!($s, default_namespace = $ns) }};\n}",
+            "signature": "macro_rules! vakint_parse { … }",
             "since": null,
             "keywords": [],
             "params": [],
@@ -83,7 +83,7 @@
               "body": "Resolves a symbol name in Vakint's namespace while preserving an explicit namespace."
             },
             "summary": "Resolves a symbol name in Vakint's namespace while preserving an explicit namespace.",
-            "signature": "#[macro_export] macro_rules! vakint_symbol\n{\n    ($s: expr) =>\n    {{\n            if\n            format!(\"{}\",\n            $s).starts_with(format!(\"{}::\", $crate::NAMESPACE).as_str())\n            {\n                match symbolica::try_parse!($s)\n                {\n                    Ok::<_, String>(a) => match a\n                    {\n                        symbolica::atom::Atom::Var(sym) => sym.get_symbol(), _ =>\n                        panic!(\"Parsed atom is not a symbol: {}.\", $s),\n                    }, Err(e) =>\n                    panic!(\"Could not parse symbol from string: {}, Error: {}\",\n                    $s, e),\n                }\n            } else\n            {\n                match\n                symbolica::try_parse!(format!(\"{}\", $s), default_namespace =\n                $crate::NAMESPACE)\n                {\n                    Ok::<_, String>(a) => match a\n                    {\n                        symbolica::atom::Atom::Var(sym) => sym.get_symbol(), _ =>\n                        panic!(\"Parsed atom is not a symbol: {}.\", $s),\n                    }, Err(e) =>\n                    panic!(\"Could not parse symbol from string: {}, Error: {}\",\n                    $s, e),\n                }\n            }\n        }};\n}",
+            "signature": "macro_rules! vakint_symbol { … }",
             "since": null,
             "keywords": [],
             "params": [],
@@ -115,7 +115,7 @@
               "body": "Owns supported topology matching, canonicalization, reduction, and evaluation operations."
             },
             "summary": "Owns supported topology matching, canonicalization, reduction, and evaluation operations.",
-            "signature": "#[derive(Debug, Clone)] pub struct Vakint { pub topologies : Topologies, }",
+            "signature": "pub struct Vakint {}",
             "since": null,
             "keywords": [],
             "params": [],
@@ -131,7 +131,10 @@
               {
                 "name": "topologies",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Supported topology registry used for matching, canonicalization, and evaluation."
+                },
                 "signature": "Topologies",
                 "default": null,
                 "members": []
@@ -140,7 +143,7 @@
             "source": {
               "identifier": "vakint::Vakint",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2192,
+              "line": 2209,
               "column": 1
             }
           },
@@ -156,7 +159,7 @@
               "body": "Controls symbols, precision, normalization, external tools, and backend evaluation order."
             },
             "summary": "Controls symbols, precision, normalization, external tools, and backend evaluation order.",
-            "signature": "#[derive(Debug, Clone)] pub struct VakintSettings\n{\n    #[allow(unused)] pub epsilon_symbol : String, pub mu_r_sq_symbol : String,\n    pub form_exe_path : String, pub python_exe_path : String, pub\n    verify_numerator_identification : bool, pub integral_normalization_factor\n    : LoopNormalizationFactor, pub run_time_decimal_precision : u32, pub\n    allow_unknown_integrals : bool, pub clean_tmp_dir : bool, pub\n    evaluation_order : EvaluationOrder, pub\n    number_of_terms_in_epsilon_expansion : i64, pub\n    precision_for_input_float_rationalization :\n    InputFloatRationalizationPrecision, pub use_dot_product_notation : bool,\n    pub temporary_directory : Option < String > ,\n}",
+            "signature": "pub struct VakintSettings {}",
             "since": null,
             "keywords": [],
             "params": [],
@@ -172,7 +175,10 @@
               {
                 "name": "epsilon_symbol",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Symbol used for the dimensional-regularization parameter epsilon."
+                },
                 "signature": "String",
                 "default": null,
                 "members": []
@@ -180,7 +186,10 @@
               {
                 "name": "mu_r_sq_symbol",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Symbol used for the squared renormalization scale."
+                },
                 "signature": "String",
                 "default": null,
                 "members": []
@@ -188,7 +197,10 @@
               {
                 "name": "form_exe_path",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Executable name or path used to invoke FORM."
+                },
                 "signature": "String",
                 "default": null,
                 "members": []
@@ -196,7 +208,10 @@
               {
                 "name": "python_exe_path",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Executable name or path used to invoke Python-based backends."
+                },
                 "signature": "String",
                 "default": null,
                 "members": []
@@ -204,7 +219,10 @@
               {
                 "name": "verify_numerator_identification",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Whether canonicalization must account for every numerator factor."
+                },
                 "signature": "bool",
                 "default": null,
                 "members": []
@@ -212,7 +230,10 @@
               {
                 "name": "integral_normalization_factor",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Per-loop normalization convention applied to evaluated integrals."
+                },
                 "signature": "LoopNormalizationFactor",
                 "default": null,
                 "members": []
@@ -220,7 +241,10 @@
               {
                 "name": "run_time_decimal_precision",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Requested decimal precision passed to numerical backends and conversions."
+                },
                 "signature": "u32",
                 "default": null,
                 "members": []
@@ -228,7 +252,10 @@
               {
                 "name": "allow_unknown_integrals",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Whether inputs may match Vakint's generic unknown-integral topology."
+                },
                 "signature": "bool",
                 "default": null,
                 "members": []
@@ -236,7 +263,10 @@
               {
                 "name": "clean_tmp_dir",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Whether successful external-backend runs remove their temporary directories."
+                },
                 "signature": "bool",
                 "default": null,
                 "members": []
@@ -244,7 +274,10 @@
               {
                 "name": "evaluation_order",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Ordered analytic and numerical backends considered for each integral."
+                },
                 "signature": "EvaluationOrder",
                 "default": null,
                 "members": []
@@ -252,7 +285,10 @@
               {
                 "name": "number_of_terms_in_epsilon_expansion",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Number of terms retained in the dimensional-regulator expansion."
+                },
                 "signature": "i64",
                 "default": null,
                 "members": []
@@ -260,7 +296,10 @@
               {
                 "name": "precision_for_input_float_rationalization",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Precision policy used when rationalizing floating-point input for FORM."
+                },
                 "signature": "InputFloatRationalizationPrecision",
                 "default": null,
                 "members": []
@@ -268,7 +307,10 @@
               {
                 "name": "use_dot_product_notation",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Whether reduced scalar products remain in dot-product notation."
+                },
                 "signature": "bool",
                 "default": null,
                 "members": []
@@ -276,7 +318,10 @@
               {
                 "name": "temporary_directory",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Optional parent directory for uniquely named external-backend work directories."
+                },
                 "signature": "Option < String >",
                 "default": null,
                 "members": []
@@ -285,7 +330,7 @@
             "source": {
               "identifier": "vakint::VakintSettings",
               "file": "crates/vakint/src/lib.rs",
-              "line": 1937,
+              "line": 1940,
               "column": 1
             }
           },
@@ -301,7 +346,7 @@
               "body": "Stores a sum of matched vacuum-integral terms with separate numerators."
             },
             "summary": "Stores a sum of matched vacuum-integral terms with separate numerators.",
-            "signature": "#[derive(Debug, Clone, PartialEq, Eq)] pub struct\nVakintExpression(pub Vec < VakintTerm >);",
+            "signature": "pub struct VakintExpression();",
             "since": null,
             "keywords": [],
             "params": [],
@@ -317,7 +362,10 @@
               {
                 "name": "0",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Expression terms, each separating a matched integral from its numerator."
+                },
                 "signature": "Vec < VakintTerm >",
                 "default": null,
                 "members": []
@@ -326,7 +374,7 @@
             "source": {
               "identifier": "vakint::VakintExpression",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2581,
+              "line": 2599,
               "column": 1
             }
           },
@@ -342,7 +390,7 @@
               "body": "Defines the ordered analytic and numerical backends available to an evaluation."
             },
             "summary": "Defines the ordered analytic and numerical backends available to an evaluation.",
-            "signature": "#[derive(Debug, Clone)] pub struct\nEvaluationOrder(pub Vec < EvaluationMethod >);",
+            "signature": "pub struct EvaluationOrder();",
             "since": null,
             "keywords": [],
             "params": [],
@@ -358,7 +406,10 @@
               {
                 "name": "0",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Evaluation backends tried in order until one supports the requested integral."
+                },
                 "signature": "Vec < EvaluationMethod >",
                 "default": null,
                 "members": []
@@ -431,7 +482,7 @@
             "source": {
               "identifier": "vakint::VakintExpression::canonicalize",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2629,
+              "line": 2650,
               "column": 1
             }
           },
@@ -488,7 +539,7 @@
             "source": {
               "identifier": "vakint::VakintExpression::tensor_reduce",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2651,
+              "line": 2672,
               "column": 1
             }
           },
@@ -545,7 +596,7 @@
             "source": {
               "identifier": "vakint::VakintExpression::evaluate_integral",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2662,
+              "line": 2683,
               "column": 1
             }
           },
@@ -561,7 +612,7 @@
               "body": "Stores numerical Laurent coefficients by power of the dimensional regulator."
             },
             "summary": "Stores numerical Laurent coefficients by power of the dimensional regulator.",
-            "signature": "#[derive(Debug, Clone, Default)] pub struct\nNumericalEvaluationResult(pub Vec < (i64, Complex < Float >) >);",
+            "signature": "pub struct NumericalEvaluationResult();",
             "since": null,
             "keywords": [],
             "params": [],
@@ -577,7 +628,10 @@
               {
                 "name": "0",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Laurent coefficients stored as `(epsilon power, complex coefficient)` pairs."
+                },
                 "signature": "Vec < (i64, Complex < Float >) >",
                 "default": null,
                 "members": []
@@ -586,7 +640,7 @@
             "source": {
               "identifier": "vakint::NumericalEvaluationResult",
               "file": "crates/vakint/src/lib.rs",
-              "line": 2746,
+              "line": 2767,
               "column": 1
             }
           }

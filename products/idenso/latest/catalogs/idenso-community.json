@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "product": {
     "id": "idenso",
     "title": "Idenso"
@@ -57,13 +57,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.idenso import cook_function\nhelp(cook_function)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "idenso-community::cook_function",
@@ -84,7 +78,7 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Convert complex nested index structures into flattened symbolic names.\n\nTransforms hierarchical index expressions within tensor function arguments\ninto simplified, flat symbolic representations. This \"cooking\" process is\nessential for pattern matching, simplification, and computational efficiency\nwhen dealing with complex tensor expressions.\n\n**Index Cooking Transformation:**\n- Nested structure: `mink(4, f(g(h(μ))))` → `mink(4, f_g_h_mu)`\n- Function chains: `lorentz(up(mu))` → `lorentz(up_mu)`\n- Complex arguments: `tensor(rep(dim,type(idx)))` → `tensor(rep(dim,type_idx))`\n\n**Scope:**\n- Only affects indices appearing as function arguments\n- Preserves top-level function structure\n# Arguments\n- `self_`: expression containing complex nested index structures\n\n# Returns\nExpression with flattened, simplified index names.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import TensorName, Slot, Representation\nimport symbolica as sp\nfrom symbolica.community.idenso import wrap_indices, cook_indices\n\nT = TensorName(\"T\")\nrep = Representation.euc(3)\n# With slots (creates TensorIndices)\nmu = rep(\"mu\")\nnu = rep(\"nu\")\nx = sp.S(\"x\")\ntensor_with_args = T(mu, nu, x)  # T(mu, nu; x)\nprint(tensor_with_args)\nprint(\ncook_indices(wrap_indices(tensor_with_args.to_expression(), sp.S(\"wrap\")))\n)\n```"
+              "body": "Convert complex nested index structures into flattened symbolic names.\n\nTransforms hierarchical index expressions within tensor function arguments\ninto simplified, flat symbolic representations. This \"cooking\" process is\nessential for pattern matching, simplification, and computational efficiency\nwhen dealing with complex tensor expressions.\n\n**Index Cooking Transformation:**\n- Nested structure: `mink(4, f(g(h(μ))))` → `mink(4, f_g_h_mu)`\n- Function chains: `lorentz(up(mu))` → `lorentz(up_mu)`\n- Complex arguments: `tensor(rep(dim,type(idx)))` → `tensor(rep(dim,type_idx))`\n\n**Scope:**\n- Only affects indices appearing as function arguments\n- Preserves top-level function structure\n# Arguments\n- `self_`: expression containing complex nested index structures\n\n# Returns\nExpression with flattened, simplified index names.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import TensorName, Slot, Representation\nimport symbolica as sp\nfrom symbolica.community.idenso import wrap_indices, cook_indices\n\nT = TensorName(\"T\")\nrep = Representation.euc(3)\n# With slots (creates TensorIndices)\nmu = rep(\"mu\")\nnu = rep(\"nu\")\nx = sp.S(\"x\")\ntensor_with_args = T(mu, nu, x)  # T(mu, nu; x)\nprint(tensor_with_args)\nprint(\n    cook_indices(wrap_indices(tensor_with_args.to_expression(), sp.S(\"wrap\")))\n)\n```"
             },
             "summary": "Convert complex nested index structures into flattened symbolic names.",
             "signature": "def cook_indices(self_: Expression) -> Expression:",
@@ -92,13 +86,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.idenso import cook_indices\nhelp(cook_indices)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "idenso-community::cook_indices",
@@ -127,13 +115,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.idenso import dirac_adjoint\nhelp(dirac_adjoint)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "idenso-community::dirac_adjoint",
@@ -162,13 +144,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.idenso import expand_bis\nhelp(expand_bis)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "idenso-community::expand_bis",
@@ -197,13 +173,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.idenso import expand_color\nhelp(expand_color)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "idenso-community::expand_color",
@@ -232,13 +202,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.idenso import expand_metrics\nhelp(expand_metrics)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "idenso-community::expand_metrics",
@@ -267,13 +231,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.idenso import expand_mink\nhelp(expand_mink)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "idenso-community::expand_mink",
@@ -302,13 +260,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.idenso import expand_mink_bis\nhelp(expand_mink_bis)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "idenso-community::expand_mink_bis",
@@ -337,13 +289,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.idenso import initialize\nhelp(initialize)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "idenso-community::initialize",
@@ -364,21 +310,15 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Lists the dangling (external, uncontracted) indices present in the expression.\n\nIdentifies and returns all indices that are not summed over (i.e., not dummy\nindices). These are the \"free\" indices that appear in the final result and\ndetermine the tensor rank of the expression. For dualizable representations,\ndownstairs indices are represented wrapped in `dind(...)`.\n\nThis is essential for:\n- Verifying index conservation in tensor equations\n- Determining the rank and structure of tensor expressions\n- Debugging index contractions\n\n# Arguments\n- `self_`: tensor expression to analyze\n\n# Returns\nA list of expressions, each representing a free (dangling) index.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import TensorName, Slot, Representation\nimport symbolica as sp\nfrom symbolica.community.idenso import (\nlist_dangling,\n)\n\nT = TensorName(\"T\")\nrep = Representation.euc(3)\n# With slots (creates TensorIndices)\nmu = rep(\"mu\")\nnu = rep(\"nu\")\nx = sp.S(\"x\")\ntensor_with_args = T(mu, nu, nu, x)  # T(mu, nu; x)\n# print(tensor_with_args)\nprint(list_dangling(tensor_with_args.to_expression()))\n```"
+              "body": "Lists the dangling (external, uncontracted) indices present in the expression.\n\nIdentifies and returns all indices that are not summed over (i.e., not dummy\nindices). These are the \"free\" indices that appear in the final result and\ndetermine the tensor rank of the expression. For dualizable representations,\ndownstairs indices are represented wrapped in `dind(...)`.\n\nThis is essential for:\n- Verifying index conservation in tensor equations\n- Determining the rank and structure of tensor expressions\n- Debugging index contractions\n\n# Arguments\n- `self_`: tensor expression to analyze\n\n# Returns\nA list of expressions, each representing a free (dangling) index.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import TensorName, Slot, Representation\nimport symbolica as sp\nfrom symbolica.community.idenso import (\n    list_dangling,\n)\n\nT = TensorName(\"T\")\nrep = Representation.euc(3)\n# With slots (creates TensorIndices)\nmu = rep(\"mu\")\nnu = rep(\"nu\")\nx = sp.S(\"x\")\ntensor_with_args = T(mu, nu, nu, x)  # T(mu, nu; x)\n# print(tensor_with_args)\nprint(list_dangling(tensor_with_args.to_expression()))\n```"
             },
             "summary": "Lists the dangling (external, uncontracted) indices present in the expression.",
-            "signature": "def list_dangling(self_: Expression) -> builtins.list[Expression]:",
+            "signature": "def list_dangling(self_: Expression) -> list[Expression]:",
             "since": null,
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.idenso import list_dangling\nhelp(list_dangling)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "idenso-community::list_dangling",
@@ -407,13 +347,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.idenso import simplify_color\nhelp(simplify_color)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "idenso-community::simplify_color",
@@ -442,13 +376,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.idenso import simplify_gamma\nhelp(simplify_gamma)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "idenso-community::simplify_gamma",
@@ -477,13 +405,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.idenso import simplify_metrics\nhelp(simplify_metrics)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "idenso-community::simplify_metrics",
@@ -512,13 +434,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.idenso import to_dots\nhelp(to_dots)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "idenso-community::to_dots",
@@ -547,13 +463,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.idenso import wrap_dummies\nhelp(wrap_dummies)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "idenso-community::wrap_dummies",
@@ -582,13 +492,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.idenso import wrap_indices\nhelp(wrap_indices)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "idenso-community::wrap_indices",

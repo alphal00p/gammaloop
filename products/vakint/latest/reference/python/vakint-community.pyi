@@ -22,7 +22,7 @@ class Vakint:
         vakint = Vakint(
             integral_normalization_factor="MSbar",
             mu_r_sq_symbol=S("mursq"),
-            # If you select 5 terms, then MATAD will be used, but for 4 and fewer, alphaLoop is will be used as
+            # If you select 5 terms, then MATAD will be used, but for 4 and fewer, alphaLoop will be used as
             # it is first in the evaluation_order supplied.
             number_of_terms_in_epsilon_expansion=4,
             evaluation_order=[

@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "product": {
     "id": "gammaloop",
     "title": "GammaLoop"
@@ -53,7 +53,7 @@
               "body": "Selects the state folder, boot commands, settings overrides, logging, and read-only mode."
             },
             "summary": "Selects the state folder, boot commands, settings overrides, logging, and read-only mode.",
-            "signature": "#[derive(Debug, Clone, PartialEq, Default)] pub struct StateLoadOption\n{\n    pub clean_state : bool, pub boot_commands_path : Option < PathBuf > , pub\n    state_folder : Option < PathBuf > , pub model_file : Option < PathBuf > ,\n    pub trace_logs_filename : Option < String > , pub level : Option <\n    LogLevel > , pub logfile_level : Option < LogLevel > , pub logging_prefix\n    : Option < LogFormat > , pub read_only_state : bool, pub\n    settings_global_path : Option < PathBuf > , pub\n    settings_runtime_defaults_path : Option < PathBuf > ,\n}",
+            "signature": "pub struct StateLoadOption {}",
             "since": null,
             "keywords": [],
             "params": [],
@@ -69,7 +69,10 @@
               {
                 "name": "clean_state",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Remove the resolved state folder before loading so the session starts from a blank state."
+                },
                 "signature": "bool",
                 "default": null,
                 "members": []
@@ -77,7 +80,10 @@
               {
                 "name": "boot_commands_path",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Optional run card whose settings and commands are applied during boot."
+                },
                 "signature": "Option < PathBuf >",
                 "default": null,
                 "members": []
@@ -85,7 +91,10 @@
               {
                 "name": "state_folder",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "State folder to load, defaulting to `./gammaloop_state` when omitted."
+                },
                 "signature": "Option < PathBuf >",
                 "default": null,
                 "members": []
@@ -93,7 +102,10 @@
               {
                 "name": "model_file",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Optional model file that replaces the saved model when loading an existing state."
+                },
                 "signature": "Option < PathBuf >",
                 "default": null,
                 "members": []
@@ -101,7 +113,10 @@
               {
                 "name": "trace_logs_filename",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Optional trace-log filename for the loaded session."
+                },
                 "signature": "Option < String >",
                 "default": null,
                 "members": []
@@ -109,7 +124,10 @@
               {
                 "name": "level",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Terminal log-level override for the loaded session."
+                },
                 "signature": "Option < LogLevel >",
                 "default": null,
                 "members": []
@@ -117,7 +135,10 @@
               {
                 "name": "logfile_level",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "File log-level override for the loaded session."
+                },
                 "signature": "Option < LogLevel >",
                 "default": null,
                 "members": []
@@ -125,7 +146,10 @@
               {
                 "name": "logging_prefix",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Prefix format used for emitted log records."
+                },
                 "signature": "Option < LogFormat >",
                 "default": null,
                 "members": []
@@ -133,7 +157,10 @@
               {
                 "name": "read_only_state",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Prevent writes inside the active state folder for the lifetime of the session."
+                },
                 "signature": "bool",
                 "default": null,
                 "members": []
@@ -141,7 +168,10 @@
               {
                 "name": "settings_global_path",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Optional TOML file whose global settings override the state or boot card."
+                },
                 "signature": "Option < PathBuf >",
                 "default": null,
                 "members": []
@@ -149,7 +179,10 @@
               {
                 "name": "settings_runtime_defaults_path",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Optional TOML file supplying the session's default runtime settings."
+                },
                 "signature": "Option < PathBuf >",
                 "default": null,
                 "members": []
@@ -158,7 +191,106 @@
             "source": {
               "identifier": "gammaloop_api::StateLoadOption",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 469,
+              "line": 470,
+              "column": 1
+            }
+          },
+          "LoadedState": {
+            "id": "LoadedState",
+            "name": "LoadedState",
+            "title": "Loaded GammaLoop state",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Owns the physics state, run history, settings, and session state returned by the loading facade."
+            },
+            "summary": "Owns the physics state, run history, settings, and session state returned by the loading facade.",
+            "signature": "pub struct LoadedState {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammaloop_api::LoadedState;"
+              }
+            ],
+            "members": [
+              {
+                "name": "state",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "In-memory model, processes, integrands, and generation metadata."
+                },
+                "signature": "State",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "run_history",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Persisted or boot-provided settings and replayable commands."
+                },
+                "signature": "RunHistory",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "cli_settings",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Effective state, global, and transient session settings after startup overrides."
+                },
+                "signature": "CLISettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "default_runtime_settings",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Runtime settings used as defaults for commands that do not supply their own."
+                },
+                "signature": "RuntimeSettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "session_state",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Transient command-block state retained between session operations."
+                },
+                "signature": "CliSessionState",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "state_load_summary",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Load timing, serialized size, and graph count for an existing saved state."
+                },
+                "signature": "Option < StateLoadSummary >",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop_api::LoadedState",
+              "file": "crates/gammaloop-api/src/lib.rs",
+              "line": 495,
               "column": 1
             }
           },
@@ -201,7 +333,7 @@
             "source": {
               "identifier": "gammaloop_api::StateLoadOption::load",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 536,
+              "line": 554,
               "column": 1
             }
           },
@@ -237,14 +369,1886 @@
               {
                 "title": "Supported usage",
                 "language": "rust",
-                "code": "let mut loaded = gammaloop_api::StateLoadOption::default().load()?; let session = loaded.cli_session();"
+                "code": "fn open_session(loaded: &mut gammaloop_api::LoadedState) -> gammaloop_api::session::CliSession<'_> { loaded.cli_session() }"
               }
             ],
             "members": [],
             "source": {
               "identifier": "gammaloop_api::LoadedState::cli_session",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 493,
+              "line": 511,
+              "column": 1
+            }
+          },
+          "CliSession": {
+            "id": "CliSession",
+            "name": "CliSession",
+            "title": "Command session",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Borrows a loaded state's coordinated state, history, settings, and transient session data."
+            },
+            "summary": "Borrows a loaded state's coordinated state, history, settings, and transient session data.",
+            "signature": "pub struct CliSession < 'a > {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammaloop_api::session::CliSession;"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop_api::session::CliSession",
+              "file": "crates/gammaloop-api/src/session.rs",
+              "line": 93,
+              "column": 1
+            }
+          },
+          "CliSession::execute_command": {
+            "id": "CliSession::execute_command",
+            "name": "execute_command",
+            "title": "Execute a parsed command",
+            "kind": "method",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Runs one command through the same stateful execution path used by the CLI and Python facade."
+            },
+            "summary": "Runs one command through the same stateful execution path used by the CLI and Python facade.",
+            "signature": "fn execute_command(& mut self, command : CommandHistory) -> Result <\nCommandExecution >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "self",
+                "docs": null,
+                "ty": "& mut self",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "command",
+                "docs": null,
+                "ty": "CommandHistory",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < CommandExecution >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn execute(session: &mut gammaloop_api::session::CliSession<'_>, command: gammaloop_api::state::CommandHistory) -> eyre::Result<()> { session.execute_command(command)?; Ok(()) }"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop_api::session::CliSession::execute_command",
+              "file": "crates/gammaloop-api/src/session.rs",
+              "line": 118,
+              "column": 1
+            }
+          },
+          "CommandHistory": {
+            "id": "CommandHistory",
+            "name": "CommandHistory",
+            "title": "Parsed command record",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Represents a command with optional raw string representation\n\nThis struct stores both the parsed command and optionally the original\nstring that was used to create it. This allows for preserving the exact\nuser input while still having access to the structured command data."
+            },
+            "summary": "Stores a typed command with its optional original spelling for replay and serialization.",
+            "signature": "pub struct CommandHistory {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammaloop_api::state::CommandHistory;"
+              }
+            ],
+            "members": [
+              {
+                "name": "command",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "The parsed command"
+                },
+                "signature": "Commands",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "raw_string",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "The original string representation of the command, if available"
+                },
+                "signature": "Option < String >",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop_api::state::CommandHistory",
+              "file": "crates/gammaloop-api/src/state.rs",
+              "line": 998,
+              "column": 1
+            }
+          },
+          "CommandHistory::from_raw_string": {
+            "id": "CommandHistory::from_raw_string",
+            "name": "from_raw_string",
+            "title": "Parse command text",
+            "kind": "method",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Parse a raw string into a CommandHistory\n\nThis function attempts to parse the raw string using clap, and if successful,\ncreates a CommandHistory with both the parsed command and the original string."
+            },
+            "summary": "Parses shell-style GammaLoop command text into the typed command representation used by a session.",
+            "signature": "fn from_raw_string(raw_string : & str) -> Result < Self, clap :: Error >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "raw_string",
+                "docs": null,
+                "ty": "& str",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < Self, clap :: Error >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let command = gammaloop_api::state::CommandHistory::from_raw_string(\"display processes\")?;"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop_api::state::CommandHistory::from_raw_string",
+              "file": "crates/gammaloop-api/src/state.rs",
+              "line": 1114,
+              "column": 1
+            }
+          },
+          "RunHistory": {
+            "id": "RunHistory",
+            "name": "RunHistory",
+            "title": "Replayable run history",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Combines frozen settings, named command blocks, and ordered commands into a reusable run card."
+            },
+            "summary": "Combines frozen settings, named command blocks, and ordered commands into a reusable run card.",
+            "signature": "pub struct RunHistory {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammaloop_api::state::RunHistory;"
+              }
+            ],
+            "members": [
+              {
+                "name": "default_runtime_settings",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Default runtime settings restored before replaying the recorded commands."
+                },
+                "signature": "RuntimeSettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "cli_settings",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "State and global CLI settings captured with this run history."
+                },
+                "signature": "CLISettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "command_blocks",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Named reusable command sequences declared by run cards."
+                },
+                "signature": "Vec < CommandsBlock >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "commands",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Ordered top-level commands persisted for replay."
+                },
+                "signature": "Vec < CommandHistory >",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop_api::state::RunHistory",
+              "file": "crates/gammaloop-api/src/state.rs",
+              "line": 1137,
+              "column": 1
+            }
+          },
+          "RunHistory::load": {
+            "id": "RunHistory::load",
+            "name": "load",
+            "title": "Load a run card",
+            "kind": "method",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Loads and validates a TOML, YAML, or JSON run history before it is replayed."
+            },
+            "summary": "Loads and validates a TOML, YAML, or JSON run history before it is replayed.",
+            "signature": "fn load(path : impl AsRef < Path >) -> Result < Self >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "path",
+                "docs": null,
+                "ty": "impl AsRef < Path >",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < Self >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let history = gammaloop_api::state::RunHistory::load(\"run.toml\")?;"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop_api::state::RunHistory::load",
+              "file": "crates/gammaloop-api/src/state.rs",
+              "line": 1362,
+              "column": 1
+            }
+          },
+          "State": {
+            "id": "State",
+            "name": "State",
+            "title": "GammaLoop physics state",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Owns the model, model parameters, processes, generated integrands, and generation summaries."
+            },
+            "summary": "Owns the model, model parameters, processes, generated integrands, and generation summaries.",
+            "signature": "pub struct State {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammaloop_api::state::State;"
+              }
+            ],
+            "members": [
+              {
+                "name": "model",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Active physics model used to interpret processes and integrands."
+                },
+                "signature": "Model",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "model_parameters",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Numerical input-parameter values currently applied to the model."
+                },
+                "signature": "InputParamCard < F < f64 > >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "process_list",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Imported processes together with their generated integrands."
+                },
+                "signature": "ProcessList",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "generation_summaries",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Generation provenance indexed by process and integrand."
+                },
+                "signature": "BTreeMap < IntegrandGenerationSummaryKey, IntegrandGenerationSummary >",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop_api::state::State",
+              "file": "crates/gammaloop-api/src/state.rs",
+              "line": 1457,
+              "column": 1
+            }
+          },
+          "State::get_integrand_info": {
+            "id": "State::get_integrand_info",
+            "name": "get_integrand_info",
+            "title": "Inspect a generated integrand",
+            "kind": "method",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Returns structured backend, graph-group, orientation, loop-basis, cut, and threshold metadata."
+            },
+            "summary": "Returns structured backend, graph-group, orientation, loop-basis, cut, and threshold metadata.",
+            "signature": "fn\nget_integrand_info(& self, process : Option < & ProcessRef > , integrand_name\n: Option < & String > ,) -> Result < IntegrandInfo >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "self",
+                "docs": null,
+                "ty": "& self",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "process",
+                "docs": null,
+                "ty": "Option < & ProcessRef >",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "integrand_name",
+                "docs": null,
+                "ty": "Option < & String >",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < IntegrandInfo >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn inspect(state: &gammaloop_api::state::State) -> eyre::Result<gammaloop_api::integrand_info::IntegrandInfo> { state.get_integrand_info(None, None) }"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop_api::state::State::get_integrand_info",
+              "file": "crates/gammaloop-api/src/state.rs",
+              "line": 2072,
+              "column": 1
+            }
+          },
+          "IntegrandInfo": {
+            "id": "IntegrandInfo",
+            "name": "IntegrandInfo",
+            "title": "Structured integrand information",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Describes one generated integrand without exposing its internal evaluator representation."
+            },
+            "summary": "Describes one generated integrand without exposing its internal evaluator representation.",
+            "signature": "pub struct IntegrandInfo {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammaloop_api::integrand_info::IntegrandInfo;"
+              }
+            ],
+            "members": [
+              {
+                "name": "process_id",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Numeric identifier of the process that owns the integrand."
+                },
+                "signature": "usize",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "process_name",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Persistent folder name of the owning process."
+                },
+                "signature": "String",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "integrand_name",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Canonical name of the resolved integrand."
+                },
+                "signature": "String",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "kind",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Whether the integrand represents an amplitude or cross section."
+                },
+                "signature": "IntegrandKind",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "generation_compilation",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Compilation mode frozen into the generated integrand."
+                },
+                "signature": "FrozenCompilationMode",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "active_f64_backend",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Floating-point evaluator backend currently active for the integrand."
+                },
+                "signature": "ActiveF64Backend",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "graph_count",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Number of amplitude graphs or cross-section supergraphs."
+                },
+                "signature": "usize",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "graph_group_count",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Number of graph groups in the generated integrand."
+                },
+                "signature": "usize",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "record_size_bytes",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Bincode size of the saved integrand record, excluding its compiled evaluator."
+                },
+                "signature": "usize",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "graph_groups",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Per-group graphs, orientations, loop-momentum bases, thresholds, and cuts."
+                },
+                "signature": "Vec < IntegrandGraphGroupInfo >",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop_api::integrand_info::IntegrandInfo",
+              "file": "crates/gammaloop-api/src/integrand_info.rs",
+              "line": 270,
+              "column": 1
+            }
+          },
+          "ImportModel": {
+            "id": "ImportModel",
+            "name": "ImportModel",
+            "title": "Model import request",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Imports a built-in JSON model, a JSON model file, or a UFO model directory into the active state."
+            },
+            "summary": "Selects a built-in JSON model, a JSON model path, or a UFO directory and controls simplification before replacing the active model.",
+            "signature": "pub struct ImportModel {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammaloop_api::commands::import::model::ImportModel;"
+              }
+            ],
+            "members": [
+              {
+                "name": "path",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Built-in model name, JSON model path, or UFO directory to import."
+                },
+                "signature": "PathBuf",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "simplify_model",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Simplify imported model expressions before storing the active model."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop_api::commands::import::model::ImportModel",
+              "file": "crates/gammaloop-api/src/commands/import/model.rs",
+              "line": 32,
+              "column": 1
+            }
+          },
+          "ImportModel::run": {
+            "id": "ImportModel::run",
+            "name": "run",
+            "title": "Import a model",
+            "kind": "method",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Parses the model specification, loads its model and parameter card, optionally simplifies it, and installs it in the active state."
+            },
+            "summary": "Parses the model specification, loads its model and parameter card, optionally simplifies it, and installs it in the active state.",
+            "signature": "fn run(& self, state : & mut State) -> Result < () >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "self",
+                "docs": null,
+                "ty": "& self",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "state",
+                "docs": null,
+                "ty": "& mut State",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < () >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn import(request: &gammaloop_api::commands::import::model::ImportModel, state: &mut gammaloop_api::state::State) -> eyre::Result<()> { request.run(state) }"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop_api::commands::import::model::ImportModel::run",
+              "file": "crates/gammaloop-api/src/commands/import/model.rs",
+              "line": 171,
+              "column": 1
+            }
+          },
+          "Generate": {
+            "id": "Generate",
+            "name": "Generate",
+            "title": "Process-generation request",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Generate cross-section or amplitude integrands from a process specification."
+            },
+            "summary": "Selects cross-section, amplitude, or existing-process generation and whether generated compilation sources are retained.",
+            "signature": "pub struct Generate {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammaloop_api::commands::Generate;"
+              }
+            ],
+            "members": [
+              {
+                "name": "keep_sources",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Keep generated C++ source files after external compilation"
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "mode",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Selects cross-section, amplitude, or existing-process generation; when\nomitted, generates all integrands in the active state."
+                },
+                "signature": "Option < GenerateCmd >",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop_api::commands::generate::Generate",
+              "file": "crates/gammaloop-api/src/commands/generate.rs",
+              "line": 52,
+              "column": 1
+            }
+          },
+          "Generate::run": {
+            "id": "Generate::run",
+            "name": "run",
+            "title": "Generate a process",
+            "kind": "method",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Generates or reuses graphs, builds the requested integrand, performs configured compilation, and records generation summaries in state."
+            },
+            "summary": "Generates or reuses graphs, builds the requested integrand, performs configured compilation, and records generation summaries in state.",
+            "signature": "fn\nrun(& self, state : & mut State, compile_folder : impl AsRef < Path > ,\noverride_existing_compiled : bool, global_settings : & GlobalSettings,\nruntime_settings : & RuntimeSettings,) -> Result < () >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "self",
+                "docs": null,
+                "ty": "& self",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "state",
+                "docs": null,
+                "ty": "& mut State",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "compile_folder",
+                "docs": null,
+                "ty": "impl AsRef < Path >",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "override_existing_compiled",
+                "docs": null,
+                "ty": "bool",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "global_settings",
+                "docs": null,
+                "ty": "& GlobalSettings",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "runtime_settings",
+                "docs": null,
+                "ty": "& RuntimeSettings",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < () >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn generate(request: &gammaloop_api::commands::Generate, state: &mut gammaloop_api::state::State, global: &gammalooprs::settings::GlobalSettings, runtime: &gammalooprs::settings::RuntimeSettings) -> eyre::Result<()> { request.run(state, \"compiled\", false, global, runtime) }"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop_api::commands::generate::Generate::run",
+              "file": "crates/gammaloop-api/src/commands/generate.rs",
+              "line": 644,
+              "column": 1
+            }
+          },
+          "Integrate": {
+            "id": "Integrate",
+            "name": "Integrate",
+            "title": "Integration request",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Selects generated integrands and configures their workspace, targets, resume behavior, sampling correlation, batching, and status renderer."
+            },
+            "summary": "Selects generated integrands and configures their workspace, targets, resume behavior, sampling correlation, batching, and status renderer.",
+            "signature": "pub struct Integrate {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammaloop_api::commands::Integrate;"
+              }
+            ],
+            "members": [
+              {
+                "name": "process",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`; repeat with `-i` to select multiple integrands"
+                },
+                "signature": "Vec < ProcessRef >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "integrand_name",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "The integrand name to integrate; repeat with -p to select multiple integrands"
+                },
+                "signature": "Vec < String >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "n_cores",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Number of cores to parallelize over"
+                },
+                "signature": "Option < usize >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "workspace_path",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Workspace directory used for resumable integration state and persisted results"
+                },
+                "signature": "Option < PathBuf >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "target",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Specify a target as either `re im` / `re,im` for one shared target or `process@integrand=re,im`"
+                },
+                "signature": "Vec < String >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "restart",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Whether to restart the integration from scratch, or continue from a previous run if possible"
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "uncorrelated",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Use one independent sampling/training grid per selected integrand instead of a shared grid"
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "show_max_weight_info",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Show the overall max-weight details table"
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "no_show_integration_statistics",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Hide integration statistics during intermediate iteration updates"
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "show_phase",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Control which complex phase is shown in integration summary tables"
+                },
+                "signature": "ShowPhaseOption",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "show_top_discrete_grid",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Show monitoring rows for the first non-trivial discrete dimension"
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "show_discrete_contributions_sum",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Show the summed discrete contributions block independently of per-bin rows"
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "sort_contributions",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Sort discrete contribution rows by index, absolute integral, or error"
+                },
+                "signature": "ContributionSortOption",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "show_max_weight_info_for_discrete_bins",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Show per-bin max-weight information for the first non-trivial discrete dimension"
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "show_summary_only",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Only render the saved integration summary, without performing integration work"
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "no_stream_iterations",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Disable streaming of end-of-iteration integration summaries in interactive terminals"
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "no_stream_updates",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Disable live streaming of in-iteration integration status updates"
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "renderer",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Renderer used for interactive streaming integration updates"
+                },
+                "signature": "RendererOption",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "batch_size",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Evaluate each iteration in per-core batches of this size"
+                },
+                "signature": "Option < usize >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "batch_timing",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Target per-core batch wall time in seconds when batch size is not specified"
+                },
+                "signature": "f64",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "min_time_between_status_updates",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Minimum time between streamed in-iteration status updates"
+                },
+                "signature": "f64",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "max_table_width",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Maximum width used when normalizing integration status tables"
+                },
+                "signature": "usize",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "write_results_for_each_iteration",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Keep per-iteration result and observable snapshot files in addition to the latest snapshots"
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop_api::commands::integrate::Integrate",
+              "file": "crates/gammaloop-api/src/commands/integrate.rs",
+              "line": 67,
+              "column": 1
+            }
+          },
+          "Integrate::run": {
+            "id": "Integrate::run",
+            "name": "run",
+            "title": "Run an integration",
+            "kind": "method",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Resolves the selected integrands and targets, prepares or resumes their workspace, executes integration, and returns results with observable snapshots."
+            },
+            "summary": "Resolves the selected integrands and targets, prepares or resumes their workspace, executes integration, and returns results with observable snapshots.",
+            "signature": "fn run(& self, state : & mut State, global_cli_settings : & CLISettings,) ->\nResult < IntegrationOutput >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "self",
+                "docs": null,
+                "ty": "& self",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "state",
+                "docs": null,
+                "ty": "& mut State",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "global_cli_settings",
+                "docs": null,
+                "ty": "& CLISettings",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < IntegrationOutput >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn integrate(request: &gammaloop_api::commands::Integrate, state: &mut gammaloop_api::state::State, settings: &gammaloop_api::CLISettings) -> eyre::Result<gammaloop_api::commands::IntegrationOutput> { request.run(state, settings) }"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop_api::commands::integrate::Integrate::run",
+              "file": "crates/gammaloop-api/src/commands/integrate.rs",
+              "line": 1665,
+              "column": 1
+            }
+          },
+          "IntegrationOutput": {
+            "id": "IntegrationOutput",
+            "name": "IntegrationOutput",
+            "title": "Integration output",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Returns the final integration result, per-slot observable snapshots, and the workspace path that owns resumable integration state."
+            },
+            "summary": "Returns the final integration result, per-slot observable snapshots, and the workspace path that owns resumable integration state.",
+            "signature": "pub struct IntegrationOutput {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammaloop_api::commands::IntegrationOutput;"
+              }
+            ],
+            "members": [
+              {
+                "name": "result",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Final estimates and convergence data for every selected process/integrand slot."
+                },
+                "signature": "IntegrationResult",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "observables",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Observable snapshots keyed by each slot's `process@integrand` identifier."
+                },
+                "signature": "BTreeMap < String, ObservableSnapshotBundle >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "workspace_path",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Workspace that stores resumable integration state, results, and observable snapshots."
+                },
+                "signature": "PathBuf",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop_api::commands::integrate::IntegrationOutput",
+              "file": "crates/gammaloop-api/src/commands/integrate.rs",
+              "line": 183,
+              "column": 1
+            }
+          },
+          "EvaluateSamples": {
+            "id": "EvaluateSamples",
+            "name": "EvaluateSamples",
+            "title": "f64 sample-evaluation request",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Selects an integrand, coordinates, weights, discrete dimensions, and optional momentum-space channels for a batch."
+            },
+            "summary": "Selects an integrand, coordinates, weights, discrete dimensions, and optional momentum-space channels for a batch.",
+            "signature": "pub struct EvaluateSamples < 'a > {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammaloop_api::commands::evaluate_samples::EvaluateSamples;"
+              }
+            ],
+            "members": [
+              {
+                "name": "process_id",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Process containing the integrand; required when process selection is ambiguous."
+                },
+                "signature": "Option < usize >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "integrand_name",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Integrand to evaluate; required when the selected process has multiple candidates."
+                },
+                "signature": "Option < String >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "use_arb_prec",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Request arbitrary-precision internal evaluation."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "minimal_output",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Omit optional evaluation metadata from each returned sample."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "return_generated_events",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Temporary event-generation override restored after this evaluation."
+                },
+                "signature": "Option < bool >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "momentum_space",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Interpret point rows as flattened three-momenta instead of integration coordinates."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "points",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Two-dimensional coordinates with one sample per row."
+                },
+                "signature": "ArrayView2 < 'a, f64 >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "integrator_weights",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Optional weight for each sample row; omitted weights default to one."
+                },
+                "signature": "Option < ArrayView1 < 'a, f64 > >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "discrete_dims",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Optional discrete integration coordinates with one row per sample."
+                },
+                "signature": "Option < ArrayView2 < 'a, usize > >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "graph_names",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Optional momentum-space graph selection for each sample."
+                },
+                "signature": "Option < Vec < Option < String > > >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "orientations",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Optional momentum-space orientation selection for each sample."
+                },
+                "signature": "Option < Vec < Option < usize > > >",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop_api::commands::evaluate_samples::EvaluateSamples",
+              "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
+              "line": 23,
+              "column": 1
+            }
+          },
+          "evaluate_sample": {
+            "id": "evaluate_sample",
+            "name": "evaluate_sample",
+            "title": "Evaluate one f64 sample",
+            "kind": "function",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Runs a one-row request and returns the sample plus its observable snapshot through the f64 output contract."
+            },
+            "summary": "Runs a one-row request and returns the sample plus its observable snapshot through the f64 output contract.",
+            "signature": "fn evaluate_sample < 'a >\n(state : & mut State, request : & EvaluateSamples < 'a > ,) -> Result <\nSingleSampleEvaluationResult >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "state",
+                "docs": null,
+                "ty": "& mut State",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "request",
+                "docs": null,
+                "ty": "& EvaluateSamples < 'a >",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < SingleSampleEvaluationResult >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn evaluate(state: &mut gammaloop_api::state::State, request: &gammaloop_api::commands::evaluate_samples::EvaluateSamples<'_>) -> eyre::Result<()> { let _result = gammaloop_api::commands::evaluate_samples::evaluate_sample(state, request)?; Ok(()) }"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_sample",
+              "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
+              "line": 306,
+              "column": 1
+            }
+          },
+          "evaluate_samples": {
+            "id": "evaluate_samples",
+            "name": "evaluate_samples",
+            "title": "Evaluate an f64 batch",
+            "kind": "function",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Runs a batch request and returns per-sample values plus one batch-level observable snapshot."
+            },
+            "summary": "Runs a batch request and returns per-sample values plus one batch-level observable snapshot.",
+            "signature": "fn evaluate_samples < 'a >\n(state : & mut State, request : & EvaluateSamples < 'a > ,) -> Result <\nBatchSampleEvaluationResult >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "state",
+                "docs": null,
+                "ty": "& mut State",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "request",
+                "docs": null,
+                "ty": "& EvaluateSamples < 'a >",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < BatchSampleEvaluationResult >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn evaluate(state: &mut gammaloop_api::state::State, request: &gammaloop_api::commands::evaluate_samples::EvaluateSamples<'_>) -> eyre::Result<()> { let _batch = gammaloop_api::commands::evaluate_samples::evaluate_samples(state, request)?; Ok(()) }"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_samples",
+              "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
+              "line": 299,
+              "column": 1
+            }
+          },
+          "EvaluateSamplesPrecise": {
+            "id": "EvaluateSamplesPrecise",
+            "name": "EvaluateSamplesPrecise",
+            "title": "Precision-preserving evaluation request",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Accepts f64 integration or momentum-space coordinates while preserving the selected precision for internal computation and returned values."
+            },
+            "summary": "Accepts f64 integration or momentum-space coordinates while preserving the selected precision for internal computation and returned values.",
+            "signature": "pub struct EvaluateSamplesPrecise < 'a > {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammaloop_api::commands::evaluate_samples::EvaluateSamplesPrecise;"
+              }
+            ],
+            "members": [
+              {
+                "name": "process_id",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Process containing the integrand; required when process selection is ambiguous."
+                },
+                "signature": "Option < usize >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "integrand_name",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Integrand to evaluate; required when the selected process has multiple candidates."
+                },
+                "signature": "Option < String >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "use_arb_prec",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Request arbitrary-precision internal evaluation."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "minimal_output",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Omit optional evaluation metadata from each returned sample."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "return_generated_events",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Temporary event-generation override restored after this evaluation."
+                },
+                "signature": "Option < bool >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "momentum_space",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Interpret point rows as flattened three-momenta instead of integration coordinates."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "points",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Two-dimensional coordinates with one sample per row."
+                },
+                "signature": "ArrayView2 < 'a, f64 >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "integrator_weights",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Optional weight for each sample row; omitted weights default to one."
+                },
+                "signature": "Option < ArrayView1 < 'a, f64 > >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "discrete_dims",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Optional discrete integration coordinates with one row per sample."
+                },
+                "signature": "Option < ArrayView2 < 'a, usize > >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "graph_names",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Optional momentum-space graph selection for each sample."
+                },
+                "signature": "Option < Vec < Option < String > > >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "orientations",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Optional momentum-space orientation selection for each sample."
+                },
+                "signature": "Option < Vec < Option < usize > > >",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop_api::commands::evaluate_samples::EvaluateSamplesPrecise",
+              "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
+              "line": 151,
+              "column": 1
+            }
+          },
+          "evaluate_sample_precise": {
+            "id": "evaluate_sample_precise",
+            "name": "evaluate_sample_precise",
+            "title": "Evaluate one precision-preserving sample",
+            "kind": "function",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Returns a single result in the active f64, f128, or arbitrary-precision representation."
+            },
+            "summary": "Returns a single result in the active f64, f128, or arbitrary-precision representation.",
+            "signature": "fn evaluate_sample_precise < 'a >\n(state : & mut State, request : & EvaluateSamplesPrecise < 'a > ,) -> Result <\nPreciseSingleSampleEvaluationResult >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "state",
+                "docs": null,
+                "ty": "& mut State",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "request",
+                "docs": null,
+                "ty": "& EvaluateSamplesPrecise < 'a >",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < PreciseSingleSampleEvaluationResult >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn evaluate(state: &mut gammaloop_api::state::State, request: &gammaloop_api::commands::evaluate_samples::EvaluateSamplesPrecise<'_>) -> eyre::Result<()> { let _result = gammaloop_api::commands::evaluate_samples::evaluate_sample_precise(state, request)?; Ok(()) }"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_sample_precise",
+              "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
+              "line": 282,
+              "column": 1
+            }
+          },
+          "evaluate_samples_precise": {
+            "id": "evaluate_samples_precise",
+            "name": "evaluate_samples_precise",
+            "title": "Evaluate a precision-preserving batch",
+            "kind": "function",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Returns every sample in the active precision together with one batch-level observable snapshot."
+            },
+            "summary": "Returns every sample in the active precision together with one batch-level observable snapshot.",
+            "signature": "fn evaluate_samples_precise < 'a >\n(state : & mut State, request : & EvaluateSamplesPrecise < 'a > ,) -> Result <\nPreciseBatchSampleEvaluationResult >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "state",
+                "docs": null,
+                "ty": "& mut State",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "request",
+                "docs": null,
+                "ty": "& EvaluateSamplesPrecise < 'a >",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < PreciseBatchSampleEvaluationResult >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn evaluate(state: &mut gammaloop_api::state::State, request: &gammaloop_api::commands::evaluate_samples::EvaluateSamplesPrecise<'_>) -> eyre::Result<()> { let _batch = gammaloop_api::commands::evaluate_samples::evaluate_samples_precise(state, request)?; Ok(()) }"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_samples_precise",
+              "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
+              "line": 275,
+              "column": 1
+            }
+          },
+          "StateFolderKind": {
+            "id": "StateFolderKind",
+            "name": "StateFolderKind",
+            "title": "State-folder classification",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Distinguishes missing, scratch, unmanifested, saved, and invalid state directories."
+            },
+            "summary": "Distinguishes missing, scratch, unmanifested, saved, and invalid state directories.",
+            "signature": "pub enum StateFolderKind {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammaloop_api::state::StateFolderKind;"
+              }
+            ],
+            "members": [
+              {
+                "name": "Missing",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "The configured state path does not exist."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Scratch",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "The state directory is empty apart from its optional `logs` directory."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Unmanifested",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "The directory contains data but no state manifest."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Saved",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "The directory contains a supported manifest and all required state files."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Invalid",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "The path cannot be used as a saved state; the payload explains why."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "String",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              }
+            ],
+            "source": {
+              "identifier": "gammaloop_api::state::StateFolderKind",
+              "file": "crates/gammaloop-api/src/state.rs",
+              "line": 1532,
+              "column": 1
+            }
+          },
+          "classify_state_folder": {
+            "id": "classify_state_folder",
+            "name": "classify_state_folder",
+            "title": "Classify a state folder",
+            "kind": "function",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Checks manifest and required-file evidence without treating empty or log-only folders as saved state."
+            },
+            "summary": "Checks manifest and required-file evidence without treating empty or log-only folders as saved state.",
+            "signature": "fn classify_state_folder(save_path : & Path) -> Result < StateFolderKind >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "save_path",
+                "docs": null,
+                "ty": "& Path",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < StateFolderKind >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let kind = gammaloop_api::state::classify_state_folder(std::path::Path::new(\"./state\"))?;"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammaloop_api::state::classify_state_folder",
+              "file": "crates/gammaloop-api/src/state.rs",
+              "line": 1550,
               "column": 1
             }
           },
@@ -260,7 +2264,7 @@
               "body": "Owns the generated command-line, global, session, and state-loading settings."
             },
             "summary": "Owns the generated command-line, global, session, and state-loading settings.",
-            "signature": "#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]\n#[serde(default, deny_unknown_fields)] pub struct CLISettings\n{\n    #[doc =\n    \" Serialize replayable commands as compact strings when their structured form permits it.\"]\n    #[serde(skip_serializing_if = \"is_true\")] pub try_strings : bool,\n    #[doc =\n    \" Permit generated artifacts to replace compatible files in the active state folder.\"]\n    #[serde(skip_serializing_if = \"is_false\")] pub override_state : bool,\n    #[doc =\n    \" Location and optional display name of the persistent GammaLoop state.\"]\n    #[serde(skip_serializing_if = \"IsDefault::is_default\")] pub state :\n    StateSettings,\n    #[doc =\n    \" Generation, logging, and parallelization settings shared by the CLI session.\"]\n    #[serde(skip_serializing_if = \"IsDefault::is_default\")] pub global :\n    GlobalSettings, #[serde(skip)] #[schemars(skip)] pub session :\n    SessionSettings,\n}",
+            "signature": "pub struct CLISettings {}",
             "since": null,
             "keywords": [],
             "params": [],
@@ -320,7 +2324,10 @@
               {
                 "name": "session",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Transient read-only controls and startup warnings excluded from serialized settings."
+                },
                 "signature": "SessionSettings",
                 "default": null,
                 "members": []
@@ -405,7 +2412,10 @@
               {
                 "name": "session",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Transient read-only controls and startup warnings excluded from serialized settings."
+                },
                 "signature": "SessionSettings",
                 "default": null,
                 "members": []

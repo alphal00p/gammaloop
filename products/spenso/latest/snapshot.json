@@ -1,11 +1,11 @@
 {
-  "schema": 2,
+  "schema": 3,
   "product": "spenso",
   "title": "Spenso",
   "channel": "latest",
   "snapshot_tag": null,
-  "git_commit": "28275fc5d5154faa43a19dba0233bacd0dafbf1f",
-  "git_timestamp": 1787064141,
+  "git_commit": "cbfc3a5827679de14e9373edd6b332e6b9b28a55",
+  "git_timestamp": 1787089200,
   "route": "/products/spenso/latest/",
   "components": [
     {

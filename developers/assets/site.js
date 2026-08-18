@@ -70,7 +70,8 @@
     const title = normalizeSearch(entry.title);
     const summary = normalizeSearch(entry.summary);
     const kind = normalizeSearch(entry.kind);
-    const haystack = `${title} ${summary} ${kind}`;
+    const text = normalizeSearch(entry.text);
+    const haystack = `${title} ${summary} ${kind} ${text}`;
     if (!terms.every((term) => haystack.includes(term))) return null;
 
     const words = title.split(/[^a-z0-9_.:-]+/).filter(Boolean);
@@ -80,10 +81,15 @@
       else if (title.includes(term)) score += 90;
       if (kind.includes(term)) score += 35;
       if (summary.includes(term)) score += 15;
+      if (text.includes(term)) score += 3;
     }
-    if (/tutorial|manual|guide/.test(kind)) score += 35;
-    else if (/command|python-api|rust-api/.test(kind)) score += 20;
-    else if (/developer/.test(kind)) score += 15;
+    if (/command|setting/.test(kind)) score += 120;
+    else if (/product|tutorial|manual|guide|reference|version history|python-api|rust-api/.test(kind)) score += 80;
+    else if (!/developer/.test(kind)) score += 30;
+    if (/developer/.test(kind)) {
+      score -= / heading/.test(kind) ? 100 : 60;
+      if (!/developer current /.test(kind)) score -= 120;
+    }
     return score;
   };
 

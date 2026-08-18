@@ -25,171 +25,207 @@
 <a href=#25 id=25 data-nosnippet>25</a>    </span><span class="kw">type </span>Base: BaseSubgraph;
 <a href=#26 id=26 data-nosnippet>26</a>    <span class="comment">// where
 <a href=#27 id=27 data-nosnippet>27</a>    // Self: 'a;
-<a href=#28 id=28 data-nosnippet>28</a>    </span><span class="kw">fn </span>extend(<span class="self">self</span>, other: <span class="self">Self</span>) -&gt; <span class="self">Self</span>;
-<a href=#29 id=29 data-nosnippet>29</a>
-<a href=#30 id=30 data-nosnippet>30</a>    <span class="kw">fn </span>new_nodevec&lt;<span class="lifetime">'a</span>, V2&gt;(
-<a href=#31 id=31 data-nosnippet>31</a>        <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">self</span>,
-<a href=#32 id=32 data-nosnippet>32</a>        node_map: <span class="kw">impl </span>FnMut(NodeIndex, <span class="self">Self</span>::NeighborsIter&lt;<span class="lifetime">'a</span>&gt;, <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">Self</span>::NodeData) -&gt; V2,
-<a href=#33 id=33 data-nosnippet>33</a>    ) -&gt; NodeVec&lt;V2&gt;;
-<a href=#34 id=34 data-nosnippet>34</a>
-<a href=#35 id=35 data-nosnippet>35</a>    <span class="kw">fn </span>extend_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, other: <span class="self">Self</span>);
-<a href=#36 id=36 data-nosnippet>36</a>    <span class="kw">fn </span>extract&lt;S: SubSetLike&lt;Base = <span class="self">Self</span>::Base&gt;, V2&gt;(
-<a href=#37 id=37 data-nosnippet>37</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#38 id=38 data-nosnippet>38</a>        subgraph: <span class="kw-2">&amp;</span>S,
-<a href=#39 id=39 data-nosnippet>39</a>        split_node: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span><span class="self">Self</span>::NodeData) -&gt; V2,
-<a href=#40 id=40 data-nosnippet>40</a>        owned_node: <span class="kw">impl </span>FnMut(<span class="self">Self</span>::NodeData) -&gt; V2,
-<a href=#41 id=41 data-nosnippet>41</a>    ) -&gt; <span class="self">Self</span>::OpStorage&lt;V2&gt;;
-<a href=#42 id=42 data-nosnippet>42</a>
-<a href=#43 id=43 data-nosnippet>43</a>    <span class="kw">fn </span>extract_nodes(<span class="kw-2">&amp;mut </span><span class="self">self</span>, nodes: <span class="kw">impl </span>IntoIterator&lt;Item = NodeIndex&gt;) -&gt; (<span class="self">Self</span>::Base, <span class="self">Self</span>);
-<a href=#44 id=44 data-nosnippet>44</a>
-<a href=#45 id=45 data-nosnippet>45</a>    <span class="kw">fn </span>delete&lt;S: SubSetLike&lt;Base = <span class="self">Self</span>::Base&gt;&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, subgraph: <span class="kw-2">&amp;</span>S);
-<a href=#46 id=46 data-nosnippet>46</a>
-<a href=#47 id=47 data-nosnippet>47</a>    <span class="comment">// fn add_node(&amp;mut self, node_data: Self::NodeData) -&gt; NodeIndex;
-<a href=#48 id=48 data-nosnippet>48</a>
-<a href=#49 id=49 data-nosnippet>49</a>    </span><span class="doccomment">/// Identifies nodes, essentially turning them into a single node
-<a href=#50 id=50 data-nosnippet>50</a>    /// Invalidates all previous NodeIndex values if using VecNodeStore.
-<a href=#51 id=51 data-nosnippet>51</a>    /// Does not invalidate if using Forest as NodeStore
-<a href=#52 id=52 data-nosnippet>52</a>    </span><span class="kw">fn </span>identify_nodes(<span class="kw-2">&amp;mut </span><span class="self">self</span>, nodes: <span class="kw-2">&amp;</span>[NodeIndex], node_data_merge: <span class="self">Self</span>::NodeData)
-<a href=#53 id=53 data-nosnippet>53</a>        -&gt; NodeIndex;
-<a href=#54 id=54 data-nosnippet>54</a>
-<a href=#55 id=55 data-nosnippet>55</a>    <span class="kw">fn </span>forget_identification_history(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; NodeVec&lt;<span class="self">Self</span>::NodeData&gt;;
+<a href=#28 id=28 data-nosnippet>28</a>    </span><span class="doccomment">/// Combines two stores using the implementation's index-space semantics.
+<a href=#29 id=29 data-nosnippet>29</a>    ///
+<a href=#30 id=30 data-nosnippet>30</a>    /// Callers must not assume embedded index-valued data is remapped unless the
+<a href=#31 id=31 data-nosnippet>31</a>    /// concrete storage implementation documents that behavior.
+<a href=#32 id=32 data-nosnippet>32</a>    </span><span class="kw">fn </span>extend(<span class="self">self</span>, other: <span class="self">Self</span>) -&gt; <span class="self">Self</span>;
+<a href=#33 id=33 data-nosnippet>33</a>
+<a href=#34 id=34 data-nosnippet>34</a>    <span class="doccomment">/// Maps each node's ID, neighbors, and borrowed data into a dense [`NodeVec`].
+<a href=#35 id=35 data-nosnippet>35</a>    </span><span class="kw">fn </span>new_nodevec&lt;<span class="lifetime">'a</span>, V2&gt;(
+<a href=#36 id=36 data-nosnippet>36</a>        <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">self</span>,
+<a href=#37 id=37 data-nosnippet>37</a>        node_map: <span class="kw">impl </span>FnMut(NodeIndex, <span class="self">Self</span>::NeighborsIter&lt;<span class="lifetime">'a</span>&gt;, <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">Self</span>::NodeData) -&gt; V2,
+<a href=#38 id=38 data-nosnippet>38</a>    ) -&gt; NodeVec&lt;V2&gt;;
+<a href=#39 id=39 data-nosnippet>39</a>
+<a href=#40 id=40 data-nosnippet>40</a>    <span class="doccomment">/// Appends a store using the implementation's index-space semantics.
+<a href=#41 id=41 data-nosnippet>41</a>    ///
+<a href=#42 id=42 data-nosnippet>42</a>    /// Callers must not assume embedded index-valued data is remapped unless the
+<a href=#43 id=43 data-nosnippet>43</a>    /// concrete storage implementation documents that behavior.
+<a href=#44 id=44 data-nosnippet>44</a>    </span><span class="kw">fn </span>extend_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, other: <span class="self">Self</span>);
+<a href=#45 id=45 data-nosnippet>45</a>    <span class="doccomment">/// Moves the selected half-edges into a new store and removes them from `self`.
+<a href=#46 id=46 data-nosnippet>46</a>    ///
+<a href=#47 id=47 data-nosnippet>47</a>    /// `split_node` maps data for nodes crossed by the selection boundary, while
+<a href=#48 id=48 data-nosnippet>48</a>    /// `owned_node` maps data for nodes wholly inside the selection. Implementations may
+<a href=#49 id=49 data-nosnippet>49</a>    /// compact both stores and thereby change hedge and node indices.
+<a href=#50 id=50 data-nosnippet>50</a>    </span><span class="kw">fn </span>extract&lt;S: SubSetLike&lt;Base = <span class="self">Self</span>::Base&gt;, V2&gt;(
+<a href=#51 id=51 data-nosnippet>51</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#52 id=52 data-nosnippet>52</a>        subgraph: <span class="kw-2">&amp;</span>S,
+<a href=#53 id=53 data-nosnippet>53</a>        split_node: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span><span class="self">Self</span>::NodeData) -&gt; V2,
+<a href=#54 id=54 data-nosnippet>54</a>        owned_node: <span class="kw">impl </span>FnMut(<span class="self">Self</span>::NodeData) -&gt; V2,
+<a href=#55 id=55 data-nosnippet>55</a>    ) -&gt; <span class="self">Self</span>::OpStorage&lt;V2&gt;;
 <a href=#56 id=56 data-nosnippet>56</a>
-<a href=#57 id=57 data-nosnippet>57</a>    <span class="kw">fn </span>to_forest&lt;U, H&gt;(
-<a href=#58 id=58 data-nosnippet>58</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#59 id=59 data-nosnippet>59</a>        map_data: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span><span class="self">Self</span>::NodeData) -&gt; U,
-<a href=#60 id=60 data-nosnippet>60</a>    ) -&gt; Forest&lt;U, ParentPointerStore&lt;H&gt;&gt;;
+<a href=#57 id=57 data-nosnippet>57</a>    <span class="doccomment">/// Moves complete nodes and their incident half-edges into a separate store.
+<a href=#58 id=58 data-nosnippet>58</a>    ///
+<a href=#59 id=59 data-nosnippet>59</a>    /// The returned subset records the selected half-edges.
+<a href=#60 id=60 data-nosnippet>60</a>    </span><span class="kw">fn </span>extract_nodes(<span class="kw-2">&amp;mut </span><span class="self">self</span>, nodes: <span class="kw">impl </span>IntoIterator&lt;Item = NodeIndex&gt;) -&gt; (<span class="self">Self</span>::Base, <span class="self">Self</span>);
 <a href=#61 id=61 data-nosnippet>61</a>
-<a href=#62 id=62 data-nosnippet>62</a>    <span class="kw">fn </span>build&lt;I: IntoIterator&lt;Item = HedgeNodeBuilder&lt;<span class="self">Self</span>::NodeData&gt;&gt;&gt;(
-<a href=#63 id=63 data-nosnippet>63</a>        nodes: I,
-<a href=#64 id=64 data-nosnippet>64</a>        n_hedges: usize,
-<a href=#65 id=65 data-nosnippet>65</a>    ) -&gt; <span class="self">Self</span>;
+<a href=#62 id=62 data-nosnippet>62</a>    <span class="doccomment">/// Removes the selected half-edges and compacts the remaining node storage.
+<a href=#63 id=63 data-nosnippet>63</a>    </span><span class="kw">fn </span>delete&lt;S: SubSetLike&lt;Base = <span class="self">Self</span>::Base&gt;&gt;(<span class="kw-2">&amp;mut </span><span class="self">self</span>, subgraph: <span class="kw-2">&amp;</span>S);
+<a href=#64 id=64 data-nosnippet>64</a>
+<a href=#65 id=65 data-nosnippet>65</a>    <span class="comment">// fn add_node(&amp;mut self, node_data: Self::NodeData) -&gt; NodeIndex;
 <a href=#66 id=66 data-nosnippet>66</a>
-<a href=#67 id=67 data-nosnippet>67</a>    <span class="kw">fn </span>build_with_mapping&lt;I: IntoIterator&lt;Item = HedgeNodeBuilder&lt;ND&gt;&gt;, ND&gt;(
-<a href=#68 id=68 data-nosnippet>68</a>        nodes: I,
-<a href=#69 id=69 data-nosnippet>69</a>        n_hedges: usize,
-<a href=#70 id=70 data-nosnippet>70</a>        map_data: <span class="kw">impl </span>FnMut(ND) -&gt; <span class="self">Self</span>::NodeData,
-<a href=#71 id=71 data-nosnippet>71</a>    ) -&gt; <span class="self">Self</span>;
+<a href=#67 id=67 data-nosnippet>67</a>    </span><span class="doccomment">/// Identifies nodes, essentially turning them into a single node
+<a href=#68 id=68 data-nosnippet>68</a>    /// Invalidates all previous NodeIndex values if using VecNodeStore.
+<a href=#69 id=69 data-nosnippet>69</a>    /// Does not invalidate if using Forest as NodeStore
+<a href=#70 id=70 data-nosnippet>70</a>    </span><span class="kw">fn </span>identify_nodes(<span class="kw-2">&amp;mut </span><span class="self">self</span>, nodes: <span class="kw-2">&amp;</span>[NodeIndex], node_data_merge: <span class="self">Self</span>::NodeData)
+<a href=#71 id=71 data-nosnippet>71</a>        -&gt; NodeIndex;
 <a href=#72 id=72 data-nosnippet>72</a>
-<a href=#73 id=73 data-nosnippet>73</a>    <span class="kw">fn </span>add_dangling_edge(<span class="self">self</span>, source: NodeIndex) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, HedgeGraphError&gt;;
-<a href=#74 id=74 data-nosnippet>74</a>
-<a href=#75 id=75 data-nosnippet>75</a>    <span class="kw">fn </span>random(sources: <span class="kw-2">&amp;</span>[<span class="self">Self</span>::Neighbors], sinks: <span class="kw-2">&amp;</span>[<span class="self">Self</span>::Neighbors]) -&gt; <span class="self">Self
-<a href=#76 id=76 data-nosnippet>76</a>    </span><span class="kw">where
-<a href=#77 id=77 data-nosnippet>77</a>        </span><span class="self">Self</span>::NodeData: Default;
-<a href=#78 id=78 data-nosnippet>78</a>
-<a href=#79 id=79 data-nosnippet>79</a>    <span class="kw">fn </span>drain(<span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (NodeIndex, <span class="self">Self</span>::NodeData)&gt;;
-<a href=#80 id=80 data-nosnippet>80</a>    <span class="kw">fn </span>iter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (NodeIndex, <span class="kw-2">&amp;</span><span class="self">Self</span>::NodeData)&gt;;
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="doccomment">/// Drops inactive nodes retained by identification operations and returns their data.
+<a href=#74 id=74 data-nosnippet>74</a>    </span><span class="kw">fn </span>forget_identification_history(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; NodeVec&lt;<span class="self">Self</span>::NodeData&gt;;
+<a href=#75 id=75 data-nosnippet>75</a>
+<a href=#76 id=76 data-nosnippet>76</a>    <span class="doccomment">/// Copies the topology into a parent-pointer forest while mapping borrowed node data.
+<a href=#77 id=77 data-nosnippet>77</a>    </span><span class="kw">fn </span>to_forest&lt;U, H&gt;(
+<a href=#78 id=78 data-nosnippet>78</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#79 id=79 data-nosnippet>79</a>        map_data: <span class="kw">impl </span>Fn(<span class="kw-2">&amp;</span><span class="self">Self</span>::NodeData) -&gt; U,
+<a href=#80 id=80 data-nosnippet>80</a>    ) -&gt; Forest&lt;U, ParentPointerStore&lt;H&gt;&gt;;
 <a href=#81 id=81 data-nosnippet>81</a>
-<a href=#82 id=82 data-nosnippet>82</a>    <span class="kw">fn </span>check_and_set_nodes(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), HedgeGraphError&gt;;
-<a href=#83 id=83 data-nosnippet>83</a>
-<a href=#84 id=84 data-nosnippet>84</a>    <span class="kw">fn </span>check_nodes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), HedgeGraphError&gt;;
-<a href=#85 id=85 data-nosnippet>85</a>
-<a href=#86 id=86 data-nosnippet>86</a>    <span class="kw">fn </span>map_data_ref_graph&lt;<span class="lifetime">'a</span>, E, V2, H&gt;(
-<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">self</span>,
-<a href=#88 id=88 data-nosnippet>88</a>        graph: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>HedgeGraph&lt;E, <span class="self">Self</span>::NodeData, H, <span class="self">Self</span>&gt;,
-<a href=#89 id=89 data-nosnippet>89</a>        node_map: <span class="kw">impl </span>FnMut(
-<a href=#90 id=90 data-nosnippet>90</a>            <span class="kw-2">&amp;</span><span class="lifetime">'a </span>HedgeGraph&lt;E, <span class="self">Self</span>::NodeData, H, <span class="self">Self</span>&gt;,
-<a href=#91 id=91 data-nosnippet>91</a>            <span class="self">Self</span>::NeighborsIter&lt;<span class="lifetime">'a</span>&gt;,
-<a href=#92 id=92 data-nosnippet>92</a>            <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">Self</span>::NodeData,
-<a href=#93 id=93 data-nosnippet>93</a>        ) -&gt; V2,
-<a href=#94 id=94 data-nosnippet>94</a>    ) -&gt; <span class="self">Self</span>::OpStorage&lt;V2&gt;;
-<a href=#95 id=95 data-nosnippet>95</a>
-<a href=#96 id=96 data-nosnippet>96</a>    <span class="kw">fn </span>map_data_ref_mut_graph&lt;<span class="lifetime">'a</span>, V2&gt;(
-<a href=#97 id=97 data-nosnippet>97</a>        <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span><span class="self">self</span>,
-<a href=#98 id=98 data-nosnippet>98</a>        node_map: <span class="kw">impl </span>FnMut(<span class="self">Self</span>::NeighborsIter&lt;<span class="lifetime">'a</span>&gt;, <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span><span class="self">Self</span>::NodeData) -&gt; V2,
-<a href=#99 id=99 data-nosnippet>99</a>    ) -&gt; <span class="self">Self</span>::OpStorage&lt;V2&gt;;
-<a href=#100 id=100 data-nosnippet>100</a>
-<a href=#101 id=101 data-nosnippet>101</a>    <span class="kw">fn </span>map_data_ref_graph_result&lt;<span class="lifetime">'a</span>, E, V2, H, Er&gt;(
-<a href=#102 id=102 data-nosnippet>102</a>        <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">self</span>,
-<a href=#103 id=103 data-nosnippet>103</a>        graph: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>HedgeGraph&lt;E, <span class="self">Self</span>::NodeData, H, <span class="self">Self</span>&gt;,
-<a href=#104 id=104 data-nosnippet>104</a>        node_map: <span class="kw">impl </span>FnMut(
-<a href=#105 id=105 data-nosnippet>105</a>            <span class="kw-2">&amp;</span><span class="lifetime">'a </span>HedgeGraph&lt;E, <span class="self">Self</span>::NodeData, H, <span class="self">Self</span>&gt;,
-<a href=#106 id=106 data-nosnippet>106</a>            <span class="self">Self</span>::NeighborsIter&lt;<span class="lifetime">'a</span>&gt;,
-<a href=#107 id=107 data-nosnippet>107</a>            <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">Self</span>::NodeData,
-<a href=#108 id=108 data-nosnippet>108</a>        ) -&gt; <span class="prelude-ty">Result</span>&lt;V2, Er&gt;,
-<a href=#109 id=109 data-nosnippet>109</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::OpStorage&lt;V2&gt;, Er&gt;;
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="doccomment">/// Builds a store from node descriptions that partition `n_hedges` half-edges.
+<a href=#83 id=83 data-nosnippet>83</a>    </span><span class="kw">fn </span>build&lt;I: IntoIterator&lt;Item = HedgeNodeBuilder&lt;<span class="self">Self</span>::NodeData&gt;&gt;&gt;(
+<a href=#84 id=84 data-nosnippet>84</a>        nodes: I,
+<a href=#85 id=85 data-nosnippet>85</a>        n_hedges: usize,
+<a href=#86 id=86 data-nosnippet>86</a>    ) -&gt; <span class="self">Self</span>;
+<a href=#87 id=87 data-nosnippet>87</a>
+<a href=#88 id=88 data-nosnippet>88</a>    <span class="doccomment">/// Builds a store from a half-edge partition while converting each node's data.
+<a href=#89 id=89 data-nosnippet>89</a>    </span><span class="kw">fn </span>build_with_mapping&lt;I: IntoIterator&lt;Item = HedgeNodeBuilder&lt;ND&gt;&gt;, ND&gt;(
+<a href=#90 id=90 data-nosnippet>90</a>        nodes: I,
+<a href=#91 id=91 data-nosnippet>91</a>        n_hedges: usize,
+<a href=#92 id=92 data-nosnippet>92</a>        map_data: <span class="kw">impl </span>FnMut(ND) -&gt; <span class="self">Self</span>::NodeData,
+<a href=#93 id=93 data-nosnippet>93</a>    ) -&gt; <span class="self">Self</span>;
+<a href=#94 id=94 data-nosnippet>94</a>
+<a href=#95 id=95 data-nosnippet>95</a>    <span class="doccomment">/// Appends an unpaired half-edge incident to `source`.
+<a href=#96 id=96 data-nosnippet>96</a>    </span><span class="kw">fn </span>add_dangling_edge(<span class="self">self</span>, source: NodeIndex) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, HedgeGraphError&gt;;
+<a href=#97 id=97 data-nosnippet>97</a>
+<a href=#98 id=98 data-nosnippet>98</a>    <span class="doccomment">/// Builds nodes from source and sink neighbor sets, assigning default data to each node.
+<a href=#99 id=99 data-nosnippet>99</a>    </span><span class="kw">fn </span>random(sources: <span class="kw-2">&amp;</span>[<span class="self">Self</span>::Neighbors], sinks: <span class="kw-2">&amp;</span>[<span class="self">Self</span>::Neighbors]) -&gt; <span class="self">Self
+<a href=#100 id=100 data-nosnippet>100</a>    </span><span class="kw">where
+<a href=#101 id=101 data-nosnippet>101</a>        </span><span class="self">Self</span>::NodeData: Default;
+<a href=#102 id=102 data-nosnippet>102</a>
+<a href=#103 id=103 data-nosnippet>103</a>    <span class="doccomment">/// Consumes the store and yields each current node ID with its owned data.
+<a href=#104 id=104 data-nosnippet>104</a>    </span><span class="kw">fn </span>drain(<span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (NodeIndex, <span class="self">Self</span>::NodeData)&gt;;
+<a href=#105 id=105 data-nosnippet>105</a>    <span class="doccomment">/// Iterates over current node IDs and borrowed node data.
+<a href=#106 id=106 data-nosnippet>106</a>    </span><span class="kw">fn </span>iter(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (NodeIndex, <span class="kw-2">&amp;</span><span class="self">Self</span>::NodeData)&gt;;
+<a href=#107 id=107 data-nosnippet>107</a>
+<a href=#108 id=108 data-nosnippet>108</a>    <span class="doccomment">/// Ensures backend-maintained node mappings are ready and consistent.
+<a href=#109 id=109 data-nosnippet>109</a>    </span><span class="kw">fn </span>check_and_set_nodes(<span class="kw-2">&amp;mut </span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), HedgeGraphError&gt;;
 <a href=#110 id=110 data-nosnippet>110</a>
-<a href=#111 id=111 data-nosnippet>111</a>    <span class="kw">fn </span>map_data_graph&lt;<span class="lifetime">'a</span>, V2&gt;(
-<a href=#112 id=112 data-nosnippet>112</a>        <span class="self">self</span>,
-<a href=#113 id=113 data-nosnippet>113</a>        involution: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Involution&lt;EdgeIndex&gt;,
-<a href=#114 id=114 data-nosnippet>114</a>        f: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>Involution&lt;EdgeIndex&gt;, NodeIndex, <span class="self">Self</span>::NodeData) -&gt; V2,
-<a href=#115 id=115 data-nosnippet>115</a>    ) -&gt; <span class="self">Self</span>::OpStorage&lt;V2&gt;;
-<a href=#116 id=116 data-nosnippet>116</a>
-<a href=#117 id=117 data-nosnippet>117</a>    <span class="kw">fn </span>map_data_graph_result&lt;<span class="lifetime">'a</span>, V2, <span class="prelude-val">Err</span>&gt;(
-<a href=#118 id=118 data-nosnippet>118</a>        <span class="self">self</span>,
-<a href=#119 id=119 data-nosnippet>119</a>        involution: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Involution&lt;EdgeIndex&gt;,
-<a href=#120 id=120 data-nosnippet>120</a>        f: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>Involution&lt;EdgeIndex&gt;, NodeIndex, <span class="self">Self</span>::NodeData) -&gt; <span class="prelude-ty">Result</span>&lt;V2, <span class="prelude-val">Err</span>&gt;,
-<a href=#121 id=121 data-nosnippet>121</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::OpStorage&lt;V2&gt;, <span class="prelude-val">Err</span>&gt;;
-<a href=#122 id=122 data-nosnippet>122</a>
-<a href=#123 id=123 data-nosnippet>123</a>    <span class="kw">fn </span>iter_node_id(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = NodeIndex&gt; {
-<a href=#124 id=124 data-nosnippet>124</a>        (<span class="number">0</span>..&lt;<span class="self">Self </span><span class="kw">as </span>Swap&lt;NodeIndex&gt;&gt;::len(<span class="self">self</span>).<span class="number">0</span>).map(NodeIndex)
-<a href=#125 id=125 data-nosnippet>125</a>    }
-<a href=#126 id=126 data-nosnippet>126</a>    <span class="kw">fn </span>iter_nodes(
-<a href=#127 id=127 data-nosnippet>127</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#128 id=128 data-nosnippet>128</a>    ) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (NodeIndex, <span class="self">Self</span>::NeighborsIter&lt;<span class="lifetime">'_</span>&gt;, <span class="kw-2">&amp;</span><span class="self">Self</span>::NodeData)&gt;;
-<a href=#129 id=129 data-nosnippet>129</a>    <span class="kw">fn </span>iter_nodes_mut(
-<a href=#130 id=130 data-nosnippet>130</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#131 id=131 data-nosnippet>131</a>    ) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (NodeIndex, <span class="self">Self</span>::NeighborsIter&lt;<span class="lifetime">'_</span>&gt;, <span class="kw-2">&amp;mut </span><span class="self">Self</span>::NodeData)&gt;;
-<a href=#132 id=132 data-nosnippet>132</a>    <span class="doccomment">/// Retrieves the [`NodeIndex`] that the given [`Hedge`] is incident to (or originates from).
-<a href=#133 id=133 data-nosnippet>133</a>    </span><span class="kw">fn </span>node_id_ref(<span class="kw-2">&amp;</span><span class="self">self</span>, hedge: Hedge) -&gt; NodeIndex;
-<a href=#134 id=134 data-nosnippet>134</a>    <span class="doccomment">/// Returns an iterator over the half-edges incident to the specified `node_id`.
-<a href=#135 id=135 data-nosnippet>135</a>    </span><span class="kw">fn </span>get_neighbor_iterator(<span class="kw-2">&amp;</span><span class="self">self</span>, node_id: NodeIndex) -&gt; <span class="self">Self</span>::NeighborsIter&lt;<span class="lifetime">'_</span>&gt;;
-<a href=#136 id=136 data-nosnippet>136</a>    <span class="doccomment">/// Gets a reference to the data associated with `node_id`.
-<a href=#137 id=137 data-nosnippet>137</a>    </span><span class="kw">fn </span>get_node_data(<span class="kw-2">&amp;</span><span class="self">self</span>, node_id: NodeIndex) -&gt; <span class="kw-2">&amp;</span><span class="self">Self</span>::NodeData;
-<a href=#138 id=138 data-nosnippet>138</a>    <span class="doccomment">/// Gets a mutable reference to the data associated with `node_id`.
-<a href=#139 id=139 data-nosnippet>139</a>    </span><span class="kw">fn </span>get_node_data_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, node_id: NodeIndex) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self</span>::NodeData;
-<a href=#140 id=140 data-nosnippet>140</a>}
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="doccomment">/// Checks that every half-edge belongs to exactly one consistent node.
+<a href=#112 id=112 data-nosnippet>112</a>    </span><span class="kw">fn </span>check_nodes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;(), HedgeGraphError&gt;;
+<a href=#113 id=113 data-nosnippet>113</a>
+<a href=#114 id=114 data-nosnippet>114</a>    <span class="doccomment">/// Maps borrowed node data while retaining topology and exposing the complete graph.
+<a href=#115 id=115 data-nosnippet>115</a>    </span><span class="kw">fn </span>map_data_ref_graph&lt;<span class="lifetime">'a</span>, E, V2, H&gt;(
+<a href=#116 id=116 data-nosnippet>116</a>        <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">self</span>,
+<a href=#117 id=117 data-nosnippet>117</a>        graph: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>HedgeGraph&lt;E, <span class="self">Self</span>::NodeData, H, <span class="self">Self</span>&gt;,
+<a href=#118 id=118 data-nosnippet>118</a>        node_map: <span class="kw">impl </span>FnMut(
+<a href=#119 id=119 data-nosnippet>119</a>            <span class="kw-2">&amp;</span><span class="lifetime">'a </span>HedgeGraph&lt;E, <span class="self">Self</span>::NodeData, H, <span class="self">Self</span>&gt;,
+<a href=#120 id=120 data-nosnippet>120</a>            <span class="self">Self</span>::NeighborsIter&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#121 id=121 data-nosnippet>121</a>            <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">Self</span>::NodeData,
+<a href=#122 id=122 data-nosnippet>122</a>        ) -&gt; V2,
+<a href=#123 id=123 data-nosnippet>123</a>    ) -&gt; <span class="self">Self</span>::OpStorage&lt;V2&gt;;
+<a href=#124 id=124 data-nosnippet>124</a>
+<a href=#125 id=125 data-nosnippet>125</a>    <span class="doccomment">/// Maps node data through mutable references while retaining topology.
+<a href=#126 id=126 data-nosnippet>126</a>    </span><span class="kw">fn </span>map_data_ref_mut_graph&lt;<span class="lifetime">'a</span>, V2&gt;(
+<a href=#127 id=127 data-nosnippet>127</a>        <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span><span class="self">self</span>,
+<a href=#128 id=128 data-nosnippet>128</a>        node_map: <span class="kw">impl </span>FnMut(<span class="self">Self</span>::NeighborsIter&lt;<span class="lifetime">'a</span>&gt;, <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span><span class="self">Self</span>::NodeData) -&gt; V2,
+<a href=#129 id=129 data-nosnippet>129</a>    ) -&gt; <span class="self">Self</span>::OpStorage&lt;V2&gt;;
+<a href=#130 id=130 data-nosnippet>130</a>
+<a href=#131 id=131 data-nosnippet>131</a>    <span class="doccomment">/// Fallible counterpart of [`NodeStorageOps::map_data_ref_graph`].
+<a href=#132 id=132 data-nosnippet>132</a>    </span><span class="kw">fn </span>map_data_ref_graph_result&lt;<span class="lifetime">'a</span>, E, V2, H, Er&gt;(
+<a href=#133 id=133 data-nosnippet>133</a>        <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">self</span>,
+<a href=#134 id=134 data-nosnippet>134</a>        graph: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>HedgeGraph&lt;E, <span class="self">Self</span>::NodeData, H, <span class="self">Self</span>&gt;,
+<a href=#135 id=135 data-nosnippet>135</a>        node_map: <span class="kw">impl </span>FnMut(
+<a href=#136 id=136 data-nosnippet>136</a>            <span class="kw-2">&amp;</span><span class="lifetime">'a </span>HedgeGraph&lt;E, <span class="self">Self</span>::NodeData, H, <span class="self">Self</span>&gt;,
+<a href=#137 id=137 data-nosnippet>137</a>            <span class="self">Self</span>::NeighborsIter&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#138 id=138 data-nosnippet>138</a>            <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">Self</span>::NodeData,
+<a href=#139 id=139 data-nosnippet>139</a>        ) -&gt; <span class="prelude-ty">Result</span>&lt;V2, Er&gt;,
+<a href=#140 id=140 data-nosnippet>140</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::OpStorage&lt;V2&gt;, Er&gt;;
 <a href=#141 id=141 data-nosnippet>141</a>
-<a href=#142 id=142 data-nosnippet>142</a><span class="doccomment">/// The fundamental trait defining the interface for a node storage backend in a [`HedgeGraph`].
-<a href=#143 id=143 data-nosnippet>143</a>///
-<a href=#144 id=144 data-nosnippet>144</a>/// This trait abstracts the way nodes and their incident half-edges are stored. Different
-<a href=#145 id=145 data-nosnippet>145</a>/// implementations can offer various performance trade-offs for accessing and
-<a href=#146 id=146 data-nosnippet>146</a>/// manipulating node data and topology.
-<a href=#147 id=147 data-nosnippet>147</a></span><span class="kw">pub trait </span>NodeStorage: Sized {
-<a href=#148 id=148 data-nosnippet>148</a>    <span class="doccomment">/// The type of data stored for each node in the graph.
-<a href=#149 id=149 data-nosnippet>149</a>    </span><span class="kw">type </span>NodeData;
-<a href=#150 id=150 data-nosnippet>150</a>    <span class="doccomment">/// A generic way to refer to this storage type when it holds node data of type `N`.
-<a href=#151 id=151 data-nosnippet>151</a>    /// This is often used in `NodeStorageOps` for methods that transform node data.
-<a href=#152 id=152 data-nosnippet>152</a>    </span><span class="kw">type </span>Storage&lt;N&gt;; <span class="comment">// TODO: This might need better definition or usage clarification.
-<a href=#153 id=153 data-nosnippet>153</a>
-<a href=#154 id=154 data-nosnippet>154</a>    </span><span class="doccomment">/// The type used to represent the collection of half-edges incident to a single node.
-<a href=#155 id=155 data-nosnippet>155</a>    /// This must implement the [`SubSetLike`] trait.
-<a href=#156 id=156 data-nosnippet>156</a>    </span><span class="kw">type </span>Neighbors: SubSetLike;
-<a href=#157 id=157 data-nosnippet>157</a>    <span class="doccomment">/// An iterator that yields the [`Hedge`] identifiers incident to a node.
-<a href=#158 id=158 data-nosnippet>158</a>    /// It must be cloneable and provide an exact size hint.
-<a href=#159 id=159 data-nosnippet>159</a>    </span><span class="kw">type </span>NeighborsIter&lt;<span class="lifetime">'a</span>&gt;: ExactSizeIterator&lt;Item = Hedge&gt; + Clone
-<a href=#160 id=160 data-nosnippet>160</a>    <span class="kw">where
-<a href=#161 id=161 data-nosnippet>161</a>        </span><span class="self">Self</span>: <span class="lifetime">'a</span>;
-<a href=#162 id=162 data-nosnippet>162</a>}
-<a href=#163 id=163 data-nosnippet>163</a>
-<a href=#164 id=164 data-nosnippet>164</a><span class="kw">mod </span>forest;
-<a href=#165 id=165 data-nosnippet>165</a><span class="kw">mod </span>vec;
-<a href=#166 id=166 data-nosnippet>166</a>
-<a href=#167 id=167 data-nosnippet>167</a><span class="kw">pub use </span>vec::BitVecNeighborIter;
-<a href=#168 id=168 data-nosnippet>168</a><span class="kw">pub use </span>vec::NodeStorageVec;
-<a href=#169 id=169 data-nosnippet>169</a>
-<a href=#170 id=170 data-nosnippet>170</a><span class="attr">#[cfg(all(
-<a href=#171 id=171 data-nosnippet>171</a>    feature = <span class="string">"nodestore-forest-child-vec"</span>,
-<a href=#172 id=172 data-nosnippet>172</a>    feature = <span class="string">"nodestore-forest-parent-child"
-<a href=#173 id=173 data-nosnippet>173</a></span>))]
-<a href=#174 id=174 data-nosnippet>174</a></span><span class="macro">compile_error!</span>(
-<a href=#175 id=175 data-nosnippet>175</a>    <span class="string">"Select only one forest nodestore feature: nodestore-forest-child-vec or nodestore-forest-parent-child."
-<a href=#176 id=176 data-nosnippet>176</a></span>);
+<a href=#142 id=142 data-nosnippet>142</a>    <span class="doccomment">/// Consumes the store and maps owned node data with access to the edge involution and node ID.
+<a href=#143 id=143 data-nosnippet>143</a>    </span><span class="kw">fn </span>map_data_graph&lt;<span class="lifetime">'a</span>, V2&gt;(
+<a href=#144 id=144 data-nosnippet>144</a>        <span class="self">self</span>,
+<a href=#145 id=145 data-nosnippet>145</a>        involution: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Involution&lt;EdgeIndex&gt;,
+<a href=#146 id=146 data-nosnippet>146</a>        f: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>Involution&lt;EdgeIndex&gt;, NodeIndex, <span class="self">Self</span>::NodeData) -&gt; V2,
+<a href=#147 id=147 data-nosnippet>147</a>    ) -&gt; <span class="self">Self</span>::OpStorage&lt;V2&gt;;
+<a href=#148 id=148 data-nosnippet>148</a>
+<a href=#149 id=149 data-nosnippet>149</a>    <span class="doccomment">/// Fallible counterpart of [`NodeStorageOps::map_data_graph`].
+<a href=#150 id=150 data-nosnippet>150</a>    </span><span class="kw">fn </span>map_data_graph_result&lt;<span class="lifetime">'a</span>, V2, <span class="prelude-val">Err</span>&gt;(
+<a href=#151 id=151 data-nosnippet>151</a>        <span class="self">self</span>,
+<a href=#152 id=152 data-nosnippet>152</a>        involution: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Involution&lt;EdgeIndex&gt;,
+<a href=#153 id=153 data-nosnippet>153</a>        f: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;</span><span class="lifetime">'a </span>Involution&lt;EdgeIndex&gt;, NodeIndex, <span class="self">Self</span>::NodeData) -&gt; <span class="prelude-ty">Result</span>&lt;V2, <span class="prelude-val">Err</span>&gt;,
+<a href=#154 id=154 data-nosnippet>154</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>::OpStorage&lt;V2&gt;, <span class="prelude-val">Err</span>&gt;;
+<a href=#155 id=155 data-nosnippet>155</a>
+<a href=#156 id=156 data-nosnippet>156</a>    <span class="doccomment">/// Iterates over the store's dense node-index range.
+<a href=#157 id=157 data-nosnippet>157</a>    </span><span class="kw">fn </span>iter_node_id(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = NodeIndex&gt; {
+<a href=#158 id=158 data-nosnippet>158</a>        (<span class="number">0</span>..&lt;<span class="self">Self </span><span class="kw">as </span>Swap&lt;NodeIndex&gt;&gt;::len(<span class="self">self</span>).<span class="number">0</span>).map(NodeIndex)
+<a href=#159 id=159 data-nosnippet>159</a>    }
+<a href=#160 id=160 data-nosnippet>160</a>    <span class="doccomment">/// Iterates over each node's ID, neighbors, and borrowed data.
+<a href=#161 id=161 data-nosnippet>161</a>    </span><span class="kw">fn </span>iter_nodes(
+<a href=#162 id=162 data-nosnippet>162</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#163 id=163 data-nosnippet>163</a>    ) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (NodeIndex, <span class="self">Self</span>::NeighborsIter&lt;<span class="lifetime">'_</span>&gt;, <span class="kw-2">&amp;</span><span class="self">Self</span>::NodeData)&gt;;
+<a href=#164 id=164 data-nosnippet>164</a>    <span class="doccomment">/// Iterates over each node's ID, neighbors, and mutably borrowed data.
+<a href=#165 id=165 data-nosnippet>165</a>    </span><span class="kw">fn </span>iter_nodes_mut(
+<a href=#166 id=166 data-nosnippet>166</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#167 id=167 data-nosnippet>167</a>    ) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (NodeIndex, <span class="self">Self</span>::NeighborsIter&lt;<span class="lifetime">'_</span>&gt;, <span class="kw-2">&amp;mut </span><span class="self">Self</span>::NodeData)&gt;;
+<a href=#168 id=168 data-nosnippet>168</a>    <span class="doccomment">/// Retrieves the [`NodeIndex`] that the given [`Hedge`] is incident to (or originates from).
+<a href=#169 id=169 data-nosnippet>169</a>    </span><span class="kw">fn </span>node_id_ref(<span class="kw-2">&amp;</span><span class="self">self</span>, hedge: Hedge) -&gt; NodeIndex;
+<a href=#170 id=170 data-nosnippet>170</a>    <span class="doccomment">/// Returns an iterator over the half-edges incident to the specified `node_id`.
+<a href=#171 id=171 data-nosnippet>171</a>    </span><span class="kw">fn </span>get_neighbor_iterator(<span class="kw-2">&amp;</span><span class="self">self</span>, node_id: NodeIndex) -&gt; <span class="self">Self</span>::NeighborsIter&lt;<span class="lifetime">'_</span>&gt;;
+<a href=#172 id=172 data-nosnippet>172</a>    <span class="doccomment">/// Gets a reference to the data associated with `node_id`.
+<a href=#173 id=173 data-nosnippet>173</a>    </span><span class="kw">fn </span>get_node_data(<span class="kw-2">&amp;</span><span class="self">self</span>, node_id: NodeIndex) -&gt; <span class="kw-2">&amp;</span><span class="self">Self</span>::NodeData;
+<a href=#174 id=174 data-nosnippet>174</a>    <span class="doccomment">/// Gets a mutable reference to the data associated with `node_id`.
+<a href=#175 id=175 data-nosnippet>175</a>    </span><span class="kw">fn </span>get_node_data_mut(<span class="kw-2">&amp;mut </span><span class="self">self</span>, node_id: NodeIndex) -&gt; <span class="kw-2">&amp;mut </span><span class="self">Self</span>::NodeData;
+<a href=#176 id=176 data-nosnippet>176</a>}
 <a href=#177 id=177 data-nosnippet>177</a>
-<a href=#178 id=178 data-nosnippet>178</a><span class="attr">#[cfg(feature = <span class="string">"nodestore-forest-child-vec"</span>)]
-<a href=#179 id=179 data-nosnippet>179</a></span><span class="kw">pub type </span>DefaultNodeStore&lt;V&gt; = Forest&lt;V, ChildVecStore&lt;()&gt;&gt;;
-<a href=#180 id=180 data-nosnippet>180</a>
-<a href=#181 id=181 data-nosnippet>181</a><span class="attr">#[cfg(all(
-<a href=#182 id=182 data-nosnippet>182</a>    not(feature = <span class="string">"nodestore-forest-child-vec"</span>),
-<a href=#183 id=183 data-nosnippet>183</a>    feature = <span class="string">"nodestore-forest-parent-child"
-<a href=#184 id=184 data-nosnippet>184</a></span>))]
-<a href=#185 id=185 data-nosnippet>185</a></span><span class="kw">pub type </span>DefaultNodeStore&lt;V&gt; = Forest&lt;V, ParentChildStore&lt;()&gt;&gt;;
-<a href=#186 id=186 data-nosnippet>186</a>
-<a href=#187 id=187 data-nosnippet>187</a><span class="attr">#[cfg(all(
-<a href=#188 id=188 data-nosnippet>188</a>    not(feature = <span class="string">"nodestore-forest-child-vec"</span>),
-<a href=#189 id=189 data-nosnippet>189</a>    not(feature = <span class="string">"nodestore-forest-parent-child"</span>)
-<a href=#190 id=190 data-nosnippet>190</a>))]
-<a href=#191 id=191 data-nosnippet>191</a></span><span class="kw">pub type </span>DefaultNodeStore&lt;V&gt; = NodeStorageVec&lt;V&gt;;
-<a href=#192 id=192 data-nosnippet>192</a>
-<a href=#193 id=193 data-nosnippet>193</a><span class="attr">#[cfg(test)]
-<a href=#194 id=194 data-nosnippet>194</a></span><span class="kw">mod </span>test;
+<a href=#178 id=178 data-nosnippet>178</a><span class="doccomment">/// The fundamental trait defining the interface for a node storage backend in a [`HedgeGraph`].
+<a href=#179 id=179 data-nosnippet>179</a>///
+<a href=#180 id=180 data-nosnippet>180</a>/// This trait abstracts the way nodes and their incident half-edges are stored. Different
+<a href=#181 id=181 data-nosnippet>181</a>/// implementations can offer various performance trade-offs for accessing and
+<a href=#182 id=182 data-nosnippet>182</a>/// manipulating node data and topology.
+<a href=#183 id=183 data-nosnippet>183</a></span><span class="kw">pub trait </span>NodeStorage: Sized {
+<a href=#184 id=184 data-nosnippet>184</a>    <span class="doccomment">/// The type of data stored for each node in the graph.
+<a href=#185 id=185 data-nosnippet>185</a>    </span><span class="kw">type </span>NodeData;
+<a href=#186 id=186 data-nosnippet>186</a>    <span class="doccomment">/// A generic way to refer to this storage type when it holds node data of type `N`.
+<a href=#187 id=187 data-nosnippet>187</a>    /// This is often used in `NodeStorageOps` for methods that transform node data.
+<a href=#188 id=188 data-nosnippet>188</a>    </span><span class="kw">type </span>Storage&lt;N&gt;; <span class="comment">// TODO: This might need better definition or usage clarification.
+<a href=#189 id=189 data-nosnippet>189</a>
+<a href=#190 id=190 data-nosnippet>190</a>    </span><span class="doccomment">/// The type used to represent the collection of half-edges incident to a single node.
+<a href=#191 id=191 data-nosnippet>191</a>    /// This must implement the [`SubSetLike`] trait.
+<a href=#192 id=192 data-nosnippet>192</a>    </span><span class="kw">type </span>Neighbors: SubSetLike;
+<a href=#193 id=193 data-nosnippet>193</a>    <span class="doccomment">/// An iterator that yields the [`Hedge`] identifiers incident to a node.
+<a href=#194 id=194 data-nosnippet>194</a>    /// It must be cloneable and provide an exact size hint.
+<a href=#195 id=195 data-nosnippet>195</a>    </span><span class="kw">type </span>NeighborsIter&lt;<span class="lifetime">'a</span>&gt;: ExactSizeIterator&lt;Item = Hedge&gt; + Clone
+<a href=#196 id=196 data-nosnippet>196</a>    <span class="kw">where
+<a href=#197 id=197 data-nosnippet>197</a>        </span><span class="self">Self</span>: <span class="lifetime">'a</span>;
+<a href=#198 id=198 data-nosnippet>198</a>}
+<a href=#199 id=199 data-nosnippet>199</a>
+<a href=#200 id=200 data-nosnippet>200</a><span class="kw">mod </span>forest;
+<a href=#201 id=201 data-nosnippet>201</a><span class="kw">mod </span>vec;
+<a href=#202 id=202 data-nosnippet>202</a>
+<a href=#203 id=203 data-nosnippet>203</a><span class="kw">pub use </span>vec::BitVecNeighborIter;
+<a href=#204 id=204 data-nosnippet>204</a><span class="kw">pub use </span>vec::NodeStorageVec;
+<a href=#205 id=205 data-nosnippet>205</a>
+<a href=#206 id=206 data-nosnippet>206</a><span class="attr">#[cfg(all(
+<a href=#207 id=207 data-nosnippet>207</a>    feature = <span class="string">"nodestore-forest-child-vec"</span>,
+<a href=#208 id=208 data-nosnippet>208</a>    feature = <span class="string">"nodestore-forest-parent-child"
+<a href=#209 id=209 data-nosnippet>209</a></span>))]
+<a href=#210 id=210 data-nosnippet>210</a></span><span class="macro">compile_error!</span>(
+<a href=#211 id=211 data-nosnippet>211</a>    <span class="string">"Select only one forest nodestore feature: nodestore-forest-child-vec or nodestore-forest-parent-child."
+<a href=#212 id=212 data-nosnippet>212</a></span>);
+<a href=#213 id=213 data-nosnippet>213</a>
+<a href=#214 id=214 data-nosnippet>214</a><span class="attr">#[cfg(feature = <span class="string">"nodestore-forest-child-vec"</span>)]
+<a href=#215 id=215 data-nosnippet>215</a></span><span class="kw">pub type </span>DefaultNodeStore&lt;V&gt; = Forest&lt;V, ChildVecStore&lt;()&gt;&gt;;
+<a href=#216 id=216 data-nosnippet>216</a>
+<a href=#217 id=217 data-nosnippet>217</a><span class="attr">#[cfg(all(
+<a href=#218 id=218 data-nosnippet>218</a>    not(feature = <span class="string">"nodestore-forest-child-vec"</span>),
+<a href=#219 id=219 data-nosnippet>219</a>    feature = <span class="string">"nodestore-forest-parent-child"
+<a href=#220 id=220 data-nosnippet>220</a></span>))]
+<a href=#221 id=221 data-nosnippet>221</a></span><span class="kw">pub type </span>DefaultNodeStore&lt;V&gt; = Forest&lt;V, ParentChildStore&lt;()&gt;&gt;;
+<a href=#222 id=222 data-nosnippet>222</a>
+<a href=#223 id=223 data-nosnippet>223</a><span class="attr">#[cfg(all(
+<a href=#224 id=224 data-nosnippet>224</a>    not(feature = <span class="string">"nodestore-forest-child-vec"</span>),
+<a href=#225 id=225 data-nosnippet>225</a>    not(feature = <span class="string">"nodestore-forest-parent-child"</span>)
+<a href=#226 id=226 data-nosnippet>226</a>))]
+<a href=#227 id=227 data-nosnippet>227</a></span><span class="kw">pub type </span>DefaultNodeStore&lt;V&gt; = NodeStorageVec&lt;V&gt;;
+<a href=#228 id=228 data-nosnippet>228</a>
+<a href=#229 id=229 data-nosnippet>229</a><span class="attr">#[cfg(test)]
+<a href=#230 id=230 data-nosnippet>230</a></span><span class="kw">mod </span>test;
 </code></pre></div></section></main></body></html>

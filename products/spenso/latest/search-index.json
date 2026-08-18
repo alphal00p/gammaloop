@@ -9,7 +9,8 @@
     "title": "Overview",
     "summary": "Typed tensor structures, data representations, contractions, networks, and companion packages.",
     "href": "index.html",
-    "kind": "start here"
+    "kind": "start here",
+    "text": "Research software documentation Spenso Typed tensors, symbolic structures, and executable tensor networks Start the tutorial Read the guides Browse reference Overview Spenso represents and evaluates tensors with abstract indices. It separates a tensor’s structure—representations, slots, dimensions, names, and index order—from its stored data. Dense and sparse storage, symbolic and parametric values, automatic index matching, and network execution build on that separation. Two questions, two layers Tensor structure answers “which indices and representations does this object carry?” Tensor data answers “which values occupy that structure?” Contraction first matches compatible slots, then combines data. Keep these phases distinct when diagnosing a shape, duality, or contraction error. Choose a task To verify slot duality with one numerical contraction, follow the first-contraction tutorial and the exact Contract reference . To assemble and execute several tensor/scalar nodes, use the tensor-network guide with the Network reference . To construct tensors or execute a network from Python, follow the Python tensor-workflow guide with the exact TensorNetwork reference . To parse symbolic tensor functions or apply Dirac/color identities, review the feature and interface guide , then continue with Idenso for representation-aware rewrites. From tensors to networks The core package supports three related levels of work: tensor structures describe slots and abstract indices; dense, sparse, numeric, symbolic, and parametric tensors attach data to those structures; tensor networks represent a collection of tensors and choose an execution or contraction strategy. Networks can be assembled directly. With the shadowing feature, they can also be inferred from Symbolica expressions whose functions carry recognizable tensor structure. Parsing is not mere string conversion: representation initialization, index variance, names, and the tensor library determine the inferred network. Enable shadowing only when Symbolica-backed parsing or symbolic operations are needed. It pulls in the Symbolica integration and corresponding Linnet support. The default core remains useful for typed tensors and contractions without that layer. Companion packages Component ownership spenso owns the tensor model and execution engine. spenso-macros owns the SimpleRepresentation derive used to declare custom index representations. spenso-hep-lib owns concrete high-energy-physics tensor-library data such as gamma matrices and projectors. The spynso3 adapter owns the Python community module. Their versions and feature gates are independent, so select and upgrade each component explicitly. Spenso uses Linnet for the underlying network graph. Idenso is the symbolic-identity layer for Spenso-formatted Symbolica expressions. GammaLoop consumes these components inside a broader collider workflow. The interface guide and generated Rust/Python references list the public modules, traits, feature gates, and import paths. Contributors changing structures, contraction, parsing, storage, or network scheduling should also read the source-audited Spenso implementation architecture ."
   },
   {
     "title": "Choose a task",
@@ -33,7 +34,8 @@
     "title": "Your first tensor workflow",
     "summary": "Define tensor structure, attach data, and inspect a first pairwise contraction before moving to networks.",
     "href": "tutorial/",
-    "kind": "tutorial"
+    "kind": "tutorial",
+    "text": "Tutorial This tutorial performs one concrete tensor contraction in Rust. The example makes the tensor structure, dual index matching, storage, and numerical result visible—the same layers that a larger Spenso network coordinates automatically. Prerequisites Use Rust 1.85 or newer (Spenso uses Rust 2024 edition), then create a binary project: This first contraction uses dense integer tensors and needs neither Symbolica nor the shadowing feature. Contract one shared index Replace src/main.rs with: Run cargo run . Success means the assertion passes and the printed result contains 10 at the component selected by the two remaining free indices. Spenso matched shared with shared.dual() , summed that axis, and preserved left_free and right_free in the output structure. The contraction follows index identity and duality, not merely equal dimensions. Verification scope and cost The docs harness compiles and runs this Rust program; it syntax-checks the setup commands without creating a project or using the network. Success is the asserted component value 10 with two free output indices. The contraction is tiny; a clean external Cargo build can take minutes, while the program itself should finish in well under a second. Structure is part of the value The data vectors alone do not say which axes may contract. Preserve the OrderedStructure with the tensor, and inspect the resulting structure before interpreting a flat component offset. A dimension match with unrelated abstract indices produces an exterior product, not the contraction shown above. From two tensors to a network Pairwise Contract is the clearest first success. For a larger expression, place tensors in a Network , inspect its graph, choose or benchmark a contraction strategy, and execute it. Use DataTensor when individual nodes may be dense or sparse. Enable shadowing only when the network must mix concrete data with Symbolica-backed parametric tensors. Troubleshooting and next steps If contract leaves both shared-looking axes free, print their slots and check that one is the dual of the other; dimensions alone are insufficient. If set rejects a component, compare the coordinate count and each coordinate with the structure’s rank and dimensions. If a sparse contraction reports an empty input, distinguish an intentionally zero tensor from a tensor whose nonzero entries were never populated. Continue with the tensor-structures and networks manual before selecting an automatic contraction strategy."
   },
   {
     "title": "Prerequisites",
@@ -62,86 +64,418 @@
   {
     "title": "Tensor networks",
     "summary": "Dense and sparse data, contraction planning, Symbolica shadowing, representations, and HEP helpers.",
-    "href": "manual/networks/",
-    "kind": "manual"
+    "href": "guides/networks/",
+    "kind": "guides",
+    "text": "Tensor data, contraction, and network execution Spenso keeps tensor structure and tensor data separate so the same structural operations work with dense, sparse, symbolic, or parametric storage. A structure supplies ordered slots, representations, dimensions, and abstract indices. Data supplies values and a storage-specific access strategy. Contraction first establishes structural compatibility and only then chooses a data operation. Dense, sparse, and parametric data Dense storage is appropriate when most components are populated and a predictable contiguous layout matters. Sparse storage is appropriate when zero structure dominates, but contraction cost depends on index overlap and lookup behavior rather than only the number of stored values. Parametric and symbolic tensors defer numeric substitution; keep their parameter environment with the tensor when serializing or moving a calculation between stages. Conversions must preserve the structure’s slot order. A tensor with the same dimensions but a different representation or variance is not interchangeable until an explicit structural operation establishes that relationship. Contraction and planning Pairwise contraction matches compatible dual slots, determines the output structure, and then contracts the selected data backends. A tensor network generalizes this to many nodes connected through abstract indices. Planning selects a contraction order; execution applies that plan to the current data. The cheapest-looking local pair is not always the cheapest complete plan. Intermediate tensor dimensions, sparsity, symbolic expression growth, and reusable subexpressions can dominate. Record the planner/configuration with performance results and invalidate a stored plan when the network structure changes. Plan structure, execute data A plan is meaningful for the network structure it was derived from. Replacing values without changing slots can reuse it; adding a tensor, changing a representation, or rewiring an index requires validation or replanning. Execute a small tensor/scalar network This self-contained network computes 2 a + 3 b for two equally structured tensors. The dummy libraries make the execution boundary explicit: every tensor is already concrete and any unresolved function key is an error. The output invariant is the component vector [11.0, 16.0] ; the original rank-one structure must also remain attached to the result. The documentation harness compiles the complete program; run it to execute the assertion in a provisioned Symbolica environment. See the exact Network , DenseTensor , and pairwise contraction references. Interpret execution failures by layer from_data errors are rank/dimension or storage-length mismatches. An unresolved function-key error means the network contains a symbolic library node despite the concrete-only setup. A different value with the same shape points to scalar placement or node arithmetic; a different shape points to changed slots or unintended contraction, which requires replanning. Symbolica shadowing With shadowing , Spenso recognizes registered tensor functions inside Symbolica expressions and builds a network whose nodes shadow those subexpressions. Initialization of representations and the tensor library must happen before parsing. Unknown functions remain symbolic rather than silently acquiring tensor semantics. Shadowing is useful for extracting a contraction problem while retaining a reversible link to the source expression. Keep the replacement map until the computed result has been substituted back. For rewrite identities and index cooking, use Idenso Spenso itself owns storage, contraction, and execution. The implementation handoff from symbolic syntax into network nodes is traced in the Spenso parsing flow . The Symbolica syntax and rewrite guide records the contributor-facing matching and replacement conventions. Custom representations and the HEP library SimpleRepresentation derives the repetitive representation plumbing for a user enum. The derive input still defines domain semantics: duality, dimension, slot compatibility, and any Symbolica tags must agree. The resulting representations implement the ordinary Rust traits used by the rest of Spenso; the spenso-macros API reference lists the supported derive attributes. spenso-hep-lib registers concrete high-energy-physics structures such as gamma matrices and projectors. Treat that library as shared domain data. GammaLoop uses the same definitions. Graph and tensor ownership Linnet owns connectivity, cuts, cycles, and graph mutation. Spenso owns which connected slots contract and how a plan is executed. Keeping that boundary explicit prevents a graph rewrite from being mistaken for a tensor-algebra identity."
   },
   {
     "title": "Dense, sparse, and parametric data",
     "summary": "Spenso · Tensor networks",
-    "href": "manual/networks/#dense-sparse-and-parametric-data",
-    "kind": "manual"
+    "href": "guides/networks/#dense-sparse-and-parametric-data",
+    "kind": "guides"
   },
   {
     "title": "Contraction and planning",
     "summary": "Spenso · Tensor networks",
-    "href": "manual/networks/#contraction-and-planning",
-    "kind": "manual"
+    "href": "guides/networks/#contraction-and-planning",
+    "kind": "guides"
   },
   {
     "title": "Execute a small tensor/scalar network",
     "summary": "Spenso · Tensor networks",
-    "href": "manual/networks/#execute-a-small-tensor-scalar-network",
-    "kind": "manual"
+    "href": "guides/networks/#execute-a-small-tensor-scalar-network",
+    "kind": "guides"
   },
   {
     "title": "Symbolica shadowing",
     "summary": "Spenso · Tensor networks",
-    "href": "manual/networks/#symbolica-shadowing",
-    "kind": "manual"
+    "href": "guides/networks/#symbolica-shadowing",
+    "kind": "guides"
   },
   {
     "title": "Custom representations and the HEP library",
     "summary": "Spenso · Tensor networks",
-    "href": "manual/networks/#custom-representations-and-the-hep-library",
-    "kind": "manual"
+    "href": "guides/networks/#custom-representations-and-the-hep-library",
+    "kind": "guides"
+  },
+  {
+    "title": "Python tensor workflows",
+    "summary": "Construct tensors, register reusable data, execute networks, and evaluate symbolic batches through the Spenso community module.",
+    "href": "guides/python/",
+    "kind": "guides",
+    "text": "Python tensor workflows Spenso’s Python interface is a native adapter over the same tensor structures, libraries, and network executor as the Rust crates. Use the generated reference for exact signatures and this guide for the object boundaries and execution sequence that those signatures do not explain. Availability and version boundary A Symbolica community module Import Spenso as symbolica.community.spenso ; there is no standalone spenso wheel. The installed Symbolica assembly determines whether the module is present and which Spenso API it contains. A source checkout or generated .pyi file does not add the native module to an existing Python environment. Check the environment before building a workflow: When a provider’s Symbolica package does not include Spenso, build it through the community-module assembly . Record the Symbolica assembly version with reproducible results; it is a more useful Python compatibility fact than the version of an unrelated local Rust checkout. Choose the right object Representation and Slot define dimensions, duality, and abstract indices. TensorIndices carries concrete abstract indices; TensorStructure describes a reusable shape whose indices can be assigned later. Tensor owns ordinary dense or sparse data. LibraryTensor is the named form registered in a TensorLibrary for reuse by symbolic networks. TensorNetwork owns an expression graph. ExecutionMode selects the rewrite strategy: one smallest-degree rewrite per step, scalar work only, or the general smallest-degree strategy. Use n_steps , not the mode, to bound how many execution steps run. TensorEvaluator substitutes repeated numerical parameter batches into a symbolic tensor; its compiled counterpart owns the generated native evaluator. The generated Representation , Tensor , and TensorNetwork entries are the exact versioned contracts. Do not infer index compatibility from two equal dimensions: names, representations, and duality remain part of the value. Construct and inspect concrete data This complete source creates a named rank-two tensor, verifies one component, and converts its storage in place. The documentation harness compiles the Python source without importing the native module. Tensor.dense requires row-major data whose length is the product of the structure dimensions. Tensor.sparse instead needs the element type and starts empty. to_dense() and to_sparse() mutate the storage representation; they do not change slots or re-index the tensor. See the dense constructor and conversion contract . Diagnose structure before storage A constructor failure usually means the data length and dimensions disagree. An unexpected contraction or exterior product is instead an index/duality problem. Print the structure and slots before changing dense/sparse storage, because a storage conversion cannot repair a structural mismatch. Register data and execute a network A symbolic network resolves named tensors through a library. Register the data first, construct the expression with the same name and compatible slots, then execute and request the result: ExecutionMode.Single selects the smallest-degree single-rewrite strategy, but execution still continues while work remains unless it is bounded; use n_steps=1 to inspect exactly one step. Scalar processes scalar work while retaining tensor structure, and All attempts the complete available execution. A successful execute() does not make result_scalar() appropriate for a tensor result; choose result_tensor() or result_scalar() according to the remaining structure. Exact behavior is linked from execute , result_tensor , and ExecutionMode . Interpret a network failure by ownership A missing-library error means a symbolic tensor name has no registered data. A result-kind error means the graph still has tensor structure when a scalar was requested, or vice versa. A changed network structure invalidates assumptions about contraction order; replacing only values with the same registered structure does not. Repeated symbolic evaluation Use Tensor.evaluator() when the tensor structure stays fixed and only symbolic parameters change across batches. Supply constants, custom functions, and parameters explicitly. Call evaluate() for real inputs and evaluate_complex() when coefficients or inputs are complex. compile() creates source and a shared library, so treat its filenames, compiler, architecture, and optimization level as reproducibility inputs rather than incidental arguments. Control Symbolica-backed Rayon work with SymbolicParallelism : Serial keeps work on the calling thread, Auto checks license capability and applies workload heuristics, and Parallel forces Rayon without that safety choice. Configure the policy before benchmarking; otherwise a threading-policy change can be mistaken for an algorithmic improvement. For exact parameters and defaults, use the evaluator reference and symbolic parallelism reference . The implementation starts in the Spenso Python adapter ."
+  },
+  {
+    "title": "Availability and version boundary",
+    "summary": "Spenso · Python tensor workflows",
+    "href": "guides/python/#availability-and-version-boundary",
+    "kind": "guides"
+  },
+  {
+    "title": "Choose the right object",
+    "summary": "Spenso · Python tensor workflows",
+    "href": "guides/python/#choose-the-right-object",
+    "kind": "guides"
+  },
+  {
+    "title": "Construct and inspect concrete data",
+    "summary": "Spenso · Python tensor workflows",
+    "href": "guides/python/#construct-and-inspect-concrete-data",
+    "kind": "guides"
+  },
+  {
+    "title": "Register data and execute a network",
+    "summary": "Spenso · Python tensor workflows",
+    "href": "guides/python/#register-data-and-execute-a-network",
+    "kind": "guides"
+  },
+  {
+    "title": "Repeated symbolic evaluation",
+    "summary": "Spenso · Python tensor workflows",
+    "href": "guides/python/#repeated-symbolic-evaluation",
+    "kind": "guides"
   },
   {
     "title": "Rust, macros, and Python",
     "summary": "Core Rust APIs, derive macros, HEP helpers, feature flags, and Python bindings.",
-    "href": "manual/interfaces/",
-    "kind": "manual"
+    "href": "reference/interfaces/",
+    "kind": "reference",
+    "text": "Rust, macros, and Python APIs Core Rust package The spenso crate organizes its public surface into structure , tensors , contraction , network , iterators , and algebra . The important abstractions form a progression: TensorStructure and related traits describe slots, names, and contraction compatibility; DenseTensor , SparseTensor , and the heterogeneous tensor enums own storage; contraction traits perform pairwise or multi-tensor operations; network stores and libraries bind symbolic tensor names to concrete data and execute a graph. Trait implementations and generic constraints determine which combinations of structure and data support an operation. Consult the curated Rust API when a method is unavailable for a particular tensor type, then follow its Rustdoc link for exhaustive generic detail. The shadowing API and symbolic parallelism controls require their corresponding Cargo features. Proc macros and HEP data spenso-macros is a separate proc-macro crate. Its SimpleRepresentation derive generates the representation and duality boilerplate used by Spenso index types. A declaration supplies a symbolic name and chooses either self_dual or a dual_name : The spenso-macros card in the Rust reference lists the derive’s helper attributes, allowed targets, and feature conditions. Macro expansion happens at compile time and produces ordinary Rust implementations. spenso-hep-lib supplies domain data and tensor-library construction for high-energy physics. It is intentionally separate from the generic core. Users who need gamma matrices or physics projectors add that package; generic Spenso users do not inherit those conventions implicitly. Python community module An adapter, not a Spenso wheel Python users import symbolica.community.spenso . The implementation is the spynso3 Rust adapter and is distributed through the Symbolica community-module mechanism. Enabling Spenso’s Rust python feature only enables conversion interoperability; it does not create a standalone importable spenso Python distribution. For a released Python assembly that includes Spenso, install the provider’s Symbolica distribution with python -m pip install symbolica , then verify python -c \"import symbolica.community.spenso\" . Module availability follows the Symbolica assembly version; a local Spenso source checkout does not add the module to an installed wheel. Source embedders must add spynso3 to the external symbolica-community assembly and invoke its SymbolicaCommunityModule registration while building that extension; building the Rust crate alone does not inject the module into another Symbolica wheel. The Python tensor-workflow guide connects construction, libraries, network execution, evaluators, and symbolic-parallelism policy. Use it with the structured Python reference , whose exact signatures can differ from the generic Rust API because spynso3 provides Python-specific conversions and defaults. Source starting points are the core crate , the derive crate , the HEP library , and the Python adapter ."
   },
   {
     "title": "Core Rust package",
     "summary": "Spenso · Rust, macros, and Python",
-    "href": "manual/interfaces/#core-rust-package",
-    "kind": "manual"
+    "href": "reference/interfaces/#core-rust-package",
+    "kind": "reference"
   },
   {
     "title": "Proc macros and HEP data",
     "summary": "Spenso · Rust, macros, and Python",
-    "href": "manual/interfaces/#proc-macros-and-hep-data",
-    "kind": "manual"
+    "href": "reference/interfaces/#proc-macros-and-hep-data",
+    "kind": "reference"
   },
   {
     "title": "Python community module",
     "summary": "Spenso · Rust, macros, and Python",
-    "href": "manual/interfaces/#python-community-module",
-    "kind": "manual"
+    "href": "reference/interfaces/#python-community-module",
+    "kind": "reference"
   },
   {
-    "title": "Releases and change history",
-    "summary": "Published versions, compatibility changes, and practical upgrade guidance.",
-    "href": "manual/releases/",
-    "kind": "manual"
+    "title": "Version history",
+    "summary": "Release-note coverage, component versions, compatibility risks, and practical upgrade checks.",
+    "href": "version-history/",
+    "kind": "version history",
+    "text": "Version history History coverage This version of Spenso is 0.6.0, but the published changelog currently ends at 0.5.6. Release notes for 0.6.0 are not yet available, so the history below is incomplete for that version. spenso-macros , spenso-hep-lib , and spynso3 have independent versions and changelogs. Available histories Spenso core versions Spenso macros versions Spenso HEP library versions Spynso3 Python-adapter versions When upgrading, inspect the history for tensor structure, contraction, network parsing, Symbolica integration, and Python API or signature changes. Also check each companion component used by the application: a core Spenso release does not imply a release of the macro, HEP, or Python adapter package. Upgrade checklist Compare tensor structure and contraction behavior, network parsing, Symbolica integration, feature flags, and Python signatures for every component used by the application. Reproducibility record For reproducible upgrades, record the versions of Spenso and every companion component used by the application. Do not assume that changes between 0.5.6 and 0.6.0 are fully represented in the available notes."
   },
   {
-    "title": "Spenso macros release history",
+    "title": "Available histories",
+    "summary": "Spenso · Version history",
+    "href": "version-history/#available-histories",
+    "kind": "version history"
+  },
+  {
+    "title": "Upgrade checklist",
+    "summary": "Spenso · Version history",
+    "href": "version-history/#upgrade-checklist",
+    "kind": "version history"
+  },
+  {
+    "title": "Reproducibility record",
+    "summary": "Spenso · Version history",
+    "href": "version-history/#reproducibility-record",
+    "kind": "version history"
+  },
+  {
+    "title": "Spenso versions",
+    "summary": "Canonical release notes for the core Spenso tensor library.",
+    "href": "version-history/spenso/",
+    "kind": "version history",
+    "text": "Spenso versions This page renders the canonical Spenso changelog source as part of the Spenso website, navigation, and search. All notable changes to this project will be documented in this file. The format is based on Keep a Changelog , and this project adheres to Semantic Versioning . Unreleased 0.5.6 - 2026-01-08 Fixed fix python_stub_gen feature fix metric initialization and update to symbolica 1.2 Other update linnet 0.5.5 - 2025-12-15 Fixed fix canonization in presence of duals fix sum normalization in network parsing fix warnings fix overflowing slot order fix add_assign with sparse tensors Other Update symbolica to 1.1.0 update linnet add depth to parser, to stop at first mul remove more prints remove prints update linnet add readmes formatting and add ref for parametric update to 0.17 pyo3_stub_gen update linnet and make classattr to classmethods Release spenso-macros 0.3 update to symbolica 1.0 update sympolica to 0.20 Properly precontract scalars Add back pyo3-stub-gen-derive Updated spenso with minor canonical string update for symbolica f2eb0c1ddcc61c342f2ff9616c2d129141d433dc Refactor coefficient conversions to support generic float types update to current dev symbolica and add pattern for pslash + m conjugate update to linnet 0.13.1 working canonize (up to functions) and dirac adjoint spenso canonize buggy robust_conj but with lots of gamma_0s first try conj update python api working pow and fun execution working pow execution with wrapping support for executing pow and functions on tensors implement function library trait add function generic key 0.5.3 - 2025-08-18 Other update linnet to crates all tests pass Fix Multiple Heads Bug implement ExportNumber for spenso::Complex to Atom for ExpandedIndex remove printouts update linnet update linnet update linnet add infinite loop error test update parse problem and add spenso:: to all symbols remove expand 0.5.2 - 2025-07-15 Other remove printout 0.5.1 - 2025-07-15 Fixed fix gamma algebra≈ Other allow arbitrary arguments for to dots"
+  },
+  {
+    "title": "Unreleased",
+    "summary": "Spenso · Spenso versions",
+    "href": "version-history/spenso/#unreleased",
+    "kind": "version history"
+  },
+  {
+    "title": "0.5.6 - 2026-01-08",
+    "summary": "Spenso · Spenso versions",
+    "href": "version-history/spenso/#0-5-6-2026-01-08",
+    "kind": "version history"
+  },
+  {
+    "title": "Fixed",
+    "summary": "Spenso · Spenso versions",
+    "href": "version-history/spenso/#fixed",
+    "kind": "version history"
+  },
+  {
+    "title": "Other",
+    "summary": "Spenso · Spenso versions",
+    "href": "version-history/spenso/#other",
+    "kind": "version history"
+  },
+  {
+    "title": "0.5.5 - 2025-12-15",
+    "summary": "Spenso · Spenso versions",
+    "href": "version-history/spenso/#0-5-5-2025-12-15",
+    "kind": "version history"
+  },
+  {
+    "title": "Fixed",
+    "summary": "Spenso · Spenso versions",
+    "href": "version-history/spenso/#fixed-2",
+    "kind": "version history"
+  },
+  {
+    "title": "Other",
+    "summary": "Spenso · Spenso versions",
+    "href": "version-history/spenso/#other-2",
+    "kind": "version history"
+  },
+  {
+    "title": "0.5.3 - 2025-08-18",
+    "summary": "Spenso · Spenso versions",
+    "href": "version-history/spenso/#0-5-3-2025-08-18",
+    "kind": "version history"
+  },
+  {
+    "title": "Other",
+    "summary": "Spenso · Spenso versions",
+    "href": "version-history/spenso/#other-3",
+    "kind": "version history"
+  },
+  {
+    "title": "0.5.2 - 2025-07-15",
+    "summary": "Spenso · Spenso versions",
+    "href": "version-history/spenso/#0-5-2-2025-07-15",
+    "kind": "version history"
+  },
+  {
+    "title": "Other",
+    "summary": "Spenso · Spenso versions",
+    "href": "version-history/spenso/#other-4",
+    "kind": "version history"
+  },
+  {
+    "title": "0.5.1 - 2025-07-15",
+    "summary": "Spenso · Spenso versions",
+    "href": "version-history/spenso/#0-5-1-2025-07-15",
+    "kind": "version history"
+  },
+  {
+    "title": "Fixed",
+    "summary": "Spenso · Spenso versions",
+    "href": "version-history/spenso/#fixed-3",
+    "kind": "version history"
+  },
+  {
+    "title": "Other",
+    "summary": "Spenso · Spenso versions",
+    "href": "version-history/spenso/#other-5",
+    "kind": "version history"
+  },
+  {
+    "title": "Spenso macros versions",
     "summary": "Canonical release notes for the independently versioned Spenso procedural macros.",
-    "href": "manual/spenso-macros-releases/",
-    "kind": "manual"
+    "href": "version-history/spenso-macros/",
+    "kind": "version history",
+    "text": "Spenso macros versions The procedural macros are versioned independently from Spenso. Their canonical version history remains the spenso-macros changelog source . This rendered copy integrates it with the manual, navigation, search, and product PDF. All notable changes to this project will be documented in this file. The format is based on Keep a Changelog , and this project adheres to Semantic Versioning . Unreleased 0.3.2 - 2026-01-08 Fixed fix metric initialization and update to symbolica 1.2 Other update linnet 0.3.1 - 2025-12-15 Other Update symbolica to 1.1.0 update linnet update linnet add readmes update linnet and make classattr to classmethods 0.2.1 - 2025-08-18 Other update linnet to crates update linnet update linnet update linnet"
   },
   {
-    "title": "Spenso HEP library release history",
+    "title": "Unreleased",
+    "summary": "Spenso · Spenso macros versions",
+    "href": "version-history/spenso-macros/#unreleased",
+    "kind": "version history"
+  },
+  {
+    "title": "0.3.2 - 2026-01-08",
+    "summary": "Spenso · Spenso macros versions",
+    "href": "version-history/spenso-macros/#0-3-2-2026-01-08",
+    "kind": "version history"
+  },
+  {
+    "title": "Fixed",
+    "summary": "Spenso · Spenso macros versions",
+    "href": "version-history/spenso-macros/#fixed",
+    "kind": "version history"
+  },
+  {
+    "title": "Other",
+    "summary": "Spenso · Spenso macros versions",
+    "href": "version-history/spenso-macros/#other",
+    "kind": "version history"
+  },
+  {
+    "title": "0.3.1 - 2025-12-15",
+    "summary": "Spenso · Spenso macros versions",
+    "href": "version-history/spenso-macros/#0-3-1-2025-12-15",
+    "kind": "version history"
+  },
+  {
+    "title": "Other",
+    "summary": "Spenso · Spenso macros versions",
+    "href": "version-history/spenso-macros/#other-2",
+    "kind": "version history"
+  },
+  {
+    "title": "0.2.1 - 2025-08-18",
+    "summary": "Spenso · Spenso macros versions",
+    "href": "version-history/spenso-macros/#0-2-1-2025-08-18",
+    "kind": "version history"
+  },
+  {
+    "title": "Other",
+    "summary": "Spenso · Spenso macros versions",
+    "href": "version-history/spenso-macros/#other-3",
+    "kind": "version history"
+  },
+  {
+    "title": "Spenso HEP library versions",
     "summary": "Canonical release notes for the independently versioned high-energy-physics helper library.",
-    "href": "manual/spenso-hep-lib-releases/",
-    "kind": "manual"
+    "href": "version-history/spenso-hep-lib/",
+    "kind": "version history",
+    "text": "Spenso HEP library versions The HEP helper library is versioned independently from Spenso. Its canonical version history remains the spenso-hep-lib changelog source . This rendered copy integrates it with the manual, navigation, search, and product PDF. All notable changes to this project will be documented in this file. The format is based on Keep a Changelog , and this project adheres to Semantic Versioning . Unreleased 0.1.7 - 2026-01-14 Other update versions 0.1.6 - 2026-01-08 Fixed fix python_stub_gen feature fix metric initialization and update to symbolica 1.2 0.1.5 - 2025-12-15 Fixed fix warnings fix add_assign with sparse tensors Other Update symbolica to 1.1.0 update linnet add readmes Release spenso-macros 0.3 update to symbolica 1.0 update sympolica to 0.20 Properly precontract scalars Refactor coefficient conversions to support generic float types working pow and fun execution working pow execution with wrapping add function generic key 0.1.3 - 2025-08-18 Other all tests pass update linnet 0.1.2 - 2025-07-15 Fixed fix gamma algebra again Other update versions 0.1.1 - 2025-07-15 Fixed fix gamma algebra≈ Other update release action allow arbitrary arguments for to dots"
   },
   {
-    "title": "Spynso3 release history",
+    "title": "Unreleased",
+    "summary": "Spenso · Spenso HEP library versions",
+    "href": "version-history/spenso-hep-lib/#unreleased",
+    "kind": "version history"
+  },
+  {
+    "title": "0.1.7 - 2026-01-14",
+    "summary": "Spenso · Spenso HEP library versions",
+    "href": "version-history/spenso-hep-lib/#0-1-7-2026-01-14",
+    "kind": "version history"
+  },
+  {
+    "title": "Other",
+    "summary": "Spenso · Spenso HEP library versions",
+    "href": "version-history/spenso-hep-lib/#other",
+    "kind": "version history"
+  },
+  {
+    "title": "0.1.6 - 2026-01-08",
+    "summary": "Spenso · Spenso HEP library versions",
+    "href": "version-history/spenso-hep-lib/#0-1-6-2026-01-08",
+    "kind": "version history"
+  },
+  {
+    "title": "Fixed",
+    "summary": "Spenso · Spenso HEP library versions",
+    "href": "version-history/spenso-hep-lib/#fixed",
+    "kind": "version history"
+  },
+  {
+    "title": "0.1.5 - 2025-12-15",
+    "summary": "Spenso · Spenso HEP library versions",
+    "href": "version-history/spenso-hep-lib/#0-1-5-2025-12-15",
+    "kind": "version history"
+  },
+  {
+    "title": "Fixed",
+    "summary": "Spenso · Spenso HEP library versions",
+    "href": "version-history/spenso-hep-lib/#fixed-2",
+    "kind": "version history"
+  },
+  {
+    "title": "Other",
+    "summary": "Spenso · Spenso HEP library versions",
+    "href": "version-history/spenso-hep-lib/#other-2",
+    "kind": "version history"
+  },
+  {
+    "title": "0.1.3 - 2025-08-18",
+    "summary": "Spenso · Spenso HEP library versions",
+    "href": "version-history/spenso-hep-lib/#0-1-3-2025-08-18",
+    "kind": "version history"
+  },
+  {
+    "title": "Other",
+    "summary": "Spenso · Spenso HEP library versions",
+    "href": "version-history/spenso-hep-lib/#other-3",
+    "kind": "version history"
+  },
+  {
+    "title": "0.1.2 - 2025-07-15",
+    "summary": "Spenso · Spenso HEP library versions",
+    "href": "version-history/spenso-hep-lib/#0-1-2-2025-07-15",
+    "kind": "version history"
+  },
+  {
+    "title": "Fixed",
+    "summary": "Spenso · Spenso HEP library versions",
+    "href": "version-history/spenso-hep-lib/#fixed-3",
+    "kind": "version history"
+  },
+  {
+    "title": "Other",
+    "summary": "Spenso · Spenso HEP library versions",
+    "href": "version-history/spenso-hep-lib/#other-4",
+    "kind": "version history"
+  },
+  {
+    "title": "0.1.1 - 2025-07-15",
+    "summary": "Spenso · Spenso HEP library versions",
+    "href": "version-history/spenso-hep-lib/#0-1-1-2025-07-15",
+    "kind": "version history"
+  },
+  {
+    "title": "Fixed",
+    "summary": "Spenso · Spenso HEP library versions",
+    "href": "version-history/spenso-hep-lib/#fixed-4",
+    "kind": "version history"
+  },
+  {
+    "title": "Other",
+    "summary": "Spenso · Spenso HEP library versions",
+    "href": "version-history/spenso-hep-lib/#other-5",
+    "kind": "version history"
+  },
+  {
+    "title": "Spynso3 versions",
     "summary": "Canonical release notes for the independently versioned Symbolica community Python adapter.",
-    "href": "manual/spynso3-releases/",
-    "kind": "manual"
+    "href": "version-history/spynso3/",
+    "kind": "version history",
+    "text": "Spynso3 versions The Python adapter is versioned independently from Spenso. Its canonical version history remains the spynso3 changelog source . This rendered copy integrates it with the manual, navigation, search, and product PDF. All notable changes to this project will be documented in this file. The format is based on Keep a Changelog , and this project adheres to Semantic Versioning . Unreleased 0.1.2 - 2026-01-14 Other update versions 0.1.1 - 2025-12-15 Fixed fix sum normalization in network parsing fix warnings fix add_assign with sparse tensors fix projp fix param docs and iter return type fix pyo3_stubs Other Update implementation to pyo3-stub-gen 0.17 Update symbolica to 1.1.0 update linnet add readmes update to 0.17 pyo3_stub_gen update linnet and make classattr to classmethods move initialize to api Release spenso-macros 0.3 update to symbolica 1.0 update sympolica to 0.20 Properly precontract scalars Add back pyo3-stub-gen-derive update to current dev symbolica and add pattern for pslash + m conjugate first try conj update python api add function generic key again return any because python is dumb update __iter__ method use numpy doc format add overloaded pyi stub gen"
+  },
+  {
+    "title": "Unreleased",
+    "summary": "Spenso · Spynso3 versions",
+    "href": "version-history/spynso3/#unreleased",
+    "kind": "version history"
+  },
+  {
+    "title": "0.1.2 - 2026-01-14",
+    "summary": "Spenso · Spynso3 versions",
+    "href": "version-history/spynso3/#0-1-2-2026-01-14",
+    "kind": "version history"
+  },
+  {
+    "title": "Other",
+    "summary": "Spenso · Spynso3 versions",
+    "href": "version-history/spynso3/#other",
+    "kind": "version history"
+  },
+  {
+    "title": "0.1.1 - 2025-12-15",
+    "summary": "Spenso · Spynso3 versions",
+    "href": "version-history/spynso3/#0-1-1-2025-12-15",
+    "kind": "version history"
+  },
+  {
+    "title": "Fixed",
+    "summary": "Spenso · Spynso3 versions",
+    "href": "version-history/spynso3/#fixed",
+    "kind": "version history"
+  },
+  {
+    "title": "Other",
+    "summary": "Spenso · Spynso3 versions",
+    "href": "version-history/spynso3/#other-2",
+    "kind": "version history"
   },
   {
     "title": "spenso · Tensor structure",
@@ -151,85 +485,85 @@
   },
   {
     "title": "spenso · Tensor structure.Slot",
-    "summary": "type Slot : IsAbstractSlot + DualSlotTo < Dual = Self :: Slot > ;",
+    "summary": "Abstract slot type used for the structure's external indices.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-slot-associatedtype",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.Indexed",
-    "summary": "type Indexed : TensorStructure < Indexed = Self :: Indexed, Slot = Self ::\nSlot > ;",
+    "summary": "Structure type produced after assigning new abstract indices.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-indexed-associatedtype",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.reindex",
-    "summary": "fn reindex(self, indices : & [< Self :: Slot as IsAbstractSlot > :: Aind],) ->\nResult < PermutedStructure < Self :: Indexed > , StructureError > ;",
+    "summary": "Replaces the slot indices in order and records any resulting permutations.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-reindex-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.dual",
-    "summary": "fn dual(self) -> Self;",
+    "summary": "Returns this structure with every external slot dualized.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-dual-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.string_rep",
-    "summary": "fn string_rep(& self) -> String\n{\n    self.external_structure_iter().map(| s | s.to_string()).collect :: < Vec <\n    _ > > ().join(\"\")\n}",
+    "summary": "Concatenates the display representation of all external slots.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-string-rep-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.external_structure_iter",
-    "summary": "fn external_structure_iter(& self) -> impl Iterator < Item = Self :: Slot > ;",
+    "summary": "Iterates over external slots in structure order.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-external-structure-iter-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.external_dims_iter",
-    "summary": "fn external_dims_iter(& self) -> impl Iterator < Item = Dimension > ;",
+    "summary": "Iterates over the dimensions of external slots in structure order.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-external-dims-iter-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.external_reps_iter",
-    "summary": "fn external_reps_iter(& self,) -> impl Iterator < Item = Representation < <\nSelf :: Slot as IsAbstractSlot > :: R > > ;",
+    "summary": "Iterates over the representations of external slots in structure order.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-external-reps-iter-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.external_indices_iter",
-    "summary": "fn external_indices_iter(& self) -> impl Iterator < Item = < Self :: Slot as\nIsAbstractSlot > :: Aind > ;",
+    "summary": "Iterates over the abstract indices of external slots in structure order.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-external-indices-iter-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.get_aind",
-    "summary": "fn get_aind(& self, i : impl Into < SlotIndex >) -> Option < < Self :: Slot as\nIsAbstractSlot > :: Aind > ;",
+    "summary": "Returns the abstract index at a slot position, if it exists.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-get-aind-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.get_rep",
-    "summary": "fn get_rep(& self, i : impl Into < SlotIndex > ,) -> Option < Representation <\n< Self :: Slot as IsAbstractSlot > :: R > > ;",
+    "summary": "Returns the representation at a slot position, if it exists.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-get-rep-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.get_dim",
-    "summary": "fn get_dim(& self, i : impl Into < SlotIndex >) -> Option < Dimension > ;",
+    "summary": "Returns the dimension at a slot position, if it exists.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-get-dim-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.get_slot",
-    "summary": "fn get_slot(& self, i : impl Into < SlotIndex >) -> Option < Self :: Slot > ;",
+    "summary": "Returns the external slot at a position, if it exists.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-get-slot-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.order",
-    "summary": "fn order(& self) -> usize;",
+    "summary": "Returns the number of external slots.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-order-method",
     "kind": "rust-api"
   },
@@ -241,25 +575,25 @@
   },
   {
     "title": "spenso · Tensor structure.to_shell",
-    "summary": "fn to_shell(self) -> TensorShell < Self > where Self : Sized,\n{ TensorShell :: new(self) }",
+    "summary": "Wraps this structure as a data-free tensor shell.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-to-shell-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.contains_matching",
-    "summary": "fn contains_matching(& self, slot : & Self :: Slot) -> bool\n{ self.external_structure_iter().any(| s | s.matches(slot)) }",
+    "summary": "Reports whether an external slot matches the supplied slot.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-contains-matching-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.external_reps",
-    "summary": "fn external_reps(& self) -> Vec < Representation < < Self :: Slot as\nIsAbstractSlot > :: R > > { self.external_reps_iter().collect() }",
+    "summary": "Collects the external representations in structure order.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-external-reps-method",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor structure.external_indices",
-    "summary": "fn external_indices(& self) -> Vec < < Self :: Slot as IsAbstractSlot > ::\nAind > { self.external_indices_iter().collect() }",
+    "summary": "Collects the external abstract indices in structure order.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-external-indices-method",
     "kind": "rust-api"
   },
@@ -295,7 +629,7 @@
   },
   {
     "title": "spenso · Tensor structure.reps",
-    "summary": "fn reps(& self) -> Vec < Representation < < Self :: Slot as IsAbstractSlot >\n:: R > > { self.external_reps_iter().collect() }",
+    "summary": "Collects the external representations in structure order.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-reps-method",
     "kind": "rust-api"
   },
@@ -349,7 +683,7 @@
   },
   {
     "title": "spenso · Tensor structure.co_expanded_index",
-    "summary": "fn co_expanded_index(& self, flat_index : FlatIndex) -> Result <\nDualConciousExpandedIndex >\n{\n    let mut indices = vec! []; for (r, i) in\n    self.external_reps_iter().zip(self.expanded_index(flat_index) ? .iter())\n    {\n        if r.rep.is_base() && r.rep.is_dual()\n        { indices.push(DualConciousIndex :: SelfDual(* i)); } else if\n        r.rep.is_base() { indices.push(DualConciousIndex :: Up(* i)); } else\n        { indices.push(DualConciousIndex :: Down(* i)); }\n    } Ok(indices.into())\n}",
+    "summary": "Expands a flat index while retaining each representation's dual orientation.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-co-expanded-index-method",
     "kind": "rust-api"
   },
@@ -367,7 +701,7 @@
   },
   {
     "title": "spenso · Tensor structure.is_fully_self_dual",
-    "summary": "fn is_fully_self_dual(& self) -> bool;",
+    "summary": "Reports whether every external representation is self-dual.",
     "href": "reference/rust/supported/spenso/#supported-tensorstructure-is-fully-self-dual-method",
     "kind": "rust-api"
   },
@@ -385,13 +719,13 @@
   },
   {
     "title": "spenso · Dense tensor.data",
-    "summary": "Vec < T >",
+    "summary": "Components in the flat order defined by `structure`.",
     "href": "reference/rust/supported/spenso/#supported-densetensor-data-field",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Dense tensor.structure",
-    "summary": "S",
+    "summary": "Tensor structure that maps external slots to flat component indices.",
     "href": "reference/rust/supported/spenso/#supported-densetensor-structure-field",
     "kind": "rust-api"
   },
@@ -403,19 +737,19 @@
   },
   {
     "title": "spenso · Sparse tensor.elements",
-    "summary": "std :: collections :: HashMap < FlatIndex, T >",
+    "summary": "Explicitly stored components keyed by their flat indices.",
     "href": "reference/rust/supported/spenso/#supported-sparsetensor-elements-field",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Sparse tensor.zero",
-    "summary": "T",
+    "summary": "Value used for components absent from `elements`.",
     "href": "reference/rust/supported/spenso/#supported-sparsetensor-zero-field",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Sparse tensor.structure",
-    "summary": "I",
+    "summary": "Tensor structure that maps external slots to flat component indices.",
     "href": "reference/rust/supported/spenso/#supported-sparsetensor-structure-field",
     "kind": "rust-api"
   },
@@ -427,13 +761,13 @@
   },
   {
     "title": "spenso · Pairwise contraction.LCM",
-    "summary": "type LCM;",
+    "summary": "Result type produced by contracting with `T`.",
     "href": "reference/rust/supported/spenso/#supported-contract-lcm-associatedtype",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Pairwise contraction.contract",
-    "summary": "fn contract(& self, other : & T) -> Result < Self :: LCM, ContractionError > ;",
+    "summary": "Contracts matching dual slots with `other` and returns the resulting tensor.",
     "href": "reference/rust/supported/spenso/#supported-contract-contract-method",
     "kind": "rust-api"
   },
@@ -445,20 +779,524 @@
   },
   {
     "title": "spenso · Tensor network.graph",
-    "summary": "NetworkGraph < LibKey, FunKey, Aind >",
+    "summary": "Expression and contraction topology whose leaves reference stored values.",
     "href": "reference/rust/supported/spenso/#supported-network-graph-field",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor network.store",
-    "summary": "S",
+    "summary": "Backing tensor and scalar storage referenced by graph leaves.",
     "href": "reference/rust/supported/spenso/#supported-network-store-field",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Tensor network.state",
-    "summary": "NetworkState",
+    "summary": "Classification of the network result as scalar or tensor, including self-duality.",
     "href": "reference/rust/supported/spenso/#supported-network-state-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network contraction strategy",
+    "summary": "Defines how a ready network operation is contracted and whether product subgraphs can be rewritten incrementally.",
+    "href": "reference/rust/supported/spenso/#supported-contractionstrategy",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network contraction strategy.SUPPORTS_PARTIAL_GRAPH_REWRITE",
+    "summary": "Whether this strategy can incrementally rewrite a ready product subgraph in place.",
+    "href": "reference/rust/supported/spenso/#supported-contractionstrategy-supports-partial-graph-rewrite-associatedconst",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network contraction strategy.contract",
+    "summary": "Contracts one ready network operation into its replacement leaf.",
+    "href": "reference/rust/supported/spenso/#supported-contractionstrategy-contract-associatedfunction",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network contraction strategy.contract_product_in_place",
+    "summary": "Attempts an in-place product rewrite and reports whether it made progress.",
+    "href": "reference/rust/supported/spenso/#supported-contractionstrategy-contract-product-in-place-associatedfunction",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network execution strategy",
+    "summary": "Defines how an executor repeatedly applies a selected contraction strategy until the strategy's stopping condition is reached.",
+    "href": "reference/rust/supported/spenso/#supported-executionstrategy",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network execution strategy.execute_all",
+    "summary": "Run the entire contraction to one leaf.",
+    "href": "reference/rust/supported/spenso/#supported-executionstrategy-execute-all-associatedfunction",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network execution mode",
+    "summary": "Enumerates sequential, parallel, borrowed-reference, and extracting execution modes.",
+    "href": "reference/rust/supported/spenso/#supported-executionmode",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network execution mode.Sequential",
+    "summary": "Executes ready operations serially against the original graph.",
+    "href": "reference/rust/supported/spenso/#supported-executionmode-sequential-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network execution mode.Parallel",
+    "summary": "Requests concurrent execution of independent ready operations with Rayon. Execution falls back to the sequential path when Rayon is unavailable or partial graph rewriting requires it.",
+    "href": "reference/rust/supported/spenso/#supported-executionmode-parallel-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network execution mode.SequentialRef",
+    "summary": "Executes serially after locating ready operations through borrowed graph views.",
+    "href": "reference/rust/supported/spenso/#supported-executionmode-sequentialref-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network execution mode.SequentialExtract",
+    "summary": "Executes serially by extracting each ready operation's owned subgraph.",
+    "href": "reference/rust/supported/spenso/#supported-executionmode-sequentialextract-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network execution result",
+    "summary": "Represents a completed network as the multiplicative identity, the additive identity, or a concrete value.",
+    "href": "reference/rust/supported/spenso/#supported-executionresult",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network execution result.One",
+    "summary": "Multiplicative identity produced by an empty product.",
+    "href": "reference/rust/supported/spenso/#supported-executionresult-one-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network execution result.Zero",
+    "summary": "Additive identity produced by an empty sum.",
+    "href": "reference/rust/supported/spenso/#supported-executionresult-zero-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network execution result.Val",
+    "summary": "Concrete scalar, tensor, or library-key result.",
+    "href": "reference/rust/supported/spenso/#supported-executionresult-val-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network execution result.Val.0",
+    "summary": "T",
+    "href": "reference/rust/supported/spenso/#supported-executionresult-val-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error",
+    "summary": "Classifies invalid topology, contraction, library, structure, I/O, and result-shape failures during network processing.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.SlotEdgeToProdNode",
+    "summary": "A tensor-slot edge terminated at a product operation.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-slotedgetoprodnode-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.SlotEdgeToScalarNode",
+    "summary": "A tensor-slot edge terminated at a scalar node.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-slotedgetoscalarnode-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.MoreThanOneNeg",
+    "summary": "A negation operation did not have exactly one child.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-morethanoneneg-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.ChildlessNeg",
+    "summary": "A unary operation had no executable leaf child.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-childlessneg-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.ContractionError",
+    "summary": "Tensor contraction failed with the attached contraction error.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-contractionerror-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.ContractionError.0",
+    "summary": "ContractionError",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-contractionerror-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.ScalarSlotEdge",
+    "summary": "A scalar leaf was connected through a tensor-slot edge.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-scalarslotedge-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.StructErr",
+    "summary": "Tensor-structure validation or manipulation failed.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-structerr-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.StructErr.0",
+    "summary": "StructureError",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-structerr-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.LibErr",
+    "summary": "Resolving a tensor through the tensor library failed.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-liberr-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.LibErr.0",
+    "summary": "LibraryError < K >",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-liberr-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.FunLibErr",
+    "summary": "Applying a registered tensor function failed.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-funliberr-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.FunLibErr.0",
+    "summary": "FunctionLibraryError < FK >",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-funliberr-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.NonTensorNodePresent",
+    "summary": "A tensor-only graph operation encountered another node kind.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-nontensornodepresent-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.NegativeExponentNonScalar",
+    "summary": "A negative exponent was applied to a non-scalar result.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-negativeexponentnonscalar-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.NegativeExponentNonScalar.0",
+    "summary": "String",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-negativeexponentnonscalar-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.TooManyArgsFunction",
+    "summary": "A function received an unsupported number of tensor arguments.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-toomanyargsfunction-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.TooManyArgsFunction.0",
+    "summary": "String",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-toomanyargsfunction-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.InvalidDotFunction",
+    "summary": "A `dot` expression did not have exactly two arguments.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-invaliddotfunction-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.InvalidDotFunction.0",
+    "summary": "String",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-invaliddotfunction-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.NonSelfDualTensorPower",
+    "summary": "An integer power was applied to a non-self-dual tensor.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-nonselfdualtensorpower-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.NonSelfDualTensorPower.0",
+    "summary": "String",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-nonselfdualtensorpower-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.InvalidResultNode",
+    "summary": "Execution produced a node that cannot represent a final result.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-invalidresultnode-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.InvalidResultNode.0",
+    "summary": "NetworkNode < DummyKey, FK >",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-invalidresultnode-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.InternalEdgePresent",
+    "summary": "A final graph still contained an internal edge requiring contraction.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-internaledgepresent-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.UncontractedScalar",
+    "summary": "A scalar factor remained uncontracted in the final graph.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-uncontractedscalar-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.CannotContractEdgeBetween",
+    "summary": "No contraction rule exists for the two endpoint node kinds.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-cannotcontractedgebetween-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.CannotContractEdgeBetween.0",
+    "summary": "String",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-cannotcontractedgebetween-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.CannotContractEdgeBetween.1",
+    "summary": "String",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-cannotcontractedgebetween-variant-1-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.NoNodes",
+    "summary": "A result was requested from an empty graph.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-nonodes-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.NoScalar",
+    "summary": "A scalar result was requested but no scalar value was available.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-noscalar-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.MoreThanOneNode",
+    "summary": "A single result was requested from a graph with multiple nodes.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-morethanonenode-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.NotScalarOutput",
+    "summary": "A scalar result was requested from a non-scalar network.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-notscalaroutput-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.FailedScalarMul",
+    "summary": "Multiplying scalar values failed to produce a result.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-failedscalarmul-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.ScalarFieldEmpty",
+    "summary": "Scalar storage was unexpectedly empty.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-scalarfieldempty-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.NotAllScalars",
+    "summary": "A scalar-only operation encountered one or more tensor values.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-notallscalars-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.NotAllScalars.0",
+    "summary": "String",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-notallscalars-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.ScalarLibSum",
+    "summary": "A sum attempted to combine a scalar with a library tensor.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-scalarlibsum-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.ScalarLibSum.0",
+    "summary": "String",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-scalarlibsum-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.SumScalarTensor",
+    "summary": "A sum attempted to combine a scalar with a materialized tensor.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-sumscalartensor-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.SumScalarTensor.0",
+    "summary": "String",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-sumscalartensor-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.IncompatibleSummand",
+    "summary": "Summands had incompatible tensor structures or result states.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-incompatiblesummand-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.IncompatibleSummand.0",
+    "summary": "String",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-incompatiblesummand-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.FailedContract",
+    "summary": "A contraction operation failed.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-failedcontract-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.FailedContract.0",
+    "summary": "ContractionError",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-failedcontract-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.NegativeExponent",
+    "summary": "The requested negative exponent is not supported.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-negativeexponent-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.FailedContractMsg",
+    "summary": "A contraction operation failed with additional context.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-failedcontractmsg-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.FailedContractMsg.0",
+    "summary": "String",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-failedcontractmsg-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.Other",
+    "summary": "An uncategorized network operation failed.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-other-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.Other.0",
+    "summary": "eyre :: Error",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-other-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.InOut",
+    "summary": "Reading or writing network data failed.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-inout-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.InOut.0",
+    "summary": "std :: io :: Error",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-inout-variant-0-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Tensor-network error.Infallible",
+    "summary": "Marks the impossible conversion from an infallible error.",
+    "href": "reference/rust/supported/spenso/#supported-tensornetworkerror-infallible-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network parsing settings",
+    "summary": "Controls scalar precontraction, depth limits, shorthand expansion and inference, scalar-leaf handling, and tensor-head recognition.",
+    "href": "reference/rust/supported/spenso/#supported-parsesettings",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network parsing settings.precontract_scalars",
+    "summary": "Fold factors that parse as pure scalars into one scalar factor while parsing a product. This keeps scalar-only subexpressions out of the tensor graph when they cannot affect contraction topology. Disable it when the caller needs every product factor to remain represented separately in the network.",
+    "href": "reference/rust/supported/spenso/#supported-parsesettings-precontract-scalars-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network parsing settings.take_first_term_from_sum",
+    "summary": "Parse only the first summand of an addition. This is meant for structure discovery paths where all summands are expected to have the same external structure, for example listing dangling indices without building a full sum network.",
+    "href": "reference/rust/supported/spenso/#supported-parsesettings-take-first-term-from-sum-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network parsing settings.depth_limit",
+    "summary": "Stop recursive parsing once the current parse depth reaches this value. At the limit, the current expression is handed to the opaque tensor expression boundary as a leaf. `None` means there is no depth limit.",
+    "href": "reference/rust/supported/spenso/#supported-parsesettings-depth-limit-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network parsing settings.depth_is_product_depth",
+    "summary": "Selects what contributes to `depth_limit`. When true, only product nesting increments parse depth. When false, additions and powers also increment depth before their children are parsed.",
+    "href": "reference/rust/supported/spenso/#supported-parsesettings-depth-is-product-depth-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network parsing settings.shorthand_parsing",
+    "summary": "Selects how shorthand notation is represented in the parsed network. `Expand` turns the selected shorthand families into explicit graph structure. Fresh dummies created by this lowering are local to the expansion. `Opaque` keeps shorthand as a leaf tensor or scalar. Its inference mode controls whether the exposed structure comes from a fast syntactic walk or from expanding the shorthand and reading the resulting dangling slots.",
+    "href": "reference/rust/supported/spenso/#supported-parsesettings-shorthand-parsing-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network parsing settings.parse_composite_scalars_as_tensors",
+    "summary": "Allow parser implementations to treat composite scalar expressions as scalar-structured tensors. Depth-limited additive or multiplicative scalar composites use this to stay represented as scalar-structured tensor leaves, so recursive contraction passes can inspect their internals instead of storing them as pure scalars.",
+    "href": "reference/rust/supported/spenso/#supported-parsesettings-parse-composite-scalars-as-tensors-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Network parsing settings.strict_tensor_filter",
+    "summary": "Controls which ordinary function heads are eligible tensor leaves. Parser-owned syntax such as slots, representations, `chain`, `trace`, `dot`, metric heads, and transparent brackets keeps its fixed meaning. This setting decides how strict the parser is for ordinary tensor heads: require tensor tags, require tensor tags plus visible representation arguments, or accept untagged heads that contain representation syntax.",
+    "href": "reference/rust/supported/spenso/#supported-parsesettings-strict-tensor-filter-field",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Symbolic network parsing",
+    "summary": "Converts Symbolica atoms and atom views into parametric tensor networks under explicit parsing settings.",
+    "href": "reference/rust/supported/spenso/#supported-networkparse",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Symbolic network parsing.parse_to_atom_net",
+    "summary": "Parses this symbolic expression into a parameterized tensor network using `settings`.",
+    "href": "reference/rust/supported/spenso/#supported-networkparse-parse-to-atom-net-method",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Symbolic parallelism policy",
+    "summary": "Chooses automatic license-aware, serial, or forced-parallel Rayon behavior for operations over Symbolica atoms.",
+    "href": "reference/rust/supported/spenso/#supported-symbolicparallelism",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Symbolic parallelism policy.Auto",
+    "summary": "Permit Rayon when licensed and use workload heuristics where available.",
+    "href": "reference/rust/supported/spenso/#supported-symbolicparallelism-auto-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Symbolic parallelism policy.Serial",
+    "summary": "Keep symbolic operations on the calling thread.",
+    "href": "reference/rust/supported/spenso/#supported-symbolicparallelism-serial-variant",
+    "kind": "rust-api"
+  },
+  {
+    "title": "spenso · Symbolic parallelism policy.Parallel",
+    "summary": "Force Rayon without `Auto`'s Symbolica license safety check.",
+    "href": "reference/rust/supported/spenso/#supported-symbolicparallelism-parallel-variant",
     "kind": "rust-api"
   },
   {
@@ -469,13 +1307,13 @@
   },
   {
     "title": "spenso · Parametric tensor.tensor",
-    "summary": "DataTensor < Atom, S >",
+    "summary": "Dense or sparse symbolic components together with their tensor structure.",
     "href": "reference/rust/supported/spenso/#supported-paramtensor-tensor-field",
     "kind": "rust-api"
   },
   {
     "title": "spenso · Parametric tensor.param_type",
-    "summary": "ParamOrComposite",
+    "summary": "Whether the components are primitive parameters or composite expressions.",
     "href": "reference/rust/supported/spenso/#supported-paramtensor-param-type-field",
     "kind": "rust-api"
   },
@@ -504,6 +1342,132 @@
     "kind": "rust-api"
   },
   {
+    "title": "spynso3 · CompiledTensorEvaluator",
+    "summary": "A compiled and optimized evaluator for maximum performance tensor evaluation.",
+    "href": "reference/python/spynso3/#exports-compiledtensorevaluator",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · CompiledTensorEvaluator.evaluate_complex",
+    "summary": "Evaluate the tensor expression for multiple complex-valued parameter inputs. Uses the compiled C++ code for maximum performance evaluation with complex numbers. Parameters ---------- inputs : list of list of complex List of parameter value lists, where each inner list contains complex values for all parameters in the same order as specified when creating the original evaluator Returns ------- list of Tensor List of evaluated tensors, one for each input parameter set Examples -------- >>> complex_inputs = [ ... [1.0+2.0j, 3.0+0.0j], ... [0.0+1.0j, 2.0+1.0j] ... ] >>> results = compiled_evaluator.evaluate_complex(complex_inputs)",
+    "href": "reference/python/spynso3/#exports-compiledtensorevaluator-evaluate-complex-method",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor",
+    "summary": "A library tensor class optimized for use in tensor libraries and networks.",
+    "href": "reference/python/spynso3/#exports-librarytensor",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.structure",
+    "summary": "def structure(self) -> TensorStructure:",
+    "href": "reference/python/spynso3/#exports-librarytensor-structure-method",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.sparse",
+    "summary": "Create a new sparse empty library tensor with the given structure and data type. Creates a sparse tensor that initially contains no non-zero elements. Elements can be set individually using indexing operations. Parameters ---------- structure : TensorStructure, list of Representations, or list of int The tensor structure defining shape and index properties type_info : type The data type - either `float` or `Expression` class Returns ------- LibraryTensor A new sparse library tensor with all elements initially zero Examples -------- >>> import symbolica as sp >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation >>> rep = Representation.euc(3) >>> structure = TensorStructure(rep, rep) >>> sparse_float = LibraryTensor.sparse(structure, float) >>> sparse_sym = LibraryTensor.sparse(structure, sp.Expression) >>> sparse_float[0, 0] = 1.0 >>> sparse_float[1, 1] = 2.0",
+    "href": "reference/python/spynso3/#exports-librarytensor-sparse-associatedfunction",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.dense",
+    "summary": "Create a new dense library tensor with the given structure and data. Dense tensors store all elements explicitly in row-major order. The structure defines the tensor's shape and indexing properties. Parameters ---------- structure : TensorStructure, list of Representations, or list of int The tensor structure defining shape and index properties data : list of float, complex, or Expression The tensor data in row-major order Returns ------- LibraryTensor A new dense library tensor with the specified data Examples -------- >>> from symbolica import S >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation >>> rep = Representation.euc(2) >>> sigma = S(\"sigma\") >>> structure = TensorStructure(rep, rep, name=sigma) >>> data = [0.0, 1.0, 1.0, 0.0] >>> tensor = LibraryTensor.dense(structure, data) >>> x, y = S(\"x\", \"y\") >>> sym_data = [x, y, -y, x] >>> sym_tensor = LibraryTensor.dense(structure, sym_data)",
+    "href": "reference/python/spynso3/#exports-librarytensor-dense-associatedfunction",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.one",
+    "summary": "Create a scalar library tensor with value 1.0. Returns ------- LibraryTensor A scalar library tensor containing the value 1.0 Examples -------- >>> from symbolica.community.spenso import LibraryTensor >>> one = LibraryTensor.one()",
+    "href": "reference/python/spynso3/#exports-librarytensor-one-associatedfunction",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.zero",
+    "summary": "Create a scalar library tensor with value 0.0. Returns ------- LibraryTensor A scalar library tensor containing the value 0.0 Examples -------- >>> from symbolica.community.spenso import LibraryTensor >>> zero = LibraryTensor.zero()",
+    "href": "reference/python/spynso3/#exports-librarytensor-zero-associatedfunction",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.to_dense",
+    "summary": "Convert this library tensor to dense storage format. Converts sparse tensors to dense format in-place. Dense tensors are unchanged. This allocates memory for all tensor elements. # Examples: ```python from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation rep = Representation.cof(2) structure = TensorStructure([rep, rep]) tensor = LibraryTensor.sparse(structure, float) tensor[0, 0] = 1.0 tensor.to_dense() # Now stores all 4 elements explicitly ```",
+    "href": "reference/python/spynso3/#exports-librarytensor-to-dense-method",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.to_sparse",
+    "summary": "Convert this library tensor to sparse storage format. Converts dense tensors to sparse format in-place, only storing non-zero elements. This can save memory for tensors with many zero elements. # Examples: ```python from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation rep = Representation.euc(2) structure = TensorStructure(rep, rep) data = [1.0, 0.0, 0.0, 2.0] tensor = LibraryTensor.dense(structure, data) tensor.to_sparse() # Now only stores 2 non-zero elements ```",
+    "href": "reference/python/spynso3/#exports-librarytensor-to-sparse-method",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.__repr__",
+    "summary": "def __repr__(self) -> str:",
+    "href": "reference/python/spynso3/#exports-librarytensor-repr-method",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.__str__",
+    "summary": "def __str__(self) -> str:",
+    "href": "reference/python/spynso3/#exports-librarytensor-str-method",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.__len__",
+    "summary": "def __len__(self) -> int:",
+    "href": "reference/python/spynso3/#exports-librarytensor-len-method",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.__getitem__",
+    "summary": "def __getitem__(self, item: slice | int | list[int]) -> Any: | def __getitem__(self, item: slice) -> list[Expression | complex | float]: | def __getitem__(self, item: Sequence[int] | int) -> Expression | complex | float:",
+    "href": "reference/python/spynso3/#exports-librarytensor-getitem-method",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.__getitem__ · overload 1",
+    "summary": "def __getitem__(self, item: slice | int | list[int]) -> Any:",
+    "href": "reference/python/spynso3/#exports-librarytensor-getitem-method-overload",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.__getitem__ · overload 2",
+    "summary": "Get library tensor elements at the specified range of indices. Parameters ---------- item : slice Slice object defining the range of indices Returns ------- list of float, complex, or Expression The tensor elements at the specified range",
+    "href": "reference/python/spynso3/#exports-librarytensor-getitem-method-overload-2",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.__getitem__ · overload 3",
+    "summary": "Get library tensor element at the specified index or indices. Parameters ---------- item : int or list of int Index specification (int for flat index, list of int for coordinates) Returns ------- float, complex, or Expression The tensor element at the specified index",
+    "href": "reference/python/spynso3/#exports-librarytensor-getitem-method-overload-3",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.__setitem__",
+    "summary": "def __setitem__(self, item: Any, value: Any) -> None: | def __setitem__(self, item: Sequence[int] | int, value: Expression | complex | float) -> None:",
+    "href": "reference/python/spynso3/#exports-librarytensor-setitem-method",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.__setitem__ · overload 1",
+    "summary": "Set library tensor element(s) at the specified index or indices. Parameters ---------- item : int or list of int Index specification (int for flat index, list of int for coordinates) value : float, complex, or Expression The value to set Examples -------- >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation >>> rep = Representation.euc(2) >>> structure = TensorStructure(rep, rep) >>> tensor = LibraryTensor.sparse(structure, float) >>> tensor[0] = 1.0 >>> tensor[1, 1] = 2.0",
+    "href": "reference/python/spynso3/#exports-librarytensor-setitem-method-overload",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.__setitem__ · overload 2",
+    "summary": "Set library tensor element(s) at the specified index or indices. Parameters ---------- item : int or list of int Index specification (int for flat index, list of int for coordinates) value : float, complex, or Expression The value to set Examples -------- >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation >>> rep = Representation.euc(2) >>> structure = TensorStructure(rep, rep) >>> tensor = LibraryTensor.sparse(structure, float) >>> tensor[0] = 1.0 >>> tensor[1, 1] = 2.0",
+    "href": "reference/python/spynso3/#exports-librarytensor-setitem-method-overload-2",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · LibraryTensor.scalar",
+    "summary": "Extract the scalar value from a rank-0 (scalar) library tensor. Returns ------- Expression The scalar expression contained in this tensor Raises ------ RuntimeError If the tensor is not a scalar Examples -------- >>> from symbolica.community.spenso import LibraryTensor >>> scalar_tensor = LibraryTensor.one() >>> value = scalar_tensor.scalar()",
+    "href": "reference/python/spynso3/#exports-librarytensor-scalar-method",
+    "kind": "python-api"
+  },
+  {
     "title": "spynso3 · Representation",
     "summary": "A representation in the sense of group representation theory for tensor indices.",
     "href": "reference/python/spynso3/#exports-representation",
@@ -511,50 +1475,26 @@
   },
   {
     "title": "spynso3 · Representation.__call__",
-    "summary": "Create a slot from this representation, by specifying an index. Parameters ---------- aind : int, str, or Symbol The index specification Returns ------- Slot A new Slot object with the specified index Examples -------- >>> from symbolica.community.spenso import Representation >>> import symbolica as sp >>> rep = Representation.euc(3) >>> slot1 = rep('mu') >>> slot2 = rep(1) >>> slot3 = rep(sp.S('nu'))",
+    "summary": "def __call__(self, aind: int | Expression | str) -> Slot: | def __call__(self, aind: Expression) -> Expression | Slot:",
     "href": "reference/python/spynso3/#exports-representation-call-method",
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · Representation.__call__.aind",
-    "summary": "The index specification",
-    "href": "reference/python/spynso3/#exports-representation-call-method-aind-parameter",
+    "title": "spynso3 · Representation.__call__ · overload 1",
+    "summary": "Create a slot from this representation, by specifying an index. Parameters ---------- aind : int, str, or Symbol The index specification Returns ------- Slot A new Slot object with the specified index Examples -------- >>> from symbolica.community.spenso import Representation >>> import symbolica as sp >>> rep = Representation.euc(3) >>> slot1 = rep('mu') >>> slot2 = rep(1) >>> slot3 = rep(sp.S('nu'))",
+    "href": "reference/python/spynso3/#exports-representation-call-method-overload",
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · Representation.__call__",
+    "title": "spynso3 · Representation.__call__ · overload 2",
     "summary": "Create a slot or symbolic expression from this representation. Parameters ---------- aind : Expression The index specification (Expression creates symbolic representation) Returns ------- Expression A symbolic expression representing this representation Examples -------- >>> from symbolica.community.spenso import Representation >>> import symbolica as sp >>> rep = Representation.euc(3) >>> expr = rep(sp.E(\"cos(x)\"))",
-    "href": "reference/python/spynso3/#exports-representation-call-method-2",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Representation.__call__.aind",
-    "summary": "The index specification (Expression creates symbolic representation)",
-    "href": "reference/python/spynso3/#exports-representation-call-method-2-aind-parameter",
+    "href": "reference/python/spynso3/#exports-representation-call-method-overload-2",
     "kind": "python-api"
   },
   {
     "title": "spynso3 · Representation.__new__",
     "summary": "Create and register a new representation with specified properties. # Parameters: - name: String name for the representation - dimension: Size of the representation (int or symbolic) - is_self_dual: If True, creates self-dual representation; if False, creates dualizable pair # Examples: ```python from symbolica.community.spenso import Representation import symbolica as sp # Self-dual representation (indices contract with themselves) euclidean = Representation(\"Euclidean\", 4, is_self_dual=True) # Dualizable representation (needs dual partner for contraction) vector_up = Representation(\"VectorUp\", 4, is_self_dual=False) # Symbolic dimension n = sp.S('n') general = Representation(\"General\", n, is_self_dual=True) ```",
     "href": "reference/python/spynso3/#exports-representation-new-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Representation.__new__.name",
-    "summary": "name: builtins.str",
-    "href": "reference/python/spynso3/#exports-representation-new-associatedfunction-name-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Representation.__new__.dimension",
-    "summary": "dimension: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-representation-new-associatedfunction-dimension-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Representation.__new__.is_self_dual",
-    "summary": "is_self_dual: builtins.bool = ...",
-    "href": "reference/python/spynso3/#exports-representation-new-associatedfunction-is-self-dual-parameter",
     "kind": "python-api"
   },
   {
@@ -570,33 +1510,9 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · Representation.g.i",
-    "summary": "i: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-representation-g-method-i-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Representation.g.j",
-    "summary": "j: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-representation-g-method-j-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · Representation.flat",
     "summary": "Create a musical isomorphism tensor for this representation. # Parameters: - i: First index - j: Second index # Examples: ```python rep = Representation.mink(4) flat = rep.flat('mu', 'nu') # Flat isomorphism ♭_μν ```",
     "href": "reference/python/spynso3/#exports-representation-flat-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Representation.flat.i",
-    "summary": "i: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-representation-flat-method-i-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Representation.flat.j",
-    "summary": "j: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-representation-flat-method-j-parameter",
     "kind": "python-api"
   },
   {
@@ -606,26 +1522,14 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · Representation.id.i",
-    "summary": "i: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-representation-id-method-i-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Representation.id.j",
-    "summary": "j: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-representation-id-method-j-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · Representation.__repr__",
-    "summary": "def __repr__(self) -> builtins.str:",
+    "summary": "def __repr__(self) -> str:",
     "href": "reference/python/spynso3/#exports-representation-repr-method",
     "kind": "python-api"
   },
   {
     "title": "spynso3 · Representation.__str__",
-    "summary": "def __str__(self) -> builtins.str:",
+    "summary": "def __str__(self) -> str:",
     "href": "reference/python/spynso3/#exports-representation-str-method",
     "kind": "python-api"
   },
@@ -642,21 +1546,9 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · Representation.bis.dimension",
-    "summary": "dimension: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-representation-bis-associatedfunction-dimension-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · Representation.euc",
     "summary": "Create a Euclidean space representation. # Parameters: - dimension: The dimension of the Euclidean space",
     "href": "reference/python/spynso3/#exports-representation-euc-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Representation.euc.dimension",
-    "summary": "dimension: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-representation-euc-associatedfunction-dimension-parameter",
     "kind": "python-api"
   },
   {
@@ -666,21 +1558,9 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · Representation.mink.dimension",
-    "summary": "dimension: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-representation-mink-associatedfunction-dimension-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · Representation.cof",
     "summary": "Create a color fundamental representation. # Parameters: - dimension: The dimension of the color group (e.g., 3 for SU(3))",
     "href": "reference/python/spynso3/#exports-representation-cof-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Representation.cof.dimension",
-    "summary": "dimension: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-representation-cof-associatedfunction-dimension-parameter",
     "kind": "python-api"
   },
   {
@@ -690,21 +1570,9 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · Representation.coad.dimension",
-    "summary": "dimension: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-representation-coad-associatedfunction-dimension-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · Representation.cos",
     "summary": "Create a color sextet representation. # Parameters: - dimension: The dimension of the sextet representation (e.g., 6 for SU(3))",
     "href": "reference/python/spynso3/#exports-representation-cos-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Representation.cos.dimension",
-    "summary": "dimension: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-representation-cos-associatedfunction-dimension-parameter",
     "kind": "python-api"
   },
   {
@@ -715,13 +1583,13 @@
   },
   {
     "title": "spynso3 · Slot.__repr__",
-    "summary": "def __repr__(self) -> builtins.str:",
+    "summary": "def __repr__(self) -> str:",
     "href": "reference/python/spynso3/#exports-slot-repr-method",
     "kind": "python-api"
   },
   {
     "title": "spynso3 · Slot.__str__",
-    "summary": "def __str__(self) -> builtins.str:",
+    "summary": "def __str__(self) -> str:",
     "href": "reference/python/spynso3/#exports-slot-str-method",
     "kind": "python-api"
   },
@@ -735,30 +1603,6 @@
     "title": "spynso3 · Slot.__new__",
     "summary": "Create a new slot with a custom representation and index. # Parameters: - name: String name for the representation - dimension: Size of the representation space - aind: The abstract index (int, str, or Symbol) - dual: If True, creates dualizable representation; if False, self-dual # Examples: ```python from symbolica.community.spenso import Slot import symbolica as sp # Self-dual slot euclidean_slot = Slot(\"Euclidean\", 4, 'mu', dual=False) # Dualizable slot vector_slot = Slot(\"Vector\", 4, 'nu', dual=True) # With symbolic index sym_index = sp.S('alpha') symbolic_slot = Slot(\"Custom\", 3, sym_index, dual=False) ```",
     "href": "reference/python/spynso3/#exports-slot-new-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Slot.__new__.name",
-    "summary": "name: builtins.str",
-    "href": "reference/python/spynso3/#exports-slot-new-associatedfunction-name-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Slot.__new__.dimension",
-    "summary": "dimension: builtins.int",
-    "href": "reference/python/spynso3/#exports-slot-new-associatedfunction-dimension-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Slot.__new__.aind",
-    "summary": "aind: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-slot-new-associatedfunction-aind-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Slot.__new__.dual",
-    "summary": "dual: builtins.bool = ...",
-    "href": "reference/python/spynso3/#exports-slot-new-associatedfunction-dual-parameter",
     "kind": "python-api"
   },
   {
@@ -786,33 +1630,9 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · Tensor.sparse.structure",
-    "summary": "The tensor structure defining shape and index properties",
-    "href": "reference/python/spynso3/#exports-tensor-sparse-associatedfunction-structure-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Tensor.sparse.type_info",
-    "summary": "The data type - either `float` or `Expression` class",
-    "href": "reference/python/spynso3/#exports-tensor-sparse-associatedfunction-type-info-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · Tensor.dense",
     "summary": "Create a new dense tensor with the given structure and data. Parameters ---------- structure : TensorIndices or list of Slots The tensor structure defining shape and index properties data : list of float, complex, or Expression The tensor data in row-major order Returns ------- Tensor A new dense tensor with the specified data Examples -------- >>> from symbolica import S >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R >>> structure = TensorIndices(R.euc(2)(1), R.euc(2)(2)) >>> data = [1.0, 2.0, 3.0, 4.0] >>> tensor = Tensor.dense(structure, data) >>> x, y = S(\"x\", \"y\") >>> sym_data = [x, y, x * y, x + y] >>> sym_tensor = Tensor.dense(structure, sym_data)",
     "href": "reference/python/spynso3/#exports-tensor-dense-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Tensor.dense.structure",
-    "summary": "The tensor structure defining shape and index properties",
-    "href": "reference/python/spynso3/#exports-tensor-dense-associatedfunction-structure-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Tensor.dense.data",
-    "summary": "The tensor data in row-major order",
-    "href": "reference/python/spynso3/#exports-tensor-dense-associatedfunction-data-parameter",
     "kind": "python-api"
   },
   {
@@ -829,146 +1649,80 @@
   },
   {
     "title": "spynso3 · Tensor.to_dense",
-    "summary": "Convert this tensor to dense storage format. Convert this tensor to dense storage format. Converts sparse tensors to dense format in-place. Dense tensors are unchanged. This allocates memory for all tensor elements. Examples -------- >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R >>> structure = TensorIndices(R.euc(4)(2)) >>> tensor = Tensor.sparse(structure, float) >>> tensor[0] = 1.0 >>> tensor.to_dense()",
+    "summary": "Convert this tensor to dense storage format. Converts sparse tensors to dense format in-place. Dense tensors are unchanged. This allocates memory for all tensor elements. Examples -------- >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R >>> structure = TensorIndices(R.euc(4)(2)) >>> tensor = Tensor.sparse(structure, float) >>> tensor[0] = 1.0 >>> tensor.to_dense()",
     "href": "reference/python/spynso3/#exports-tensor-to-dense-method",
     "kind": "python-api"
   },
   {
     "title": "spynso3 · Tensor.to_sparse",
-    "summary": "Convert this tensor to sparse storage format. Convert this tensor to sparse storage format. Converts dense tensors to sparse format in-place, only storing non-zero elements. This can save memory for tensors with many zero elements. Examples -------- >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R >>> structure = TensorIndices(R.euc(2)(2), R.euc(2)(1)) >>> data = [1.0, 0.0, 0.0, 2.0] >>> tensor = Tensor.dense(structure, data) >>> tensor.to_sparse()",
+    "summary": "Convert this tensor to sparse storage format. Converts dense tensors to sparse format in-place, only storing non-zero elements. This can save memory for tensors with many zero elements. Examples -------- >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R >>> structure = TensorIndices(R.euc(2)(2), R.euc(2)(1)) >>> data = [1.0, 0.0, 0.0, 2.0] >>> tensor = Tensor.dense(structure, data) >>> tensor.to_sparse()",
     "href": "reference/python/spynso3/#exports-tensor-to-sparse-method",
     "kind": "python-api"
   },
   {
     "title": "spynso3 · Tensor.__repr__",
-    "summary": "def __repr__(self) -> builtins.str:",
+    "summary": "def __repr__(self) -> str:",
     "href": "reference/python/spynso3/#exports-tensor-repr-method",
     "kind": "python-api"
   },
   {
     "title": "spynso3 · Tensor.__str__",
-    "summary": "def __str__(self) -> builtins.str:",
+    "summary": "def __str__(self) -> str:",
     "href": "reference/python/spynso3/#exports-tensor-str-method",
     "kind": "python-api"
   },
   {
     "title": "spynso3 · Tensor.__len__",
-    "summary": "def __len__(self) -> builtins.int:",
+    "summary": "def __len__(self) -> int:",
     "href": "reference/python/spynso3/#exports-tensor-len-method",
     "kind": "python-api"
   },
   {
     "title": "spynso3 · Tensor.__getitem__",
-    "summary": "def __getitem__(self, item: builtins.slice | builtins.int | builtins.list[builtins.int]) -> typing.Any:",
+    "summary": "def __getitem__(self, item: slice | int | list[int]) -> Any: | def __getitem__(self, item: slice) -> list[Expression | complex | float]: | def __getitem__(self, item: Sequence[int] | int) -> Expression | complex | float:",
     "href": "reference/python/spynso3/#exports-tensor-getitem-method",
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · Tensor.__getitem__.item",
-    "summary": "item: builtins.slice | builtins.int | builtins.list[builtins.int]",
-    "href": "reference/python/spynso3/#exports-tensor-getitem-method-item-parameter",
+    "title": "spynso3 · Tensor.__getitem__ · overload 1",
+    "summary": "def __getitem__(self, item: slice | int | list[int]) -> Any:",
+    "href": "reference/python/spynso3/#exports-tensor-getitem-method-overload",
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · Tensor.__getitem__",
+    "title": "spynso3 · Tensor.__getitem__ · overload 2",
     "summary": "Get tensor elements at the specified range of indices. Parameters ---------- item : slice Slice object defining the range of indices Returns ------- list of float, complex, or Expression The tensor elements at the specified range",
-    "href": "reference/python/spynso3/#exports-tensor-getitem-method-2",
+    "href": "reference/python/spynso3/#exports-tensor-getitem-method-overload-2",
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · Tensor.__getitem__.item",
-    "summary": "Slice object defining the range of indices",
-    "href": "reference/python/spynso3/#exports-tensor-getitem-method-2-item-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Tensor.__getitem__",
+    "title": "spynso3 · Tensor.__getitem__ · overload 3",
     "summary": "Get tensor element at the specified index or indices. Parameters ---------- item : int or list of int Index specification (int for flat index, list of int for coordinates) Returns ------- float, complex, or Expression The tensor element at the specified index",
-    "href": "reference/python/spynso3/#exports-tensor-getitem-method-3",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Tensor.__getitem__.item",
-    "summary": "Index specification (int for flat index, list of int for coordinates)",
-    "href": "reference/python/spynso3/#exports-tensor-getitem-method-3-item-parameter",
+    "href": "reference/python/spynso3/#exports-tensor-getitem-method-overload-3",
     "kind": "python-api"
   },
   {
     "title": "spynso3 · Tensor.__setitem__",
-    "summary": "Set tensor element(s) at the specified index or indices. Parameters ---------- item : int or list of int Index specification (int for flat index, list of int for coordinates) value : float, complex, or Expression The value to set Examples -------- >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R >>> structure = TensorIndices(R.euc(2)(2), R.euc(2)(1)) >>> tensor = Tensor.sparse(structure, float) >>> tensor[0] = 4.0 >>> tensor[1, 1] = 1.0",
+    "summary": "def __setitem__(self, item: Any, value: Any) -> None: | def __setitem__(self, item: int | Sequence[int], value: Expression | complex | float) -> None:",
     "href": "reference/python/spynso3/#exports-tensor-setitem-method",
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · Tensor.__setitem__.item",
-    "summary": "Index specification (int for flat index, list of int for coordinates)",
-    "href": "reference/python/spynso3/#exports-tensor-setitem-method-item-parameter",
+    "title": "spynso3 · Tensor.__setitem__ · overload 1",
+    "summary": "Set tensor element(s) at the specified index or indices. Parameters ---------- item : int or list of int Index specification (int for flat index, list of int for coordinates) value : float, complex, or Expression The value to set Examples -------- >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R >>> structure = TensorIndices(R.euc(2)(2), R.euc(2)(1)) >>> tensor = Tensor.sparse(structure, float) >>> tensor[0] = 4.0 >>> tensor[1, 1] = 1.0",
+    "href": "reference/python/spynso3/#exports-tensor-setitem-method-overload",
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · Tensor.__setitem__.value",
-    "summary": "The value to set",
-    "href": "reference/python/spynso3/#exports-tensor-setitem-method-value-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Tensor.__setitem__",
+    "title": "spynso3 · Tensor.__setitem__ · overload 2",
     "summary": "Set tensor element at the specified index. Parameters ---------- item : int or list of int Index specification (int for flat index, list of int for coordinates) value : float, complex, or Expression The value to set Examples -------- >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation >>> rep = Representation.euc(2) >>> structure = TensorIndices(rep(1), rep(2)) >>> tensor = Tensor.sparse(structure, float) >>> tensor[0] = 1.0 >>> tensor[1, 1] = 2.0",
-    "href": "reference/python/spynso3/#exports-tensor-setitem-method-2",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Tensor.__setitem__.item",
-    "summary": "Index specification (int for flat index, list of int for coordinates)",
-    "href": "reference/python/spynso3/#exports-tensor-setitem-method-2-item-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Tensor.__setitem__.value",
-    "summary": "The value to set",
-    "href": "reference/python/spynso3/#exports-tensor-setitem-method-2-value-parameter",
+    "href": "reference/python/spynso3/#exports-tensor-setitem-method-overload-2",
     "kind": "python-api"
   },
   {
     "title": "spynso3 · Tensor.evaluator",
-    "summary": "Create an optimized evaluator for symbolic tensor expressions. Create an optimized evaluator for symbolic tensor expressions. Compiles the symbolic expressions in this tensor into an optimized evaluation tree that can efficiently compute numerical values for different parameter inputs. Parameters ---------- constants : dict Dict mapping symbolic expressions to their constant numerical values funs : dict Dict mapping function signatures to their symbolic definitions params : list of Expression List of symbolic parameters that will be varied during evaluation iterations : int, optional Number of optimization iterations for Horner scheme (default: 100) n_cores : int, optional Number of CPU cores to use for optimization (default: 4) verbose : bool, optional Whether to print optimization progress (default: False) Returns ------- TensorEvaluator An optimized evaluator for efficient numerical evaluation Examples -------- >>> from symbolica import S >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R >>> x, y = S(\"x\", \"y\") >>> structure = TensorIndices(R.euc(2)(1)) >>> tensor = Tensor.dense(structure, [x * y, x + y]) >>> evaluator = tensor.evaluator(constants={}, funs={}, params=[x, y], iterations=50) >>> results = evaluator.evaluate_complex([[1.0, 2.0], [3.0, 4.0]])",
+    "summary": "Create an optimized evaluator for symbolic tensor expressions. Compiles the symbolic expressions in this tensor into an optimized evaluation tree that can efficiently compute numerical values for different parameter inputs. Parameters ---------- constants : dict Dict mapping symbolic expressions to their constant numerical values funs : dict Dict mapping function signatures to their symbolic definitions params : list of Expression List of symbolic parameters that will be varied during evaluation iterations : int, optional Number of optimization iterations for Horner scheme (default: 100) n_cores : int, optional Number of CPU cores to use for optimization (default: 4) verbose : bool, optional Whether to print optimization progress (default: False) Returns ------- TensorEvaluator An optimized evaluator for efficient numerical evaluation Examples -------- >>> from symbolica import S >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R >>> x, y = S(\"x\", \"y\") >>> structure = TensorIndices(R.euc(2)(1)) >>> tensor = Tensor.dense(structure, [x * y, x + y]) >>> evaluator = tensor.evaluator(constants={}, funs={}, params=[x, y], iterations=50) >>> results = evaluator.evaluate_complex([[1.0, 2.0], [3.0, 4.0]])",
     "href": "reference/python/spynso3/#exports-tensor-evaluator-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Tensor.evaluator.constants",
-    "summary": "Dict mapping symbolic expressions to their constant numerical values",
-    "href": "reference/python/spynso3/#exports-tensor-evaluator-method-constants-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Tensor.evaluator.funs",
-    "summary": "Dict mapping function signatures to their symbolic definitions",
-    "href": "reference/python/spynso3/#exports-tensor-evaluator-method-funs-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Tensor.evaluator.params",
-    "summary": "List of symbolic parameters that will be varied during evaluation",
-    "href": "reference/python/spynso3/#exports-tensor-evaluator-method-params-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Tensor.evaluator.iterations",
-    "summary": "Number of optimization iterations for Horner scheme (default: 100)",
-    "href": "reference/python/spynso3/#exports-tensor-evaluator-method-iterations-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Tensor.evaluator.n_cores",
-    "summary": "Number of CPU cores to use for optimization (default: 4)",
-    "href": "reference/python/spynso3/#exports-tensor-evaluator-method-n-cores-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · Tensor.evaluator.verbose",
-    "summary": "Whether to print optimization progress (default: False)",
-    "href": "reference/python/spynso3/#exports-tensor-evaluator-method-verbose-parameter",
     "kind": "python-api"
   },
   {
@@ -984,6 +1738,30 @@
     "kind": "python-api"
   },
   {
+    "title": "spynso3 · TensorEvaluator",
+    "summary": "An optimized evaluator for symbolic tensor expressions.",
+    "href": "reference/python/spynso3/#exports-tensorevaluator",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorEvaluator.evaluate",
+    "summary": "Evaluate the tensor expression for multiple real-valued parameter inputs. Parameters ---------- inputs : list of list of float List of parameter value lists, where each inner list contains numerical values for all parameters in the same order as specified when creating the evaluator Returns ------- list of Tensor List of evaluated tensors, one for each input parameter set Raises ------ ValueError If the evaluator contains complex coefficients Examples -------- >>> results = evaluator.evaluate([[1.0, 2.0], [3.0, 4.0]])",
+    "href": "reference/python/spynso3/#exports-tensorevaluator-evaluate-method",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorEvaluator.evaluate_complex",
+    "summary": "Evaluate the expression for multiple inputs and return the results.",
+    "href": "reference/python/spynso3/#exports-tensorevaluator-evaluate-complex-method",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorEvaluator.compile",
+    "summary": "Compile the evaluator to a shared library using C++ for maximum performance. Generates optimized C++ code with optional inline assembly and compiles it into a shared library that can be loaded for extremely fast evaluation. Parameters ---------- function_name : str Name for the generated C++ function filename : str Path for the generated C++ source file library_name : str Name for the compiled shared library inline_asm : str, optional Type of inline assembly optimization (\"default\", \"x64\", \"aarch64\", \"none\") optimization_level : int, optional Compiler optimization level 0-3 (default: 3) compiler_path : str, optional Path to specific C++ compiler (default: system default) custom_header : str, optional Additional C++ header code to include Returns ------- CompiledTensorEvaluator A compiled evaluator for maximum performance evaluation Examples -------- >>> compiled = evaluator.compile( ... function_name=\"fast_eval\", ... filename=\"tensor_eval.cpp\", ... library_name=\"tensor_lib\", ... optimization_level=3, ... ) >>> results = compiled.evaluate_complex([[1.0, 2.0], [3.0, 4.0]])",
+    "href": "reference/python/spynso3/#exports-tensorevaluator-compile-method",
+    "kind": "python-api"
+  },
+  {
     "title": "spynso3 · TensorIndices",
     "summary": "A tensor structure with abstract indices for symbolic tensor operations.",
     "href": "reference/python/spynso3/#exports-tensorindices",
@@ -996,12 +1774,6 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorIndices.set_name.name",
-    "summary": "The tensor name to assign",
-    "href": "reference/python/spynso3/#exports-tensorindices-set-name-method-name-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · TensorIndices.get_name",
     "summary": "Get the tensor name of this structure. Returns ------- TensorName or None The tensor name if set, None otherwise Examples -------- >>> name = structure.get_name()",
     "href": "reference/python/spynso3/#exports-tensorindices-get-name-method",
@@ -1009,13 +1781,13 @@
   },
   {
     "title": "spynso3 · TensorIndices.__repr__",
-    "summary": "def __repr__(self) -> builtins.str:",
+    "summary": "def __repr__(self) -> str:",
     "href": "reference/python/spynso3/#exports-tensorindices-repr-method",
     "kind": "python-api"
   },
   {
     "title": "spynso3 · TensorIndices.__str__",
-    "summary": "def __str__(self) -> builtins.str:",
+    "summary": "def __str__(self) -> str:",
     "href": "reference/python/spynso3/#exports-tensorindices-str-method",
     "kind": "python-api"
   },
@@ -1027,7 +1799,7 @@
   },
   {
     "title": "spynso3 · TensorIndices.__len__",
-    "summary": "def __len__(self) -> builtins.int:",
+    "summary": "def __len__(self) -> int:",
     "href": "reference/python/spynso3/#exports-tensorindices-len-method",
     "kind": "python-api"
   },
@@ -1038,21 +1810,9 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorIndices.__add__.rhs",
-    "summary": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression",
-    "href": "reference/python/spynso3/#exports-tensorindices-add-method-rhs-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · TensorIndices.__radd__",
     "summary": "Add this expression to `other`, returning the result.",
     "href": "reference/python/spynso3/#exports-tensorindices-radd-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorIndices.__radd__.rhs",
-    "summary": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression",
-    "href": "reference/python/spynso3/#exports-tensorindices-radd-method-rhs-parameter",
     "kind": "python-api"
   },
   {
@@ -1062,21 +1822,9 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorIndices.__sub__.rhs",
-    "summary": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression",
-    "href": "reference/python/spynso3/#exports-tensorindices-sub-method-rhs-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · TensorIndices.__rsub__",
     "summary": "Subtract this expression from `other`, returning the result.",
     "href": "reference/python/spynso3/#exports-tensorindices-rsub-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorIndices.__rsub__.rhs",
-    "summary": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression",
-    "href": "reference/python/spynso3/#exports-tensorindices-rsub-method-rhs-parameter",
     "kind": "python-api"
   },
   {
@@ -1086,21 +1834,9 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorIndices.__mul__.rhs",
-    "summary": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression",
-    "href": "reference/python/spynso3/#exports-tensorindices-mul-method-rhs-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · TensorIndices.__rmul__",
     "summary": "Add this expression to `other`, returning the result.",
     "href": "reference/python/spynso3/#exports-tensorindices-rmul-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorIndices.__rmul__.rhs",
-    "summary": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression",
-    "href": "reference/python/spynso3/#exports-tensorindices-rmul-method-rhs-parameter",
     "kind": "python-api"
   },
   {
@@ -1110,51 +1846,27 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorIndices.__new__.slots",
-    "summary": "*slots: TensorIndices | builtins.list[Slot]",
-    "href": "reference/python/spynso3/#exports-tensorindices-new-associatedfunction-slots-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorIndices.__new__.name",
-    "summary": "Optional tensor name to assign to the structure",
-    "href": "reference/python/spynso3/#exports-tensorindices-new-associatedfunction-name-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · TensorIndices.__getitem__",
-    "summary": "Get expanded indices at the specified range of flattened indices. Parameters ---------- item : slice Slice object defining the range of indices Returns ------- list of list of int List of expanded indices",
+    "summary": "def __getitem__(self, item: slice) -> list[Expression | complex | float]: | def __getitem__(self, item: Sequence[int]) -> Expression | complex | float: | def __getitem__(self, item: int) -> Expression | complex | float:",
     "href": "reference/python/spynso3/#exports-tensorindices-getitem-method",
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorIndices.__getitem__.item",
-    "summary": "Slice object defining the range of indices",
-    "href": "reference/python/spynso3/#exports-tensorindices-getitem-method-item-parameter",
+    "title": "spynso3 · TensorIndices.__getitem__ · overload 1",
+    "summary": "Get expanded indices at the specified range of flattened indices. Parameters ---------- item : slice Slice object defining the range of indices Returns ------- list of list of int List of expanded indices",
+    "href": "reference/python/spynso3/#exports-tensorindices-getitem-method-overload",
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorIndices.__getitem__",
+    "title": "spynso3 · TensorIndices.__getitem__ · overload 2",
     "summary": "Get flattened index associated to this expanded index. Parameters ---------- item : list of int Multi-dimensional index coordinates Returns ------- int The flat index",
-    "href": "reference/python/spynso3/#exports-tensorindices-getitem-method-2",
+    "href": "reference/python/spynso3/#exports-tensorindices-getitem-method-overload-2",
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorIndices.__getitem__.item",
-    "summary": "Multi-dimensional index coordinates",
-    "href": "reference/python/spynso3/#exports-tensorindices-getitem-method-2-item-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorIndices.__getitem__",
+    "title": "spynso3 · TensorIndices.__getitem__ · overload 3",
     "summary": "Get expanded index associated to this flat index. Parameters ---------- item : int Flat index into the tensor Returns ------- list of int Multi-dimensional index coordinates",
-    "href": "reference/python/spynso3/#exports-tensorindices-getitem-method-3",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorIndices.__getitem__.item",
-    "summary": "Flat index into the tensor",
-    "href": "reference/python/spynso3/#exports-tensorindices-getitem-method-3-item-parameter",
+    "href": "reference/python/spynso3/#exports-tensorindices-getitem-method-overload-3",
     "kind": "python-api"
   },
   {
@@ -1182,21 +1894,9 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorLibrary.register.tensor",
-    "summary": "The tensor to register - can be a LibraryTensor or regular Tensor",
-    "href": "reference/python/spynso3/#exports-tensorlibrary-register-method-tensor-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · TensorLibrary.__getitem__",
     "summary": "Retrieve a registered tensor structure by name. Looks up a previously registered tensor by its name and returns a reference structure that can be used to create new tensor instances. Parameters ---------- key : str or Expression The tensor name - can be a string or symbolic expression Returns ------- TensorStructure A TensorStructure representing the registered tensor template Raises ------ RuntimeError If the tensor name is not found in the library Examples -------- >>> structure = lib[\"T\"]",
     "href": "reference/python/spynso3/#exports-tensorlibrary-getitem-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorLibrary.__getitem__.key",
-    "summary": "The tensor name - can be a string or symbolic expression",
-    "href": "reference/python/spynso3/#exports-tensorlibrary-getitem-method-key-parameter",
     "kind": "python-api"
   },
   {
@@ -1212,6 +1912,108 @@
     "kind": "python-api"
   },
   {
+    "title": "spynso3 · TensorName",
+    "summary": "A symbolic name for tensor functions and structures.",
+    "href": "reference/python/spynso3/#exports-tensorname",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorName.__new__",
+    "summary": "Create a new tensor name with optional mathematical properties. Parameters ---------- name : str The string name for the tensor function is_symmetric : bool, optional If True, tensor is symmetric under index permutation is_antisymmetric : bool, optional If True, tensor is antisymmetric under index permutation is_cyclesymmetric : bool, optional If True, tensor is symmetric under cyclic permutations is_linear : bool, optional If True, tensor is linear in its arguments custom_normalization : Transformer, optional Custom normalization function (advanced) Returns ------- TensorName A new TensorName with the specified properties Examples -------- >>> from symbolica.community.spenso import TensorName >>> T = TensorName(\"T\") >>> g = TensorName(\"g\", is_symmetric=True) >>> F = TensorName(\"F\", is_antisymmetric=True) >>> D = TensorName(\"D\", is_linear=True)",
+    "href": "reference/python/spynso3/#exports-tensorname-new-associatedfunction",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorName.__repr__",
+    "summary": "def __repr__(self) -> str:",
+    "href": "reference/python/spynso3/#exports-tensorname-repr-method",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorName.__str__",
+    "summary": "def __str__(self) -> str:",
+    "href": "reference/python/spynso3/#exports-tensorname-str-method",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorName.to_expression",
+    "summary": "Convert the tensor name to a symbolic expression. Returns ------- Expression A symbolic Expression representing this tensor name Examples -------- >>> T = TensorName(\"T\") >>> expr = T.to_expression()",
+    "href": "reference/python/spynso3/#exports-tensorname-to-expression-method",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorName.g",
+    "summary": "Predefined metric tensor name.",
+    "href": "reference/python/spynso3/#exports-tensorname-g-associatedfunction",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorName.flat",
+    "summary": "Predefined musical isomorphism tensor name. This enables dualizing self dual indices.",
+    "href": "reference/python/spynso3/#exports-tensorname-flat-associatedfunction",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorName.gamma",
+    "summary": "Predefined gamma matrix name.",
+    "href": "reference/python/spynso3/#exports-tensorname-gamma-associatedfunction",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorName.gamma5",
+    "summary": "Predefined gamma5 matrix name.",
+    "href": "reference/python/spynso3/#exports-tensorname-gamma5-associatedfunction",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorName.projm",
+    "summary": "Predefined left chiral projector name.",
+    "href": "reference/python/spynso3/#exports-tensorname-projm-associatedfunction",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorName.projp",
+    "summary": "Predefined right chiral projector name.",
+    "href": "reference/python/spynso3/#exports-tensorname-projp-associatedfunction",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorName.sigma",
+    "summary": "Predefined sigma matrix name.",
+    "href": "reference/python/spynso3/#exports-tensorname-sigma-associatedfunction",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorName.f",
+    "summary": "Predefined color structure constant name.",
+    "href": "reference/python/spynso3/#exports-tensorname-f-associatedfunction",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorName.t",
+    "summary": "Predefined color generator name.",
+    "href": "reference/python/spynso3/#exports-tensorname-t-associatedfunction",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorName.__call__",
+    "summary": "def __call__(self, *args: Slot | Expression | int | str | float | complex) -> TensorIndices: | def __call__(self, *args: Representation | Expression) -> TensorStructure:",
+    "href": "reference/python/spynso3/#exports-tensorname-call-method",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorName.__call__ · overload 1",
+    "summary": "Call the tensor name with arguments to create tensor structures. Accepts a mix of slots and symbolic expressions (for additional arguments). Parameters ---------- *args : Slot or Expression Slot objects and Expressions for additional arguments Returns ------- TensorIndices A new TensorIndices object Examples -------- >>> from symbolica.community.spenso import TensorName, Slot, Representation >>> import symbolica as sp >>> T = TensorName(\"T\") >>> rep = Representation.euc(3) >>> mu = rep(\"mu\") >>> nu = rep(\"nu\") >>> indexed_tensor = T(mu, nu)",
+    "href": "reference/python/spynso3/#exports-tensorname-call-method-overload",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · TensorName.__call__ · overload 2",
+    "summary": "Call the tensor name with arguments to create a TensorStructure. Accepts a mix of representations and symbolic expressions (for additional arguments). Parameters ---------- *args : Representation or Expression Representation objects and Expressions for additional arguments Returns ------- TensorStructure A new TensorStructure object Examples -------- >>> from symbolica.community.spenso import TensorName, Slot, Representation >>> import symbolica as sp >>> T = TensorName(\"T\") >>> rep = Representation.euc(3) >>> structure_tensor = T(rep, rep)",
+    "href": "reference/python/spynso3/#exports-tensorname-call-method-overload-2",
+    "kind": "python-api"
+  },
+  {
     "title": "spynso3 · TensorNetwork",
     "summary": "A tensor network representing computational graphs of tensor operations.",
     "href": "reference/python/spynso3/#exports-tensornetwork",
@@ -1221,18 +2023,6 @@
     "title": "spynso3 · TensorNetwork.__new__",
     "summary": "Create a tensor network by parsing an arithmetic expression. Parses symbolic expressions containing tensor operations and converts them into an optimizable computational graph representation. Parameters ---------- expr : ArithmeticStructure The arithmetic expression or tensor structure to parse library : TensorLibrary, optional Optional tensor library for resolving named tensor references Returns ------- TensorNetwork A new TensorNetwork representing the parsed expression",
     "href": "reference/python/spynso3/#exports-tensornetwork-new-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.__new__.expr",
-    "summary": "The arithmetic expression or tensor structure to parse",
-    "href": "reference/python/spynso3/#exports-tensornetwork-new-associatedfunction-expr-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.__new__.library",
-    "summary": "Optional tensor library for resolving named tensor references",
-    "href": "reference/python/spynso3/#exports-tensornetwork-new-associatedfunction-library-parameter",
     "kind": "python-api"
   },
   {
@@ -1249,14 +2039,8 @@
   },
   {
     "title": "spynso3 · TensorNetwork.broadcast",
-    "summary": "def broadcast(str: builtins.str) -> Expression:",
+    "summary": "def broadcast(str: str) -> Expression:",
     "href": "reference/python/spynso3/#exports-tensornetwork-broadcast-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.broadcast.str",
-    "summary": "str: builtins.str",
-    "href": "reference/python/spynso3/#exports-tensornetwork-broadcast-associatedfunction-str-parameter",
     "kind": "python-api"
   },
   {
@@ -1272,117 +2056,21 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorNetwork.replace.pattern",
-    "summary": "The symbolic pattern to match against",
-    "href": "reference/python/spynso3/#exports-tensornetwork-replace-method-pattern-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.replace.rhs",
-    "summary": "The replacement expression or pattern",
-    "href": "reference/python/spynso3/#exports-tensornetwork-replace-method-rhs-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.replace._cond",
-    "summary": "_cond: typing.Optional[PatternRestriction | Condition] = None",
-    "href": "reference/python/spynso3/#exports-tensornetwork-replace-method-cond-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.replace.non_greedy_wildcards",
-    "summary": "List of wildcard symbols to match non-greedily",
-    "href": "reference/python/spynso3/#exports-tensornetwork-replace-method-non-greedy-wildcards-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.replace.level_range",
-    "summary": "Tuple specifying depth range for pattern matching",
-    "href": "reference/python/spynso3/#exports-tensornetwork-replace-method-level-range-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.replace.level_is_tree_depth",
-    "summary": "Whether level refers to tree depth or expression depth",
-    "href": "reference/python/spynso3/#exports-tensornetwork-replace-method-level-is-tree-depth-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.replace.allow_new_wildcards_on_rhs",
-    "summary": "Allow new wildcards in replacement pattern",
-    "href": "reference/python/spynso3/#exports-tensornetwork-replace-method-allow-new-wildcards-on-rhs-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.replace.rhs_cache_size",
-    "summary": "Size of cache for replacement pattern compilation",
-    "href": "reference/python/spynso3/#exports-tensornetwork-replace-method-rhs-cache-size-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.replace.repeat",
-    "summary": "Whether to repeatedly apply the replacement until no more matches",
-    "href": "reference/python/spynso3/#exports-tensornetwork-replace-method-repeat-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · TensorNetwork.evaluate",
     "summary": "Evaluate symbolic expressions in the network with numerical values. Substitutes symbolic constants and functions with numerical values, converting symbolic parts of the network to concrete numerical tensors. Parameters ---------- constants : dict Dict mapping symbolic expressions to their numerical values functions : dict Dict mapping function symbols to Python callable objects Returns ------- TensorNetwork A new TensorNetwork with symbolic expressions evaluated",
     "href": "reference/python/spynso3/#exports-tensornetwork-evaluate-method",
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorNetwork.evaluate.constants",
-    "summary": "Dict mapping symbolic expressions to their numerical values",
-    "href": "reference/python/spynso3/#exports-tensornetwork-evaluate-method-constants-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.evaluate.functions",
-    "summary": "Dict mapping function symbols to Python callable objects",
-    "href": "reference/python/spynso3/#exports-tensornetwork-evaluate-method-functions-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · TensorNetwork.execute",
-    "summary": "Execute the tensor network to perform tensor contractions and simplifications. Processes the computational graph by executing tensor operations such as contractions, additions, and multiplications. The execution can be controlled by mode and step limits. Parameters ---------- library : TensorLibrary, optional Optional tensor library for resolving tensor operations function_library : None, optional Reserved for an internally supplied function library n_steps : int, optional Maximum number of execution steps (None for complete execution) mode : ExecutionMode, optional Execution strategy (ExecutionMode.All, ExecutionMode.Scalar, or ExecutionMode.Single) Examples -------- >>> from symbolica.community.spenso import TensorNetwork, ExecutionMode, TensorLibrary >>> network = TensorNetwork(some_expression) >>> network.execute() >>> network.execute(n_steps=5) >>> network.execute(mode=ExecutionMode.Scalar) >>> lib = TensorLibrary.hep_lib() >>> network.execute(library=lib)",
+    "summary": "Execute the tensor network to perform tensor contractions and simplifications. Processes the computational graph by executing tensor operations such as contractions, additions, and multiplications. The execution can be controlled by mode and step limits. Parameters ---------- library : TensorLibrary, optional Optional tensor library for resolving tensor operations function_library : None, optional Reserved for an internally supplied function library n_steps : int, optional Maximum number of execution steps (None for complete execution) mode : ExecutionMode, optional Execution strategy. ExecutionMode.Single selects one smallest-degree rewrite per step; use n_steps to bound how many steps run. Examples -------- >>> from symbolica.community.spenso import TensorNetwork, ExecutionMode, TensorLibrary >>> network = TensorNetwork(some_expression) >>> network.execute() >>> network.execute(n_steps=5) >>> network.execute(mode=ExecutionMode.Scalar) >>> lib = TensorLibrary.hep_lib() >>> network.execute(library=lib)",
     "href": "reference/python/spynso3/#exports-tensornetwork-execute-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.execute.library",
-    "summary": "Optional tensor library for resolving tensor operations",
-    "href": "reference/python/spynso3/#exports-tensornetwork-execute-method-library-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.execute.function_library",
-    "summary": "Reserved for an internally supplied function library",
-    "href": "reference/python/spynso3/#exports-tensornetwork-execute-method-function-library-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.execute.n_steps",
-    "summary": "Maximum number of execution steps (None for complete execution)",
-    "href": "reference/python/spynso3/#exports-tensornetwork-execute-method-n-steps-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.execute.mode",
-    "summary": "Execution strategy (ExecutionMode.All, ExecutionMode.Scalar, or ExecutionMode.Single)",
-    "href": "reference/python/spynso3/#exports-tensornetwork-execute-method-mode-parameter",
     "kind": "python-api"
   },
   {
     "title": "spynso3 · TensorNetwork.result_tensor",
     "summary": "Extract the final tensor result from the executed network. After network execution, retrieves the computed tensor result. The network should be executed before calling this method. Parameters ---------- library : TensorLibrary, optional Optional tensor library for resolving tensor structures Returns ------- Tensor The computed tensor result Raises ------ RuntimeError If the network execution resulted in an error Examples -------- >>> from symbolica.community.spenso import TensorNetwork, TensorLibrary >>> network = TensorNetwork(tensor_expression) >>> network.execute() >>> result = network.result_tensor() >>> lib = TensorLibrary.hep_lib() >>> result_with_lib = network.result_tensor(library=lib)",
     "href": "reference/python/spynso3/#exports-tensornetwork-result-tensor-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.result_tensor.library",
-    "summary": "Optional tensor library for resolving tensor structures",
-    "href": "reference/python/spynso3/#exports-tensornetwork-result-tensor-method-library-parameter",
     "kind": "python-api"
   },
   {
@@ -1404,21 +2092,9 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorNetwork.__add__.rhs",
-    "summary": "The tensor network to add (right-hand side)",
-    "href": "reference/python/spynso3/#exports-tensornetwork-add-method-rhs-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · TensorNetwork.__radd__",
     "summary": "Add two tensor networks element-wise (right-hand addition).",
     "href": "reference/python/spynso3/#exports-tensornetwork-radd-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.__radd__.rhs",
-    "summary": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor",
-    "href": "reference/python/spynso3/#exports-tensornetwork-radd-method-rhs-parameter",
     "kind": "python-api"
   },
   {
@@ -1428,21 +2104,9 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorNetwork.__sub__.rhs",
-    "summary": "The tensor network to subtract (right-hand side)",
-    "href": "reference/python/spynso3/#exports-tensornetwork-sub-method-rhs-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · TensorNetwork.__rsub__",
     "summary": "Subtract one tensor network from another (right-hand subtraction).",
     "href": "reference/python/spynso3/#exports-tensornetwork-rsub-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.__rsub__.rhs",
-    "summary": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor",
-    "href": "reference/python/spynso3/#exports-tensornetwork-rsub-method-rhs-parameter",
     "kind": "python-api"
   },
   {
@@ -1452,21 +2116,9 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorNetwork.__mul__.rhs",
-    "summary": "The tensor network to multiply with (right-hand side)",
-    "href": "reference/python/spynso3/#exports-tensornetwork-mul-method-rhs-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · TensorNetwork.__rmul__",
     "summary": "Multiply two tensor networks (right-hand multiplication).",
     "href": "reference/python/spynso3/#exports-tensornetwork-rmul-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorNetwork.__rmul__.rhs",
-    "summary": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor",
-    "href": "reference/python/spynso3/#exports-tensornetwork-rmul-method-rhs-parameter",
     "kind": "python-api"
   },
   {
@@ -1477,37 +2129,31 @@
   },
   {
     "title": "spynso3 · TensorStructure.set_name",
-    "summary": "def set_name(self, name: TensorName | builtins.str | Expression) -> None:",
+    "summary": "def set_name(self, name: TensorName | str | Expression) -> None:",
     "href": "reference/python/spynso3/#exports-tensorstructure-set-name-method",
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorStructure.set_name.name",
-    "summary": "name: TensorName | builtins.str | Expression",
-    "href": "reference/python/spynso3/#exports-tensorstructure-set-name-method-name-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · TensorStructure.get_name",
-    "summary": "def get_name(self) -> typing.Optional[TensorName]:",
+    "summary": "def get_name(self) -> Optional[TensorName]:",
     "href": "reference/python/spynso3/#exports-tensorstructure-get-name-method",
     "kind": "python-api"
   },
   {
     "title": "spynso3 · TensorStructure.__repr__",
-    "summary": "def __repr__(self) -> builtins.str:",
+    "summary": "def __repr__(self) -> str:",
     "href": "reference/python/spynso3/#exports-tensorstructure-repr-method",
     "kind": "python-api"
   },
   {
     "title": "spynso3 · TensorStructure.__str__",
-    "summary": "def __str__(self) -> builtins.str:",
+    "summary": "def __str__(self) -> str:",
     "href": "reference/python/spynso3/#exports-tensorstructure-str-method",
     "kind": "python-api"
   },
   {
     "title": "spynso3 · TensorStructure.__len__",
-    "summary": "def __len__(self) -> builtins.int:",
+    "summary": "def __len__(self) -> int:",
     "href": "reference/python/spynso3/#exports-tensorstructure-len-method",
     "kind": "python-api"
   },
@@ -1518,51 +2164,27 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorStructure.__new__.reps_and_additional_args",
-    "summary": "*reps_and_additional_args: TensorIndices | builtins.list[Slot]",
-    "href": "reference/python/spynso3/#exports-tensorstructure-new-associatedfunction-reps-and-additional-args-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorStructure.__new__.name",
-    "summary": "Optional tensor name to assign to the structure",
-    "href": "reference/python/spynso3/#exports-tensorstructure-new-associatedfunction-name-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · TensorStructure.__getitem__",
-    "summary": "Get expanded indices at the specified range of flattened indices. Parameters ---------- item : slice Slice object defining the range of indices Returns ------- list of list of int List of expanded indices",
+    "summary": "def __getitem__(self, item: slice) -> list[Expression | complex | float]: | def __getitem__(self, item: Sequence[int]) -> Expression | complex | float: | def __getitem__(self, item: int) -> Expression | complex | float:",
     "href": "reference/python/spynso3/#exports-tensorstructure-getitem-method",
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorStructure.__getitem__.item",
-    "summary": "Slice object defining the range of indices",
-    "href": "reference/python/spynso3/#exports-tensorstructure-getitem-method-item-parameter",
+    "title": "spynso3 · TensorStructure.__getitem__ · overload 1",
+    "summary": "Get expanded indices at the specified range of flattened indices. Parameters ---------- item : slice Slice object defining the range of indices Returns ------- list of list of int List of expanded indices",
+    "href": "reference/python/spynso3/#exports-tensorstructure-getitem-method-overload",
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorStructure.__getitem__",
+    "title": "spynso3 · TensorStructure.__getitem__ · overload 2",
     "summary": "Get flattened index associated to this expanded index. Parameters ---------- item : list of int Multi-dimensional index coordinates Returns ------- int The flat index",
-    "href": "reference/python/spynso3/#exports-tensorstructure-getitem-method-2",
+    "href": "reference/python/spynso3/#exports-tensorstructure-getitem-method-overload-2",
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorStructure.__getitem__.item",
-    "summary": "Multi-dimensional index coordinates",
-    "href": "reference/python/spynso3/#exports-tensorstructure-getitem-method-2-item-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorStructure.__getitem__",
+    "title": "spynso3 · TensorStructure.__getitem__ · overload 3",
     "summary": "Get expanded index associated to this flat index. Parameters ---------- item : int Flat index into the tensor Returns ------- list of int Multi-dimensional index coordinates",
-    "href": "reference/python/spynso3/#exports-tensorstructure-getitem-method-3",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorStructure.__getitem__.item",
-    "summary": "Flat index into the tensor",
-    "href": "reference/python/spynso3/#exports-tensorstructure-getitem-method-3-item-parameter",
+    "href": "reference/python/spynso3/#exports-tensorstructure-getitem-method-overload-3",
     "kind": "python-api"
   },
   {
@@ -1572,33 +2194,9 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorStructure.__call__.args",
-    "summary": "*args: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-tensorstructure-call-method-args-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorStructure.__call__.extra_args",
-    "summary": "Optional list of additional non-tensorial arguments",
-    "href": "reference/python/spynso3/#exports-tensorstructure-call-method-extra-args-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · TensorStructure.symbolic",
     "summary": "Create a symbolic expression representing this tensor structure. Builds a symbolic tensor expression with the specified indices. Arguments can be separated using a semicolon (';') to distinguish between additional arguments and tensor indices. Parameters ---------- *args : int, str, Symbol, Expression, or ';' Positional arguments (int, str, Symbol, Expression for indices, ';' for separator) extra_args : list of Expression, optional Optional list of additional non-tensorial arguments Returns ------- Expression A symbolic Expression representing the tensor with indices Examples -------- >>> import symbolica as sp >>> from symbolica.community.spenso import TensorStructure, Representation, TensorName >>> rep = Representation.euc(3) >>> T = TensorName(\"T\") >>> structure = TensorStructure([rep, rep], name=T) >>> expr = structure.symbolic('mu', 'nu') >>> x = sp.S('x') >>> expr = structure.symbolic(x, ';', 'mu', 'nu') >>> expr = structure.symbolic('mu', 'nu', extra_args=[x])",
     "href": "reference/python/spynso3/#exports-tensorstructure-symbolic-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorStructure.symbolic.args",
-    "summary": "*args: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-tensorstructure-symbolic-method-args-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorStructure.symbolic.extra_args",
-    "summary": "Optional list of additional non-tensorial arguments",
-    "href": "reference/python/spynso3/#exports-tensorstructure-symbolic-method-extra-args-parameter",
     "kind": "python-api"
   },
   {
@@ -1608,33 +2206,57 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorStructure.index.args",
-    "summary": "*args: builtins.int | Expression | str",
-    "href": "reference/python/spynso3/#exports-tensorstructure-index-method-args-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorStructure.index.extra_args",
-    "summary": "Optional list of additional non-tensorial arguments",
-    "href": "reference/python/spynso3/#exports-tensorstructure-index-method-extra-args-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorStructure.index.cook_indices",
-    "summary": "If True, attempt to convert expressions to valid indices",
-    "href": "reference/python/spynso3/#exports-tensorstructure-index-method-cook-indices-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · ExecutionMode",
     "summary": "Execution modes for tensor network evaluation.",
     "href": "reference/python/spynso3/#exports-executionmode",
     "kind": "python-api"
   },
   {
+    "title": "spynso3 · ExecutionMode.Single",
+    "summary": "Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains",
+    "href": "reference/python/spynso3/#exports-executionmode-single-variant",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · ExecutionMode.Scalar",
+    "summary": "Only contract scalar operations, leaving tensor structure intact",
+    "href": "reference/python/spynso3/#exports-executionmode-scalar-variant",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · ExecutionMode.All",
+    "summary": "Execute all possible contractions for complete evaluation",
+    "href": "reference/python/spynso3/#exports-executionmode-all-variant",
+    "kind": "python-api"
+  },
+  {
     "title": "spynso3 · SymbolicParallelism",
     "summary": "Policy for Rayon operations that manipulate Symbolica expressions.",
     "href": "reference/python/spynso3/#exports-symbolicparallelism",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · SymbolicParallelism.Auto",
+    "summary": "Permit Rayon when licensed and use workload heuristics where available.",
+    "href": "reference/python/spynso3/#exports-symbolicparallelism-auto-variant",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · SymbolicParallelism.Serial",
+    "summary": "Keep symbolic operations on the calling thread.",
+    "href": "reference/python/spynso3/#exports-symbolicparallelism-serial-variant",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · SymbolicParallelism.Parallel",
+    "summary": "Force Rayon without `Auto`'s Symbolica license safety check.",
+    "href": "reference/python/spynso3/#exports-symbolicparallelism-parallel-variant",
+    "kind": "python-api"
+  },
+  {
+    "title": "spynso3 · set_symbolica_rayon_enabled",
+    "summary": "Configure whether Spenso may use Rayon for Symbolica operations.",
+    "href": "reference/python/spynso3/#exports-set-symbolica-rayon-enabled",
     "kind": "python-api"
   }
 ]

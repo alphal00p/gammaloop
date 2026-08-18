@@ -11,22 +11,49 @@ import typing
 
 @typing.final
 class AdditionalWeight:
+    r"""
+    Named auxiliary complex weight attached to a generated event.
+    """
     @property
-    def key(self) -> builtins.str: ...
+    def key(self) -> builtins.str:
+        r"""
+        Stable weight name, optionally followed by colon-separated identifiers.
+        """
     @property
-    def value(self) -> typing.Any: ...
+    def value(self) -> typing.Any:
+        r"""
+        Complex auxiliary event weight associated with ``key``.
+        """
 
 @typing.final
 class BatchEvaluationResult:
+    r"""
+    Per-sample evaluations paired with one observable snapshot for the complete batch.
+    """
     @property
-    def samples(self) -> builtins.list[SampleEvaluationResult]: ...
+    def samples(self) -> builtins.list[SampleEvaluationResult]:
+        r"""
+        Evaluation records in the same order as the requested samples.
+        """
     @property
-    def observables(self) -> dict: ...
-    def __str__(self) -> builtins.str: ...
-    def __repr__(self) -> builtins.str: ...
+    def observables(self) -> dict:
+        r"""
+        Observable snapshots accumulated across the complete sample batch.
+        """
+    def __str__(self) -> builtins.str:
+        r"""
+        Return a human-readable batch and observable summary.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return the human-readable batch and observable summary.
+        """
 
 @typing.final
 class ComponentDiscreteBreakdown:
+    r"""
+    Optional real and imaginary discrete-axis breakdowns for an integration slot.
+    """
     @property
     def re(self) -> typing.Optional[DiscreteBreakdown]: ...
     @property
@@ -34,25 +61,55 @@ class ComponentDiscreteBreakdown:
 
 @typing.final
 class CutInfo:
+    r"""
+    Process, graph, orientation, and loop-basis identifiers for one cut event.
+    """
     @property
-    def incoming_pdgs(self) -> builtins.list[builtins.int]: ...
+    def incoming_pdgs(self) -> builtins.list[builtins.int]:
+        r"""
+        PDG identifiers aligned with ``Event.incoming_momenta``.
+        """
     @property
-    def outgoing_pdgs(self) -> builtins.list[builtins.int]: ...
+    def outgoing_pdgs(self) -> builtins.list[builtins.int]:
+        r"""
+        PDG identifiers aligned with ``Event.outgoing_momenta``.
+        """
     @property
-    def cut_id(self) -> builtins.int: ...
+    def cut_id(self) -> builtins.int:
+        r"""
+        Zero-based cut identifier within the selected graph.
+        """
     @property
-    def graph_id(self) -> builtins.int: ...
+    def graph_id(self) -> builtins.int:
+        r"""
+        Zero-based graph identifier within the integrand.
+        """
     @property
-    def graph_group_id(self) -> typing.Optional[builtins.int]: ...
+    def graph_group_id(self) -> typing.Optional[builtins.int]:
+        r"""
+        Graph-group identifier, when group metadata is available.
+        """
     @property
-    def orientation_id(self) -> typing.Optional[builtins.int]: ...
+    def orientation_id(self) -> typing.Optional[builtins.int]:
+        r"""
+        Causal-flow orientation identifier, when sampled explicitly.
+        """
     @property
-    def lmb_channel_id(self) -> typing.Optional[builtins.int]: ...
+    def lmb_channel_id(self) -> typing.Optional[builtins.int]:
+        r"""
+        Loop-momentum-basis multichannel identifier, when sampled explicitly.
+        """
     @property
-    def lmb_channel_edge_ids(self) -> typing.Optional[builtins.list[builtins.int]]: ...
+    def lmb_channel_edge_ids(self) -> typing.Optional[builtins.list[builtins.int]]:
+        r"""
+        Edge identifiers defining the selected loop-momentum basis, when available.
+        """
 
 @typing.final
 class DiscreteBreakdown:
+    r"""
+    Per-bin integration estimates along one discrete axis at fixed other coordinates.
+    """
     @property
     def axis_label(self) -> builtins.str: ...
     @property
@@ -62,6 +119,9 @@ class DiscreteBreakdown:
 
 @typing.final
 class DiscreteBreakdownEntry:
+    r"""
+    Estimate and sampling metadata for one bin of a discrete-axis breakdown.
+    """
     @property
     def bin_index(self) -> builtins.int: ...
     @property
@@ -79,6 +139,9 @@ class DiscreteBreakdownEntry:
 
 @typing.final
 class DiscreteCoordinate:
+    r"""
+    One labeled coordinate on a discrete integration axis.
+    """
     @property
     def axis_label(self) -> builtins.str: ...
     @property
@@ -88,95 +151,236 @@ class DiscreteCoordinate:
 
 @typing.final
 class DotExportSettings:
+    r"""
+    Controls which graph details and algebraic transformations are included in DOT exports.
+    """
     @property
-    def combine_diagrams(self) -> builtins.bool: ...
+    def combine_diagrams(self) -> builtins.bool:
+        r"""
+        Write all diagrams of an integrand to one file during filesystem export.
+        """
     @combine_diagrams.setter
-    def combine_diagrams(self, value: builtins.bool) -> None: ...
+    def combine_diagrams(self, value: builtins.bool) -> None:
+        r"""
+        Write all diagrams of an integrand to one file during filesystem export.
+        """
     @property
-    def with_uv(self) -> builtins.bool: ...
+    def with_uv(self) -> builtins.bool:
+        r"""
+        Request UV counterterm graph output; currently retained for compatibility.
+        """
     @with_uv.setter
-    def with_uv(self, value: builtins.bool) -> None: ...
+    def with_uv(self, value: builtins.bool) -> None:
+        r"""
+        Request UV counterterm graph output; currently retained for compatibility.
+        """
     @property
-    def output_full_numerator(self) -> builtins.bool: ...
+    def output_full_numerator(self) -> builtins.bool:
+        r"""
+        Add the complete symbolic numerator as the graph-level `full_num` field.
+        """
     @output_full_numerator.setter
-    def output_full_numerator(self, value: builtins.bool) -> None: ...
+    def output_full_numerator(self, value: builtins.bool) -> None:
+        r"""
+        Add the complete symbolic numerator as the graph-level `full_num` field.
+        """
     @property
-    def split_xs_by_initial_states(self) -> builtins.bool: ...
+    def split_xs_by_initial_states(self) -> builtins.bool:
+        r"""
+        Split cross-section graphs by distinct initial-state assignments.
+        """
     @split_xs_by_initial_states.setter
-    def split_xs_by_initial_states(self, value: builtins.bool) -> None: ...
+    def split_xs_by_initial_states(self, value: builtins.bool) -> None:
+        r"""
+        Split cross-section graphs by distinct initial-state assignments.
+        """
     @property
-    def do_gamma_algebra(self) -> builtins.bool: ...
+    def do_gamma_algebra(self) -> builtins.bool:
+        r"""
+        Simplify gamma-matrix algebra in the full numerator before formatting it.
+        """
     @do_gamma_algebra.setter
-    def do_gamma_algebra(self, value: builtins.bool) -> None: ...
+    def do_gamma_algebra(self, value: builtins.bool) -> None:
+        r"""
+        Simplify gamma-matrix algebra in the full numerator before formatting it.
+        """
     @property
-    def do_color_algebra(self) -> builtins.bool: ...
+    def do_color_algebra(self) -> builtins.bool:
+        r"""
+        Simplify color algebra in the full numerator before formatting it.
+        """
     @do_color_algebra.setter
-    def do_color_algebra(self, value: builtins.bool) -> None: ...
+    def do_color_algebra(self, value: builtins.bool) -> None:
+        r"""
+        Simplify color algebra in the full numerator before formatting it.
+        """
     @property
-    def include_autogenerated_fields(self) -> builtins.bool: ...
+    def include_autogenerated_fields(self) -> builtins.bool:
+        r"""
+        Include vertex and edge fields whose values GammaLoop generated automatically.
+        """
     @include_autogenerated_fields.setter
-    def include_autogenerated_fields(self, value: builtins.bool) -> None: ...
-    def __new__(cls) -> DotExportSettings: ...
+    def include_autogenerated_fields(self, value: builtins.bool) -> None:
+        r"""
+        Include vertex and edge fields whose values GammaLoop generated automatically.
+        """
+    def __new__(cls) -> DotExportSettings:
+        r"""
+        Construct DOT export settings with GammaLoop's defaults.
+        """
 
 @typing.final
 class EvaluationResult:
+    r"""
+    Single-sample evaluation paired with the observable snapshot for that sample.
+    """
     @property
-    def sample(self) -> SampleEvaluationResult: ...
+    def sample(self) -> SampleEvaluationResult:
+        r"""
+        Evaluation record for the requested sample.
+        """
     @property
-    def integrand_result(self) -> complex: ...
+    def integrand_result(self) -> complex:
+        r"""
+        Complex integrand value before applying the parameterization Jacobian.
+        """
     @property
-    def integrator_weight(self) -> builtins.float: ...
+    def integrator_weight(self) -> builtins.float:
+        r"""
+        Monte Carlo weight supplied by the integrator, excluding the parameterization Jacobian.
+        """
     @property
-    def generated_event_count(self) -> typing.Optional[builtins.int]: ...
+    def generated_event_count(self) -> typing.Optional[builtins.int]:
+        r"""
+        Number of candidate events generated, or ``None`` when metadata was omitted.
+        """
     @property
-    def accepted_event_count(self) -> typing.Optional[builtins.int]: ...
+    def accepted_event_count(self) -> typing.Optional[builtins.int]:
+        r"""
+        Number of generated events accepted by selectors, or ``None`` without metadata.
+        """
     @property
-    def event_processing_time_seconds(self) -> typing.Optional[builtins.float]: ...
+    def event_processing_time_seconds(self) -> typing.Optional[builtins.float]:
+        r"""
+        Time spent building and selecting events, in seconds, or ``None`` without metadata.
+        """
     @property
-    def parameterization_jacobian(self) -> typing.Optional[builtins.float]: ...
+    def parameterization_jacobian(self) -> typing.Optional[builtins.float]:
+        r"""
+        Sample parameterization Jacobian, or ``None`` when no Jacobian was supplied.
+        """
     @property
-    def is_nan(self) -> typing.Optional[builtins.bool]: ...
+    def is_nan(self) -> typing.Optional[builtins.bool]:
+        r"""
+        Whether evaluation metadata flagged a non-finite result, or ``None`` without metadata.
+        """
     @property
-    def stability_results(self) -> typing.Optional[builtins.list[StabilityResult]]: ...
+    def stability_results(self) -> typing.Optional[builtins.list[StabilityResult]]:
+        r"""
+        Per-precision stability attempts, or ``None`` when metadata was omitted.
+        """
     @property
-    def event_groups(self) -> builtins.list[EventGroup]: ...
+    def event_groups(self) -> builtins.list[EventGroup]:
+        r"""
+        Correlated event groups produced while evaluating this sample.
+        """
     @property
-    def observables(self) -> dict: ...
-    def __str__(self) -> builtins.str: ...
-    def __repr__(self) -> builtins.str: ...
+    def observables(self) -> dict:
+        r"""
+        Observable snapshots produced from the same Monte Carlo sample.
+        """
+    def __str__(self) -> builtins.str:
+        r"""
+        Return a human-readable evaluation and observable summary.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return the human-readable evaluation and observable summary.
+        """
 
 @typing.final
 class Event:
+    r"""
+    Accepted cut event with momenta, its primary weight, and auxiliary weights.
+    """
     @property
-    def incoming_momenta(self) -> builtins.list[FourMomentum]: ...
+    def incoming_momenta(self) -> builtins.list[FourMomentum]:
+        r"""
+        Incoming four-momenta, aligned with ``cut_info.incoming_pdgs``.
+        """
     @property
-    def outgoing_momenta(self) -> builtins.list[FourMomentum]: ...
+    def outgoing_momenta(self) -> builtins.list[FourMomentum]:
+        r"""
+        Outgoing four-momenta, aligned with ``cut_info.outgoing_pdgs``.
+        """
     @property
-    def cut_info(self) -> CutInfo: ...
+    def cut_info(self) -> CutInfo:
+        r"""
+        Cut, graph, orientation, and loop-basis identifiers for this event.
+        """
     @property
-    def weight(self) -> typing.Any: ...
+    def weight(self) -> typing.Any:
+        r"""
+        Primary complex event weight.
+        """
     @property
-    def additional_weights(self) -> builtins.list[AdditionalWeight]: ...
-    def __str__(self) -> builtins.str: ...
-    def __repr__(self) -> builtins.str: ...
+    def additional_weights(self) -> builtins.list[AdditionalWeight]:
+        r"""
+        Named auxiliary complex weights such as threshold-counterterm contributions.
+        """
+    def __str__(self) -> builtins.str:
+        r"""
+        Return a human-readable event summary.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return the human-readable event summary.
+        """
 
 @typing.final
 class EventGroup:
+    r"""
+    Correlated accepted events produced by one graph group for one sample.
+    """
     @property
-    def events(self) -> builtins.list[Event]: ...
-    def __str__(self) -> builtins.str: ...
-    def __repr__(self) -> builtins.str: ...
+    def events(self) -> builtins.list[Event]:
+        r"""
+        Correlated accepted events in this group.
+        """
+    def __str__(self) -> builtins.str:
+        r"""
+        Return a human-readable summary of the grouped events.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return the human-readable grouped-event summary.
+        """
 
 @typing.final
 class FourMomentum:
+    r"""
+    One energy-momentum four-vector returned with a generated event.
+    """
     @property
-    def e(self) -> builtins.float: ...
+    def e(self) -> builtins.float:
+        r"""
+        Energy component.
+        """
     @property
-    def px(self) -> builtins.float: ...
+    def px(self) -> builtins.float:
+        r"""
+        Momentum along the x axis.
+        """
     @property
-    def py(self) -> builtins.float: ...
+    def py(self) -> builtins.float:
+        r"""
+        Momentum along the y axis.
+        """
     @property
-    def pz(self) -> builtins.float: ...
+    def pz(self) -> builtins.float:
+        r"""
+        Momentum along the z axis.
+        """
 
 @typing.final
 class GammaLoopAPI:
@@ -357,13 +561,123 @@ class GammaLoopAPI:
             points = numpy.asarray(points, dtype=numpy.float64)
             result = api.evaluate_samples(points, process_id=0, minimal_output=True)
         """
-    def import_graphs(self, graphs: builtins.str, process_name: typing.Optional[builtins.str] = None, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, format: builtins.str = ..., overwrite: builtins.bool = ..., append: builtins.bool = ...) -> None: ...
-    def get_lmbs(self, graphs: builtins.str, format: builtins.str = ...) -> builtins.list[builtins.list[tuple[builtins.list[builtins.int], builtins.list[builtins.int], builtins.dict[builtins.int, tuple[builtins.list[builtins.int], builtins.list[builtins.int]]]]]]: ...
-    def get_orientations(self, graph_name: builtins.str, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> builtins.list[builtins.dict[builtins.int, builtins.int]]: ...
-    def get_model(self) -> builtins.str: ...
-    def evaluate(self, process_id: typing.Optional[builtins.int] = None, graphs_group_name: typing.Optional[builtins.str] = None, result_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, numerical: builtins.bool = ..., number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None) -> builtins.str: ...
-    def import_model(self, model_specifier: builtins.str | os.PathLike | pathlib.Path, simplify_model: builtins.bool = ...) -> None: ...
-    def list_outputs(self) -> tuple[builtins.dict[builtins.str, builtins.int], builtins.dict[builtins.str, builtins.int]]: ...
+    def import_graphs(self, graphs: builtins.str, process_name: typing.Optional[builtins.str] = None, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, format: builtins.str = ..., overwrite: builtins.bool = ..., append: builtins.bool = ...) -> None:
+        r"""
+        Import DOT graphs into a new or existing process/integrand collection.
+
+        Parameters
+        ----------
+        graphs : str
+            DOT file path when ``format="dot"`` or inline DOT text when
+            ``format="string"``.
+        process_name, process_id : str or int, optional
+            Process to create or update. Inline text requires one of these selectors.
+        integrand_name : str, optional
+            Integrand within the selected process.
+        format : {"dot", "string"}, default="dot"
+            Select file-backed or inline input.
+        overwrite, append : bool, default=False
+            Replace an existing collection or append to it; these modes conflict.
+
+        Raises
+        ------
+        Exception
+            If selectors conflict, the source is missing or malformed, or importing fails.
+        """
+    def get_lmbs(self, graphs: builtins.str, format: builtins.str = ...) -> builtins.list[builtins.list[tuple[builtins.list[builtins.int], builtins.list[builtins.int], builtins.dict[builtins.int, tuple[builtins.list[builtins.int], builtins.list[builtins.int]]]]]]:
+        r"""
+        Generate loop-momentum bases for each supplied graph.
+
+        Parameters
+        ----------
+        graphs : str
+            DOT file path or inline DOT text, as selected by ``format``.
+        format : {"dot", "string"}, default="dot"
+            Select file-backed or inline input.
+
+        Returns
+        -------
+        list
+            Per graph, a list of ``(loop_edges, external_edges, edge_signatures)``
+            tuples. Each signature contains its loop and external coefficients.
+        """
+    def get_orientations(self, graph_name: builtins.str, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> builtins.list[builtins.dict[builtins.int, builtins.int]]:
+        r"""
+        Return the causal-flow orientations generated for one graph.
+
+        Each returned dictionary maps an edge id to ``1`` (default), ``-1``
+        (reversed), or ``0`` (undirected). Supply process and integrand selectors when
+        the active state does not identify a unique integrand.
+
+        Parameters
+        ----------
+        graph_name : str
+            Name of the graph within the selected integrand.
+        process_id : int, optional
+            Numeric process identifier; omit when process selection is unambiguous.
+        integrand_name : str, optional
+            Integrand containing the graph; omit when integrand selection is unambiguous.
+
+        Returns
+        -------
+        list[dict[int, int]]
+            One edge-direction mapping per generated orientation.
+        """
+    def get_model(self) -> builtins.str:
+        r"""
+        Serialize the active physics model as JSON.
+
+        Returns
+        -------
+        str
+            JSON representation of the model currently owned by this session.
+        """
+    def evaluate(self, process_id: typing.Optional[builtins.int] = None, graphs_group_name: typing.Optional[builtins.str] = None, result_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, numerical: builtins.bool = ..., number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None) -> builtins.str:
+        r"""
+        Evaluate one generated graph group as a symbolic or numerical expression.
+
+        Parameters
+        ----------
+        process_id : int, optional
+            Process containing the requested graph group.
+        graphs_group_name : str, optional
+            Group to evaluate when the current state is ambiguous.
+        result_path : path-like, optional
+            Optional destination for the evaluated expression.
+        numerical : bool, default=True
+            Evaluate numerically instead of retaining a symbolic result.
+        number_of_terms_in_epsilon_expansion : int, optional
+            Truncate the dimensional-regulator expansion to this many terms.
+
+        Returns
+        -------
+        str
+            Canonical Symbolica representation of the result.
+        """
+    def import_model(self, model_specifier: builtins.str | os.PathLike | pathlib.Path, simplify_model: builtins.bool = ...) -> None:
+        r"""
+        Replace the active model from a GammaLoop model file or supported model source.
+
+        ``simplify_model`` applies the standard symbolic simplification pass while
+        importing. Existing process data may no longer be compatible with a replaced
+        model, so import the model before generating processes.
+
+        Parameters
+        ----------
+        model_specifier : path-like
+            Path or model specifier accepted by GammaLoop's model importer.
+        simplify_model : bool, default=True
+            Apply the standard symbolic simplification pass while importing.
+        """
+    def list_outputs(self) -> tuple[builtins.dict[builtins.str, builtins.int], builtins.dict[builtins.str, builtins.int]]:
+        r"""
+        List generated amplitude and cross-section names with their process ids.
+
+        Returns
+        -------
+        tuple[dict[str, int], dict[str, int]]
+            Amplitude mapping followed by the cross-section mapping.
+        """
     def get_integrand_info(self, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> IntegrandInfo:
         r"""
         Describe the selected generated integrand and its graph structure.
@@ -505,7 +819,24 @@ class GammaLoopAPI:
             runtime = api.get_default_runtime_settings()
             print(runtime.get("integrator.n_start"))
         """
-    def get_dot_files(self, process: typing.Optional[builtins.int | builtins.str] = None, integrand_name: typing.Optional[builtins.str] = None, settings: DotExportSettings = ...) -> builtins.str: ...
+    def get_dot_files(self, process: typing.Optional[builtins.int | builtins.str] = None, integrand_name: typing.Optional[builtins.str] = None, settings: DotExportSettings = ...) -> builtins.str:
+        r"""
+        Render a selected amplitude or cross section as Graphviz DOT text.
+
+        Parameters
+        ----------
+        process : int or str, optional
+            Process id or name; omit only when selection is unambiguous.
+        integrand_name : str, optional
+            Integrand to render.
+        settings : DotExportSettings, optional
+            Controls diagram combination, UV terms, algebra, and generated fields.
+
+        Returns
+        -------
+        str
+            DOT source suitable for Graphviz or GammaLoop's drawing pipeline.
+        """
     def run(self, command: builtins.str) -> None:
         r"""
         Parse and execute a CLI command in this API instance's session.
@@ -539,93 +870,387 @@ class GammaLoopAPI:
 
             api.run("display processes")
         """
-    def generate_cff(self, dot_string: builtins.str, subgraph_nodes: typing.Sequence[builtins.str], reverse_dangling: typing.Sequence[builtins.int], orientation_pattern: typing.Optional[builtins.str] = None) -> builtins.list[tuple[builtins.dict[builtins.int, builtins.int], builtins.str]]: ...
-    def generate_cff_as_json_string(self, dot_string: builtins.str, subgraph_nodes: typing.Sequence[builtins.str], reverse_dangling: typing.Sequence[builtins.int], orientation_pattern: typing.Optional[builtins.str] = None) -> builtins.str: ...
+    def generate_cff(self, dot_string: builtins.str, subgraph_nodes: typing.Sequence[builtins.str], reverse_dangling: typing.Sequence[builtins.int], orientation_pattern: typing.Optional[builtins.str] = None) -> builtins.list[tuple[builtins.dict[builtins.int, builtins.int], builtins.str]]:
+        r"""
+        Build a causal-flow expression from an inline DOT graph or one of its subgraphs.
+
+        Parameters
+        ----------
+        dot_string : str
+            Inline DOT graph using particles from the active model.
+        subgraph_nodes : Sequence[str]
+            Vertex names retained in the subgraph; an empty sequence selects all nodes.
+        reverse_dangling : Sequence[int]
+            Dangling edge ids whose orientation is reversed.
+        orientation_pattern : str, optional
+            Pattern restricting returned causal-flow orientations.
+
+        Returns
+        -------
+        list[tuple[dict[int, int], str]]
+            Edge-direction maps paired with their energy-denominator expressions.
+        """
+    def generate_cff_as_json_string(self, dot_string: builtins.str, subgraph_nodes: typing.Sequence[builtins.str], reverse_dangling: typing.Sequence[builtins.int], orientation_pattern: typing.Optional[builtins.str] = None) -> builtins.str:
+        r"""
+        Serialize a causal-flow expression and its surfaces as JSON.
+
+        This accepts the same graph, subgraph, and dangling-edge inputs as
+        ``generate_cff``. The current JSON representation is intended for GammaLoop
+        tooling and may contain internal structural details.
+
+        Parameters
+        ----------
+        dot_string : str
+            Inline DOT graph using particles from the active model.
+        subgraph_nodes : Sequence[str]
+            Vertex names retained in the subgraph; an empty sequence selects all nodes.
+        reverse_dangling : Sequence[int]
+            Dangling edge ids whose orientation is reversed.
+        orientation_pattern : str, optional
+            Pattern restricting returned causal-flow orientations.
+
+        Returns
+        -------
+        str
+            JSON representation of the causal-flow expression and E-surfaces.
+        """
 
 @typing.final
 class HistogramAccumulator:
+    r"""
+    Mutable continuous or discrete histogram accumulator with sample-level statistics.
+    """
     @staticmethod
-    def continuous(title: builtins.str, x_min: builtins.float, x_max: builtins.float, n_bins: builtins.int, type_description: builtins.str = ..., phase: builtins.str = ..., value_transform: builtins.str = ..., log_x_axis: builtins.bool = ..., log_y_axis: builtins.bool = ...) -> HistogramAccumulator: ...
+    def continuous(title: builtins.str, x_min: builtins.float, x_max: builtins.float, n_bins: builtins.int, type_description: builtins.str = ..., phase: builtins.str = ..., value_transform: builtins.str = ..., log_x_axis: builtins.bool = ..., log_y_axis: builtins.bool = ...) -> HistogramAccumulator:
+        r"""
+        Create an evenly binned continuous histogram accumulator.
+
+        Parameters
+        ----------
+        title : str
+            Human-readable title used by snapshots and exported output.
+        x_min : float
+            Lower edge of the histogram range.
+        x_max : float
+            Upper edge of the histogram range.
+        n_bins : int
+            Number of equal-width in-range bins.
+        type_description : str, default="AL"
+            HwU ``TYPE@`` metadata.
+        phase : {"real", "imag"}, default="real"
+            Component of each complex event weight to accumulate.
+        value_transform : {"identity", "log10"}, default="identity"
+            Transformation applied to coordinates before binning.
+        log_x_axis : bool, default=False
+            Request logarithmic horizontal-axis rendering.
+        log_y_axis : bool, default=True
+            Request logarithmic vertical-axis rendering.
+        """
     @staticmethod
-    def discrete(title: builtins.str, min_bin_id: builtins.int, max_bin_id: builtins.int, ordering: builtins.str = ..., labels: typing.Optional[typing.Sequence[builtins.str]] = None, type_description: builtins.str = ..., phase: builtins.str = ..., log_y_axis: builtins.bool = ...) -> HistogramAccumulator: ...
-    def snapshot(self) -> HistogramSnapshot: ...
-    def merge_in_place(self, other: HistogramAccumulator) -> None: ...
-    def rebin(self, contiguous_bins: builtins.int) -> HistogramAccumulator: ...
-    def rescale(self, factor: builtins.float) -> None: ...
-    def change_bin_ordering(self, ordering: builtins.str) -> None: ...
-    def update_results(self) -> None: ...
-    def fill_continuous_sample(self, entries: typing.Sequence[tuple[builtins.float, builtins.float]]) -> None: ...
-    def fill_discrete_sample(self, entries: typing.Sequence[tuple[builtins.int, builtins.float]]) -> None: ...
+    def discrete(title: builtins.str, min_bin_id: builtins.int, max_bin_id: builtins.int, ordering: builtins.str = ..., labels: typing.Optional[typing.Sequence[builtins.str]] = None, type_description: builtins.str = ..., phase: builtins.str = ..., log_y_axis: builtins.bool = ...) -> HistogramAccumulator:
+        r"""
+        Create a discrete histogram accumulator over an inclusive integer range.
+
+        Parameters
+        ----------
+        title : str
+            Human-readable title used by snapshots and exported output.
+        min_bin_id : int
+            Smallest accepted bin identifier.
+        max_bin_id : int
+            Largest accepted bin identifier, inclusive.
+        ordering : {"ascending_bin_id", "value_descending", "abs_value_descending"}, default="ascending_bin_id"
+            Ordering used when bins are returned or exported.
+        labels : Sequence[str], optional
+            One label per bin, ordered by ascending bin identifier.
+        type_description : str, default="AL"
+            HwU ``TYPE@`` metadata.
+        phase : {"real", "imag"}, default="real"
+            Component of each complex event weight to accumulate.
+        log_y_axis : bool, default=True
+            Request logarithmic vertical-axis rendering.
+
+        Raises
+        ------
+        ValueError
+            If the range, label count, ordering, or phase is invalid.
+        """
+    def snapshot(self) -> HistogramSnapshot:
+        r"""
+        Return an immutable snapshot including committed and pending samples.
+        """
+    def merge_in_place(self, other: HistogramAccumulator) -> None:
+        r"""
+        Move pending samples from another compatible accumulator into this one.
+
+        Parameters
+        ----------
+        other : HistogramAccumulator
+            Compatible accumulator whose pending samples are consumed.
+
+        Raises
+        ------
+        ValueError
+            If histogram definitions differ.
+        """
+    def rebin(self, contiguous_bins: builtins.int) -> HistogramAccumulator:
+        r"""
+        Return a copy with each run of adjacent continuous bins combined.
+
+        Discrete histograms are copied unchanged.
+
+        Parameters
+        ----------
+        contiguous_bins : int
+            Positive number of old bins per new bin; it must divide the bin count.
+        """
+    def rescale(self, factor: builtins.float) -> None:
+        r"""
+        Multiply all accumulated weights by a constant in place.
+
+        Parameters
+        ----------
+        factor : float
+            Scale applied to weight sums; squared-weight sums use its square.
+        """
+    def change_bin_ordering(self, ordering: builtins.str) -> None:
+        r"""
+        Change the display ordering of a discrete histogram.
+
+        Parameters
+        ----------
+        ordering : {"ascending_bin_id", "value_descending", "abs_value_descending"}
+            New ordering for snapshots and exported output.
+
+        Raises
+        ------
+        ValueError
+            If this is a continuous histogram or the name is invalid.
+        """
+    def update_results(self) -> None:
+        r"""
+        Commit pending samples to the accumulator's completed-result counters.
+        """
+    def fill_continuous_sample(self, entries: typing.Sequence[tuple[builtins.float, builtins.float]]) -> None:
+        r"""
+        Add one independent continuous sample containing coordinate-weight pairs.
+
+        Parameters
+        ----------
+        entries : Sequence[tuple[float, float]]
+            ``(coordinate, projected_weight)`` entries for this sample.
+
+        Raises
+        ------
+        ValueError
+            If this is not a continuous histogram.
+        """
+    def fill_discrete_sample(self, entries: typing.Sequence[tuple[builtins.int, builtins.float]]) -> None:
+        r"""
+        Add one independent discrete sample containing bin-weight pairs.
+
+        Parameters
+        ----------
+        entries : Sequence[tuple[int, float]]
+            ``(bin_id, projected_weight)`` entries for this sample.
+
+        Raises
+        ------
+        ValueError
+            If this is not a discrete histogram.
+        """
 
 @typing.final
 class HistogramBin:
+    r"""
+    Raw statistics and optional coordinate metadata for one histogram bin.
+    """
     @property
-    def x_min(self) -> typing.Optional[builtins.float]: ...
+    def x_min(self) -> typing.Optional[builtins.float]:
+        r"""
+        Lower coordinate edge, or ``None`` for a discrete or overflow bin.
+        """
     @property
-    def x_max(self) -> typing.Optional[builtins.float]: ...
+    def x_max(self) -> typing.Optional[builtins.float]:
+        r"""
+        Upper coordinate edge, or ``None`` for a discrete or underflow bin.
+        """
     @property
-    def bin_id(self) -> typing.Optional[builtins.int]: ...
+    def bin_id(self) -> typing.Optional[builtins.int]:
+        r"""
+        Discrete bin identifier, or ``None`` for a continuous bin.
+        """
     @property
-    def label(self) -> typing.Optional[builtins.str]: ...
+    def label(self) -> typing.Optional[builtins.str]:
+        r"""
+        Optional label of a discrete bin.
+        """
     @property
-    def entry_count(self) -> builtins.int: ...
+    def entry_count(self) -> builtins.int:
+        r"""
+        Number of event entries accumulated in this bin.
+        """
     @property
-    def sum_weights(self) -> builtins.float: ...
+    def sum_weights(self) -> builtins.float:
+        r"""
+        Sum of per-sample projected weights for this bin.
+        """
     @property
-    def sum_weights_squared(self) -> builtins.float: ...
+    def sum_weights_squared(self) -> builtins.float:
+        r"""
+        Sum of squared per-sample projected weights for this bin.
+        """
     @property
-    def mitigated_fill_count(self) -> builtins.int: ...
-    def average(self, sample_count: builtins.int) -> builtins.float: ...
-    def error(self, sample_count: builtins.int) -> builtins.float: ...
+    def mitigated_fill_count(self) -> builtins.int:
+        r"""
+        Number of fills produced by paired boundary-misbinning mitigation.
+        """
+    def average(self, sample_count: builtins.int) -> builtins.float:
+        r"""
+        Compute this bin's Monte Carlo mean from its raw weight sum.
+
+        Parameters
+        ----------
+        sample_count : int
+            Number of statistically independent samples represented by the histogram.
+
+        Returns
+        -------
+        float
+            ``sum_weights / sample_count``, or zero when ``sample_count`` is zero.
+        """
+    def error(self, sample_count: builtins.int) -> builtins.float:
+        r"""
+        Compute the standard error of this bin's Monte Carlo mean.
+
+        Parameters
+        ----------
+        sample_count : int
+            Number of statistically independent samples represented by the histogram.
+
+        Returns
+        -------
+        float
+            Sample-mean standard error, or zero when it cannot be estimated reliably.
+        """
 
 @typing.final
 class HistogramSnapshot:
+    r"""
+    Immutable, mergeable histogram snapshot containing raw per-bin statistics.
+    """
     @property
-    def kind(self) -> builtins.str: ...
+    def kind(self) -> builtins.str:
+        r"""
+        ``"continuous"`` or ``"discrete"``.
+        """
     @property
-    def title(self) -> builtins.str: ...
+    def title(self) -> builtins.str:
+        r"""
+        Human-readable histogram title.
+        """
     @property
-    def type_description(self) -> builtins.str: ...
+    def type_description(self) -> builtins.str:
+        r"""
+        HwU ``TYPE@`` description retained with the histogram.
+        """
     @property
-    def phase(self) -> builtins.str: ...
+    def phase(self) -> builtins.str:
+        r"""
+        Complex-weight component accumulated: ``"real"`` or ``"imag"``.
+        """
     @property
-    def value_transform(self) -> builtins.str: ...
+    def value_transform(self) -> builtins.str:
+        r"""
+        Coordinate transform: ``"identity"`` or ``"log10"``.
+        """
     @property
-    def supports_misbinning_mitigation(self) -> builtins.bool: ...
+    def supports_misbinning_mitigation(self) -> builtins.bool:
+        r"""
+        Whether paired fills can mitigate bin-boundary instability.
+        """
     @property
-    def x_min(self) -> typing.Optional[builtins.float]: ...
+    def x_min(self) -> typing.Optional[builtins.float]:
+        r"""
+        Lower bound of a continuous histogram, otherwise ``None``.
+        """
     @property
-    def x_max(self) -> typing.Optional[builtins.float]: ...
+    def x_max(self) -> typing.Optional[builtins.float]:
+        r"""
+        Upper bound of a continuous histogram, otherwise ``None``.
+        """
     @property
-    def sample_count(self) -> builtins.int: ...
+    def sample_count(self) -> builtins.int:
+        r"""
+        Number of statistically independent Monte Carlo samples represented.
+        """
     @property
-    def log_x_axis(self) -> builtins.bool: ...
+    def log_x_axis(self) -> builtins.bool:
+        r"""
+        Whether compatible renderers should use a logarithmic horizontal axis.
+        """
     @property
-    def log_y_axis(self) -> builtins.bool: ...
+    def log_y_axis(self) -> builtins.bool:
+        r"""
+        Whether compatible renderers should use a logarithmic vertical axis.
+        """
     @property
-    def discrete_min_bin_id(self) -> typing.Optional[builtins.int]: ...
+    def discrete_min_bin_id(self) -> typing.Optional[builtins.int]:
+        r"""
+        Smallest discrete bin identifier, otherwise ``None``.
+        """
     @property
-    def discrete_ordering(self) -> typing.Optional[builtins.str]: ...
+    def discrete_ordering(self) -> typing.Optional[builtins.str]:
+        r"""
+        Discrete display ordering, otherwise ``None``.
+        """
     @property
-    def bins(self) -> builtins.list[HistogramBin]: ...
+    def bins(self) -> builtins.list[HistogramBin]:
+        r"""
+        Raw statistics for every in-range bin, in display order.
+        """
     @property
-    def underflow_bin(self) -> HistogramBin: ...
+    def underflow_bin(self) -> HistogramBin:
+        r"""
+        Raw statistics for entries below a continuous histogram's range.
+        """
     @property
-    def overflow_bin(self) -> HistogramBin: ...
+    def overflow_bin(self) -> HistogramBin:
+        r"""
+        Raw statistics for entries above a continuous histogram's range.
+        """
     @property
-    def statistics(self) -> HistogramStats: ...
+    def statistics(self) -> HistogramStats:
+        r"""
+        Histogram-wide entry and mitigation counters.
+        """
 
 @typing.final
 class HistogramStats:
+    r"""
+    Aggregate entry, NaN, and misbinning-mitigation counts for a histogram.
+    """
     @property
-    def in_range_entry_count(self) -> builtins.int: ...
+    def in_range_entry_count(self) -> builtins.int:
+        r"""
+        Number of event entries assigned to in-range bins.
+        """
     @property
-    def nan_value_count(self) -> builtins.int: ...
+    def nan_value_count(self) -> builtins.int:
+        r"""
+        Number of entries skipped because their coordinate was non-finite.
+        """
     @property
-    def mitigated_pair_count(self) -> builtins.int: ...
+    def mitigated_pair_count(self) -> builtins.int:
+        r"""
+        Number of entry pairs processed by boundary-misbinning mitigation.
+        """
 
 @typing.final
 class IntegralEstimate:
+    r"""
+    Complex integral estimate with errors, chi-squared values, and evaluation counts.
+    """
     @property
     def neval(self) -> builtins.int: ...
     @property
@@ -643,123 +1268,288 @@ class IntegralEstimate:
 
 @typing.final
 class IntegrandActiveThresholdCut:
+    r"""
+    Viable cut associated with a threshold E-surface.
+    """
     @property
-    def cut_id(self) -> builtins.int: ...
+    def cut_id(self) -> builtins.int:
+        r"""
+        Zero-based identifier of a cut on which the E-surface remains viable.
+        """
     @property
-    def can_become_pinched(self) -> builtins.bool: ...
+    def can_become_pinched(self) -> builtins.bool:
+        r"""
+        Whether this cut can make the E-surface pinched for some kinematics.
+        """
 
 @typing.final
 class IntegrandCut:
+    r"""
+    Cut edges, raising power, and threshold associations for one cross-section cut.
+    """
     @property
-    def cut_id(self) -> builtins.int: ...
+    def cut_id(self) -> builtins.int:
+        r"""
+        Zero-based cut identifier within the representative graph.
+        """
     @property
-    def edge_ids(self) -> builtins.list[builtins.int]: ...
+    def edge_ids(self) -> builtins.list[builtins.int]:
+        r"""
+        Edge identifiers crossed by the cut.
+        """
     @property
-    def raising_power(self) -> builtins.int: ...
+    def raising_power(self) -> builtins.int:
+        r"""
+        Maximum multiplicity of the cut's related threshold group.
+        """
     @property
-    def left_thresholds(self) -> builtins.list[IntegrandCutThreshold]: ...
+    def left_thresholds(self) -> builtins.list[IntegrandCutThreshold]:
+        r"""
+        Threshold associations on the left side of the cut.
+        """
     @property
-    def right_thresholds(self) -> builtins.list[IntegrandCutThreshold]: ...
+    def right_thresholds(self) -> builtins.list[IntegrandCutThreshold]:
+        r"""
+        Threshold associations on the right side of the cut.
+        """
 
 @typing.final
 class IntegrandCutThreshold:
+    r"""
+    Classification and boundary edges of one threshold associated with a cut.
+    """
     @property
-    def esurface_id(self) -> builtins.int: ...
+    def esurface_id(self) -> builtins.int:
+        r"""
+        Threshold E-surface identifier within the graph group.
+        """
     @property
-    def status(self) -> builtins.str: ...
+    def status(self) -> builtins.str:
+        r"""
+        Viability classification for this threshold-cut association.
+        """
     @property
-    def cut_boundary_edge_ids(self) -> builtins.list[builtins.int]: ...
+    def cut_boundary_edge_ids(self) -> builtins.list[builtins.int]:
+        r"""
+        Cut edges that bound the associated threshold region.
+        """
     @property
-    def threshold_boundary_edge_ids(self) -> builtins.list[builtins.int]: ...
+    def threshold_boundary_edge_ids(self) -> builtins.list[builtins.int]:
+        r"""
+        Threshold edges that bound the associated threshold region.
+        """
     @property
-    def invariant_bound_is_applicable(self) -> builtins.bool: ...
+    def invariant_bound_is_applicable(self) -> builtins.bool:
+        r"""
+        Whether the invariant-bound criterion applies to this association.
+        """
 
 @typing.final
 class IntegrandGraph:
+    r"""
+    Identity and master-graph status of one graph in an integrand.
+    """
     @property
-    def graph_id(self) -> builtins.int: ...
+    def graph_id(self) -> builtins.int:
+        r"""
+        Zero-based graph identifier within the integrand.
+        """
     @property
-    def name(self) -> builtins.str: ...
+    def name(self) -> builtins.str:
+        r"""
+        Persistent graph name.
+        """
     @property
-    def is_master(self) -> builtins.bool: ...
+    def is_master(self) -> builtins.bool:
+        r"""
+        Whether this graph is the representative graph of its group.
+        """
 
 @typing.final
 class IntegrandGraphGroup:
+    r"""
+    Graphs and shared orientation, loop-basis, threshold, and cut data in one group.
+    """
     @property
-    def group_id(self) -> builtins.int: ...
+    def group_id(self) -> builtins.int:
+        r"""
+        Zero-based graph-group identifier within the integrand.
+        """
     @property
-    def graphs(self) -> builtins.list[IntegrandGraph]: ...
+    def graphs(self) -> builtins.list[IntegrandGraph]:
+        r"""
+        Graphs in this group, with the representative graph marked as master.
+        """
     @property
-    def orientation_edge_ids(self) -> builtins.list[builtins.int]: ...
+    def orientation_edge_ids(self) -> builtins.list[builtins.int]:
+        r"""
+        Edge identifiers that establish the ordering of every orientation signature.
+        """
     @property
-    def orientations(self) -> builtins.list[IntegrandOrientation]: ...
+    def orientations(self) -> builtins.list[IntegrandOrientation]:
+        r"""
+        Available causal-flow orientations for the representative graph.
+        """
     @property
-    def loop_momentum_bases(self) -> builtins.list[IntegrandLoopMomentumBasis]: ...
+    def loop_momentum_bases(self) -> builtins.list[IntegrandLoopMomentumBasis]:
+        r"""
+        Available loop-momentum bases for the representative graph.
+        """
     @property
-    def threshold_esurface_ids(self) -> builtins.list[builtins.int]: ...
+    def threshold_esurface_ids(self) -> builtins.list[builtins.int]:
+        r"""
+        Ordered identifiers of threshold E-surfaces retained for the group.
+        """
     @property
-    def threshold_esurfaces(self) -> builtins.list[IntegrandThresholdEsurface]: ...
+    def threshold_esurfaces(self) -> builtins.list[IntegrandThresholdEsurface]:
+        r"""
+        Structured metadata for the retained threshold E-surfaces.
+        """
     @property
-    def cuts(self) -> builtins.list[IntegrandCut]: ...
+    def cuts(self) -> builtins.list[IntegrandCut]:
+        r"""
+        Cross-section cuts; empty for amplitude graph groups.
+        """
 
 @typing.final
 class IntegrandInfo:
+    r"""
+    Structured description of a generated integrand and its evaluation backend.
+    """
     @property
-    def process_id(self) -> builtins.int: ...
+    def process_id(self) -> builtins.int:
+        r"""
+        Numeric identifier of the process that owns the integrand.
+        """
     @property
-    def process_name(self) -> builtins.str: ...
+    def process_name(self) -> builtins.str:
+        r"""
+        Persistent folder name of the owning process.
+        """
     @property
-    def integrand_name(self) -> builtins.str: ...
+    def integrand_name(self) -> builtins.str:
+        r"""
+        Canonical name of the resolved integrand.
+        """
     @property
-    def kind(self) -> builtins.str: ...
+    def kind(self) -> builtins.str:
+        r"""
+        ``"amplitude"`` or ``"cross section"``.
+        """
     @property
-    def generation_backend(self) -> builtins.str: ...
+    def generation_backend(self) -> builtins.str:
+        r"""
+        Compilation backend frozen into the generated integrand.
+        """
     @property
-    def generation_compile_options(self) -> typing.Optional[builtins.str]: ...
+    def generation_compile_options(self) -> typing.Optional[builtins.str]:
+        r"""
+        Backend-specific compilation options, when configured.
+        """
     @property
-    def active_f64_backend(self) -> builtins.str: ...
+    def active_f64_backend(self) -> builtins.str:
+        r"""
+        Floating-point evaluator backend currently active for f64 evaluation.
+        """
     @property
-    def graph_count(self) -> builtins.int: ...
+    def graph_count(self) -> builtins.int:
+        r"""
+        Number of amplitude graphs or cross-section supergraphs.
+        """
     @property
-    def graph_group_count(self) -> builtins.int: ...
+    def graph_group_count(self) -> builtins.int:
+        r"""
+        Number of graph groups in the generated integrand.
+        """
     @property
-    def record_size_bytes(self) -> builtins.int: ...
+    def record_size_bytes(self) -> builtins.int:
+        r"""
+        Serialized integrand-record size in bytes, excluding its compiled evaluator.
+        """
     @property
-    def graph_groups(self) -> builtins.list[IntegrandGraphGroup]: ...
+    def graph_groups(self) -> builtins.list[IntegrandGraphGroup]:
+        r"""
+        Per-group graph, orientation, basis, threshold, and cut metadata.
+        """
 
 @typing.final
 class IntegrandLoopMomentumBasis:
+    r"""
+    Loop-momentum basis and optional multichannel identifier for a graph group.
+    """
     @property
-    def basis_id(self) -> builtins.int: ...
+    def basis_id(self) -> builtins.int:
+        r"""
+        Zero-based loop-momentum-basis identifier on the representative graph.
+        """
     @property
-    def channel_id(self) -> typing.Optional[builtins.int]: ...
+    def channel_id(self) -> typing.Optional[builtins.int]:
+        r"""
+        Effective multichannel identifier, or ``None`` when this basis is not sampled.
+        """
     @property
-    def edge_ids(self) -> builtins.list[builtins.int]: ...
+    def edge_ids(self) -> builtins.list[builtins.int]:
+        r"""
+        Edge identifiers whose momenta form the basis.
+        """
     @property
-    def matches_generation_basis(self) -> builtins.bool: ...
+    def matches_generation_basis(self) -> builtins.bool:
+        r"""
+        Whether this is the loop-momentum basis used during integrand generation.
+        """
 
 @typing.final
 class IntegrandOrientation:
+    r"""
+    Edge-direction signature for one causal-flow orientation.
+    """
     @property
-    def orientation_id(self) -> builtins.int: ...
+    def orientation_id(self) -> builtins.int:
+        r"""
+        Zero-based orientation identifier within the graph group.
+        """
     @property
-    def signature(self) -> builtins.list[builtins.int]: ...
+    def signature(self) -> builtins.list[builtins.int]:
+        r"""
+        Direction per ``IntegrandGraphGroup.orientation_edge_ids``: ``1``, ``-1``, or ``0``.
+        """
 
 @typing.final
 class IntegrandThresholdEsurface:
+    r"""
+    Threshold E-surface metadata and the cuts on which it remains active.
+    """
     @property
-    def esurface_id(self) -> builtins.int: ...
+    def esurface_id(self) -> builtins.int:
+        r"""
+        E-surface identifier within the graph group.
+        """
     @property
-    def representative_graph_id(self) -> builtins.int: ...
+    def representative_graph_id(self) -> builtins.int:
+        r"""
+        Graph whose local E-surface supplies ``edge_ids``.
+        """
     @property
-    def edge_ids(self) -> builtins.list[builtins.int]: ...
+    def edge_ids(self) -> builtins.list[builtins.int]:
+        r"""
+        Edge identifiers contributing energies to this E-surface.
+        """
     @property
-    def classification(self) -> typing.Optional[builtins.str]: ...
+    def classification(self) -> typing.Optional[builtins.str]:
+        r"""
+        Kinematic existence class, or ``None`` when no static classification was computed.
+        """
     @property
-    def active_cuts(self) -> builtins.list[IntegrandActiveThresholdCut]: ...
+    def active_cuts(self) -> builtins.list[IntegrandActiveThresholdCut]:
+        r"""
+        Cuts on which this E-surface remains viable.
+        """
 
 @typing.final
 class IntegrationOutput:
+    r"""
+    Completed integration result, observable snapshots, and workspace location.
+    """
     @property
     def workspace_path(self) -> pathlib.Path: ...
     @property
@@ -770,6 +1560,9 @@ class IntegrationOutput:
 
 @typing.final
 class IntegrationResult:
+    r"""
+    Collection of independently addressable integration-slot results.
+    """
     @property
     def slots(self) -> builtins.list[SlotIntegrationResult]: ...
     def slot(self, key: builtins.str) -> typing.Optional[SlotIntegrationResult]: ...
@@ -777,6 +1570,9 @@ class IntegrationResult:
 
 @typing.final
 class IntegrationStatisticsSnapshot:
+    r"""
+    Timing, precision, stability, and event-selection statistics for an integration slot.
+    """
     @property
     def num_evals(self) -> builtins.int: ...
     @property
@@ -810,6 +1606,9 @@ class IntegrationStatisticsSnapshot:
 
 @typing.final
 class IntegrationTableComponentResult:
+    r"""
+    One real or imaginary component row from an integration result table.
+    """
     @property
     def component(self) -> builtins.str: ...
     @property
@@ -829,6 +1628,9 @@ class IntegrationTableComponentResult:
 
 @typing.final
 class MaxWeightInfoEntry:
+    r"""
+    Largest observed contribution for one signed integration component.
+    """
     @property
     def component(self) -> builtins.str: ...
     @property
@@ -840,48 +1642,160 @@ class MaxWeightInfoEntry:
 
 @typing.final
 class SampleEvaluationResult:
+    r"""
+    Numerical value, metadata, stability records, and generated events for one sample.
+    """
     @property
-    def integrand_result(self) -> complex: ...
+    def integrand_result(self) -> complex:
+        r"""
+        Complex integrand value before applying the parameterization Jacobian.
+        """
     @property
-    def integrator_weight(self) -> builtins.float: ...
+    def integrator_weight(self) -> builtins.float:
+        r"""
+        Monte Carlo weight supplied by the integrator, excluding the parameterization Jacobian.
+        """
     @property
-    def generated_event_count(self) -> typing.Optional[builtins.int]: ...
+    def generated_event_count(self) -> typing.Optional[builtins.int]:
+        r"""
+        Number of candidate events generated, or ``None`` when metadata was omitted.
+        """
     @property
-    def accepted_event_count(self) -> typing.Optional[builtins.int]: ...
+    def accepted_event_count(self) -> typing.Optional[builtins.int]:
+        r"""
+        Number of generated events accepted by selectors, or ``None`` without metadata.
+        """
     @property
-    def event_processing_time_seconds(self) -> typing.Optional[builtins.float]: ...
+    def event_processing_time_seconds(self) -> typing.Optional[builtins.float]:
+        r"""
+        Time spent building and selecting events, in seconds, or ``None`` without metadata.
+        """
     @property
-    def parameterization_jacobian(self) -> typing.Optional[builtins.float]: ...
+    def parameterization_jacobian(self) -> typing.Optional[builtins.float]:
+        r"""
+        Sample parameterization Jacobian, or ``None`` when no Jacobian was supplied.
+        """
     @property
-    def is_nan(self) -> typing.Optional[builtins.bool]: ...
+    def is_nan(self) -> typing.Optional[builtins.bool]:
+        r"""
+        Whether evaluation metadata flagged a non-finite result, or ``None`` without metadata.
+        """
     @property
-    def stability_results(self) -> typing.Optional[builtins.list[StabilityResult]]: ...
+    def stability_results(self) -> typing.Optional[builtins.list[StabilityResult]]:
+        r"""
+        Per-precision stability attempts, or ``None`` when metadata was omitted.
+        """
     @property
-    def event_groups(self) -> builtins.list[EventGroup]: ...
-    def __str__(self) -> builtins.str: ...
-    def __repr__(self) -> builtins.str: ...
+    def event_groups(self) -> builtins.list[EventGroup]:
+        r"""
+        Correlated event groups produced while evaluating this sample.
+        """
+    def __str__(self) -> builtins.str:
+        r"""
+        Return a human-readable evaluation summary.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return the human-readable evaluation summary.
+        """
 
 @typing.final
 class SettingsValue:
+    r"""
+    Read-only, detached view over serialized GammaLoop settings.
+    """
     @property
-    def path(self) -> builtins.str: ...
+    def path(self) -> builtins.str:
+        r"""
+        Dot-separated location of this value within the settings tree.
+        """
     @property
-    def kind(self) -> builtins.str: ...
-    def is_object(self) -> builtins.bool: ...
-    def is_array(self) -> builtins.bool: ...
-    def is_scalar(self) -> builtins.bool: ...
-    def keys(self) -> builtins.list[builtins.str]: ...
-    def get(self, path: builtins.str) -> typing.Any: ...
-    def to_dict(self) -> typing.Any: ...
-    def __getattr__(self, name: builtins.str) -> typing.Any: ...
-    def __dir__(self) -> builtins.list[builtins.str]: ...
-    def __len__(self) -> builtins.int: ...
-    def __str__(self) -> builtins.str: ...
-    def __repr__(self) -> builtins.str: ...
-    def __getitem__(self, key: typing.Any, /) -> typing.Any: ...
+    def kind(self) -> builtins.str:
+        r"""
+        JSON value kind: ``object``, ``array``, ``string``, ``number``, ``boolean``, or ``null``.
+        """
+    def is_object(self) -> builtins.bool:
+        r"""
+        Return whether this value is an object with named children.
+        """
+    def is_array(self) -> builtins.bool:
+        r"""
+        Return whether this value is an array with indexed children.
+        """
+    def is_scalar(self) -> builtins.bool:
+        r"""
+        Return whether this value is a scalar JSON value, including ``null``.
+        """
+    def keys(self) -> builtins.list[builtins.str]:
+        r"""
+        Return this object's child keys in lexical order.
+
+        Raises
+        ------
+        TypeError
+            If this value is not an object.
+        """
+    def get(self, path: builtins.str) -> typing.Any:
+        r"""
+        Resolve a dot-separated descendant path.
+
+        An empty path returns this value. Objects become ``SettingsValue`` views,
+        while scalar values become their ordinary Python equivalents.
+
+        Parameters
+        ----------
+        path : str
+            Relative path such as ``"sampling.parameterization"``.
+
+        Raises
+        ------
+        KeyError
+            If the path does not exist below this value.
+        """
+    def to_dict(self) -> typing.Any:
+        r"""
+        Convert the complete detached value tree to ordinary Python containers and scalars.
+        """
+    def __getattr__(self, name: builtins.str) -> typing.Any:
+        r"""
+        Resolve an object child by attribute name.
+
+        Parameters
+        ----------
+        name : str
+            Immediate child key to resolve.
+        """
+    def __dir__(self) -> builtins.list[builtins.str]:
+        r"""
+        Return object-child names in lexical order, or an empty list for other kinds.
+        """
+    def __len__(self) -> builtins.int:
+        r"""
+        Return the number of object or array children.
+        """
+    def __str__(self) -> builtins.str:
+        r"""
+        Return the detached settings value as pretty-printed JSON.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a compact representation containing this value's path and kind.
+        """
+    def __getitem__(self, key: typing.Any, /) -> typing.Any:
+        r"""
+        Resolve a relative string path or array index.
+
+        Parameters
+        ----------
+        key : str or int
+            Descendant path for an object, or zero-based index for an array.
+        """
 
 @typing.final
 class SlotIntegrationResult:
+    r"""
+    Result, diagnostics, and discrete breakdown for one named integration slot.
+    """
     @property
     def key(self) -> builtins.str: ...
     @property
@@ -903,16 +1817,34 @@ class SlotIntegrationResult:
 
 @typing.final
 class StabilityResult:
+    r"""
+    Outcome and cost of one numerical-stability precision level.
+    """
     @property
-    def precision(self) -> builtins.str: ...
+    def precision(self) -> builtins.str:
+        r"""
+        Numerical precision used for this stability level.
+        """
     @property
-    def estimated_relative_accuracy(self) -> typing.Optional[builtins.float]: ...
+    def estimated_relative_accuracy(self) -> typing.Optional[builtins.float]:
+        r"""
+        Estimated relative accuracy, or ``None`` when it could not be estimated.
+        """
     @property
-    def status(self) -> builtins.str: ...
+    def status(self) -> builtins.str:
+        r"""
+        Human-readable stability outcome and number of rotated samples.
+        """
     @property
-    def sample_count(self) -> builtins.int: ...
+    def sample_count(self) -> builtins.int:
+        r"""
+        Number of rotated samples evaluated at this precision level.
+        """
     @property
-    def total_time_seconds(self) -> builtins.float: ...
+    def total_time_seconds(self) -> builtins.float:
+        r"""
+        Total wall-clock time spent at this precision level, in seconds.
+        """
 
 @typing.final
 class LogLevel(enum.Enum):

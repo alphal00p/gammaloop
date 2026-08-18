@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "product": {
     "id": "linnet",
     "title": "Linnet"
@@ -57,7 +57,7 @@
               "body": "The main graph data structure, representing a graph using the half-edge\n(or doubly connected edge list - DCEL) principle.\n\nA `HedgeGraph` stores nodes and edges (represented as pairs of half-edges).\nIt is generic over the data associated with edges (`E`), nodes/vertices (`V`),\nand the specific storage strategy used for nodes (`S`).\n\nThe half-edge representation allows for efficient traversal of graph topology,\nsuch as iterating around faces (in planar embeddings), finding incident edges\nto a node, or quickly accessing an edge's opposite half-edge.\n\n# Type Parameters\n\n- `E`: The type of data associated with each edge (or pair of half-edges).\n- `V`: The type of data associated with each node (vertex).\n- `S`: The node storage strategy, implementing the [`NodeStorage`] trait.\nThis determines how node data and their connectivity to half-edges\nare stored. Defaults to [`DefaultNodeStore<V>`] (feature-selected; `nodestore-vec` uses\n[`nodestore::NodeStorageVec<V>`])."
             },
             "summary": "Stores graph topology as paired half-edges with independent edge, vertex, and half-edge payloads.",
-            "signature": "#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]\n#[cfg_attr(feature = \"serde\", derive(serde::Serialize, serde::Deserialize))]\n#[cfg_attr(feature = \"bincode\",\nderive(bincode_trait_derive::Encode, bincode_trait_derive::Decode))]\n#[cfg_attr(feature = \"rkyv\",\nderive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]\n#[cfg_attr(feature = \"rkyv\", archive(check_bytes))]\n#[doc =\n\" The main graph data structure, representing a graph using the half-edge\"]\n#[doc = \" (or doubly connected edge list - DCEL) principle.\"] #[doc = \"\"]\n#[doc =\n\" A `HedgeGraph` stores nodes and edges (represented as pairs of half-edges).\"]\n#[doc =\n\" It is generic over the data associated with edges (`E`), nodes/vertices (`V`),\"]\n#[doc = \" and the specific storage strategy used for nodes (`S`).\"]\n#[doc = \"\"]\n#[doc =\n\" The half-edge representation allows for efficient traversal of graph topology,\"]\n#[doc =\n\" such as iterating around faces (in planar embeddings), finding incident edges\"]\n#[doc = \" to a node, or quickly accessing an edge\\'s opposite half-edge.\"]\n#[doc = \"\"] #[doc = \" # Type Parameters\"] #[doc = \"\"]\n#[doc =\n\" - `E`: The type of data associated with each edge (or pair of half-edges).\"]\n#[doc = \" - `V`: The type of data associated with each node (vertex).\"]\n#[doc =\n\" - `S`: The node storage strategy, implementing the [`NodeStorage`] trait.\"]\n#[doc =\n\"   This determines how node data and their connectivity to half-edges\"]\n#[doc =\n\"   are stored. Defaults to [`DefaultNodeStore<V>`] (feature-selected; `nodestore-vec` uses\"]\n#[doc = \"   [`nodestore::NodeStorageVec<V>`]).\"] pub struct HedgeGraph < E, V,\nH = NoData, S : NodeStorage < NodeData = V > = DefaultNodeStore < V > >\n{\n    pub(crate) hedge_data : HedgeVec < H > ,\n    #[doc =\n    \" Internal storage for all half-edges, their data, and their topological\"]\n    #[doc =\n    \" relationships (e.g., opposite half-edge, next half-edge around a node).\"]\n    #[doc = \" This is typically a [`SmartHedgeVec<E>`].\"] pub(crate)\n    edge_store : SmartEdgeVec < E > ,\n    #[doc =\n    \" Storage for all nodes in the graph, including their data (`V`) and\"]\n    #[doc = \" information about the half-edges incident to them.\"]\n    #[doc =\n    \" The specific implementation is determined by the `S` type parameter.\"]\n    pub node_store : S,\n}",
+            "signature": "pub struct HedgeGraph < E, V, H = NoData, S : NodeStorage < NodeData = V > =\nDefaultNodeStore < V > > {}",
             "since": null,
             "keywords": [],
             "params": [],
@@ -70,25 +70,6 @@
               }
             ],
             "members": [
-              {
-                "name": "hedge_data",
-                "kind": "field",
-                "docs": null,
-                "signature": "HedgeVec < H >",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "edge_store",
-                "kind": "field",
-                "docs": {
-                  "format": "rust-markdown",
-                  "body": "Internal storage for all half-edges, their data, and their topological\nrelationships (e.g., opposite half-edge, next half-edge around a node).\nThis is typically a [`SmartHedgeVec<E>`]."
-                },
-                "signature": "SmartEdgeVec < E >",
-                "default": null,
-                "members": []
-              },
               {
                 "name": "node_store",
                 "kind": "field",
@@ -120,7 +101,7 @@
               "body": "A builder for programmatically constructing [`HedgeGraph`] instances.\n\nThis builder allows for the incremental addition of nodes and edges (both\npaired and external/dangling) before finalizing the graph structure.\n\n# Type Parameters\n\n- `E`: The type of data to be associated with edges.\n- `V`: The type of data to be associated with nodes.\n\n# Example\n\n```rust,ignore\nuse linnet::half_edge::builder::HedgeGraphBuilder;\nuse linnet::half_edge::involution::{Flow, Orientation};\n\nlet mut builder = HedgeGraphBuilder::<&str, &str>::new();\n\nlet node0 = builder.add_node(\"Node_0_Data\");\nlet node1 = builder.add_node(\"Node_1_Data\");\nlet node2 = builder.add_node(\"Node_2_Data\");\n\nbuilder.add_edge(node0, node1, \"Edge_01_Data\", Orientation::Default);\nbuilder.add_external_edge(node2, \"External_Edge_Data\", Orientation::Undirected, Flow::Source);\n\n// Assuming a NodeStorage type MyNodeStore is defined and implements NodeStorageOps\n// let graph: HedgeGraph<&str, &str, MyNodeStore> = builder.build();\n```"
             },
             "summary": "Builds a valid half-edge graph while assigning typed node, edge, and hedge identifiers.",
-            "signature": "#[derive(Clone, Debug)]\n#[cfg_attr(feature = \"rkyv\",\nderive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]\n#[doc =\n\" A builder for programmatically constructing [`HedgeGraph`] instances.\"]\n#[doc = \"\"]\n#[doc =\n\" This builder allows for the incremental addition of nodes and edges (both\"]\n#[doc =\n\" paired and external/dangling) before finalizing the graph structure.\"]\n#[doc = \"\"] #[doc = \" # Type Parameters\"] #[doc = \"\"]\n#[doc = \" - `E`: The type of data to be associated with edges.\"]\n#[doc = \" - `V`: The type of data to be associated with nodes.\"] #[doc = \"\"]\n#[doc = \" # Example\"] #[doc = \"\"] #[doc = \" ```rust,ignore\"]\n#[doc = \" use linnet::half_edge::builder::HedgeGraphBuilder;\"]\n#[doc = \" use linnet::half_edge::involution::{Flow, Orientation};\"]\n#[doc = \"\"]\n#[doc = \" let mut builder = HedgeGraphBuilder::<&str, &str>::new();\"]\n#[doc = \"\"] #[doc = \" let node0 = builder.add_node(\\\"Node_0_Data\\\");\"]\n#[doc = \" let node1 = builder.add_node(\\\"Node_1_Data\\\");\"]\n#[doc = \" let node2 = builder.add_node(\\\"Node_2_Data\\\");\"] #[doc = \"\"]\n#[doc =\n\" builder.add_edge(node0, node1, \\\"Edge_01_Data\\\", Orientation::Default);\"]\n#[doc =\n\" builder.add_external_edge(node2, \\\"External_Edge_Data\\\", Orientation::Undirected, Flow::Source);\"]\n#[doc = \"\"]\n#[doc =\n\" // Assuming a NodeStorage type MyNodeStore is defined and implements NodeStorageOps\"]\n#[doc =\n\" // let graph: HedgeGraph<&str, &str, MyNodeStore> = builder.build();\"]\n#[doc = \" ```\"] pub struct HedgeGraphBuilder < E, V, H = NoData >\n{\n    hedge_data : HedgeVec < H > ,\n    #[doc =\n    \" A list of nodes currently being built, stored as [`HedgeNodeBuilder`] instances.\"]\n    nodes : Vec < HedgeNodeBuilder < V > > ,\n    #[doc =\n    \" The [`Involution`] structure managing the half-edges being added to the graph.\"]\n    pub(crate) involution : Involution < E > ,\n}",
+            "signature": "pub struct HedgeGraphBuilder < E, V, H = NoData > {}",
             "since": null,
             "keywords": [],
             "params": [],
@@ -137,38 +118,7 @@
                 "code": "use linnet::half_edge::builder::HedgeGraphBuilder;"
               }
             ],
-            "members": [
-              {
-                "name": "hedge_data",
-                "kind": "field",
-                "docs": null,
-                "signature": "HedgeVec < H >",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "nodes",
-                "kind": "field",
-                "docs": {
-                  "format": "rust-markdown",
-                  "body": "A list of nodes currently being built, stored as [`HedgeNodeBuilder`] instances."
-                },
-                "signature": "Vec < HedgeNodeBuilder < V > >",
-                "default": null,
-                "members": []
-              },
-              {
-                "name": "involution",
-                "kind": "field",
-                "docs": {
-                  "format": "rust-markdown",
-                  "body": "The [`Involution`] structure managing the half-edges being added to the graph."
-                },
-                "signature": "Involution < E >",
-                "default": null,
-                "members": []
-              }
-            ],
+            "members": [],
             "source": {
               "identifier": "linnet::half_edge::builder::HedgeGraphBuilder",
               "file": "crates/linnet/src/half_edge/builder.rs",
@@ -220,7 +170,7 @@
               "body": "Represents a traversal tree (e.g., DFS or BFS tree) derived from a [`HedgeGraph`].\n\nThis structure uses a generic [`Forest`] to store the tree topology. Each \"root\" in the\n`Forest` corresponds to a node in the original `HedgeGraph`, and its data is a [`TTRoot`]\nenum indicating its role (Root, Child, or None) in this specific traversal. The nodes\nwithin each tree of the `Forest` typically represent the half-edges that form the\ntraversal path.\n\n# Type Parameters\n\n- `P`: The type of [`ForestNodeStore`] used by the underlying `Forest`.\nIt stores `()` as `NodeData` because the tree nodes (representing half-edges)\ndon't need additional data beyond their structural role in the traversal tree.\nDefaults to [`ParentPointerStore<()>`]."
             },
             "summary": "Records parent, root, and traversal information produced by breadth-first or depth-first graph walks.",
-            "signature": "#[derive(Debug, Clone)]\n#[cfg_attr(feature = \"serde\", derive(serde::Serialize, serde::Deserialize))]\n#[doc =\n\" Represents a traversal tree (e.g., DFS or BFS tree) derived from a [`HedgeGraph`].\"]\n#[doc = \"\"]\n#[doc =\n\" This structure uses a generic [`Forest`] to store the tree topology. Each \\\"root\\\" in the\"]\n#[doc =\n\" `Forest` corresponds to a node in the original `HedgeGraph`, and its data is a [`TTRoot`]\"]\n#[doc =\n\" enum indicating its role (Root, Child, or None) in this specific traversal. The nodes\"]\n#[doc =\n\" within each tree of the `Forest` typically represent the half-edges that form the\"]\n#[doc = \" traversal path.\"] #[doc = \"\"] #[doc = \" # Type Parameters\"]\n#[doc = \"\"]\n#[doc =\n\" - `P`: The type of [`ForestNodeStore`] used by the underlying `Forest`.\"]\n#[doc =\n\"   It stores `()` as `NodeData` because the tree nodes (representing half-edges)\"]\n#[doc =\n\"   don\\'t need additional data beyond their structural role in the traversal tree.\"]\n#[doc = \"   Defaults to [`ParentPointerStore<()>`].\"] pub struct\nSimpleTraversalTree < P : ForestNodeStore < NodeData = () > =\nParentPointerStore < () > >\n{\n    #[doc =\n    \" The underlying forest structure representing the traversal tree(s).\"]\n    #[doc =\n    \" Each root in this forest is a graph node, and its data is its [`TTRoot`] status.\"]\n    #[doc = \" Nodes within each tree of this forest represent half-edges.\"]\n    forest : Forest < TTRoot, P > ,\n    #[doc =\n    \" A bitmask representing the set of half-edges that constitute the actual\"]\n    #[doc = \" edges of this traversal tree.\"] pub tree_subgraph : SuBitGraph,\n}",
+            "signature": "pub struct SimpleTraversalTree < P : ForestNodeStore < NodeData = () > =\nParentPointerStore < () > > {}",
             "since": null,
             "keywords": [],
             "params": [],
@@ -233,17 +183,6 @@
               }
             ],
             "members": [
-              {
-                "name": "forest",
-                "kind": "field",
-                "docs": {
-                  "format": "rust-markdown",
-                  "body": "The underlying forest structure representing the traversal tree(s).\nEach root in this forest is a graph node, and its data is its [`TTRoot`] status.\nNodes within each tree of this forest represent half-edges."
-                },
-                "signature": "Forest < TTRoot, P >",
-                "default": null,
-                "members": []
-              },
               {
                 "name": "tree_subgraph",
                 "kind": "field",
@@ -275,7 +214,7 @@
               "body": "Combines a half-edge graph with DOT attributes and parser/serializer support."
             },
             "summary": "Combines a half-edge graph with DOT attributes and parser/serializer support.",
-            "signature": "#[derive(Debug, Clone, PartialEq, Eq)]\n#[cfg_attr(feature = \"rkyv\",\nderive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize))]\n#[cfg_attr(feature = \"rkyv\", archive(check_bytes))] pub struct DotGraph < N :\nNodeStorage < NodeData = DotVertexData > = DefaultNodeStore < DotVertexData >\n>\n{\n    pub global_data : GlobalData, pub graph : HedgeGraph < DotEdgeData,\n    DotVertexData, DotHedgeData, N > ,\n}",
+            "signature": "pub struct DotGraph < N : NodeStorage < NodeData = DotVertexData > =\nDefaultNodeStore < DotVertexData > > {}",
             "since": null,
             "keywords": [],
             "params": [],
@@ -291,7 +230,10 @@
               {
                 "name": "global_data",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Graph-level DOT metadata, including its name, payload, and attribute defaults."
+                },
                 "signature": "GlobalData",
                 "default": null,
                 "members": []
@@ -299,7 +241,10 @@
               {
                 "name": "graph",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Parsed half-edge topology together with its DOT edge, vertex, and half-edge data."
+                },
                 "signature": "HedgeGraph < DotEdgeData, DotVertexData, DotHedgeData, N >",
                 "default": null,
                 "members": []
@@ -309,6 +254,1274 @@
               "identifier": "linnet::parser::DotGraph",
               "file": "crates/linnet/src/parser/mod.rs",
               "line": 149,
+              "column": 1
+            }
+          },
+          "HedgePair": {
+            "id": "HedgePair",
+            "name": "HedgePair",
+            "title": "Half-edge pairing",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Describes the pairing status of a half-edge, indicating whether it forms a\ncomplete edge with another half-edge, is a dangling/external edge, or is\npart of a \"split\" edge in a subgraph context."
+            },
+            "summary": "Represents an unpaired external half-edge, a paired full edge, or an edge split across a subgraph boundary.",
+            "signature": "pub enum HedgePair {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use linnet::half_edge::involution::HedgePair;"
+              }
+            ],
+            "members": [
+              {
+                "name": "Unpaired",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Represents a half-edge that is unpaired (dangling or external)."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "hedge",
+                    "kind": "field",
+                    "docs": {
+                      "format": "rust-markdown",
+                      "body": "The half-edge itself."
+                    },
+                    "signature": "Hedge",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "flow",
+                    "kind": "field",
+                    "docs": {
+                      "format": "rust-markdown",
+                      "body": "The [`Flow`] (directionality) of this unpaired half-edge."
+                    },
+                    "signature": "Flow",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "Paired",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Represents two half-edges that are paired together to form a complete,\ninternal, undirected edge."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "source",
+                    "kind": "field",
+                    "docs": {
+                      "format": "rust-markdown",
+                      "body": "The half-edge considered the \"source\" in this pair."
+                    },
+                    "signature": "Hedge",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "sink",
+                    "kind": "field",
+                    "docs": {
+                      "format": "rust-markdown",
+                      "body": "The half-edge considered the \"sink\" in this pair, opposite to `source`."
+                    },
+                    "signature": "Hedge",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "Split",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Represents an edge that is \"split\" in the context of a subgraph.\nThis typically means one half-edge is inside the subgraph and its\nopposite is outside, or vice-versa."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "source",
+                    "kind": "field",
+                    "docs": {
+                      "format": "rust-markdown",
+                      "body": "The half-edge on one side of the split (often the one inside a subgraph)."
+                    },
+                    "signature": "Hedge",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "sink",
+                    "kind": "field",
+                    "docs": {
+                      "format": "rust-markdown",
+                      "body": "The half-edge on the other side of the split (often the one outside a subgraph)."
+                    },
+                    "signature": "Hedge",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "split",
+                    "kind": "field",
+                    "docs": {
+                      "format": "rust-markdown",
+                      "body": "Indicates which side of the original conceptual edge (`source` or `sink`\nof the pair) is considered \"split off\" or external.\nFor example, if `split == Flow::Source`, then the `source` half-edge\nis effectively dangling from the perspective of the other side of the split."
+                    },
+                    "signature": "Flow",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              }
+            ],
+            "source": {
+              "identifier": "linnet::half_edge::involution::HedgePair",
+              "file": "crates/linnet/src/half_edge/involution.rs",
+              "line": 452,
+              "column": 1
+            }
+          },
+          "Flow": {
+            "id": "Flow",
+            "name": "Flow",
+            "title": "Intrinsic half-edge flow",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Represents the underlying, intrinsic directionality of a half-edge\nrelative to the full edge it is part of.\n\nEach full edge is composed of two half-edges. One is designated as the\n`Source` and the other as the `Sink`. This is a fundamental property\nused by the `Involution` to pair half-edges correctly."
+            },
+            "summary": "Marks a half-edge as the intrinsic source or sink within its full edge.",
+            "signature": "pub enum Flow {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use linnet::half_edge::involution::Flow;"
+              }
+            ],
+            "members": [
+              {
+                "name": "Source",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Indicates this half-edge is the \"source\" part of its full edge.\nThis is often visualized as the outgoing part of a directed edge\nif the edge's `Orientation` is `Default`."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Sink",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Indicates this half-edge is the \"sink\" part of its full edge.\nThis is often visualized as the incoming part of a directed edge\nif the edge's `Orientation` is `Default`."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet::half_edge::involution::Flow",
+              "file": "crates/linnet/src/half_edge/involution.rs",
+              "line": 1126,
+              "column": 1
+            }
+          },
+          "Orientation": {
+            "id": "Orientation",
+            "name": "Orientation",
+            "title": "Edge orientation",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Represents the superficial or conventional orientation of an edge.\n\nThis orientation can be distinct from the underlying `Flow` of the half-edges\nthat constitute the edge. It's often used for display or for algorithms\nwhere a conventional direction is needed."
+            },
+            "summary": "Records default, reversed, or undirected presentation independently of an edge's intrinsic half-edge flow.",
+            "signature": "pub enum Orientation {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use linnet::half_edge::involution::Orientation;"
+              }
+            ],
+            "members": [
+              {
+                "name": "Default",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "The edge's orientation aligns with the underlying flow of its \"source\"\nhalf-edge (e.g., if half-edge A is `Flow::Source` and points to B,\na `Default` orientation means the edge is A -> B)."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Reversed",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "The edge's orientation is opposite to the underlying flow of its \"source\"\nhalf-edge (e.g., if half-edge A is `Flow::Source` and points to B,\na `Reversed` orientation means the edge is B -> A)."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Undirected",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "The edge is considered undirected, regardless of the underlying half-edge flows."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet::half_edge::involution::Orientation",
+              "file": "crates/linnet/src/half_edge/involution.rs",
+              "line": 1085,
+              "column": 1
+            }
+          },
+          "SubSetLike": {
+            "id": "SubSetLike",
+            "name": "SubSetLike",
+            "title": "Half-edge subset interface",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "The core trait defining the properties and behaviors of a subgraph representation.\n\nA subgraph is fundamentally a selection of half-edges from a larger [`HedgeGraph`].\nThis trait provides methods for querying the subgraph's contents, its relationship\nto the parent graph, and performing common operations.\n\nImplementors must also satisfy `Clone`, `Eq`, `Hash`, and various [`Inclusion`] bounds."
+            },
+            "summary": "Defines the core inclusion queries, iteration, joining, and labeling contract shared by half-edge subset representations.",
+            "signature": "pub trait SubSetLike < ID = Hedge > : Clone + Eq + Hash + Inclusion < Self > +\nInclusion < Self :: Base > + Inclusion < std :: ops :: Range < ID > > +\nInclusion < std :: ops :: RangeToInclusive < ID > > + Inclusion < std :: ops\n:: RangeInclusive < ID > > + Inclusion < std :: ops :: RangeTo < ID > > +\nInclusion < std :: ops :: RangeFrom < ID > > + Inclusion < ID > {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use linnet::half_edge::subgraph::SubSetLike;"
+              }
+            ],
+            "members": [
+              {
+                "name": "Base",
+                "kind": "associated-type",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Canonical subset representation returned by [`SubSetLike::included`]."
+                },
+                "signature": "type Base : SubSetLike < ID > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "BaseIter",
+                "kind": "associated-type",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Double-ended iterator over the included IDs."
+                },
+                "signature": "type BaseIter < 'a > : Iterator < Item = ID > + DoubleEndedIterator where Self\n: 'a, ID : 'a;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "has_greater",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Contains an id with index >= hedge"
+                },
+                "signature": "fn has_greater(& self, hedge : ID) -> bool { … }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "has_lesser",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Contains an id with index < hedge"
+                },
+                "signature": "fn has_lesser(& self, hedge : ID) -> bool { … }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "join",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "joins two subsets into one, (this is not union)"
+                },
+                "signature": "fn join(mut self, other : Self) -> Self { … }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "join_mut",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Appends all incuded half-edges at the end of other"
+                },
+                "signature": "fn join_mut(& mut self, other : Self);",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "string_label",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns a compact textual label representing this selection."
+                },
+                "signature": "fn string_label(& self) -> String;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "symbol",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns a Symbolica symbol whose name and formatter encode this selection's label."
+                },
+                "signature": "fn symbol(& self) -> symbolica :: atom :: Symbol { … }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "from_base62",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Attempts to decode an implementation-specific compact label for a universe\nof `size` IDs.\n\nReturns `None` when decoding is unsupported or the label cannot represent that universe."
+                },
+                "signature": "fn from_base62(label : & str, size : usize) -> Option < Self >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "included_iter",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Iterates over every ID included in the selection."
+                },
+                "signature": "fn included_iter(& self) -> Self :: BaseIter < '_ >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "included",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns a simple Self::Base of all included hedges"
+                },
+                "signature": "fn included(& self) -> & Self :: Base;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "size",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Number of half-edges in the graph this is a subgraph of"
+                },
+                "signature": "fn size(& self) -> usize;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "n_included",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Number of half-edges included in the subgraph"
+                },
+                "signature": "fn n_included(& self) -> usize;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "empty",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Creates a selection containing no IDs in a universe of `size` IDs."
+                },
+                "signature": "fn empty(size : usize) -> Self;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "is_empty",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns whether the selection contains no IDs."
+                },
+                "signature": "fn is_empty(& self) -> bool;",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet::half_edge::subgraph::SubSetLike",
+              "file": "crates/linnet/src/half_edge/subgraph.rs",
+              "line": 453,
+              "column": 1
+            }
+          },
+          "SubSetOps": {
+            "id": "SubSetOps",
+            "name": "SubSetOps",
+            "title": "Half-edge subset operations",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Defines binary set operations between a subgraph and another subset-like value.\n\n# Type Parameters\n- `Other`: The type of the other subgraph to perform operations with. Defaults to `Self`."
+            },
+            "summary": "Provides in-place and value-returning intersection, union, symmetric-difference, and subtraction operations.",
+            "signature": "pub trait SubSetOps < ID = Hedge, Other : SubSetLike < ID > = Self > :\nSubSetLike < ID > {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use linnet::half_edge::subgraph::SubSetOps;"
+              }
+            ],
+            "members": [
+              {
+                "name": "intersect_with",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Retains only IDs included by both subsets."
+                },
+                "signature": "fn intersect_with(& mut self, other : & Other);",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "union_with",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Adds every ID included by `other`."
+                },
+                "signature": "fn union_with(& mut self, other : & Other);",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "sym_diff_with",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Retains IDs included by exactly one of the two subsets."
+                },
+                "signature": "fn sym_diff_with(& mut self, other : & Other);",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "empty_intersection",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns whether the subsets have no included ID in common."
+                },
+                "signature": "fn empty_intersection(& self, other : & Other) -> bool;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "empty_union",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns whether neither subset includes any ID."
+                },
+                "signature": "fn empty_union(& self, other : & Other) -> bool;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "intersection",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns the IDs included by both subsets without modifying either input."
+                },
+                "signature": "fn intersection(& self, other : & Other) -> Self { … }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "union",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns the IDs included by either subset without modifying either input."
+                },
+                "signature": "fn union(& self, other : & Other) -> Self { … }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "sym_diff",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns the IDs included by exactly one subset without modifying either input."
+                },
+                "signature": "fn sym_diff(& self, other : & Other) -> Self { … }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "subtract_with",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Removes every ID included by `other`."
+                },
+                "signature": "fn subtract_with(& mut self, other : & Other);",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "subtract",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns the IDs in `self` but not `other` without modifying either input."
+                },
+                "signature": "fn subtract(& self, other : & Other) -> Self { … }",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet::half_edge::subgraph::SubSetOps",
+              "file": "crates/linnet/src/half_edge/subgraph.rs",
+              "line": 20,
+              "column": 1
+            }
+          },
+          "Inclusion": {
+            "id": "Inclusion",
+            "name": "Inclusion",
+            "title": "Subset inclusion queries",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "A trait for checking inclusion or intersection relationships between a subgraph\nand another entity `T`.\n\nThis is used to determine if a subgraph contains certain elements (like specific hedges,\nranges of hedges, or other subgraphs) or overlaps with them.\n\n# Type Parameters\n- `T`: The type of the entity to check for inclusion or intersection with."
+            },
+            "summary": "Abstracts full containment and non-empty intersection checks between a subgraph and another value.",
+            "signature": "pub trait Inclusion < T > {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use linnet::half_edge::subgraph::Inclusion;"
+              }
+            ],
+            "members": [
+              {
+                "name": "includes",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Checks if this subgraph fully includes/contains the `other` entity."
+                },
+                "signature": "fn includes(& self, other : & T) -> bool;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "intersects",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Checks if this subgraph has any common elements with the `other` entity."
+                },
+                "signature": "fn intersects(& self, other : & T) -> bool;",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet::half_edge::subgraph::Inclusion",
+              "file": "crates/linnet/src/half_edge/subgraph.rs",
+              "line": 192,
+              "column": 1
+            }
+          },
+          "BaseSubgraph": {
+            "id": "BaseSubgraph",
+            "name": "BaseSubgraph",
+            "title": "Mutable base subgraph",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Combines graph-aware subset behavior and mutation with construction from edge filters or half-edge iterators."
+            },
+            "summary": "Combines graph-aware subset behavior and mutation with construction from edge filters or half-edge iterators.",
+            "signature": "pub trait BaseSubgraph : SubGraphLike + ModifySubSet < HedgePair > +\nModifySubSet < Hedge > + SubSetOps < Hedge > {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use linnet::half_edge::subgraph::BaseSubgraph;"
+              }
+            ],
+            "members": [
+              {
+                "name": "from_filter",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Selects all half-edges belonging to edges whose data satisfies `filter`."
+                },
+                "signature": "fn from_filter < E, V, H, N : NodeStorageOps < NodeData = V > , F : FnMut(& E)\n-> bool > (graph : & HedgeGraph < E, V, H, N > , filter : F,) -> Self;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "from_hedge_iter",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Creates a base subgraph containing all hedges yielded by the iterator.\n`len` specifies the total number of possible hedges in the graph context."
+                },
+                "signature": "fn from_hedge_iter < I : Iterator < Item = Hedge > > (iter : I, len : usize)\n-> Self;",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet::half_edge::subgraph::BaseSubgraph",
+              "file": "crates/linnet/src/half_edge/subgraph.rs",
+              "line": 232,
+              "column": 1
+            }
+          },
+          "SubGraphLike": {
+            "id": "SubGraphLike",
+            "name": "SubGraphLike",
+            "title": "Graph-aware subgraph interface",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Extends half-edge subsets with graph coverage, edge counts, external hairs, and DOT rendering."
+            },
+            "summary": "Extends half-edge subsets with graph coverage, edge counts, external hairs, and DOT rendering.",
+            "signature": "pub trait SubGraphLike : SubSetLike < Hedge > + Inclusion < HedgePair > {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use linnet::half_edge::subgraph::SubGraphLike;"
+              }
+            ],
+            "members": [
+              {
+                "name": "covers",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "maximal graph that contains all nodes of the subgraph"
+                },
+                "signature": "fn covers < E, V, H, N : NodeStorageOps < NodeData = V > , S : ModifySubSet <\nHedge > + SubSetOps < Hedge > + SubSetLike < Hedge > , >\n(& self, graph : & HedgeGraph < E, V, H, N > ,) -> S { … }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "background_color",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Chooses the DOT background color used to distinguish the subgraph boundary.\n\nThe default colors split and absent edge pairs gray and leaves complete pairs uncolored."
+                },
+                "signature": "fn background_color(& self, hedge_pair : Option < HedgePair >) -> Option <\nString > { … }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "nedges",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Number of full edges included in the subgraph"
+                },
+                "signature": "fn nedges < E, V, H, N : NodeStorageOps < NodeData = V > >\n(& self, graph : & HedgeGraph < E, V, H, N > ,) -> usize;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "dot_fmt",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Writes a DOT rendering of this subgraph to a formatting sink.\n\nThe attribute callbacks supply optional DOT attributes for half-edges, edges, and nodes."
+                },
+                "signature": "fn dot_fmt < W : std :: fmt :: Write, E, V, H, N : NodeStorageOps < NodeData =\nV > , Str : AsRef < str > >\n(& self, writer : & mut W, graph : & HedgeGraph < E, V, H, N > , graph_info :\nStr, hedge_attr : & impl Fn(& H) -> Option < String > , edge_attr : & impl\nFn(& E) -> Option < String > , node_attr : & impl Fn(& V) -> Option < String >\n,) -> Result < (), std :: fmt :: Error > { … }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "dot_io",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Writes a DOT rendering of this subgraph to an I/O sink.\n\nThe attribute callbacks supply optional DOT attributes for half-edges, edges, and nodes."
+                },
+                "signature": "fn dot_io < W : std :: io :: Write, E, V, H, N : NodeStorageOps < NodeData = V\n> , Str : AsRef < str > >\n(& self, writer : & mut W, graph : & HedgeGraph < E, V, H, N > , graph_info :\nStr, hedge_attr : & impl Fn(& H) -> Option < String > , edge_attr : & impl\nFn(& E) -> Option < String > , node_attr : & impl Fn(& V) -> Option < String >\n,) -> Result < (), std :: io :: Error > { … }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "hairs",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Selects the half-edges that occur in both this subgraph and `node`."
+                },
+                "signature": "fn hairs(& self, node : impl Iterator < Item = Hedge >) -> SuBitGraph { … }",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet::half_edge::subgraph::SubGraphLike",
+              "file": "crates/linnet/src/half_edge/subgraph.rs",
+              "line": 264,
+              "column": 1
+            }
+          },
+          "NodeStorage": {
+            "id": "NodeStorage",
+            "name": "NodeStorage",
+            "title": "Node-storage interface",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "The fundamental trait defining the interface for a node storage backend in a [`HedgeGraph`].\n\nThis trait abstracts the way nodes and their incident half-edges are stored. Different\nimplementations can offer various performance trade-offs for accessing and\nmanipulating node data and topology."
+            },
+            "summary": "Defines a graph's node data, transformed storage family, neighbor representation, and neighbor iterator.",
+            "signature": "pub trait NodeStorage : Sized {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use linnet::half_edge::nodestore::NodeStorage;"
+              }
+            ],
+            "members": [
+              {
+                "name": "NodeData",
+                "kind": "associated-type",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "The type of data stored for each node in the graph."
+                },
+                "signature": "type NodeData;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Storage",
+                "kind": "associated-type",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A generic way to refer to this storage type when it holds node data of type `N`.\nThis is often used in `NodeStorageOps` for methods that transform node data."
+                },
+                "signature": "type Storage < N > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Neighbors",
+                "kind": "associated-type",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "The type used to represent the collection of half-edges incident to a single node.\nThis must implement the [`SubSetLike`] trait."
+                },
+                "signature": "type Neighbors : SubSetLike;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "NeighborsIter",
+                "kind": "associated-type",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "An iterator that yields the [`Hedge`] identifiers incident to a node.\nIt must be cloneable and provide an exact size hint."
+                },
+                "signature": "type NeighborsIter < 'a > : ExactSizeIterator < Item = Hedge > + Clone where\nSelf : 'a;",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet::half_edge::nodestore::NodeStorage",
+              "file": "crates/linnet/src/half_edge/nodestore.rs",
+              "line": 183,
+              "column": 1
+            }
+          },
+          "NodeStorageOps": {
+            "id": "NodeStorageOps",
+            "name": "NodeStorageOps",
+            "title": "Mutable node-storage operations",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Defines a comprehensive set of operations for a node storage backend within a [`HedgeGraph`].\n\nThis trait extends [`NodeStorage`] by adding methods for modifying the storage (e.g.,\nextending, extracting, deleting, identifying nodes), building it, iterating over nodes,\nand mapping node data. It abstracts over the specific data structures used to store\nnode information and their incident half-edges."
+            },
+            "summary": "Adds construction, extraction, node identification, validation, traversal, and data mapping to a node-storage backend.",
+            "signature": "pub trait NodeStorageOps : NodeStorage + Swap < Hedge > + Swap < NodeIndex >\n{}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use linnet::half_edge::nodestore::NodeStorageOps;"
+              }
+            ],
+            "members": [
+              {
+                "name": "OpStorage",
+                "kind": "associated-type",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "The type of storage returned after mapping operations that might change the node data type."
+                },
+                "signature": "type OpStorage < N > : NodeStorageOps < NodeData = N > ;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Base",
+                "kind": "associated-type",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "The base type of subgraph used by this node storage (e.g., a `BitVec` to represent a set of hedges)."
+                },
+                "signature": "type Base : BaseSubgraph;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "extend",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Combines two stores using the implementation's index-space semantics.\n\nCallers must not assume embedded index-valued data is remapped unless the\nconcrete storage implementation documents that behavior."
+                },
+                "signature": "fn extend(self, other : Self) -> Self;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "new_nodevec",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Maps each node's ID, neighbors, and borrowed data into a dense [`NodeVec`]."
+                },
+                "signature": "fn new_nodevec < 'a, V2 >\n(& 'a self, node_map : impl\nFnMut(NodeIndex, Self :: NeighborsIter < 'a > , & 'a Self :: NodeData) -> V2,)\n-> NodeVec < V2 >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "extend_mut",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Appends a store using the implementation's index-space semantics.\n\nCallers must not assume embedded index-valued data is remapped unless the\nconcrete storage implementation documents that behavior."
+                },
+                "signature": "fn extend_mut(& mut self, other : Self);",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "extract",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Moves the selected half-edges into a new store and removes them from `self`.\n\n`split_node` maps data for nodes crossed by the selection boundary, while\n`owned_node` maps data for nodes wholly inside the selection. Implementations may\ncompact both stores and thereby change hedge and node indices."
+                },
+                "signature": "fn extract < S : SubSetLike < Base = Self :: Base > , V2 >\n(& mut self, subgraph : & S, split_node : impl FnMut(& Self :: NodeData) ->\nV2, owned_node : impl FnMut(Self :: NodeData) -> V2,) -> Self :: OpStorage <\nV2 >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "extract_nodes",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Moves complete nodes and their incident half-edges into a separate store.\n\nThe returned subset records the selected half-edges."
+                },
+                "signature": "fn extract_nodes(& mut self, nodes : impl IntoIterator < Item = NodeIndex >)\n-> (Self :: Base, Self);",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "delete",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Removes the selected half-edges and compacts the remaining node storage."
+                },
+                "signature": "fn delete < S : SubSetLike < Base = Self :: Base > >\n(& mut self, subgraph : & S);",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "identify_nodes",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Identifies nodes, essentially turning them into a single node\nInvalidates all previous NodeIndex values if using VecNodeStore.\nDoes not invalidate if using Forest as NodeStore"
+                },
+                "signature": "fn\nidentify_nodes(& mut self, nodes : & [NodeIndex], node_data_merge : Self ::\nNodeData) -> NodeIndex;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "forget_identification_history",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Drops inactive nodes retained by identification operations and returns their data."
+                },
+                "signature": "fn forget_identification_history(& mut self) -> NodeVec < Self :: NodeData >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "to_forest",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Copies the topology into a parent-pointer forest while mapping borrowed node data."
+                },
+                "signature": "fn to_forest < U, H > (& self, map_data : impl Fn(& Self :: NodeData) -> U,)\n-> Forest < U, ParentPointerStore < H > >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "build",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Builds a store from node descriptions that partition `n_hedges` half-edges."
+                },
+                "signature": "fn build < I : IntoIterator < Item = HedgeNodeBuilder < Self :: NodeData > > >\n(nodes : I, n_hedges : usize,) -> Self;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "build_with_mapping",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Builds a store from a half-edge partition while converting each node's data."
+                },
+                "signature": "fn build_with_mapping < I : IntoIterator < Item = HedgeNodeBuilder < ND > > ,\nND >\n(nodes : I, n_hedges : usize, map_data : impl FnMut(ND) -> Self :: NodeData,)\n-> Self;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "add_dangling_edge",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Appends an unpaired half-edge incident to `source`."
+                },
+                "signature": "fn add_dangling_edge(self, source : NodeIndex) -> Result < Self,\nHedgeGraphError >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "random",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Builds nodes from source and sink neighbor sets, assigning default data to each node."
+                },
+                "signature": "fn random(sources : & [Self :: Neighbors], sinks : & [Self :: Neighbors]) ->\nSelf where Self :: NodeData : Default;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "drain",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Consumes the store and yields each current node ID with its owned data."
+                },
+                "signature": "fn drain(self) -> impl Iterator < Item = (NodeIndex, Self :: NodeData) >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "iter",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Iterates over current node IDs and borrowed node data."
+                },
+                "signature": "fn iter(& self) -> impl Iterator < Item = (NodeIndex, & Self :: NodeData) >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "check_and_set_nodes",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Ensures backend-maintained node mappings are ready and consistent."
+                },
+                "signature": "fn check_and_set_nodes(& mut self) -> Result < (), HedgeGraphError >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "check_nodes",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Checks that every half-edge belongs to exactly one consistent node."
+                },
+                "signature": "fn check_nodes(& self) -> Result < (), HedgeGraphError >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "map_data_ref_graph",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Maps borrowed node data while retaining topology and exposing the complete graph."
+                },
+                "signature": "fn map_data_ref_graph < 'a, E, V2, H >\n(& 'a self, graph : & 'a HedgeGraph < E, Self :: NodeData, H, Self > ,\nnode_map : impl\nFnMut(& 'a HedgeGraph < E, Self :: NodeData, H, Self > , Self :: NeighborsIter\n< 'a > , & 'a Self :: NodeData,) -> V2,) -> Self :: OpStorage < V2 >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "map_data_ref_mut_graph",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Maps node data through mutable references while retaining topology."
+                },
+                "signature": "fn map_data_ref_mut_graph < 'a, V2 >\n(& 'a mut self, node_map : impl\nFnMut(Self :: NeighborsIter < 'a > , & 'a mut Self :: NodeData) -> V2,) ->\nSelf :: OpStorage < V2 >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "map_data_ref_graph_result",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Fallible counterpart of [`NodeStorageOps::map_data_ref_graph`]."
+                },
+                "signature": "fn map_data_ref_graph_result < 'a, E, V2, H, Er >\n(& 'a self, graph : & 'a HedgeGraph < E, Self :: NodeData, H, Self > ,\nnode_map : impl\nFnMut(& 'a HedgeGraph < E, Self :: NodeData, H, Self > , Self :: NeighborsIter\n< 'a > , & 'a Self :: NodeData,) -> Result < V2, Er > ,) -> Result < Self ::\nOpStorage < V2 > , Er >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "map_data_graph",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Consumes the store and maps owned node data with access to the edge involution and node ID."
+                },
+                "signature": "fn map_data_graph < 'a, V2 >\n(self, involution : & 'a Involution < EdgeIndex > , f : impl\nFnMut(& 'a Involution < EdgeIndex > , NodeIndex, Self :: NodeData) -> V2,) ->\nSelf :: OpStorage < V2 >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "map_data_graph_result",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Fallible counterpart of [`NodeStorageOps::map_data_graph`]."
+                },
+                "signature": "fn map_data_graph_result < 'a, V2, Err >\n(self, involution : & 'a Involution < EdgeIndex > , f : impl\nFnMut(& 'a Involution < EdgeIndex > , NodeIndex, Self :: NodeData) -> Result <\nV2, Err > ,) -> Result < Self :: OpStorage < V2 > , Err >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "iter_node_id",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Iterates over the store's dense node-index range."
+                },
+                "signature": "fn iter_node_id(& self) -> impl Iterator < Item = NodeIndex > { … }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "iter_nodes",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Iterates over each node's ID, neighbors, and borrowed data."
+                },
+                "signature": "fn iter_nodes(& self,) -> impl Iterator < Item =\n(NodeIndex, Self :: NeighborsIter < '_ > , & Self :: NodeData) >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "iter_nodes_mut",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Iterates over each node's ID, neighbors, and mutably borrowed data."
+                },
+                "signature": "fn iter_nodes_mut(& mut self,) -> impl Iterator < Item =\n(NodeIndex, Self :: NeighborsIter < '_ > , & mut Self :: NodeData) >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "node_id_ref",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Retrieves the [`NodeIndex`] that the given [`Hedge`] is incident to (or originates from)."
+                },
+                "signature": "fn node_id_ref(& self, hedge : Hedge) -> NodeIndex;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get_neighbor_iterator",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns an iterator over the half-edges incident to the specified `node_id`."
+                },
+                "signature": "fn get_neighbor_iterator(& self, node_id : NodeIndex) -> Self :: NeighborsIter\n< '_ >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get_node_data",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Gets a reference to the data associated with `node_id`."
+                },
+                "signature": "fn get_node_data(& self, node_id : NodeIndex) -> & Self :: NodeData;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get_node_data_mut",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Gets a mutable reference to the data associated with `node_id`."
+                },
+                "signature": "fn get_node_data_mut(& mut self, node_id : NodeIndex) -> & mut Self ::\nNodeData;",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "linnet::half_edge::nodestore::NodeStorageOps",
+              "file": "crates/linnet/src/half_edge/nodestore.rs",
+              "line": 21,
               "column": 1
             }
           }

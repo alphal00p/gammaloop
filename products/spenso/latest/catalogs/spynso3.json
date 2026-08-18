@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "product": {
     "id": "spenso",
     "title": "Spenso"
@@ -41,7 +41,7 @@
             "name": "CompiledTensorEvaluator",
             "title": "CompiledTensorEvaluator",
             "kind": "python-class",
-            "supported": false,
+            "supported": true,
             "required_features": [
               "python_stubgen"
             ],
@@ -55,22 +55,16 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.spenso import CompiledTensorEvaluator\nhelp(CompiledTensorEvaluator)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "evaluate_complex",
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Evaluate the tensor expression for multiple complex-valued parameter inputs.\n\nEvaluate the tensor expression for multiple complex-valued parameter inputs.\n\nUses the compiled C++ code for maximum performance evaluation with complex numbers.\n\nParameters\n----------\ninputs : list of list of complex\nList of parameter value lists, where each inner list contains\ncomplex values for all parameters in the same order as specified\nwhen creating the original evaluator\n\nReturns\n-------\nlist of Tensor\nList of evaluated tensors, one for each input parameter set\n\nExamples\n--------\n>>> complex_inputs = [\n...     [1.0+2.0j, 3.0+0.0j],\n...     [0.0+1.0j, 2.0+1.0j]\n... ]\n>>> results = compiled_evaluator.evaluate_complex(complex_inputs)"
+                  "body": "Evaluate the tensor expression for multiple complex-valued parameter inputs.\n\nUses the compiled C++ code for maximum performance evaluation with complex numbers.\n\nParameters\n----------\ninputs : list of list of complex\n    List of parameter value lists, where each inner list contains\n    complex values for all parameters in the same order as specified\n    when creating the original evaluator\n\nReturns\n-------\nlist of Tensor\n    List of evaluated tensors, one for each input parameter set\n\nExamples\n--------\n>>> complex_inputs = [\n...     [1.0+2.0j, 3.0+0.0j],\n...     [0.0+1.0j, 2.0+1.0j]\n... ]\n>>> results = compiled_evaluator.evaluate_complex(complex_inputs)"
                 },
-                "signature": "def evaluate_complex(self, inputs: typing.Sequence[typing.Sequence[builtins.complex]]) -> builtins.list[Tensor]:",
+                "signature": "def evaluate_complex(self, inputs: Sequence[Sequence[complex]]) -> list[Tensor]:",
                 "default": null,
                 "members": [
                   {
@@ -80,7 +74,7 @@
                       "format": "python-docstring",
                       "body": "List of parameter value lists, where each inner list contains complex values for all parameters in the same order as specified when creating the original evaluator"
                     },
-                    "signature": "inputs: typing.Sequence[typing.Sequence[builtins.complex]]",
+                    "signature": "Sequence[Sequence[complex]]",
                     "default": null,
                     "members": []
                   }
@@ -99,7 +93,7 @@
             "name": "LibraryTensor",
             "title": "LibraryTensor",
             "kind": "python-class",
-            "supported": false,
+            "supported": true,
             "required_features": [
               "python_stubgen"
             ],
@@ -113,13 +107,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.spenso import LibraryTensor\nhelp(LibraryTensor)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "structure",
@@ -134,9 +122,9 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a new sparse empty library tensor with the given structure and data type.\n\nCreates a sparse tensor that initially contains no non-zero elements.\nElements can be set individually using indexing operations.\n\nParameters\n----------\nstructure : TensorStructure, list of Representations, or list of int\nThe tensor structure defining shape and index properties\ntype_info : type\nThe data type - either `float` or `Expression` class\n\nReturns\n-------\nLibraryTensor\nA new sparse library tensor with all elements initially zero\n\nExamples\n--------\n>>> import symbolica as sp\n>>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation\n>>> rep = Representation.euc(3)\n>>> structure = TensorStructure(rep, rep)\n>>> sparse_float = LibraryTensor.sparse(structure, float)\n>>> sparse_sym = LibraryTensor.sparse(structure, sp.Expression)\n>>> sparse_float[0, 0] = 1.0\n>>> sparse_float[1, 1] = 2.0"
+                  "body": "Create a new sparse empty library tensor with the given structure and data type.\n\nCreates a sparse tensor that initially contains no non-zero elements.\nElements can be set individually using indexing operations.\n\nParameters\n----------\nstructure : TensorStructure, list of Representations, or list of int\n    The tensor structure defining shape and index properties\ntype_info : type\n    The data type - either `float` or `Expression` class\n\nReturns\n-------\nLibraryTensor\n    A new sparse library tensor with all elements initially zero\n\nExamples\n--------\n>>> import symbolica as sp\n>>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation\n>>> rep = Representation.euc(3)\n>>> structure = TensorStructure(rep, rep)\n>>> sparse_float = LibraryTensor.sparse(structure, float)\n>>> sparse_sym = LibraryTensor.sparse(structure, sp.Expression)\n>>> sparse_float[0, 0] = 1.0\n>>> sparse_float[1, 1] = 2.0"
                 },
-                "signature": "def sparse(structure: TensorStructure | builtins.list[Representation] | builtins.list[builtins.int], type_info: type) -> LibraryTensor:",
+                "signature": "def sparse(structure: TensorStructure | list[Representation] | list[int], type_info: type) -> LibraryTensor:",
                 "default": null,
                 "members": [
                   {
@@ -146,7 +134,7 @@
                       "format": "python-docstring",
                       "body": "The tensor structure defining shape and index properties"
                     },
-                    "signature": "structure: TensorStructure | builtins.list[Representation] | builtins.list[builtins.int]",
+                    "signature": "TensorStructure | list[Representation] | list[int]",
                     "default": null,
                     "members": []
                   },
@@ -157,7 +145,7 @@
                       "format": "python-docstring",
                       "body": "The data type - either `float` or `Expression` class"
                     },
-                    "signature": "type_info: type",
+                    "signature": "type",
                     "default": null,
                     "members": []
                   }
@@ -168,9 +156,9 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a new dense library tensor with the given structure and data.\n\nDense tensors store all elements explicitly in row-major order. The structure\ndefines the tensor's shape and indexing properties.\n\nParameters\n----------\nstructure : TensorStructure, list of Representations, or list of int\nThe tensor structure defining shape and index properties\ndata : list of float, complex, or Expression\nThe tensor data in row-major order\n\nReturns\n-------\nLibraryTensor\nA new dense library tensor with the specified data\n\nExamples\n--------\n>>> from symbolica import S\n>>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation\n>>> rep = Representation.euc(2)\n>>> sigma = S(\"sigma\")\n>>> structure = TensorStructure(rep, rep, name=sigma)\n>>> data = [0.0, 1.0, 1.0, 0.0]\n>>> tensor = LibraryTensor.dense(structure, data)\n>>> x, y = S(\"x\", \"y\")\n>>> sym_data = [x, y, -y, x]\n>>> sym_tensor = LibraryTensor.dense(structure, sym_data)"
+                  "body": "Create a new dense library tensor with the given structure and data.\n\nDense tensors store all elements explicitly in row-major order. The structure\ndefines the tensor's shape and indexing properties.\n\nParameters\n----------\nstructure : TensorStructure, list of Representations, or list of int\n    The tensor structure defining shape and index properties\ndata : list of float, complex, or Expression\n    The tensor data in row-major order\n\nReturns\n-------\nLibraryTensor\n    A new dense library tensor with the specified data\n\nExamples\n--------\n>>> from symbolica import S\n>>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation\n>>> rep = Representation.euc(2)\n>>> sigma = S(\"sigma\")\n>>> structure = TensorStructure(rep, rep, name=sigma)\n>>> data = [0.0, 1.0, 1.0, 0.0]\n>>> tensor = LibraryTensor.dense(structure, data)\n>>> x, y = S(\"x\", \"y\")\n>>> sym_data = [x, y, -y, x]\n>>> sym_tensor = LibraryTensor.dense(structure, sym_data)"
                 },
-                "signature": "def dense(structure: TensorStructure | builtins.list[Representation] | builtins.list[builtins.int], data: typing.Sequence[Expression] | typing.Sequence[builtins.float] | typing.Sequence[builtins.complex]) -> LibraryTensor:",
+                "signature": "def dense(structure: TensorStructure | list[Representation] | list[int], data: Sequence[Expression] | Sequence[float] | Sequence[complex]) -> LibraryTensor:",
                 "default": null,
                 "members": [
                   {
@@ -180,7 +168,7 @@
                       "format": "python-docstring",
                       "body": "The tensor structure defining shape and index properties"
                     },
-                    "signature": "structure: TensorStructure | builtins.list[Representation] | builtins.list[builtins.int]",
+                    "signature": "TensorStructure | list[Representation] | list[int]",
                     "default": null,
                     "members": []
                   },
@@ -191,7 +179,7 @@
                       "format": "python-docstring",
                       "body": "The tensor data in row-major order"
                     },
-                    "signature": "data: typing.Sequence[Expression] | typing.Sequence[builtins.float] | typing.Sequence[builtins.complex]",
+                    "signature": "Sequence[Expression] | Sequence[float] | Sequence[complex]",
                     "default": null,
                     "members": []
                   }
@@ -202,7 +190,7 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a scalar library tensor with value 1.0.\n\nReturns\n-------\nLibraryTensor\nA scalar library tensor containing the value 1.0\n\nExamples\n--------\n>>> from symbolica.community.spenso import LibraryTensor\n>>> one = LibraryTensor.one()"
+                  "body": "Create a scalar library tensor with value 1.0.\n\nReturns\n-------\nLibraryTensor\n    A scalar library tensor containing the value 1.0\n\nExamples\n--------\n>>> from symbolica.community.spenso import LibraryTensor\n>>> one = LibraryTensor.one()"
                 },
                 "signature": "def one() -> LibraryTensor:",
                 "default": null,
@@ -213,7 +201,7 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a scalar library tensor with value 0.0.\n\nReturns\n-------\nLibraryTensor\nA scalar library tensor containing the value 0.0\n\nExamples\n--------\n>>> from symbolica.community.spenso import LibraryTensor\n>>> zero = LibraryTensor.zero()"
+                  "body": "Create a scalar library tensor with value 0.0.\n\nReturns\n-------\nLibraryTensor\n    A scalar library tensor containing the value 0.0\n\nExamples\n--------\n>>> from symbolica.community.spenso import LibraryTensor\n>>> zero = LibraryTensor.zero()"
                 },
                 "signature": "def zero() -> LibraryTensor:",
                 "default": null,
@@ -245,7 +233,7 @@
                 "name": "__repr__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -253,7 +241,7 @@
                 "name": "__str__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __str__(self) -> builtins.str:",
+                "signature": "def __str__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -261,7 +249,7 @@
                 "name": "__len__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __len__(self) -> builtins.int:",
+                "signature": "def __len__(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -269,130 +257,148 @@
                 "name": "__getitem__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __getitem__(self, item: builtins.slice | builtins.int | builtins.list[builtins.int]) -> typing.Any:",
+                "signature": null,
                 "default": null,
                 "members": [
                   {
-                    "name": "item",
-                    "kind": "parameter",
+                    "name": "__getitem__",
+                    "kind": "overload",
                     "docs": null,
-                    "signature": "item: builtins.slice | builtins.int | builtins.list[builtins.int]",
+                    "signature": "def __getitem__(self, item: slice | int | list[int]) -> Any:",
                     "default": null,
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "__getitem__",
-                "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Get library tensor elements at the specified range of indices.\n\nParameters\n----------\nitem : slice\nSlice object defining the range of indices\n\nReturns\n-------\nlist of float, complex, or Expression\nThe tensor elements at the specified range"
-                },
-                "signature": "def __getitem__(self, item: builtins.slice) -> builtins.list[Expression | builtins.complex | float]:",
-                "default": null,
-                "members": [
+                    "members": [
+                      {
+                        "name": "item",
+                        "kind": "parameter",
+                        "docs": null,
+                        "signature": "slice | int | list[int]",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
+                  },
                   {
-                    "name": "item",
-                    "kind": "parameter",
+                    "name": "__getitem__",
+                    "kind": "overload",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "Slice object defining the range of indices"
+                      "body": "Get library tensor elements at the specified range of indices.\n\nParameters\n----------\nitem : slice\n    Slice object defining the range of indices\n\nReturns\n-------\nlist of float, complex, or Expression\n    The tensor elements at the specified range"
                     },
-                    "signature": "item: builtins.slice",
+                    "signature": "def __getitem__(self, item: slice) -> list[Expression | complex | float]:",
                     "default": null,
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "__getitem__",
-                "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Get library tensor element at the specified index or indices.\n\nParameters\n----------\nitem : int or list of int\nIndex specification (int for flat index, list of int for coordinates)\n\nReturns\n-------\nfloat, complex, or Expression\nThe tensor element at the specified index"
-                },
-                "signature": "def __getitem__(self, item: typing.Sequence[builtins.int] | builtins.int) -> Expression | builtins.complex | float:",
-                "default": null,
-                "members": [
+                    "members": [
+                      {
+                        "name": "item",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "Slice object defining the range of indices"
+                        },
+                        "signature": "slice",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
+                  },
                   {
-                    "name": "item",
-                    "kind": "parameter",
+                    "name": "__getitem__",
+                    "kind": "overload",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "Index specification (int for flat index, list of int for coordinates)"
+                      "body": "Get library tensor element at the specified index or indices.\n\nParameters\n----------\nitem : int or list of int\n    Index specification (int for flat index, list of int for coordinates)\n\nReturns\n-------\nfloat, complex, or Expression\n    The tensor element at the specified index"
                     },
-                    "signature": "item: typing.Sequence[builtins.int] | builtins.int",
+                    "signature": "def __getitem__(self, item: Sequence[int] | int) -> Expression | complex | float:",
                     "default": null,
-                    "members": []
+                    "members": [
+                      {
+                        "name": "item",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "Index specification (int for flat index, list of int for coordinates)"
+                        },
+                        "signature": "Sequence[int] | int",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
                   }
                 ]
               },
               {
                 "name": "__setitem__",
                 "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Set library tensor element(s) at the specified index or indices.\n\nParameters\n----------\nitem : int or list of int\nIndex specification (int for flat index, list of int for coordinates)\nvalue : float, complex, or Expression\nThe value to set\n\nExamples\n--------\n>>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation\n>>> rep = Representation.euc(2)\n>>> structure = TensorStructure(rep, rep)\n>>> tensor = LibraryTensor.sparse(structure, float)\n>>> tensor[0] = 1.0\n>>> tensor[1, 1] = 2.0"
-                },
-                "signature": "def __setitem__(self, item: typing.Any, value: typing.Any) -> None:",
+                "docs": null,
+                "signature": null,
                 "default": null,
                 "members": [
                   {
-                    "name": "item",
-                    "kind": "parameter",
+                    "name": "__setitem__",
+                    "kind": "overload",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "Index specification (int for flat index, list of int for coordinates)"
+                      "body": "Set library tensor element(s) at the specified index or indices.\n\nParameters\n----------\nitem : int or list of int\n    Index specification (int for flat index, list of int for coordinates)\nvalue : float, complex, or Expression\n    The value to set\n\nExamples\n--------\n>>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation\n>>> rep = Representation.euc(2)\n>>> structure = TensorStructure(rep, rep)\n>>> tensor = LibraryTensor.sparse(structure, float)\n>>> tensor[0] = 1.0\n>>> tensor[1, 1] = 2.0"
                     },
-                    "signature": "item: typing.Any",
+                    "signature": "def __setitem__(self, item: Any, value: Any) -> None:",
                     "default": null,
-                    "members": []
+                    "members": [
+                      {
+                        "name": "item",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "Index specification (int for flat index, list of int for coordinates)"
+                        },
+                        "signature": "Any",
+                        "default": null,
+                        "members": []
+                      },
+                      {
+                        "name": "value",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "The value to set"
+                        },
+                        "signature": "Any",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
                   },
                   {
-                    "name": "value",
-                    "kind": "parameter",
+                    "name": "__setitem__",
+                    "kind": "overload",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "The value to set"
+                      "body": "Set library tensor element(s) at the specified index or indices.\n\nParameters\n----------\nitem : int or list of int\n    Index specification (int for flat index, list of int for coordinates)\nvalue : float, complex, or Expression\n    The value to set\n\nExamples\n--------\n>>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation\n>>> rep = Representation.euc(2)\n>>> structure = TensorStructure(rep, rep)\n>>> tensor = LibraryTensor.sparse(structure, float)\n>>> tensor[0] = 1.0\n>>> tensor[1, 1] = 2.0"
                     },
-                    "signature": "value: typing.Any",
+                    "signature": "def __setitem__(self, item: Sequence[int] | int, value: Expression | complex | float) -> None:",
                     "default": null,
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "__setitem__",
-                "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Set library tensor element(s) at the specified index or indices.\n\nParameters\n----------\nitem : int or list of int\nIndex specification (int for flat index, list of int for coordinates)\nvalue : float, complex, or Expression\nThe value to set\n\nExamples\n--------\n>>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation\n>>> rep = Representation.euc(2)\n>>> structure = TensorStructure(rep, rep)\n>>> tensor = LibraryTensor.sparse(structure, float)\n>>> tensor[0] = 1.0\n>>> tensor[1, 1] = 2.0"
-                },
-                "signature": "def __setitem__(self, item: typing.Sequence[builtins.int] | builtins.int, value: Expression | builtins.complex | float) -> None:",
-                "default": null,
-                "members": [
-                  {
-                    "name": "item",
-                    "kind": "parameter",
-                    "docs": {
-                      "format": "python-docstring",
-                      "body": "Index specification (int for flat index, list of int for coordinates)"
-                    },
-                    "signature": "item: typing.Sequence[builtins.int] | builtins.int",
-                    "default": null,
-                    "members": []
-                  },
-                  {
-                    "name": "value",
-                    "kind": "parameter",
-                    "docs": {
-                      "format": "python-docstring",
-                      "body": "The value to set"
-                    },
-                    "signature": "value: Expression | builtins.complex | float",
-                    "default": null,
-                    "members": []
+                    "members": [
+                      {
+                        "name": "item",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "Index specification (int for flat index, list of int for coordinates)"
+                        },
+                        "signature": "Sequence[int] | int",
+                        "default": null,
+                        "members": []
+                      },
+                      {
+                        "name": "value",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "The value to set"
+                        },
+                        "signature": "Expression | complex | float",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
                   }
                 ]
               },
@@ -401,7 +407,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Extract the scalar value from a rank-0 (scalar) library tensor.\n\nReturns\n-------\nExpression\nThe scalar expression contained in this tensor\n\nRaises\n------\nRuntimeError\nIf the tensor is not a scalar\n\nExamples\n--------\n>>> from symbolica.community.spenso import LibraryTensor\n>>> scalar_tensor = LibraryTensor.one()\n>>> value = scalar_tensor.scalar()"
+                  "body": "Extract the scalar value from a rank-0 (scalar) library tensor.\n\nReturns\n-------\nExpression\n    The scalar expression contained in this tensor\n\nRaises\n------\nRuntimeError\n    If the tensor is not a scalar\n\nExamples\n--------\n>>> from symbolica.community.spenso import LibraryTensor\n>>> scalar_tensor = LibraryTensor.one()\n>>> value = scalar_tensor.scalar()"
                 },
                 "signature": "def scalar(self) -> Expression:",
                 "default": null,
@@ -434,57 +440,60 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.spenso import Representation\nhelp(Representation)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "__call__",
                 "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Create a slot from this representation, by specifying an index.\n\nParameters\n----------\naind : int, str, or Symbol\nThe index specification\n\nReturns\n-------\nSlot\nA new Slot object with the specified index\n\nExamples\n--------\n>>> from symbolica.community.spenso import Representation\n>>> import symbolica as sp\n>>> rep = Representation.euc(3)\n>>> slot1 = rep('mu')\n>>> slot2 = rep(1)\n>>> slot3 = rep(sp.S('nu'))"
-                },
-                "signature": "def __call__(self, aind: builtins.int | Expression | str) -> Slot:",
+                "docs": null,
+                "signature": null,
                 "default": null,
                 "members": [
                   {
-                    "name": "aind",
-                    "kind": "parameter",
+                    "name": "__call__",
+                    "kind": "overload",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "The index specification"
+                      "body": "Create a slot from this representation, by specifying an index.\n\nParameters\n----------\naind : int, str, or Symbol\n    The index specification\n\nReturns\n-------\nSlot\n    A new Slot object with the specified index\n\nExamples\n--------\n>>> from symbolica.community.spenso import Representation\n>>> import symbolica as sp\n>>> rep = Representation.euc(3)\n>>> slot1 = rep('mu')\n>>> slot2 = rep(1)\n>>> slot3 = rep(sp.S('nu'))"
                     },
-                    "signature": "aind: builtins.int | Expression | str",
+                    "signature": "def __call__(self, aind: int | Expression | str) -> Slot:",
                     "default": null,
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "__call__",
-                "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Create a slot or symbolic expression from this representation.\n\nParameters\n----------\naind : Expression\nThe index specification (Expression creates symbolic representation)\n\nReturns\n-------\nExpression\nA symbolic expression representing this representation\n\nExamples\n--------\n>>> from symbolica.community.spenso import Representation\n>>> import symbolica as sp\n>>> rep = Representation.euc(3)\n>>> expr = rep(sp.E(\"cos(x)\"))"
-                },
-                "signature": "def __call__(self, aind: Expression) -> Expression | Slot:",
-                "default": null,
-                "members": [
+                    "members": [
+                      {
+                        "name": "aind",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "The index specification"
+                        },
+                        "signature": "int | Expression | str",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
+                  },
                   {
-                    "name": "aind",
-                    "kind": "parameter",
+                    "name": "__call__",
+                    "kind": "overload",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "The index specification (Expression creates symbolic representation)"
+                      "body": "Create a slot or symbolic expression from this representation.\n\nParameters\n----------\naind : Expression\n    The index specification (Expression creates symbolic representation)\n\nReturns\n-------\nExpression\n    A symbolic expression representing this representation\n\nExamples\n--------\n>>> from symbolica.community.spenso import Representation\n>>> import symbolica as sp\n>>> rep = Representation.euc(3)\n>>> expr = rep(sp.E(\"cos(x)\"))"
                     },
-                    "signature": "aind: Expression",
+                    "signature": "def __call__(self, aind: Expression) -> Expression | Slot:",
                     "default": null,
-                    "members": []
+                    "members": [
+                      {
+                        "name": "aind",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "The index specification (Expression creates symbolic representation)"
+                        },
+                        "signature": "Expression",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
                   }
                 ]
               },
@@ -495,14 +504,14 @@
                   "format": "python-docstring",
                   "body": "Create and register a new representation with specified properties.\n\n# Parameters:\n- name: String name for the representation\n- dimension: Size of the representation (int or symbolic)\n- is_self_dual: If True, creates self-dual representation; if False, creates dualizable pair\n\n# Examples:\n```python\nfrom symbolica.community.spenso import Representation\nimport symbolica as sp\n\n# Self-dual representation (indices contract with themselves)\neuclidean = Representation(\"Euclidean\", 4, is_self_dual=True)\n\n# Dualizable representation (needs dual partner for contraction)\nvector_up = Representation(\"VectorUp\", 4, is_self_dual=False)\n\n# Symbolic dimension\nn = sp.S('n')\ngeneral = Representation(\"General\", n, is_self_dual=True)\n```"
                 },
-                "signature": "def __new__(cls, name: builtins.str, dimension: builtins.int | Expression | str, is_self_dual: builtins.bool = ...) -> Representation:",
+                "signature": "def __new__(cls, name: str, dimension: int | Expression | str, is_self_dual: bool = ...) -> Representation:",
                 "default": null,
                 "members": [
                   {
                     "name": "name",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "name: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -510,7 +519,7 @@
                     "name": "dimension",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "dimension: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   },
@@ -518,7 +527,7 @@
                     "name": "is_self_dual",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "is_self_dual: builtins.bool = ...",
+                    "signature": "bool",
                     "default": "...",
                     "members": []
                   }
@@ -539,14 +548,14 @@
                   "format": "python-docstring",
                   "body": "Create a metric tensor for this representation.\n\n# Parameters:\n- i: First index\n- j: Second index\n\n# Examples:\n```python\nrep = Representation.mink(4)\nmetric = rep.g('mu', 'nu')  # Minkowski metric g_μν\n```"
                 },
-                "signature": "def g(self, i: builtins.int | Expression | str, j: builtins.int | Expression | str) -> TensorIndices:",
+                "signature": "def g(self, i: int | Expression | str, j: int | Expression | str) -> TensorIndices:",
                 "default": null,
                 "members": [
                   {
                     "name": "i",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "i: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   },
@@ -554,7 +563,7 @@
                     "name": "j",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "j: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   }
@@ -567,14 +576,14 @@
                   "format": "python-docstring",
                   "body": "Create a musical isomorphism tensor for this representation.\n\n# Parameters:\n- i: First index\n- j: Second index\n\n# Examples:\n```python\nrep = Representation.mink(4)\nflat = rep.flat('mu', 'nu')  # Flat isomorphism ♭_μν\n```"
                 },
-                "signature": "def flat(self, i: builtins.int | Expression | str, j: builtins.int | Expression | str) -> TensorIndices:",
+                "signature": "def flat(self, i: int | Expression | str, j: int | Expression | str) -> TensorIndices:",
                 "default": null,
                 "members": [
                   {
                     "name": "i",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "i: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   },
@@ -582,7 +591,7 @@
                     "name": "j",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "j: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   }
@@ -595,14 +604,14 @@
                   "format": "python-docstring",
                   "body": "Create an identity tensor for this representation.\n\n# Parameters:\n- i: First index\n- j: Second index\n\n# Examples:\n```python\nrep = Representation.cof(3)\nidentity = rep.id('a', 'b')  # Color identity δ_ab\n```"
                 },
-                "signature": "def id(self, i: builtins.int | Expression | str, j: builtins.int | Expression | str) -> TensorIndices:",
+                "signature": "def id(self, i: int | Expression | str, j: int | Expression | str) -> TensorIndices:",
                 "default": null,
                 "members": [
                   {
                     "name": "i",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "i: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   },
@@ -610,7 +619,7 @@
                     "name": "j",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "j: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   }
@@ -620,7 +629,7 @@
                 "name": "__repr__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -628,7 +637,7 @@
                 "name": "__str__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __str__(self) -> builtins.str:",
+                "signature": "def __str__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -650,14 +659,14 @@
                   "format": "python-docstring",
                   "body": "Create a bispinor representation.\n\n# Parameters:\n- dimension: The dimension of the bispinor space"
                 },
-                "signature": "def bis(dimension: builtins.int | Expression | str) -> Representation:",
+                "signature": "def bis(dimension: int | Expression | str) -> Representation:",
                 "default": null,
                 "members": [
                   {
                     "name": "dimension",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "dimension: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   }
@@ -670,14 +679,14 @@
                   "format": "python-docstring",
                   "body": "Create a Euclidean space representation.\n\n# Parameters:\n- dimension: The dimension of the Euclidean space"
                 },
-                "signature": "def euc(dimension: builtins.int | Expression | str) -> Representation:",
+                "signature": "def euc(dimension: int | Expression | str) -> Representation:",
                 "default": null,
                 "members": [
                   {
                     "name": "dimension",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "dimension: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   }
@@ -690,14 +699,14 @@
                   "format": "python-docstring",
                   "body": "Create a Minkowski space representation.\n\n# Parameters:\n- dimension: The dimension of the Minkowski space"
                 },
-                "signature": "def mink(dimension: builtins.int | Expression | str) -> Representation:",
+                "signature": "def mink(dimension: int | Expression | str) -> Representation:",
                 "default": null,
                 "members": [
                   {
                     "name": "dimension",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "dimension: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   }
@@ -710,14 +719,14 @@
                   "format": "python-docstring",
                   "body": "Create a color fundamental representation.\n\n# Parameters:\n- dimension: The dimension of the color group (e.g., 3 for SU(3))"
                 },
-                "signature": "def cof(dimension: builtins.int | Expression | str) -> Representation:",
+                "signature": "def cof(dimension: int | Expression | str) -> Representation:",
                 "default": null,
                 "members": [
                   {
                     "name": "dimension",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "dimension: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   }
@@ -730,14 +739,14 @@
                   "format": "python-docstring",
                   "body": "Create a color adjoint representation.\n\n# Parameters:\n- dimension: The dimension of the adjoint representation (e.g., 8 for SU(3))"
                 },
-                "signature": "def coad(dimension: builtins.int | Expression | str) -> Representation:",
+                "signature": "def coad(dimension: int | Expression | str) -> Representation:",
                 "default": null,
                 "members": [
                   {
                     "name": "dimension",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "dimension: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   }
@@ -750,14 +759,14 @@
                   "format": "python-docstring",
                   "body": "Create a color sextet representation.\n\n# Parameters:\n- dimension: The dimension of the sextet representation (e.g., 6 for SU(3))"
                 },
-                "signature": "def cos(dimension: builtins.int | Expression | str) -> Representation:",
+                "signature": "def cos(dimension: int | Expression | str) -> Representation:",
                 "default": null,
                 "members": [
                   {
                     "name": "dimension",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "dimension: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   }
@@ -790,19 +799,13 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.spenso import Slot\nhelp(Slot)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "__repr__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -810,7 +813,7 @@
                 "name": "__str__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __str__(self) -> builtins.str:",
+                "signature": "def __str__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -829,14 +832,14 @@
                   "format": "python-docstring",
                   "body": "Create a new slot with a custom representation and index.\n\n# Parameters:\n- name: String name for the representation\n- dimension: Size of the representation space\n- aind: The abstract index (int, str, or Symbol)\n- dual: If True, creates dualizable representation; if False, self-dual\n\n# Examples:\n```python\nfrom symbolica.community.spenso import Slot\nimport symbolica as sp\n\n# Self-dual slot\neuclidean_slot = Slot(\"Euclidean\", 4, 'mu', dual=False)\n\n# Dualizable slot\nvector_slot = Slot(\"Vector\", 4, 'nu', dual=True)\n\n# With symbolic index\nsym_index = sp.S('alpha')\nsymbolic_slot = Slot(\"Custom\", 3, sym_index, dual=False)\n```"
                 },
-                "signature": "def __new__(cls, name: builtins.str, dimension: builtins.int, aind: builtins.int | Expression | str, dual: builtins.bool = ...) -> Slot:",
+                "signature": "def __new__(cls, name: str, dimension: int, aind: int | Expression | str, dual: bool = ...) -> Slot:",
                 "default": null,
                 "members": [
                   {
                     "name": "name",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "name: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -844,7 +847,7 @@
                     "name": "dimension",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "dimension: builtins.int",
+                    "signature": "int",
                     "default": null,
                     "members": []
                   },
@@ -852,7 +855,7 @@
                     "name": "aind",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "aind: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   },
@@ -860,7 +863,7 @@
                     "name": "dual",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "dual: builtins.bool = ...",
+                    "signature": "bool",
                     "default": "...",
                     "members": []
                   }
@@ -904,13 +907,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.spenso import Tensor\nhelp(Tensor)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "structure",
@@ -925,9 +922,9 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a new sparse empty tensor with the given structure and data type.\n\nParameters\n----------\nstructure : TensorIndices or list of Slots\nThe tensor structure defining shape and index properties\ntype_info : type\nThe data type - either `float` or `Expression` class\n\nReturns\n-------\nTensor\nA new sparse tensor with all elements initially zero\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> structure = TensorIndices(R.euc(3)(1), R.euc(3)(2))\n>>> sparse_float = Tensor.sparse(structure, float)\n>>> sparse_sym = Tensor.sparse(structure, symbolica.Expression)"
+                  "body": "Create a new sparse empty tensor with the given structure and data type.\n\nParameters\n----------\nstructure : TensorIndices or list of Slots\n    The tensor structure defining shape and index properties\ntype_info : type\n    The data type - either `float` or `Expression` class\n\nReturns\n-------\nTensor\n    A new sparse tensor with all elements initially zero\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> structure = TensorIndices(R.euc(3)(1), R.euc(3)(2))\n>>> sparse_float = Tensor.sparse(structure, float)\n>>> sparse_sym = Tensor.sparse(structure, symbolica.Expression)"
                 },
-                "signature": "def sparse(structure: TensorIndices | builtins.list[Slot], type_info: type) -> Tensor:",
+                "signature": "def sparse(structure: TensorIndices | list[Slot], type_info: type) -> Tensor:",
                 "default": null,
                 "members": [
                   {
@@ -937,7 +934,7 @@
                       "format": "python-docstring",
                       "body": "The tensor structure defining shape and index properties"
                     },
-                    "signature": "structure: TensorIndices | builtins.list[Slot]",
+                    "signature": "TensorIndices | list[Slot]",
                     "default": null,
                     "members": []
                   },
@@ -948,7 +945,7 @@
                       "format": "python-docstring",
                       "body": "The data type - either `float` or `Expression` class"
                     },
-                    "signature": "type_info: type",
+                    "signature": "type",
                     "default": null,
                     "members": []
                   }
@@ -959,9 +956,9 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a new dense tensor with the given structure and data.\n\nParameters\n----------\nstructure : TensorIndices or list of Slots\nThe tensor structure defining shape and index properties\ndata : list of float, complex, or Expression\nThe tensor data in row-major order\n\nReturns\n-------\nTensor\nA new dense tensor with the specified data\n\nExamples\n--------\n>>> from symbolica import S\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> structure = TensorIndices(R.euc(2)(1), R.euc(2)(2))\n>>> data = [1.0, 2.0, 3.0, 4.0]\n>>> tensor = Tensor.dense(structure, data)\n>>> x, y = S(\"x\", \"y\")\n>>> sym_data = [x, y, x * y, x + y]\n>>> sym_tensor = Tensor.dense(structure, sym_data)"
+                  "body": "Create a new dense tensor with the given structure and data.\n\nParameters\n----------\nstructure : TensorIndices or list of Slots\n    The tensor structure defining shape and index properties\ndata : list of float, complex, or Expression\n    The tensor data in row-major order\n\nReturns\n-------\nTensor\n    A new dense tensor with the specified data\n\nExamples\n--------\n>>> from symbolica import S\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> structure = TensorIndices(R.euc(2)(1), R.euc(2)(2))\n>>> data = [1.0, 2.0, 3.0, 4.0]\n>>> tensor = Tensor.dense(structure, data)\n>>> x, y = S(\"x\", \"y\")\n>>> sym_data = [x, y, x * y, x + y]\n>>> sym_tensor = Tensor.dense(structure, sym_data)"
                 },
-                "signature": "def dense(structure: TensorIndices | builtins.list[Slot], data: typing.Sequence[Expression] | typing.Sequence[builtins.float] | typing.Sequence[builtins.complex]) -> Tensor:",
+                "signature": "def dense(structure: TensorIndices | list[Slot], data: Sequence[Expression] | Sequence[float] | Sequence[complex]) -> Tensor:",
                 "default": null,
                 "members": [
                   {
@@ -971,7 +968,7 @@
                       "format": "python-docstring",
                       "body": "The tensor structure defining shape and index properties"
                     },
-                    "signature": "structure: TensorIndices | builtins.list[Slot]",
+                    "signature": "TensorIndices | list[Slot]",
                     "default": null,
                     "members": []
                   },
@@ -982,7 +979,7 @@
                       "format": "python-docstring",
                       "body": "The tensor data in row-major order"
                     },
-                    "signature": "data: typing.Sequence[Expression] | typing.Sequence[builtins.float] | typing.Sequence[builtins.complex]",
+                    "signature": "Sequence[Expression] | Sequence[float] | Sequence[complex]",
                     "default": null,
                     "members": []
                   }
@@ -993,7 +990,7 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a scalar tensor with value 1.0.\n\nReturns\n-------\nTensor\nA scalar tensor containing the value 1.0\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor\n>>> one = Tensor.one()"
+                  "body": "Create a scalar tensor with value 1.0.\n\nReturns\n-------\nTensor\n    A scalar tensor containing the value 1.0\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor\n>>> one = Tensor.one()"
                 },
                 "signature": "def one() -> Tensor:",
                 "default": null,
@@ -1004,7 +1001,7 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a scalar tensor with value 0.0.\n\nReturns\n-------\nTensor\nA scalar tensor containing the value 0.0\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor\n>>> zero = Tensor.zero()"
+                  "body": "Create a scalar tensor with value 0.0.\n\nReturns\n-------\nTensor\n    A scalar tensor containing the value 0.0\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor\n>>> zero = Tensor.zero()"
                 },
                 "signature": "def zero() -> Tensor:",
                 "default": null,
@@ -1015,7 +1012,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Convert this tensor to dense storage format.\n\nConvert this tensor to dense storage format.\n\nConverts sparse tensors to dense format in-place. Dense tensors are unchanged.\nThis allocates memory for all tensor elements.\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> structure = TensorIndices(R.euc(4)(2))\n>>> tensor = Tensor.sparse(structure, float)\n>>> tensor[0] = 1.0\n>>> tensor.to_dense()"
+                  "body": "Convert this tensor to dense storage format.\n\nConverts sparse tensors to dense format in-place. Dense tensors are unchanged.\nThis allocates memory for all tensor elements.\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> structure = TensorIndices(R.euc(4)(2))\n>>> tensor = Tensor.sparse(structure, float)\n>>> tensor[0] = 1.0\n>>> tensor.to_dense()"
                 },
                 "signature": "def to_dense(self) -> None:",
                 "default": null,
@@ -1026,7 +1023,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Convert this tensor to sparse storage format.\n\nConvert this tensor to sparse storage format.\n\nConverts dense tensors to sparse format in-place, only storing non-zero elements.\nThis can save memory for tensors with many zero elements.\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> structure = TensorIndices(R.euc(2)(2), R.euc(2)(1))\n>>> data = [1.0, 0.0, 0.0, 2.0]\n>>> tensor = Tensor.dense(structure, data)\n>>> tensor.to_sparse()"
+                  "body": "Convert this tensor to sparse storage format.\n\nConverts dense tensors to sparse format in-place, only storing non-zero elements.\nThis can save memory for tensors with many zero elements.\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> structure = TensorIndices(R.euc(2)(2), R.euc(2)(1))\n>>> data = [1.0, 0.0, 0.0, 2.0]\n>>> tensor = Tensor.dense(structure, data)\n>>> tensor.to_sparse()"
                 },
                 "signature": "def to_sparse(self) -> None:",
                 "default": null,
@@ -1036,7 +1033,7 @@
                 "name": "__repr__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -1044,7 +1041,7 @@
                 "name": "__str__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __str__(self) -> builtins.str:",
+                "signature": "def __str__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -1052,7 +1049,7 @@
                 "name": "__len__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __len__(self) -> builtins.int:",
+                "signature": "def __len__(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -1060,130 +1057,148 @@
                 "name": "__getitem__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __getitem__(self, item: builtins.slice | builtins.int | builtins.list[builtins.int]) -> typing.Any:",
+                "signature": null,
                 "default": null,
                 "members": [
                   {
-                    "name": "item",
-                    "kind": "parameter",
+                    "name": "__getitem__",
+                    "kind": "overload",
                     "docs": null,
-                    "signature": "item: builtins.slice | builtins.int | builtins.list[builtins.int]",
+                    "signature": "def __getitem__(self, item: slice | int | list[int]) -> Any:",
                     "default": null,
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "__getitem__",
-                "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Get tensor elements at the specified range of indices.\n\nParameters\n----------\nitem : slice\nSlice object defining the range of indices\n\nReturns\n-------\nlist of float, complex, or Expression\nThe tensor elements at the specified range"
-                },
-                "signature": "def __getitem__(self, item: builtins.slice) -> builtins.list[Expression | builtins.complex | float]:",
-                "default": null,
-                "members": [
+                    "members": [
+                      {
+                        "name": "item",
+                        "kind": "parameter",
+                        "docs": null,
+                        "signature": "slice | int | list[int]",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
+                  },
                   {
-                    "name": "item",
-                    "kind": "parameter",
+                    "name": "__getitem__",
+                    "kind": "overload",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "Slice object defining the range of indices"
+                      "body": "Get tensor elements at the specified range of indices.\n\nParameters\n----------\nitem : slice\n    Slice object defining the range of indices\n\nReturns\n-------\nlist of float, complex, or Expression\n    The tensor elements at the specified range"
                     },
-                    "signature": "item: builtins.slice",
+                    "signature": "def __getitem__(self, item: slice) -> list[Expression | complex | float]:",
                     "default": null,
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "__getitem__",
-                "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Get tensor element at the specified index or indices.\n\nParameters\n----------\nitem : int or list of int\nIndex specification (int for flat index, list of int for coordinates)\n\nReturns\n-------\nfloat, complex, or Expression\nThe tensor element at the specified index"
-                },
-                "signature": "def __getitem__(self, item: typing.Sequence[builtins.int] | builtins.int) -> Expression | builtins.complex | float:",
-                "default": null,
-                "members": [
+                    "members": [
+                      {
+                        "name": "item",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "Slice object defining the range of indices"
+                        },
+                        "signature": "slice",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
+                  },
                   {
-                    "name": "item",
-                    "kind": "parameter",
+                    "name": "__getitem__",
+                    "kind": "overload",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "Index specification (int for flat index, list of int for coordinates)"
+                      "body": "Get tensor element at the specified index or indices.\n\nParameters\n----------\nitem : int or list of int\n    Index specification (int for flat index, list of int for coordinates)\n\nReturns\n-------\nfloat, complex, or Expression\n    The tensor element at the specified index"
                     },
-                    "signature": "item: typing.Sequence[builtins.int] | builtins.int",
+                    "signature": "def __getitem__(self, item: Sequence[int] | int) -> Expression | complex | float:",
                     "default": null,
-                    "members": []
+                    "members": [
+                      {
+                        "name": "item",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "Index specification (int for flat index, list of int for coordinates)"
+                        },
+                        "signature": "Sequence[int] | int",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
                   }
                 ]
               },
               {
                 "name": "__setitem__",
                 "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Set tensor element(s) at the specified index or indices.\n\nParameters\n----------\nitem : int or list of int\nIndex specification (int for flat index, list of int for coordinates)\nvalue : float, complex, or Expression\nThe value to set\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> structure = TensorIndices(R.euc(2)(2), R.euc(2)(1))\n>>> tensor = Tensor.sparse(structure, float)\n>>> tensor[0] = 4.0\n>>> tensor[1, 1] = 1.0"
-                },
-                "signature": "def __setitem__(self, item: typing.Any, value: typing.Any) -> None:",
+                "docs": null,
+                "signature": null,
                 "default": null,
                 "members": [
                   {
-                    "name": "item",
-                    "kind": "parameter",
+                    "name": "__setitem__",
+                    "kind": "overload",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "Index specification (int for flat index, list of int for coordinates)"
+                      "body": "Set tensor element(s) at the specified index or indices.\n\nParameters\n----------\nitem : int or list of int\n    Index specification (int for flat index, list of int for coordinates)\nvalue : float, complex, or Expression\n    The value to set\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> structure = TensorIndices(R.euc(2)(2), R.euc(2)(1))\n>>> tensor = Tensor.sparse(structure, float)\n>>> tensor[0] = 4.0\n>>> tensor[1, 1] = 1.0"
                     },
-                    "signature": "item: typing.Any",
+                    "signature": "def __setitem__(self, item: Any, value: Any) -> None:",
                     "default": null,
-                    "members": []
+                    "members": [
+                      {
+                        "name": "item",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "Index specification (int for flat index, list of int for coordinates)"
+                        },
+                        "signature": "Any",
+                        "default": null,
+                        "members": []
+                      },
+                      {
+                        "name": "value",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "The value to set"
+                        },
+                        "signature": "Any",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
                   },
                   {
-                    "name": "value",
-                    "kind": "parameter",
+                    "name": "__setitem__",
+                    "kind": "overload",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "The value to set"
+                      "body": "Set tensor element at the specified index.\n\nParameters\n----------\nitem : int or list of int\n    Index specification (int for flat index, list of int for coordinates)\nvalue : float, complex, or Expression\n    The value to set\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation\n>>> rep = Representation.euc(2)\n>>> structure = TensorIndices(rep(1), rep(2))\n>>> tensor = Tensor.sparse(structure, float)\n>>> tensor[0] = 1.0\n>>> tensor[1, 1] = 2.0"
                     },
-                    "signature": "value: typing.Any",
+                    "signature": "def __setitem__(self, item: int | Sequence[int], value: Expression | complex | float) -> None:",
                     "default": null,
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "__setitem__",
-                "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Set tensor element at the specified index.\n\nParameters\n----------\nitem : int or list of int\nIndex specification (int for flat index, list of int for coordinates)\nvalue : float, complex, or Expression\nThe value to set\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation\n>>> rep = Representation.euc(2)\n>>> structure = TensorIndices(rep(1), rep(2))\n>>> tensor = Tensor.sparse(structure, float)\n>>> tensor[0] = 1.0\n>>> tensor[1, 1] = 2.0"
-                },
-                "signature": "def __setitem__(self, item: builtins.int | typing.Sequence[builtins.int], value: Expression | builtins.complex | float) -> None:",
-                "default": null,
-                "members": [
-                  {
-                    "name": "item",
-                    "kind": "parameter",
-                    "docs": {
-                      "format": "python-docstring",
-                      "body": "Index specification (int for flat index, list of int for coordinates)"
-                    },
-                    "signature": "item: builtins.int | typing.Sequence[builtins.int]",
-                    "default": null,
-                    "members": []
-                  },
-                  {
-                    "name": "value",
-                    "kind": "parameter",
-                    "docs": {
-                      "format": "python-docstring",
-                      "body": "The value to set"
-                    },
-                    "signature": "value: Expression | builtins.complex | float",
-                    "default": null,
-                    "members": []
+                    "members": [
+                      {
+                        "name": "item",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "Index specification (int for flat index, list of int for coordinates)"
+                        },
+                        "signature": "int | Sequence[int]",
+                        "default": null,
+                        "members": []
+                      },
+                      {
+                        "name": "value",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "The value to set"
+                        },
+                        "signature": "Expression | complex | float",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
                   }
                 ]
               },
@@ -1192,9 +1207,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create an optimized evaluator for symbolic tensor expressions.\n\nCreate an optimized evaluator for symbolic tensor expressions.\n\nCompiles the symbolic expressions in this tensor into an optimized evaluation tree\nthat can efficiently compute numerical values for different parameter inputs.\n\nParameters\n----------\nconstants : dict\nDict mapping symbolic expressions to their constant numerical values\nfuns : dict\nDict mapping function signatures to their symbolic definitions\nparams : list of Expression\nList of symbolic parameters that will be varied during evaluation\niterations : int, optional\nNumber of optimization iterations for Horner scheme (default: 100)\nn_cores : int, optional\nNumber of CPU cores to use for optimization (default: 4)\nverbose : bool, optional\nWhether to print optimization progress (default: False)\n\nReturns\n-------\nTensorEvaluator\nAn optimized evaluator for efficient numerical evaluation\n\nExamples\n--------\n>>> from symbolica import S\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> x, y = S(\"x\", \"y\")\n>>> structure = TensorIndices(R.euc(2)(1))\n>>> tensor = Tensor.dense(structure, [x * y, x + y])\n>>> evaluator = tensor.evaluator(constants={}, funs={}, params=[x, y], iterations=50)\n>>> results = evaluator.evaluate_complex([[1.0, 2.0], [3.0, 4.0]])"
+                  "body": "Create an optimized evaluator for symbolic tensor expressions.\n\nCompiles the symbolic expressions in this tensor into an optimized evaluation tree\nthat can efficiently compute numerical values for different parameter inputs.\n\nParameters\n----------\nconstants : dict\n    Dict mapping symbolic expressions to their constant numerical values\nfuns : dict\n    Dict mapping function signatures to their symbolic definitions\nparams : list of Expression\n    List of symbolic parameters that will be varied during evaluation\niterations : int, optional\n    Number of optimization iterations for Horner scheme (default: 100)\nn_cores : int, optional\n    Number of CPU cores to use for optimization (default: 4)\nverbose : bool, optional\n    Whether to print optimization progress (default: False)\n\nReturns\n-------\nTensorEvaluator\n    An optimized evaluator for efficient numerical evaluation\n\nExamples\n--------\n>>> from symbolica import S\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> x, y = S(\"x\", \"y\")\n>>> structure = TensorIndices(R.euc(2)(1))\n>>> tensor = Tensor.dense(structure, [x * y, x + y])\n>>> evaluator = tensor.evaluator(constants={}, funs={}, params=[x, y], iterations=50)\n>>> results = evaluator.evaluate_complex([[1.0, 2.0], [3.0, 4.0]])"
                 },
-                "signature": "def evaluator(self, constants: typing.Mapping[Expression, Expression], funs: typing.Mapping[tuple[Expression, builtins.str, typing.Sequence[Expression]], Expression], params: typing.Sequence[Expression], iterations: builtins.int = ..., n_cores: builtins.int = ..., verbose: builtins.bool = ...) -> TensorEvaluator:",
+                "signature": "def evaluator(self, constants: Mapping[Expression, Expression], funs: Mapping[tuple[Expression, str, Sequence[Expression]], Expression], params: Sequence[Expression], iterations: int = ..., n_cores: int = ..., verbose: bool = ...) -> TensorEvaluator:",
                 "default": null,
                 "members": [
                   {
@@ -1204,7 +1219,7 @@
                       "format": "python-docstring",
                       "body": "Dict mapping symbolic expressions to their constant numerical values"
                     },
-                    "signature": "constants: typing.Mapping[Expression, Expression]",
+                    "signature": "Mapping[Expression, Expression]",
                     "default": null,
                     "members": []
                   },
@@ -1215,7 +1230,7 @@
                       "format": "python-docstring",
                       "body": "Dict mapping function signatures to their symbolic definitions"
                     },
-                    "signature": "funs: typing.Mapping[tuple[Expression, builtins.str, typing.Sequence[Expression]], Expression]",
+                    "signature": "Mapping[tuple[Expression, str, Sequence[Expression]], Expression]",
                     "default": null,
                     "members": []
                   },
@@ -1226,7 +1241,7 @@
                       "format": "python-docstring",
                       "body": "List of symbolic parameters that will be varied during evaluation"
                     },
-                    "signature": "params: typing.Sequence[Expression]",
+                    "signature": "Sequence[Expression]",
                     "default": null,
                     "members": []
                   },
@@ -1237,7 +1252,7 @@
                       "format": "python-docstring",
                       "body": "Number of optimization iterations for Horner scheme (default: 100)"
                     },
-                    "signature": "iterations: builtins.int = ...",
+                    "signature": "int",
                     "default": "...",
                     "members": []
                   },
@@ -1248,7 +1263,7 @@
                       "format": "python-docstring",
                       "body": "Number of CPU cores to use for optimization (default: 4)"
                     },
-                    "signature": "n_cores: builtins.int = ...",
+                    "signature": "int",
                     "default": "...",
                     "members": []
                   },
@@ -1259,7 +1274,7 @@
                       "format": "python-docstring",
                       "body": "Whether to print optimization progress (default: False)"
                     },
-                    "signature": "verbose: builtins.bool = ...",
+                    "signature": "bool",
                     "default": "...",
                     "members": []
                   }
@@ -1270,7 +1285,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Extract the scalar value from a rank-0 (scalar) tensor.\n\nReturns\n-------\nExpression\nThe scalar expression contained in this tensor\n\nRaises\n------\nRuntimeError\nIf the tensor is not a scalar\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor\n>>> scalar_tensor = Tensor.one()\n>>> value = scalar_tensor.scalar()"
+                  "body": "Extract the scalar value from a rank-0 (scalar) tensor.\n\nReturns\n-------\nExpression\n    The scalar expression contained in this tensor\n\nRaises\n------\nRuntimeError\n    If the tensor is not a scalar\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor\n>>> scalar_tensor = Tensor.one()\n>>> value = scalar_tensor.scalar()"
                 },
                 "signature": "def scalar(self) -> Expression:",
                 "default": null,
@@ -1283,7 +1298,7 @@
                   "format": "python-docstring",
                   "body": "Iterator"
                 },
-                "signature": "def __iter__(self) -> typing.Iterator[typing.Any]:",
+                "signature": "def __iter__(self) -> Iterator[Any]:",
                 "default": null,
                 "members": []
               }
@@ -1300,13 +1315,13 @@
             "name": "TensorEvaluator",
             "title": "TensorEvaluator",
             "kind": "python-class",
-            "supported": false,
+            "supported": true,
             "required_features": [
               "python_stubgen"
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "An optimized evaluator for symbolic tensor expressions.\n\nAn optimized evaluator for symbolic tensor expressions.\n\nThis class provides efficient numerical evaluation of symbolic tensor expressions\nafter optimization. It supports both real and complex-valued evaluations.\n\nCreate instances using the `Tensor.evaluator()` method rather than directly.\n\nExamples\n--------\n>>> evaluator = my_tensor.evaluator(constants={}, funs={}, params=[x, y])\n>>> results = evaluator.evaluate([[1.0, 2.0], [3.0, 4.0]])"
+              "body": "An optimized evaluator for symbolic tensor expressions.\n\nThis class provides efficient numerical evaluation of symbolic tensor expressions\nafter optimization. It supports both real and complex-valued evaluations.\n\nCreate instances using the `Tensor.evaluator()` method rather than directly.\n\nExamples\n--------\n>>> evaluator = my_tensor.evaluator(constants={}, funs={}, params=[x, y])\n>>> results = evaluator.evaluate([[1.0, 2.0], [3.0, 4.0]])"
             },
             "summary": "An optimized evaluator for symbolic tensor expressions.",
             "signature": "class TensorEvaluator:",
@@ -1314,22 +1329,16 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.spenso import TensorEvaluator\nhelp(TensorEvaluator)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "evaluate",
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Evaluate the tensor expression for multiple real-valued parameter inputs.\n\nParameters\n----------\ninputs : list of list of float\nList of parameter value lists, where each inner list contains\nnumerical values for all parameters in the same order as specified\nwhen creating the evaluator\n\nReturns\n-------\nlist of Tensor\nList of evaluated tensors, one for each input parameter set\n\nRaises\n------\nValueError\nIf the evaluator contains complex coefficients\n\nExamples\n--------\n>>> results = evaluator.evaluate([[1.0, 2.0], [3.0, 4.0]])"
+                  "body": "Evaluate the tensor expression for multiple real-valued parameter inputs.\n\nParameters\n----------\ninputs : list of list of float\n    List of parameter value lists, where each inner list contains\n    numerical values for all parameters in the same order as specified\n    when creating the evaluator\n\nReturns\n-------\nlist of Tensor\n    List of evaluated tensors, one for each input parameter set\n\nRaises\n------\nValueError\n    If the evaluator contains complex coefficients\n\nExamples\n--------\n>>> results = evaluator.evaluate([[1.0, 2.0], [3.0, 4.0]])"
                 },
-                "signature": "def evaluate(self, inputs: typing.Sequence[typing.Sequence[builtins.float]]) -> builtins.list[Tensor]:",
+                "signature": "def evaluate(self, inputs: Sequence[Sequence[float]]) -> list[Tensor]:",
                 "default": null,
                 "members": [
                   {
@@ -1339,7 +1348,7 @@
                       "format": "python-docstring",
                       "body": "List of parameter value lists, where each inner list contains numerical values for all parameters in the same order as specified when creating the evaluator"
                     },
-                    "signature": "inputs: typing.Sequence[typing.Sequence[builtins.float]]",
+                    "signature": "Sequence[Sequence[float]]",
                     "default": null,
                     "members": []
                   }
@@ -1352,14 +1361,14 @@
                   "format": "python-docstring",
                   "body": "Evaluate the expression for multiple inputs and return the results."
                 },
-                "signature": "def evaluate_complex(self, inputs: typing.Sequence[typing.Sequence[builtins.complex]]) -> builtins.list[Tensor]:",
+                "signature": "def evaluate_complex(self, inputs: Sequence[Sequence[complex]]) -> list[Tensor]:",
                 "default": null,
                 "members": [
                   {
                     "name": "inputs",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "inputs: typing.Sequence[typing.Sequence[builtins.complex]]",
+                    "signature": "Sequence[Sequence[complex]]",
                     "default": null,
                     "members": []
                   }
@@ -1370,9 +1379,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Compile the evaluator to a shared library using C++ for maximum performance.\n\nCompile the evaluator to a shared library using C++ for maximum performance.\n\nGenerates optimized C++ code with optional inline assembly and compiles it\ninto a shared library that can be loaded for extremely fast evaluation.\n\nParameters\n----------\nfunction_name : str\nName for the generated C++ function\nfilename : str\nPath for the generated C++ source file\nlibrary_name : str\nName for the compiled shared library\ninline_asm : str, optional\nType of inline assembly optimization (\"default\", \"x64\", \"aarch64\", \"none\")\noptimization_level : int, optional\nCompiler optimization level 0-3 (default: 3)\ncompiler_path : str, optional\nPath to specific C++ compiler (default: system default)\ncustom_header : str, optional\nAdditional C++ header code to include\n\nReturns\n-------\nCompiledTensorEvaluator\nA compiled evaluator for maximum performance evaluation\n\nExamples\n--------\n>>> compiled = evaluator.compile(\n...     function_name=\"fast_eval\",\n...     filename=\"tensor_eval.cpp\",\n...     library_name=\"tensor_lib\",\n...     optimization_level=3,\n... )\n>>> results = compiled.evaluate_complex([[1.0, 2.0], [3.0, 4.0]])"
+                  "body": "Compile the evaluator to a shared library using C++ for maximum performance.\n\nGenerates optimized C++ code with optional inline assembly and compiles it\ninto a shared library that can be loaded for extremely fast evaluation.\n\nParameters\n----------\nfunction_name : str\n    Name for the generated C++ function\nfilename : str\n    Path for the generated C++ source file\nlibrary_name : str\n    Name for the compiled shared library\ninline_asm : str, optional\n    Type of inline assembly optimization (\"default\", \"x64\", \"aarch64\", \"none\")\noptimization_level : int, optional\n    Compiler optimization level 0-3 (default: 3)\ncompiler_path : str, optional\n    Path to specific C++ compiler (default: system default)\ncustom_header : str, optional\n    Additional C++ header code to include\n\nReturns\n-------\nCompiledTensorEvaluator\n    A compiled evaluator for maximum performance evaluation\n\nExamples\n--------\n>>> compiled = evaluator.compile(\n...     function_name=\"fast_eval\",\n...     filename=\"tensor_eval.cpp\",\n...     library_name=\"tensor_lib\",\n...     optimization_level=3,\n... )\n>>> results = compiled.evaluate_complex([[1.0, 2.0], [3.0, 4.0]])"
                 },
-                "signature": "def compile(self, function_name: builtins.str, filename: builtins.str, library_name: builtins.str, inline_asm: builtins.str = ..., optimization_level: builtins.int = ..., compiler_path: typing.Optional[builtins.str] = None, custom_header: typing.Optional[builtins.str] = None) -> CompiledTensorEvaluator:",
+                "signature": "def compile(self, function_name: str, filename: str, library_name: str, inline_asm: str = ..., optimization_level: int = ..., compiler_path: Optional[str] = None, custom_header: Optional[str] = None) -> CompiledTensorEvaluator:",
                 "default": null,
                 "members": [
                   {
@@ -1382,7 +1391,7 @@
                       "format": "python-docstring",
                       "body": "Name for the generated C++ function"
                     },
-                    "signature": "function_name: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -1393,7 +1402,7 @@
                       "format": "python-docstring",
                       "body": "Path for the generated C++ source file"
                     },
-                    "signature": "filename: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -1404,7 +1413,7 @@
                       "format": "python-docstring",
                       "body": "Name for the compiled shared library"
                     },
-                    "signature": "library_name: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -1415,7 +1424,7 @@
                       "format": "python-docstring",
                       "body": "Type of inline assembly optimization (\"default\", \"x64\", \"aarch64\", \"none\")"
                     },
-                    "signature": "inline_asm: builtins.str = ...",
+                    "signature": "str",
                     "default": "...",
                     "members": []
                   },
@@ -1426,7 +1435,7 @@
                       "format": "python-docstring",
                       "body": "Compiler optimization level 0-3 (default: 3)"
                     },
-                    "signature": "optimization_level: builtins.int = ...",
+                    "signature": "int",
                     "default": "...",
                     "members": []
                   },
@@ -1437,7 +1446,7 @@
                       "format": "python-docstring",
                       "body": "Path to specific C++ compiler (default: system default)"
                     },
-                    "signature": "compiler_path: typing.Optional[builtins.str] = None",
+                    "signature": "Optional[str]",
                     "default": "None",
                     "members": []
                   },
@@ -1448,7 +1457,7 @@
                       "format": "python-docstring",
                       "body": "Additional C++ header code to include"
                     },
-                    "signature": "custom_header: typing.Optional[builtins.str] = None",
+                    "signature": "Optional[str]",
                     "default": "None",
                     "members": []
                   }
@@ -1481,22 +1490,16 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.spenso import TensorIndices\nhelp(TensorIndices)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "set_name",
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Set the tensor name for this structure.\n\nParameters\n----------\nname : TensorName\nThe tensor name to assign\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorIndices, TensorName, Representation\n>>> rep = Representation.euc(3)\n>>> structure = TensorIndices(rep('mu'), rep('nu'))\n>>> T = TensorName(\"T\")\n>>> structure.set_name(T)"
+                  "body": "Set the tensor name for this structure.\n\nParameters\n----------\nname : TensorName\n    The tensor name to assign\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorIndices, TensorName, Representation\n>>> rep = Representation.euc(3)\n>>> structure = TensorIndices(rep('mu'), rep('nu'))\n>>> T = TensorName(\"T\")\n>>> structure.set_name(T)"
                 },
-                "signature": "def set_name(self, name: TensorName | builtins.str | Expression) -> None:",
+                "signature": "def set_name(self, name: TensorName | str | Expression) -> None:",
                 "default": null,
                 "members": [
                   {
@@ -1506,7 +1509,7 @@
                       "format": "python-docstring",
                       "body": "The tensor name to assign"
                     },
-                    "signature": "name: TensorName | builtins.str | Expression",
+                    "signature": "TensorName | str | Expression",
                     "default": null,
                     "members": []
                   }
@@ -1517,9 +1520,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Get the tensor name of this structure.\n\nReturns\n-------\nTensorName or None\nThe tensor name if set, None otherwise\n\nExamples\n--------\n>>> name = structure.get_name()"
+                  "body": "Get the tensor name of this structure.\n\nReturns\n-------\nTensorName or None\n    The tensor name if set, None otherwise\n\nExamples\n--------\n>>> name = structure.get_name()"
                 },
-                "signature": "def get_name(self) -> typing.Optional[TensorName]:",
+                "signature": "def get_name(self) -> Optional[TensorName]:",
                 "default": null,
                 "members": []
               },
@@ -1527,7 +1530,7 @@
                 "name": "__repr__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -1535,7 +1538,7 @@
                 "name": "__str__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __str__(self) -> builtins.str:",
+                "signature": "def __str__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -1544,7 +1547,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Convert the tensor indices to a symbolic expression.\n\nCreates a symbolic representation of the tensor with its indices that can be\nused in algebraic manipulations and pattern matching.\n\nReturns\n-------\nExpression\nA symbolic Expression representing this indexed tensor\n\nRaises\n------\nRuntimeError\nIf the tensor structure has no name\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorName, Representation\n>>> T = TensorName(\"T\")\n>>> rep = Representation.euc(3)\n>>> mu = rep('mu')\n>>> nu = rep('nu')\n>>> indices = T(mu, nu)\n>>> expr = indices.to_expression()"
+                  "body": "Convert the tensor indices to a symbolic expression.\n\nCreates a symbolic representation of the tensor with its indices that can be\nused in algebraic manipulations and pattern matching.\n\nReturns\n-------\nExpression\n    A symbolic Expression representing this indexed tensor\n\nRaises\n------\nRuntimeError\n    If the tensor structure has no name\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorName, Representation\n>>> T = TensorName(\"T\")\n>>> rep = Representation.euc(3)\n>>> mu = rep('mu')\n>>> nu = rep('nu')\n>>> indices = T(mu, nu)\n>>> expr = indices.to_expression()"
                 },
                 "signature": "def to_expression(self) -> Expression:",
                 "default": null,
@@ -1554,7 +1557,7 @@
                 "name": "__len__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __len__(self) -> builtins.int:",
+                "signature": "def __len__(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -1565,14 +1568,14 @@
                   "format": "python-docstring",
                   "body": "Add this expression to `other`, returning the result."
                 },
-                "signature": "def __add__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression) -> Expression:",
+                "signature": "def __add__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression) -> Expression:",
                 "default": null,
                 "members": [
                   {
                     "name": "rhs",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression",
+                    "signature": "Expression | int | str | float | complex | TensorIndices | Expression",
                     "default": null,
                     "members": []
                   }
@@ -1585,14 +1588,14 @@
                   "format": "python-docstring",
                   "body": "Add this expression to `other`, returning the result."
                 },
-                "signature": "def __radd__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression) -> Expression:",
+                "signature": "def __radd__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression) -> Expression:",
                 "default": null,
                 "members": [
                   {
                     "name": "rhs",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression",
+                    "signature": "Expression | int | str | float | complex | TensorIndices | Expression",
                     "default": null,
                     "members": []
                   }
@@ -1605,14 +1608,14 @@
                   "format": "python-docstring",
                   "body": "Subtract `other` from this expression, returning the result."
                 },
-                "signature": "def __sub__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression) -> Expression:",
+                "signature": "def __sub__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression) -> Expression:",
                 "default": null,
                 "members": [
                   {
                     "name": "rhs",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression",
+                    "signature": "Expression | int | str | float | complex | TensorIndices | Expression",
                     "default": null,
                     "members": []
                   }
@@ -1625,14 +1628,14 @@
                   "format": "python-docstring",
                   "body": "Subtract this expression from `other`, returning the result."
                 },
-                "signature": "def __rsub__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression) -> Expression:",
+                "signature": "def __rsub__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression) -> Expression:",
                 "default": null,
                 "members": [
                   {
                     "name": "rhs",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression",
+                    "signature": "Expression | int | str | float | complex | TensorIndices | Expression",
                     "default": null,
                     "members": []
                   }
@@ -1645,14 +1648,14 @@
                   "format": "python-docstring",
                   "body": "Add this expression to `other`, returning the result."
                 },
-                "signature": "def __mul__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression) -> Expression:",
+                "signature": "def __mul__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression) -> Expression:",
                 "default": null,
                 "members": [
                   {
                     "name": "rhs",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression",
+                    "signature": "Expression | int | str | float | complex | TensorIndices | Expression",
                     "default": null,
                     "members": []
                   }
@@ -1665,14 +1668,14 @@
                   "format": "python-docstring",
                   "body": "Add this expression to `other`, returning the result."
                 },
-                "signature": "def __rmul__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression) -> Expression:",
+                "signature": "def __rmul__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression) -> Expression:",
                 "default": null,
                 "members": [
                   {
                     "name": "rhs",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression",
+                    "signature": "Expression | int | str | float | complex | TensorIndices | Expression",
                     "default": null,
                     "members": []
                   }
@@ -1683,16 +1686,16 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create tensor structure from slots and optional arguments.\n\nParameters\n----------\n*additional_args : Slot or Expression\nMixed arguments (Slot objects and Expressions for additional arguments)\nname : TensorName, optional\nOptional tensor name to assign to the structure\n\nReturns\n-------\nTensorIndices\nA new TensorIndices object\n\nExamples\n--------\n>>> from symbolica import S\n>>> from symbolica.community.spenso import TensorIndices, Representation, TensorName\n>>> rep = Representation.euc(3)\n>>> mu = rep('mu')\n>>> nu = rep('nu')\n>>> structure = TensorIndices(mu, nu)\n>>> x = S('x')\n>>> structure_with_args = TensorIndices(mu, nu, x)\n>>> T = TensorName(\"T\")\n>>> named_structure = TensorIndices(mu, nu, name=T)"
+                  "body": "Create tensor structure from slots and optional arguments.\n\nParameters\n----------\n*additional_args : Slot or Expression\n    Mixed arguments (Slot objects and Expressions for additional arguments)\nname : TensorName, optional\n    Optional tensor name to assign to the structure\n\nReturns\n-------\nTensorIndices\n    A new TensorIndices object\n\nExamples\n--------\n>>> from symbolica import S\n>>> from symbolica.community.spenso import TensorIndices, Representation, TensorName\n>>> rep = Representation.euc(3)\n>>> mu = rep('mu')\n>>> nu = rep('nu')\n>>> structure = TensorIndices(mu, nu)\n>>> x = S('x')\n>>> structure_with_args = TensorIndices(mu, nu, x)\n>>> T = TensorName(\"T\")\n>>> named_structure = TensorIndices(mu, nu, name=T)"
                 },
-                "signature": "def __new__(cls, *slots: TensorIndices | builtins.list[Slot], name: TensorName | builtins.str | Expression | None = None) -> TensorIndices:",
+                "signature": "def __new__(cls, *slots: TensorIndices | list[Slot], name: TensorName | str | Expression | None = None) -> TensorIndices:",
                 "default": null,
                 "members": [
                   {
                     "name": "slots",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "*slots: TensorIndices | builtins.list[Slot]",
+                    "signature": "TensorIndices | list[Slot]",
                     "default": null,
                     "members": []
                   },
@@ -1703,7 +1706,7 @@
                       "format": "python-docstring",
                       "body": "Optional tensor name to assign to the structure"
                     },
-                    "signature": "name: TensorName | builtins.str | Expression | None = None",
+                    "signature": "TensorName | str | Expression | None",
                     "default": "None",
                     "members": []
                   }
@@ -1712,69 +1715,78 @@
               {
                 "name": "__getitem__",
                 "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Get expanded indices at the specified range of flattened indices.\n\nParameters\n----------\nitem : slice\nSlice object defining the range of indices\n\nReturns\n-------\nlist of list of int\nList of expanded indices"
-                },
-                "signature": "def __getitem__(self, item: builtins.slice) -> builtins.list[Expression | builtins.complex | float]:",
+                "docs": null,
+                "signature": null,
                 "default": null,
                 "members": [
                   {
-                    "name": "item",
-                    "kind": "parameter",
+                    "name": "__getitem__",
+                    "kind": "overload",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "Slice object defining the range of indices"
+                      "body": "Get expanded indices at the specified range of flattened indices.\n\nParameters\n----------\nitem : slice\n    Slice object defining the range of indices\n\nReturns\n-------\nlist of list of int\n    List of expanded indices"
                     },
-                    "signature": "item: builtins.slice",
+                    "signature": "def __getitem__(self, item: slice) -> list[Expression | complex | float]:",
                     "default": null,
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "__getitem__",
-                "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Get flattened index associated to this expanded index.\n\nParameters\n----------\nitem : list of int\nMulti-dimensional index coordinates\n\nReturns\n-------\nint\nThe flat index"
-                },
-                "signature": "def __getitem__(self, item: typing.Sequence[builtins.int]) -> Expression | builtins.complex | float:",
-                "default": null,
-                "members": [
+                    "members": [
+                      {
+                        "name": "item",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "Slice object defining the range of indices"
+                        },
+                        "signature": "slice",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
+                  },
                   {
-                    "name": "item",
-                    "kind": "parameter",
+                    "name": "__getitem__",
+                    "kind": "overload",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "Multi-dimensional index coordinates"
+                      "body": "Get flattened index associated to this expanded index.\n\nParameters\n----------\nitem : list of int\n    Multi-dimensional index coordinates\n\nReturns\n-------\nint\n    The flat index"
                     },
-                    "signature": "item: typing.Sequence[builtins.int]",
+                    "signature": "def __getitem__(self, item: Sequence[int]) -> Expression | complex | float:",
                     "default": null,
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "__getitem__",
-                "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Get expanded index associated to this flat index.\n\nParameters\n----------\nitem : int\nFlat index into the tensor\n\nReturns\n-------\nlist of int\nMulti-dimensional index coordinates"
-                },
-                "signature": "def __getitem__(self, item: builtins.int) -> Expression | builtins.complex | float:",
-                "default": null,
-                "members": [
+                    "members": [
+                      {
+                        "name": "item",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "Multi-dimensional index coordinates"
+                        },
+                        "signature": "Sequence[int]",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
+                  },
                   {
-                    "name": "item",
-                    "kind": "parameter",
+                    "name": "__getitem__",
+                    "kind": "overload",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "Flat index into the tensor"
+                      "body": "Get expanded index associated to this flat index.\n\nParameters\n----------\nitem : int\n    Flat index into the tensor\n\nReturns\n-------\nlist of int\n    Multi-dimensional index coordinates"
                     },
-                    "signature": "item: builtins.int",
+                    "signature": "def __getitem__(self, item: int) -> Expression | complex | float:",
                     "default": null,
-                    "members": []
+                    "members": [
+                      {
+                        "name": "item",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "Flat index into the tensor"
+                        },
+                        "signature": "int",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
                   }
                 ]
               }
@@ -1805,20 +1817,14 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.spenso import TensorLibrary\nhelp(TensorLibrary)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "__new__",
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a new empty tensor library.\n\nInitializes an empty library ready for registering tensor structures.\nThe library automatically manages internal tensor IDs.\n\nReturns\n-------\nTensorLibrary\nA new empty tensor library\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorLibrary\n>>> lib = TensorLibrary()"
+                  "body": "Create a new empty tensor library.\n\nInitializes an empty library ready for registering tensor structures.\nThe library automatically manages internal tensor IDs.\n\nReturns\n-------\nTensorLibrary\n    A new empty tensor library\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorLibrary\n>>> lib = TensorLibrary()"
                 },
                 "signature": "def __new__(cls) -> TensorLibrary:",
                 "default": null,
@@ -1829,7 +1835,7 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a new empty tensor library (static method).\n\nInitializes an empty library ready for registering tensor structures.\nThe library automatically manages internal tensor IDs.\n\nReturns\n-------\nTensorLibrary\nA new empty tensor library\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorLibrary\n>>> lib = TensorLibrary.construct()"
+                  "body": "Create a new empty tensor library (static method).\n\nInitializes an empty library ready for registering tensor structures.\nThe library automatically manages internal tensor IDs.\n\nReturns\n-------\nTensorLibrary\n    A new empty tensor library\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorLibrary\n>>> lib = TensorLibrary.construct()"
                 },
                 "signature": "def construct() -> TensorLibrary:",
                 "default": null,
@@ -1840,7 +1846,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Register a tensor in the library.\n\nAdds a tensor template to the library that can be referenced by name\nin tensor networks and symbolic expressions. The tensor must have a name\nset in its structure.\n\nParameters\n----------\ntensor : LibraryTensor or Tensor\nThe tensor to register - can be a LibraryTensor or regular Tensor\n\nExamples\n--------\n>>> import symbolica\n>>> from symbolica.community.spenso import TensorLibrary, LibraryTensor, TensorStructure, Representation\n>>> lib = TensorLibrary()\n>>> rep = Representation.euc(3)\n>>> name = symbolica.S(\"my_tensor\")\n>>> structure = TensorStructure(rep, rep, name=name)\n>>> tensor = LibraryTensor.dense(structure, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0])\n>>> lib.register(tensor)\n>>> tensor_ref = lib[name]"
+                  "body": "Register a tensor in the library.\n\nAdds a tensor template to the library that can be referenced by name\nin tensor networks and symbolic expressions. The tensor must have a name\nset in its structure.\n\nParameters\n----------\ntensor : LibraryTensor or Tensor\n    The tensor to register - can be a LibraryTensor or regular Tensor\n\nExamples\n--------\n>>> import symbolica\n>>> from symbolica.community.spenso import TensorLibrary, LibraryTensor, TensorStructure, Representation\n>>> lib = TensorLibrary()\n>>> rep = Representation.euc(3)\n>>> name = symbolica.S(\"my_tensor\")\n>>> structure = TensorStructure(rep, rep, name=name)\n>>> tensor = LibraryTensor.dense(structure, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0])\n>>> lib.register(tensor)\n>>> tensor_ref = lib[name]"
                 },
                 "signature": "def register(self, tensor: Tensor | LibraryTensor) -> None:",
                 "default": null,
@@ -1852,7 +1858,7 @@
                       "format": "python-docstring",
                       "body": "The tensor to register - can be a LibraryTensor or regular Tensor"
                     },
-                    "signature": "tensor: Tensor | LibraryTensor",
+                    "signature": "Tensor | LibraryTensor",
                     "default": null,
                     "members": []
                   }
@@ -1863,9 +1869,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Retrieve a registered tensor structure by name.\n\nLooks up a previously registered tensor by its name and returns\na reference structure that can be used to create new tensor instances.\n\nParameters\n----------\nkey : str or Expression\nThe tensor name - can be a string or symbolic expression\n\nReturns\n-------\nTensorStructure\nA TensorStructure representing the registered tensor template\n\nRaises\n------\nRuntimeError\nIf the tensor name is not found in the library\n\nExamples\n--------\n>>> structure = lib[\"T\"]"
+                  "body": "Retrieve a registered tensor structure by name.\n\nLooks up a previously registered tensor by its name and returns\na reference structure that can be used to create new tensor instances.\n\nParameters\n----------\nkey : str or Expression\n    The tensor name - can be a string or symbolic expression\n\nReturns\n-------\nTensorStructure\n    A TensorStructure representing the registered tensor template\n\nRaises\n------\nRuntimeError\n    If the tensor name is not found in the library\n\nExamples\n--------\n>>> structure = lib[\"T\"]"
                 },
-                "signature": "def __getitem__(self, key: Expression | int | str | float | builtins.complex | builtins.str) -> TensorStructure:",
+                "signature": "def __getitem__(self, key: Expression | int | str | float | complex | str) -> TensorStructure:",
                 "default": null,
                 "members": [
                   {
@@ -1875,7 +1881,7 @@
                       "format": "python-docstring",
                       "body": "The tensor name - can be a string or symbolic expression"
                     },
-                    "signature": "key: Expression | int | str | float | builtins.complex | builtins.str",
+                    "signature": "Expression | int | str | float | complex | str",
                     "default": null,
                     "members": []
                   }
@@ -1886,7 +1892,7 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a library pre-loaded with High Energy Physics tensor definitions.\n\nReturns a library containing standard HEP tensors such as gamma matrices,\ncolor generators, metric tensors, and other commonly used structures in\nparticle physics calculations. They are floating point tensors with f64 precision.\n\nReturns\n-------\nTensorLibrary\nA TensorLibrary pre-populated with HEP tensor definitions\n\nExamples\n--------\n>>> import symbolica\n>>> from symbolica.community.spenso import TensorLibrary, TensorName\n>>> hep_lib = TensorLibrary.hep_lib()\n>>> gamma_structure = hep_lib[symbolica.S(\"spenso::gamma\")]"
+                  "body": "Create a library pre-loaded with High Energy Physics tensor definitions.\n\nReturns a library containing standard HEP tensors such as gamma matrices,\ncolor generators, metric tensors, and other commonly used structures in\nparticle physics calculations. They are floating point tensors with f64 precision.\n\nReturns\n-------\nTensorLibrary\n    A TensorLibrary pre-populated with HEP tensor definitions\n\nExamples\n--------\n>>> import symbolica\n>>> from symbolica.community.spenso import TensorLibrary, TensorName\n>>> hep_lib = TensorLibrary.hep_lib()\n>>> gamma_structure = hep_lib[symbolica.S(\"spenso::gamma\")]"
                 },
                 "signature": "def hep_lib() -> TensorLibrary:",
                 "default": null,
@@ -1897,7 +1903,7 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a library pre-loaded with High Energy Physics tensor definitions.\n\nReturns a library containing standard HEP tensors such as gamma matrices,\ncolor generators, metric tensors, and other commonly used structures in\nparticle physics calculations. They are tensors with atom numeric entries.\n\nReturns\n-------\nTensorLibrary\nA TensorLibrary pre-populated with HEP tensor definitions\n\nExamples\n--------\n>>> import symbolica\n>>> from symbolica.community.spenso import TensorLibrary, TensorName\n>>> hep_lib = TensorLibrary.hep_lib_atom()\n>>> gamma_structure = hep_lib[symbolica.S(\"spenso::gamma\")]"
+                  "body": "Create a library pre-loaded with High Energy Physics tensor definitions.\n\nReturns a library containing standard HEP tensors such as gamma matrices,\ncolor generators, metric tensors, and other commonly used structures in\nparticle physics calculations. They are tensors with atom numeric entries.\n\nReturns\n-------\nTensorLibrary\n    A TensorLibrary pre-populated with HEP tensor definitions\n\nExamples\n--------\n>>> import symbolica\n>>> from symbolica.community.spenso import TensorLibrary, TensorName\n>>> hep_lib = TensorLibrary.hep_lib_atom()\n>>> gamma_structure = hep_lib[symbolica.S(\"spenso::gamma\")]"
                 },
                 "signature": "def hep_lib_atom() -> TensorLibrary:",
                 "default": null,
@@ -1916,7 +1922,7 @@
             "name": "TensorName",
             "title": "TensorName",
             "kind": "python-class",
-            "supported": false,
+            "supported": true,
             "required_features": [
               "python_stubgen"
             ],
@@ -1930,22 +1936,16 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.spenso import TensorName\nhelp(TensorName)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "__new__",
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a new tensor name with optional mathematical properties.\n\nParameters\n----------\nname : str\nThe string name for the tensor function\nis_symmetric : bool, optional\nIf True, tensor is symmetric under index permutation\nis_antisymmetric : bool, optional\nIf True, tensor is antisymmetric under index permutation\nis_cyclesymmetric : bool, optional\nIf True, tensor is symmetric under cyclic permutations\nis_linear : bool, optional\nIf True, tensor is linear in its arguments\ncustom_normalization : Transformer, optional\nCustom normalization function (advanced)\n\nReturns\n-------\nTensorName\nA new TensorName with the specified properties\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorName\n>>> T = TensorName(\"T\")\n>>> g = TensorName(\"g\", is_symmetric=True)\n>>> F = TensorName(\"F\", is_antisymmetric=True)\n>>> D = TensorName(\"D\", is_linear=True)"
+                  "body": "Create a new tensor name with optional mathematical properties.\n\nParameters\n----------\nname : str\n    The string name for the tensor function\nis_symmetric : bool, optional\n    If True, tensor is symmetric under index permutation\nis_antisymmetric : bool, optional\n    If True, tensor is antisymmetric under index permutation\nis_cyclesymmetric : bool, optional\n    If True, tensor is symmetric under cyclic permutations\nis_linear : bool, optional\n    If True, tensor is linear in its arguments\ncustom_normalization : Transformer, optional\n    Custom normalization function (advanced)\n\nReturns\n-------\nTensorName\n    A new TensorName with the specified properties\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorName\n>>> T = TensorName(\"T\")\n>>> g = TensorName(\"g\", is_symmetric=True)\n>>> F = TensorName(\"F\", is_antisymmetric=True)\n>>> D = TensorName(\"D\", is_linear=True)"
                 },
-                "signature": "def __new__(cls, name: builtins.str, is_symmetric: typing.Optional[builtins.bool] = None, is_antisymmetric: typing.Optional[builtins.bool] = None, is_cyclesymmetric: typing.Optional[builtins.bool] = None, is_linear: typing.Optional[builtins.bool] = None, custom_normalization: typing.Optional[Transformer] = None) -> TensorName:",
+                "signature": "def __new__(cls, name: str, is_symmetric: Optional[bool] = None, is_antisymmetric: Optional[bool] = None, is_cyclesymmetric: Optional[bool] = None, is_linear: Optional[bool] = None, custom_normalization: Optional[Transformer] = None) -> TensorName:",
                 "default": null,
                 "members": [
                   {
@@ -1955,7 +1955,7 @@
                       "format": "python-docstring",
                       "body": "The string name for the tensor function"
                     },
-                    "signature": "name: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -1966,7 +1966,7 @@
                       "format": "python-docstring",
                       "body": "If True, tensor is symmetric under index permutation"
                     },
-                    "signature": "is_symmetric: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   },
@@ -1977,7 +1977,7 @@
                       "format": "python-docstring",
                       "body": "If True, tensor is antisymmetric under index permutation"
                     },
-                    "signature": "is_antisymmetric: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   },
@@ -1988,7 +1988,7 @@
                       "format": "python-docstring",
                       "body": "If True, tensor is symmetric under cyclic permutations"
                     },
-                    "signature": "is_cyclesymmetric: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   },
@@ -1999,7 +1999,7 @@
                       "format": "python-docstring",
                       "body": "If True, tensor is linear in its arguments"
                     },
-                    "signature": "is_linear: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   },
@@ -2010,7 +2010,7 @@
                       "format": "python-docstring",
                       "body": "Custom normalization function (advanced)"
                     },
-                    "signature": "custom_normalization: typing.Optional[Transformer] = None",
+                    "signature": "Optional[Transformer]",
                     "default": "None",
                     "members": []
                   }
@@ -2020,7 +2020,7 @@
                 "name": "__repr__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -2028,7 +2028,7 @@
                 "name": "__str__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __str__(self) -> builtins.str:",
+                "signature": "def __str__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -2037,7 +2037,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Convert the tensor name to a symbolic expression.\n\nReturns\n-------\nExpression\nA symbolic Expression representing this tensor name\n\nExamples\n--------\n>>> T = TensorName(\"T\")\n>>> expr = T.to_expression()"
+                  "body": "Convert the tensor name to a symbolic expression.\n\nReturns\n-------\nExpression\n    A symbolic Expression representing this tensor name\n\nExamples\n--------\n>>> T = TensorName(\"T\")\n>>> expr = T.to_expression()"
                 },
                 "signature": "def to_expression(self) -> Expression:",
                 "default": null,
@@ -2145,40 +2145,49 @@
               {
                 "name": "__call__",
                 "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Call the tensor name with arguments to create tensor structures.\n\nAccepts a mix of slots and symbolic expressions (for additional arguments).\n\nParameters\n----------\n*args : Slot or Expression\nSlot objects and Expressions for additional arguments\n\nReturns\n-------\nTensorIndices\nA new TensorIndices object\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorName, Slot, Representation\n>>> import symbolica as sp\n>>> T = TensorName(\"T\")\n>>> rep = Representation.euc(3)\n>>> mu = rep(\"mu\")\n>>> nu = rep(\"nu\")\n>>> indexed_tensor = T(mu, nu)"
-                },
-                "signature": "def __call__(self, *args: Slot | Expression | int | str | float | builtins.complex) -> TensorIndices:",
+                "docs": null,
+                "signature": null,
                 "default": null,
                 "members": [
                   {
-                    "name": "args",
-                    "kind": "parameter",
-                    "docs": null,
-                    "signature": "*args: Slot | Expression | int | str | float | builtins.complex",
+                    "name": "__call__",
+                    "kind": "overload",
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Call the tensor name with arguments to create tensor structures.\n\nAccepts a mix of slots and symbolic expressions (for additional arguments).\n\nParameters\n----------\n*args : Slot or Expression\n    Slot objects and Expressions for additional arguments\n\nReturns\n-------\nTensorIndices\n    A new TensorIndices object\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorName, Slot, Representation\n>>> import symbolica as sp\n>>> T = TensorName(\"T\")\n>>> rep = Representation.euc(3)\n>>> mu = rep(\"mu\")\n>>> nu = rep(\"nu\")\n>>> indexed_tensor = T(mu, nu)"
+                    },
+                    "signature": "def __call__(self, *args: Slot | Expression | int | str | float | complex) -> TensorIndices:",
                     "default": null,
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "__call__",
-                "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Call the tensor name with arguments to create a TensorStructure.\n\nAccepts a mix of representations and symbolic expressions (for additional arguments).\n\nParameters\n----------\n*args : Representation or Expression\nRepresentation objects and Expressions for additional arguments\n\nReturns\n-------\nTensorStructure\nA new TensorStructure object\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorName, Slot, Representation\n>>> import symbolica as sp\n>>> T = TensorName(\"T\")\n>>> rep = Representation.euc(3)\n>>> structure_tensor = T(rep, rep)"
-                },
-                "signature": "def __call__(self, *args: Representation | Expression) -> TensorStructure:",
-                "default": null,
-                "members": [
+                    "members": [
+                      {
+                        "name": "args",
+                        "kind": "parameter",
+                        "docs": null,
+                        "signature": "Slot | Expression | int | str | float | complex",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
+                  },
                   {
-                    "name": "args",
-                    "kind": "parameter",
-                    "docs": null,
-                    "signature": "*args: Representation | Expression",
+                    "name": "__call__",
+                    "kind": "overload",
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Call the tensor name with arguments to create a TensorStructure.\n\nAccepts a mix of representations and symbolic expressions (for additional arguments).\n\nParameters\n----------\n*args : Representation or Expression\n    Representation objects and Expressions for additional arguments\n\nReturns\n-------\nTensorStructure\n    A new TensorStructure object\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorName, Slot, Representation\n>>> import symbolica as sp\n>>> T = TensorName(\"T\")\n>>> rep = Representation.euc(3)\n>>> structure_tensor = T(rep, rep)"
+                    },
+                    "signature": "def __call__(self, *args: Representation | Expression) -> TensorStructure:",
                     "default": null,
-                    "members": []
+                    "members": [
+                      {
+                        "name": "args",
+                        "kind": "parameter",
+                        "docs": null,
+                        "signature": "Representation | Expression",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
                   }
                 ]
               }
@@ -2209,22 +2218,16 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.spenso import TensorNetwork\nhelp(TensorNetwork)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "__new__",
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a tensor network by parsing an arithmetic expression.\n\nParses symbolic expressions containing tensor operations and converts them\ninto an optimizable computational graph representation.\n\nParameters\n----------\nexpr : ArithmeticStructure\nThe arithmetic expression or tensor structure to parse\nlibrary : TensorLibrary, optional\nOptional tensor library for resolving named tensor references\n\nReturns\n-------\nTensorNetwork\nA new TensorNetwork representing the parsed expression"
+                  "body": "Create a tensor network by parsing an arithmetic expression.\n\nParses symbolic expressions containing tensor operations and converts them\ninto an optimizable computational graph representation.\n\nParameters\n----------\nexpr : ArithmeticStructure\n    The arithmetic expression or tensor structure to parse\nlibrary : TensorLibrary, optional\n    Optional tensor library for resolving named tensor references\n\nReturns\n-------\nTensorNetwork\n    A new TensorNetwork representing the parsed expression"
                 },
-                "signature": "def __new__(cls, expr: Expression | int | str | float | builtins.complex | TensorIndices | Expression, library: typing.Optional[TensorLibrary] = None) -> TensorNetwork:",
+                "signature": "def __new__(cls, expr: Expression | int | str | float | complex | TensorIndices | Expression, library: Optional[TensorLibrary] = None) -> TensorNetwork:",
                 "default": null,
                 "members": [
                   {
@@ -2234,7 +2237,7 @@
                       "format": "python-docstring",
                       "body": "The arithmetic expression or tensor structure to parse"
                     },
-                    "signature": "expr: Expression | int | str | float | builtins.complex | TensorIndices | Expression",
+                    "signature": "Expression | int | str | float | complex | TensorIndices | Expression",
                     "default": null,
                     "members": []
                   },
@@ -2245,7 +2248,7 @@
                       "format": "python-docstring",
                       "body": "Optional tensor library for resolving named tensor references"
                     },
-                    "signature": "library: typing.Optional[TensorLibrary] = None",
+                    "signature": "Optional[TensorLibrary]",
                     "default": "None",
                     "members": []
                   }
@@ -2256,7 +2259,7 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a tensor network representing the scalar value 1.\n\nReturns\n-------\nTensorNetwork\nA TensorNetwork containing only the scalar 1\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorNetwork\n>>> one_net = TensorNetwork.one()\n>>> result = one_net.result_scalar()"
+                  "body": "Create a tensor network representing the scalar value 1.\n\nReturns\n-------\nTensorNetwork\n    A TensorNetwork containing only the scalar 1\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorNetwork\n>>> one_net = TensorNetwork.one()\n>>> result = one_net.result_scalar()"
                 },
                 "signature": "def one() -> TensorNetwork:",
                 "default": null,
@@ -2274,14 +2277,14 @@
                 "name": "broadcast",
                 "kind": "associated-function",
                 "docs": null,
-                "signature": "def broadcast(str: builtins.str) -> Expression:",
+                "signature": "def broadcast(str: str) -> Expression:",
                 "default": null,
                 "members": [
                   {
                     "name": "str",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "str: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -2292,7 +2295,7 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a tensor network representing the scalar value 0.\n\nReturns\n-------\nTensorNetwork\nA TensorNetwork containing only the scalar 0\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorNetwork\n>>> zero_net = TensorNetwork.zero()\n>>> result = zero_net.result_scalar()"
+                  "body": "Create a tensor network representing the scalar value 0.\n\nReturns\n-------\nTensorNetwork\n    A TensorNetwork containing only the scalar 0\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorNetwork\n>>> zero_net = TensorNetwork.zero()\n>>> result = zero_net.result_scalar()"
                 },
                 "signature": "def zero() -> TensorNetwork:",
                 "default": null,
@@ -2303,9 +2306,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Replace patterns in the tensor network using symbolic pattern matching.\n\nApplies pattern-based transformations to the network structure, allowing for\nsymbolic simplifications, substitutions, and algebraic manipulations.\n\nParameters\n----------\npattern : Expression\nThe symbolic pattern to match against\nrhs : Expression\nThe replacement expression or pattern\nnon_greedy_wildcards : list of Expression, optional\nList of wildcard symbols to match non-greedily\nlevel_range : tuple of int, optional\nTuple specifying depth range for pattern matching\nlevel_is_tree_depth : bool, optional\nWhether level refers to tree depth or expression depth\nallow_new_wildcards_on_rhs : bool, optional\nAllow new wildcards in replacement pattern\nrhs_cache_size : int, optional\nSize of cache for replacement pattern compilation\nrepeat : bool, optional\nWhether to repeatedly apply the replacement until no more matches\n\nReturns\n-------\nTensorNetwork\nA new TensorNetwork with the replacements applied"
+                  "body": "Replace patterns in the tensor network using symbolic pattern matching.\n\nApplies pattern-based transformations to the network structure, allowing for\nsymbolic simplifications, substitutions, and algebraic manipulations.\n\nParameters\n----------\npattern : Expression\n    The symbolic pattern to match against\nrhs : Expression\n    The replacement expression or pattern\nnon_greedy_wildcards : list of Expression, optional\n    List of wildcard symbols to match non-greedily\nlevel_range : tuple of int, optional\n    Tuple specifying depth range for pattern matching\nlevel_is_tree_depth : bool, optional\n    Whether level refers to tree depth or expression depth\nallow_new_wildcards_on_rhs : bool, optional\n    Allow new wildcards in replacement pattern\nrhs_cache_size : int, optional\n    Size of cache for replacement pattern compilation\nrepeat : bool, optional\n    Whether to repeatedly apply the replacement until no more matches\n\nReturns\n-------\nTensorNetwork\n    A new TensorNetwork with the replacements applied"
                 },
-                "signature": "def replace(self, pattern: Expression | int | str | float | builtins.complex, rhs: Expression | int | str | float | builtins.complex | HeldExpression | typing.Callable[[dict[Expression, Expression]], Expression] | int | float | complex | decimal.Decimal, _cond: typing.Optional[PatternRestriction | Condition] = None, non_greedy_wildcards: typing.Optional[typing.Sequence[Expression]] = None, level_range: typing.Optional[tuple[builtins.int, typing.Optional[builtins.int]]] = None, level_is_tree_depth: typing.Optional[builtins.bool] = None, allow_new_wildcards_on_rhs: typing.Optional[builtins.bool] = None, rhs_cache_size: typing.Optional[builtins.int] = None, repeat: typing.Optional[builtins.bool] = None) -> TensorNetwork:",
+                "signature": "def replace(self, pattern: Expression | int | str | float | complex, rhs: Expression | int | str | float | complex | HeldExpression | Callable[[dict[Expression, Expression]], Expression] | int | float | complex | decimal.Decimal, _cond: Optional[PatternRestriction | Condition] = None, non_greedy_wildcards: Optional[Sequence[Expression]] = None, level_range: Optional[tuple[int, Optional[int]]] = None, level_is_tree_depth: Optional[bool] = None, allow_new_wildcards_on_rhs: Optional[bool] = None, rhs_cache_size: Optional[int] = None, repeat: Optional[bool] = None) -> TensorNetwork:",
                 "default": null,
                 "members": [
                   {
@@ -2315,7 +2318,7 @@
                       "format": "python-docstring",
                       "body": "The symbolic pattern to match against"
                     },
-                    "signature": "pattern: Expression | int | str | float | builtins.complex",
+                    "signature": "Expression | int | str | float | complex",
                     "default": null,
                     "members": []
                   },
@@ -2326,7 +2329,7 @@
                       "format": "python-docstring",
                       "body": "The replacement expression or pattern"
                     },
-                    "signature": "rhs: Expression | int | str | float | builtins.complex | HeldExpression | typing.Callable[[dict[Expression, Expression]], Expression] | int | float | complex | decimal.Decimal",
+                    "signature": "Expression | int | str | float | complex | HeldExpression | Callable[[dict[Expression, Expression]], Expression] | int | float | complex | decimal.Decimal",
                     "default": null,
                     "members": []
                   },
@@ -2334,7 +2337,7 @@
                     "name": "_cond",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "_cond: typing.Optional[PatternRestriction | Condition] = None",
+                    "signature": "Optional[PatternRestriction | Condition]",
                     "default": "None",
                     "members": []
                   },
@@ -2345,7 +2348,7 @@
                       "format": "python-docstring",
                       "body": "List of wildcard symbols to match non-greedily"
                     },
-                    "signature": "non_greedy_wildcards: typing.Optional[typing.Sequence[Expression]] = None",
+                    "signature": "Optional[Sequence[Expression]]",
                     "default": "None",
                     "members": []
                   },
@@ -2356,7 +2359,7 @@
                       "format": "python-docstring",
                       "body": "Tuple specifying depth range for pattern matching"
                     },
-                    "signature": "level_range: typing.Optional[tuple[builtins.int, typing.Optional[builtins.int]]] = None",
+                    "signature": "Optional[tuple[int, Optional[int]]]",
                     "default": "None",
                     "members": []
                   },
@@ -2367,7 +2370,7 @@
                       "format": "python-docstring",
                       "body": "Whether level refers to tree depth or expression depth"
                     },
-                    "signature": "level_is_tree_depth: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   },
@@ -2378,7 +2381,7 @@
                       "format": "python-docstring",
                       "body": "Allow new wildcards in replacement pattern"
                     },
-                    "signature": "allow_new_wildcards_on_rhs: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   },
@@ -2389,7 +2392,7 @@
                       "format": "python-docstring",
                       "body": "Size of cache for replacement pattern compilation"
                     },
-                    "signature": "rhs_cache_size: typing.Optional[builtins.int] = None",
+                    "signature": "Optional[int]",
                     "default": "None",
                     "members": []
                   },
@@ -2400,7 +2403,7 @@
                       "format": "python-docstring",
                       "body": "Whether to repeatedly apply the replacement until no more matches"
                     },
-                    "signature": "repeat: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   }
@@ -2411,9 +2414,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Evaluate symbolic expressions in the network with numerical values.\n\nSubstitutes symbolic constants and functions with numerical values,\nconverting symbolic parts of the network to concrete numerical tensors.\n\nParameters\n----------\nconstants : dict\nDict mapping symbolic expressions to their numerical values\nfunctions : dict\nDict mapping function symbols to Python callable objects\n\nReturns\n-------\nTensorNetwork\nA new TensorNetwork with symbolic expressions evaluated"
+                  "body": "Evaluate symbolic expressions in the network with numerical values.\n\nSubstitutes symbolic constants and functions with numerical values,\nconverting symbolic parts of the network to concrete numerical tensors.\n\nParameters\n----------\nconstants : dict\n    Dict mapping symbolic expressions to their numerical values\nfunctions : dict\n    Dict mapping function symbols to Python callable objects\n\nReturns\n-------\nTensorNetwork\n    A new TensorNetwork with symbolic expressions evaluated"
                 },
-                "signature": "def evaluate(self, constants: typing.Mapping[Expression, builtins.float], functions: typing.Mapping[Expression, typing.Any]) -> TensorNetwork:",
+                "signature": "def evaluate(self, constants: Mapping[Expression, float], functions: Mapping[Expression, Any]) -> TensorNetwork:",
                 "default": null,
                 "members": [
                   {
@@ -2423,7 +2426,7 @@
                       "format": "python-docstring",
                       "body": "Dict mapping symbolic expressions to their numerical values"
                     },
-                    "signature": "constants: typing.Mapping[Expression, builtins.float]",
+                    "signature": "Mapping[Expression, float]",
                     "default": null,
                     "members": []
                   },
@@ -2434,7 +2437,7 @@
                       "format": "python-docstring",
                       "body": "Dict mapping function symbols to Python callable objects"
                     },
-                    "signature": "functions: typing.Mapping[Expression, typing.Any]",
+                    "signature": "Mapping[Expression, Any]",
                     "default": null,
                     "members": []
                   }
@@ -2445,9 +2448,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Execute the tensor network to perform tensor contractions and simplifications.\n\nProcesses the computational graph by executing tensor operations such as\ncontractions, additions, and multiplications. The execution can be controlled\nby mode and step limits.\n\nParameters\n----------\nlibrary : TensorLibrary, optional\nOptional tensor library for resolving tensor operations\nfunction_library : None, optional\nReserved for an internally supplied function library\nn_steps : int, optional\nMaximum number of execution steps (None for complete execution)\nmode : ExecutionMode, optional\nExecution strategy (ExecutionMode.All, ExecutionMode.Scalar, or ExecutionMode.Single)\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorNetwork, ExecutionMode, TensorLibrary\n>>> network = TensorNetwork(some_expression)\n>>> network.execute()\n>>> network.execute(n_steps=5)\n>>> network.execute(mode=ExecutionMode.Scalar)\n>>> lib = TensorLibrary.hep_lib()\n>>> network.execute(library=lib)"
+                  "body": "Execute the tensor network to perform tensor contractions and simplifications.\n\nProcesses the computational graph by executing tensor operations such as\ncontractions, additions, and multiplications. The execution can be controlled\nby mode and step limits.\n\nParameters\n----------\nlibrary : TensorLibrary, optional\n    Optional tensor library for resolving tensor operations\nfunction_library : None, optional\n    Reserved for an internally supplied function library\nn_steps : int, optional\n    Maximum number of execution steps (None for complete execution)\nmode : ExecutionMode, optional\n    Execution strategy. ExecutionMode.Single selects one smallest-degree rewrite per\n    step; use n_steps to bound how many steps run.\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorNetwork, ExecutionMode, TensorLibrary\n>>> network = TensorNetwork(some_expression)\n>>> network.execute()\n>>> network.execute(n_steps=5)\n>>> network.execute(mode=ExecutionMode.Scalar)\n>>> lib = TensorLibrary.hep_lib()\n>>> network.execute(library=lib)"
                 },
-                "signature": "def execute(self, library: typing.Optional[TensorLibrary] = None, function_library: None = None, n_steps: typing.Optional[builtins.int] = None, mode: ExecutionMode = ...) -> None:",
+                "signature": "def execute(self, library: Optional[TensorLibrary] = None, function_library: None = None, n_steps: Optional[int] = None, mode: ExecutionMode = ...) -> None:",
                 "default": null,
                 "members": [
                   {
@@ -2457,7 +2460,7 @@
                       "format": "python-docstring",
                       "body": "Optional tensor library for resolving tensor operations"
                     },
-                    "signature": "library: typing.Optional[TensorLibrary] = None",
+                    "signature": "Optional[TensorLibrary]",
                     "default": "None",
                     "members": []
                   },
@@ -2468,7 +2471,7 @@
                       "format": "python-docstring",
                       "body": "Reserved for an internally supplied function library"
                     },
-                    "signature": "function_library: None = None",
+                    "signature": "None",
                     "default": "None",
                     "members": []
                   },
@@ -2479,7 +2482,7 @@
                       "format": "python-docstring",
                       "body": "Maximum number of execution steps (None for complete execution)"
                     },
-                    "signature": "n_steps: typing.Optional[builtins.int] = None",
+                    "signature": "Optional[int]",
                     "default": "None",
                     "members": []
                   },
@@ -2488,9 +2491,9 @@
                     "kind": "parameter",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "Execution strategy (ExecutionMode.All, ExecutionMode.Scalar, or ExecutionMode.Single)"
+                      "body": "Execution strategy. ExecutionMode.Single selects one smallest-degree rewrite per step; use n_steps to bound how many steps run."
                     },
-                    "signature": "mode: ExecutionMode = ...",
+                    "signature": "ExecutionMode",
                     "default": "...",
                     "members": []
                   }
@@ -2501,9 +2504,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Extract the final tensor result from the executed network.\n\nAfter network execution, retrieves the computed tensor result. The network\nshould be executed before calling this method.\n\nParameters\n----------\nlibrary : TensorLibrary, optional\nOptional tensor library for resolving tensor structures\n\nReturns\n-------\nTensor\nThe computed tensor result\n\nRaises\n------\nRuntimeError\nIf the network execution resulted in an error\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorNetwork, TensorLibrary\n>>> network = TensorNetwork(tensor_expression)\n>>> network.execute()\n>>> result = network.result_tensor()\n>>> lib = TensorLibrary.hep_lib()\n>>> result_with_lib = network.result_tensor(library=lib)"
+                  "body": "Extract the final tensor result from the executed network.\n\nAfter network execution, retrieves the computed tensor result. The network\nshould be executed before calling this method.\n\nParameters\n----------\nlibrary : TensorLibrary, optional\n    Optional tensor library for resolving tensor structures\n\nReturns\n-------\nTensor\n    The computed tensor result\n\nRaises\n------\nRuntimeError\n    If the network execution resulted in an error\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorNetwork, TensorLibrary\n>>> network = TensorNetwork(tensor_expression)\n>>> network.execute()\n>>> result = network.result_tensor()\n>>> lib = TensorLibrary.hep_lib()\n>>> result_with_lib = network.result_tensor(library=lib)"
                 },
-                "signature": "def result_tensor(self, library: typing.Optional[TensorLibrary] = None) -> Tensor:",
+                "signature": "def result_tensor(self, library: Optional[TensorLibrary] = None) -> Tensor:",
                 "default": null,
                 "members": [
                   {
@@ -2513,7 +2516,7 @@
                       "format": "python-docstring",
                       "body": "Optional tensor library for resolving tensor structures"
                     },
-                    "signature": "library: typing.Optional[TensorLibrary] = None",
+                    "signature": "Optional[TensorLibrary]",
                     "default": "None",
                     "members": []
                   }
@@ -2524,7 +2527,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Extract the final scalar result from the executed network.\n\nFor networks that evaluate to scalar expressions, retrieves the computed\nscalar value. The network should be executed before calling this method.\n\nReturns\n-------\nExpression\nThe computed scalar expression\n\nRaises\n------\nRuntimeError\nIf the network execution resulted in an error\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorNetwork\n>>> network = TensorNetwork(scalar_expression)\n>>> network.execute()\n>>> scalar_result = network.result_scalar()"
+                  "body": "Extract the final scalar result from the executed network.\n\nFor networks that evaluate to scalar expressions, retrieves the computed\nscalar value. The network should be executed before calling this method.\n\nReturns\n-------\nExpression\n    The computed scalar expression\n\nRaises\n------\nRuntimeError\n    If the network execution resulted in an error\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorNetwork\n>>> network = TensorNetwork(scalar_expression)\n>>> network.execute()\n>>> scalar_result = network.result_scalar()"
                 },
                 "signature": "def result_scalar(self) -> Expression:",
                 "default": null,
@@ -2537,7 +2540,7 @@
                   "format": "python-docstring",
                   "body": "Return a string representation of the network structure.\n\nGenerates a DOT format representation of the computational graph that can be\nvisualized using graphviz or similar tools."
                 },
-                "signature": "def __str__(self) -> builtins.str:",
+                "signature": "def __str__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -2546,9 +2549,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Add two tensor networks element-wise.\n\nParameters\n----------\nrhs : TensorNetwork\nThe tensor network to add (right-hand side)\n\nReturns\n-------\nTensorNetwork\nA new TensorNetwork representing the sum\n\nExamples\n--------\n>>> net1 = TensorNetwork(expr1)\n>>> net2 = TensorNetwork(expr2)\n>>> sum_net = net1 + net2"
+                  "body": "Add two tensor networks element-wise.\n\nParameters\n----------\nrhs : TensorNetwork\n    The tensor network to add (right-hand side)\n\nReturns\n-------\nTensorNetwork\n    A new TensorNetwork representing the sum\n\nExamples\n--------\n>>> net1 = TensorNetwork(expr1)\n>>> net2 = TensorNetwork(expr2)\n>>> sum_net = net1 + net2"
                 },
-                "signature": "def __add__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:",
+                "signature": "def __add__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:",
                 "default": null,
                 "members": [
                   {
@@ -2558,7 +2561,7 @@
                       "format": "python-docstring",
                       "body": "The tensor network to add (right-hand side)"
                     },
-                    "signature": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor",
+                    "signature": "Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor",
                     "default": null,
                     "members": []
                   }
@@ -2571,14 +2574,14 @@
                   "format": "python-docstring",
                   "body": "Add two tensor networks element-wise (right-hand addition)."
                 },
-                "signature": "def __radd__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:",
+                "signature": "def __radd__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:",
                 "default": null,
                 "members": [
                   {
                     "name": "rhs",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor",
+                    "signature": "Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor",
                     "default": null,
                     "members": []
                   }
@@ -2589,9 +2592,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Subtract one tensor network from another element-wise.\n\nParameters\n----------\nrhs : TensorNetwork\nThe tensor network to subtract (right-hand side)\n\nReturns\n-------\nTensorNetwork\nA new TensorNetwork representing the difference\n\nExamples\n--------\n>>> net1 = TensorNetwork(expr1)\n>>> net2 = TensorNetwork(expr2)\n>>> diff_net = net1 - net2"
+                  "body": "Subtract one tensor network from another element-wise.\n\nParameters\n----------\nrhs : TensorNetwork\n    The tensor network to subtract (right-hand side)\n\nReturns\n-------\nTensorNetwork\n    A new TensorNetwork representing the difference\n\nExamples\n--------\n>>> net1 = TensorNetwork(expr1)\n>>> net2 = TensorNetwork(expr2)\n>>> diff_net = net1 - net2"
                 },
-                "signature": "def __sub__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:",
+                "signature": "def __sub__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:",
                 "default": null,
                 "members": [
                   {
@@ -2601,7 +2604,7 @@
                       "format": "python-docstring",
                       "body": "The tensor network to subtract (right-hand side)"
                     },
-                    "signature": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor",
+                    "signature": "Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor",
                     "default": null,
                     "members": []
                   }
@@ -2614,14 +2617,14 @@
                   "format": "python-docstring",
                   "body": "Subtract one tensor network from another (right-hand subtraction)."
                 },
-                "signature": "def __rsub__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:",
+                "signature": "def __rsub__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:",
                 "default": null,
                 "members": [
                   {
                     "name": "rhs",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor",
+                    "signature": "Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor",
                     "default": null,
                     "members": []
                   }
@@ -2632,9 +2635,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Multiply two tensor networks.\n\nParameters\n----------\nrhs : TensorNetwork\nThe tensor network to multiply with (right-hand side)\n\nReturns\n-------\nTensorNetwork\nA new TensorNetwork representing the product\n\nExamples\n--------\n>>> net1 = TensorNetwork(expr1)\n>>> net2 = TensorNetwork(expr2)\n>>> product_net = net1 * net2"
+                  "body": "Multiply two tensor networks.\n\nParameters\n----------\nrhs : TensorNetwork\n    The tensor network to multiply with (right-hand side)\n\nReturns\n-------\nTensorNetwork\n    A new TensorNetwork representing the product\n\nExamples\n--------\n>>> net1 = TensorNetwork(expr1)\n>>> net2 = TensorNetwork(expr2)\n>>> product_net = net1 * net2"
                 },
-                "signature": "def __mul__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:",
+                "signature": "def __mul__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:",
                 "default": null,
                 "members": [
                   {
@@ -2644,7 +2647,7 @@
                       "format": "python-docstring",
                       "body": "The tensor network to multiply with (right-hand side)"
                     },
-                    "signature": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor",
+                    "signature": "Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor",
                     "default": null,
                     "members": []
                   }
@@ -2657,14 +2660,14 @@
                   "format": "python-docstring",
                   "body": "Multiply two tensor networks (right-hand multiplication)."
                 },
-                "signature": "def __rmul__(self, rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:",
+                "signature": "def __rmul__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:",
                 "default": null,
                 "members": [
                   {
                     "name": "rhs",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "rhs: Expression | int | str | float | builtins.complex | TensorIndices | Expression | TensorNetwork | Tensor",
+                    "signature": "Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor",
                     "default": null,
                     "members": []
                   }
@@ -2697,26 +2700,20 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.spenso import TensorStructure\nhelp(TensorStructure)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "set_name",
                 "kind": "method",
                 "docs": null,
-                "signature": "def set_name(self, name: TensorName | builtins.str | Expression) -> None:",
+                "signature": "def set_name(self, name: TensorName | str | Expression) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "name",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "name: TensorName | builtins.str | Expression",
+                    "signature": "TensorName | str | Expression",
                     "default": null,
                     "members": []
                   }
@@ -2726,7 +2723,7 @@
                 "name": "get_name",
                 "kind": "method",
                 "docs": null,
-                "signature": "def get_name(self) -> typing.Optional[TensorName]:",
+                "signature": "def get_name(self) -> Optional[TensorName]:",
                 "default": null,
                 "members": []
               },
@@ -2734,7 +2731,7 @@
                 "name": "__repr__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -2742,7 +2739,7 @@
                 "name": "__str__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __str__(self) -> builtins.str:",
+                "signature": "def __str__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -2750,7 +2747,7 @@
                 "name": "__len__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __len__(self) -> builtins.int:",
+                "signature": "def __len__(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -2759,16 +2756,16 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Construct a new TensorStructure with the given representations.\n\nParameters\n----------\n*reps_and_additional_args : Representation or Expression\nMixed arguments (Representation objects and Expressions for additional arguments)\nname : TensorName, optional\nOptional tensor name to assign to the structure\n\nReturns\n-------\nTensorStructure\nA new TensorStructure object\n\nExamples\n--------\n>>> from symbolica import S\n>>> from symbolica.community.spenso import TensorStructure, Representation, TensorName\n>>> rep = Representation.euc(3)\n>>> structure = TensorStructure(rep, rep)\n>>> x = S('x')\n>>> structure_with_args = TensorStructure(rep, rep, x)\n>>> T = TensorName(\"T\")\n>>> named_structure = TensorStructure(rep, rep, name=T)"
+                  "body": "Construct a new TensorStructure with the given representations.\n\nParameters\n----------\n*reps_and_additional_args : Representation or Expression\n    Mixed arguments (Representation objects and Expressions for additional arguments)\nname : TensorName, optional\n    Optional tensor name to assign to the structure\n\nReturns\n-------\nTensorStructure\n    A new TensorStructure object\n\nExamples\n--------\n>>> from symbolica import S\n>>> from symbolica.community.spenso import TensorStructure, Representation, TensorName\n>>> rep = Representation.euc(3)\n>>> structure = TensorStructure(rep, rep)\n>>> x = S('x')\n>>> structure_with_args = TensorStructure(rep, rep, x)\n>>> T = TensorName(\"T\")\n>>> named_structure = TensorStructure(rep, rep, name=T)"
                 },
-                "signature": "def __new__(cls, *reps_and_additional_args: TensorIndices | builtins.list[Slot], name: TensorName | builtins.str | Expression | None = None) -> TensorStructure:",
+                "signature": "def __new__(cls, *reps_and_additional_args: TensorIndices | list[Slot], name: TensorName | str | Expression | None = None) -> TensorStructure:",
                 "default": null,
                 "members": [
                   {
                     "name": "reps_and_additional_args",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "*reps_and_additional_args: TensorIndices | builtins.list[Slot]",
+                    "signature": "TensorIndices | list[Slot]",
                     "default": null,
                     "members": []
                   },
@@ -2779,7 +2776,7 @@
                       "format": "python-docstring",
                       "body": "Optional tensor name to assign to the structure"
                     },
-                    "signature": "name: TensorName | builtins.str | Expression | None = None",
+                    "signature": "TensorName | str | Expression | None",
                     "default": "None",
                     "members": []
                   }
@@ -2788,69 +2785,78 @@
               {
                 "name": "__getitem__",
                 "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Get expanded indices at the specified range of flattened indices.\n\nParameters\n----------\nitem : slice\nSlice object defining the range of indices\n\nReturns\n-------\nlist of list of int\nList of expanded indices"
-                },
-                "signature": "def __getitem__(self, item: builtins.slice) -> builtins.list[Expression | builtins.complex | float]:",
+                "docs": null,
+                "signature": null,
                 "default": null,
                 "members": [
                   {
-                    "name": "item",
-                    "kind": "parameter",
+                    "name": "__getitem__",
+                    "kind": "overload",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "Slice object defining the range of indices"
+                      "body": "Get expanded indices at the specified range of flattened indices.\n\nParameters\n----------\nitem : slice\n    Slice object defining the range of indices\n\nReturns\n-------\nlist of list of int\n    List of expanded indices"
                     },
-                    "signature": "item: builtins.slice",
+                    "signature": "def __getitem__(self, item: slice) -> list[Expression | complex | float]:",
                     "default": null,
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "__getitem__",
-                "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Get flattened index associated to this expanded index.\n\nParameters\n----------\nitem : list of int\nMulti-dimensional index coordinates\n\nReturns\n-------\nint\nThe flat index"
-                },
-                "signature": "def __getitem__(self, item: typing.Sequence[builtins.int]) -> Expression | builtins.complex | float:",
-                "default": null,
-                "members": [
+                    "members": [
+                      {
+                        "name": "item",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "Slice object defining the range of indices"
+                        },
+                        "signature": "slice",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
+                  },
                   {
-                    "name": "item",
-                    "kind": "parameter",
+                    "name": "__getitem__",
+                    "kind": "overload",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "Multi-dimensional index coordinates"
+                      "body": "Get flattened index associated to this expanded index.\n\nParameters\n----------\nitem : list of int\n    Multi-dimensional index coordinates\n\nReturns\n-------\nint\n    The flat index"
                     },
-                    "signature": "item: typing.Sequence[builtins.int]",
+                    "signature": "def __getitem__(self, item: Sequence[int]) -> Expression | complex | float:",
                     "default": null,
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "__getitem__",
-                "kind": "method",
-                "docs": {
-                  "format": "python-docstring",
-                  "body": "Get expanded index associated to this flat index.\n\nParameters\n----------\nitem : int\nFlat index into the tensor\n\nReturns\n-------\nlist of int\nMulti-dimensional index coordinates"
-                },
-                "signature": "def __getitem__(self, item: builtins.int) -> Expression | builtins.complex | float:",
-                "default": null,
-                "members": [
+                    "members": [
+                      {
+                        "name": "item",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "Multi-dimensional index coordinates"
+                        },
+                        "signature": "Sequence[int]",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
+                  },
                   {
-                    "name": "item",
-                    "kind": "parameter",
+                    "name": "__getitem__",
+                    "kind": "overload",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "Flat index into the tensor"
+                      "body": "Get expanded index associated to this flat index.\n\nParameters\n----------\nitem : int\n    Flat index into the tensor\n\nReturns\n-------\nlist of int\n    Multi-dimensional index coordinates"
                     },
-                    "signature": "item: builtins.int",
+                    "signature": "def __getitem__(self, item: int) -> Expression | complex | float:",
                     "default": null,
-                    "members": []
+                    "members": [
+                      {
+                        "name": "item",
+                        "kind": "parameter",
+                        "docs": {
+                          "format": "python-docstring",
+                          "body": "Flat index into the tensor"
+                        },
+                        "signature": "int",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
                   }
                 ]
               },
@@ -2859,16 +2865,16 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Convenience method for creating symbolic expressions.\n\nThis is a shorthand for calling `symbolic(*args, extra_args=extra_args)`.\nCreates a symbolic Expression representing this tensor structure.\n\nParameters\n----------\n*args : int, str, Symbol, or Expression\nPositional arguments (indices and additional args)\nextra_args : list of Expression, optional\nOptional list of additional non-tensorial arguments\n\nReturns\n-------\nExpression\nA symbolic Expression representing the tensor\n\nExamples\n--------\n>>> structure = TensorStructure(rep, rep, name=\"T\")\n>>> expr = structure('mu', 'nu')"
+                  "body": "Convenience method for creating symbolic expressions.\n\nThis is a shorthand for calling `symbolic(*args, extra_args=extra_args)`.\nCreates a symbolic Expression representing this tensor structure.\n\nParameters\n----------\n*args : int, str, Symbol, or Expression\n    Positional arguments (indices and additional args)\nextra_args : list of Expression, optional\n    Optional list of additional non-tensorial arguments\n\nReturns\n-------\nExpression\n    A symbolic Expression representing the tensor\n\nExamples\n--------\n>>> structure = TensorStructure(rep, rep, name=\"T\")\n>>> expr = structure('mu', 'nu')"
                 },
-                "signature": "def __call__(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression | int | str | float | builtins.complex] = []) -> Expression:",
+                "signature": "def __call__(self, *args: int | Expression | str, extra_args: Sequence[Expression | int | str | float | complex] | None = None) -> Expression:",
                 "default": null,
                 "members": [
                   {
                     "name": "args",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "*args: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   },
@@ -2879,8 +2885,8 @@
                       "format": "python-docstring",
                       "body": "Optional list of additional non-tensorial arguments"
                     },
-                    "signature": "extra_args: typing.Sequence[Expression | int | str | float | builtins.complex] = []",
-                    "default": "[]",
+                    "signature": "Sequence[Expression | int | str | float | complex] | None",
+                    "default": "None",
                     "members": []
                   }
                 ]
@@ -2890,16 +2896,16 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a symbolic expression representing this tensor structure.\n\nBuilds a symbolic tensor expression with the specified indices. Arguments can be\nseparated using a semicolon (';') to distinguish between additional arguments\nand tensor indices.\n\nParameters\n----------\n*args : int, str, Symbol, Expression, or ';'\nPositional arguments (int, str, Symbol, Expression for indices, ';' for separator)\nextra_args : list of Expression, optional\nOptional list of additional non-tensorial arguments\n\nReturns\n-------\nExpression\nA symbolic Expression representing the tensor with indices\n\nExamples\n--------\n>>> import symbolica as sp\n>>> from symbolica.community.spenso import TensorStructure, Representation, TensorName\n>>> rep = Representation.euc(3)\n>>> T = TensorName(\"T\")\n>>> structure = TensorStructure([rep, rep], name=T)\n>>> expr = structure.symbolic('mu', 'nu')\n>>> x = sp.S('x')\n>>> expr = structure.symbolic(x, ';', 'mu', 'nu')\n>>> expr = structure.symbolic('mu', 'nu', extra_args=[x])"
+                  "body": "Create a symbolic expression representing this tensor structure.\n\nBuilds a symbolic tensor expression with the specified indices. Arguments can be\nseparated using a semicolon (';') to distinguish between additional arguments\nand tensor indices.\n\nParameters\n----------\n*args : int, str, Symbol, Expression, or ';'\n    Positional arguments (int, str, Symbol, Expression for indices, ';' for separator)\nextra_args : list of Expression, optional\n    Optional list of additional non-tensorial arguments\n\nReturns\n-------\nExpression\n    A symbolic Expression representing the tensor with indices\n\nExamples\n--------\n>>> import symbolica as sp\n>>> from symbolica.community.spenso import TensorStructure, Representation, TensorName\n>>> rep = Representation.euc(3)\n>>> T = TensorName(\"T\")\n>>> structure = TensorStructure([rep, rep], name=T)\n>>> expr = structure.symbolic('mu', 'nu')\n>>> x = sp.S('x')\n>>> expr = structure.symbolic(x, ';', 'mu', 'nu')\n>>> expr = structure.symbolic('mu', 'nu', extra_args=[x])"
                 },
-                "signature": "def symbolic(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression | int | str | float | builtins.complex] = []) -> Expression:",
+                "signature": "def symbolic(self, *args: int | Expression | str, extra_args: Sequence[Expression | int | str | float | complex] | None = None) -> Expression:",
                 "default": null,
                 "members": [
                   {
                     "name": "args",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "*args: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   },
@@ -2910,8 +2916,8 @@
                       "format": "python-docstring",
                       "body": "Optional list of additional non-tensorial arguments"
                     },
-                    "signature": "extra_args: typing.Sequence[Expression | int | str | float | builtins.complex] = []",
-                    "default": "[]",
+                    "signature": "Sequence[Expression | int | str | float | complex] | None",
+                    "default": "None",
                     "members": []
                   }
                 ]
@@ -2921,16 +2927,16 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create an indexed tensor (TensorIndices) from this structure.\n\nConverts this structure template into a concrete indexed tensor by assigning\nspecific abstract indices to each representation slot.\n\nParameters\n----------\n*args : int, str, Symbol, Expression, or ';'\nPositional arguments (indices and ';' separator between additional args and indices)\nextra_args : list of Expression, optional\nOptional list of additional non-tensorial arguments\ncook_indices : bool, optional\nIf True, attempt to convert expressions to valid indices\n\nReturns\n-------\nTensorIndices\nA TensorIndices object with concrete index assignments\n\nExamples\n--------\n>>> import symbolica as sp\n>>> from symbolica.community.spenso import TensorStructure, Representation, TensorName\n>>> rep = Representation.cof(3)\n>>> T = TensorName(\"T\")\n>>> structure = TensorStructure([rep, rep], name=T)\n>>> indices = structure.index('mu', 'nu')\n>>> x = sp.S('x')\n>>> indices = structure.index(x, ';', 'mu', 'nu')"
+                  "body": "Create an indexed tensor (TensorIndices) from this structure.\n\nConverts this structure template into a concrete indexed tensor by assigning\nspecific abstract indices to each representation slot.\n\nParameters\n----------\n*args : int, str, Symbol, Expression, or ';'\n    Positional arguments (indices and ';' separator between additional args and indices)\nextra_args : list of Expression, optional\n    Optional list of additional non-tensorial arguments\ncook_indices : bool, optional\n    If True, attempt to convert expressions to valid indices\n\nReturns\n-------\nTensorIndices\n    A TensorIndices object with concrete index assignments\n\nExamples\n--------\n>>> import symbolica as sp\n>>> from symbolica.community.spenso import TensorStructure, Representation, TensorName\n>>> rep = Representation.cof(3)\n>>> T = TensorName(\"T\")\n>>> structure = TensorStructure([rep, rep], name=T)\n>>> indices = structure.index('mu', 'nu')\n>>> x = sp.S('x')\n>>> indices = structure.index(x, ';', 'mu', 'nu')"
                 },
-                "signature": "def index(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression] = [], cook_indices: builtins.bool = False) -> TensorIndices:",
+                "signature": "def index(self, *args: int | Expression | str, extra_args: Sequence[Expression] | None = None, cook_indices: bool = False) -> TensorIndices:",
                 "default": null,
                 "members": [
                   {
                     "name": "args",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "*args: builtins.int | Expression | str",
+                    "signature": "int | Expression | str",
                     "default": null,
                     "members": []
                   },
@@ -2941,8 +2947,8 @@
                       "format": "python-docstring",
                       "body": "Optional list of additional non-tensorial arguments"
                     },
-                    "signature": "extra_args: typing.Sequence[Expression] = []",
-                    "default": "[]",
+                    "signature": "Sequence[Expression] | None",
+                    "default": "None",
                     "members": []
                   },
                   {
@@ -2952,7 +2958,7 @@
                       "format": "python-docstring",
                       "body": "If True, attempt to convert expressions to valid indices"
                     },
-                    "signature": "cook_indices: builtins.bool = False",
+                    "signature": "bool",
                     "default": "False",
                     "members": []
                   }
@@ -2962,7 +2968,7 @@
             "source": {
               "identifier": "spynso3::TensorStructure",
               "file": "docs/api/python/spynso3.pyi",
-              "line": 1744,
+              "line": 1745,
               "column": 1
             }
           },
@@ -2977,7 +2983,7 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Execution modes for tensor network evaluation.\n\nControls how the tensor network execution engine processes the computational graph.\n\nVariants\n--------\nSingle : Execute one contraction at a time, useful for debugging\nScalar : Only contract scalar operations, leaving tensor structure intact\nAll : Execute all possible contractions for complete evaluation"
+              "body": "Execution modes for tensor network evaluation.\n\nControls how the tensor network execution engine processes the computational graph.\n\nVariants\n--------\nSingle : Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains\nScalar : Only contract scalar operations, leaving tensor structure intact\nAll : Execute all possible contractions for complete evaluation"
             },
             "summary": "Execution modes for tensor network evaluation.",
             "signature": "class ExecutionMode(enum.Enum):",
@@ -2985,18 +2991,46 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
+            "examples": [],
+            "members": [
               {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.spenso import ExecutionMode\nhelp(ExecutionMode)"
+                "name": "Single",
+                "kind": "variant",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains"
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Scalar",
+                "kind": "variant",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Only contract scalar operations, leaving tensor structure intact"
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "All",
+                "kind": "variant",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Execute all possible contractions for complete evaluation"
+                },
+                "signature": null,
+                "default": null,
+                "members": []
               }
             ],
-            "members": [],
             "source": {
               "identifier": "spynso3::ExecutionMode",
               "file": "docs/api/python/spynso3.pyi",
-              "line": 1938,
+              "line": 1939,
               "column": 1
             }
           },
@@ -3019,18 +3053,46 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
+            "examples": [],
+            "members": [
               {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.spenso import SymbolicParallelism\nhelp(SymbolicParallelism)"
+                "name": "Auto",
+                "kind": "variant",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Permit Rayon when licensed and use workload heuristics where available."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Serial",
+                "kind": "variant",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Keep symbolic operations on the calling thread."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Parallel",
+                "kind": "variant",
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Force Rayon without `Auto`'s Symbolica license safety check."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
               }
             ],
-            "members": [],
             "source": {
               "identifier": "spynso3::SymbolicParallelism",
               "file": "docs/api/python/spynso3.pyi",
-              "line": 1955,
+              "line": 1956,
               "column": 1
             }
           },
@@ -3039,7 +3101,7 @@
             "name": "set_symbolica_rayon_enabled",
             "title": "set_symbolica_rayon_enabled",
             "kind": "python-function",
-            "supported": false,
+            "supported": true,
             "required_features": [
               "python_stubgen"
             ],
@@ -3048,23 +3110,17 @@
               "body": "Configure whether Spenso may use Rayon for Symbolica operations.\n\n`Auto` checks the Symbolica license once during this call. When licensed,\noperations may use Rayon and apply workload heuristics where available;\nwhen unlicensed, symbolic operations remain serial. The returned boolean\nreports whether the resolved policy permits Rayon, not whether every\noperation will use it."
             },
             "summary": "Configure whether Spenso may use Rayon for Symbolica operations.",
-            "signature": "def set_symbolica_rayon_enabled(policy: SymbolicParallelism) -> builtins.bool:",
+            "signature": "def set_symbolica_rayon_enabled(policy: SymbolicParallelism) -> bool:",
             "since": null,
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.spenso import set_symbolica_rayon_enabled\nhelp(set_symbolica_rayon_enabled)"
-              }
-            ],
+            "examples": [],
             "members": [],
             "source": {
               "identifier": "spynso3::set_symbolica_rayon_enabled",
               "file": "docs/api/python/spynso3.pyi",
-              "line": 1972,
+              "line": 1973,
               "column": 1
             }
           }

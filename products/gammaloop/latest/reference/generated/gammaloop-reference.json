@@ -7650,7 +7650,7 @@
           "value_names": [
             "WORKSPACE_PATH"
           ],
-          "help": "The path to run the integrationg within",
+          "help": "Workspace directory used for resumable integration state and persisted results",
           "required": false,
           "positional": false,
           "index": null,
@@ -16086,7 +16086,7 @@
     },
     {
       "path": "cli.global.generation.compile.compilation_mode",
-      "value_type": "string",
+      "value_type": "CompilationMode",
       "description": "Evaluator backend: Symbolica JIT, generated C++, or generated assembly.",
       "required": false,
       "default": "symjit",
@@ -16106,7 +16106,7 @@
     },
     {
       "path": "cli.global.generation.compile.custom",
-      "value_type": "array",
+      "value_type": "array<string>",
       "description": "Additional command-line arguments passed verbatim to the external compiler.",
       "required": false,
       "default": [],
@@ -16122,7 +16122,7 @@
     },
     {
       "path": "cli.global.generation.compile.optimization_level",
-      "value_type": "string",
+      "value_type": "CompilationOptimizationLevel",
       "description": "Optimization level passed to the selected evaluator compiler.",
       "required": false,
       "default": "O2",
@@ -16239,11 +16239,21 @@
     },
     {
       "path": "cli.global.generation.evaluator.spenso_execution_mode",
-      "value_type": "array",
+      "value_type": "tuple<ExecutionMode, ContractionMode>",
       "description": "Spenso execution and contraction modes used by the lowered tensor network.",
       "required": false,
-      "default": null,
-      "possible_values": []
+      "default": [
+        "Sequential",
+        "MinResultRank"
+      ],
+      "possible_values": [
+        "item 1: Parallel",
+        "item 1: Sequential",
+        "item 1: SequentialExtract",
+        "item 1: SequentialRef",
+        "item 2: MinResultRank",
+        "item 2: SmallestDegree"
+      ]
     },
     {
       "path": "cli.global.generation.evaluator.store_atom",
@@ -16271,7 +16281,7 @@
     },
     {
       "path": "cli.global.generation.evaluator.tensor_network_contraction_order",
-      "value_type": "string",
+      "value_type": "TensorNetworkContractionOrder",
       "description": "Heuristic used to order tensor-network contractions.",
       "required": false,
       "default": "sparse_atom_aware",
@@ -16300,7 +16310,7 @@
     },
     {
       "path": "cli.global.generation.force_cuts",
-      "value_type": "array",
+      "value_type": "array<array<string>>",
       "description": "Explicit particle-name sets forced to define graph cuts.",
       "required": false,
       "default": [],
@@ -16404,7 +16414,7 @@
     },
     {
       "path": "cli.global.generation.uv.final_integrand",
-      "value_type": "string",
+      "value_type": "FinalIntegrandDimension",
       "description": "Dimensional representation used for the final locally subtracted integrand.",
       "required": false,
       "default": "ThreeD",
@@ -16439,7 +16449,7 @@
     },
     {
       "path": "cli.global.generation.uv.orchestrator",
-      "value_type": "string",
+      "value_type": "UVOrchestrator",
       "description": "Algorithm used to enumerate and combine nested ultraviolet counterterms.",
       "required": false,
       "default": "hedge_poset",
@@ -16451,7 +16461,7 @@
     },
     {
       "path": "cli.global.generation.uv.renormalization_prescription.log_divergent",
-      "value_type": "string",
+      "value_type": "ApproximationType",
       "description": "Approximation applied to logarithmically divergent ultraviolet counterterms.",
       "required": false,
       "default": "MUV",
@@ -16466,7 +16476,7 @@
     },
     {
       "path": "cli.global.generation.uv.renormalization_prescription.massive_power_divergent",
-      "value_type": "string",
+      "value_type": "ApproximationType",
       "description": "Approximation applied to power-divergent counterterms with massive external structure.",
       "required": false,
       "default": "MUV",
@@ -16481,7 +16491,7 @@
     },
     {
       "path": "cli.global.generation.uv.renormalization_prescription.massless_power_divergent",
-      "value_type": "string",
+      "value_type": "ApproximationType",
       "description": "Approximation applied to power-divergent counterterms with massless external structure.",
       "required": false,
       "default": "MUV",
@@ -16496,11 +16506,42 @@
     },
     {
       "path": "cli.global.generation.uv.renormalization_prescription.overrides",
-      "value_type": "array",
+      "value_type": "array<CTRenormalizationRule>",
       "description": "Counterterm-specific prescription rules evaluated before the divergence-class defaults.",
       "required": false,
       "default": [],
       "possible_values": []
+    },
+    {
+      "path": "cli.global.generation.uv.renormalization_prescription.overrides[].ct_identifier.external_pdg_set",
+      "value_type": "array<integer>",
+      "description": "Signed PDG identifiers on the counterterm's external boundary.",
+      "required": false,
+      "default": null,
+      "possible_values": []
+    },
+    {
+      "path": "cli.global.generation.uv.renormalization_prescription.overrides[].ct_identifier.internal_pdg_set",
+      "value_type": "array | null",
+      "description": "Optional internal PDG identifiers; omitting them makes the rule match any internal set.",
+      "required": false,
+      "default": null,
+      "possible_values": []
+    },
+    {
+      "path": "cli.global.generation.uv.renormalization_prescription.overrides[].prescription",
+      "value_type": "ApproximationType",
+      "description": "Approximation that replaces the default prescription for matching counterterms.",
+      "required": true,
+      "default": null,
+      "possible_values": [
+        "IR",
+        "MUV",
+        "OS",
+        "PolePart",
+        "Unsubtracted",
+        "VaccuumLimit"
+      ]
     },
     {
       "path": "cli.global.generation.uv.softct",
@@ -16544,7 +16585,7 @@
     },
     {
       "path": "cli.global.generation.uv.vakint.evaluation_methods",
-      "value_type": "array",
+      "value_type": "array<string>",
       "description": "Ordered Vakint evaluation backends tried for each matched vacuum integral.",
       "required": false,
       "default": [
@@ -16684,7 +16725,7 @@
     },
     {
       "path": "cli.global.generation.vector_polarization_sum_gauge",
-      "value_type": "string",
+      "value_type": "VectorPolarizationSumGauge",
       "description": "Gauge used when summing external vector-particle polarizations.",
       "required": false,
       "default": "LightLikeAxial",
@@ -16711,7 +16752,7 @@
     },
     {
       "path": "cli.global.log_style.log_format",
-      "value_type": "string",
+      "value_type": "LogFormat",
       "description": "Amount of timestamp, target, level, and source context included in each log line.",
       "required": false,
       "default": "Long",
@@ -16805,7 +16846,7 @@
     },
     {
       "path": "runtime.general.additional_param_values",
-      "value_type": "array",
+      "value_type": "array<number>",
       "description": "Values assigned, in order, to extra symbolic parameters expected by the evaluator.",
       "required": false,
       "default": [],
@@ -16837,7 +16878,7 @@
     },
     {
       "path": "runtime.general.evaluator_method",
-      "value_type": "string",
+      "value_type": "EvaluatorMethod",
       "description": "Evaluator backend used for generated integrands.",
       "required": false,
       "default": "SingleParametric",
@@ -16858,7 +16899,7 @@
     },
     {
       "path": "runtime.general.integral_unit",
-      "value_type": "string",
+      "value_type": "IntegralUnit",
       "description": "Unit used to report integrated cross-sections; `auto` selects picobarns for scattering.",
       "required": false,
       "default": "auto",
@@ -16937,7 +16978,7 @@
     },
     {
       "path": "runtime.h_function.function",
-      "value_type": "string",
+      "value_type": "HFunction",
       "description": "Functional form of the counterterm damping profile.",
       "required": false,
       "default": "poly_exponential",
@@ -16965,10 +17006,47 @@
       "possible_values": []
     },
     {
+      "path": "runtime.integrand.h_function.enabled_dampening",
+      "value_type": "boolean",
+      "description": "Apply the damping profile; disabling it leaves the corresponding factor equal to one.",
+      "required": false,
+      "default": null,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.integrand.h_function.function",
+      "value_type": "HFunction",
+      "description": "Functional form of the counterterm damping profile.",
+      "required": false,
+      "default": null,
+      "possible_values": [
+        "exponential",
+        "exponential_ct",
+        "poly_exponential",
+        "poly_left_right_exponential"
+      ]
+    },
+    {
+      "path": "runtime.integrand.h_function.power",
+      "value_type": "integer | null",
+      "description": "Optional polynomial power overriding the profile's built-in choice.",
+      "required": false,
+      "default": null,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.integrand.h_function.sigma",
+      "value_type": "number",
+      "description": "Characteristic width of the damping profile.",
+      "required": false,
+      "default": null,
+      "possible_values": []
+    },
+    {
       "path": "runtime.integrand.n_3d_momenta",
       "value_type": "integer",
       "description": "Number of independent three-momenta used to construct the unit-surface test dimension.",
-      "required": true,
+      "required": false,
       "default": null,
       "possible_values": []
     },
@@ -16998,7 +17076,7 @@
     },
     {
       "path": "runtime.integrator.integrated_phase",
-      "value_type": "string",
+      "value_type": "IntegratedPhase",
       "description": "Complex component to integrate: real, imaginary, or both.",
       "required": false,
       "default": "real",
@@ -17058,13 +17136,17 @@
     },
     {
       "path": "runtime.integrator.observables_output.format",
-      "value_type": "array",
+      "value_type": "array<ObservableFileFormat>",
       "description": "Output formats written for configured observables; duplicates and `none` are ignored.",
       "required": false,
       "default": [
         "json"
       ],
-      "possible_values": []
+      "possible_values": [
+        "hwu",
+        "json",
+        "none"
+      ]
     },
     {
       "path": "runtime.integrator.seed",
@@ -17116,11 +17198,23 @@
     },
     {
       "path": "runtime.kinematics.externals.data.helicities",
-      "value_type": "array",
+      "value_type": "array<integer | string>",
       "description": "Helicity assigned to each external particle in process order.",
       "required": true,
       "default": [],
-      "possible_values": []
+      "possible_values": [
+        "+",
+        "-",
+        "-1",
+        "0",
+        "1",
+        "minus",
+        "plus",
+        "summed",
+        "summed-averaged",
+        "summed_averaged",
+        "zero"
+      ]
     },
     {
       "path": "runtime.kinematics.externals.data.improvement_settings.large_deformation_check",
@@ -17132,7 +17226,7 @@
     },
     {
       "path": "runtime.kinematics.externals.data.improvement_settings.mode",
-      "value_type": "string",
+      "value_type": "ImprovementMode",
       "description": "On-shell improvement algorithm, or `none` to preserve the supplied momenta.",
       "required": false,
       "default": "none",
@@ -17152,11 +17246,13 @@
     },
     {
       "path": "runtime.kinematics.externals.data.momenta",
-      "value_type": "array",
+      "value_type": "array<Dep | array<number>>",
       "description": "External four-momenta; exactly one entry may be marked dependent.",
       "required": true,
       "default": [],
-      "possible_values": []
+      "possible_values": [
+        "dependent"
+      ]
     },
     {
       "path": "runtime.kinematics.externals.type",
@@ -17210,7 +17306,7 @@
     },
     {
       "path": "runtime.sampling.coordinate_system",
-      "value_type": "string",
+      "value_type": "CoordinateSystem",
       "description": "Coordinate system used to parameterize loop momenta.",
       "required": false,
       "default": "spherical",
@@ -17228,7 +17324,7 @@
     },
     {
       "path": "runtime.sampling.graph_names",
-      "value_type": "array",
+      "value_type": "array<string>",
       "description": "Optional graph-name allow-list for discrete graph sampling.",
       "required": false,
       "default": [],
@@ -17236,7 +17332,7 @@
     },
     {
       "path": "runtime.sampling.graphs",
-      "value_type": "string",
+      "value_type": "SumMode",
       "description": "Whether graph contributions are summed deterministically or sampled as a discrete axis.",
       "required": false,
       "default": "summed",
@@ -17255,7 +17351,7 @@
     },
     {
       "path": "runtime.sampling.lmb_channel_weight",
-      "value_type": "string",
+      "value_type": "LmbChannelWeight",
       "description": "Rule used to construct the relative probability of each loop-momentum-basis channel.",
       "required": false,
       "default": "ose",
@@ -17266,7 +17362,7 @@
     },
     {
       "path": "runtime.sampling.lmb_channels",
-      "value_type": "string",
+      "value_type": "SumMode",
       "description": "Whether loop-momentum-basis channels are summed or sampled discretely.",
       "required": false,
       "default": "summed",
@@ -17285,7 +17381,7 @@
     },
     {
       "path": "runtime.sampling.mapping",
-      "value_type": "string",
+      "value_type": "ParameterizationMapping",
       "description": "Mapping from the unit hypercube to unbounded radial coordinates.",
       "required": false,
       "default": "linear",
@@ -17297,7 +17393,7 @@
     },
     {
       "path": "runtime.sampling.orientations",
-      "value_type": "string",
+      "value_type": "SumMode",
       "description": "Whether causal orientations are summed deterministically or sampled as a discrete axis.",
       "required": false,
       "default": "summed",
@@ -17340,7 +17436,7 @@
     },
     {
       "path": "runtime.stability.levels",
-      "value_type": "array",
+      "value_type": "array<StabilityLevelSetting>",
       "description": "Ordered numerical-precision levels and tolerances used during stability escalation.",
       "required": false,
       "default": [
@@ -17363,6 +17459,42 @@
           "required_precision_for_re": 0.00001
         }
       ],
+      "possible_values": []
+    },
+    {
+      "path": "runtime.stability.levels[].escalate_for_large_weight_threshold",
+      "value_type": "number",
+      "description": "Ratio threshold for the large-weight escalation check; a non-positive value disables it.",
+      "required": true,
+      "default": null,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.stability.levels[].precision",
+      "value_type": "Precision",
+      "description": "Numeric precision used for this escalation level.",
+      "required": true,
+      "default": null,
+      "possible_values": [
+        "Arb",
+        "Double",
+        "Quad"
+      ]
+    },
+    {
+      "path": "runtime.stability.levels[].required_precision_for_im",
+      "value_type": "number",
+      "description": "Maximum accepted relative error in the imaginary component before escalating.",
+      "required": true,
+      "default": null,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.stability.levels[].required_precision_for_re",
+      "value_type": "number",
+      "description": "Maximum accepted relative error in the real component before escalating.",
+      "required": true,
+      "default": null,
       "possible_values": []
     },
     {
@@ -17399,7 +17531,7 @@
     },
     {
       "path": "runtime.stability.rotation_axis",
-      "value_type": "array",
+      "value_type": "array<object>",
       "description": "Rotations applied when comparing an unstable sample with an equivalent phase-space point.",
       "required": false,
       "default": [
@@ -17411,6 +17543,44 @@
         }
       ],
       "possible_values": []
+    },
+    {
+      "path": "runtime.stability.rotation_axis[].alpha",
+      "value_type": "number",
+      "description": "First Euler angle, in radians.",
+      "required": false,
+      "default": null,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.stability.rotation_axis[].beta",
+      "value_type": "number",
+      "description": "Second Euler angle, in radians.",
+      "required": false,
+      "default": null,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.stability.rotation_axis[].gamma",
+      "value_type": "number",
+      "description": "Third Euler angle, in radians.",
+      "required": false,
+      "default": null,
+      "possible_values": []
+    },
+    {
+      "path": "runtime.stability.rotation_axis[].type",
+      "value_type": "string",
+      "description": "Selects a Cartesian quarter-turn, no rotation, or explicit Euler angles.",
+      "required": true,
+      "default": null,
+      "possible_values": [
+        "euler_angles",
+        "none",
+        "x",
+        "y",
+        "z"
+      ]
     },
     {
       "path": "runtime.subtraction.disable_threshold_subtraction",
@@ -17438,7 +17608,7 @@
     },
     {
       "path": "runtime.subtraction.integrated_ct_settings.range.h_function_settings.function",
-      "value_type": "string",
+      "value_type": "HFunction",
       "description": "Functional form of the counterterm damping profile.",
       "required": false,
       "default": "poly_exponential",
@@ -17472,6 +17642,7 @@
       "required": true,
       "default": "infinite",
       "possible_values": [
+        "compact",
         "infinite"
       ]
     },

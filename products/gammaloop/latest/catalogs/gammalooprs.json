@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "product": {
     "id": "gammaloop",
     "title": "GammaLoop"
@@ -83,7 +83,7 @@
               "body": "Provides shared access to the physics model owned by a computation context."
             },
             "summary": "Provides shared access to the physics model owned by a computation context.",
-            "signature": "pub trait HasModel { fn get_model(& self) -> & Model; }",
+            "signature": "pub trait HasModel {}",
             "since": null,
             "keywords": [],
             "params": [],
@@ -99,7 +99,10 @@
               {
                 "name": "get_model",
                 "kind": "method",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns the physics model associated with this computation context."
+                },
                 "signature": "fn get_model(& self) -> & Model;",
                 "default": null,
                 "members": []
@@ -109,6 +112,1351 @@
               "identifier": "gammalooprs::HasModel",
               "file": "crates/gammalooprs/src/lib.rs",
               "line": 46,
+              "column": 1
+            }
+          },
+          "GammaLoopContextContainer": {
+            "id": "GammaLoopContextContainer",
+            "name": "GammaLoopContextContainer",
+            "title": "Concrete GammaLoop context",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Pairs a Symbolica state map with the physics model required by GammaLoop computations."
+            },
+            "summary": "Pairs a Symbolica state map with the physics model required by GammaLoop computations.",
+            "signature": "pub struct GammaLoopContextContainer < 'a > {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammalooprs::GammaLoopContextContainer;"
+              }
+            ],
+            "members": [
+              {
+                "name": "state_map",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Symbolica state map used to resolve symbols during GammaLoop computations."
+                },
+                "signature": "& 'a StateMap",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "model",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Physics model that supplies particles, parameters, and interactions."
+                },
+                "signature": "& 'a Model",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammalooprs::GammaLoopContextContainer",
+              "file": "crates/gammalooprs/src/lib.rs",
+              "line": 64,
+              "column": 1
+            }
+          },
+          "HasIntegrand": {
+            "id": "HasIntegrand",
+            "name": "HasIntegrand",
+            "title": "Integrand contract",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Defines grid construction, sample evaluation, dimensions, and result merging for an integrand."
+            },
+            "summary": "Defines grid construction, sample evaluation, dimensions, and result merging for an integrand.",
+            "signature": "pub trait HasIntegrand {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "fn accepts_integrand<I: gammalooprs::integrands::HasIntegrand>(_integrand: &I) {}"
+              }
+            ],
+            "members": [
+              {
+                "name": "create_grid",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Constructs the continuous or discrete integration grid required by this integrand."
+                },
+                "signature": "fn create_grid(& self) -> Grid < F < f64 > >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "name",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns the integrand name used in state inspection, logs, and status output."
+                },
+                "signature": "fn name(& self) -> String;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "evaluate_sample",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Evaluates one weighted grid sample against the supplied model and numerical controls."
+                },
+                "signature": "fn\nevaluate_sample(& mut self, sample : & Sample < F < f64 > > , model : & Model,\nwgt : F < f64 > , iter : usize, use_arb_prec : bool, max_eval : Complex < F <\nf64 > > ,) -> Result < EvaluationResult >;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get_n_dim",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns the number of continuous sampling dimensions used by the integrand."
+                },
+                "signature": "fn get_n_dim(& self) -> usize;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "get_integrator_settings",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns integrator settings specialized for this integrand, or the defaults."
+                },
+                "signature": "fn get_integrator_settings(& self) -> IntegratorSettings { … }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "merge_results",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Merges iteration-local result state from another worker integrand."
+                },
+                "signature": "fn merge_results < I : HasIntegrand >\n(& mut self, _other : & mut I, _iter : usize) { … }",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "update_results",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Finalizes or writes iteration-local result state after an integration iteration."
+                },
+                "signature": "fn update_results(& mut self, _iter : usize) { … }",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammalooprs::integrands::HasIntegrand",
+              "file": "crates/gammalooprs/src/integrands/mod.rs",
+              "line": 73,
+              "column": 1
+            }
+          },
+          "Integrand": {
+            "id": "Integrand",
+            "name": "Integrand",
+            "title": "Runtime integrand",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Dispatches evaluation and observable handling across built-in and generated process integrands."
+            },
+            "summary": "Dispatches evaluation and observable handling across built-in and generated process integrands.",
+            "signature": "pub enum Integrand {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammalooprs::integrands::Integrand;"
+              }
+            ],
+            "members": [
+              {
+                "name": "UnitSurface",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Built-in diagnostic integrand over a unit hypersurface."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "UnitSurfaceIntegrand",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "UnitVolume",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Built-in diagnostic integrand over a unit integration volume."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "UnitVolumeIntegrand",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "HFunctionTest",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "One-dimensional diagnostic integrand for the configured H-function profile."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "HFunctionTestIntegrand",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "ProcessIntegrand",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Generated amplitude or cross-section process integrand."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "Box < ProcessIntegrand >",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              }
+            ],
+            "source": {
+              "identifier": "gammalooprs::integrands::Integrand",
+              "file": "crates/gammalooprs/src/integrands/mod.rs",
+              "line": 109,
+              "column": 1
+            }
+          },
+          "GlobalSettings": {
+            "id": "GlobalSettings",
+            "name": "GlobalSettings",
+            "title": "Global settings",
+            "kind": "setting",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Configures logging, process generation, worker counts, and other execution-wide GammaLoop defaults."
+            },
+            "summary": "Configures logging, process generation, worker counts, and other execution-wide GammaLoop defaults.",
+            "signature": "pub struct GlobalSettings {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let global = gammalooprs::settings::GlobalSettings::default();"
+              }
+            ],
+            "members": [
+              {
+                "name": "logfile_directive",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Tracing filter applied to the optional log-file sink; `off` disables that sink."
+                },
+                "signature": "String",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "display_directive",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Tracing filter applied to terminal output shown by the interactive session."
+                },
+                "signature": "String",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "log_style",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Formatting choices shared by terminal and file tracing subscribers."
+                },
+                "signature": "LogStyle",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "generation",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Diagram, numerator, counterterm, evaluator, and compilation settings used during generation."
+                },
+                "signature": "GenerationSettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "n_cores",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Per-stage worker counts for diagram generation, evaluator construction, compilation, and integration."
+                },
+                "signature": "Parallelisation",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammalooprs::settings::GlobalSettings",
+              "file": "crates/gammalooprs/src/settings/mod.rs",
+              "line": 25,
+              "column": 1
+            }
+          },
+          "RuntimeSettings": {
+            "id": "RuntimeSettings",
+            "name": "RuntimeSettings",
+            "title": "Runtime settings",
+            "kind": "setting",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Collects kinematics, integration, subtraction, observables, and evaluation settings for one integrand."
+            },
+            "summary": "Collects kinematics, integration, subtraction, observables, and evaluation settings for one integrand.",
+            "signature": "pub struct RuntimeSettings {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let runtime = gammalooprs::settings::RuntimeSettings::default();"
+              }
+            ],
+            "members": [
+              {
+                "name": "general",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Evaluation scales, backend, caching, event generation, and output-unit controls."
+                },
+                "signature": "GeneralSettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "model",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Per-integrand overrides for external model parameters."
+                },
+                "signature": "RuntimeModelSettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "hard_coded_integrand",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Optional built-in test integrand used instead of a generated process integrand."
+                },
+                "signature": "Option < IntegrandSettings >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "kinematics",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Center-of-mass energy, external momenta, helicities, and phase-space improvement."
+                },
+                "signature": "KinematicsSettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "integrator",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Adaptive Monte Carlo iteration, accuracy, learning, and output controls."
+                },
+                "signature": "IntegratorSettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "quantities",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Named derived quantities available to selectors and observables."
+                },
+                "signature": "QuantitiesSettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "observables",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Named histograms and other observable accumulators."
+                },
+                "signature": "ObservablesSettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "selectors",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Named event-selection predicates applied before observable accumulation."
+                },
+                "signature": "SelectorsSettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "stability",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Precision escalation, rotated checks, and optional stability diagnostics."
+                },
+                "signature": "StabilitySettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "sampling",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Continuous parameterization and discrete graph/orientation/channel sampling strategy."
+                },
+                "signature": "SamplingSettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "subtraction",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Local and integrated threshold/ultraviolet subtraction controls."
+                },
+                "signature": "SubtractionSettings",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "lu_h_function",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Damping profile shared by Local Unitarity threshold terms."
+                },
+                "signature": "HFunctionSettings",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammalooprs::settings::RuntimeSettings",
+              "file": "crates/gammalooprs/src/settings/mod.rs",
+              "line": 52,
+              "column": 1
+            }
+          },
+          "SingleSampleEvaluationResult": {
+            "id": "SingleSampleEvaluationResult",
+            "name": "SingleSampleEvaluationResult",
+            "title": "Single-sample result",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Returns one f64 evaluation together with the observable snapshot produced for that sample."
+            },
+            "summary": "Returns one f64 evaluation together with the observable snapshot produced for that sample.",
+            "signature": "pub struct SingleSampleEvaluationResult {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammalooprs::integrands::evaluation::SingleSampleEvaluationResult;"
+              }
+            ],
+            "members": [
+              {
+                "name": "sample",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Evaluation record for the requested f64 sample."
+                },
+                "signature": "SampleEvaluationResult",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "observables",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Persistent runtime-observable snapshot after processing the requested sample.\n\nThe snapshot can include samples accumulated by earlier API calls."
+                },
+                "signature": "ObservableSnapshotBundle",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammalooprs::integrands::evaluation::SingleSampleEvaluationResult",
+              "file": "crates/gammalooprs/src/integrands/evaluation.rs",
+              "line": 385,
+              "column": 1
+            }
+          },
+          "BatchSampleEvaluationResult": {
+            "id": "BatchSampleEvaluationResult",
+            "name": "BatchSampleEvaluationResult",
+            "title": "Batch evaluation result",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Returns f64 sample evaluations and the observable snapshot accumulated across the complete batch."
+            },
+            "summary": "Returns f64 sample evaluations and the observable snapshot accumulated across the complete batch.",
+            "signature": "pub struct BatchSampleEvaluationResult {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammalooprs::integrands::evaluation::BatchSampleEvaluationResult;"
+              }
+            ],
+            "members": [
+              {
+                "name": "samples",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Evaluation records in the same order as the requested f64 samples."
+                },
+                "signature": "Vec < SampleEvaluationResult >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "observables",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Persistent runtime-observable snapshot after processing the requested batch.\n\nThe snapshot can include samples accumulated by earlier API calls."
+                },
+                "signature": "ObservableSnapshotBundle",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammalooprs::integrands::evaluation::BatchSampleEvaluationResult",
+              "file": "crates/gammalooprs/src/integrands/evaluation.rs",
+              "line": 395,
+              "column": 1
+            }
+          },
+          "PreciseSingleSampleEvaluationResult": {
+            "id": "PreciseSingleSampleEvaluationResult",
+            "name": "PreciseSingleSampleEvaluationResult",
+            "title": "Precise single-sample result",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Retains the active numerical precision for one evaluation and its observable snapshot."
+            },
+            "summary": "Retains the active numerical precision for one evaluation and its observable snapshot.",
+            "signature": "pub struct PreciseSingleSampleEvaluationResult {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammalooprs::integrands::evaluation::PreciseSingleSampleEvaluationResult;"
+              }
+            ],
+            "members": [
+              {
+                "name": "sample",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Evaluation record retaining the numerical precision selected for the sample."
+                },
+                "signature": "PreciseSampleEvaluationResult",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "observables",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Observable snapshot produced from the same Monte Carlo sample."
+                },
+                "signature": "ObservableSnapshotBundle",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammalooprs::integrands::evaluation::PreciseSingleSampleEvaluationResult",
+              "file": "crates/gammalooprs/src/integrands/evaluation.rs",
+              "line": 411,
+              "column": 1
+            }
+          },
+          "PreciseBatchSampleEvaluationResult": {
+            "id": "PreciseBatchSampleEvaluationResult",
+            "name": "PreciseBatchSampleEvaluationResult",
+            "title": "Precise batch result",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Retains the active numerical precision for every sample in a batch and its observable snapshot."
+            },
+            "summary": "Retains the active numerical precision for every sample in a batch and its observable snapshot.",
+            "signature": "pub struct PreciseBatchSampleEvaluationResult {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammalooprs::integrands::evaluation::PreciseBatchSampleEvaluationResult;"
+              }
+            ],
+            "members": [
+              {
+                "name": "samples",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Precision-preserving evaluation records in requested sample order."
+                },
+                "signature": "Vec < PreciseSampleEvaluationResult >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "observables",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Observable snapshot accumulated across the complete sample batch."
+                },
+                "signature": "ObservableSnapshotBundle",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammalooprs::integrands::evaluation::PreciseBatchSampleEvaluationResult",
+              "file": "crates/gammalooprs/src/integrands/evaluation.rs",
+              "line": 419,
+              "column": 1
+            }
+          },
+          "HistogramSnapshot": {
+            "id": "HistogramSnapshot",
+            "name": "HistogramSnapshot",
+            "title": "Mergeable histogram snapshot",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Stores raw per-bin statistics, underflow, overflow, and metadata in a serializable snapshot."
+            },
+            "summary": "Stores raw per-bin statistics, underflow, overflow, and metadata in a serializable snapshot.",
+            "signature": "pub struct HistogramSnapshot {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use gammalooprs::observables::HistogramSnapshot;"
+              }
+            ],
+            "members": [
+              {
+                "name": "kind",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Determines whether bins represent continuous ranges or discrete identifiers."
+                },
+                "signature": "HistogramSnapshotKind",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "title",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Human-readable histogram title used by JSON and HwU output."
+                },
+                "signature": "String",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "type_description",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "HwU `TYPE@` description retained with the histogram metadata."
+                },
+                "signature": "String",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "phase",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Real or imaginary component of the complex event weight accumulated in this histogram."
+                },
+                "signature": "ObservablePhase",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "value_transform",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Transformation applied to observable coordinates before continuous binning."
+                },
+                "signature": "ObservableValueTransform",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "supports_misbinning_mitigation",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Whether the observable supports paired fills that mitigate boundary misbinning."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "x_min",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Lower bound of a continuous histogram, or `None` for a discrete histogram."
+                },
+                "signature": "Option < f64 >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "x_max",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Upper bound of a continuous histogram, or `None` for a discrete histogram."
+                },
+                "signature": "Option < f64 >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "sample_count",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Number of statistically independent Monte Carlo samples represented by the snapshot."
+                },
+                "signature": "usize",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "log_x_axis",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Whether compatible renderers should display the horizontal axis logarithmically."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "log_y_axis",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Whether compatible renderers should display the vertical axis logarithmically."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "discrete_min_bin_id",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Smallest discrete bin identifier, or `None` for a continuous histogram."
+                },
+                "signature": "Option < isize >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "discrete_ordering",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Display ordering for discrete bins, or `None` for a continuous histogram."
+                },
+                "signature": "Option < DiscreteBinOrdering >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "bins",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Raw statistics for every in-range bin."
+                },
+                "signature": "Vec < HistogramBinSnapshot >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "underflow_bin",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Raw statistics for entries below the configured histogram range."
+                },
+                "signature": "HistogramBinSnapshot",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "overflow_bin",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Raw statistics for entries above the configured histogram range."
+                },
+                "signature": "HistogramBinSnapshot",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "statistics",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Histogram-wide entry, non-finite-value, and mitigation counters."
+                },
+                "signature": "HistogramStatisticsSnapshot",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammalooprs::observables::HistogramSnapshot",
+              "file": "crates/gammalooprs/src/observables/mod.rs",
+              "line": 1984,
+              "column": 1
+            }
+          },
+          "HistogramSnapshot::merge": {
+            "id": "HistogramSnapshot::merge",
+            "name": "merge",
+            "title": "Merge histogram snapshots",
+            "kind": "method",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Combines compatible raw-stat snapshots without losing reconstructible accumulator state."
+            },
+            "summary": "Combines compatible raw-stat snapshots without losing reconstructible accumulator state.",
+            "signature": "fn merge(& self, other : & HistogramSnapshot) -> Result < Self >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "self",
+                "docs": null,
+                "ty": "& self",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "other",
+                "docs": null,
+                "ty": "& HistogramSnapshot",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < Self >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let left = gammalooprs::observables::HistogramAccumulatorState::default().snapshot(); let right = gammalooprs::observables::HistogramAccumulatorState::default().snapshot(); let merged = left.merge(&right)?;"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammalooprs::observables::HistogramSnapshot::merge",
+              "file": "crates/gammalooprs/src/observables/mod.rs",
+              "line": 2073,
+              "column": 1
+            }
+          },
+          "HistogramSnapshot::rebin": {
+            "id": "HistogramSnapshot::rebin",
+            "name": "rebin",
+            "title": "Rebin a histogram snapshot",
+            "kind": "method",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Combines contiguous continuous bins while preserving raw statistics and rejecting invalid factors."
+            },
+            "summary": "Combines contiguous continuous bins while preserving raw statistics and rejecting invalid factors.",
+            "signature": "fn rebin(& self, contiguous_bins : usize) -> Result < Self >",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "self",
+                "docs": null,
+                "ty": "& self",
+                "default": null,
+                "required": true
+              },
+              {
+                "name": "contiguous_bins",
+                "docs": null,
+                "ty": "usize",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "Result < Self >"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let accumulator = gammalooprs::observables::HistogramAccumulatorState::continuous(\"energy\".into(), \"weighted events\".into(), gammalooprs::observables::ObservablePhase::Real, gammalooprs::observables::ObservableValueTransform::Identity, 0.0, 4.0, false, false, 4); let coarser = accumulator.snapshot().rebin(2)?; assert_eq!(coarser.bins.len(), 2);"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammalooprs::observables::HistogramSnapshot::rebin",
+              "file": "crates/gammalooprs/src/observables/mod.rs",
+              "line": 2171,
+              "column": 1
+            }
+          },
+          "HistogramAccumulatorState": {
+            "id": "HistogramAccumulatorState",
+            "name": "HistogramAccumulatorState",
+            "title": "Histogram accumulator",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Accumulates statistically independent samples before producing mergeable histogram snapshots."
+            },
+            "summary": "Accumulates statistically independent samples before producing mergeable histogram snapshots.",
+            "signature": "pub struct HistogramAccumulatorState {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let accumulator = gammalooprs::observables::HistogramAccumulatorState::default();"
+              }
+            ],
+            "members": [
+              {
+                "name": "kind",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Determines whether bins represent continuous ranges or discrete identifiers."
+                },
+                "signature": "HistogramSnapshotKind",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "title",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Human-readable histogram title used by snapshots and exported output."
+                },
+                "signature": "String",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "type_description",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "HwU `TYPE@` description retained in generated snapshots."
+                },
+                "signature": "String",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "phase",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Real or imaginary component of the complex event weight accumulated in this histogram."
+                },
+                "signature": "ObservablePhase",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "value_transform",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Transformation applied to observable coordinates before continuous binning."
+                },
+                "signature": "ObservableValueTransform",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "supports_misbinning_mitigation",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Whether the observable supports paired fills that mitigate boundary misbinning."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "x_min",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Lower continuous bound, or the smallest discrete bin identifier as an `f64`."
+                },
+                "signature": "f64",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "x_max",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Upper continuous bound, or one past the largest discrete bin identifier as an `f64`."
+                },
+                "signature": "f64",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "sample_count",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Number of committed statistically independent Monte Carlo samples."
+                },
+                "signature": "usize",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "log_x_axis",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Whether compatible renderers should display the horizontal axis logarithmically."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "log_y_axis",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Whether compatible renderers should display the vertical axis logarithmically."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "discrete_min_bin_id",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Smallest discrete bin identifier, or `None` for a continuous histogram."
+                },
+                "signature": "Option < isize >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "discrete_ordering",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Display ordering for discrete bins, or `None` for a continuous histogram."
+                },
+                "signature": "Option < DiscreteBinOrdering >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "bin_labels",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Optional labels indexed by bin offset, primarily used by discrete histograms."
+                },
+                "signature": "Vec < Option < String > >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "bins",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Per-bin raw-stat accumulators in continuous or ascending discrete-bin order."
+                },
+                "signature": "Vec < ObservableBinAccumulator >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "underflow_bin",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Raw-stat accumulator for entries below the configured histogram range."
+                },
+                "signature": "ObservableBinAccumulator",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "overflow_bin",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Raw-stat accumulator for entries above the configured histogram range."
+                },
+                "signature": "ObservableBinAccumulator",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "statistics",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Histogram-wide entry, non-finite-value, and mitigation counters."
+                },
+                "signature": "ObservableHistogramStatistics",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "gammalooprs::observables::HistogramAccumulatorState",
+              "file": "crates/gammalooprs/src/observables/mod.rs",
+              "line": 2231,
+              "column": 1
+            }
+          },
+          "HistogramAccumulatorState::snapshot": {
+            "id": "HistogramAccumulatorState::snapshot",
+            "name": "snapshot",
+            "title": "Snapshot a histogram accumulator",
+            "kind": "method",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Captures the accumulator's current raw statistics in a serializable histogram snapshot."
+            },
+            "summary": "Captures the accumulator's current raw statistics in a serializable histogram snapshot.",
+            "signature": "fn snapshot(& self) -> HistogramSnapshot",
+            "since": null,
+            "keywords": [],
+            "params": [
+              {
+                "name": "self",
+                "docs": null,
+                "ty": "& self",
+                "default": null,
+                "required": true
+              }
+            ],
+            "returns": {
+              "format": "plain-text",
+              "body": "HistogramSnapshot"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let accumulator = gammalooprs::observables::HistogramAccumulatorState::default(); let snapshot = accumulator.snapshot();"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammalooprs::observables::HistogramAccumulatorState::snapshot",
+              "file": "crates/gammalooprs/src/observables/mod.rs",
+              "line": 2469,
               "column": 1
             }
           },
@@ -140,7 +1488,106 @@
             "source": {
               "identifier": "gammalooprs::set_interrupt_handler",
               "file": "crates/gammalooprs/src/lib.rs",
-              "line": 81,
+              "line": 84,
+              "column": 1
+            }
+          },
+          "request_interrupt": {
+            "id": "request_interrupt",
+            "name": "request_interrupt",
+            "title": "Request interruption",
+            "kind": "function",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Signals cooperative cancellation to long-running GammaLoop evaluation and integration code."
+            },
+            "summary": "Signals cooperative cancellation to long-running GammaLoop evaluation and integration code.",
+            "signature": "fn request_interrupt()",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "gammalooprs::request_interrupt();"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammalooprs::request_interrupt",
+              "file": "crates/gammalooprs/src/lib.rs",
+              "line": 93,
+              "column": 1
+            }
+          },
+          "is_interrupt_requested": {
+            "id": "is_interrupt_requested",
+            "name": "is_interrupt_requested",
+            "title": "Inspect interruption state",
+            "kind": "function",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Reports whether cooperative cancellation has been requested for the current process."
+            },
+            "summary": "Reports whether cooperative cancellation has been requested for the current process.",
+            "signature": "fn is_interrupt_requested() -> bool",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": {
+              "format": "plain-text",
+              "body": "bool"
+            },
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let interrupted = gammalooprs::is_interrupt_requested();"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammalooprs::is_interrupt_requested",
+              "file": "crates/gammalooprs/src/lib.rs",
+              "line": 103,
+              "column": 1
+            }
+          },
+          "clear_interrupt_request": {
+            "id": "clear_interrupt_request",
+            "name": "clear_interrupt_request",
+            "title": "Clear interruption state",
+            "kind": "function",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Clears a previous cooperative-cancellation request before beginning new work."
+            },
+            "summary": "Clears a previous cooperative-cancellation request before beginning new work.",
+            "signature": "fn clear_interrupt_request()",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "gammalooprs::clear_interrupt_request();"
+              }
+            ],
+            "members": [],
+            "source": {
+              "identifier": "gammalooprs::clear_interrupt_request",
+              "file": "crates/gammalooprs/src/lib.rs",
+              "line": 123,
               "column": 1
             }
           }

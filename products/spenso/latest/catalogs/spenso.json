@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "product": {
     "id": "spenso",
     "title": "Spenso"
@@ -53,7 +53,7 @@
               "body": "Describes ordered slots, dimensions, representations, and contraction compatibility independently of data."
             },
             "summary": "Describes ordered slots, dimensions, representations, and contraction compatibility independently of data.",
-            "signature": "pub trait TensorStructure\n{\n    type Slot : IsAbstractSlot + DualSlotTo < Dual = Self :: Slot > ; type\n    Indexed : TensorStructure < Indexed = Self :: Indexed, Slot = Self :: Slot\n    > ; fn\n    reindex(self, indices : & [< Self :: Slot as IsAbstractSlot > :: Aind],)\n    -> Result < PermutedStructure < Self :: Indexed > , StructureError > ; fn\n    dual(self) -> Self; fn string_rep(& self) -> String\n    {\n        self.external_structure_iter().map(| s | s.to_string()).collect :: <\n        Vec < _ > > ().join(\"\")\n    } fn external_structure_iter(& self) -> impl Iterator < Item = Self ::\n    Slot > ; fn external_dims_iter(& self) -> impl Iterator < Item = Dimension\n    > ; fn external_reps_iter(& self,) -> impl Iterator < Item =\n    Representation < < Self :: Slot as IsAbstractSlot > :: R > > ; fn\n    external_indices_iter(& self) -> impl Iterator < Item = < Self :: Slot as\n    IsAbstractSlot > :: Aind > ; fn\n    get_aind(& self, i : impl Into < SlotIndex >) -> Option < < Self :: Slot\n    as IsAbstractSlot > :: Aind > ; fn\n    get_rep(& self, i : impl Into < SlotIndex > ,) -> Option < Representation\n    < < Self :: Slot as IsAbstractSlot > :: R > > ; fn\n    get_dim(& self, i : impl Into < SlotIndex >) -> Option < Dimension > ; fn\n    get_slot(& self, i : impl Into < SlotIndex >) -> Option < Self :: Slot > ;\n    fn order(& self) -> usize;\n    #[doc =\n    \" returns the list of slots that are the external indices of the tensor\"]\n    fn external_structure(& self) -> Vec < Self :: Slot >\n    { self.external_structure_iter().collect() } fn to_shell(self) ->\n    TensorShell < Self > where Self : Sized, { TensorShell :: new(self) } fn\n    contains_matching(& self, slot : & Self :: Slot) -> bool\n    { self.external_structure_iter().any(| s | s.matches(slot)) } fn\n    external_reps(& self) -> Vec < Representation < < Self :: Slot as\n    IsAbstractSlot > :: R > > { self.external_reps_iter().collect() } fn\n    external_indices(& self) -> Vec < < Self :: Slot as IsAbstractSlot > ::\n    Aind > { self.external_indices_iter().collect() }\n    #[doc =\n    \" checks if the tensor has the same exact structure as another tensor\"] fn\n    same_content(& self, other : & Self) -> bool { self.same_external(other) }\n    #[doc =\n    \" Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list, along with a boolean indicating if there is a single match\"]\n    fn match_index(& self, other : & Self) -> Option < (bool, usize, usize) >\n    {\n        let posmap =\n        self.external_structure_iter().enumerate().map(| (i, slot) |\n        (slot, i)).collect :: < AHashMap < _, _ > > (); let mut first_pair :\n        Option < (usize, usize) > = None; for (j, slot) in\n        other.external_structure_iter().enumerate()\n        {\n            if let Some(& i) = posmap.get(& slot.dual())\n            {\n                if let Some((i, j)) = first_pair\n                { return Some((false, i, j)); } first_pair = Some((i, j));\n            }\n        } first_pair.map(| (i, j) | (true, i, j))\n    }\n    #[doc =\n    \" Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list\"]\n    fn match_indices(& self, other : & Self) -> Option <\n    (Permutation, Vec < bool > , Vec < bool >) >\n    {\n        let mut self_matches = vec! [false; self.order()]; let mut perm = Vec\n        :: new(); let mut other_matches = vec! [false; other.order()]; let\n        posmap =\n        self.external_structure_iter().enumerate().map(| (i, slot) |\n        (slot, i)).collect :: < AHashMap < _, _ > > (); for (j, slot_other) in\n        other.external_structure_iter().enumerate()\n        {\n            if let Some(& i) = posmap.get(& slot_other.dual())\n            {\n                self_matches [i] = true; other_matches [j] = true;\n                perm.push(i);\n            }\n        } if perm.is_empty() { None } else\n        {\n            let p : Permutation = Permutation :: sort(& perm);\n            Some((p, self_matches, other_matches))\n        }\n    } #[doc = \" Identify the repeated slots in the external index list\"] fn\n    traces(& self) -> Vec < [usize; 2] >\n    {\n        let mut positions : HashMap < < Self as TensorStructure > :: Slot, Vec\n        < usize > > = HashMap :: new(); for (index, key) in\n        self.external_structure_iter().enumerate()\n        {\n            if let Some(v) = positions.get_mut(& key.dual())\n            { v.push(index); } else { positions.insert(key, vec! [index]); }\n        }\n        positions.into_values().filter_map(| indices |\n        {\n            if indices.len() == 2 { Some([indices [0], indices [1]]) } else\n            { None }\n        }).collect()\n    }\n    #[doc =\n    \" yields the (outwards facing) shape of the tensor as a list of dimensions\"]\n    fn shape(& self) -> Vec < Dimension >\n    { self.external_dims_iter().collect() } fn reps(& self) -> Vec <\n    Representation < < Self :: Slot as IsAbstractSlot > :: R > >\n    { self.external_reps_iter().collect() }\n    #[doc = \" checks if externally, the two tensors are the same\"] fn\n    same_external(& self, other : & Self) -> bool\n    {\n        let set1 : HashSet < _ > = self.external_structure_iter().collect();\n        let set2 : HashSet < _ > = other.external_structure_iter().collect();\n        set1 == set2\n    }\n    #[doc =\n    \" find the permutation of the external indices that would make the two tensors the same. Applying the permutation to other should make it the same as self\"]\n    fn find_permutation(& self, other : & Self) -> Result < Permutation >\n    {\n        if self.order() != other.order()\n        {\n            return\n            Err(eyre!\n            (\"Mismatched order: {} vs {}\", self.order(), other.order()));\n        } let other_structure = other.external_structure(); let self_structure\n        = self.external_structure(); let other_sort = Permutation ::\n        sort(& other_structure); let self_sort = Permutation ::\n        sort(& self_structure); if other_sort.apply_slice(& other_structure)\n        == self_sort.apply_slice(& self_structure)\n        { Ok(other_sort.compose(& self_sort.inverse())) } else\n        { Err(eyre! (\"Mismatched structure\")) }\n    } #[doc = \" yields the strides of the tensor in column major order\"] fn\n    strides_column_major(& self) -> Result < Vec < usize > >\n    {\n        let mut strides : Vec < usize > = vec! [1; self.order()]; if\n        self.order() == 0 { return Ok(strides); } for i in 0 .. self.order() -\n        1\n        {\n            strides [i + 1] = strides [i] * usize ::\n            try_from(self.shape() [i]) ? ;\n        } Ok(strides)\n    } #[doc = \" yields the strides of the tensor in row major order\"] fn\n    strides_row_major(& self) -> Result < Vec < usize > >\n    {\n        let mut strides = vec! [1; self.order()]; if self.order() == 0\n        { return Ok(strides); } for i in (0 .. self.order() - 1).rev()\n        {\n            strides [i] = strides [i + 1] * usize ::\n            try_from(self.shape() [i + 1]) ? ;\n        } Ok(strides)\n    } #[doc = \" By default, the strides are row major\"] fn strides(& self) ->\n    Result < Vec < usize > > { self.strides_row_major() }\n    #[doc =\n    \" Verifies that the list of indices provided are valid for the tensor\"]\n    #[doc = \"\"] #[doc = \" # Errors\"] #[doc = \"\"]\n    #[doc =\n    \" `Mismatched order` = if the length of the indices is different from the order of the tensor,\"]\n    #[doc = \"\"]\n    #[doc =\n    \" `Index out of bounds` = if the index is out of bounds for the dimension of that index\"]\n    #[doc = \"\"] fn verify_indices < C : AsRef < [ConcreteIndex] > >\n    (& self, indices : C) -> Result < () >\n    {\n        if indices.as_ref().len() != self.order()\n        {\n            return\n            Err(eyre!\n            (\"Mismatched order: {} indices, vs order {}\",\n            indices.as_ref().len(), self.order()));\n        } for (i, dim_len) in\n        self.external_structure_iter().map(| slot | slot.dim()).enumerate()\n        {\n            if indices.as_ref() [i] >= usize :: try_from(dim_len) ?\n            {\n                return\n                Err(eyre!\n                (\"Index {} out of bounds for dimension {} of size {}\",\n                indices.as_ref()[i], i, usize::try_from(dim_len)?));\n            }\n        } Ok(())\n    } #[doc = \" yields the flat index of the tensor given a list of indices\"]\n    #[doc = \"\"] #[doc = \" # Errors\"] #[doc = \"\"]\n    #[doc = \" Same as [`Self::verify_indices`]\"] fn flat_index < C : AsRef <\n    [ConcreteIndex] > > (& self, indices : C) -> Result < FlatIndex >\n    {\n        let strides = self.strides() ? ; self.verify_indices(& indices) ? ;\n        let mut idx = 0; for (i, & index) in\n        indices.as_ref().iter().enumerate() { idx += index * strides [i]; }\n        Ok(idx.into())\n    } #[doc = \" yields the expanded index of the tensor given a flat index\"]\n    #[doc = \"\"] #[doc = \" # Errors\"] #[doc = \"\"]\n    #[doc =\n    \" `Index out of bounds` = if the flat index is out of bounds for the tensor\"]\n    fn expanded_index(& self, flat_index : FlatIndex) -> Result <\n    ExpandedIndex >\n    {\n        let mut indices = vec! []; let mut index : usize = flat_index.into();\n        for & stride in & self.strides() ?\n        { indices.push(index / stride); index %= stride; } if usize ::\n        from(flat_index) < self.size() ? { Ok(indices.into()) } else\n        { Err(eyre! (\"Index {flat_index} out of bounds\")) }\n    } fn co_expanded_index(& self, flat_index : FlatIndex) -> Result <\n    DualConciousExpandedIndex >\n    {\n        let mut indices = vec! []; for (r, i) in\n        self.external_reps_iter().zip(self.expanded_index(flat_index) ?\n        .iter())\n        {\n            if r.rep.is_base() && r.rep.is_dual()\n            { indices.push(DualConciousIndex :: SelfDual(* i)); } else if\n            r.rep.is_base() { indices.push(DualConciousIndex :: Up(* i)); }\n            else { indices.push(DualConciousIndex :: Down(* i)); }\n        } Ok(indices.into())\n    } #[doc = \" yields an iterator over the indices of the tensor\"] fn\n    index_iter(& self) -> TensorStructureIndexIterator < '_, Self > where Self\n    : Sized, { TensorStructureIndexIterator :: new(self) }\n    #[doc = \" if the tensor has no (external) indices, it is a scalar\"] fn\n    is_scalar(& self) -> bool { self.order() == 0 } fn\n    is_fully_self_dual(& self) -> bool;\n    #[doc =\n    \" yields the size of the tensor, i.e. the product of the dimensions. This is the length of the vector of the data in a dense tensor\"]\n    fn size(& self) -> Result < usize >\n    {\n        if self.order() == 0 { return Ok(1); } let mut size = 1; for dim in\n        self.shape() { size *= usize :: try_from(dim) ? ; } Ok(size)\n    }\n}",
+            "signature": "pub trait TensorStructure {}",
             "since": null,
             "keywords": [],
             "params": [],
@@ -69,7 +69,10 @@
               {
                 "name": "Slot",
                 "kind": "associated-type",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Abstract slot type used for the structure's external indices."
+                },
                 "signature": "type Slot : IsAbstractSlot + DualSlotTo < Dual = Self :: Slot > ;",
                 "default": null,
                 "members": []
@@ -77,7 +80,10 @@
               {
                 "name": "Indexed",
                 "kind": "associated-type",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Structure type produced after assigning new abstract indices."
+                },
                 "signature": "type Indexed : TensorStructure < Indexed = Self :: Indexed, Slot = Self ::\nSlot > ;",
                 "default": null,
                 "members": []
@@ -85,15 +91,21 @@
               {
                 "name": "reindex",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn reindex(self, indices : & [< Self :: Slot as IsAbstractSlot > :: Aind],) ->\nResult < PermutedStructure < Self :: Indexed > , StructureError > ;",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Replaces the slot indices in order and records any resulting permutations."
+                },
+                "signature": "fn reindex(self, indices : & [< Self :: Slot as IsAbstractSlot > :: Aind],) ->\nResult < PermutedStructure < Self :: Indexed > , StructureError >;",
                 "default": null,
                 "members": []
               },
               {
                 "name": "dual",
                 "kind": "method",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns this structure with every external slot dualized."
+                },
                 "signature": "fn dual(self) -> Self;",
                 "default": null,
                 "members": []
@@ -101,79 +113,109 @@
               {
                 "name": "string_rep",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn string_rep(& self) -> String\n{\n    self.external_structure_iter().map(| s | s.to_string()).collect :: < Vec <\n    _ > > ().join(\"\")\n}",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Concatenates the display representation of all external slots."
+                },
+                "signature": "fn string_rep(& self) -> String { … }",
                 "default": null,
                 "members": []
               },
               {
                 "name": "external_structure_iter",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn external_structure_iter(& self) -> impl Iterator < Item = Self :: Slot > ;",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Iterates over external slots in structure order."
+                },
+                "signature": "fn external_structure_iter(& self) -> impl Iterator < Item = Self :: Slot >;",
                 "default": null,
                 "members": []
               },
               {
                 "name": "external_dims_iter",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn external_dims_iter(& self) -> impl Iterator < Item = Dimension > ;",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Iterates over the dimensions of external slots in structure order."
+                },
+                "signature": "fn external_dims_iter(& self) -> impl Iterator < Item = Dimension >;",
                 "default": null,
                 "members": []
               },
               {
                 "name": "external_reps_iter",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn external_reps_iter(& self,) -> impl Iterator < Item = Representation < <\nSelf :: Slot as IsAbstractSlot > :: R > > ;",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Iterates over the representations of external slots in structure order."
+                },
+                "signature": "fn external_reps_iter(& self,) -> impl Iterator < Item = Representation < <\nSelf :: Slot as IsAbstractSlot > :: R > >;",
                 "default": null,
                 "members": []
               },
               {
                 "name": "external_indices_iter",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn external_indices_iter(& self) -> impl Iterator < Item = < Self :: Slot as\nIsAbstractSlot > :: Aind > ;",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Iterates over the abstract indices of external slots in structure order."
+                },
+                "signature": "fn external_indices_iter(& self) -> impl Iterator < Item = < Self :: Slot as\nIsAbstractSlot > :: Aind >;",
                 "default": null,
                 "members": []
               },
               {
                 "name": "get_aind",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn get_aind(& self, i : impl Into < SlotIndex >) -> Option < < Self :: Slot as\nIsAbstractSlot > :: Aind > ;",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns the abstract index at a slot position, if it exists."
+                },
+                "signature": "fn get_aind(& self, i : impl Into < SlotIndex >) -> Option < < Self :: Slot as\nIsAbstractSlot > :: Aind >;",
                 "default": null,
                 "members": []
               },
               {
                 "name": "get_rep",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn get_rep(& self, i : impl Into < SlotIndex > ,) -> Option < Representation <\n< Self :: Slot as IsAbstractSlot > :: R > > ;",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns the representation at a slot position, if it exists."
+                },
+                "signature": "fn get_rep(& self, i : impl Into < SlotIndex > ,) -> Option < Representation <\n< Self :: Slot as IsAbstractSlot > :: R > >;",
                 "default": null,
                 "members": []
               },
               {
                 "name": "get_dim",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn get_dim(& self, i : impl Into < SlotIndex >) -> Option < Dimension > ;",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns the dimension at a slot position, if it exists."
+                },
+                "signature": "fn get_dim(& self, i : impl Into < SlotIndex >) -> Option < Dimension >;",
                 "default": null,
                 "members": []
               },
               {
                 "name": "get_slot",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn get_slot(& self, i : impl Into < SlotIndex >) -> Option < Self :: Slot > ;",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns the external slot at a position, if it exists."
+                },
+                "signature": "fn get_slot(& self, i : impl Into < SlotIndex >) -> Option < Self :: Slot >;",
                 "default": null,
                 "members": []
               },
               {
                 "name": "order",
                 "kind": "method",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Returns the number of external slots."
+                },
                 "signature": "fn order(& self) -> usize;",
                 "default": null,
                 "members": []
@@ -185,39 +227,51 @@
                   "format": "rust-markdown",
                   "body": "returns the list of slots that are the external indices of the tensor"
                 },
-                "signature": "#[doc =\n\" returns the list of slots that are the external indices of the tensor\"] fn\nexternal_structure(& self) -> Vec < Self :: Slot >\n{ self.external_structure_iter().collect() }",
+                "signature": "fn external_structure(& self) -> Vec < Self :: Slot > { … }",
                 "default": null,
                 "members": []
               },
               {
                 "name": "to_shell",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn to_shell(self) -> TensorShell < Self > where Self : Sized,\n{ TensorShell :: new(self) }",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Wraps this structure as a data-free tensor shell."
+                },
+                "signature": "fn to_shell(self) -> TensorShell < Self > where Self : Sized, { … }",
                 "default": null,
                 "members": []
               },
               {
                 "name": "contains_matching",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn contains_matching(& self, slot : & Self :: Slot) -> bool\n{ self.external_structure_iter().any(| s | s.matches(slot)) }",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Reports whether an external slot matches the supplied slot."
+                },
+                "signature": "fn contains_matching(& self, slot : & Self :: Slot) -> bool { … }",
                 "default": null,
                 "members": []
               },
               {
                 "name": "external_reps",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn external_reps(& self) -> Vec < Representation < < Self :: Slot as\nIsAbstractSlot > :: R > > { self.external_reps_iter().collect() }",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Collects the external representations in structure order."
+                },
+                "signature": "fn external_reps(& self) -> Vec < Representation < < Self :: Slot as\nIsAbstractSlot > :: R > > { … }",
                 "default": null,
                 "members": []
               },
               {
                 "name": "external_indices",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn external_indices(& self) -> Vec < < Self :: Slot as IsAbstractSlot > ::\nAind > { self.external_indices_iter().collect() }",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Collects the external abstract indices in structure order."
+                },
+                "signature": "fn external_indices(& self) -> Vec < < Self :: Slot as IsAbstractSlot > ::\nAind > { … }",
                 "default": null,
                 "members": []
               },
@@ -228,7 +282,7 @@
                   "format": "rust-markdown",
                   "body": "checks if the tensor has the same exact structure as another tensor"
                 },
-                "signature": "#[doc =\n\" checks if the tensor has the same exact structure as another tensor\"] fn\nsame_content(& self, other : & Self) -> bool { self.same_external(other) }",
+                "signature": "fn same_content(& self, other : & Self) -> bool { … }",
                 "default": null,
                 "members": []
               },
@@ -239,7 +293,7 @@
                   "format": "rust-markdown",
                   "body": "Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list, along with a boolean indicating if there is a single match"
                 },
-                "signature": "#[doc =\n\" Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list, along with a boolean indicating if there is a single match\"]\nfn match_index(& self, other : & Self) -> Option < (bool, usize, usize) >\n{\n    let posmap =\n    self.external_structure_iter().enumerate().map(| (i, slot) |\n    (slot, i)).collect :: < AHashMap < _, _ > > (); let mut first_pair :\n    Option < (usize, usize) > = None; for (j, slot) in\n    other.external_structure_iter().enumerate()\n    {\n        if let Some(& i) = posmap.get(& slot.dual())\n        {\n            if let Some((i, j)) = first_pair { return Some((false, i, j)); }\n            first_pair = Some((i, j));\n        }\n    } first_pair.map(| (i, j) | (true, i, j))\n}",
+                "signature": "fn match_index(& self, other : & Self) -> Option < (bool, usize, usize) > { … }",
                 "default": null,
                 "members": []
               },
@@ -250,7 +304,7 @@
                   "format": "rust-markdown",
                   "body": "Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list"
                 },
-                "signature": "#[doc =\n\" Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list\"]\nfn match_indices(& self, other : & Self) -> Option <\n(Permutation, Vec < bool > , Vec < bool >) >\n{\n    let mut self_matches = vec! [false; self.order()]; let mut perm = Vec ::\n    new(); let mut other_matches = vec! [false; other.order()]; let posmap =\n    self.external_structure_iter().enumerate().map(| (i, slot) |\n    (slot, i)).collect :: < AHashMap < _, _ > > (); for (j, slot_other) in\n    other.external_structure_iter().enumerate()\n    {\n        if let Some(& i) = posmap.get(& slot_other.dual())\n        { self_matches [i] = true; other_matches [j] = true; perm.push(i); }\n    } if perm.is_empty() { None } else\n    {\n        let p : Permutation = Permutation :: sort(& perm);\n        Some((p, self_matches, other_matches))\n    }\n}",
+                "signature": "fn match_indices(& self, other : & Self) -> Option <\n(Permutation, Vec < bool > , Vec < bool >) > { … }",
                 "default": null,
                 "members": []
               },
@@ -261,7 +315,7 @@
                   "format": "rust-markdown",
                   "body": "Identify the repeated slots in the external index list"
                 },
-                "signature": "#[doc = \" Identify the repeated slots in the external index list\"] fn\ntraces(& self) -> Vec < [usize; 2] >\n{\n    let mut positions : HashMap < < Self as TensorStructure > :: Slot, Vec <\n    usize > > = HashMap :: new(); for (index, key) in\n    self.external_structure_iter().enumerate()\n    {\n        if let Some(v) = positions.get_mut(& key.dual()) { v.push(index); }\n        else { positions.insert(key, vec! [index]); }\n    }\n    positions.into_values().filter_map(| indices |\n    {\n        if indices.len() == 2 { Some([indices [0], indices [1]]) } else\n        { None }\n    }).collect()\n}",
+                "signature": "fn traces(& self) -> Vec < [usize; 2] > { … }",
                 "default": null,
                 "members": []
               },
@@ -272,15 +326,18 @@
                   "format": "rust-markdown",
                   "body": "yields the (outwards facing) shape of the tensor as a list of dimensions"
                 },
-                "signature": "#[doc =\n\" yields the (outwards facing) shape of the tensor as a list of dimensions\"]\nfn shape(& self) -> Vec < Dimension > { self.external_dims_iter().collect() }",
+                "signature": "fn shape(& self) -> Vec < Dimension > { … }",
                 "default": null,
                 "members": []
               },
               {
                 "name": "reps",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn reps(& self) -> Vec < Representation < < Self :: Slot as IsAbstractSlot >\n:: R > > { self.external_reps_iter().collect() }",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Collects the external representations in structure order."
+                },
+                "signature": "fn reps(& self) -> Vec < Representation < < Self :: Slot as IsAbstractSlot >\n:: R > > { … }",
                 "default": null,
                 "members": []
               },
@@ -291,7 +348,7 @@
                   "format": "rust-markdown",
                   "body": "checks if externally, the two tensors are the same"
                 },
-                "signature": "#[doc = \" checks if externally, the two tensors are the same\"] fn\nsame_external(& self, other : & Self) -> bool\n{\n    let set1 : HashSet < _ > = self.external_structure_iter().collect(); let\n    set2 : HashSet < _ > = other.external_structure_iter().collect(); set1 ==\n    set2\n}",
+                "signature": "fn same_external(& self, other : & Self) -> bool { … }",
                 "default": null,
                 "members": []
               },
@@ -302,7 +359,7 @@
                   "format": "rust-markdown",
                   "body": "find the permutation of the external indices that would make the two tensors the same. Applying the permutation to other should make it the same as self"
                 },
-                "signature": "#[doc =\n\" find the permutation of the external indices that would make the two tensors the same. Applying the permutation to other should make it the same as self\"]\nfn find_permutation(& self, other : & Self) -> Result < Permutation >\n{\n    if self.order() != other.order()\n    {\n        return\n        Err(eyre!\n        (\"Mismatched order: {} vs {}\", self.order(), other.order()));\n    } let other_structure = other.external_structure(); let self_structure =\n    self.external_structure(); let other_sort = Permutation ::\n    sort(& other_structure); let self_sort = Permutation ::\n    sort(& self_structure); if other_sort.apply_slice(& other_structure) ==\n    self_sort.apply_slice(& self_structure)\n    { Ok(other_sort.compose(& self_sort.inverse())) } else\n    { Err(eyre! (\"Mismatched structure\")) }\n}",
+                "signature": "fn find_permutation(& self, other : & Self) -> Result < Permutation > { … }",
                 "default": null,
                 "members": []
               },
@@ -313,7 +370,7 @@
                   "format": "rust-markdown",
                   "body": "yields the strides of the tensor in column major order"
                 },
-                "signature": "#[doc = \" yields the strides of the tensor in column major order\"] fn\nstrides_column_major(& self) -> Result < Vec < usize > >\n{\n    let mut strides : Vec < usize > = vec! [1; self.order()]; if self.order()\n    == 0 { return Ok(strides); } for i in 0 .. self.order() - 1\n    {\n        strides [i + 1] = strides [i] * usize :: try_from(self.shape() [i]) ?\n        ;\n    } Ok(strides)\n}",
+                "signature": "fn strides_column_major(& self) -> Result < Vec < usize > > { … }",
                 "default": null,
                 "members": []
               },
@@ -324,7 +381,7 @@
                   "format": "rust-markdown",
                   "body": "yields the strides of the tensor in row major order"
                 },
-                "signature": "#[doc = \" yields the strides of the tensor in row major order\"] fn\nstrides_row_major(& self) -> Result < Vec < usize > >\n{\n    let mut strides = vec! [1; self.order()]; if self.order() == 0\n    { return Ok(strides); } for i in (0 .. self.order() - 1).rev()\n    {\n        strides [i] = strides [i + 1] * usize ::\n        try_from(self.shape() [i + 1]) ? ;\n    } Ok(strides)\n}",
+                "signature": "fn strides_row_major(& self) -> Result < Vec < usize > > { … }",
                 "default": null,
                 "members": []
               },
@@ -335,7 +392,7 @@
                   "format": "rust-markdown",
                   "body": "By default, the strides are row major"
                 },
-                "signature": "#[doc = \" By default, the strides are row major\"] fn strides(& self) -> Result\n< Vec < usize > > { self.strides_row_major() }",
+                "signature": "fn strides(& self) -> Result < Vec < usize > > { … }",
                 "default": null,
                 "members": []
               },
@@ -346,7 +403,7 @@
                   "format": "rust-markdown",
                   "body": "Verifies that the list of indices provided are valid for the tensor\n\n# Errors\n\n`Mismatched order` = if the length of the indices is different from the order of the tensor,\n\n`Index out of bounds` = if the index is out of bounds for the dimension of that index"
                 },
-                "signature": "#[doc =\n\" Verifies that the list of indices provided are valid for the tensor\"]\n#[doc = \"\"] #[doc = \" # Errors\"] #[doc = \"\"]\n#[doc =\n\" `Mismatched order` = if the length of the indices is different from the order of the tensor,\"]\n#[doc = \"\"]\n#[doc =\n\" `Index out of bounds` = if the index is out of bounds for the dimension of that index\"]\n#[doc = \"\"] fn verify_indices < C : AsRef < [ConcreteIndex] > >\n(& self, indices : C) -> Result < () >\n{\n    if indices.as_ref().len() != self.order()\n    {\n        return\n        Err(eyre!\n        (\"Mismatched order: {} indices, vs order {}\", indices.as_ref().len(),\n        self.order()));\n    } for (i, dim_len) in\n    self.external_structure_iter().map(| slot | slot.dim()).enumerate()\n    {\n        if indices.as_ref() [i] >= usize :: try_from(dim_len) ?\n        {\n            return\n            Err(eyre!\n            (\"Index {} out of bounds for dimension {} of size {}\",\n            indices.as_ref()[i], i, usize::try_from(dim_len)?));\n        }\n    } Ok(())\n}",
+                "signature": "fn verify_indices < C : AsRef < [ConcreteIndex] > > (& self, indices : C) ->\nResult < () > { … }",
                 "default": null,
                 "members": []
               },
@@ -357,7 +414,7 @@
                   "format": "rust-markdown",
                   "body": "yields the flat index of the tensor given a list of indices\n\n# Errors\n\nSame as [`Self::verify_indices`]"
                 },
-                "signature": "#[doc = \" yields the flat index of the tensor given a list of indices\"]\n#[doc = \"\"] #[doc = \" # Errors\"] #[doc = \"\"]\n#[doc = \" Same as [`Self::verify_indices`]\"] fn flat_index < C : AsRef <\n[ConcreteIndex] > > (& self, indices : C) -> Result < FlatIndex >\n{\n    let strides = self.strides() ? ; self.verify_indices(& indices) ? ; let\n    mut idx = 0; for (i, & index) in indices.as_ref().iter().enumerate()\n    { idx += index * strides [i]; } Ok(idx.into())\n}",
+                "signature": "fn flat_index < C : AsRef < [ConcreteIndex] > > (& self, indices : C) ->\nResult < FlatIndex > { … }",
                 "default": null,
                 "members": []
               },
@@ -368,15 +425,18 @@
                   "format": "rust-markdown",
                   "body": "yields the expanded index of the tensor given a flat index\n\n# Errors\n\n`Index out of bounds` = if the flat index is out of bounds for the tensor"
                 },
-                "signature": "#[doc = \" yields the expanded index of the tensor given a flat index\"]\n#[doc = \"\"] #[doc = \" # Errors\"] #[doc = \"\"]\n#[doc =\n\" `Index out of bounds` = if the flat index is out of bounds for the tensor\"]\nfn expanded_index(& self, flat_index : FlatIndex) -> Result < ExpandedIndex >\n{\n    let mut indices = vec! []; let mut index : usize = flat_index.into(); for\n    & stride in & self.strides() ?\n    { indices.push(index / stride); index %= stride; } if usize ::\n    from(flat_index) < self.size() ? { Ok(indices.into()) } else\n    { Err(eyre! (\"Index {flat_index} out of bounds\")) }\n}",
+                "signature": "fn expanded_index(& self, flat_index : FlatIndex) -> Result < ExpandedIndex > { … }",
                 "default": null,
                 "members": []
               },
               {
                 "name": "co_expanded_index",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn co_expanded_index(& self, flat_index : FlatIndex) -> Result <\nDualConciousExpandedIndex >\n{\n    let mut indices = vec! []; for (r, i) in\n    self.external_reps_iter().zip(self.expanded_index(flat_index) ? .iter())\n    {\n        if r.rep.is_base() && r.rep.is_dual()\n        { indices.push(DualConciousIndex :: SelfDual(* i)); } else if\n        r.rep.is_base() { indices.push(DualConciousIndex :: Up(* i)); } else\n        { indices.push(DualConciousIndex :: Down(* i)); }\n    } Ok(indices.into())\n}",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Expands a flat index while retaining each representation's dual orientation."
+                },
+                "signature": "fn co_expanded_index(& self, flat_index : FlatIndex) -> Result <\nDualConciousExpandedIndex > { … }",
                 "default": null,
                 "members": []
               },
@@ -387,7 +447,7 @@
                   "format": "rust-markdown",
                   "body": "yields an iterator over the indices of the tensor"
                 },
-                "signature": "#[doc = \" yields an iterator over the indices of the tensor\"] fn\nindex_iter(& self) -> TensorStructureIndexIterator < '_, Self > where Self :\nSized, { TensorStructureIndexIterator :: new(self) }",
+                "signature": "fn index_iter(& self) -> TensorStructureIndexIterator < '_, Self > where Self\n: Sized, { … }",
                 "default": null,
                 "members": []
               },
@@ -398,14 +458,17 @@
                   "format": "rust-markdown",
                   "body": "if the tensor has no (external) indices, it is a scalar"
                 },
-                "signature": "#[doc = \" if the tensor has no (external) indices, it is a scalar\"] fn\nis_scalar(& self) -> bool { self.order() == 0 }",
+                "signature": "fn is_scalar(& self) -> bool { … }",
                 "default": null,
                 "members": []
               },
               {
                 "name": "is_fully_self_dual",
                 "kind": "method",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Reports whether every external representation is self-dual."
+                },
                 "signature": "fn is_fully_self_dual(& self) -> bool;",
                 "default": null,
                 "members": []
@@ -417,7 +480,7 @@
                   "format": "rust-markdown",
                   "body": "yields the size of the tensor, i.e. the product of the dimensions. This is the length of the vector of the data in a dense tensor"
                 },
-                "signature": "#[doc =\n\" yields the size of the tensor, i.e. the product of the dimensions. This is the length of the vector of the data in a dense tensor\"]\nfn size(& self) -> Result < usize >\n{\n    if self.order() == 0 { return Ok(1); } let mut size = 1; for dim in\n    self.shape() { size *= usize :: try_from(dim) ? ; } Ok(size)\n}",
+                "signature": "fn size(& self) -> Result < usize > { … }",
                 "default": null,
                 "members": []
               }
@@ -441,7 +504,7 @@
               "body": "Stores every tensor component in structure-defined flat order."
             },
             "summary": "Stores every tensor component in structure-defined flat order.",
-            "signature": "#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Hash, Eq, Encode,\nDecode)] pub struct DenseTensor < T, S = OrderedStructure >\n{ pub data : Vec < T > , pub structure : S, }",
+            "signature": "pub struct DenseTensor < T, S = OrderedStructure > {}",
             "since": null,
             "keywords": [],
             "params": [],
@@ -457,7 +520,10 @@
               {
                 "name": "data",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Components in the flat order defined by `structure`."
+                },
                 "signature": "Vec < T >",
                 "default": null,
                 "members": []
@@ -465,7 +531,10 @@
               {
                 "name": "structure",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Tensor structure that maps external slots to flat component indices."
+                },
                 "signature": "S",
                 "default": null,
                 "members": []
@@ -490,7 +559,7 @@
               "body": "Sparse data tensor, generic on storage type `T`, and structure type `I`.\n\nStores data in a hashmap of usize, using ahash's hashmap.\nThe usize key is the flattened index of the corresponding position in the dense tensor"
             },
             "summary": "Stores only explicit tensor components keyed by flat index.",
-            "signature": "#[doc =\n\" Sparse data tensor, generic on storage type `T`, and structure type `I`.\"]\n#[doc = \"\"]\n#[doc = \" Stores data in a hashmap of usize, using ahash\\'s hashmap.\"]\n#[doc =\n\" The usize key is the flattened index of the corresponding position in the dense tensor\"]\n#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Encode, Decode)]\npub struct SparseTensor < T, I = OrderedStructure >\n{\n    pub elements : std :: collections :: HashMap < FlatIndex, T > , pub zero :\n    T, pub structure : I,\n}",
+            "signature": "pub struct SparseTensor < T, I = OrderedStructure > {}",
             "since": null,
             "keywords": [],
             "params": [],
@@ -506,7 +575,10 @@
               {
                 "name": "elements",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Explicitly stored components keyed by their flat indices."
+                },
                 "signature": "std :: collections :: HashMap < FlatIndex, T >",
                 "default": null,
                 "members": []
@@ -514,7 +586,10 @@
               {
                 "name": "zero",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Value used for components absent from `elements`."
+                },
                 "signature": "T",
                 "default": null,
                 "members": []
@@ -522,7 +597,10 @@
               {
                 "name": "structure",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Tensor structure that maps external slots to flat component indices."
+                },
                 "signature": "I",
                 "default": null,
                 "members": []
@@ -547,7 +625,7 @@
               "body": "Defines pairwise tensor contraction with an explicit settings type and output."
             },
             "summary": "Defines pairwise tensor contraction with an explicit settings type and output.",
-            "signature": "pub trait Contract < T = Self, Settings = () >\n{\n    type LCM; fn contract(& self, other : & T) -> Result < Self :: LCM,\n    ContractionError > ;\n}",
+            "signature": "pub trait Contract < T = Self, Settings = () > {}",
             "since": null,
             "keywords": [],
             "params": [],
@@ -563,7 +641,10 @@
               {
                 "name": "LCM",
                 "kind": "associated-type",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Result type produced by contracting with `T`."
+                },
                 "signature": "type LCM;",
                 "default": null,
                 "members": []
@@ -571,8 +652,11 @@
               {
                 "name": "contract",
                 "kind": "method",
-                "docs": null,
-                "signature": "fn contract(& self, other : & T) -> Result < Self :: LCM, ContractionError > ;",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Contracts matching dual slots with `other` and returns the resulting tensor."
+                },
+                "signature": "fn contract(& self, other : & T) -> Result < Self :: LCM, ContractionError >;",
                 "default": null,
                 "members": []
               }
@@ -596,7 +680,7 @@
               "body": "Binds symbolic tensor expressions to libraries and an executable contraction graph."
             },
             "summary": "Binds symbolic tensor expressions to libraries and an executable contraction graph.",
-            "signature": "#[derive(Debug, Clone, Serialize, Deserialize, bincode_trait_derive::Encode,\nbincode_trait_derive::Decode, PartialEq, Eq,)]\n#[cfg_attr(feature = \"shadowing\",\ntrait_decode(trait = symbolica::state::HasStateMap),)] pub struct Network < S,\nLibKey, FunKey, Aind = AbstractIndex >\n{\n    pub graph : NetworkGraph < LibKey, FunKey, Aind > , pub store : S, pub\n    state : NetworkState,\n}",
+            "signature": "pub struct Network < S, LibKey, FunKey, Aind = AbstractIndex > {}",
             "since": null,
             "keywords": [],
             "params": [],
@@ -612,7 +696,10 @@
               {
                 "name": "graph",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Expression and contraction topology whose leaves reference stored values."
+                },
                 "signature": "NetworkGraph < LibKey, FunKey, Aind >",
                 "default": null,
                 "members": []
@@ -620,7 +707,10 @@
               {
                 "name": "store",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Backing tensor and scalar storage referenced by graph leaves."
+                },
                 "signature": "S",
                 "default": null,
                 "members": []
@@ -628,7 +718,10 @@
               {
                 "name": "state",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Classification of the network result as scalar or tensor, including self-duality."
+                },
                 "signature": "NetworkState",
                 "default": null,
                 "members": []
@@ -638,6 +731,1071 @@
               "identifier": "spenso::network::Network",
               "file": "crates/spenso/src/network/mod.rs",
               "line": 1660,
+              "column": 1
+            }
+          },
+          "ContractionStrategy": {
+            "id": "ContractionStrategy",
+            "name": "ContractionStrategy",
+            "title": "Network contraction strategy",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Defines how a ready network operation is contracted and whether product subgraphs can be rewritten incrementally."
+            },
+            "summary": "Defines how a ready network operation is contracted and whether product subgraphs can be rewritten incrementally.",
+            "signature": "pub trait ContractionStrategy < E, L, K, FK, Aind > : Sized {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use spenso::network::ContractionStrategy;"
+              }
+            ],
+            "members": [
+              {
+                "name": "SUPPORTS_PARTIAL_GRAPH_REWRITE",
+                "kind": "associated-const",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Whether this strategy can incrementally rewrite a ready product subgraph in place."
+                },
+                "signature": "const SUPPORTS_PARTIAL_GRAPH_REWRITE : bool = …;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "contract",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Contracts one ready network operation into its replacement leaf."
+                },
+                "signature": "fn\ncontract(executor : & mut E, graph : & NetworkGraph < K, FK, Aind > ,\noperation : & NetworkOperation < FK > , lib : & L,) -> Result < NetworkLeaf <\nK, Aind > , TensorNetworkError < K, FK > > where K : Display, FK : Display;",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "contract_product_in_place",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Attempts an in-place product rewrite and reports whether it made progress."
+                },
+                "signature": "fn\ncontract_product_in_place(executor : & mut E, graph : & mut NetworkGraph < K,\nFK, Aind > , operation : & NetworkOperation < FK > , lib : & L, ignored : &\nmut SuBitGraph,) -> Result < bool, TensorNetworkError < K, FK > > where K :\nDisplay + Debug, FK : Display + Debug, Aind : AbsInd, { … }",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "spenso::network::contract::ContractionStrategy",
+              "file": "crates/spenso/src/network/contract.rs",
+              "line": 305,
+              "column": 1
+            }
+          },
+          "ExecutionStrategy": {
+            "id": "ExecutionStrategy",
+            "name": "ExecutionStrategy",
+            "title": "Network execution strategy",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Defines how an executor repeatedly applies a selected contraction strategy until the strategy's stopping condition is reached."
+            },
+            "summary": "Defines how an executor repeatedly applies a selected contraction strategy until the strategy's stopping condition is reached.",
+            "signature": "pub trait ExecutionStrategy < E, FL, L, K, FK, Aind > where E : ExecuteOp <\nFL, L, K, FK, Aind > , {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use spenso::network::ExecutionStrategy;"
+              }
+            ],
+            "members": [
+              {
+                "name": "execute_all",
+                "kind": "associated-function",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Run the entire contraction to one leaf."
+                },
+                "signature": "fn execute_all < C : ContractionStrategy < E, L, K, FK, Aind > >\n(executor : & mut E, graph : & mut NetworkGraph < K, FK, Aind > , lib : & L,\nfnlib : & FL,) -> Result < (), TensorNetworkError < K, FK > > where K :\nDisplay, FK : Display;",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "spenso::network::ExecutionStrategy",
+              "file": "crates/spenso/src/network/mod.rs",
+              "line": 2955,
+              "column": 1
+            }
+          },
+          "ExecutionMode": {
+            "id": "ExecutionMode",
+            "name": "ExecutionMode",
+            "title": "Network execution mode",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Enumerates sequential, parallel, borrowed-reference, and extracting execution modes."
+            },
+            "summary": "Enumerates sequential, parallel, borrowed-reference, and extracting execution modes.",
+            "signature": "pub enum ExecutionMode {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use spenso::network::ExecutionMode;"
+              }
+            ],
+            "members": [
+              {
+                "name": "Sequential",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Executes ready operations serially against the original graph."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Parallel",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Requests concurrent execution of independent ready operations with Rayon.\n\nExecution falls back to the sequential path when Rayon is unavailable or\npartial graph rewriting requires it."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "SequentialRef",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Executes serially after locating ready operations through borrowed graph views."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "SequentialExtract",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Executes serially by extracting each ready operation's owned subgraph."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "spenso::network::ExecutionMode",
+              "file": "crates/spenso/src/network/mod.rs",
+              "line": 3728,
+              "column": 1
+            }
+          },
+          "ExecutionResult": {
+            "id": "ExecutionResult",
+            "name": "ExecutionResult",
+            "title": "Network execution result",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Represents a completed network as the multiplicative identity, the additive identity, or a concrete value."
+            },
+            "summary": "Represents a completed network as the multiplicative identity, the additive identity, or a concrete value.",
+            "signature": "pub enum ExecutionResult < T > {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use spenso::network::ExecutionResult;"
+              }
+            ],
+            "members": [
+              {
+                "name": "One",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Multiplicative identity produced by an empty product."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Zero",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Additive identity produced by an empty sum."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Val",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Concrete scalar, tensor, or library-key result."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "T",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              }
+            ],
+            "source": {
+              "identifier": "spenso::network::ExecutionResult",
+              "file": "crates/spenso/src/network/mod.rs",
+              "line": 2515,
+              "column": 1
+            }
+          },
+          "TensorNetworkError": {
+            "id": "TensorNetworkError",
+            "name": "TensorNetworkError",
+            "title": "Tensor-network error",
+            "kind": "type",
+            "supported": true,
+            "required_features": [],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Classifies invalid topology, contraction, library, structure, I/O, and result-shape failures during network processing."
+            },
+            "summary": "Classifies invalid topology, contraction, library, structure, I/O, and result-shape failures during network processing.",
+            "signature": "pub enum TensorNetworkError < K : Display, FK : Display > {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use spenso::network::TensorNetworkError;"
+              }
+            ],
+            "members": [
+              {
+                "name": "SlotEdgeToProdNode",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A tensor-slot edge terminated at a product operation."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "SlotEdgeToScalarNode",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A tensor-slot edge terminated at a scalar node."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "MoreThanOneNeg",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A negation operation did not have exactly one child."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "ChildlessNeg",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A unary operation had no executable leaf child."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "ContractionError",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Tensor contraction failed with the attached contraction error."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "ContractionError",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "ScalarSlotEdge",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A scalar leaf was connected through a tensor-slot edge."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "StructErr",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Tensor-structure validation or manipulation failed."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "StructureError",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "LibErr",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Resolving a tensor through the tensor library failed."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "LibraryError < K >",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "FunLibErr",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Applying a registered tensor function failed."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "FunctionLibraryError < FK >",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "NonTensorNodePresent",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A tensor-only graph operation encountered another node kind."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "NegativeExponentNonScalar",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A negative exponent was applied to a non-scalar result."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "String",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "TooManyArgsFunction",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A function received an unsupported number of tensor arguments."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "String",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "InvalidDotFunction",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A `dot` expression did not have exactly two arguments."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "String",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "NonSelfDualTensorPower",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "An integer power was applied to a non-self-dual tensor."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "String",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "InvalidResultNode",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Execution produced a node that cannot represent a final result."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "NetworkNode < DummyKey, FK >",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "InternalEdgePresent",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A final graph still contained an internal edge requiring contraction."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "UncontractedScalar",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A scalar factor remained uncontracted in the final graph."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "CannotContractEdgeBetween",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "No contraction rule exists for the two endpoint node kinds."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "String",
+                    "default": null,
+                    "members": []
+                  },
+                  {
+                    "name": "1",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "String",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "NoNodes",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A result was requested from an empty graph."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "NoScalar",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A scalar result was requested but no scalar value was available."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "MoreThanOneNode",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A single result was requested from a graph with multiple nodes."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "NotScalarOutput",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A scalar result was requested from a non-scalar network."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "FailedScalarMul",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Multiplying scalar values failed to produce a result."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "ScalarFieldEmpty",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Scalar storage was unexpectedly empty."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "NotAllScalars",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A scalar-only operation encountered one or more tensor values."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "String",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "ScalarLibSum",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A sum attempted to combine a scalar with a library tensor."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "String",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "SumScalarTensor",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A sum attempted to combine a scalar with a materialized tensor."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "String",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "IncompatibleSummand",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Summands had incompatible tensor structures or result states."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "String",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "FailedContract",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A contraction operation failed."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "ContractionError",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "NegativeExponent",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "The requested negative exponent is not supported."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "FailedContractMsg",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "A contraction operation failed with additional context."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "String",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "Other",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "An uncategorized network operation failed."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "eyre :: Error",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "InOut",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Reading or writing network data failed."
+                },
+                "signature": null,
+                "default": null,
+                "members": [
+                  {
+                    "name": "0",
+                    "kind": "field",
+                    "docs": null,
+                    "signature": "std :: io :: Error",
+                    "default": null,
+                    "members": []
+                  }
+                ]
+              },
+              {
+                "name": "Infallible",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Marks the impossible conversion from an infallible error."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "spenso::network::TensorNetworkError",
+              "file": "crates/spenso/src/network/mod.rs",
+              "line": 2392,
+              "column": 1
+            }
+          },
+          "ParseSettings": {
+            "id": "ParseSettings",
+            "name": "ParseSettings",
+            "title": "Network parsing settings",
+            "kind": "type",
+            "supported": true,
+            "required_features": [
+              "shadowing"
+            ],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Controls scalar precontraction, depth limits, shorthand expansion and inference, scalar-leaf handling, and tensor-head recognition."
+            },
+            "summary": "Controls scalar precontraction, depth limits, shorthand expansion and inference, scalar-leaf handling, and tensor-head recognition.",
+            "signature": "pub struct ParseSettings {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "let settings = spenso::network::parsing::ParseSettings::default();"
+              }
+            ],
+            "members": [
+              {
+                "name": "precontract_scalars",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Fold factors that parse as pure scalars into one scalar factor while\nparsing a product.\n\nThis keeps scalar-only subexpressions out of the tensor graph when they\ncannot affect contraction topology. Disable it when the caller needs\nevery product factor to remain represented separately in the network."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "take_first_term_from_sum",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Parse only the first summand of an addition.\n\nThis is meant for structure discovery paths where all summands are\nexpected to have the same external structure, for example listing\ndangling indices without building a full sum network."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "depth_limit",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Stop recursive parsing once the current parse depth reaches this value.\n\nAt the limit, the current expression is handed to the opaque tensor\nexpression boundary as a leaf. `None` means there is no depth limit."
+                },
+                "signature": "Option < usize >",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "depth_is_product_depth",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Selects what contributes to `depth_limit`.\n\nWhen true, only product nesting increments parse depth. When false,\nadditions and powers also increment depth before their children are\nparsed."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "shorthand_parsing",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Selects how shorthand notation is represented in the parsed network.\n\n`Expand` turns the selected shorthand families into explicit graph\nstructure. Fresh dummies created by this lowering are local to the\nexpansion.\n\n`Opaque` keeps shorthand as a leaf tensor or scalar. Its inference mode\ncontrols whether the exposed structure comes from a fast syntactic walk\nor from expanding the shorthand and reading the resulting dangling slots."
+                },
+                "signature": "ShorthandParsing",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "parse_composite_scalars_as_tensors",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Allow parser implementations to treat composite scalar expressions as\nscalar-structured tensors.\n\nDepth-limited additive or multiplicative scalar composites use this to\nstay represented as scalar-structured tensor leaves, so recursive\ncontraction passes can inspect their internals instead of storing them\nas pure scalars."
+                },
+                "signature": "bool",
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "strict_tensor_filter",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Controls which ordinary function heads are eligible tensor leaves.\n\nParser-owned syntax such as slots, representations, `chain`, `trace`,\n`dot`, metric heads, and transparent brackets keeps its fixed meaning.\nThis setting decides how strict the parser is for ordinary tensor heads:\nrequire tensor tags, require tensor tags plus visible representation\narguments, or accept untagged heads that contain representation syntax."
+                },
+                "signature": "StrictTensorFilter",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "spenso::network::parsing::ParseSettings",
+              "file": "crates/spenso/src/network/parsing/mod.rs",
+              "line": 191,
+              "column": 1
+            }
+          },
+          "NetworkParse": {
+            "id": "NetworkParse",
+            "name": "NetworkParse",
+            "title": "Symbolic network parsing",
+            "kind": "trait",
+            "supported": true,
+            "required_features": [
+              "shadowing"
+            ],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Converts Symbolica atoms and atom views into parametric tensor networks under explicit parsing settings."
+            },
+            "summary": "Converts Symbolica atoms and atom views into parametric tensor networks under explicit parsing settings.",
+            "signature": "pub trait NetworkParse {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use spenso::network::parsing::NetworkParse;"
+              }
+            ],
+            "members": [
+              {
+                "name": "parse_to_atom_net",
+                "kind": "method",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Parses this symbolic expression into a parameterized tensor network using `settings`."
+                },
+                "signature": "fn parse_to_atom_net < Aind : AbsInd + DummyAind + ParseableAind >\n(& self, settings : & ParseSettings,) -> Result < ParamNet < Aind > ,\nTensorNetworkError < DummyKey, Symbol > >;",
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "spenso::network::parsing::NetworkParse",
+              "file": "crates/spenso/src/network/parsing/mod.rs",
+              "line": 1007,
+              "column": 1
+            }
+          },
+          "SymbolicParallelism": {
+            "id": "SymbolicParallelism",
+            "name": "SymbolicParallelism",
+            "title": "Symbolic parallelism policy",
+            "kind": "type",
+            "supported": true,
+            "required_features": [
+              "shadowing"
+            ],
+            "docs": {
+              "format": "rust-markdown",
+              "body": "Policy used to configure Rayon for operations that manipulate Symbolica atoms."
+            },
+            "summary": "Chooses automatic license-aware, serial, or forced-parallel Rayon behavior for operations over Symbolica atoms.",
+            "signature": "pub enum SymbolicParallelism {}",
+            "since": null,
+            "keywords": [],
+            "params": [],
+            "returns": null,
+            "examples": [
+              {
+                "title": "Supported usage",
+                "language": "rust",
+                "code": "use spenso::symbolic_parallelism::SymbolicParallelism;"
+              }
+            ],
+            "members": [
+              {
+                "name": "Auto",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Permit Rayon when licensed and use workload heuristics where available."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Serial",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Keep symbolic operations on the calling thread."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              },
+              {
+                "name": "Parallel",
+                "kind": "variant",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Force Rayon without `Auto`'s Symbolica license safety check."
+                },
+                "signature": null,
+                "default": null,
+                "members": []
+              }
+            ],
+            "source": {
+              "identifier": "spenso::symbolic_parallelism::SymbolicParallelism",
+              "file": "crates/spenso/src/symbolic_parallelism.rs",
+              "line": 10,
               "column": 1
             }
           },
@@ -655,7 +1813,7 @@
               "body": "Stores tensor components as parameter-dependent symbolic coefficients."
             },
             "summary": "Stores tensor components as parameter-dependent symbolic coefficients.",
-            "signature": "#[derive(Clone, Debug, PartialEq, Eq, Hash, bincode_trait_derive::Encode,\nbincode_trait_derive::Decode,)]\n#[trait_decode(trait = symbolica::state::HasStateMap)] pub struct ParamTensor\n< S = OrderedStructure >\n{ pub tensor : DataTensor < Atom, S > , pub param_type : ParamOrComposite, }",
+            "signature": "pub struct ParamTensor < S = OrderedStructure > {}",
             "since": null,
             "keywords": [],
             "params": [],
@@ -671,7 +1829,10 @@
               {
                 "name": "tensor",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Dense or sparse symbolic components together with their tensor structure."
+                },
                 "signature": "DataTensor < Atom, S >",
                 "default": null,
                 "members": []
@@ -679,7 +1840,10 @@
               {
                 "name": "param_type",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Whether the components are primitive parameters or composite expressions."
+                },
                 "signature": "ParamOrComposite",
                 "default": null,
                 "members": []

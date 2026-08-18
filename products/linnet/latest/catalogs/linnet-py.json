@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "product": {
     "id": "linnet",
     "title": "Linnet"
@@ -57,13 +57,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import Cycle\nhelp(Cycle)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "filter",
@@ -83,7 +77,7 @@
                   "format": "python-docstring",
                   "body": "Optional loop count for this cycle."
                 },
-                "signature": "def loop_count(self) -> typing.Optional[builtins.int]:",
+                "signature": "def loop_count(self) -> Optional[int]:",
                 "default": null,
                 "members": []
               },
@@ -94,7 +88,7 @@
                   "format": "python-docstring",
                   "body": "Debug-style representation."
                 },
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -126,13 +120,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import DotEdgeData\nhelp(DotEdgeData)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "statements",
@@ -163,7 +151,7 @@
                   "format": "python-docstring",
                   "body": "Optional edge id."
                 },
-                "signature": "def edge_id(self) -> typing.Optional[EdgeIndex]:",
+                "signature": "def edge_id(self) -> Optional[EdgeIndex]:",
                 "default": null,
                 "members": []
               },
@@ -174,14 +162,14 @@
                   "format": "python-docstring",
                   "body": "Create edge data from fields."
                 },
-                "signature": "def __new__(cls, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, local_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, edge_id: typing.Optional[builtins.int] = None) -> DotEdgeData:",
+                "signature": "def __new__(cls, statements: Optional[Mapping[str, str]] = None, local_statements: Optional[Mapping[str, str]] = None, edge_id: Optional[int] = None) -> DotEdgeData:",
                 "default": null,
                 "members": [
                   {
                     "name": "statements",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
+                    "signature": "Optional[Mapping[str, str]]",
                     "default": "None",
                     "members": []
                   },
@@ -189,7 +177,7 @@
                     "name": "local_statements",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "local_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
+                    "signature": "Optional[Mapping[str, str]]",
                     "default": "None",
                     "members": []
                   },
@@ -197,7 +185,7 @@
                     "name": "edge_id",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "edge_id: typing.Optional[builtins.int] = None",
+                    "signature": "Optional[int]",
                     "default": "None",
                     "members": []
                   }
@@ -210,14 +198,14 @@
                   "format": "python-docstring",
                   "body": "Insert or update an attribute statement."
                 },
-                "signature": "def add_statement(self, key: builtins.str, value: builtins.str) -> None:",
+                "signature": "def add_statement(self, key: str, value: str) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -225,7 +213,7 @@
                     "name": "value",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "value: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -238,7 +226,7 @@
                   "format": "python-docstring",
                   "body": "Debug-style representation."
                 },
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -270,13 +258,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import DotGraph\nhelp(DotGraph)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "global_data",
@@ -300,7 +282,7 @@
                     "name": "value",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "value: GlobalData",
+                    "signature": "GlobalData",
                     "default": null,
                     "members": []
                   }
@@ -313,14 +295,14 @@
                   "format": "python-docstring",
                   "body": "Parse a DOT string into a graph."
                 },
-                "signature": "def from_string(cls, s: builtins.str) -> DotGraph:",
+                "signature": "def from_string(cls, s: str) -> DotGraph:",
                 "default": null,
                 "members": [
                   {
                     "name": "s",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "s: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -333,14 +315,14 @@
                   "format": "python-docstring",
                   "body": "Parse a DOT string into multiple graphs."
                 },
-                "signature": "def from_string_set(cls, s: builtins.str) -> builtins.list[DotGraph]:",
+                "signature": "def from_string_set(cls, s: str) -> list[DotGraph]:",
                 "default": null,
                 "members": [
                   {
                     "name": "s",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "s: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -353,14 +335,14 @@
                   "format": "python-docstring",
                   "body": "Parse a DOT file into a graph."
                 },
-                "signature": "def from_file(cls, path: builtins.str) -> DotGraph:",
+                "signature": "def from_file(cls, path: str) -> DotGraph:",
                 "default": null,
                 "members": [
                   {
                     "name": "path",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "path: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -373,7 +355,7 @@
                   "format": "python-docstring",
                   "body": "Serialize graph to DOT for debugging."
                 },
-                "signature": "def debug_dot(self) -> builtins.str:",
+                "signature": "def debug_dot(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -384,7 +366,7 @@
                   "format": "python-docstring",
                   "body": "Serialize the full graph to DOT."
                 },
-                "signature": "def dot(self) -> builtins.str:",
+                "signature": "def dot(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -395,14 +377,14 @@
                   "format": "python-docstring",
                   "body": "Serialize a subgraph to DOT."
                 },
-                "signature": "def dot_of(self, subgraph: Subgraph) -> builtins.str:",
+                "signature": "def dot_of(self, subgraph: Subgraph) -> str:",
                 "default": null,
                 "members": [
                   {
                     "name": "subgraph",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "subgraph: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   }
@@ -415,7 +397,7 @@
                   "format": "python-docstring",
                   "body": "Number of nodes."
                 },
-                "signature": "def n_nodes(self) -> builtins.int:",
+                "signature": "def n_nodes(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -426,7 +408,7 @@
                   "format": "python-docstring",
                   "body": "Number of edges."
                 },
-                "signature": "def n_edges(self) -> builtins.int:",
+                "signature": "def n_edges(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -437,7 +419,7 @@
                   "format": "python-docstring",
                   "body": "Number of hedges."
                 },
-                "signature": "def n_hedges(self) -> builtins.int:",
+                "signature": "def n_hedges(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -448,7 +430,7 @@
                   "format": "python-docstring",
                   "body": "Number of external hedges."
                 },
-                "signature": "def n_externals(self) -> builtins.int:",
+                "signature": "def n_externals(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -459,7 +441,7 @@
                   "format": "python-docstring",
                   "body": "Number of internal hedges."
                 },
-                "signature": "def n_internals(self) -> builtins.int:",
+                "signature": "def n_internals(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -492,7 +474,7 @@
                   "format": "python-docstring",
                   "body": "Iterate edges in the full graph."
                 },
-                "signature": "def iter_edges(self) -> builtins.list[tuple[HedgePair, EdgeIndex, EdgeData]]:",
+                "signature": "def iter_edges(self) -> list[tuple[HedgePair, EdgeIndex, EdgeData]]:",
                 "default": null,
                 "members": []
               },
@@ -503,14 +485,14 @@
                   "format": "python-docstring",
                   "body": "Iterate edges within a subgraph."
                 },
-                "signature": "def iter_edges_of(self, subgraph: Subgraph) -> builtins.list[tuple[HedgePair, EdgeIndex, EdgeData]]:",
+                "signature": "def iter_edges_of(self, subgraph: Subgraph) -> list[tuple[HedgePair, EdgeIndex, EdgeData]]:",
                 "default": null,
                 "members": [
                   {
                     "name": "subgraph",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "subgraph: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   }
@@ -523,7 +505,7 @@
                   "format": "python-docstring",
                   "body": "Iterate nodes in the full graph."
                 },
-                "signature": "def iter_nodes(self) -> builtins.list[tuple[NodeIndex, builtins.list[Hedge], DotVertexData]]:",
+                "signature": "def iter_nodes(self) -> list[tuple[NodeIndex, list[Hedge], DotVertexData]]:",
                 "default": null,
                 "members": []
               },
@@ -534,14 +516,14 @@
                   "format": "python-docstring",
                   "body": "Iterate nodes within a subgraph."
                 },
-                "signature": "def iter_nodes_of(self, subgraph: Subgraph) -> builtins.list[tuple[NodeIndex, builtins.list[Hedge], DotVertexData]]:",
+                "signature": "def iter_nodes_of(self, subgraph: Subgraph) -> list[tuple[NodeIndex, list[Hedge], DotVertexData]]:",
                 "default": null,
                 "members": [
                   {
                     "name": "subgraph",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "subgraph: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   }
@@ -554,14 +536,14 @@
                   "format": "python-docstring",
                   "body": "Connected components of a subgraph."
                 },
-                "signature": "def connected_components(self, subgraph: Subgraph) -> builtins.list[Subgraph]:",
+                "signature": "def connected_components(self, subgraph: Subgraph) -> list[Subgraph]:",
                 "default": null,
                 "members": [
                   {
                     "name": "subgraph",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "subgraph: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   }
@@ -574,14 +556,14 @@
                   "format": "python-docstring",
                   "body": "Count connected components."
                 },
-                "signature": "def count_connected_components(self, subgraph: Subgraph) -> builtins.int:",
+                "signature": "def count_connected_components(self, subgraph: Subgraph) -> int:",
                 "default": null,
                 "members": [
                   {
                     "name": "subgraph",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "subgraph: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   }
@@ -594,14 +576,14 @@
                   "format": "python-docstring",
                   "body": "Whether a subgraph is connected."
                 },
-                "signature": "def is_connected(self, subgraph: Subgraph) -> builtins.bool:",
+                "signature": "def is_connected(self, subgraph: Subgraph) -> bool:",
                 "default": null,
                 "members": [
                   {
                     "name": "subgraph",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "subgraph: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   }
@@ -614,14 +596,14 @@
                   "format": "python-docstring",
                   "body": "Depth-first traversal from a root node."
                 },
-                "signature": "def depth_first_traverse(self, subgraph: Subgraph, root_node: NodeIndex, include_hedge: typing.Optional[Hedge]) -> TraversalTree:",
+                "signature": "def depth_first_traverse(self, subgraph: Subgraph, root_node: NodeIndex, include_hedge: Optional[Hedge]) -> TraversalTree:",
                 "default": null,
                 "members": [
                   {
                     "name": "subgraph",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "subgraph: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   },
@@ -629,7 +611,7 @@
                     "name": "root_node",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "root_node: NodeIndex",
+                    "signature": "NodeIndex",
                     "default": null,
                     "members": []
                   },
@@ -637,7 +619,7 @@
                     "name": "include_hedge",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "include_hedge: typing.Optional[Hedge]",
+                    "signature": "Optional[Hedge]",
                     "default": null,
                     "members": []
                   }
@@ -650,14 +632,14 @@
                   "format": "python-docstring",
                   "body": "Breadth-first traversal from a root node."
                 },
-                "signature": "def breadth_first_traverse(self, subgraph: Subgraph, root_node: NodeIndex, include_hedge: typing.Optional[Hedge]) -> TraversalTree:",
+                "signature": "def breadth_first_traverse(self, subgraph: Subgraph, root_node: NodeIndex, include_hedge: Optional[Hedge]) -> TraversalTree:",
                 "default": null,
                 "members": [
                   {
                     "name": "subgraph",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "subgraph: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   },
@@ -665,7 +647,7 @@
                     "name": "root_node",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "root_node: NodeIndex",
+                    "signature": "NodeIndex",
                     "default": null,
                     "members": []
                   },
@@ -673,7 +655,7 @@
                     "name": "include_hedge",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "include_hedge: typing.Optional[Hedge]",
+                    "signature": "Optional[Hedge]",
                     "default": null,
                     "members": []
                   }
@@ -704,7 +686,7 @@
                     "name": "subgraph",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "subgraph: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   }
@@ -717,7 +699,7 @@
                   "format": "python-docstring",
                   "body": "Cycle basis of the full graph."
                 },
-                "signature": "def cycle_basis(self) -> tuple[builtins.list[Cycle], Subgraph]:",
+                "signature": "def cycle_basis(self) -> tuple[list[Cycle], Subgraph]:",
                 "default": null,
                 "members": []
               },
@@ -728,14 +710,14 @@
                   "format": "python-docstring",
                   "body": "Cycle basis of a subgraph."
                 },
-                "signature": "def cycle_basis_of(self, subgraph: Subgraph) -> tuple[builtins.list[Cycle], Subgraph]:",
+                "signature": "def cycle_basis_of(self, subgraph: Subgraph) -> tuple[list[Cycle], Subgraph]:",
                 "default": null,
                 "members": [
                   {
                     "name": "subgraph",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "subgraph: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   }
@@ -748,7 +730,7 @@
                   "format": "python-docstring",
                   "body": "All spanning forests of the full graph."
                 },
-                "signature": "def all_spanning_forests(self) -> builtins.list[Subgraph]:",
+                "signature": "def all_spanning_forests(self) -> list[Subgraph]:",
                 "default": null,
                 "members": []
               },
@@ -759,14 +741,14 @@
                   "format": "python-docstring",
                   "body": "All spanning forests of a subgraph."
                 },
-                "signature": "def all_spanning_forests_of(self, subgraph: Subgraph) -> builtins.list[Subgraph]:",
+                "signature": "def all_spanning_forests_of(self, subgraph: Subgraph) -> list[Subgraph]:",
                 "default": null,
                 "members": [
                   {
                     "name": "subgraph",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "subgraph: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   }
@@ -779,14 +761,14 @@
                   "format": "python-docstring",
                   "body": "Combine nodes into a single hedge node."
                 },
-                "signature": "def combine_to_single_hedgenode(self, nodes: typing.Sequence[NodeIndex]) -> HedgeNode:",
+                "signature": "def combine_to_single_hedgenode(self, nodes: Sequence[NodeIndex]) -> HedgeNode:",
                 "default": null,
                 "members": [
                   {
                     "name": "nodes",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "nodes: typing.Sequence[NodeIndex]",
+                    "signature": "Sequence[NodeIndex]",
                     "default": null,
                     "members": []
                   }
@@ -799,14 +781,14 @@
                   "format": "python-docstring",
                   "body": "All cuts between two hedge nodes."
                 },
-                "signature": "def all_cuts(self, source: HedgeNode, target: HedgeNode) -> builtins.list[tuple[Subgraph, OrientedCut, Subgraph]]:",
+                "signature": "def all_cuts(self, source: HedgeNode, target: HedgeNode) -> list[tuple[Subgraph, OrientedCut, Subgraph]]:",
                 "default": null,
                 "members": [
                   {
                     "name": "source",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "source: HedgeNode",
+                    "signature": "HedgeNode",
                     "default": null,
                     "members": []
                   },
@@ -814,7 +796,7 @@
                     "name": "target",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "target: HedgeNode",
+                    "signature": "HedgeNode",
                     "default": null,
                     "members": []
                   }
@@ -827,14 +809,14 @@
                   "format": "python-docstring",
                   "body": "All cuts between two sets of node indices."
                 },
-                "signature": "def all_cuts_from_ids(self, source: typing.Sequence[NodeIndex], target: typing.Sequence[NodeIndex]) -> builtins.list[tuple[Subgraph, OrientedCut, Subgraph]]:",
+                "signature": "def all_cuts_from_ids(self, source: Sequence[NodeIndex], target: Sequence[NodeIndex]) -> list[tuple[Subgraph, OrientedCut, Subgraph]]:",
                 "default": null,
                 "members": [
                   {
                     "name": "source",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "source: typing.Sequence[NodeIndex]",
+                    "signature": "Sequence[NodeIndex]",
                     "default": null,
                     "members": []
                   },
@@ -842,7 +824,7 @@
                     "name": "target",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "target: typing.Sequence[NodeIndex]",
+                    "signature": "Sequence[NodeIndex]",
                     "default": null,
                     "members": []
                   }
@@ -855,14 +837,14 @@
                   "format": "python-docstring",
                   "body": "Contract a subgraph into a single node, deleting its edges."
                 },
-                "signature": "def contract_subgraph(self, subgraph: Subgraph, node_data_merge: typing.Optional[DotVertexData] = None) -> None:",
+                "signature": "def contract_subgraph(self, subgraph: Subgraph, node_data_merge: Optional[DotVertexData] = None) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "subgraph",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "subgraph: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   },
@@ -870,7 +852,7 @@
                     "name": "node_data_merge",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "node_data_merge: typing.Optional[DotVertexData] = None",
+                    "signature": "Optional[DotVertexData]",
                     "default": "None",
                     "members": []
                   }
@@ -883,14 +865,14 @@
                   "format": "python-docstring",
                   "body": "Join two graphs, matching dangling edges via a Python callback."
                 },
-                "signature": "def join(self, other: DotGraph, matching_fn: typing.Any, merge_fn: typing.Any) -> DotGraph:",
+                "signature": "def join(self, other: DotGraph, matching_fn: Any, merge_fn: Any) -> DotGraph:",
                 "default": null,
                 "members": [
                   {
                     "name": "other",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "other: DotGraph",
+                    "signature": "DotGraph",
                     "default": null,
                     "members": []
                   },
@@ -898,7 +880,7 @@
                     "name": "matching_fn",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "matching_fn: typing.Any",
+                    "signature": "Any",
                     "default": null,
                     "members": []
                   },
@@ -906,7 +888,7 @@
                     "name": "merge_fn",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "merge_fn: typing.Any",
+                    "signature": "Any",
                     "default": null,
                     "members": []
                   }
@@ -919,14 +901,14 @@
                   "format": "python-docstring",
                   "body": "In-place join, matching dangling edges via a Python callback."
                 },
-                "signature": "def join_mut(self, other: DotGraph, matching_fn: typing.Any, merge_fn: typing.Any) -> None:",
+                "signature": "def join_mut(self, other: DotGraph, matching_fn: Any, merge_fn: Any) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "other",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "other: DotGraph",
+                    "signature": "DotGraph",
                     "default": null,
                     "members": []
                   },
@@ -934,7 +916,7 @@
                     "name": "matching_fn",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "matching_fn: typing.Any",
+                    "signature": "Any",
                     "default": null,
                     "members": []
                   },
@@ -942,7 +924,7 @@
                     "name": "merge_fn",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "merge_fn: typing.Any",
+                    "signature": "Any",
                     "default": null,
                     "members": []
                   }
@@ -955,14 +937,14 @@
                   "format": "python-docstring",
                   "body": "Extract a subgraph with Python callbacks to transform edge/node data."
                 },
-                "signature": "def extract(self, subgraph: Subgraph, split_edge_fn: typing.Any, internal_data: typing.Any, split_node: typing.Any, owned_node: typing.Any) -> DotGraph:",
+                "signature": "def extract(self, subgraph: Subgraph, split_edge_fn: Any, internal_data: Any, split_node: Any, owned_node: Any) -> DotGraph:",
                 "default": null,
                 "members": [
                   {
                     "name": "subgraph",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "subgraph: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   },
@@ -970,7 +952,7 @@
                     "name": "split_edge_fn",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "split_edge_fn: typing.Any",
+                    "signature": "Any",
                     "default": null,
                     "members": []
                   },
@@ -978,7 +960,7 @@
                     "name": "internal_data",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "internal_data: typing.Any",
+                    "signature": "Any",
                     "default": null,
                     "members": []
                   },
@@ -986,7 +968,7 @@
                     "name": "split_node",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "split_node: typing.Any",
+                    "signature": "Any",
                     "default": null,
                     "members": []
                   },
@@ -994,7 +976,7 @@
                     "name": "owned_node",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "owned_node: typing.Any",
+                    "signature": "Any",
                     "default": null,
                     "members": []
                   }
@@ -1004,50 +986,59 @@
                 "name": "__getitem__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __getitem__(self, key: Hedge) -> DotHedgeData:",
+                "signature": null,
                 "default": null,
                 "members": [
                   {
-                    "name": "key",
-                    "kind": "parameter",
+                    "name": "__getitem__",
+                    "kind": "overload",
                     "docs": null,
-                    "signature": "key: Hedge",
+                    "signature": "def __getitem__(self, key: Hedge) -> DotHedgeData:",
                     "default": null,
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "__getitem__",
-                "kind": "method",
-                "docs": null,
-                "signature": "def __getitem__(self, key: NodeIndex) -> DotVertexData:",
-                "default": null,
-                "members": [
+                    "members": [
+                      {
+                        "name": "key",
+                        "kind": "parameter",
+                        "docs": null,
+                        "signature": "Hedge",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
+                  },
                   {
-                    "name": "key",
-                    "kind": "parameter",
+                    "name": "__getitem__",
+                    "kind": "overload",
                     "docs": null,
-                    "signature": "key: NodeIndex",
+                    "signature": "def __getitem__(self, key: NodeIndex) -> DotVertexData:",
                     "default": null,
-                    "members": []
-                  }
-                ]
-              },
-              {
-                "name": "__getitem__",
-                "kind": "method",
-                "docs": null,
-                "signature": "def __getitem__(self, key: EdgeIndex) -> DotEdgeData:",
-                "default": null,
-                "members": [
+                    "members": [
+                      {
+                        "name": "key",
+                        "kind": "parameter",
+                        "docs": null,
+                        "signature": "NodeIndex",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
+                  },
                   {
-                    "name": "key",
-                    "kind": "parameter",
+                    "name": "__getitem__",
+                    "kind": "overload",
                     "docs": null,
-                    "signature": "key: EdgeIndex",
+                    "signature": "def __getitem__(self, key: EdgeIndex) -> DotEdgeData:",
                     "default": null,
-                    "members": []
+                    "members": [
+                      {
+                        "name": "key",
+                        "kind": "parameter",
+                        "docs": null,
+                        "signature": "EdgeIndex",
+                        "default": null,
+                        "members": []
+                      }
+                    ]
                   }
                 ]
               }
@@ -1079,13 +1070,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import DotGraphBuilder\nhelp(DotGraphBuilder)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "__new__",
@@ -1105,14 +1090,14 @@
                   "format": "python-docstring",
                   "body": "Add a node and return its index."
                 },
-                "signature": "def add_node(self, data: typing.Optional[DotVertexData] = None) -> NodeIndex:",
+                "signature": "def add_node(self, data: Optional[DotVertexData] = None) -> NodeIndex:",
                 "default": null,
                 "members": [
                   {
                     "name": "data",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "data: typing.Optional[DotVertexData] = None",
+                    "signature": "Optional[DotVertexData]",
                     "default": "None",
                     "members": []
                   }
@@ -1125,14 +1110,14 @@
                   "format": "python-docstring",
                   "body": "Add an edge between two nodes."
                 },
-                "signature": "def add_edge(self, source: NodeIndex, sink: NodeIndex, data: typing.Optional[DotEdgeData] = None, orientation: typing.Optional[Orientation] = None, source_hedge: typing.Optional[DotHedgeData] = None, sink_hedge: typing.Optional[DotHedgeData] = None) -> None:",
+                "signature": "def add_edge(self, source: NodeIndex, sink: NodeIndex, data: Optional[DotEdgeData] = None, orientation: Optional[Orientation] = None, source_hedge: Optional[DotHedgeData] = None, sink_hedge: Optional[DotHedgeData] = None) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "source",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "source: NodeIndex",
+                    "signature": "NodeIndex",
                     "default": null,
                     "members": []
                   },
@@ -1140,7 +1125,7 @@
                     "name": "sink",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "sink: NodeIndex",
+                    "signature": "NodeIndex",
                     "default": null,
                     "members": []
                   },
@@ -1148,7 +1133,7 @@
                     "name": "data",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "data: typing.Optional[DotEdgeData] = None",
+                    "signature": "Optional[DotEdgeData]",
                     "default": "None",
                     "members": []
                   },
@@ -1156,7 +1141,7 @@
                     "name": "orientation",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "orientation: typing.Optional[Orientation] = None",
+                    "signature": "Optional[Orientation]",
                     "default": "None",
                     "members": []
                   },
@@ -1164,7 +1149,7 @@
                     "name": "source_hedge",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "source_hedge: typing.Optional[DotHedgeData] = None",
+                    "signature": "Optional[DotHedgeData]",
                     "default": "None",
                     "members": []
                   },
@@ -1172,7 +1157,7 @@
                     "name": "sink_hedge",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "sink_hedge: typing.Optional[DotHedgeData] = None",
+                    "signature": "Optional[DotHedgeData]",
                     "default": "None",
                     "members": []
                   }
@@ -1185,14 +1170,14 @@
                   "format": "python-docstring",
                   "body": "Add a dangling (external) edge incident to a node."
                 },
-                "signature": "def add_external_edge(self, source: NodeIndex, data: typing.Optional[DotEdgeData] = None, orientation: typing.Optional[Orientation] = None, flow: typing.Optional[Flow] = None, hedge: typing.Optional[DotHedgeData] = None) -> None:",
+                "signature": "def add_external_edge(self, source: NodeIndex, data: Optional[DotEdgeData] = None, orientation: Optional[Orientation] = None, flow: Optional[Flow] = None, hedge: Optional[DotHedgeData] = None) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "source",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "source: NodeIndex",
+                    "signature": "NodeIndex",
                     "default": null,
                     "members": []
                   },
@@ -1200,7 +1185,7 @@
                     "name": "data",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "data: typing.Optional[DotEdgeData] = None",
+                    "signature": "Optional[DotEdgeData]",
                     "default": "None",
                     "members": []
                   },
@@ -1208,7 +1193,7 @@
                     "name": "orientation",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "orientation: typing.Optional[Orientation] = None",
+                    "signature": "Optional[Orientation]",
                     "default": "None",
                     "members": []
                   },
@@ -1216,7 +1201,7 @@
                     "name": "flow",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "flow: typing.Optional[Flow] = None",
+                    "signature": "Optional[Flow]",
                     "default": "None",
                     "members": []
                   },
@@ -1224,7 +1209,7 @@
                     "name": "hedge",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "hedge: typing.Optional[DotHedgeData] = None",
+                    "signature": "Optional[DotHedgeData]",
                     "default": "None",
                     "members": []
                   }
@@ -1269,13 +1254,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import DotHedgeData\nhelp(DotHedgeData)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "statement",
@@ -1284,7 +1263,7 @@
                   "format": "python-docstring",
                   "body": "Optional statement string."
                 },
-                "signature": "def statement(self) -> typing.Optional[builtins.str]:",
+                "signature": "def statement(self) -> Optional[str]:",
                 "default": null,
                 "members": []
               },
@@ -1295,7 +1274,7 @@
                   "format": "python-docstring",
                   "body": "Optional hedge id."
                 },
-                "signature": "def id(self) -> typing.Optional[Hedge]:",
+                "signature": "def id(self) -> Optional[Hedge]:",
                 "default": null,
                 "members": []
               },
@@ -1306,7 +1285,7 @@
                   "format": "python-docstring",
                   "body": "Optional port label."
                 },
-                "signature": "def port_label(self) -> typing.Optional[builtins.str]:",
+                "signature": "def port_label(self) -> Optional[str]:",
                 "default": null,
                 "members": []
               },
@@ -1317,7 +1296,7 @@
                   "format": "python-docstring",
                   "body": "Optional compass point as a string."
                 },
-                "signature": "def compasspt(self) -> typing.Optional[builtins.str]:",
+                "signature": "def compasspt(self) -> Optional[str]:",
                 "default": null,
                 "members": []
               },
@@ -1328,14 +1307,14 @@
                   "format": "python-docstring",
                   "body": "Create hedge data from fields."
                 },
-                "signature": "def __new__(cls, statement: typing.Optional[builtins.str] = None, id: typing.Optional[builtins.int] = None, port_label: typing.Optional[builtins.str] = None, compasspt: typing.Optional[builtins.str] = None) -> DotHedgeData:",
+                "signature": "def __new__(cls, statement: Optional[str] = None, id: Optional[int] = None, port_label: Optional[str] = None, compasspt: Optional[str] = None) -> DotHedgeData:",
                 "default": null,
                 "members": [
                   {
                     "name": "statement",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "statement: typing.Optional[builtins.str] = None",
+                    "signature": "Optional[str]",
                     "default": "None",
                     "members": []
                   },
@@ -1343,7 +1322,7 @@
                     "name": "id",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "id: typing.Optional[builtins.int] = None",
+                    "signature": "Optional[int]",
                     "default": "None",
                     "members": []
                   },
@@ -1351,7 +1330,7 @@
                     "name": "port_label",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "port_label: typing.Optional[builtins.str] = None",
+                    "signature": "Optional[str]",
                     "default": "None",
                     "members": []
                   },
@@ -1359,7 +1338,7 @@
                     "name": "compasspt",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "compasspt: typing.Optional[builtins.str] = None",
+                    "signature": "Optional[str]",
                     "default": "None",
                     "members": []
                   }
@@ -1372,7 +1351,7 @@
                   "format": "python-docstring",
                   "body": "Debug-style representation."
                 },
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -1404,13 +1383,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import DotVertexData\nhelp(DotVertexData)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "name",
@@ -1419,7 +1392,7 @@
                   "format": "python-docstring",
                   "body": "Optional vertex name."
                 },
-                "signature": "def name(self) -> typing.Optional[builtins.str]:",
+                "signature": "def name(self) -> Optional[str]:",
                 "default": null,
                 "members": []
               },
@@ -1430,7 +1403,7 @@
                   "format": "python-docstring",
                   "body": "Optional node index."
                 },
-                "signature": "def index(self) -> typing.Optional[NodeIndex]:",
+                "signature": "def index(self) -> Optional[NodeIndex]:",
                 "default": null,
                 "members": []
               },
@@ -1452,14 +1425,14 @@
                   "format": "python-docstring",
                   "body": "Create vertex data from fields."
                 },
-                "signature": "def __new__(cls, name: typing.Optional[builtins.str] = None, index: typing.Optional[builtins.int] = None, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None) -> DotVertexData:",
+                "signature": "def __new__(cls, name: Optional[str] = None, index: Optional[int] = None, statements: Optional[Mapping[str, str]] = None) -> DotVertexData:",
                 "default": null,
                 "members": [
                   {
                     "name": "name",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "name: typing.Optional[builtins.str] = None",
+                    "signature": "Optional[str]",
                     "default": "None",
                     "members": []
                   },
@@ -1467,7 +1440,7 @@
                     "name": "index",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "index: typing.Optional[builtins.int] = None",
+                    "signature": "Optional[int]",
                     "default": "None",
                     "members": []
                   },
@@ -1475,7 +1448,7 @@
                     "name": "statements",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
+                    "signature": "Optional[Mapping[str, str]]",
                     "default": "None",
                     "members": []
                   }
@@ -1488,14 +1461,14 @@
                   "format": "python-docstring",
                   "body": "Insert or update an attribute statement."
                 },
-                "signature": "def add_statement(self, key: builtins.str, value: builtins.str) -> None:",
+                "signature": "def add_statement(self, key: str, value: str) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -1503,7 +1476,7 @@
                     "name": "value",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "value: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -1516,7 +1489,7 @@
                   "format": "python-docstring",
                   "body": "Debug-style representation."
                 },
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -1548,13 +1521,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import EdgeData\nhelp(EdgeData)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "orientation",
@@ -1585,14 +1552,14 @@
                   "format": "python-docstring",
                   "body": "Create edge data from orientation and DotEdgeData."
                 },
-                "signature": "def __new__(cls, orientation: typing.Any, data: typing.Any) -> EdgeData:",
+                "signature": "def __new__(cls, orientation: Any, data: Any) -> EdgeData:",
                 "default": null,
                 "members": [
                   {
                     "name": "orientation",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "orientation: typing.Any",
+                    "signature": "Any",
                     "default": null,
                     "members": []
                   },
@@ -1600,7 +1567,7 @@
                     "name": "data",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "data: typing.Any",
+                    "signature": "Any",
                     "default": null,
                     "members": []
                   }
@@ -1613,7 +1580,7 @@
                   "format": "python-docstring",
                   "body": "Debug-style representation."
                 },
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -1645,13 +1612,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import EdgeIndex\nhelp(EdgeIndex)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "value",
@@ -1660,7 +1621,7 @@
                   "format": "python-docstring",
                   "body": "Numeric value of this edge index."
                 },
-                "signature": "def value(self) -> builtins.int:",
+                "signature": "def value(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -1671,14 +1632,14 @@
                   "format": "python-docstring",
                   "body": "Create an edge index from a zero-based index."
                 },
-                "signature": "def __new__(cls, value: builtins.int) -> EdgeIndex:",
+                "signature": "def __new__(cls, value: int) -> EdgeIndex:",
                 "default": null,
                 "members": [
                   {
                     "name": "value",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "value: builtins.int",
+                    "signature": "int",
                     "default": null,
                     "members": []
                   }
@@ -1691,7 +1652,7 @@
                   "format": "python-docstring",
                   "body": "Convert to int."
                 },
-                "signature": "def __int__(self) -> builtins.int:",
+                "signature": "def __int__(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -1702,7 +1663,7 @@
                   "format": "python-docstring",
                   "body": "Debug-style representation."
                 },
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -1734,26 +1695,20 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import EdgeStatements\nhelp(EdgeStatements)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "__getitem__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __getitem__(self, key: builtins.str) -> builtins.str:",
+                "signature": "def __getitem__(self, key: str) -> str:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -1763,14 +1718,14 @@
                 "name": "__setitem__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __setitem__(self, key: builtins.str, value: builtins.str) -> None:",
+                "signature": "def __setitem__(self, key: str, value: str) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -1778,7 +1733,7 @@
                     "name": "value",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "value: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -1788,14 +1743,14 @@
                 "name": "__delitem__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __delitem__(self, key: builtins.str) -> None:",
+                "signature": "def __delitem__(self, key: str) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -1805,14 +1760,14 @@
                 "name": "__contains__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __contains__(self, key: builtins.str) -> builtins.bool:",
+                "signature": "def __contains__(self, key: str) -> bool:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -1822,7 +1777,7 @@
                 "name": "__len__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __len__(self) -> builtins.int:",
+                "signature": "def __len__(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -1830,7 +1785,7 @@
                 "name": "__iter__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __iter__(self) -> typing.Iterator[builtins.str]:",
+                "signature": "def __iter__(self) -> Iterator[str]:",
                 "default": null,
                 "members": []
               },
@@ -1838,14 +1793,14 @@
                 "name": "get",
                 "kind": "method",
                 "docs": null,
-                "signature": "def get(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
+                "signature": "def get(self, key: str, default: Any = None) -> Any:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -1853,7 +1808,7 @@
                     "name": "default",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "default: typing.Any = None",
+                    "signature": "Any",
                     "default": "None",
                     "members": []
                   }
@@ -1863,7 +1818,7 @@
                 "name": "keys",
                 "kind": "method",
                 "docs": null,
-                "signature": "def keys(self) -> builtins.list[builtins.str]:",
+                "signature": "def keys(self) -> list[str]:",
                 "default": null,
                 "members": []
               },
@@ -1871,7 +1826,7 @@
                 "name": "values",
                 "kind": "method",
                 "docs": null,
-                "signature": "def values(self) -> builtins.list[builtins.str]:",
+                "signature": "def values(self) -> list[str]:",
                 "default": null,
                 "members": []
               },
@@ -1879,7 +1834,7 @@
                 "name": "items",
                 "kind": "method",
                 "docs": null,
-                "signature": "def items(self) -> builtins.list[tuple[builtins.str, builtins.str]]:",
+                "signature": "def items(self) -> list[tuple[str, str]]:",
                 "default": null,
                 "members": []
               },
@@ -1895,14 +1850,14 @@
                 "name": "update",
                 "kind": "method",
                 "docs": null,
-                "signature": "def update(self, other: typing.Mapping[builtins.str, builtins.str]) -> None:",
+                "signature": "def update(self, other: Mapping[str, str]) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "other",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "other: typing.Mapping[builtins.str, builtins.str]",
+                    "signature": "Mapping[str, str]",
                     "default": null,
                     "members": []
                   }
@@ -1912,14 +1867,14 @@
                 "name": "pop",
                 "kind": "method",
                 "docs": null,
-                "signature": "def pop(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
+                "signature": "def pop(self, key: str, default: Any = None) -> Any:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -1927,7 +1882,7 @@
                     "name": "default",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "default: typing.Any = None",
+                    "signature": "Any",
                     "default": "None",
                     "members": []
                   }
@@ -1937,7 +1892,7 @@
                 "name": "popitem",
                 "kind": "method",
                 "docs": null,
-                "signature": "def popitem(self) -> tuple[builtins.str, builtins.str]:",
+                "signature": "def popitem(self) -> tuple[str, str]:",
                 "default": null,
                 "members": []
               },
@@ -1945,14 +1900,14 @@
                 "name": "setdefault",
                 "kind": "method",
                 "docs": null,
-                "signature": "def setdefault(self, key: builtins.str, default: typing.Optional[builtins.str] = None) -> builtins.str:",
+                "signature": "def setdefault(self, key: str, default: Optional[str] = None) -> str:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -1960,7 +1915,7 @@
                     "name": "default",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "default: typing.Optional[builtins.str] = None",
+                    "signature": "Optional[str]",
                     "default": "None",
                     "members": []
                   }
@@ -1970,7 +1925,7 @@
                 "name": "__repr__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -2002,13 +1957,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import Flow\nhelp(Flow)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "source",
@@ -2039,7 +1988,7 @@
                   "format": "python-docstring",
                   "body": "Debug-style representation."
                 },
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -2071,13 +2020,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import GlobalData\nhelp(GlobalData)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "name",
@@ -2086,7 +2029,7 @@
                   "format": "python-docstring",
                   "body": "Graph name."
                 },
-                "signature": "def name(self) -> builtins.str:",
+                "signature": "def name(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -2094,14 +2037,14 @@
                 "name": "name",
                 "kind": "setter",
                 "docs": null,
-                "signature": "def name(self, value: builtins.str) -> None:",
+                "signature": "def name(self, value: str) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "value",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "value: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -2122,14 +2065,14 @@
                 "name": "statements",
                 "kind": "setter",
                 "docs": null,
-                "signature": "def statements(self, value: builtins.dict[builtins.str, builtins.str]) -> None:",
+                "signature": "def statements(self, value: dict[str, str]) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "value",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "value: builtins.dict[builtins.str, builtins.str]",
+                    "signature": "dict[str, str]",
                     "default": null,
                     "members": []
                   }
@@ -2150,14 +2093,14 @@
                 "name": "edge_statements",
                 "kind": "setter",
                 "docs": null,
-                "signature": "def edge_statements(self, value: builtins.dict[builtins.str, builtins.str]) -> None:",
+                "signature": "def edge_statements(self, value: dict[str, str]) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "value",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "value: builtins.dict[builtins.str, builtins.str]",
+                    "signature": "dict[str, str]",
                     "default": null,
                     "members": []
                   }
@@ -2178,14 +2121,14 @@
                 "name": "node_statements",
                 "kind": "setter",
                 "docs": null,
-                "signature": "def node_statements(self, value: builtins.dict[builtins.str, builtins.str]) -> None:",
+                "signature": "def node_statements(self, value: dict[str, str]) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "value",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "value: builtins.dict[builtins.str, builtins.str]",
+                    "signature": "dict[str, str]",
                     "default": null,
                     "members": []
                   }
@@ -2198,14 +2141,14 @@
                   "format": "python-docstring",
                   "body": "Create global data from fields."
                 },
-                "signature": "def __new__(cls, name: typing.Optional[builtins.str] = None, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, edge_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, node_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None) -> GlobalData:",
+                "signature": "def __new__(cls, name: Optional[str] = None, statements: Optional[Mapping[str, str]] = None, edge_statements: Optional[Mapping[str, str]] = None, node_statements: Optional[Mapping[str, str]] = None) -> GlobalData:",
                 "default": null,
                 "members": [
                   {
                     "name": "name",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "name: typing.Optional[builtins.str] = None",
+                    "signature": "Optional[str]",
                     "default": "None",
                     "members": []
                   },
@@ -2213,7 +2156,7 @@
                     "name": "statements",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
+                    "signature": "Optional[Mapping[str, str]]",
                     "default": "None",
                     "members": []
                   },
@@ -2221,7 +2164,7 @@
                     "name": "edge_statements",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "edge_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
+                    "signature": "Optional[Mapping[str, str]]",
                     "default": "None",
                     "members": []
                   },
@@ -2229,7 +2172,7 @@
                     "name": "node_statements",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "node_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None",
+                    "signature": "Optional[Mapping[str, str]]",
                     "default": "None",
                     "members": []
                   }
@@ -2242,14 +2185,14 @@
                   "format": "python-docstring",
                   "body": "Insert or update a graph-level statement."
                 },
-                "signature": "def add_statement(self, key: builtins.str, value: builtins.str) -> None:",
+                "signature": "def add_statement(self, key: str, value: str) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -2257,7 +2200,7 @@
                     "name": "value",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "value: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -2270,14 +2213,14 @@
                   "format": "python-docstring",
                   "body": "Insert or update a default edge statement."
                 },
-                "signature": "def add_edge_statement(self, key: builtins.str, value: builtins.str) -> None:",
+                "signature": "def add_edge_statement(self, key: str, value: str) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -2285,7 +2228,7 @@
                     "name": "value",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "value: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -2298,14 +2241,14 @@
                   "format": "python-docstring",
                   "body": "Insert or update a default node statement."
                 },
-                "signature": "def add_node_statement(self, key: builtins.str, value: builtins.str) -> None:",
+                "signature": "def add_node_statement(self, key: str, value: str) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -2313,7 +2256,7 @@
                     "name": "value",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "value: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -2326,7 +2269,7 @@
                   "format": "python-docstring",
                   "body": "Debug-style representation."
                 },
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -2358,26 +2301,20 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import GlobalStatements\nhelp(GlobalStatements)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "__getitem__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __getitem__(self, key: builtins.str) -> builtins.str:",
+                "signature": "def __getitem__(self, key: str) -> str:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -2387,14 +2324,14 @@
                 "name": "__setitem__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __setitem__(self, key: builtins.str, value: builtins.str) -> None:",
+                "signature": "def __setitem__(self, key: str, value: str) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -2402,7 +2339,7 @@
                     "name": "value",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "value: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -2412,14 +2349,14 @@
                 "name": "__delitem__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __delitem__(self, key: builtins.str) -> None:",
+                "signature": "def __delitem__(self, key: str) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -2429,14 +2366,14 @@
                 "name": "__contains__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __contains__(self, key: builtins.str) -> builtins.bool:",
+                "signature": "def __contains__(self, key: str) -> bool:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -2446,7 +2383,7 @@
                 "name": "__len__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __len__(self) -> builtins.int:",
+                "signature": "def __len__(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -2454,7 +2391,7 @@
                 "name": "__iter__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __iter__(self) -> typing.Iterator[builtins.str]:",
+                "signature": "def __iter__(self) -> Iterator[str]:",
                 "default": null,
                 "members": []
               },
@@ -2462,14 +2399,14 @@
                 "name": "get",
                 "kind": "method",
                 "docs": null,
-                "signature": "def get(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
+                "signature": "def get(self, key: str, default: Any = None) -> Any:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -2477,7 +2414,7 @@
                     "name": "default",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "default: typing.Any = None",
+                    "signature": "Any",
                     "default": "None",
                     "members": []
                   }
@@ -2487,7 +2424,7 @@
                 "name": "keys",
                 "kind": "method",
                 "docs": null,
-                "signature": "def keys(self) -> builtins.list[builtins.str]:",
+                "signature": "def keys(self) -> list[str]:",
                 "default": null,
                 "members": []
               },
@@ -2495,7 +2432,7 @@
                 "name": "values",
                 "kind": "method",
                 "docs": null,
-                "signature": "def values(self) -> builtins.list[builtins.str]:",
+                "signature": "def values(self) -> list[str]:",
                 "default": null,
                 "members": []
               },
@@ -2503,7 +2440,7 @@
                 "name": "items",
                 "kind": "method",
                 "docs": null,
-                "signature": "def items(self) -> builtins.list[tuple[builtins.str, builtins.str]]:",
+                "signature": "def items(self) -> list[tuple[str, str]]:",
                 "default": null,
                 "members": []
               },
@@ -2519,14 +2456,14 @@
                 "name": "update",
                 "kind": "method",
                 "docs": null,
-                "signature": "def update(self, other: typing.Mapping[builtins.str, builtins.str]) -> None:",
+                "signature": "def update(self, other: Mapping[str, str]) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "other",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "other: typing.Mapping[builtins.str, builtins.str]",
+                    "signature": "Mapping[str, str]",
                     "default": null,
                     "members": []
                   }
@@ -2536,14 +2473,14 @@
                 "name": "pop",
                 "kind": "method",
                 "docs": null,
-                "signature": "def pop(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
+                "signature": "def pop(self, key: str, default: Any = None) -> Any:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -2551,7 +2488,7 @@
                     "name": "default",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "default: typing.Any = None",
+                    "signature": "Any",
                     "default": "None",
                     "members": []
                   }
@@ -2561,7 +2498,7 @@
                 "name": "popitem",
                 "kind": "method",
                 "docs": null,
-                "signature": "def popitem(self) -> tuple[builtins.str, builtins.str]:",
+                "signature": "def popitem(self) -> tuple[str, str]:",
                 "default": null,
                 "members": []
               },
@@ -2569,14 +2506,14 @@
                 "name": "setdefault",
                 "kind": "method",
                 "docs": null,
-                "signature": "def setdefault(self, key: builtins.str, default: typing.Optional[builtins.str] = None) -> builtins.str:",
+                "signature": "def setdefault(self, key: str, default: Optional[str] = None) -> str:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -2584,7 +2521,7 @@
                     "name": "default",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "default: typing.Optional[builtins.str] = None",
+                    "signature": "Optional[str]",
                     "default": "None",
                     "members": []
                   }
@@ -2594,7 +2531,7 @@
                 "name": "__repr__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -2626,13 +2563,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import Hedge\nhelp(Hedge)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "value",
@@ -2641,7 +2572,7 @@
                   "format": "python-docstring",
                   "body": "Numeric value of this hedge."
                 },
-                "signature": "def value(self) -> builtins.int:",
+                "signature": "def value(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -2652,14 +2583,14 @@
                   "format": "python-docstring",
                   "body": "Create a hedge from a zero-based index."
                 },
-                "signature": "def __new__(cls, value: builtins.int) -> Hedge:",
+                "signature": "def __new__(cls, value: int) -> Hedge:",
                 "default": null,
                 "members": [
                   {
                     "name": "value",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "value: builtins.int",
+                    "signature": "int",
                     "default": null,
                     "members": []
                   }
@@ -2672,7 +2603,7 @@
                   "format": "python-docstring",
                   "body": "Convert to int."
                 },
-                "signature": "def __int__(self) -> builtins.int:",
+                "signature": "def __int__(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -2683,7 +2614,7 @@
                   "format": "python-docstring",
                   "body": "Debug-style representation."
                 },
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -2715,13 +2646,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import HedgeNode\nhelp(HedgeNode)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "internal_graph",
@@ -2759,7 +2684,7 @@
                     "name": "internal_graph",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "internal_graph: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   },
@@ -2767,7 +2692,7 @@
                     "name": "hairs",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "hairs: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   }
@@ -2780,7 +2705,7 @@
                   "format": "python-docstring",
                   "body": "Debug-style representation."
                 },
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -2812,13 +2737,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import HedgePair\nhelp(HedgePair)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "kind",
@@ -2827,7 +2746,7 @@
                   "format": "python-docstring",
                   "body": "Kind of hedge pair: \\\"paired\\\", \\\"unpaired\\\", or \\\"split\\\"."
                 },
-                "signature": "def kind(self) -> builtins.str:",
+                "signature": "def kind(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -2838,7 +2757,7 @@
                   "format": "python-docstring",
                   "body": "Source hedge (paired/split)."
                 },
-                "signature": "def source(self) -> typing.Optional[Hedge]:",
+                "signature": "def source(self) -> Optional[Hedge]:",
                 "default": null,
                 "members": []
               },
@@ -2849,7 +2768,7 @@
                   "format": "python-docstring",
                   "body": "Sink hedge (paired/split)."
                 },
-                "signature": "def sink(self) -> typing.Optional[Hedge]:",
+                "signature": "def sink(self) -> Optional[Hedge]:",
                 "default": null,
                 "members": []
               },
@@ -2860,7 +2779,7 @@
                   "format": "python-docstring",
                   "body": "Hedge (unpaired only)."
                 },
-                "signature": "def hedge(self) -> typing.Optional[Hedge]:",
+                "signature": "def hedge(self) -> Optional[Hedge]:",
                 "default": null,
                 "members": []
               },
@@ -2871,7 +2790,7 @@
                   "format": "python-docstring",
                   "body": "Flow for unpaired hedge."
                 },
-                "signature": "def flow(self) -> typing.Optional[Flow]:",
+                "signature": "def flow(self) -> Optional[Flow]:",
                 "default": null,
                 "members": []
               },
@@ -2882,7 +2801,7 @@
                   "format": "python-docstring",
                   "body": "Which side is split for split edges."
                 },
-                "signature": "def split(self) -> typing.Optional[Flow]:",
+                "signature": "def split(self) -> Optional[Flow]:",
                 "default": null,
                 "members": []
               },
@@ -2893,7 +2812,7 @@
                   "format": "python-docstring",
                   "body": "Debug-style representation."
                 },
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -2925,13 +2844,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import NodeIndex\nhelp(NodeIndex)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "value",
@@ -2940,7 +2853,7 @@
                   "format": "python-docstring",
                   "body": "Numeric value of this node index."
                 },
-                "signature": "def value(self) -> builtins.int:",
+                "signature": "def value(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -2951,14 +2864,14 @@
                   "format": "python-docstring",
                   "body": "Create a node index from a zero-based index."
                 },
-                "signature": "def __new__(cls, value: builtins.int) -> NodeIndex:",
+                "signature": "def __new__(cls, value: int) -> NodeIndex:",
                 "default": null,
                 "members": [
                   {
                     "name": "value",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "value: builtins.int",
+                    "signature": "int",
                     "default": null,
                     "members": []
                   }
@@ -2971,7 +2884,7 @@
                   "format": "python-docstring",
                   "body": "Convert to int."
                 },
-                "signature": "def __int__(self) -> builtins.int:",
+                "signature": "def __int__(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -2982,7 +2895,7 @@
                   "format": "python-docstring",
                   "body": "Debug-style representation."
                 },
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -3014,26 +2927,20 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import NodeStatements\nhelp(NodeStatements)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "__getitem__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __getitem__(self, key: builtins.str) -> builtins.str:",
+                "signature": "def __getitem__(self, key: str) -> str:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -3043,14 +2950,14 @@
                 "name": "__setitem__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __setitem__(self, key: builtins.str, value: builtins.str) -> None:",
+                "signature": "def __setitem__(self, key: str, value: str) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -3058,7 +2965,7 @@
                     "name": "value",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "value: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -3068,14 +2975,14 @@
                 "name": "__delitem__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __delitem__(self, key: builtins.str) -> None:",
+                "signature": "def __delitem__(self, key: str) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -3085,14 +2992,14 @@
                 "name": "__contains__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __contains__(self, key: builtins.str) -> builtins.bool:",
+                "signature": "def __contains__(self, key: str) -> bool:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   }
@@ -3102,7 +3009,7 @@
                 "name": "__len__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __len__(self) -> builtins.int:",
+                "signature": "def __len__(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -3110,7 +3017,7 @@
                 "name": "__iter__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __iter__(self) -> typing.Iterator[builtins.str]:",
+                "signature": "def __iter__(self) -> Iterator[str]:",
                 "default": null,
                 "members": []
               },
@@ -3118,14 +3025,14 @@
                 "name": "get",
                 "kind": "method",
                 "docs": null,
-                "signature": "def get(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
+                "signature": "def get(self, key: str, default: Any = None) -> Any:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -3133,7 +3040,7 @@
                     "name": "default",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "default: typing.Any = None",
+                    "signature": "Any",
                     "default": "None",
                     "members": []
                   }
@@ -3143,7 +3050,7 @@
                 "name": "keys",
                 "kind": "method",
                 "docs": null,
-                "signature": "def keys(self) -> builtins.list[builtins.str]:",
+                "signature": "def keys(self) -> list[str]:",
                 "default": null,
                 "members": []
               },
@@ -3151,7 +3058,7 @@
                 "name": "values",
                 "kind": "method",
                 "docs": null,
-                "signature": "def values(self) -> builtins.list[builtins.str]:",
+                "signature": "def values(self) -> list[str]:",
                 "default": null,
                 "members": []
               },
@@ -3159,7 +3066,7 @@
                 "name": "items",
                 "kind": "method",
                 "docs": null,
-                "signature": "def items(self) -> builtins.list[tuple[builtins.str, builtins.str]]:",
+                "signature": "def items(self) -> list[tuple[str, str]]:",
                 "default": null,
                 "members": []
               },
@@ -3175,14 +3082,14 @@
                 "name": "update",
                 "kind": "method",
                 "docs": null,
-                "signature": "def update(self, other: typing.Mapping[builtins.str, builtins.str]) -> None:",
+                "signature": "def update(self, other: Mapping[str, str]) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "other",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "other: typing.Mapping[builtins.str, builtins.str]",
+                    "signature": "Mapping[str, str]",
                     "default": null,
                     "members": []
                   }
@@ -3192,14 +3099,14 @@
                 "name": "pop",
                 "kind": "method",
                 "docs": null,
-                "signature": "def pop(self, key: builtins.str, default: typing.Any = None) -> typing.Any:",
+                "signature": "def pop(self, key: str, default: Any = None) -> Any:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -3207,7 +3114,7 @@
                     "name": "default",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "default: typing.Any = None",
+                    "signature": "Any",
                     "default": "None",
                     "members": []
                   }
@@ -3217,7 +3124,7 @@
                 "name": "popitem",
                 "kind": "method",
                 "docs": null,
-                "signature": "def popitem(self) -> tuple[builtins.str, builtins.str]:",
+                "signature": "def popitem(self) -> tuple[str, str]:",
                 "default": null,
                 "members": []
               },
@@ -3225,14 +3132,14 @@
                 "name": "setdefault",
                 "kind": "method",
                 "docs": null,
-                "signature": "def setdefault(self, key: builtins.str, default: typing.Optional[builtins.str] = None) -> builtins.str:",
+                "signature": "def setdefault(self, key: str, default: Optional[str] = None) -> str:",
                 "default": null,
                 "members": [
                   {
                     "name": "key",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "key: builtins.str",
+                    "signature": "str",
                     "default": null,
                     "members": []
                   },
@@ -3240,7 +3147,7 @@
                     "name": "default",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "default: typing.Optional[builtins.str] = None",
+                    "signature": "Optional[str]",
                     "default": "None",
                     "members": []
                   }
@@ -3250,7 +3157,7 @@
                 "name": "__repr__",
                 "kind": "method",
                 "docs": null,
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -3282,13 +3189,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import Orientation\nhelp(Orientation)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "default",
@@ -3330,7 +3231,7 @@
                   "format": "python-docstring",
                   "body": "Debug-style representation."
                 },
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -3362,13 +3263,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import OrientedCut\nhelp(OrientedCut)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "left",
@@ -3399,7 +3294,7 @@
                   "format": "python-docstring",
                   "body": "Debug-style representation."
                 },
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -3431,13 +3326,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import Subgraph\nhelp(Subgraph)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "empty",
@@ -3446,14 +3335,14 @@
                   "format": "python-docstring",
                   "body": "Create an empty subgraph of the given size (number of hedges)."
                 },
-                "signature": "def empty(cls, size: builtins.int) -> Subgraph:",
+                "signature": "def empty(cls, size: int) -> Subgraph:",
                 "default": null,
                 "members": [
                   {
                     "name": "size",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "size: builtins.int",
+                    "signature": "int",
                     "default": null,
                     "members": []
                   }
@@ -3466,14 +3355,14 @@
                   "format": "python-docstring",
                   "body": "Create a full subgraph including all hedges."
                 },
-                "signature": "def full(cls, size: builtins.int) -> Subgraph:",
+                "signature": "def full(cls, size: int) -> Subgraph:",
                 "default": null,
                 "members": [
                   {
                     "name": "size",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "size: builtins.int",
+                    "signature": "int",
                     "default": null,
                     "members": []
                   }
@@ -3486,14 +3375,14 @@
                   "format": "python-docstring",
                   "body": "Create a subgraph from a list of hedges."
                 },
-                "signature": "def from_hedges(cls, size: builtins.int, hedges: typing.Sequence[Hedge]) -> Subgraph:",
+                "signature": "def from_hedges(cls, size: int, hedges: Sequence[Hedge]) -> Subgraph:",
                 "default": null,
                 "members": [
                   {
                     "name": "size",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "size: builtins.int",
+                    "signature": "int",
                     "default": null,
                     "members": []
                   },
@@ -3501,7 +3390,7 @@
                     "name": "hedges",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "hedges: typing.Sequence[Hedge]",
+                    "signature": "Sequence[Hedge]",
                     "default": null,
                     "members": []
                   }
@@ -3514,7 +3403,7 @@
                   "format": "python-docstring",
                   "body": "List included hedges."
                 },
-                "signature": "def to_hedges(self) -> builtins.list[Hedge]:",
+                "signature": "def to_hedges(self) -> list[Hedge]:",
                 "default": null,
                 "members": []
               },
@@ -3525,7 +3414,7 @@
                   "format": "python-docstring",
                   "body": "Total number of hedges in the parent graph."
                 },
-                "signature": "def size(self) -> builtins.int:",
+                "signature": "def size(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -3536,7 +3425,7 @@
                   "format": "python-docstring",
                   "body": "Number of included hedges."
                 },
-                "signature": "def n_included(self) -> builtins.int:",
+                "signature": "def n_included(self) -> int:",
                 "default": null,
                 "members": []
               },
@@ -3547,14 +3436,14 @@
                   "format": "python-docstring",
                   "body": "Whether a hedge is included."
                 },
-                "signature": "def includes(self, hedge: typing.Any) -> builtins.bool:",
+                "signature": "def includes(self, hedge: Any) -> bool:",
                 "default": null,
                 "members": [
                   {
                     "name": "hedge",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "hedge: typing.Any",
+                    "signature": "Any",
                     "default": null,
                     "members": []
                   }
@@ -3574,7 +3463,7 @@
                     "name": "other",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "other: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   }
@@ -3594,7 +3483,7 @@
                     "name": "other",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "other: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   }
@@ -3614,7 +3503,7 @@
                     "name": "other",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "other: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   }
@@ -3634,7 +3523,7 @@
                     "name": "other",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "other: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   }
@@ -3647,7 +3536,7 @@
                   "format": "python-docstring",
                   "body": "Debug-style representation."
                 },
-                "signature": "def __repr__(self) -> builtins.str:",
+                "signature": "def __repr__(self) -> str:",
                 "default": null,
                 "members": []
               }
@@ -3679,13 +3568,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from linnet_py import TraversalTree\nhelp(TraversalTree)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "tree_subgraph",
@@ -3705,7 +3588,7 @@
                   "format": "python-docstring",
                   "body": "Node order from traversal."
                 },
-                "signature": "def node_order(self) -> builtins.list[NodeIndex]:",
+                "signature": "def node_order(self) -> list[NodeIndex]:",
                 "default": null,
                 "members": []
               },
@@ -3723,7 +3606,7 @@
                     "name": "subgraph",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "subgraph: Subgraph",
+                    "signature": "Subgraph",
                     "default": null,
                     "members": []
                   }
@@ -3736,7 +3619,7 @@
                   "format": "python-docstring",
                   "body": "Iterate hedges as (hedge, kind, root_hedge)."
                 },
-                "signature": "def iter_hedges(self) -> builtins.list[tuple[Hedge, builtins.str, typing.Optional[Hedge]]]:",
+                "signature": "def iter_hedges(self) -> list[tuple[Hedge, str, Optional[Hedge]]]:",
                 "default": null,
                 "members": []
               }

@@ -9,7 +9,8 @@
     "title": "Overview",
     "summary": "Topology matching, canonicalization, tensor reduction, evaluation backends, and reproducibility.",
     "href": "index.html",
-    "kind": "start here"
+    "kind": "start here",
+    "text": "Research software documentation Vakint Single-scale vacuum-integral matching and evaluation Start the tutorial Read the guides Browse reference Overview Vakint matches single-scale vacuum integrals to a library of known topologies, canonicalizes their momentum routing, reduces tensor numerators, and evaluates them analytically or numerically. Expressions are represented with Symbolica and contain a numerator multiplied by a topo(...) structure built from propagators. Separate matching from evaluation Canonical topology matching is useful on its own and is much cheaper than a complete evaluation. Tensor reduction and analytic backends invoke FORM; numerical sector decomposition invokes pySecDec and FORM. Choose the narrowest operation and evaluation order needed for the task. Choose a task To recognize and canonicalize an integral without external tools, follow the matching-only tutorial and compare with the generated topology table . To tensor-reduce and evaluate with an explicit backend policy, use the evaluation guide with the exact EvaluationOrder reference. To embed Vakint in Rust or symbolica.community.vakint , use the interface guide and generated Rust/Python signatures before selecting external tools. Workflow A complete calculation proceeds through explicit stages: create one Vakint engine and reuse it, because topology setup has a cost; parse or construct a Symbolica expression in Vakint’s namespace; canonicalize the topology and momentum routing; tensor-reduce the numerator when required; evaluate the integral with the first supported backend in the configured order; substitute numerical parameters and external momenta when a numerical result is required. VakintExpression is the structured sum of numerator/topology terms. A recognized topology can be rendered in canonical long or short form. If unknown integrals are allowed, matching may preserve them, but evaluation still needs a backend that supports the resulting topology. External tools and reproducibility Construction validates the selected backends The default evaluation order includes AlphaLoop, MATAD, FMFT, and pySecDec. Settings validation therefore probes FORM and pySecDec even if a later example only canonicalizes an expression. Vakint requires FORM 4.2.1 or newer and pySecDec 1.6.4 or newer. For matching without evaluation, use an empty evaluation order in Rust; in Python, provide an empty evaluation_order when constructing Vakint . Analytic AlphaLoop, MATAD, and FMFT methods depend on FORM. The pySecDec method depends on both FORM and pySecDec and requires numerical masses and, where applicable, external momenta. Record tool versions, normalization convention, epsilon depth, decimal precision, backend order, and temporary-output reuse policy with any result intended to be reproduced. Diagnostics and platform notes Matching with an empty evaluation order needs neither FORM nor pySecDec. For backend evaluation, check the configured executable paths first. Verbose logging and retained temporary files are useful when an external tool fails: On macOS, if a GNU-compiler link fails with missing __emul... symbols, retry the build with EXTRA_MACOS_LIBS_FOR_GNU_GCC=T set. Vakint is used by GammaLoop for vacuum-integral work, but it owns its topology and evaluation conventions independently. Use this guide and the generated API/topology references for the selected version. Contributors can follow topology construction, canonicalization, backend selection, and external-process ownership in the Vakint implementation architecture ."
   },
   {
     "title": "Choose a task",
@@ -39,7 +40,8 @@
     "title": "Match your first integral",
     "summary": "Configure a matching-only engine, parse a vacuum integral, canonicalize it, and inspect the match.",
     "href": "tutorial/",
-    "kind": "tutorial"
+    "kind": "tutorial",
+    "text": "Tutorial This tutorial parses and canonicalizes one vacuum integral in Rust. It deliberately disables all evaluation backends, so the first success exercises Vakint’s topology library and momentum routing without requiring FORM, MATAD, FMFT, or pySecDec. Prerequisites Use Rust 1.85 or newer and work from the GammaLoop source revision identified in this page’s footer. The latest documentation follows that checkout’s API; use an immutable documentation snapshot when working from a released package. Enter the repository development environment: Vakint uses Symbolica; ensure your use satisfies its license terms. External integration tools are unnecessary for the matching-only settings below. The documentation test compiles this example against the same workspace revision as the generated Rust reference. Match a one-loop topology The following is a complete program. The documentation test compiles it directly; to inspect its output, place the same program in a scratch binary target in this checkout and run that target. Runtime success means Vakint recognizes the propagator as a supported one-loop vacuum topology, the canonical: line contains the short form topo(I1L(muvsq,1)) , and the program exits without probing an external executable. Other canonical spellings may reorder identifiers or momentum routing; the normalized result, not the input’s labels, is the comparison boundary. Verification scope and cost The docs harness compiles this source against the current workspace and syntax-checks the setup command. Run the program in a provisioned checkout to verify that both printed forms are produced and the canonical form is recognized. Expect a dependency-heavy cold build to take minutes and the matching operation itself to take seconds. Symbolica may refuse a second concurrent unlicensed process; stop the other instance or use a licensed environment before retrying. An empty evaluation order is intentional EvaluationOrder::empty() makes this a topology-matching tutorial. Default settings include analytic and numerical backends. Validating the explicit empty order before to_canonical prevents an accidental external-backend probe in a matching-only workflow. Move from matching to evaluation Once the canonical form is understood, choose one supported backend explicitly, validate its dependencies, then apply the stages in order: tensor reduction, integral evaluation, and numerical substitution. Record the normalization factor, epsilon depth, decimal precision, backend settings, and tool versions with the result. Reuse one Vakint engine because topology construction has a cost. Troubleshooting and next steps An unrecognized-integral error means the propagators, powers, masses, or momentum routing did not match a registered topology and allow_unknown_integrals is false. Print the long form and compare it with the supported-topology reference. A FORM or pySecDec version error means a nonempty evaluation order slipped into the settings; return to EvaluationOrder::empty() for pure canonicalization. A Symbolica concurrency error means another unlicensed Symbolica process is active; stop it or retry in an environment licensed for concurrent instances. If two inputs look different after matching, compare their canonical forms rather than their original propagator numbering. Continue with the topology-and-evaluation guide before enabling a backend or adding tensor numerators."
   },
   {
     "title": "Prerequisites",
@@ -68,62 +70,95 @@
   {
     "title": "Matching and evaluation",
     "summary": "Parsing, topology matching, normalization, tensor reduction, and backend selection.",
-    "href": "manual/evaluation/",
-    "kind": "manual"
+    "href": "guides/evaluation/",
+    "kind": "guides",
+    "text": "Topology matching, reduction, and evaluation Vakint recognizes an integral only after its propagators, masses, powers, and momentum routing can be mapped to a supported topology pattern. The topology reference lists the patterns available in the selected version. Parsing and topology matching A VakintExpression is a sum of numerator/topology pairs. Parsing checks the Vakint namespace; matching then searches allowed substitutions and momentum shifts. Unknown-topology handling is a setting: preserving an unknown term is useful for partial simplification, but does not make that term evaluable. Canonical long form is explicit and suitable for auditing. Canonical short form is convenient for display and library lookup. Both represent the same matched topology only after canonicalization has succeeded. Normalization and canonicalization Normalization conventions cover loop-measure factors, mass scales, epsilon powers, and the requested expansion depth. Set them before comparing results from different backends. Momentum canonicalization may rename loop variables and reorder propagators; compare canonical expressions rather than input spelling when testing equivalence. Matching does not require an evaluation backend Parsing, matching, normalization, and canonical routing work without FORM or pySecDec when the evaluation order is empty. Use this configuration when you only need a canonical topology. Tensor reduction Tensor numerators are reduced to scalar integrals before analytic evaluation where required. Reduction depends on the topology, Lorentz rank, dimension convention, and scalar-product normalization. Tensor reduction requires FORM. When diagnosing a mismatch, keep the FORM input and Vakint temporary directory so that the failing reduction can be inspected. Evaluation order and backends The evaluation order is an ordered selection policy, not a request to combine backend results. Vakint skips methods whose capability declaration does not match the canonical topology, then uses the first matching method. An error from that selected backend is returned immediately; it does not trigger fallback to the next method. AlphaLoop, MATAD, and FMFT are analytic FORM-backed paths. pySecDec is numerical and additionally needs numeric parameters and external momenta where the topology requires them. For reproducible comparisons record: the canonical topology and normalization convention; epsilon expansion depth and decimal precision; the ordered backend list and backend-specific settings; FORM, pySecDec, MATAD, and FMFT versions where applicable; parameter substitutions and any retained temporary-output directory. Configure one analytic tensor reduction This program makes normalization, precision, and backend order explicit before reducing a rank-two one-loop numerator. It compiles without running external tools in the documentation harness; running it requires a supported FORM installation for the AlphaLoop path. The result invariant is an MS-bar Laurent series in the dimensional regulator: the reduced expression no longer contains the original loop-momentum numerator, and only the first successful method in alphaloop_only() contributes. Inspect the exact VakintSettings , tensor reduction , and evaluation references before changing normalization or backend order. Numerical substitution and result interpretation Backend evaluation returns a symbolic Laurent series. Numerical substitution is a separate boundary: supply every remaining real/complex parameter and, when the numerator contains external scalar products, the external four-momenta. params_from_f64 and externals_from_f64 convert ordinary inputs to the configured decimal precision before the series is evaluated. NumericalEvaluationResult stores sorted (epsilon power, complex coefficient) pairs. Negative powers are poles, power zero is the finite term, and positive powers are higher orders. The optional second result carries a backend-reported uncertainty series when the evaluated expression contains one. Compare corresponding powers; do not collapse the series to one complex number or silently discard the uncertainty. Use partial_numerical_evaluation when you intentionally want to substitute known constants and retain unresolved symbolic factors for inspection. Use numerical_evaluation for the final boundary: it reports an error when tensor structure or a required symbol remains. This distinction prevents a partially substituted expression from being mistaken for a fully numerical result. Interpret failures at the owning stage An engine-construction error means the topology library could not be initialized. A canonicalization error means the propagators did not match a supported topology. A reduction error points to the numerator, Lorentz rank, or FORM translation; retain the temporary directory in that case. An evaluation error after successful reduction means settings validation, the selected backend’s capabilities, or the backend invocation failed. Python is an embedded community module symbolica.community.vakint is registered into a Symbolica installation; it is not a standalone PyPI package. Constructing its Vakint class validates the configured backends. Pass an empty evaluation order for pure matching work on machines without FORM/pySecDec. See the supported-topology and external-dependency reference for the patterns and minimum tool versions available here. Their Rust definitions begin in Vakint's topology module . Methods and software to cite Vakint combines distinct methods rather than treating every backend as interchangeable. Cite the software version and the method actually selected for the reported result: FORM for the symbolic reduction engine; MATAD when its massive tadpole tables are used; FMFT for the four-loop fully massive tadpole path; and pySecDec for numerical sector decomposition. Vakint also uses Symbolica for expression manipulation. Record the Vakint revision, normalization, epsilon depth, precision, selected backend and dependency versions with the result; a generic citation to the package does not encode those choices."
   },
   {
     "title": "Parsing and topology matching",
     "summary": "Vakint · Matching and evaluation",
-    "href": "manual/evaluation/#parsing-and-topology-matching",
-    "kind": "manual"
+    "href": "guides/evaluation/#parsing-and-topology-matching",
+    "kind": "guides"
   },
   {
     "title": "Normalization and canonicalization",
     "summary": "Vakint · Matching and evaluation",
-    "href": "manual/evaluation/#normalization-and-canonicalization",
-    "kind": "manual"
+    "href": "guides/evaluation/#normalization-and-canonicalization",
+    "kind": "guides"
   },
   {
     "title": "Tensor reduction",
     "summary": "Vakint · Matching and evaluation",
-    "href": "manual/evaluation/#tensor-reduction",
-    "kind": "manual"
+    "href": "guides/evaluation/#tensor-reduction",
+    "kind": "guides"
   },
   {
     "title": "Evaluation order and backends",
     "summary": "Vakint · Matching and evaluation",
-    "href": "manual/evaluation/#evaluation-order-and-backends",
-    "kind": "manual"
+    "href": "guides/evaluation/#evaluation-order-and-backends",
+    "kind": "guides"
   },
   {
     "title": "Configure one analytic tensor reduction",
     "summary": "Vakint · Matching and evaluation",
-    "href": "manual/evaluation/#configure-one-analytic-tensor-reduction",
-    "kind": "manual"
+    "href": "guides/evaluation/#configure-one-analytic-tensor-reduction",
+    "kind": "guides"
+  },
+  {
+    "title": "Numerical substitution and result interpretation",
+    "summary": "Vakint · Matching and evaluation",
+    "href": "guides/evaluation/#numerical-substitution-and-result-interpretation",
+    "kind": "guides"
+  },
+  {
+    "title": "Methods and software to cite",
+    "summary": "Vakint · Matching and evaluation",
+    "href": "guides/evaluation/#methods-and-software-to-cite",
+    "kind": "guides"
   },
   {
     "title": "Rust and Python interfaces",
     "summary": "Engine types, settings, expression formats, and the Symbolica Python module.",
-    "href": "manual/interfaces/",
-    "kind": "manual"
+    "href": "reference/interfaces/",
+    "kind": "reference",
+    "text": "Rust and Python APIs API reference The reference for this version lists public items, signatures, fields, defaults, feature requirements, and links to their source definitions. Rust packages: vakint Python modules: symbolica.community.vakint Rust package The main Rust types make the workflow state explicit: Vakint owns the topology library and matching/evaluation operations; VakintSettings owns symbols, precision, normalization, tool paths, validation, and backend order; VakintExpression and VakintTerm separate numerators from topology atoms; EvaluationOrder and EvaluationMethod select AlphaLoop, MATAD, FMFT, or pySecDec; NumericalEvaluationResult stores Laurent coefficients in the dimensional regulator. For a dependency-free canonicalization setup, select an empty backend order before validating: vakint_parse! and the related helpers parse Symbolica expressions in Vakint’s namespace. Handle parse failures before passing a user-supplied expression to matching or evaluation. The curated Rust API presents the supported entry points before the full Rustdoc, while the generated topology reference records the runtime topology library and supported external-tool versions for this release. Python community module Python availability Python users import symbolica.community.vakint ; Vakint is not distributed as a standalone Python package. Check that the installed Symbolica distribution includes the Vakint community module before relying on this interface. Verify availability with python -c \"import symbolica.community.vakint\" . Custom Symbolica builds can add Vakint to the symbolica-community assembly, enable the symbolica_community_module feature, and register VakintWrapper while building the extension. The structured Python reference covers the four exported classes: Vakint , VakintExpression , VakintEvaluationMethod , and VakintNumericalResult . This example constructs a matching-only engine without probing external backends: Vakint exposes canonicalization, tensor reduction, integral evaluation, complete evaluation, and numerical conversion. VakintEvaluationMethod constructs configured backend choices. VakintNumericalResult converts Laurent coefficients to Python tuples and compares results with thresholds and optional errors. Construct one engine and reuse it. When enabling pySecDec, provide numerical masses and external momenta where the topology requires them. Reuse existing pySecDec output only while debugging, and remove it before evaluating changed inputs. Source starting points are the Rust API and the Python module ."
   },
   {
     "title": "Rust package",
     "summary": "Vakint · Rust and Python interfaces",
-    "href": "manual/interfaces/#rust-package",
-    "kind": "manual"
+    "href": "reference/interfaces/#rust-package",
+    "kind": "reference"
   },
   {
     "title": "Python community module",
     "summary": "Vakint · Rust and Python interfaces",
-    "href": "manual/interfaces/#python-community-module",
-    "kind": "manual"
+    "href": "reference/interfaces/#python-community-module",
+    "kind": "reference"
   },
   {
-    "title": "Versions and compatibility",
-    "summary": "Published versions, compatibility changes, and practical upgrade guidance.",
-    "href": "manual/releases/",
-    "kind": "manual"
+    "title": "Version history",
+    "summary": "Release-note coverage, component versions, compatibility risks, and practical upgrade checks.",
+    "href": "version-history/",
+    "kind": "version history",
+    "text": "Version history History coverage Vakint does not yet have a standalone changelog. The package metadata, tagged repository history, and API reference are the available version record. Components and version sources Rust package: vakint package metadata Release record: Vakint repository tags Usage and external tools: matching and evaluation guide The Rust crate and the Python interface included with Symbolica can be released on different schedules. Record both versions when sharing a calculation or reporting a problem. Upgrade checklist Pin the Vakint version together with FORM, pySecDec, MATAD, and FMFT versions used for a calculation. Then compare: supported topologies and canonical momentum routing; normalization conventions and epsilon-expansion defaults; tensor reduction and analytic backend behavior; pySecDec integration and numerical precision; Rust and Python method signatures and feature requirements. Reproducibility record Record the Rust crate, Symbolica/Python module, FORM, pySecDec, MATAD, and FMFT versions together with the selected topology and normalization settings."
+  },
+  {
+    "title": "Components and version sources",
+    "summary": "Vakint · Version history",
+    "href": "version-history/#components-and-version-sources",
+    "kind": "version history"
+  },
+  {
+    "title": "Upgrade checklist",
+    "summary": "Vakint · Version history",
+    "href": "version-history/#upgrade-checklist",
+    "kind": "version history"
+  },
+  {
+    "title": "Reproducibility record",
+    "summary": "Vakint · Version history",
+    "href": "version-history/#reproducibility-record",
+    "kind": "version history"
   },
   {
     "title": "vakint · Vakint expression parser",
@@ -145,7 +180,7 @@
   },
   {
     "title": "vakint · Vakint engine.topologies",
-    "summary": "Topologies",
+    "summary": "Supported topology registry used for matching, canonicalization, and evaluation.",
     "href": "reference/rust/supported/vakint/#supported-vakint-topologies-field",
     "kind": "rust-api"
   },
@@ -157,85 +192,85 @@
   },
   {
     "title": "vakint · Vakint settings.epsilon_symbol",
-    "summary": "String",
+    "summary": "Symbol used for the dimensional-regularization parameter epsilon.",
     "href": "reference/rust/supported/vakint/#supported-vakintsettings-epsilon-symbol-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.mu_r_sq_symbol",
-    "summary": "String",
+    "summary": "Symbol used for the squared renormalization scale.",
     "href": "reference/rust/supported/vakint/#supported-vakintsettings-mu-r-sq-symbol-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.form_exe_path",
-    "summary": "String",
+    "summary": "Executable name or path used to invoke FORM.",
     "href": "reference/rust/supported/vakint/#supported-vakintsettings-form-exe-path-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.python_exe_path",
-    "summary": "String",
+    "summary": "Executable name or path used to invoke Python-based backends.",
     "href": "reference/rust/supported/vakint/#supported-vakintsettings-python-exe-path-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.verify_numerator_identification",
-    "summary": "bool",
+    "summary": "Whether canonicalization must account for every numerator factor.",
     "href": "reference/rust/supported/vakint/#supported-vakintsettings-verify-numerator-identification-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.integral_normalization_factor",
-    "summary": "LoopNormalizationFactor",
+    "summary": "Per-loop normalization convention applied to evaluated integrals.",
     "href": "reference/rust/supported/vakint/#supported-vakintsettings-integral-normalization-factor-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.run_time_decimal_precision",
-    "summary": "u32",
+    "summary": "Requested decimal precision passed to numerical backends and conversions.",
     "href": "reference/rust/supported/vakint/#supported-vakintsettings-run-time-decimal-precision-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.allow_unknown_integrals",
-    "summary": "bool",
+    "summary": "Whether inputs may match Vakint's generic unknown-integral topology.",
     "href": "reference/rust/supported/vakint/#supported-vakintsettings-allow-unknown-integrals-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.clean_tmp_dir",
-    "summary": "bool",
+    "summary": "Whether successful external-backend runs remove their temporary directories.",
     "href": "reference/rust/supported/vakint/#supported-vakintsettings-clean-tmp-dir-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.evaluation_order",
-    "summary": "EvaluationOrder",
+    "summary": "Ordered analytic and numerical backends considered for each integral.",
     "href": "reference/rust/supported/vakint/#supported-vakintsettings-evaluation-order-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.number_of_terms_in_epsilon_expansion",
-    "summary": "i64",
+    "summary": "Number of terms retained in the dimensional-regulator expansion.",
     "href": "reference/rust/supported/vakint/#supported-vakintsettings-number-of-terms-in-epsilon-expansion-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.precision_for_input_float_rationalization",
-    "summary": "InputFloatRationalizationPrecision",
+    "summary": "Precision policy used when rationalizing floating-point input for FORM.",
     "href": "reference/rust/supported/vakint/#supported-vakintsettings-precision-for-input-float-rationalization-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.use_dot_product_notation",
-    "summary": "bool",
+    "summary": "Whether reduced scalar products remain in dot-product notation.",
     "href": "reference/rust/supported/vakint/#supported-vakintsettings-use-dot-product-notation-field",
     "kind": "rust-api"
   },
   {
     "title": "vakint · Vakint settings.temporary_directory",
-    "summary": "Option < String >",
+    "summary": "Optional parent directory for uniquely named external-backend work directories.",
     "href": "reference/rust/supported/vakint/#supported-vakintsettings-temporary-directory-field",
     "kind": "rust-api"
   },
@@ -247,7 +282,7 @@
   },
   {
     "title": "vakint · Vakint expression.0",
-    "summary": "Vec < VakintTerm >",
+    "summary": "Expression terms, each separating a matched integral from its numerator.",
     "href": "reference/rust/supported/vakint/#supported-vakintexpression-0-field",
     "kind": "rust-api"
   },
@@ -259,7 +294,7 @@
   },
   {
     "title": "vakint · Evaluation order.0",
-    "summary": "Vec < EvaluationMethod >",
+    "summary": "Evaluation backends tried in order until one supports the requested integral.",
     "href": "reference/rust/supported/vakint/#supported-evaluationorder-0-field",
     "kind": "rust-api"
   },
@@ -289,7 +324,7 @@
   },
   {
     "title": "vakint · Numerical Laurent result.0",
-    "summary": "Vec < (i64, Complex < Float >) >",
+    "summary": "Laurent coefficients stored as `(epsilon power, complex coefficient)` pairs.",
     "href": "reference/rust/supported/vakint/#supported-numericalevaluationresult-0-field",
     "kind": "rust-api"
   },
@@ -301,86 +336,8 @@
   },
   {
     "title": "vakint-community · Vakint.__new__",
-    "summary": "Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations. Note that the creation of a Vakint instance involves the processing and creation of the library of all known topologies, which can be time consuming. ## Examples ```python vakint = Vakint( integral_normalization_factor=\"MSbar\", mu_r_sq_symbol=S(\"mursq\"), # If you select 5 terms, then MATAD will be used, but for 4 and fewer, alphaLoop is will be used as # it is first in the evaluation_order supplied. number_of_terms_in_epsilon_expansion=4, evaluation_order=[ VakintEvaluationMethod.new_alphaloop_method(), VakintEvaluationMethod.new_matad_method(), VakintEvaluationMethod.new_fmft_method(), VakintEvaluationMethod.new_pysecdec_method( min_n_evals=10_000, max_n_evals=1000_000, numerical_masses=masses, numerical_external_momenta=external_momenta ), ], form_exe_path=\"form\", python_exe_path=\"python3\", ) ``` Parameters ---------- run_time_decimal_precision : Optional[int] The decimal precision to be used during the evaluation. Default is 17. evaluation_order : Optional[Sequence[VakintEvaluationMethod]] A list of `VakintEvaluationMethod` instances specifying the order in which evaluation methods are to be applied. Default is all available methods in a sensible order. epsilon_symbol : Optional[Expression] The symbol to be used for the dimensional regularisation parameter epsilon. Default is \"ε\". mu_r_sq_symbol : Optional[Expression] The symbol to be used for the renormalisation scale squared. Default is \"mursq\". form_exe_path : Optional[str] The path to the FORM executable. Default is \"form\". python_exe_path : Optional[str] The path to the Python executable. Default is \"python3\". verify_numerator_identification : Optional[bool] Whether to verify the identification of numerator structures. Default is True. integral_normalization_factor : Optional[str] The normalization factor to be used for integrals. Can be \"MSbar\", \"pySecDec\", \"FMFTandMATAD\" or a custom string. Default is \"MSbar\". allow_unknown_integrals : Optional[bool] Whether to allow unknown integrals to be processed. Default is True. clean_tmp_dir : Optional[bool] Whether to clean the temporary directory after evaluation. Default is True, unless the environment variable VAKINT_NO_CLEAN_TMP_DIR is set. number_of_terms_in_epsilon_expansion : Optional[int] The number of terms in the epsilon expansion to be computed. Default is 4. use_dot_product_notation : Optional[bool] Whether to use dot product notation for scalar products. Default is False. temporary_directory : Optional[str] The path to the temporary directory to be used. Default is None, in which case a system temporary directory will be used.",
+    "summary": "Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations. Note that the creation of a Vakint instance involves the processing and creation of the library of all known topologies, which can be time consuming. ## Examples ```python vakint = Vakint( integral_normalization_factor=\"MSbar\", mu_r_sq_symbol=S(\"mursq\"), # If you select 5 terms, then MATAD will be used, but for 4 and fewer, alphaLoop will be used as # it is first in the evaluation_order supplied. number_of_terms_in_epsilon_expansion=4, evaluation_order=[ VakintEvaluationMethod.new_alphaloop_method(), VakintEvaluationMethod.new_matad_method(), VakintEvaluationMethod.new_fmft_method(), VakintEvaluationMethod.new_pysecdec_method( min_n_evals=10_000, max_n_evals=1000_000, numerical_masses=masses, numerical_external_momenta=external_momenta ), ], form_exe_path=\"form\", python_exe_path=\"python3\", ) ``` Parameters ---------- run_time_decimal_precision : Optional[int] The decimal precision to be used during the evaluation. Default is 17. evaluation_order : Optional[Sequence[VakintEvaluationMethod]] A list of `VakintEvaluationMethod` instances specifying the order in which evaluation methods are to be applied. Default is all available methods in a sensible order. epsilon_symbol : Optional[Expression] The symbol to be used for the dimensional regularisation parameter epsilon. Default is \"ε\". mu_r_sq_symbol : Optional[Expression] The symbol to be used for the renormalisation scale squared. Default is \"mursq\". form_exe_path : Optional[str] The path to the FORM executable. Default is \"form\". python_exe_path : Optional[str] The path to the Python executable. Default is \"python3\". verify_numerator_identification : Optional[bool] Whether to verify the identification of numerator structures. Default is True. integral_normalization_factor : Optional[str] The normalization factor to be used for integrals. Can be \"MSbar\", \"pySecDec\", \"FMFTandMATAD\" or a custom string. Default is \"MSbar\". allow_unknown_integrals : Optional[bool] Whether to allow unknown integrals to be processed. Default is True. clean_tmp_dir : Optional[bool] Whether to clean the temporary directory after evaluation. Default is True, unless the environment variable VAKINT_NO_CLEAN_TMP_DIR is set. number_of_terms_in_epsilon_expansion : Optional[int] The number of terms in the epsilon expansion to be computed. Default is 4. use_dot_product_notation : Optional[bool] Whether to use dot product notation for scalar products. Default is False. temporary_directory : Optional[str] The path to the temporary directory to be used. Default is None, in which case a system temporary directory will be used.",
     "href": "reference/python/vakint-community/#exports-vakint-new-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.__new__.run_time_decimal_precision",
-    "summary": "The decimal precision to be used during the evaluation. Default is 17.",
-    "href": "reference/python/vakint-community/#exports-vakint-new-associatedfunction-run-time-decimal-precision-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.__new__.evaluation_order",
-    "summary": "A list of `VakintEvaluationMethod` instances specifying the order in which evaluation methods are to be applied. Default is all available methods in a sensible order.",
-    "href": "reference/python/vakint-community/#exports-vakint-new-associatedfunction-evaluation-order-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.__new__.epsilon_symbol",
-    "summary": "The symbol to be used for the dimensional regularisation parameter epsilon. Default is \"ε\".",
-    "href": "reference/python/vakint-community/#exports-vakint-new-associatedfunction-epsilon-symbol-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.__new__.mu_r_sq_symbol",
-    "summary": "The symbol to be used for the renormalisation scale squared. Default is \"mursq\".",
-    "href": "reference/python/vakint-community/#exports-vakint-new-associatedfunction-mu-r-sq-symbol-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.__new__.form_exe_path",
-    "summary": "The path to the FORM executable. Default is \"form\".",
-    "href": "reference/python/vakint-community/#exports-vakint-new-associatedfunction-form-exe-path-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.__new__.python_exe_path",
-    "summary": "The path to the Python executable. Default is \"python3\".",
-    "href": "reference/python/vakint-community/#exports-vakint-new-associatedfunction-python-exe-path-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.__new__.verify_numerator_identification",
-    "summary": "Whether to verify the identification of numerator structures. Default is True.",
-    "href": "reference/python/vakint-community/#exports-vakint-new-associatedfunction-verify-numerator-identification-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.__new__.integral_normalization_factor",
-    "summary": "The normalization factor to be used for integrals. Can be \"MSbar\", \"pySecDec\", \"FMFTandMATAD\" or a custom string. Default is \"MSbar\".",
-    "href": "reference/python/vakint-community/#exports-vakint-new-associatedfunction-integral-normalization-factor-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.__new__.allow_unknown_integrals",
-    "summary": "Whether to allow unknown integrals to be processed. Default is True.",
-    "href": "reference/python/vakint-community/#exports-vakint-new-associatedfunction-allow-unknown-integrals-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.__new__.clean_tmp_dir",
-    "summary": "Whether to clean the temporary directory after evaluation. Default is True, unless the environment variable VAKINT_NO_CLEAN_TMP_DIR is set.",
-    "href": "reference/python/vakint-community/#exports-vakint-new-associatedfunction-clean-tmp-dir-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.__new__.number_of_terms_in_epsilon_expansion",
-    "summary": "The number of terms in the epsilon expansion to be computed. Default is 4.",
-    "href": "reference/python/vakint-community/#exports-vakint-new-associatedfunction-number-of-terms-in-epsilon-expansion-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.__new__.use_dot_product_notation",
-    "summary": "Whether to use dot product notation for scalar products. Default is False.",
-    "href": "reference/python/vakint-community/#exports-vakint-new-associatedfunction-use-dot-product-notation-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.__new__.temporary_directory",
-    "summary": "The path to the temporary directory to be used. Default is None, in which case a system temporary directory will be used.",
-    "href": "reference/python/vakint-community/#exports-vakint-new-associatedfunction-temporary-directory-parameter",
     "kind": "python-api"
   },
   {
@@ -390,33 +347,9 @@
     "kind": "python-api"
   },
   {
-    "title": "vakint-community · Vakint.numerical_result_from_expression.expr",
-    "summary": "A Symbolica expression representing a Laurent series in the dimensional regularisation parameter epsilon specified in the vakint engine.",
-    "href": "reference/python/vakint-community/#exports-vakint-numerical-result-from-expression-method-expr-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "vakint-community · Vakint.numerical_evaluation",
     "summary": "Perform a numerical evaluation of an integral parameterically evaluated by Vakint, given numerical values for all parameters and optionally for external momenta. ## Examples ```python evaluated_integral = vakint.evaluate_integral(E(\"(k(1,11)*k(1,11)+p(1,12)*p(2,12))*topo(prop(1,edge(1,1),k(1),muvsq,1))\", default_namespace=\"vakint\")) numerical_result, numerical_error = vakint.numerical_evaluation( evaluated_integral, { \"muvsq\": 2., \"mursq\": 3.}, { 1: (0.1, 0.2, 0.3, 0.4), 2: (0.5, 0.6, 0.7, 0.8) } ) str(numerical_result) # ε^-1 : (0+27.63489232305020i) # ε^ 0 : (0+-62.73919274007806i) # ε^+1 : (0+107.7642844179578i) # ε^+2 : (0+-138.7269737122023i) ``` Parameters ---------- evaluated_integral : Expression A Symbolica expression representing an integral that has been evaluated parameterically by Vakint params : Dict[str, float] A dictionary mapping parameter names to their numerical values. externals : Optional[Dict[int, Tuple[float, float, float, float]]] An optional dictionary mapping external momentum indices to their numerical 4-vector values.",
     "href": "reference/python/vakint-community/#exports-vakint-numerical-evaluation-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.numerical_evaluation.evaluated_integral",
-    "summary": "A Symbolica expression representing an integral that has been evaluated parameterically by Vakint",
-    "href": "reference/python/vakint-community/#exports-vakint-numerical-evaluation-method-evaluated-integral-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.numerical_evaluation.params",
-    "summary": "A dictionary mapping parameter names to their numerical values.",
-    "href": "reference/python/vakint-community/#exports-vakint-numerical-evaluation-method-params-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.numerical_evaluation.externals",
-    "summary": "An optional dictionary mapping external momentum indices to their numerical 4-vector values.",
-    "href": "reference/python/vakint-community/#exports-vakint-numerical-evaluation-method-externals-parameter",
     "kind": "python-api"
   },
   {
@@ -426,27 +359,9 @@
     "kind": "python-api"
   },
   {
-    "title": "vakint-community · Vakint.numerical_result_to_expression.result",
-    "summary": "result: VakintNumericalResult",
-    "href": "reference/python/vakint-community/#exports-vakint-numerical-result-to-expression-method-result-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "vakint-community · Vakint.to_canonical",
     "summary": "Convert a vakint expression to its canonical form, optionally using a short form for the topology representation. ## Examples ```python integral_expr = E(\"(k(99,11)*k(99,11)+p(1,12)*p(2,12))*topo(prop(18,edge(7,7),k(99),muvsq,1))\", default_namespace=\"vakint\") vakint.to_canonical(integral_expr) # (k(1,11)^2+p(1,12)*p(2,12))*topo(prop(1,edge(1,1),k(1),muvsq,1)) vakint.to_canonical(integral_expr,short_form=True) # (k(1,11)^2+p(1,12)*p(2,12))*topo(I1L(muvsq,1)) ``` Parameters ---------- integral_expression : Expression A Symbolica expression representing a vakint integral. short_form : Optional[bool] Whether to use the short form for the topology representation. Default is False.",
     "href": "reference/python/vakint-community/#exports-vakint-to-canonical-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.to_canonical.integral_expression",
-    "summary": "A Symbolica expression representing a vakint integral.",
-    "href": "reference/python/vakint-community/#exports-vakint-to-canonical-method-integral-expression-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.to_canonical.short_form",
-    "summary": "Whether to use the short form for the topology representation. Default is False.",
-    "href": "reference/python/vakint-community/#exports-vakint-to-canonical-method-short-form-parameter",
     "kind": "python-api"
   },
   {
@@ -456,33 +371,15 @@
     "kind": "python-api"
   },
   {
-    "title": "vakint-community · Vakint.tensor_reduce.integral_expression",
-    "summary": "A Symbolica expression representing a vakint integral.",
-    "href": "reference/python/vakint-community/#exports-vakint-tensor-reduce-method-integral-expression-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "vakint-community · Vakint.evaluate_integral",
     "summary": "Perform the parametric evaluation of *only the integral* appearing in the Symbolica expression given in input representing a vakint integral. The numerator is left unchanged. ## Examples ```python integral_expr = E(\"(k(1,11)*k(1,11)+p(1,12)*k(1,12)+k(1,101)*k(1,102))*topo(prop(1,edge(1,1),k(1),muvsq,1))\", default_namespace=\"vakint\") vakint.evaluate_integral(integral_expr) # ε*(-((-𝜋^2*𝑖*log(𝜋)+𝜋^2*𝑖*log(1/4*𝜋^-1*mursq))*(muvsq^2+muvsq*k(1,1)*p(1,1)+[...] ``` Parameters ---------- integral_expression : Expression A Symbolica expression representing a vakint integral.",
     "href": "reference/python/vakint-community/#exports-vakint-evaluate-integral-method",
     "kind": "python-api"
   },
   {
-    "title": "vakint-community · Vakint.evaluate_integral.integral_expression",
-    "summary": "A Symbolica expression representing a vakint integral.",
-    "href": "reference/python/vakint-community/#exports-vakint-evaluate-integral-method-integral-expression-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "vakint-community · Vakint.evaluate",
     "summary": "Perform the complete parametric evaluation of the vaking integral represented by the Symbolica expression given in input. Note that the tensor reduction will be automatically performed on the input given. ## Examples ```python integral_expr = E(\"(k(1,11)*k(1,11)+p(1,12)*k(1,12)+k(1,101)*k(1,102))*topo(prop(1,edge(1,1),k(1),muvsq,1))\", default_namespace=\"vakint\") vakint.evaluate(integral_expr) # ε*((muvsq^2+1/4*muvsq^2*g(101,102))*(1/2*𝜋^2*𝑖*log(𝜋)^2+1/2*𝜋^2*𝑖*log(1/4*𝜋^-1*mursq)^2-[...] ``` Parameters ---------- integral_expression : Expression A Symbolica expression representing a vakint integral.",
     "href": "reference/python/vakint-community/#exports-vakint-evaluate-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · Vakint.evaluate.integral_expression",
-    "summary": "A Symbolica expression representing a vakint integral.",
-    "href": "reference/python/vakint-community/#exports-vakint-evaluate-method-integral-expression-parameter",
     "kind": "python-api"
   },
   {
@@ -510,93 +407,15 @@
     "kind": "python-api"
   },
   {
-    "title": "vakint-community · VakintEvaluationMethod.new_matad_method.expand_masters",
-    "summary": "Whether to expand master integrals. Default is True.",
-    "href": "reference/python/vakint-community/#exports-vakintevaluationmethod-new-matad-method-associatedfunction-expand-masters-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · VakintEvaluationMethod.new_matad_method.susbstitute_masters",
-    "summary": "Whether to substitute master integrals. Default is True.",
-    "href": "reference/python/vakint-community/#exports-vakintevaluationmethod-new-matad-method-associatedfunction-susbstitute-masters-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · VakintEvaluationMethod.new_matad_method.substitute_hpls",
-    "summary": "Whether to substitute harmonic polylogarithms. Default is True.",
-    "href": "reference/python/vakint-community/#exports-vakintevaluationmethod-new-matad-method-associatedfunction-substitute-hpls-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · VakintEvaluationMethod.new_matad_method.direct_numerical_substition",
-    "summary": "Whether to perform direct numerical substitution. Default is True.",
-    "href": "reference/python/vakint-community/#exports-vakintevaluationmethod-new-matad-method-associatedfunction-direct-numerical-substition-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "vakint-community · VakintEvaluationMethod.new_fmft_method",
     "summary": "Create a new VakintEvaluationMethod instance representing the FMFT method. ## Examples ```python fmft_method = VakintEvaluationMethod.new_fmft_method( expand_masters=True, susbstitute_masters=True ) ``` Parameters ---------- expand_masters : Optional[bool] Whether to expand master integrals. Default is True. susbstitute_masters : Optional[bool] Whether to substitute master integrals. Default is True.",
     "href": "reference/python/vakint-community/#exports-vakintevaluationmethod-new-fmft-method-associatedfunction",
     "kind": "python-api"
   },
   {
-    "title": "vakint-community · VakintEvaluationMethod.new_fmft_method.expand_masters",
-    "summary": "Whether to expand master integrals. Default is True.",
-    "href": "reference/python/vakint-community/#exports-vakintevaluationmethod-new-fmft-method-associatedfunction-expand-masters-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · VakintEvaluationMethod.new_fmft_method.susbstitute_masters",
-    "summary": "Whether to substitute master integrals. Default is True.",
-    "href": "reference/python/vakint-community/#exports-vakintevaluationmethod-new-fmft-method-associatedfunction-susbstitute-masters-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "vakint-community · VakintEvaluationMethod.new_pysecdec_method",
     "summary": "Create a new VakintEvaluationMethod instance representing the numerical pySecDec method. ## Examples ```python pysecdec_method = VakintEvaluationMethod.new_pysecdec_method( quiet=True, relative_precision=1e-7, min_n_evals=10_000, max_n_evals=1_000_000_000_000, reuse_existing_output=None, numerical_masses={\"muvsq\": 1.0}, numerical_external_momenta={1: (1.0, 0.0, 0.0, 0.0), 2: (0.0, 1.0, 0.0, 0.0)} ) ``` Note that for because pySecDec can only do numerical evaluations, the preset values of the masses and external momenta must be provided here. Parameters ---------- quiet : Optional[bool] Whether to suppress output from pySecDec. Default is True. relative_precision : Optional[float] The relative precision to be achieved in the numerical integration. Default is 1e-7. min_n_evals : Optional[int] The minimum number of evaluations to be performed in the numerical integration. Default is 10,000. max_n_evals : Optional[int] The maximum number of evaluations to be performed in the numerical integration. Default is 1,000,000,000,000. reuse_existing_output : Optional[str] Path to existing pySecDec output to reuse. Default is None. numerical_masses : Optional[Dict[str, float]] A dictionary mapping mass parameter names to their numerical values. Default is an empty dictionary. numerical_external_momenta : Optional[Dict[int, Tuple[float, float, float, float]]] A dictionary mapping external momentum indices to their numerical 4-vector values. Default is an empty dictionary.",
     "href": "reference/python/vakint-community/#exports-vakintevaluationmethod-new-pysecdec-method-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · VakintEvaluationMethod.new_pysecdec_method.quiet",
-    "summary": "Whether to suppress output from pySecDec. Default is True.",
-    "href": "reference/python/vakint-community/#exports-vakintevaluationmethod-new-pysecdec-method-associatedfunction-quiet-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · VakintEvaluationMethod.new_pysecdec_method.relative_precision",
-    "summary": "The relative precision to be achieved in the numerical integration. Default is 1e-7.",
-    "href": "reference/python/vakint-community/#exports-vakintevaluationmethod-new-pysecdec-method-associatedfunction-relative-precision-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · VakintEvaluationMethod.new_pysecdec_method.min_n_evals",
-    "summary": "The minimum number of evaluations to be performed in the numerical integration. Default is 10,000.",
-    "href": "reference/python/vakint-community/#exports-vakintevaluationmethod-new-pysecdec-method-associatedfunction-min-n-evals-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · VakintEvaluationMethod.new_pysecdec_method.max_n_evals",
-    "summary": "The maximum number of evaluations to be performed in the numerical integration. Default is 1,000,000,000,000.",
-    "href": "reference/python/vakint-community/#exports-vakintevaluationmethod-new-pysecdec-method-associatedfunction-max-n-evals-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · VakintEvaluationMethod.new_pysecdec_method.reuse_existing_output",
-    "summary": "Path to existing pySecDec output to reuse. Default is None.",
-    "href": "reference/python/vakint-community/#exports-vakintevaluationmethod-new-pysecdec-method-associatedfunction-reuse-existing-output-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · VakintEvaluationMethod.new_pysecdec_method.numerical_masses",
-    "summary": "A dictionary mapping mass parameter names to their numerical values. Default is an empty dictionary.",
-    "href": "reference/python/vakint-community/#exports-vakintevaluationmethod-new-pysecdec-method-associatedfunction-numerical-masses-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · VakintEvaluationMethod.new_pysecdec_method.numerical_external_momenta",
-    "summary": "A dictionary mapping external momentum indices to their numerical 4-vector values. Default is an empty dictionary.",
-    "href": "reference/python/vakint-community/#exports-vakintevaluationmethod-new-pysecdec-method-associatedfunction-numerical-external-momenta-parameter",
     "kind": "python-api"
   },
   {
@@ -624,12 +443,6 @@
     "kind": "python-api"
   },
   {
-    "title": "vakint-community · VakintExpression.__new__.atom",
-    "summary": "A Symbolica Expression containing a vakint integral, i.e. a sum of terms, each a product of a numerator and a `vakint::topo(...)` structure.",
-    "href": "reference/python/vakint-community/#exports-vakintexpression-new-associatedfunction-atom-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "vakint-community · VakintNumericalResult",
     "summary": "Container class storing the result of a numerical evaluation of a vakint expression as a Laurent series in the dimensional regularisation parameter epsilon.",
     "href": "reference/python/vakint-community/#exports-vakintnumericalresult",
@@ -654,39 +467,9 @@
     "kind": "python-api"
   },
   {
-    "title": "vakint-community · VakintNumericalResult.__new__.values",
-    "summary": "A list of tuples, each containing an integer exponent of epsilon and a tuple of two floats representing the real and imaginary parts of the coefficient.",
-    "href": "reference/python/vakint-community/#exports-vakintnumericalresult-new-associatedfunction-values-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "vakint-community · VakintNumericalResult.compare_to",
     "summary": "Compare this numerical result to another, returning a tuple of (bool, str) where the bool indicates whether the results match within the specified thresholds, and the str provides details of the comparison. ## Examples ```python result1 = VakintNumericalResult([ (-3, (0.0, -11440.53140354612)), ]) result2 = VakintNumericalResult([ (-3, (0.0, -11440.53140354612)), (-2, (0.0, 2.0)), ]) result1.compare_to(result2, relative_threshold=1e-5) # (False, 'imaginary part of ε^-2 coefficient does not match within rel. error required: 0 != 2.00000000000000 (rel. error = 2.00000000000000)') ``` Parameters ---------- other : VakintNumericalResult The other numerical result to compare to. relative_threshold : float The relative threshold for comparison. error : Optional[VakintNumericalResult] An optional numerical result representing the error in the evaluation. max_pull : Optional[float] The maximum pull for comparison. Default is 3.0.",
     "href": "reference/python/vakint-community/#exports-vakintnumericalresult-compare-to-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · VakintNumericalResult.compare_to.other",
-    "summary": "The other numerical result to compare to.",
-    "href": "reference/python/vakint-community/#exports-vakintnumericalresult-compare-to-method-other-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · VakintNumericalResult.compare_to.relative_threshold",
-    "summary": "The relative threshold for comparison.",
-    "href": "reference/python/vakint-community/#exports-vakintnumericalresult-compare-to-method-relative-threshold-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · VakintNumericalResult.compare_to.error",
-    "summary": "An optional numerical result representing the error in the evaluation.",
-    "href": "reference/python/vakint-community/#exports-vakintnumericalresult-compare-to-method-error-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "vakint-community · VakintNumericalResult.compare_to.max_pull",
-    "summary": "The maximum pull for comparison. Default is 3.0.",
-    "href": "reference/python/vakint-community/#exports-vakintnumericalresult-compare-to-method-max-pull-parameter",
     "kind": "python-api"
   },
   {

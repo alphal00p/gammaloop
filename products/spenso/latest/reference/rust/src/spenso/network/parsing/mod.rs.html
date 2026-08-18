@@ -1005,33 +1005,34 @@
 <a href=#1005 id=1005 data-nosnippet>1005</a>    }
 <a href=#1006 id=1006 data-nosnippet>1006</a>}
 <a href=#1007 id=1007 data-nosnippet>1007</a><span class="kw">pub trait </span>NetworkParse {
-<a href=#1008 id=1008 data-nosnippet>1008</a>    <span class="attr">#[allow(clippy::result_large_err)]
-<a href=#1009 id=1009 data-nosnippet>1009</a>    </span><span class="kw">fn </span>parse_to_atom_net&lt;Aind: AbsInd + DummyAind + ParseableAind&gt;(
-<a href=#1010 id=1010 data-nosnippet>1010</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#1011 id=1011 data-nosnippet>1011</a>        settings: <span class="kw-2">&amp;</span>ParseSettings,
-<a href=#1012 id=1012 data-nosnippet>1012</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;ParamNet&lt;Aind&gt;, TensorNetworkError&lt;DummyKey, Symbol&gt;&gt;;
-<a href=#1013 id=1013 data-nosnippet>1013</a>}
-<a href=#1014 id=1014 data-nosnippet>1014</a>
-<a href=#1015 id=1015 data-nosnippet>1015</a><span class="kw">impl </span>NetworkParse <span class="kw">for </span>Atom {
-<a href=#1016 id=1016 data-nosnippet>1016</a>    <span class="kw">fn </span>parse_to_atom_net&lt;Aind: AbsInd + DummyAind + ParseableAind&gt;(
-<a href=#1017 id=1017 data-nosnippet>1017</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#1018 id=1018 data-nosnippet>1018</a>        settings: <span class="kw-2">&amp;</span>ParseSettings,
-<a href=#1019 id=1019 data-nosnippet>1019</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;ParamNet&lt;Aind&gt;, TensorNetworkError&lt;DummyKey, Symbol&gt;&gt; {
-<a href=#1020 id=1020 data-nosnippet>1020</a>        <span class="self">self</span>.as_view().parse_to_atom_net::&lt;Aind&gt;(settings)
-<a href=#1021 id=1021 data-nosnippet>1021</a>    }
-<a href=#1022 id=1022 data-nosnippet>1022</a>}
-<a href=#1023 id=1023 data-nosnippet>1023</a>
-<a href=#1024 id=1024 data-nosnippet>1024</a><span class="kw">impl </span>NetworkParse <span class="kw">for </span>AtomView&lt;<span class="lifetime">'_</span>&gt; {
-<a href=#1025 id=1025 data-nosnippet>1025</a>    <span class="kw">fn </span>parse_to_atom_net&lt;Aind: AbsInd + DummyAind + ParseableAind&gt;(
-<a href=#1026 id=1026 data-nosnippet>1026</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
-<a href=#1027 id=1027 data-nosnippet>1027</a>        settings: <span class="kw-2">&amp;</span>ParseSettings,
-<a href=#1028 id=1028 data-nosnippet>1028</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;ParamNet&lt;Aind&gt;, TensorNetworkError&lt;DummyKey, Symbol&gt;&gt; {
-<a href=#1029 id=1029 data-nosnippet>1029</a>        <span class="kw">let </span>lib = DummyLibrary::&lt;ParamTensor&lt;ShadowedStructure&lt;Aind&gt;&gt;&gt;::new();
-<a href=#1030 id=1030 data-nosnippet>1030</a>
-<a href=#1031 id=1031 data-nosnippet>1031</a>        ParamNet::&lt;Aind&gt;::try_from_view::&lt;ShadowedStructure&lt;Aind&gt;, <span class="kw">_</span>&gt;(<span class="kw-2">*</span><span class="self">self</span>, <span class="kw-2">&amp;</span>lib, settings)
-<a href=#1032 id=1032 data-nosnippet>1032</a>    }
-<a href=#1033 id=1033 data-nosnippet>1033</a>}
-<a href=#1034 id=1034 data-nosnippet>1034</a>
-<a href=#1035 id=1035 data-nosnippet>1035</a><span class="attr">#[cfg(test)]
-<a href=#1036 id=1036 data-nosnippet>1036</a></span><span class="kw">mod </span>test;
+<a href=#1008 id=1008 data-nosnippet>1008</a>    <span class="doccomment">/// Parses this symbolic expression into a parameterized tensor network using `settings`.
+<a href=#1009 id=1009 data-nosnippet>1009</a>    </span><span class="attr">#[allow(clippy::result_large_err)]
+<a href=#1010 id=1010 data-nosnippet>1010</a>    </span><span class="kw">fn </span>parse_to_atom_net&lt;Aind: AbsInd + DummyAind + ParseableAind&gt;(
+<a href=#1011 id=1011 data-nosnippet>1011</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#1012 id=1012 data-nosnippet>1012</a>        settings: <span class="kw-2">&amp;</span>ParseSettings,
+<a href=#1013 id=1013 data-nosnippet>1013</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;ParamNet&lt;Aind&gt;, TensorNetworkError&lt;DummyKey, Symbol&gt;&gt;;
+<a href=#1014 id=1014 data-nosnippet>1014</a>}
+<a href=#1015 id=1015 data-nosnippet>1015</a>
+<a href=#1016 id=1016 data-nosnippet>1016</a><span class="kw">impl </span>NetworkParse <span class="kw">for </span>Atom {
+<a href=#1017 id=1017 data-nosnippet>1017</a>    <span class="kw">fn </span>parse_to_atom_net&lt;Aind: AbsInd + DummyAind + ParseableAind&gt;(
+<a href=#1018 id=1018 data-nosnippet>1018</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#1019 id=1019 data-nosnippet>1019</a>        settings: <span class="kw-2">&amp;</span>ParseSettings,
+<a href=#1020 id=1020 data-nosnippet>1020</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;ParamNet&lt;Aind&gt;, TensorNetworkError&lt;DummyKey, Symbol&gt;&gt; {
+<a href=#1021 id=1021 data-nosnippet>1021</a>        <span class="self">self</span>.as_view().parse_to_atom_net::&lt;Aind&gt;(settings)
+<a href=#1022 id=1022 data-nosnippet>1022</a>    }
+<a href=#1023 id=1023 data-nosnippet>1023</a>}
+<a href=#1024 id=1024 data-nosnippet>1024</a>
+<a href=#1025 id=1025 data-nosnippet>1025</a><span class="kw">impl </span>NetworkParse <span class="kw">for </span>AtomView&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#1026 id=1026 data-nosnippet>1026</a>    <span class="kw">fn </span>parse_to_atom_net&lt;Aind: AbsInd + DummyAind + ParseableAind&gt;(
+<a href=#1027 id=1027 data-nosnippet>1027</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
+<a href=#1028 id=1028 data-nosnippet>1028</a>        settings: <span class="kw-2">&amp;</span>ParseSettings,
+<a href=#1029 id=1029 data-nosnippet>1029</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;ParamNet&lt;Aind&gt;, TensorNetworkError&lt;DummyKey, Symbol&gt;&gt; {
+<a href=#1030 id=1030 data-nosnippet>1030</a>        <span class="kw">let </span>lib = DummyLibrary::&lt;ParamTensor&lt;ShadowedStructure&lt;Aind&gt;&gt;&gt;::new();
+<a href=#1031 id=1031 data-nosnippet>1031</a>
+<a href=#1032 id=1032 data-nosnippet>1032</a>        ParamNet::&lt;Aind&gt;::try_from_view::&lt;ShadowedStructure&lt;Aind&gt;, <span class="kw">_</span>&gt;(<span class="kw-2">*</span><span class="self">self</span>, <span class="kw-2">&amp;</span>lib, settings)
+<a href=#1033 id=1033 data-nosnippet>1033</a>    }
+<a href=#1034 id=1034 data-nosnippet>1034</a>}
+<a href=#1035 id=1035 data-nosnippet>1035</a>
+<a href=#1036 id=1036 data-nosnippet>1036</a><span class="attr">#[cfg(test)]
+<a href=#1037 id=1037 data-nosnippet>1037</a></span><span class="kw">mod </span>test;
 </code></pre></div></section></main></body></html>

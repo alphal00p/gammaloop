@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "product": {
     "id": "vakint",
     "title": "Vakint"
@@ -57,22 +57,16 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.vakint import Vakint\nhelp(Vakint)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "__new__",
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.\nNote that the creation of a Vakint instance involves the processing and creation of the library of all known topologies, which can be time consuming.\n\n## Examples\n```python\nvakint = Vakint(\nintegral_normalization_factor=\"MSbar\",\nmu_r_sq_symbol=S(\"mursq\"),\n# If you select 5 terms, then MATAD will be used, but for 4 and fewer, alphaLoop is will be used as\n# it is first in the evaluation_order supplied.\nnumber_of_terms_in_epsilon_expansion=4,\nevaluation_order=[\nVakintEvaluationMethod.new_alphaloop_method(),\nVakintEvaluationMethod.new_matad_method(),\nVakintEvaluationMethod.new_fmft_method(),\nVakintEvaluationMethod.new_pysecdec_method(\nmin_n_evals=10_000,\nmax_n_evals=1000_000,\nnumerical_masses=masses,\nnumerical_external_momenta=external_momenta\n),\n],\nform_exe_path=\"form\",\npython_exe_path=\"python3\",\n)\n```\n\nParameters\n----------\n\nrun_time_decimal_precision : Optional[int]\nThe decimal precision to be used during the evaluation. Default is 17.\nevaluation_order : Optional[Sequence[VakintEvaluationMethod]]\nA list of `VakintEvaluationMethod` instances specifying the order in which evaluation methods are to be applied. Default is all available methods in a sensible order.\nepsilon_symbol : Optional[Expression]\nThe symbol to be used for the dimensional regularisation parameter epsilon. Default is \"ε\".\nmu_r_sq_symbol : Optional[Expression]\nThe symbol to be used for the renormalisation scale squared. Default is \"mursq\".\nform_exe_path : Optional[str]\nThe path to the FORM executable. Default is \"form\".\npython_exe_path : Optional[str]\nThe path to the Python executable. Default is \"python3\".\nverify_numerator_identification : Optional[bool]\nWhether to verify the identification of numerator structures. Default is True.\nintegral_normalization_factor : Optional[str]\nThe normalization factor to be used for integrals. Can be \"MSbar\", \"pySecDec\", \"FMFTandMATAD\" or a custom string. Default is \"MSbar\".\nallow_unknown_integrals : Optional[bool]\nWhether to allow unknown integrals to be processed. Default is True.\nclean_tmp_dir : Optional[bool]\nWhether to clean the temporary directory after evaluation. Default is True, unless the environment variable VAKINT_NO_CLEAN_TMP_DIR is set.\nnumber_of_terms_in_epsilon_expansion : Optional[int]\nThe number of terms in the epsilon expansion to be computed. Default is 4.\nuse_dot_product_notation : Optional[bool]\nWhether to use dot product notation for scalar products. Default is False.\ntemporary_directory : Optional[str]\nThe path to the temporary directory to be used. Default is None, in which case a system temporary directory will be used."
+                  "body": "Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.\nNote that the creation of a Vakint instance involves the processing and creation of the library of all known topologies, which can be time consuming.\n\n## Examples\n```python\nvakint = Vakint(\n    integral_normalization_factor=\"MSbar\",\n    mu_r_sq_symbol=S(\"mursq\"),\n    # If you select 5 terms, then MATAD will be used, but for 4 and fewer, alphaLoop will be used as\n    # it is first in the evaluation_order supplied.\n    number_of_terms_in_epsilon_expansion=4,\n    evaluation_order=[\n        VakintEvaluationMethod.new_alphaloop_method(),\n        VakintEvaluationMethod.new_matad_method(),\n        VakintEvaluationMethod.new_fmft_method(),\n        VakintEvaluationMethod.new_pysecdec_method(\n            min_n_evals=10_000,\n            max_n_evals=1000_000,\n            numerical_masses=masses,\n            numerical_external_momenta=external_momenta\n        ),\n    ],\n    form_exe_path=\"form\",\n    python_exe_path=\"python3\",\n)\n```\n\nParameters\n----------\n\nrun_time_decimal_precision : Optional[int]\n    The decimal precision to be used during the evaluation. Default is 17.\nevaluation_order : Optional[Sequence[VakintEvaluationMethod]]\n    A list of `VakintEvaluationMethod` instances specifying the order in which evaluation methods are to be applied. Default is all available methods in a sensible order.\nepsilon_symbol : Optional[Expression]\n    The symbol to be used for the dimensional regularisation parameter epsilon. Default is \"ε\".\nmu_r_sq_symbol : Optional[Expression]\n    The symbol to be used for the renormalisation scale squared. Default is \"mursq\".\nform_exe_path : Optional[str]\n    The path to the FORM executable. Default is \"form\".\npython_exe_path : Optional[str]\n    The path to the Python executable. Default is \"python3\".\nverify_numerator_identification : Optional[bool]\n    Whether to verify the identification of numerator structures. Default is True.\nintegral_normalization_factor : Optional[str]\n    The normalization factor to be used for integrals. Can be \"MSbar\", \"pySecDec\", \"FMFTandMATAD\" or a custom string. Default is \"MSbar\".\nallow_unknown_integrals : Optional[bool]\n    Whether to allow unknown integrals to be processed. Default is True.\nclean_tmp_dir : Optional[bool]\n    Whether to clean the temporary directory after evaluation. Default is True, unless the environment variable VAKINT_NO_CLEAN_TMP_DIR is set.\nnumber_of_terms_in_epsilon_expansion : Optional[int]\n    The number of terms in the epsilon expansion to be computed. Default is 4.\nuse_dot_product_notation : Optional[bool]\n    Whether to use dot product notation for scalar products. Default is False.\ntemporary_directory : Optional[str]\n    The path to the temporary directory to be used. Default is None, in which case a system temporary directory will be used."
                 },
-                "signature": "def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None) -> Vakint:",
+                "signature": "def __new__(cls, run_time_decimal_precision: Optional[int] = None, evaluation_order: Optional[Sequence[VakintEvaluationMethod]] = None, epsilon_symbol: Optional[Expression] = None, mu_r_sq_symbol: Optional[Expression] = None, form_exe_path: Optional[str] = None, python_exe_path: Optional[str] = None, verify_numerator_identification: Optional[bool] = None, integral_normalization_factor: Optional[str] = None, allow_unknown_integrals: Optional[bool] = None, clean_tmp_dir: Optional[bool] = None, number_of_terms_in_epsilon_expansion: Optional[int] = None, use_dot_product_notation: Optional[bool] = None, temporary_directory: Optional[str] = None) -> Vakint:",
                 "default": null,
                 "members": [
                   {
@@ -82,7 +76,7 @@
                       "format": "python-docstring",
                       "body": "The decimal precision to be used during the evaluation. Default is 17."
                     },
-                    "signature": "run_time_decimal_precision: typing.Optional[builtins.int] = None",
+                    "signature": "Optional[int]",
                     "default": "None",
                     "members": []
                   },
@@ -93,7 +87,7 @@
                       "format": "python-docstring",
                       "body": "A list of `VakintEvaluationMethod` instances specifying the order in which evaluation methods are to be applied. Default is all available methods in a sensible order."
                     },
-                    "signature": "evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None",
+                    "signature": "Optional[Sequence[VakintEvaluationMethod]]",
                     "default": "None",
                     "members": []
                   },
@@ -104,7 +98,7 @@
                       "format": "python-docstring",
                       "body": "The symbol to be used for the dimensional regularisation parameter epsilon. Default is \"ε\"."
                     },
-                    "signature": "epsilon_symbol: typing.Optional[Expression] = None",
+                    "signature": "Optional[Expression]",
                     "default": "None",
                     "members": []
                   },
@@ -115,7 +109,7 @@
                       "format": "python-docstring",
                       "body": "The symbol to be used for the renormalisation scale squared. Default is \"mursq\"."
                     },
-                    "signature": "mu_r_sq_symbol: typing.Optional[Expression] = None",
+                    "signature": "Optional[Expression]",
                     "default": "None",
                     "members": []
                   },
@@ -126,7 +120,7 @@
                       "format": "python-docstring",
                       "body": "The path to the FORM executable. Default is \"form\"."
                     },
-                    "signature": "form_exe_path: typing.Optional[builtins.str] = None",
+                    "signature": "Optional[str]",
                     "default": "None",
                     "members": []
                   },
@@ -137,7 +131,7 @@
                       "format": "python-docstring",
                       "body": "The path to the Python executable. Default is \"python3\"."
                     },
-                    "signature": "python_exe_path: typing.Optional[builtins.str] = None",
+                    "signature": "Optional[str]",
                     "default": "None",
                     "members": []
                   },
@@ -148,7 +142,7 @@
                       "format": "python-docstring",
                       "body": "Whether to verify the identification of numerator structures. Default is True."
                     },
-                    "signature": "verify_numerator_identification: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   },
@@ -159,7 +153,7 @@
                       "format": "python-docstring",
                       "body": "The normalization factor to be used for integrals. Can be \"MSbar\", \"pySecDec\", \"FMFTandMATAD\" or a custom string. Default is \"MSbar\"."
                     },
-                    "signature": "integral_normalization_factor: typing.Optional[builtins.str] = None",
+                    "signature": "Optional[str]",
                     "default": "None",
                     "members": []
                   },
@@ -170,7 +164,7 @@
                       "format": "python-docstring",
                       "body": "Whether to allow unknown integrals to be processed. Default is True."
                     },
-                    "signature": "allow_unknown_integrals: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   },
@@ -181,7 +175,7 @@
                       "format": "python-docstring",
                       "body": "Whether to clean the temporary directory after evaluation. Default is True, unless the environment variable VAKINT_NO_CLEAN_TMP_DIR is set."
                     },
-                    "signature": "clean_tmp_dir: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   },
@@ -192,7 +186,7 @@
                       "format": "python-docstring",
                       "body": "The number of terms in the epsilon expansion to be computed. Default is 4."
                     },
-                    "signature": "number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None",
+                    "signature": "Optional[int]",
                     "default": "None",
                     "members": []
                   },
@@ -203,7 +197,7 @@
                       "format": "python-docstring",
                       "body": "Whether to use dot product notation for scalar products. Default is False."
                     },
-                    "signature": "use_dot_product_notation: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   },
@@ -214,7 +208,7 @@
                       "format": "python-docstring",
                       "body": "The path to the temporary directory to be used. Default is None, in which case a system temporary directory will be used."
                     },
-                    "signature": "temporary_directory: typing.Optional[builtins.str] = None",
+                    "signature": "Optional[str]",
                     "default": "None",
                     "members": []
                   }
@@ -225,7 +219,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Convert a Symbolica expression to a vakint numerical result, interpreting the expression as a Laurent series in the dimensional regularisation parameter epsilon.\n\n## Examples\n```python\nres = vakint.numerical_result_from_expression(E(\"vakint::ε^-2 + 1 + 0.12*vakint::ε^-1\"))\nstr(res)\n# ε^-2 : (1.000000000000000+0i)\n# ε^-1 : (1.200000000000000e-1+0i)\n# ε^ 0 : (1.000000000000000+0i)\n```\n\nParameters\n----------\n\nexpr : Expression\nA Symbolica expression representing a Laurent series in the dimensional regularisation parameter epsilon specified in the vakint engine."
+                  "body": "Convert a Symbolica expression to a vakint numerical result, interpreting the expression as a Laurent series in the dimensional regularisation parameter epsilon.\n\n## Examples\n```python\nres = vakint.numerical_result_from_expression(E(\"vakint::ε^-2 + 1 + 0.12*vakint::ε^-1\"))\nstr(res)\n# ε^-2 : (1.000000000000000+0i)\n# ε^-1 : (1.200000000000000e-1+0i)\n# ε^ 0 : (1.000000000000000+0i)\n```\n\nParameters\n----------\n\nexpr : Expression\n  A Symbolica expression representing a Laurent series in the dimensional regularisation parameter epsilon specified in the vakint engine."
                 },
                 "signature": "def numerical_result_from_expression(self, expr: Expression) -> VakintNumericalResult:",
                 "default": null,
@@ -237,7 +231,7 @@
                       "format": "python-docstring",
                       "body": "A Symbolica expression representing a Laurent series in the dimensional regularisation parameter epsilon specified in the vakint engine."
                     },
-                    "signature": "expr: Expression",
+                    "signature": "Expression",
                     "default": null,
                     "members": []
                   }
@@ -248,9 +242,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Perform a numerical evaluation of an integral parameterically evaluated by Vakint, given numerical values for all parameters and optionally for external momenta.\n\n## Examples\n```python\nevaluated_integral = vakint.evaluate_integral(E(\"(k(1,11)*k(1,11)+p(1,12)*p(2,12))*topo(prop(1,edge(1,1),k(1),muvsq,1))\", default_namespace=\"vakint\"))\nnumerical_result, numerical_error = vakint.numerical_evaluation(\nevaluated_integral,\n{ \"muvsq\": 2., \"mursq\": 3.},\n{\n1: (0.1, 0.2, 0.3, 0.4),\n2: (0.5, 0.6, 0.7, 0.8)\n}\n)\nstr(numerical_result)\n# ε^-1 : (0+27.63489232305020i)\n# ε^ 0 : (0+-62.73919274007806i)\n# ε^+1 : (0+107.7642844179578i)\n# ε^+2 : (0+-138.7269737122023i)\n```\n\nParameters\n----------\n\nevaluated_integral : Expression\nA Symbolica expression representing an integral that has been evaluated parameterically by Vakint\nparams : Dict[str, float]\nA dictionary mapping parameter names to their numerical values.\nexternals : Optional[Dict[int, Tuple[float, float, float, float]]]\nAn optional dictionary mapping external momentum indices to their numerical 4-vector values."
+                  "body": "Perform a numerical evaluation of an integral parameterically evaluated by Vakint, given numerical values for all parameters and optionally for external momenta.\n\n## Examples\n```python\nevaluated_integral = vakint.evaluate_integral(E(\"(k(1,11)*k(1,11)+p(1,12)*p(2,12))*topo(prop(1,edge(1,1),k(1),muvsq,1))\", default_namespace=\"vakint\"))\nnumerical_result, numerical_error = vakint.numerical_evaluation(\n  evaluated_integral,\n  { \"muvsq\": 2., \"mursq\": 3.},\n  {\n      1: (0.1, 0.2, 0.3, 0.4),\n      2: (0.5, 0.6, 0.7, 0.8)\n  }\n)\nstr(numerical_result)\n# ε^-1 : (0+27.63489232305020i)\n# ε^ 0 : (0+-62.73919274007806i)\n# ε^+1 : (0+107.7642844179578i)\n# ε^+2 : (0+-138.7269737122023i)\n```\n\nParameters\n----------\n\nevaluated_integral : Expression\n  A Symbolica expression representing an integral that has been evaluated parameterically by Vakint\nparams : Dict[str, float]\n  A dictionary mapping parameter names to their numerical values.\nexternals : Optional[Dict[int, Tuple[float, float, float, float]]]\n  An optional dictionary mapping external momentum indices to their numerical 4-vector values."
                 },
-                "signature": "def numerical_evaluation(self, evaluated_integral: typing.Any, params: typing.Mapping[builtins.str, builtins.float], externals: typing.Optional[typing.Mapping[builtins.int, tuple[builtins.float, builtins.float, builtins.float, builtins.float]]] = None) -> tuple[VakintNumericalResult, typing.Optional[VakintNumericalResult]]:",
+                "signature": "def numerical_evaluation(self, evaluated_integral: Any, params: Mapping[str, float], externals: Optional[Mapping[int, tuple[float, float, float, float]]] = None) -> tuple[VakintNumericalResult, Optional[VakintNumericalResult]]:",
                 "default": null,
                 "members": [
                   {
@@ -260,7 +254,7 @@
                       "format": "python-docstring",
                       "body": "A Symbolica expression representing an integral that has been evaluated parameterically by Vakint"
                     },
-                    "signature": "evaluated_integral: typing.Any",
+                    "signature": "Any",
                     "default": null,
                     "members": []
                   },
@@ -271,7 +265,7 @@
                       "format": "python-docstring",
                       "body": "A dictionary mapping parameter names to their numerical values."
                     },
-                    "signature": "params: typing.Mapping[builtins.str, builtins.float]",
+                    "signature": "Mapping[str, float]",
                     "default": null,
                     "members": []
                   },
@@ -282,7 +276,7 @@
                       "format": "python-docstring",
                       "body": "An optional dictionary mapping external momentum indices to their numerical 4-vector values."
                     },
-                    "signature": "externals: typing.Optional[typing.Mapping[builtins.int, tuple[builtins.float, builtins.float, builtins.float, builtins.float]]] = None",
+                    "signature": "Optional[Mapping[int, tuple[float, float, float, float]]]",
                     "default": "None",
                     "members": []
                   }
@@ -293,7 +287,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Convert a vakint numerical result back to a Symbolica expression representing a Laurent series in the dimensional regularisation parameter epsilon.\n\n## Examples\n```python\nevaluated_integral = vakint.evaluate_integral(E(\"(k(1,11)*k(1,11)+p(1,12)*p(2,12))*topo(prop(1,edge(1,1),k(1),muvsq,1))\", default_namespace=\"vakint\"))\nnumerical_result, numerical_error = vakint.numerical_evaluation(\nevaluated_integral,\n{ \"muvsq\": 2., \"mursq\": 3.},\n{\n1: (0.1, 0.2, 0.3, 0.4),\n2: (0.5, 0.6, 0.7, 0.8)\n}\n)\nvakint.numerical_result_to_expression(numerical_result)\n# 107.7642844179578𝑖*ε+27.63489232305020𝑖*ε^-1+-138.7269737122023𝑖*ε^2+-62.73919274007806𝑖"
+                  "body": "Convert a vakint numerical result back to a Symbolica expression representing a Laurent series in the dimensional regularisation parameter epsilon.\n\n## Examples\n```python\nevaluated_integral = vakint.evaluate_integral(E(\"(k(1,11)*k(1,11)+p(1,12)*p(2,12))*topo(prop(1,edge(1,1),k(1),muvsq,1))\", default_namespace=\"vakint\"))\nnumerical_result, numerical_error = vakint.numerical_evaluation(\n  evaluated_integral,\n  { \"muvsq\": 2., \"mursq\": 3.},\n  {\n      1: (0.1, 0.2, 0.3, 0.4),\n      2: (0.5, 0.6, 0.7, 0.8)\n  }\n)\nvakint.numerical_result_to_expression(numerical_result)\n# 107.7642844179578𝑖*ε+27.63489232305020𝑖*ε^-1+-138.7269737122023𝑖*ε^2+-62.73919274007806𝑖"
                 },
                 "signature": "def numerical_result_to_expression(self, result: VakintNumericalResult) -> Expression:",
                 "default": null,
@@ -302,7 +296,7 @@
                     "name": "result",
                     "kind": "parameter",
                     "docs": null,
-                    "signature": "result: VakintNumericalResult",
+                    "signature": "VakintNumericalResult",
                     "default": null,
                     "members": []
                   }
@@ -313,9 +307,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Convert a vakint expression to its canonical form, optionally using a short form for the topology representation.\n\n## Examples\n```python\nintegral_expr = E(\"(k(99,11)*k(99,11)+p(1,12)*p(2,12))*topo(prop(18,edge(7,7),k(99),muvsq,1))\", default_namespace=\"vakint\")\nvakint.to_canonical(integral_expr)\n# (k(1,11)^2+p(1,12)*p(2,12))*topo(prop(1,edge(1,1),k(1),muvsq,1))\nvakint.to_canonical(integral_expr,short_form=True)\n# (k(1,11)^2+p(1,12)*p(2,12))*topo(I1L(muvsq,1))\n```\n\nParameters\n----------\n\nintegral_expression : Expression\nA Symbolica expression representing a vakint integral.\nshort_form : Optional[bool]\nWhether to use the short form for the topology representation. Default is False."
+                  "body": "Convert a vakint expression to its canonical form, optionally using a short form for the topology representation.\n\n## Examples\n```python\nintegral_expr = E(\"(k(99,11)*k(99,11)+p(1,12)*p(2,12))*topo(prop(18,edge(7,7),k(99),muvsq,1))\", default_namespace=\"vakint\")\nvakint.to_canonical(integral_expr)\n# (k(1,11)^2+p(1,12)*p(2,12))*topo(prop(1,edge(1,1),k(1),muvsq,1))\nvakint.to_canonical(integral_expr,short_form=True)\n# (k(1,11)^2+p(1,12)*p(2,12))*topo(I1L(muvsq,1))\n```\n\nParameters\n----------\n\nintegral_expression : Expression\n  A Symbolica expression representing a vakint integral.\nshort_form : Optional[bool]\n  Whether to use the short form for the topology representation. Default is False."
                 },
-                "signature": "def to_canonical(self, integral_expression: Expression, short_form: typing.Optional[builtins.bool] = None) -> Expression:",
+                "signature": "def to_canonical(self, integral_expression: Expression, short_form: Optional[bool] = None) -> Expression:",
                 "default": null,
                 "members": [
                   {
@@ -325,7 +319,7 @@
                       "format": "python-docstring",
                       "body": "A Symbolica expression representing a vakint integral."
                     },
-                    "signature": "integral_expression: Expression",
+                    "signature": "Expression",
                     "default": null,
                     "members": []
                   },
@@ -336,7 +330,7 @@
                       "format": "python-docstring",
                       "body": "Whether to use the short form for the topology representation. Default is False."
                     },
-                    "signature": "short_form: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   }
@@ -347,7 +341,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Convert a vakint expression to a form where tensor integrals are reduced to scalar integrals.\n\n## Examples\n```python\nintegral_expr = E(\"(k(1,11)*k(1,11)+p(1,12)*k(1,12)+k(1,101)*k(1,102))*topo(prop(1,edge(1,1),k(1),muvsq,1))\", default_namespace=\"vakint\")\n\nvakint.tensor_reduce(integral_expr)\n# (k(1,1)^2-(2*ε-4)^-1*k(1,1)^2*g(101,102))*topo(prop(1,edge(1,1),k(1),muvsq,1))\n```\n\nParameters\n----------\nintegral_expression : Expression\nA Symbolica expression representing a vakint integral."
+                  "body": "Convert a vakint expression to a form where tensor integrals are reduced to scalar integrals.\n\n## Examples\n```python\nintegral_expr = E(\"(k(1,11)*k(1,11)+p(1,12)*k(1,12)+k(1,101)*k(1,102))*topo(prop(1,edge(1,1),k(1),muvsq,1))\", default_namespace=\"vakint\")\n\nvakint.tensor_reduce(integral_expr)\n# (k(1,1)^2-(2*ε-4)^-1*k(1,1)^2*g(101,102))*topo(prop(1,edge(1,1),k(1),muvsq,1))\n```\n\nParameters\n----------\nintegral_expression : Expression\n   A Symbolica expression representing a vakint integral."
                 },
                 "signature": "def tensor_reduce(self, integral_expression: Expression) -> Expression:",
                 "default": null,
@@ -359,7 +353,7 @@
                       "format": "python-docstring",
                       "body": "A Symbolica expression representing a vakint integral."
                     },
-                    "signature": "integral_expression: Expression",
+                    "signature": "Expression",
                     "default": null,
                     "members": []
                   }
@@ -370,7 +364,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Perform the parametric evaluation of *only the integral* appearing in the Symbolica expression given in input representing a vakint integral.\nThe numerator is left unchanged.\n\n## Examples\n```python\nintegral_expr = E(\"(k(1,11)*k(1,11)+p(1,12)*k(1,12)+k(1,101)*k(1,102))*topo(prop(1,edge(1,1),k(1),muvsq,1))\", default_namespace=\"vakint\")\n\nvakint.evaluate_integral(integral_expr)\n# ε*(-((-𝜋^2*𝑖*log(𝜋)+𝜋^2*𝑖*log(1/4*𝜋^-1*mursq))*(muvsq^2+muvsq*k(1,1)*p(1,1)+[...]\n```\n\nParameters\n----------\n\nintegral_expression : Expression\nA Symbolica expression representing a vakint integral."
+                  "body": "Perform the parametric evaluation of *only the integral* appearing in the Symbolica expression given in input representing a vakint integral.\nThe numerator is left unchanged.\n\n## Examples\n```python\nintegral_expr = E(\"(k(1,11)*k(1,11)+p(1,12)*k(1,12)+k(1,101)*k(1,102))*topo(prop(1,edge(1,1),k(1),muvsq,1))\", default_namespace=\"vakint\")\n\nvakint.evaluate_integral(integral_expr)\n# ε*(-((-𝜋^2*𝑖*log(𝜋)+𝜋^2*𝑖*log(1/4*𝜋^-1*mursq))*(muvsq^2+muvsq*k(1,1)*p(1,1)+[...]\n```\n\nParameters\n----------\n\nintegral_expression : Expression\n  A Symbolica expression representing a vakint integral."
                 },
                 "signature": "def evaluate_integral(self, integral_expression: Expression) -> Expression:",
                 "default": null,
@@ -382,7 +376,7 @@
                       "format": "python-docstring",
                       "body": "A Symbolica expression representing a vakint integral."
                     },
-                    "signature": "integral_expression: Expression",
+                    "signature": "Expression",
                     "default": null,
                     "members": []
                   }
@@ -393,7 +387,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Perform the complete parametric evaluation of the vaking integral represented by the Symbolica expression given in input.\nNote that the tensor reduction will be automatically performed on the input given.\n\n## Examples\n```python\nintegral_expr = E(\"(k(1,11)*k(1,11)+p(1,12)*k(1,12)+k(1,101)*k(1,102))*topo(prop(1,edge(1,1),k(1),muvsq,1))\", default_namespace=\"vakint\")\n\nvakint.evaluate(integral_expr)\n# ε*((muvsq^2+1/4*muvsq^2*g(101,102))*(1/2*𝜋^2*𝑖*log(𝜋)^2+1/2*𝜋^2*𝑖*log(1/4*𝜋^-1*mursq)^2-[...]\n```\n\nParameters\n----------\n\nintegral_expression : Expression\nA Symbolica expression representing a vakint integral."
+                  "body": "Perform the complete parametric evaluation of the vaking integral represented by the Symbolica expression given in input.\nNote that the tensor reduction will be automatically performed on the input given.\n\n## Examples\n```python\nintegral_expr = E(\"(k(1,11)*k(1,11)+p(1,12)*k(1,12)+k(1,101)*k(1,102))*topo(prop(1,edge(1,1),k(1),muvsq,1))\", default_namespace=\"vakint\")\n\nvakint.evaluate(integral_expr)\n# ε*((muvsq^2+1/4*muvsq^2*g(101,102))*(1/2*𝜋^2*𝑖*log(𝜋)^2+1/2*𝜋^2*𝑖*log(1/4*𝜋^-1*mursq)^2-[...]\n```\n\nParameters\n----------\n\nintegral_expression : Expression\n  A Symbolica expression representing a vakint integral."
                 },
                 "signature": "def evaluate(self, integral_expression: Expression) -> Expression:",
                 "default": null,
@@ -405,7 +399,7 @@
                       "format": "python-docstring",
                       "body": "A Symbolica expression representing a vakint integral."
                     },
-                    "signature": "integral_expression: Expression",
+                    "signature": "Expression",
                     "default": null,
                     "members": []
                   }
@@ -439,13 +433,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.vakint import VakintEvaluationMethod\nhelp(VakintEvaluationMethod)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "__str__",
@@ -454,7 +442,7 @@
                   "format": "python-docstring",
                   "body": "String representation of the evaluation method."
                 },
-                "signature": "def __str__(self) -> builtins.str:",
+                "signature": "def __str__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -474,9 +462,9 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a new VakintEvaluationMethod instance representing the MATAD method.\n\n## Examples\n```python\nmatad_method = VakintEvaluationMethod.new_matad_method(\nexpand_masters=True,\nsusbstitute_masters=True,\nsubstitute_hpls=True,\ndirect_numerical_substition=True\n)\n```\n\nParameters\n----------\n\nexpand_masters : Optional[bool]\nWhether to expand master integrals. Default is True.\nsusbstitute_masters : Optional[bool]\nWhether to substitute master integrals. Default is True.\nsubstitute_hpls : Optional[bool]\nWhether to substitute harmonic polylogarithms. Default is True.\ndirect_numerical_substition : Optional[bool]\nWhether to perform direct numerical substitution. Default is True."
+                  "body": "Create a new VakintEvaluationMethod instance representing the MATAD method.\n\n## Examples\n```python\nmatad_method = VakintEvaluationMethod.new_matad_method(\n expand_masters=True,\n susbstitute_masters=True,\n substitute_hpls=True,\n direct_numerical_substition=True\n)\n```\n\nParameters\n----------\n\nexpand_masters : Optional[bool]\n   Whether to expand master integrals. Default is True.\nsusbstitute_masters : Optional[bool]\n   Whether to substitute master integrals. Default is True.\nsubstitute_hpls : Optional[bool]\n   Whether to substitute harmonic polylogarithms. Default is True.\ndirect_numerical_substition : Optional[bool]\n   Whether to perform direct numerical substitution. Default is True."
                 },
-                "signature": "def new_matad_method(cls, expand_masters: typing.Optional[builtins.bool] = None, susbstitute_masters: typing.Optional[builtins.bool] = None, substitute_hpls: typing.Optional[builtins.bool] = None, direct_numerical_substition: typing.Optional[builtins.bool] = None) -> VakintEvaluationMethod:",
+                "signature": "def new_matad_method(cls, expand_masters: Optional[bool] = None, susbstitute_masters: Optional[bool] = None, substitute_hpls: Optional[bool] = None, direct_numerical_substition: Optional[bool] = None) -> VakintEvaluationMethod:",
                 "default": null,
                 "members": [
                   {
@@ -486,7 +474,7 @@
                       "format": "python-docstring",
                       "body": "Whether to expand master integrals. Default is True."
                     },
-                    "signature": "expand_masters: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   },
@@ -497,7 +485,7 @@
                       "format": "python-docstring",
                       "body": "Whether to substitute master integrals. Default is True."
                     },
-                    "signature": "susbstitute_masters: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   },
@@ -508,7 +496,7 @@
                       "format": "python-docstring",
                       "body": "Whether to substitute harmonic polylogarithms. Default is True."
                     },
-                    "signature": "substitute_hpls: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   },
@@ -519,7 +507,7 @@
                       "format": "python-docstring",
                       "body": "Whether to perform direct numerical substitution. Default is True."
                     },
-                    "signature": "direct_numerical_substition: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   }
@@ -530,9 +518,9 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a new VakintEvaluationMethod instance representing the FMFT method.\n\n## Examples\n```python\nfmft_method = VakintEvaluationMethod.new_fmft_method(\nexpand_masters=True,\nsusbstitute_masters=True\n)\n```\n\nParameters\n----------\n\nexpand_masters : Optional[bool]\nWhether to expand master integrals. Default is True.\nsusbstitute_masters : Optional[bool]\nWhether to substitute master integrals. Default is True."
+                  "body": "Create a new VakintEvaluationMethod instance representing the FMFT method.\n\n## Examples\n```python\nfmft_method = VakintEvaluationMethod.new_fmft_method(\n  expand_masters=True,\n  susbstitute_masters=True\n)\n```\n\nParameters\n----------\n\nexpand_masters : Optional[bool]\n  Whether to expand master integrals. Default is True.\nsusbstitute_masters : Optional[bool]\n  Whether to substitute master integrals. Default is True."
                 },
-                "signature": "def new_fmft_method(cls, expand_masters: typing.Optional[builtins.bool] = None, susbstitute_masters: typing.Optional[builtins.bool] = None) -> VakintEvaluationMethod:",
+                "signature": "def new_fmft_method(cls, expand_masters: Optional[bool] = None, susbstitute_masters: Optional[bool] = None) -> VakintEvaluationMethod:",
                 "default": null,
                 "members": [
                   {
@@ -542,7 +530,7 @@
                       "format": "python-docstring",
                       "body": "Whether to expand master integrals. Default is True."
                     },
-                    "signature": "expand_masters: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   },
@@ -553,7 +541,7 @@
                       "format": "python-docstring",
                       "body": "Whether to substitute master integrals. Default is True."
                     },
-                    "signature": "susbstitute_masters: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   }
@@ -564,9 +552,9 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a new VakintEvaluationMethod instance representing the numerical pySecDec method.\n\n## Examples\n```python\npysecdec_method = VakintEvaluationMethod.new_pysecdec_method(\nquiet=True,\nrelative_precision=1e-7,\nmin_n_evals=10_000,\nmax_n_evals=1_000_000_000_000,\nreuse_existing_output=None,\nnumerical_masses={\"muvsq\": 1.0},\nnumerical_external_momenta={1: (1.0, 0.0, 0.0, 0.0), 2: (0.0, 1.0, 0.0, 0.0)}\n)\n```\n\nNote that for because pySecDec can only do numerical evaluations, the preset values of the masses and external momenta must be provided here.\n\nParameters\n----------\n\nquiet : Optional[bool]\nWhether to suppress output from pySecDec. Default is True.\nrelative_precision : Optional[float]\nThe relative precision to be achieved in the numerical integration. Default is 1e-7.\nmin_n_evals : Optional[int]\nThe minimum number of evaluations to be performed in the numerical integration. Default is 10,000.\nmax_n_evals : Optional[int]\nThe maximum number of evaluations to be performed in the numerical integration. Default is 1,000,000,000,000.\nreuse_existing_output : Optional[str]\nPath to existing pySecDec output to reuse. Default is None.\nnumerical_masses : Optional[Dict[str, float]]\nA dictionary mapping mass parameter names to their numerical values. Default is an empty dictionary.\nnumerical_external_momenta : Optional[Dict[int, Tuple[float, float, float, float]]]\nA dictionary mapping external momentum indices to their numerical 4-vector values. Default is an empty dictionary."
+                  "body": "Create a new VakintEvaluationMethod instance representing the numerical pySecDec method.\n\n## Examples\n```python\npysecdec_method = VakintEvaluationMethod.new_pysecdec_method(\n  quiet=True,\n  relative_precision=1e-7,\n  min_n_evals=10_000,\n  max_n_evals=1_000_000_000_000,\n  reuse_existing_output=None,\n  numerical_masses={\"muvsq\": 1.0},\n  numerical_external_momenta={1: (1.0, 0.0, 0.0, 0.0), 2: (0.0, 1.0, 0.0, 0.0)}\n)\n```\n\nNote that for because pySecDec can only do numerical evaluations, the preset values of the masses and external momenta must be provided here.\n\nParameters\n----------\n\nquiet : Optional[bool]\n   Whether to suppress output from pySecDec. Default is True.\nrelative_precision : Optional[float]\n   The relative precision to be achieved in the numerical integration. Default is 1e-7.\nmin_n_evals : Optional[int]\n   The minimum number of evaluations to be performed in the numerical integration. Default is 10,000.\nmax_n_evals : Optional[int]\n   The maximum number of evaluations to be performed in the numerical integration. Default is 1,000,000,000,000.\nreuse_existing_output : Optional[str]\n   Path to existing pySecDec output to reuse. Default is None.\nnumerical_masses : Optional[Dict[str, float]]\n   A dictionary mapping mass parameter names to their numerical values. Default is an empty dictionary.\nnumerical_external_momenta : Optional[Dict[int, Tuple[float, float, float, float]]]\n   A dictionary mapping external momentum indices to their numerical 4-vector values. Default is an empty dictionary."
                 },
-                "signature": "def new_pysecdec_method(cls, quiet: typing.Optional[builtins.bool] = None, relative_precision: typing.Optional[builtins.float] = None, min_n_evals: typing.Optional[builtins.int] = None, max_n_evals: typing.Optional[builtins.int] = None, reuse_existing_output: typing.Optional[builtins.str] = None, numerical_masses: typing.Optional[typing.Mapping[builtins.str, builtins.float]] = None, numerical_external_momenta: typing.Optional[typing.Mapping[builtins.int, tuple[builtins.float, builtins.float, builtins.float, builtins.float]]] = None) -> VakintEvaluationMethod:",
+                "signature": "def new_pysecdec_method(cls, quiet: Optional[bool] = None, relative_precision: Optional[float] = None, min_n_evals: Optional[int] = None, max_n_evals: Optional[int] = None, reuse_existing_output: Optional[str] = None, numerical_masses: Optional[Mapping[str, float]] = None, numerical_external_momenta: Optional[Mapping[int, tuple[float, float, float, float]]] = None) -> VakintEvaluationMethod:",
                 "default": null,
                 "members": [
                   {
@@ -576,7 +564,7 @@
                       "format": "python-docstring",
                       "body": "Whether to suppress output from pySecDec. Default is True."
                     },
-                    "signature": "quiet: typing.Optional[builtins.bool] = None",
+                    "signature": "Optional[bool]",
                     "default": "None",
                     "members": []
                   },
@@ -587,7 +575,7 @@
                       "format": "python-docstring",
                       "body": "The relative precision to be achieved in the numerical integration. Default is 1e-7."
                     },
-                    "signature": "relative_precision: typing.Optional[builtins.float] = None",
+                    "signature": "Optional[float]",
                     "default": "None",
                     "members": []
                   },
@@ -598,7 +586,7 @@
                       "format": "python-docstring",
                       "body": "The minimum number of evaluations to be performed in the numerical integration. Default is 10,000."
                     },
-                    "signature": "min_n_evals: typing.Optional[builtins.int] = None",
+                    "signature": "Optional[int]",
                     "default": "None",
                     "members": []
                   },
@@ -609,7 +597,7 @@
                       "format": "python-docstring",
                       "body": "The maximum number of evaluations to be performed in the numerical integration. Default is 1,000,000,000,000."
                     },
-                    "signature": "max_n_evals: typing.Optional[builtins.int] = None",
+                    "signature": "Optional[int]",
                     "default": "None",
                     "members": []
                   },
@@ -620,7 +608,7 @@
                       "format": "python-docstring",
                       "body": "Path to existing pySecDec output to reuse. Default is None."
                     },
-                    "signature": "reuse_existing_output: typing.Optional[builtins.str] = None",
+                    "signature": "Optional[str]",
                     "default": "None",
                     "members": []
                   },
@@ -631,7 +619,7 @@
                       "format": "python-docstring",
                       "body": "A dictionary mapping mass parameter names to their numerical values. Default is an empty dictionary."
                     },
-                    "signature": "numerical_masses: typing.Optional[typing.Mapping[builtins.str, builtins.float]] = None",
+                    "signature": "Optional[Mapping[str, float]]",
                     "default": "None",
                     "members": []
                   },
@@ -642,7 +630,7 @@
                       "format": "python-docstring",
                       "body": "A dictionary mapping external momentum indices to their numerical 4-vector values. Default is an empty dictionary."
                     },
-                    "signature": "numerical_external_momenta: typing.Optional[typing.Mapping[builtins.int, tuple[builtins.float, builtins.float, builtins.float, builtins.float]]] = None",
+                    "signature": "Optional[Mapping[int, tuple[float, float, float, float]]]",
                     "default": "None",
                     "members": []
                   }
@@ -676,13 +664,7 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.vakint import VakintExpression\nhelp(VakintExpression)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "__str__",
@@ -691,7 +673,7 @@
                   "format": "python-docstring",
                   "body": "String representation of the VakintExpression."
                 },
-                "signature": "def __str__(self) -> builtins.str:",
+                "signature": "def __str__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -700,7 +682,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Convert the VakintExpression back to a Symbolica Expression.\n\n## Examples\n```python\nintegral = VakintExpression(E('''\n(\nk(1,11)*k(1,11)\n)*topo(\nprop(1,edge(1,1),k(1),muvsq,1)\n)''', default_namespace=\"vakint\"))\nstr(integral)\n# (k(1,11)^2) x topo(prop(1,edge(1,1),k(1),muvsq,1))\n```"
+                  "body": "Convert the VakintExpression back to a Symbolica Expression.\n\n## Examples\n```python\nintegral = VakintExpression(E('''\n        (\n            k(1,11)*k(1,11)\n        )*topo(\n             prop(1,edge(1,1),k(1),muvsq,1)\n)''', default_namespace=\"vakint\"))\nstr(integral)\n# (k(1,11)^2) x topo(prop(1,edge(1,1),k(1),muvsq,1))\n```"
                 },
                 "signature": "def to_expression(self) -> Expression:",
                 "default": null,
@@ -711,9 +693,9 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a new VakintExpression from a Symbolica Expression which will separate numerator and topologies\n\n## Examples\n```python\nintegral=E('''\n(\nk(1,11)*k(2,11)*k(1,22)*k(2,22)\n+ p(1,11)*k(3,11)*k(3,22)*p(2,22)\n+ p(1,11)*p(2,11)*(k(2,22)+k(1,22))*k(2,22)\n)*topo(\nprop(1,edge(1,2),k(1),muvsq,1)\n* prop(2,edge(2,3),k(2),muvsq,1)\n* prop(3,edge(3,1),k(3),muvsq,1)\n* prop(4,edge(1,4),k(3)-k(1),muvsq,1)\n* prop(5,edge(2,4),k(1)-k(2),muvsq,1)\n* prop(6,edge(3,4),k(2)-k(3),muvsq,1)\n)''', default_namespace=\"vakint\")\nprint(VakintExpression(integral))\n# ((k(1,22)+k(2,22))*k(2,22)*p(1,11)*p(2,11)+k(1,11)*k(1,22)*k(2,11)*k(2,22)+k(3,11)*k(3,22)*p(1,11)*p(2,22)) x topo(prop(1,edge(1,2),k(1),muvsq,1)*prop(2,edge(2,3),k(2),muvsq,1)*prop(3,edge(3,1),k(3),muvsq,1)*prop(4,edge(1,4),-k(1)+k(3),muvsq,1)*prop(5,edge(2,4),k(1)-k(2),muvsq,1)*prop(6,edge(3,4),k(2)-k(3),muvsq,1))\n```\n\nParameters\n----------\n\natom : Expression\nA Symbolica Expression containing a vakint integral, i.e. a sum of terms, each a product of a numerator and a `vakint::topo(...)` structure."
+                  "body": "Create a new VakintExpression from a Symbolica Expression which will separate numerator and topologies\n\n## Examples\n```python\nintegral=E('''\n        (\n            k(1,11)*k(2,11)*k(1,22)*k(2,22)\n          + p(1,11)*k(3,11)*k(3,22)*p(2,22)\n          + p(1,11)*p(2,11)*(k(2,22)+k(1,22))*k(2,22)\n        )*topo(\n             prop(1,edge(1,2),k(1),muvsq,1)\n            * prop(2,edge(2,3),k(2),muvsq,1)\n            * prop(3,edge(3,1),k(3),muvsq,1)\n            * prop(4,edge(1,4),k(3)-k(1),muvsq,1)\n            * prop(5,edge(2,4),k(1)-k(2),muvsq,1)\n            * prop(6,edge(3,4),k(2)-k(3),muvsq,1)\n)''', default_namespace=\"vakint\")\nprint(VakintExpression(integral))\n# ((k(1,22)+k(2,22))*k(2,22)*p(1,11)*p(2,11)+k(1,11)*k(1,22)*k(2,11)*k(2,22)+k(3,11)*k(3,22)*p(1,11)*p(2,22)) x topo(prop(1,edge(1,2),k(1),muvsq,1)*prop(2,edge(2,3),k(2),muvsq,1)*prop(3,edge(3,1),k(3),muvsq,1)*prop(4,edge(1,4),-k(1)+k(3),muvsq,1)*prop(5,edge(2,4),k(1)-k(2),muvsq,1)*prop(6,edge(3,4),k(2)-k(3),muvsq,1))\n```\n\nParameters\n----------\n\natom : Expression\n  A Symbolica Expression containing a vakint integral, i.e. a sum of terms, each a product of a numerator and a `vakint::topo(...)` structure."
                 },
-                "signature": "def __new__(cls, atom: typing.Any) -> VakintExpression:",
+                "signature": "def __new__(cls, atom: Any) -> VakintExpression:",
                 "default": null,
                 "members": [
                   {
@@ -723,7 +705,7 @@
                       "format": "python-docstring",
                       "body": "A Symbolica Expression containing a vakint integral, i.e. a sum of terms, each a product of a numerator and a `vakint::topo(...)` structure."
                     },
-                    "signature": "atom: typing.Any",
+                    "signature": "Any",
                     "default": null,
                     "members": []
                   }
@@ -757,22 +739,16 @@
             "keywords": [],
             "params": [],
             "returns": null,
-            "examples": [
-              {
-                "title": "Introspection scaffold (not a task example)",
-                "language": "python",
-                "code": "from symbolica.community.vakint import VakintNumericalResult\nhelp(VakintNumericalResult)"
-              }
-            ],
+            "examples": [],
             "members": [
               {
                 "name": "__str__",
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "String representation of the numerical result.\n\n## Examples\n```python\nresult = VakintNumericalResult([\n(-3, (0.0, -11440.53140354612)),\n(-2, (0.0,  57169.95521898031)),\n(-1, (0.0, -178748.9838377694)),\n(0, (0.0,  321554.1122184795)),\n])\n\nstr(result)\nε^-3 : (0+-11440.5314035461i)\nε^-2 : (0+57169.9552189803i)\nε^-1 : (0+-178748.983837769i)\nε^ 0 : (0+321554.112218480i)"
+                  "body": "String representation of the numerical result.\n\n## Examples\n```python\nresult = VakintNumericalResult([\n  (-3, (0.0, -11440.53140354612)),\n  (-2, (0.0,  57169.95521898031)),\n  (-1, (0.0, -178748.9838377694)),\n  (0, (0.0,  321554.1122184795)),\n])\n\nstr(result)\nε^-3 : (0+-11440.5314035461i)\nε^-2 : (0+57169.9552189803i)\nε^-1 : (0+-178748.983837769i)\nε^ 0 : (0+321554.112218480i)"
                 },
-                "signature": "def __str__(self) -> builtins.str:",
+                "signature": "def __str__(self) -> str:",
                 "default": null,
                 "members": []
               },
@@ -781,9 +757,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Convert the numerical result to a native Python list of (epsilon exponent, (real, imag)) tuples.\n\n## Examples\n```python\nresult = VakintNumericalResult([\n(-3, (0.0, -11440.53140354612)),\n(-2, (0.0,  57169.95521898031)),\n(-1, (0.0, -178748.9838377694)),\n(0, (0.0,  321554.1122184795)),\n])\n\nresult.to_list()\n# [(-3, (0.0, -11440.53140354612)), (-2, (0.0, 57169.95521898031)), (-1, (0.0, -178748.9838377694)), (0, (0.0, 321554.1122184795))]\n```"
+                  "body": "Convert the numerical result to a native Python list of (epsilon exponent, (real, imag)) tuples.\n\n## Examples\n```python\nresult = VakintNumericalResult([\n  (-3, (0.0, -11440.53140354612)),\n  (-2, (0.0,  57169.95521898031)),\n  (-1, (0.0, -178748.9838377694)),\n  (0, (0.0,  321554.1122184795)),\n])\n\nresult.to_list()\n# [(-3, (0.0, -11440.53140354612)), (-2, (0.0, 57169.95521898031)), (-1, (0.0, -178748.9838377694)), (0, (0.0, 321554.1122184795))]\n```"
                 },
-                "signature": "def to_list(self) -> builtins.list[tuple[builtins.int, tuple[builtins.float, builtins.float]]]:",
+                "signature": "def to_list(self) -> list[tuple[int, tuple[float, float]]]:",
                 "default": null,
                 "members": []
               },
@@ -792,9 +768,9 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Create a new instance of VakintNumericalResult from a list of (espilon exponent, (real, imag)) tuples.\n\n## Examples\n```python\nVakintNumericalResult([\n(-3, (0.0, -11440.53140354612)),\n(-2, (0.0,  57169.95521898031)),\n(-1, (0.0, -178748.9838377694)),\n(-0, (0.0,  321554.1122184795)),\n])\n```\n\nParameters\n----------\n\nvalues : List[Tuple[int, Tuple[float, float]]]\nA list of tuples, each containing an integer exponent of epsilon and a tuple of two floats\nrepresenting the real and imaginary parts of the coefficient."
+                  "body": "Create a new instance of VakintNumericalResult from a list of (espilon exponent, (real, imag)) tuples.\n\n## Examples\n```python\nVakintNumericalResult([\n    (-3, (0.0, -11440.53140354612)),\n    (-2, (0.0,  57169.95521898031)),\n    (-1, (0.0, -178748.9838377694)),\n    (-0, (0.0,  321554.1122184795)),\n])\n```\n\nParameters\n----------\n\nvalues : List[Tuple[int, Tuple[float, float]]]\n   A list of tuples, each containing an integer exponent of epsilon and a tuple of two floats\n   representing the real and imaginary parts of the coefficient."
                 },
-                "signature": "def __new__(cls, values: typing.Sequence[tuple[builtins.int, tuple[builtins.float, builtins.float]]]) -> VakintNumericalResult:",
+                "signature": "def __new__(cls, values: Sequence[tuple[int, tuple[float, float]]]) -> VakintNumericalResult:",
                 "default": null,
                 "members": [
                   {
@@ -804,7 +780,7 @@
                       "format": "python-docstring",
                       "body": "A list of tuples, each containing an integer exponent of epsilon and a tuple of two floats representing the real and imaginary parts of the coefficient."
                     },
-                    "signature": "values: typing.Sequence[tuple[builtins.int, tuple[builtins.float, builtins.float]]]",
+                    "signature": "Sequence[tuple[int, tuple[float, float]]]",
                     "default": null,
                     "members": []
                   }
@@ -815,9 +791,9 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Compare this numerical result to another, returning a tuple of (bool, str) where the bool indicates whether the results match within the specified thresholds,\nand the str provides details of the comparison.\n\n## Examples\n```python\nresult1 = VakintNumericalResult([\n(-3, (0.0, -11440.53140354612)),\n])\nresult2 = VakintNumericalResult([\n(-3, (0.0, -11440.53140354612)),\n(-2, (0.0,  2.0)),\n])\nresult1.compare_to(result2, relative_threshold=1e-5)\n# (False, 'imaginary part of ε^-2 coefficient does not match within rel. error required: 0 != 2.00000000000000 (rel. error = 2.00000000000000)')\n```\n\nParameters\n----------\n\nother : VakintNumericalResult\nThe other numerical result to compare to.\nrelative_threshold : float\nThe relative threshold for comparison.\nerror : Optional[VakintNumericalResult]\nAn optional numerical result representing the error in the evaluation.\nmax_pull : Optional[float]\nThe maximum pull for comparison. Default is 3.0."
+                  "body": "Compare this numerical result to another, returning a tuple of (bool, str) where the bool indicates whether the results match within the specified thresholds,\nand the str provides details of the comparison.\n\n## Examples\n```python\nresult1 = VakintNumericalResult([\n (-3, (0.0, -11440.53140354612)),\n])\nresult2 = VakintNumericalResult([\n (-3, (0.0, -11440.53140354612)),\n (-2, (0.0,  2.0)),\n])\nresult1.compare_to(result2, relative_threshold=1e-5)\n# (False, 'imaginary part of ε^-2 coefficient does not match within rel. error required: 0 != 2.00000000000000 (rel. error = 2.00000000000000)')\n```\n\nParameters\n----------\n\nother : VakintNumericalResult\n   The other numerical result to compare to.\nrelative_threshold : float\n   The relative threshold for comparison.\nerror : Optional[VakintNumericalResult]\n   An optional numerical result representing the error in the evaluation.\nmax_pull : Optional[float]\n   The maximum pull for comparison. Default is 3.0."
                 },
-                "signature": "def compare_to(self, other: VakintNumericalResult, relative_threshold: builtins.float, error: typing.Optional[VakintNumericalResult] = None, max_pull: typing.Optional[builtins.float] = None) -> tuple[builtins.bool, builtins.str]:",
+                "signature": "def compare_to(self, other: VakintNumericalResult, relative_threshold: float, error: Optional[VakintNumericalResult] = None, max_pull: Optional[float] = None) -> tuple[bool, str]:",
                 "default": null,
                 "members": [
                   {
@@ -827,7 +803,7 @@
                       "format": "python-docstring",
                       "body": "The other numerical result to compare to."
                     },
-                    "signature": "other: VakintNumericalResult",
+                    "signature": "VakintNumericalResult",
                     "default": null,
                     "members": []
                   },
@@ -838,7 +814,7 @@
                       "format": "python-docstring",
                       "body": "The relative threshold for comparison."
                     },
-                    "signature": "relative_threshold: builtins.float",
+                    "signature": "float",
                     "default": null,
                     "members": []
                   },
@@ -849,7 +825,7 @@
                       "format": "python-docstring",
                       "body": "An optional numerical result representing the error in the evaluation."
                     },
-                    "signature": "error: typing.Optional[VakintNumericalResult] = None",
+                    "signature": "Optional[VakintNumericalResult]",
                     "default": "None",
                     "members": []
                   },
@@ -860,7 +836,7 @@
                       "format": "python-docstring",
                       "body": "The maximum pull for comparison. Default is 3.0."
                     },
-                    "signature": "max_pull: typing.Optional[builtins.float] = None",
+                    "signature": "Optional[float]",
                     "default": "None",
                     "members": []
                   }
