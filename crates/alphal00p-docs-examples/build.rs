@@ -38,11 +38,13 @@ struct Component {
 
 #[derive(Default)]
 struct ManualExamples {
-    rust: Vec<(String, String)>,
+    rust: Vec<(String, String, String)>,
     python: Vec<(String, String)>,
     shell: Vec<(String, String)>,
     data_blocks: usize,
 }
+
+type FencedBlock = (String, Option<String>, usize, String);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RustExampleMode {
@@ -150,15 +152,30 @@ fn main() -> Result<()> {
     }
 
     let manual = manual_examples(workspace_root, &registry)?;
-    for (case, code) in &manual.rust {
+    for (case, code, mode) in &manual.rust {
         let function = rust_identifier(case);
+        if mode == "syntax" {
+            rust_count += 1;
+            continue;
+        }
         if syn::parse_file(code).is_ok() {
+            let run_test = if mode == "run" {
+                run_count += 1;
+                "\n    #[test]\n    fn run_documented_main() { main() }"
+            } else {
+                ""
+            };
             writeln!(
                 rust_source,
-                "#[allow(dead_code, unused_imports)]\nmod {function} {{\n{}\n}}",
-                indent(code, 4)
+                "#[allow(dead_code, unused_imports)]\nmod {function} {{\n{}{}\n}}",
+                indent(code, 4),
+                run_test
             )?;
         } else {
+            ensure!(
+                mode != "run",
+                "runnable Rust documentation example {case} must be a complete source file"
+            );
             writeln!(
                 rust_source,
                 "#[allow(dead_code)]\nfn {function}() -> eyre::Result<()> {{\n{}\n    Ok(())\n}}",
@@ -250,25 +267,52 @@ fn manual_examples(workspace_root: &Path, registry: &Registry) -> Result<ManualE
             let relative = path
                 .strip_prefix(workspace_root)
                 .expect("manual content is below the workspace");
-            for (language, line, code) in fenced_blocks(&source, relative)? {
+            let is_tutorial = relative
+                .file_name()
+                .is_some_and(|name| name == "tutorial.typ");
+            for (language, declared_mode, line, code) in fenced_blocks(&source, relative)? {
                 let case = format!("manual::{}::{}:{line}", product.id, relative.display());
-                match language.as_str() {
-                    "rust" => examples.rust.push((case, code)),
-                    "python" => examples.python.push((case, code)),
-                    "sh" | "bash" | "shell" => examples.shell.push((case, code)),
-                    "toml" => {
+                ensure!(
+                    !is_tutorial || declared_mode.is_some(),
+                    "tutorial example {case} needs an immediately preceding // docs-example: MODE marker"
+                );
+                let mode = declared_mode.as_deref().unwrap_or(match language.as_str() {
+                    "rust" | "python" => "compile",
+                    _ => "syntax",
+                });
+                match (language.as_str(), mode) {
+                    ("rust", mode @ ("run" | "compile" | "syntax")) => {
+                        if matches!(mode, "run" | "syntax") {
+                            syn::parse_file(&code).wrap_err_with(|| {
+                                format!("invalid Rust documentation example {case}")
+                            })?;
+                        }
+                        examples.rust.push((case, code, mode.to_owned()));
+                    }
+                    ("python", "compile") => examples.python.push((case, code)),
+                    ("sh" | "bash" | "shell", "syntax") => {
+                        examples.shell.push((case, code));
+                    }
+                    ("toml", "syntax") => {
                         toml::from_str::<toml::Value>(&code).wrap_err_with(|| {
                             format!("invalid TOML documentation example {case}")
                         })?;
                         examples.data_blocks += 1;
                     }
-                    "text" => {
+                    ("text", "syntax") => {
                         ensure!(!code.trim().is_empty(), "empty text example {case}");
+                        examples.data_blocks += 1;
+                    }
+                    ("rs" | "c" | "form", "syntax") => {
+                        // The Idenso specification quotes Rust-like Symbolica
+                        // patterns plus upstream C and FORM source fragments.
+                        // They are evidence, not standalone programs.
+                        ensure!(!code.trim().is_empty(), "empty source fragment {case}");
                         examples.data_blocks += 1;
                     }
                     _ => ensure!(
                         false,
-                        "unsupported fenced example language {language:?} in {case}"
+                        "unsupported documentation example language {language:?} with verification mode {mode:?} in {case}"
                     ),
                 }
             }
@@ -277,7 +321,7 @@ fn manual_examples(workspace_root: &Path, registry: &Registry) -> Result<ManualE
     Ok(examples)
 }
 
-fn fenced_blocks(source: &str, path: &Path) -> Result<Vec<(String, usize, String)>> {
+fn fenced_blocks(source: &str, path: &Path) -> Result<Vec<FencedBlock>> {
     let lines = source.lines().collect::<Vec<_>>();
     let mut blocks = Vec::new();
     let mut index = 0;
@@ -293,6 +337,16 @@ fn fenced_blocks(source: &str, path: &Path) -> Result<Vec<(String, usize, String
             path.display(),
             index + 1
         );
+        let mode = index
+            .checked_sub(1)
+            .and_then(|line| lines[line].trim().strip_prefix("// docs-example: "))
+            .map(str::to_owned);
+        ensure!(
+            mode.as_ref().is_none_or(|mode| !mode.is_empty()),
+            "empty documentation example mode at {}:{}",
+            path.display(),
+            index
+        );
         let start = index + 1;
         index += 1;
         let mut code = Vec::new();
@@ -306,7 +360,7 @@ fn fenced_blocks(source: &str, path: &Path) -> Result<Vec<(String, usize, String
             path.display(),
             start
         );
-        blocks.push((language, start, code.join("\n")));
+        blocks.push((language, mode, start, code.join("\n")));
         index += 1;
     }
     Ok(blocks)

@@ -71,5 +71,7 @@ precision use `evaluate_sample_precise` and `evaluate_samples_precise`.
 
 Use `./gammaloop --help` and the generated #link("reference/cli/")[CLI and settings reference]
 for command names, aliases, flags, positional arguments, defaults, possible values, and setting
-paths. The tutorials explain how commands and settings combine into a persistent workflow.
+paths. The tutorials explain how commands and settings combine into a persistent workflow. The
+#link("manual/diagnostics/")[logging and diagnostics guide] covers startup precedence, selective tag
+filters, sink routing, release-build limitations, and copyable investigation patterns.
 ]

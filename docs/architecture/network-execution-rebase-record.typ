@@ -1,13 +1,22 @@
-# Network Execution Rebase PR Notes
+= Network execution rebase record
+<network-execution-rebase-record>
+#quote(block: true)[
+#strong[Lifecycle:] Archived implementation/rebase record
+
+The trace labels below preserve the history of a rebase onto
+`symbolic-network-simplify-v2`; they are not a maintained description of the current network
+executor. Consult the current Spenso/Idenso manuals and source-backed API reference before
+copying an interface or diagnostic control from this record.
+]
 
 This file tracks the code changes being preserved while rebasing the network
 execution work onto `symbolic-network-simplify-v2`. It is source material for
 the PR description: the focus is what the new code does and how it does it.
 Commit labels are kept only for traceability during the rebase.
 
-## Integrated Changes
+== Integrated Changes
 
-### Direct Boundary Contractions Over Sums
+=== Direct Boundary Contractions Over Sums
 
 Trace commit: `pmrsnlov`.
 
@@ -40,7 +49,7 @@ Validation run:
 - `cargo check --package gammalooprs --tests --profile dev-optim`
 - `cargo check --package idenso --test network_dumb --profile dev-optim`
 
-### Full-Depth Parse And Execution Profiling
+=== Full-Depth Parse And Execution Profiling
 
 Trace commit: `orwppqxy`.
 
@@ -72,7 +81,7 @@ Validation run:
 - `cargo check --package gammalooprs --tests --profile dev-optim`
 - `cargo check --package spenso --tests --profile dev-optim`
 
-### Live Operation Descriptors
+=== Live Operation Descriptors
 
 Trace commit: `mkswtoln`.
 
@@ -104,7 +113,7 @@ Validation run:
 - `cargo check --package spenso --tests --profile dev-optim`
 - `cargo check --package idenso --tests --profile dev-optim`
 
-### Product Contraction Without Graph Cloning
+=== Product Contraction Without Graph Cloning
 
 Trace commit: `xwqrolxv`.
 
@@ -137,7 +146,7 @@ Validation run:
 - `cargo check --package idenso --tests --profile dev-optim`
 - `cargo check --package gammalooprs --tests --profile dev-optim`
 
-### Optional Rayon Ready-Batch Execution
+=== Optional Rayon Ready-Batch Execution
 
 Trace commit: `prszmwmv`.
 
@@ -170,7 +179,7 @@ Validation run:
 - `cargo check --package idenso --tests --profile dev-optim`
 - `cargo check --package gammalooprs --tests --profile dev-optim`
 
-### Concrete Tensor Parse/Execution Diagnostics
+=== Concrete Tensor Parse/Execution Diagnostics
 
 Trace commit: `mlnonqyu`.
 
@@ -203,7 +212,7 @@ Validation run:
 - `cargo check --package gammalooprs --test large_spenso_actual --profile dev-optim`
 - `cargo check --package gammalooprs --tests --profile dev-optim`
 
-### Contraction Order MWE And MinResultRank Diagnostic
+=== Contraction Order MWE And MinResultRank Diagnostic
 
 Trace commit: `nlzmnxqt`.
 
@@ -236,7 +245,7 @@ Validation run:
 - `cargo check --package gammalooprs --test large_spenso_actual --profile dev-optim`
 - `cargo check --package gammalooprs --tests --profile dev-optim`
 
-### Opt-In Lazy Tensor Sums
+=== Opt-In Lazy Tensor Sums
 
 Trace commit: `womukytz`.
 
@@ -274,7 +283,7 @@ Validation run:
 - `cargo check --package spenso --tests --profile dev-optim`
 - `cargo check --package gammalooprs --tests --profile dev-optim`
 
-### Component Horner Diagnostics
+=== Component Horner Diagnostics
 
 Trace commit: `zlvxmnxm`.
 
@@ -303,7 +312,7 @@ Validation run:
 - `cargo check --package gammalooprs --test large_spenso_actual --profile dev-optim`
 - `cargo check --package gammalooprs --tests --profile dev-optim`
 
-### Staged Index Disconnection Diagnostic
+=== Staged Index Disconnection Diagnostic
 
 Trace commit: `ntrwxyor`.
 
@@ -337,7 +346,7 @@ Validation run:
 - `cargo check --package gammalooprs --test large_spenso_actual --profile dev-optim`
 - `cargo check --package gammalooprs --tests --profile dev-optim`
 
-### Scalar-Preserving Tensor Sum Terms
+=== Scalar-Preserving Tensor Sum Terms
 
 Trace commit: `spwmxtox`.
 

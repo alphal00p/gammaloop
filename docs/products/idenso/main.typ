@@ -2,6 +2,7 @@
 #import "content/overview.typ": overview
 #import "content/tutorial.typ": tutorial
 #import "content/algebra.typ": algebra
+#import "content/form-symbolica-color-and-dirac.typ": form-color-dirac-content
 #import "content/api.typ": api
 #import "content/changelog.typ": changelog
 
@@ -14,6 +15,7 @@
     #overview
     #tutorial
     #algebra
+    #form-color-dirac-content("manual")
     #api
     #changelog
   ],

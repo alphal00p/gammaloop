@@ -1,13 +1,22 @@
-# Spenso Symbolica Syntax And Rewrite Idioms
+= Spenso Symbolica Syntax And Rewrite Idioms
+
+#quote(block: true)[
+#strong[Status:] Implemented reference; audited against Spenso and Idenso on 2026-08-18
+
+The surface forms are owned by
+#link("../../crates/spenso/src/network/parsing/mod.rs")[Spenso parsing and materialization], while the
+domain-specific passes are owned by #link("../../crates/idenso/src/lib.rs")[Idenso]. Examples below are
+syntax and rewrite idioms, not a promise that every illustrative snippet is a standalone program.
+]
 
 This note describes the Symbolica syntax Spenso uses for tensor expressions and
 the Rust idioms for implementing algebraic rewrites over that syntax. It is
 meant as a general reference for tensor, metric, Schoonschip, Dirac, and color
 simplifiers; the FORM-derived identities in
-`docs/idenso/form_symbolica_color_and_dirac.typ` are examples of this style, not
+#link("../../../products/idenso/latest/manual/form-color-dirac/")[the rendered color and Dirac specification] are examples of this style, not
 the definition of the syntax.
 
-## Tensor Syntax
+== Tensor Syntax
 
 Spenso tensor expressions are Symbolica atoms. The names in the surface syntax
 mirror the Rust model:
@@ -66,33 +75,122 @@ T(a, b, cof(NC, i))   symbolic tensor with scalar labels a, b and one slot
 The same convention is used in patterns: structural arguments are represented by
 slot or representation patterns, and scalar labels are ordinary Symbolica atoms.
 
-## Supported Surface Forms
+== Supported Surface Forms
 
 The parser and simplifiers recognize the following Spenso surface forms. The
 same row shows how to build the form, which tag or symbol makes it recognizable,
 and what to use when matching it in a replacement rule.
 
-| Surface form | Meaning | Concrete builder | Tag or symbol | Pattern form |
-| --- | --- | --- | --- | --- |
-| `f(args...)` with no representation-tagged syntax | pure scalar Symbolica expression | `function!(f, args...)` | no Spenso tensor tag | ordinary Symbolica pattern |
-| `pure_scalar(expr)` | force `expr` to parse as a scalar | `pure_scalar!(expr)` | `SPENSO_TAG.pure_scalar` symbol | `function!(T.pure_scalar, W_.x_)` |
-| `rep(dim)` | stripped representation, for compact notation or traces | `mink!(D)`, `bis!(D)`, `cof!(NC)`, `coad!(NA)` | representation head tagged `representation` | `rep_!(N; W_.d_)` |
-| `rep(dim, i)` | indexed representation slot | `mink!(D, mu)`, `bis!(D, i)`, `cof!(NC, i)`, `slot!(rep, i)` | representation head tagged `representation`; maybe `self_dual` or `dualizable` | `rep_!(N; W_.d_, W_.i_)`, `self_dual_!(N; ...)`, `dualizable_!(N; ...)` |
-| `dind(rep(dim, i))` | dual slot | `dind!(cof!(NC, i))` or `slot.dual().to_atom()` | `dind` dual wrapper plus representation tags | `dualizable_dual_!(N; W_.d_, W_.i_)` |
-| `aind(slot...)` | bundle of structural slots inside one argument | `aind!(slots...)` | `AIND_SYMBOLS.aind` symbol | `function!(AIND_SYMBOLS.aind, W_.x___)` |
-| `F(..., slot, ...)` | ordinary tensor leaf; direct slots define structure | `tensor!(F, args...)` | head tagged `tensor` | `tensor_!(N; W_.a___)` or `function!(W_.f_, args...)` |
-| `p(..., rep(dim))` | compact rank-one tensor shorthand | `vector!(p, args...)`, `p!(args...)`, `q!(args...)` | head tagged `tensor` and `rank1` | `rank1_!(N; W_.a___, rep_!(M; W_.d_))` |
-| `g(slot_a, slot_b)` | metric tensor syntax | `g!(a, b)` or `metric!(a, b)` | `ETS.metric` symbol | `function!(ETS.metric, a, b)` |
-| `g(p(rep), q(rep))` | compact scalar product shorthand | `g!(p, q)` or `metric!(p, q)` | `ETS.metric` plus rank-one compact arguments | `function!(ETS.metric, rank1_!(0; ...), rank1_!(1; ...))` |
-| `dot(p(rep), q(rep))` | two-argument compact dot shorthand | `dot!(p, q)` | `SPENSO_TAG.dot` symbol | `function!(T.dot, a, b)` |
-| `chain(start, end, factors...)` | ordered open chain | `chain!(start, end, factors...)` | `SPENSO_TAG.chain` symbol; ordered arguments | `chain!(start, end, factors...)` |
-| `trace(rep)` | empty closed trace | `trace!(rep)` | `SPENSO_TAG.trace` symbol | `trace!(rep)` |
-| `trace(rep, cyclic(factors...))` | ordinary closed trace with cyclic factor order | `trace!(rep, factors...)` or `trace!(rep, cyclic!(factors...))` | `SPENSO_TAG.trace` plus `CYCLIC` with `Cyclesymmetric` attribute | `trace!(rep, cyclic!(args...))` |
-| `trace(rep, sym(factors...))` | fully symmetric closed trace invariant | `trace_sym!(rep, factors...)` | `SPENSO_TAG.trace` plus `SYM` with `Symmetric` attribute | `trace_sym!(rep, args...)` |
-| `epsilon(args...)` | antisymmetric Levi-Civita tensor for idenso epsilon algebra | `epsilon!(args...)` | `EPSILON_SYMBOL` with `Antisymmetric` attribute | `function!(*EPSILON_SYMBOL, W_.x___)` |
-| `bracket(expr...)` | product-like parser grouping of network factors | `bracket!(expr...)` | `SPENSO_TAG.bracket` symbol | `function!(T.bracket, W_.x___)` |
-| `broadcast(expr)` | apply a scalar/broadcast function to the parsed inner tensor | `broadcast_symbol!(f)` then `function!(f, expr)` | head tagged `broadcast` | `function!(W_.f_, W_.x_)` with a broadcast-head condition |
-| `sum`, `product`, `integer power` | ordinary Symbolica arithmetic, parsed recursively | `+`, `*`, `.pow(...)` | Symbolica arithmetic nodes | ordinary Symbolica pattern, with conditions for exponent cases |
+#[
+#set text(size: 7pt)
+#table(
+  columns: (1.2fr, 1.55fr, 1.8fr, 1.55fr, 1.9fr),
+  inset: 3pt,
+  align: left + top,
+  table.header(
+    [*Surface form*],
+    [*Meaning*],
+    [*Concrete builder*],
+    [*Tag or symbol*],
+    [*Pattern form*],
+  ),
+  [`f(args...)` with no representation-tagged syntax],
+  [pure scalar Symbolica expression],
+  [`function!(f, args...)`],
+  [no Spenso tensor tag],
+  [ordinary Symbolica pattern],
+  [`pure_scalar(expr)`],
+  [force `expr` to parse as a scalar],
+  [`pure_scalar!(expr)`],
+  [`SPENSO_TAG.pure_scalar` symbol],
+  [`function!(T.pure_scalar, W_.x_)`],
+  [`rep(dim)`],
+  [stripped representation, for compact notation or traces],
+  [`mink!(D)`, `bis!(D)`, `cof!(NC)`, `coad!(NA)`],
+  [representation head tagged `representation`],
+  [`rep_!(N; W_.d_)`],
+  [`rep(dim, i)`],
+  [indexed representation slot],
+  [`mink!(D, mu)`, `bis!(D, i)`, `cof!(NC, i)`, `slot!(rep, i)`],
+  [representation head tagged `representation`; maybe `self_dual` or `dualizable`],
+  [`rep_!(N; W_.d_, W_.i_)`, `self_dual_!(N; ...)`, `dualizable_!(N; ...)`],
+  [`dind(rep(dim, i))`],
+  [dual slot],
+  [`dind!(cof!(NC, i))` or `slot.dual().to_atom()`],
+  [`dind` dual wrapper plus representation tags],
+  [`dualizable_dual_!(N; W_.d_, W_.i_)`],
+  [`aind(slot...)`],
+  [bundle of structural slots inside one argument],
+  [`aind!(slots...)`],
+  [`AIND_SYMBOLS.aind` symbol],
+  [`function!(AIND_SYMBOLS.aind, W_.x___)`],
+  [`F(..., slot, ...)`],
+  [ordinary tensor leaf; direct slots define structure],
+  [`tensor!(F, args...)`],
+  [head tagged `tensor`],
+  [`tensor_!(N; W_.a___)` or `function!(W_.f_, args...)`],
+  [`p(..., rep(dim))`],
+  [compact rank-one tensor shorthand],
+  [`vector!(p, args...)`, `p!(args...)`, `q!(args...)`],
+  [head tagged `tensor` and `rank1`],
+  [`rank1_!(N; W_.a___, rep_!(M; W_.d_))`],
+  [`g(slot_a, slot_b)`],
+  [metric tensor syntax],
+  [`g!(a, b)` or `metric!(a, b)`],
+  [`ETS.metric` symbol],
+  [`function!(ETS.metric, a, b)`],
+  [`g(p(rep), q(rep))`],
+  [compact scalar product shorthand],
+  [`g!(p, q)` or `metric!(p, q)`],
+  [`ETS.metric` plus rank-one compact arguments],
+  [`function!(ETS.metric, rank1_!(0; ...), rank1_!(1; ...))`],
+  [`dot(p(rep), q(rep))`],
+  [two-argument compact dot shorthand],
+  [`dot!(p, q)`],
+  [`SPENSO_TAG.dot` symbol],
+  [`function!(T.dot, a, b)`],
+  [`chain(start, end, factors...)`],
+  [ordered open chain],
+  [`chain!(start, end, factors...)`],
+  [`SPENSO_TAG.chain` symbol; ordered arguments],
+  [`chain!(start, end, factors...)`],
+  [`trace(rep)`],
+  [empty closed trace],
+  [`trace!(rep)`],
+  [`SPENSO_TAG.trace` symbol],
+  [`trace!(rep)`],
+  [`trace(rep, cyclic(factors...))`],
+  [ordinary closed trace with cyclic factor order],
+  [`trace!(rep, factors...)` or `trace!(rep, cyclic!(factors...))`],
+  [`SPENSO_TAG.trace` plus `CYCLIC` with `Cyclesymmetric` attribute],
+  [`trace!(rep, cyclic!(args...))`],
+  [`trace(rep, sym(factors...))`],
+  [fully symmetric closed trace invariant],
+  [`trace_sym!(rep, factors...)`],
+  [`SPENSO_TAG.trace` plus `SYM` with `Symmetric` attribute],
+  [`trace_sym!(rep, args...)`],
+  [`epsilon(args...)`],
+  [antisymmetric Levi-Civita tensor for Idenso epsilon algebra],
+  [`epsilon!(args...)`],
+  [`EPSILON_SYMBOL` with `Antisymmetric` attribute],
+  [`function!(*EPSILON_SYMBOL, W_.x___)`],
+  [`bracket(expr...)`],
+  [product-like parser grouping of network factors],
+  [`bracket!(expr...)`],
+  [`SPENSO_TAG.bracket` symbol],
+  [`function!(T.bracket, W_.x___)`],
+  [`broadcast(expr)`],
+  [apply a scalar/broadcast function to the parsed inner tensor],
+  [`broadcast_symbol!(f)` then `function!(f, expr)`],
+  [head tagged `broadcast`],
+  [`function!(W_.f_, W_.x_)` with a broadcast-head condition],
+  [`sum`, `product`, `integer power`],
+  [ordinary Symbolica arithmetic, parsed recursively],
+  [`+`, `*`, `.pow(...)`],
+  [Symbolica arithmetic nodes],
+  [ordinary Symbolica pattern, with conditions for exponent cases],
+)
+]
 
 `dot` is a two-argument shorthand. A three-argument spelling such as
 `dot(rep, p, q)` is not parser syntax.
@@ -165,7 +263,7 @@ vector is replacing an omitted slot.
 
 The dummy `d` is fresh and local to the materialized expansion.
 
-## Tagged Builders And Patterns
+== Tagged Builders And Patterns
 
 Concrete expression builders, parser detection, and replacement patterns are the
 three uses of the same `SPENSO_TAG` mechanism shown in the table above. Spenso
@@ -280,7 +378,7 @@ leaves. Call `ColorSimplifySettings::default().with_cof_dimension_invariants()`
 when a caller needs supported `cof(N)` cases rewritten to explicit dimension
 formulas before numeric evaluation or graph grouping.
 
-## Rust Rewrite Idioms
+== Rust Rewrite Idioms
 
 Prefer a small pass type over a pile of free helpers:
 
@@ -351,9 +449,9 @@ This style is appropriate when the right-hand side is determined entirely by the
 matched wildcard substitution.
 
 Current examples of this style are `CHAIN_NORMALIZATIONS` in
-`crates/idenso/src/chain.rs`, `TRACE_TERMINALS` in
+`crates/idenso/src/shorthands/chain.rs`, `TRACE_TERMINALS` in
 `crates/idenso/src/dirac/simplify.rs`, and `TRACE_TERMINALS` in
-`crates/idenso/src/color/mod.rs`. They are all local identities: the replacement
+`crates/idenso/src/color/simplify.rs`. They are all local identities: the replacement
 does not need to inspect an ordered factor list, choose a contraction target,
 allocate fresh dummies, or branch on a simplification strategy.
 
@@ -374,7 +472,7 @@ depend on earlier `if (match(...))`, `repeat`, `ReplaceLoop`, `sum`, `renumber`,
 or C-side trace logic. In Rust, keep the local identity as a static replacement
 only when the Symbolica match already contains all information needed for the
 right-hand side. Otherwise put the strategy on a pass type, as in
-`DiracChainSimplifier` in `crates/idenso/src/dirac/simplify.rs`.
+`DiracSimplifier` in `crates/idenso/src/dirac/simplify.rs`.
 
 `crates/idenso/src/epsilon.rs` is an example of a dynamic pass. Its right-hand
 side depends on the matched epsilon rank and factor positions: it emits

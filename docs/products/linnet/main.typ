@@ -2,6 +2,7 @@
 #import "content/overview.typ": overview
 #import "content/tutorial.typ": tutorial
 #import "content/algorithms.typ": algorithms
+#import "content/linnest.typ": linnest
 #import "content/api.typ": api
 #import "content/changelog.typ": changelog
 
@@ -14,6 +15,7 @@
     #overview
     #tutorial
     #algorithms
+    #linnest
     #api
     #changelog
   ],

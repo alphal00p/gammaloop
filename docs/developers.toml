@@ -1,6 +1,11 @@
-schema = 2
+schema = 3
 title = "Developer architecture"
 summary = "Implementation notes, design proposals, performance investigations, and build-system records for contributors working on the αLoop codebase."
+
+[[owner]]
+id = "unassigned"
+name = "Ownership decision required"
+contact = "https://github.com/alphal00p/gammaloop/issues"
 
 [[section]]
 id = "implemented"
@@ -14,6 +19,82 @@ summary = "Application shell, domain core, state lifecycle, integration and even
 source = "docs/architecture/architecture-current.typ"
 kind = "System architecture"
 status = "Implemented"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-17"
+review_ref = "c9f4e32acd2c"
+products = ["gammaloop"]
+topics = ["state", "evaluation", "events", "integration", "persistence"]
+review_triggers = ["crates/gammaloop-api/src/**", "crates/gammalooprs/src/integrands/**", "crates/gammalooprs/src/observables/**", "crates/gammalooprs/src/integrate/**", "crates/gammalooprs/src/settings/**"]
+
+[[section.note.scope]]
+path = "crates/gammaloop-api/src/state.rs"
+symbol = "gammaloop_api::state::State::load"
+anchor = "load_state_manifest(&save_path)?"
+digest = "585b57a4a52209493288e8ef657e8144d382011c"
+
+[[section.note.scope]]
+path = "crates/gammaloop-api/src/commands/integrate.rs"
+symbol = "gammaloop_api::commands::integrate::Integrate::default_workspace_path"
+anchor = "fn default_workspace_path(&self"
+digest = "84a9ff4697c822832eae80b41bb6ffe7d431278a"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrands/evaluation.rs"
+symbol = "gammalooprs::integrands::evaluation::EvaluationResult"
+anchor = "pub struct EvaluationResult {"
+digest = "9853f32a5035259fca3db4c9ca60c2892854400b"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrands/process/mod.rs"
+symbol = "gammalooprs::integrands::process::ProcessIntegrand::warm_up"
+anchor = "pub fn warm_up(&mut self, model"
+digest = "d27636d8cba005d85314c5604c40247720a01168"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/observables/events.rs"
+symbol = "gammalooprs::observables::events::GenericEvent"
+anchor = "pub struct GenericEvent<T: FloatLike> {"
+digest = "0f9cc30132cbe0106c4354f5afbee4709debf4a8"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/observables/mod.rs"
+symbol = "gammalooprs::observables::EventProcessingRuntime"
+anchor = "pub struct EventProcessingRuntime {"
+digest = "14cc6ea676345299b17f1460e183a096ae07546c"
+
+[[section.note]]
+id = "integration-dashboard"
+title = "Integration dashboard architecture"
+summary = "Renderer-neutral status flow, Ratatui terminal ownership, suspend/shutdown behavior, keyboard controls, and verification boundaries."
+source = "docs/architecture/ratatui-integration-dashboard.typ"
+kind = "Runtime presentation architecture"
+status = "Implemented"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-18"
+review_ref = "f46892d216f1dafa21e0fbebbd2c69c328f47fa2"
+products = ["gammaloop"]
+topics = ["integration", "terminal", "ratatui", "status"]
+review_triggers = ["crates/gammaloop-api/src/commands/integrate.rs", "crates/gammalooprs/src/integrate/**"]
+
+[[section.note.scope]]
+path = "crates/gammaloop-api/src/commands/integrate.rs"
+symbol = "gammaloop_api::commands::integrate::dashboard_event_loop"
+anchor = "fn dashboard_event_loop(receiver"
+digest = "84a9ff4697c822832eae80b41bb6ffe7d431278a"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrate/render_ratatui.rs"
+symbol = "gammalooprs::integrate::RatatuiDashboardState"
+anchor = "pub struct RatatuiDashboardState {"
+digest = "71ab92299354e389a83e7ba4f0f81f6ad1bbc41f"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrate/mod.rs"
+symbol = "gammalooprs::integrate"
+anchor = "mod render_ratatui;"
+digest = "45627d3318f40e05bc2ef6148c4178f2b7513115"
 
 [[section.note]]
 id = "uv-renormalization"
@@ -22,6 +103,13 @@ summary = "Orchestrator ownership, sign conventions, projections, disconnected c
 source = "docs/architecture/uv-renormalization.typ"
 kind = "System architecture"
 status = "Implemented"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-17"
+review_ref = "c9f4e32acd2c"
+products = ["gammaloop"]
+topics = ["uv", "renormalization"]
+review_triggers = ["crates/gammalooprs/src/uv/**", "crates/gammalooprs/src/graph/**"]
 
 [[section.note]]
 id = "spenso-parsing-flow"
@@ -30,6 +118,13 @@ summary = "Dispatch, shorthand modes, structure inference, materialization, chai
 source = "docs/architecture/parsing-flow.typ"
 kind = "Architecture diagram"
 status = "Implemented"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-17"
+review_ref = "c9f4e32acd2c"
+products = ["spenso", "idenso"]
+topics = ["parsing", "tensor-network"]
+review_triggers = ["crates/spenso/src/network/parsing/**"]
 
 [[section.note]]
 id = "schoonschip-network"
@@ -38,6 +133,13 @@ summary = "Entry points, fixed-point execution, opaque parsing, contraction, set
 source = "docs/architecture/schoonschip-net-parsing.typ"
 kind = "Architecture diagram"
 status = "Implemented"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-17"
+review_ref = "c9f4e32acd2c"
+products = ["spenso", "idenso"]
+topics = ["parsing", "schoonschip", "rewrites"]
+review_triggers = ["crates/idenso/src/shorthands/schoonschip/**", "crates/spenso/src/network/**"]
 
 [[section.note]]
 id = "gammaloop-draw-style-migration"
@@ -46,6 +148,44 @@ summary = "The implemented Typst callback architecture, canonical source locatio
 source = "docs/architecture/gammaloop-draw-style-migration-example.typ"
 kind = "Drawing architecture"
 status = "Implemented record"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-15"
+review_ref = "395610143576"
+implemented_by = "395610143576"
+products = ["gammaloop", "linnet"]
+topics = ["drawing", "typst"]
+review_triggers = ["crates/gammalooprs/src/**/drawing*", "crates/linnest/typst/**", "assets/embedded/drawing/**"]
+
+[[section.note]]
+id = "gammaloop-drawing-architecture"
+title = "GammaLoop Drawing Architecture"
+summary = "The current GammaLoop/Linnest/Kurvst drawing pipeline, DOT data ownership and style callbacks, with the superseded evaluated-field proposal kept behind an explicit historical boundary."
+source = "docs/architecture/gammaloop-drawing-architecture.typ"
+kind = "Drawing architecture and syntax reference"
+status = "Partially current · reviewed 2026-08-18"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-18"
+review_ref = "f46892d216f1dafa21e0fbebbd2c69c328f47fa2"
+products = ["gammaloop", "linnet"]
+topics = ["drawing", "dot", "typst"]
+review_triggers = ["crates/gammalooprs/src/model/mod.rs", "crates/linnest/typst/src/physics-edge-style.typ", "crates/linnest/typst/src/impl/physics-edge-style.typ", "assets/embedded/drawing/templates/"]
+
+[[section.note]]
+id = "spenso-symbolica-syntax-and-rewrites"
+title = "Spenso Symbolica Syntax And Rewrite Idioms"
+summary = "Implemented Spenso surface forms, tag-aware builders and patterns, and the Idenso pass boundaries used for static and dynamic algebraic rewrites."
+source = "docs/architecture/spenso-symbolica-syntax-and-rewrites.typ"
+kind = "Symbolic algebra implementation reference"
+status = "Implemented reference · reviewed 2026-08-18"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-18"
+review_ref = "f46892d216f1dafa21e0fbebbd2c69c328f47fa2"
+products = ["spenso", "idenso"]
+topics = ["symbolica", "tensor syntax", "rewriting"]
+review_triggers = ["crates/spenso/src/network/parsing/", "crates/spenso/src/shadowing/", "crates/idenso/src/shorthands/", "crates/idenso/src/dirac/", "crates/idenso/src/color/"]
 
 [[section]]
 id = "proposals"
@@ -59,6 +199,13 @@ summary = "Candidate service boundaries, cache sessions, pipeline unification, e
 source = "docs/architecture/architecture-ideas.typ"
 kind = "Design proposal"
 status = "Proposal"
+lifecycle = "proposal"
+owner = "unassigned"
+reviewed_at = "2026-08-17"
+review_ref = "c9f4e32acd2c"
+products = ["gammaloop"]
+topics = ["architecture", "roadmap"]
+review_triggers = ["crates/gammaloop-api/src/**", "crates/gammalooprs/src/**"]
 
 [[section.note]]
 id = "cff-surface-cache-ownership"
@@ -67,11 +214,89 @@ summary = "A proposal for expression-local surface ownership, its migration path
 source = "docs/architecture/cff-surface-cache-ownership.typ"
 kind = "Design proposal"
 status = "Proposal"
+lifecycle = "proposal"
+owner = "unassigned"
+reviewed_at = "2026-08-17"
+review_ref = "c9f4e32acd2c"
+products = ["gammaloop"]
+topics = ["cff", "cache", "ownership"]
+review_triggers = ["crates/gammalooprs/src/**/cff*", "crates/gammalooprs/src/graph/**"]
 
 [[section]]
 id = "investigations"
 title = "Engineering investigations"
 summary = "Dated measurements and diagnostic records. Treat their results as experiment context, not timeless API guarantees."
+
+[[section.note]]
+id = "gammaloop-drawing-evaluated-fields-history"
+title = "GammaLoop Evaluated-Field Proposal"
+summary = "The superseded proposal for executable Typst fields in DOT drawing data, preserved separately from the maintained callback-based drawing architecture."
+source = "docs/architecture/gammaloop-drawing-evaluated-fields-history.typ"
+kind = "Superseded drawing proposal"
+status = "Archived · superseded"
+lifecycle = "archived"
+owner = "unassigned"
+implemented_by = "gammaloop-drawing-architecture"
+superseded_by = "gammaloop-drawing-architecture"
+products = ["gammaloop", "linnet"]
+topics = ["drawing", "dot", "typst", "implementation-history"]
+
+[[section.note]]
+id = "bnl-benchmark-investigation"
+title = "BNL Benchmark Investigation"
+summary = "A 2026-05-25 threshold-subtraction and four-mass integration study whose cards and graph remain, but whose generated states, workspaces, command blocks, and result logs are absent."
+source = "docs/architecture/bnl-benchmark-investigation.typ"
+kind = "Performance investigation · 2026-05-25"
+status = "Archived · non-reproducible"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-05-25"
+evidence_revision = "4fdbf430b29edd24b9e1292c07ab24a151427dc7"
+products = ["gammaloop"]
+topics = ["performance", "bnl", "threshold-subtraction", "integration"]
+
+[[section.note]]
+id = "bnl-contraction-order-performance"
+title = "BNL Contraction Order Performance Notes"
+summary = "A 2026-05-27 to 2026-05-28 contraction-order comparison with retained input atoms and example code, but incomplete machine and dependency controls."
+source = "docs/architecture/bnl-contraction-order-performance.typ"
+kind = "Performance investigation · 2026-05-27 to 2026-05-28"
+status = "Archived · partially reproducible"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-05-27 to 2026-05-28"
+evidence_revision = "4fdbf430b29edd24b9e1292c07ab24a151427dc7"
+evidence_command = "cargo run -p gammalooprs --example bnl_evaluator_atom_mwe --profile dev-optim -- examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_exact.sym first:1 --alias-scalars 4096 --contraction-order sparse-atom-aware"
+products = ["gammaloop"]
+topics = ["performance", "bnl", "contraction-order", "tensor-network"]
+
+[[section.note]]
+id = "bnl-scalar-alias-capture"
+title = "BNL Scalar Alias Capture"
+summary = "An undated four-alias evaluator rendering preserved as a concise provenance page plus a hashed ANSI data artifact instead of 9,500 lines of authored prose."
+source = "docs/architecture/bnl-scalar-alias-capture.typ"
+kind = "Raw evaluator evidence · undated"
+status = "Archived raw capture"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "undated"
+evidence_revision = "4fdbf430b29edd24b9e1292c07ab24a151427dc7"
+products = ["gammaloop"]
+topics = ["bnl", "evaluator", "scalar-aliasing", "raw-output"]
+
+[[section.note]]
+id = "aa-aa-three-loop-performance-smoke"
+title = "Three-Loop aa to aa Performance Smoke"
+summary = "A 2026-06-15 generation and integration smoke record with retained cards, DOTs, scripts, and CSV summaries, explicit missing-state boundaries, and a warning for 400--570 GiB attempts."
+source = "docs/architecture/aa-aa-three-loop-performance-smoke.typ"
+kind = "Performance investigation · 2026-06-15"
+status = "Archived · partially reproducible"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-06-15"
+evidence_revision = "4fdbf430b29edd24b9e1292c07ab24a151427dc7"
+products = ["gammaloop"]
+topics = ["performance", "three-loop", "integration", "memory"]
 
 [[section.note]]
 id = "network-simplification"
@@ -80,6 +305,10 @@ summary = "Direct sum contraction behavior, profiling controls, current bottlene
 source = "docs/architecture/network-simplification-status.typ"
 kind = "Performance investigation"
 status = "Investigation record"
+lifecycle = "investigation"
+owner = "unassigned"
+products = ["spenso", "idenso"]
+topics = ["performance", "network-execution"]
 
 [[section.note]]
 id = "spenso-large-expressions"
@@ -88,6 +317,11 @@ summary = "A superseded large-input investigation whose root fixtures and contro
 source = "docs/architecture/spenso-large-expression-pathology.typ"
 kind = "Performance investigation"
 status = "Superseded investigation"
+lifecycle = "superseded"
+owner = "unassigned"
+superseded_by = "network-simplification"
+products = ["spenso", "idenso"]
+topics = ["performance", "large-expressions"]
 
 [[section.note]]
 id = "spenso-improvement-effects"
@@ -96,6 +330,10 @@ summary = "A historical timing matrix whose branch, fixture, test, and environme
 source = "docs/architecture/spenso-large-input-improvement-effects.typ"
 kind = "Performance investigation"
 status = "Historical experiment"
+lifecycle = "archived"
+owner = "unassigned"
+products = ["spenso", "idenso"]
+topics = ["performance", "large-input"]
 
 [[section.note]]
 id = "spenso-test-baseline"
@@ -104,6 +342,75 @@ summary = "An archived test/timeout record with unresolved revision and removed 
 source = "docs/architecture/spenso-network-execution-test-baseline.typ"
 kind = "Test baseline · 2026-05-05"
 status = "Archived · non-reproducible"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-05-05"
+products = ["spenso", "idenso", "gammaloop"]
+topics = ["testing", "network-execution"]
+
+[[section.note]]
+id = "bnl-evaluator-atom-capture"
+title = "BNL evaluator-atom capture"
+summary = "An undated GammaLoop 0.3.3 evaluator-atom output capture retained as non-reproducible BNL performance evidence, with its missing controls made explicit."
+source = "docs/architecture/bnl-evaluator-atom-capture.typ"
+kind = "Performance evidence · undated"
+status = "Archived · non-reproducible"
+lifecycle = "archived"
+owner = "unassigned"
+products = ["gammaloop"]
+topics = ["performance", "bnl", "evaluator"]
+evidence_command = "cargo run -p gammalooprs --example bnl_evaluator_atom_mwe --profile dev-optim -- examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_unfiltered_pre_network.sym --alias-scalars 8"
+
+[[section.note]]
+id = "uv-scalar-profile-benchmark"
+title = "UV scalar profile benchmark notes"
+summary = "A 2026-05-18 dev-optim profiling record for UV scalar tests, preserved with its removed extraction hooks and missing revision controls made explicit."
+source = "docs/architecture/uv-scalar-profile-benchmark.typ"
+kind = "Performance investigation · 2026-05-18"
+status = "Archived · partially reproducible"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-05-18"
+products = ["gammaloop"]
+topics = ["performance", "uv"]
+
+[[section.note]]
+id = "ci-test-failure-summary-2026-03-25"
+title = "CI test failure summary"
+summary = "A 2026-03-25 workspace failure inventory retained as historical triage evidence rather than a current CI status page."
+source = "docs/architecture/ci-test-failure-summary-2026-03-25.typ"
+kind = "CI investigation · 2026-03-25"
+status = "Archived investigation"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-03-25"
+products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
+topics = ["ci", "testing"]
+
+[[section.note]]
+id = "network-execution-rebase-record"
+title = "Network execution rebase record"
+summary = "A trace-label-indexed record of changes preserved during the symbolic-network-simplify-v2 rebase, retained as implementation history rather than current guidance."
+source = "docs/architecture/network-execution-rebase-record.typ"
+kind = "Implementation history"
+status = "Archived record"
+lifecycle = "archived"
+owner = "unassigned"
+products = ["spenso", "idenso"]
+topics = ["network-execution", "implementation-history"]
+
+[[section.note]]
+id = "ratatui-integration-dashboard-history"
+title = "Ratatui integration dashboard implementation history"
+summary = "The design plan and chronological implementation notes that led to the maintained integration dashboard architecture."
+source = "docs/architecture/ratatui-integration-dashboard-history.typ"
+kind = "Implementation history"
+status = "Archived record"
+lifecycle = "archived"
+owner = "unassigned"
+implemented_by = "crates/gammaloop-api/src/commands/integrate.rs"
+products = ["gammaloop"]
+topics = ["integration", "ratatui", "implementation-history"]
 
 [[section]]
 id = "build-system"
@@ -117,11 +424,33 @@ summary = "A living cache-architecture contract embedded in a chronological expe
 source = "docs/architecture/nix-crane-cache-reuse.typ"
 kind = "Build engineering"
 status = "Living engineering record"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-17"
+review_ref = "c9f4e32acd2c"
+products = ["gammaloop"]
+topics = ["nix", "ci", "cache", "documentation"]
+review_triggers = ["flake.nix", "flake.lock", ".github/workflows/**"]
 
 [[section]]
 id = "documentation"
 title = "Documentation system"
 summary = "Quality reviews and improvement plans for the manuals, developer notes, validation, navigation, and publishing pipeline."
+
+[[section.note]]
+id = "architecture-notes"
+title = "Architecture notes"
+summary = "How contributor architecture records are classified, reviewed, scoped, superseded, and kept separate from supported product interfaces."
+source = "docs/architecture/architecture.typ"
+kind = "Contributor documentation policy"
+status = "Current guide"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-18"
+review_ref = "f46892d216f1dafa21e0fbebbd2c69c328f47fa2"
+products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
+topics = ["documentation", "architecture", "governance"]
+review_triggers = ["docs/developers.toml", "crates/alphal00p-docs-builder/src/lib.rs", "CONTRIBUTING.typ"]
 
 [[section.note]]
 id = "documentation-improvement-plan"
@@ -130,3 +459,10 @@ summary = "A critical review and phased plan for truthful Python/CLI reference, 
 source = "docs/architecture/documentation-improvement-plan.typ"
 kind = "Documentation strategy"
 status = "Proposal"
+lifecycle = "proposal"
+owner = "unassigned"
+reviewed_at = "2026-08-17"
+review_ref = "c9f4e32acd2c"
+products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
+topics = ["documentation", "quality"]
+review_triggers = ["docs/**", "crates/alphal00p-docs-*/**", ".github/workflows/docs-pages.yml", "flake.nix", "justfile"]

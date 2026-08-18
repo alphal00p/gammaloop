@@ -4,13 +4,15 @@
 = Tutorial
 
 In this tutorial, you will construct a half-edge graph in Rust, validate its invariants, find
-its one independent cycle, and print DOT. The builder returns Linnet's typed node and half-edge
-identifiers directly, so you can see where graph identity enters the workflow.
+its one independent cycle inside an explicitly selected subgraph, and print DOT. The builder
+returns typed node indexes; Linnet's subgraph filters then select the half-edges on which an
+algorithm operates.
 
 == Prerequisites
 
 Create a Rust binary project and add the current Linnet release:
 
+// docs-example: syntax
 ```sh
 cargo new linnet-first-graph
 cd linnet-first-graph
@@ -23,10 +25,12 @@ No drawing feature or external layout program is needed to construct the graph a
 
 Replace `src/main.rs` with the following program:
 
+// docs-example: run
 ```rust
 use linnet::half_edge::{
     builder::HedgeGraphBuilder,
     involution::Flow,
+    subgraph::{SubSetOps, SuBitGraph},
     HedgeGraph,
 };
 
@@ -45,7 +49,9 @@ fn main() {
     let graph: HedgeGraph<&str, &str> = builder.build();
     graph.check().expect("the half-edge involution is valid");
 
-    let (basis, _) = graph.cycle_basis();
+    let boundary: SuBitGraph = graph.external_filter();
+    let internal = graph.full_filter().subtract(&boundary);
+    let (basis, _) = graph.cycle_basis_of(&internal);
     assert_eq!(basis.len(), 1);
     println!("{}", graph.base_dot());
 }
@@ -54,6 +60,14 @@ fn main() {
 Run it with `cargo run`. Success means the assertion passes and stdout contains a DOT
 `digraph` with nodes `a`, `b`, and `c`, three paired internal edges, and two dangling boundary
 edges. The external edges do not add a cycle, so the triangle's cycle-basis rank remains one.
+
+#callout("Verification scope and cost", [
+  The docs harness compiles and runs this Rust program; it syntax-checks the setup commands
+  without creating a project or using the network. Success requires `graph.check()` and the
+  subgraph cycle-rank assertion to pass. The run is small; a clean external Cargo build is
+  dependency-dominated and can take minutes, while the graph operation itself should finish in
+  well under a second.
+])
 
 #callout("Keep the returned indexes with their graph", [
   `a`, `b`, and `c` are compact `NodeIndex` values owned by this graph construction. Do not
@@ -65,7 +79,8 @@ edges. The external edges do not add a cycle, so the triangle's cycle-basis rank
 
 Add a fourth internal edge between `a` and `b`, run the program again, and change the assertion
 to `basis.len() == 2`. This demonstrates the key distinction: parallel paired half-edges add an
-independent cycle, while dangling identity half-edges describe the graph boundary.
+independent cycle, while dangling identity half-edges describe the graph boundary excluded by
+`internal`.
 
 From here, use a subgraph view to run traversal, cuts, or contraction against only the region
 you intend to modify. Enable Linnet's `drawing` feature only when you need layout rather than
@@ -77,8 +92,8 @@ plain DOT interchange.
   keep the explicit `HedgeGraph<&str, &str>` annotation from the example.
 - A failed `check()` points to an involution or storage invariant. Validate immediately after
   parsing or construction, before applying graph algorithms.
-- If a traversal includes an unexpected dangling edge, check the selected subgraph and the
-  `Flow` assigned to each external edge.
+- If an algorithm includes an unexpected dangling edge, check that you passed `internal` rather
+  than `graph.full_filter()`, then inspect the `Flow` assigned to each external edge.
 - Continue with the subgraph-and-algorithms manual, then consult the Rust API reference for the
   exact return mappings of mutating operations and additional builder methods.
 ]

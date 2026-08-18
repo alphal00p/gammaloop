@@ -17,6 +17,7 @@ environment first:
 The assembly and installation instructions live in
 #link("https://github.com/benruijl/symbolica-community")[`symbolica-community`].
 
+// docs-example: syntax
 ```sh
 python -c "import symbolica.community.idenso; import symbolica.community.spenso"
 ```
@@ -28,6 +29,7 @@ file does not mount the native module.
 
 Save the following as `metric_first.py`:
 
+// docs-example: compile
 ```python
 from symbolica.community.idenso import initialize, list_dangling, simplify_metrics
 from symbolica.community.spenso import Representation, TensorName
@@ -51,6 +53,14 @@ Run `python metric_first.py`. Success means the metric is removed from the reduc
 the contracted `mu` no longer appears as a free index, and the result is a rank-one expression
 carrying `nu`. Printed output can vary with the installed Symbolica version; inspect the
 expression structure instead of comparing exact text.
+
+#callout("Verification scope and cost", [
+  The docs harness compiles this Python source without importing native modules; it syntax-checks
+  the environment probe without running it. Execute both steps in a provisioned community-module
+  environment to verify the rank-one invariant. The script should take seconds after startup;
+  building or installing Symbolica community modules is the expensive prerequisite and may take
+  substantially longer.
+])
 
 #callout("Initialize before parsing or rewriting", [
   `initialize()` installs Idenso's representation and tensor symbols. Calling it explicitly at

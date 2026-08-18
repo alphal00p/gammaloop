@@ -14,6 +14,7 @@ Nix shell; without Nix you need Rust 1.85 or newer, `just`, a recent GNU toolcha
 dependencies described in the root README. The bundled Standard Model used below does not need
 the UFO loader. A Symbolica license may be required by your build and use case.
 
+// docs-example: syntax
 ```sh
 nix develop
 just build-cli
@@ -23,11 +24,20 @@ just build-cli
 The last command should print the one-shot CLI options and command tree. The `./gammaloop`
 wrapper selects the binary built under `target/dev-optim/`.
 
+#callout("Verification scope and cost", [
+  The docs harness checks these shell blocks for syntax; it does not build or execute
+  GammaLoop. Verify a clean checkout manually in `nix develop`. A cold CLI build and process
+  generation are the high-resource path and can take tens of minutes, while reopening a valid
+  state is normally much cheaper. The invariant for this tutorial is a resumable state with the
+  files listed below, not a completed Monte Carlo integration.
+])
+
 == Generate an example process
 
 The run card declares a state folder, settings, and named command blocks. Run its `generate`
 block and persist the result on exit:
 
+// docs-example: syntax
 ```sh
 ./gammaloop --clean-state \
   ./examples/cli/gg_hhh/1L/gg_hhh_1L.toml \
@@ -36,6 +46,8 @@ block and persist the result on exit:
 
 #callout("`--clean-state` removes the resolved state first", [
   Use it only for this first, reproducible run. Omit it when resuming work you want to keep.
+  Its generated #link("reference/cli/?q=clean-state")[argument reference] records the exact
+  valueless-flag semantics.
   The example card resolves its state to `examples/cli/gg_hhh/1L/state` and requests ten
   worker cores; make a private copy of the card before changing either value.
 ])
@@ -50,6 +62,7 @@ commands and settings needed to replay the run; it is not merely a log file.
 
 Load the saved state and ask the active session to display its processes:
 
+// docs-example: syntax
 ```sh
 ./gammaloop -s ./examples/cli/gg_hhh/1L/state \
   run -c "display processes; quit -o"
@@ -69,7 +82,8 @@ they request a substantial Monte Carlo integration.
 - If startup reports a state fingerprint or settings mismatch, replay the card with a new
   state folder instead of transplanting only its `processes/` directory.
 - Use `./gammaloop help generate` to inspect the flags supported by your installed version,
-  then continue with the process-generation manual and the CLI reference.
+  then continue with the process-generation manual and the
+  #link("reference/cli/?q=gammaLoop%20generate")[filtered generate-command reference].
 
 #boundary("Example run card", [
   See the complete

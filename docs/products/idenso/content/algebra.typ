@@ -50,8 +50,8 @@ can substantially increase intermediate expression size even when the resulting 
 is unchanged.
 
 Concrete syntax and rewrite cases are documented in
-#source-link("docs/idenso/spenso_symbolica_syntax_and_rewrites.md", label: "the Spenso/Symbolica syntax note")
-and #source-link("docs/idenso/form_symbolica_color_and_dirac.typ", label: "the color and Dirac comparison").
+#source-link("docs/architecture/spenso-symbolica-syntax-and-rewrites.typ", label: "the Spenso/Symbolica syntax note")
+and the rendered #link("manual/form-color-dirac/")[FORM color and Dirac specification].
 The #source-link("docs/architecture/schoonschip-net-parsing.typ", label: "Schoonschip parsing guide")
 shows how normalization, network construction, and contraction fit together.
 

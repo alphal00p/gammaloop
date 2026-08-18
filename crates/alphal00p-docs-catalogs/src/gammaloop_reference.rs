@@ -2,8 +2,8 @@
 
 use std::collections::BTreeSet;
 
-use clap::{Arg, Command, CommandFactory};
-use eyre::{Result, ensure};
+use clap::{Arg, ArgAction, Command, CommandFactory};
+use eyre::{Result, bail, ensure};
 use gammaloop_api::{CLISettings, OneShot};
 use gammalooprs::{settings::RuntimeSettings, utils::serde_utils::ShowDefaultsGuard};
 use schemars::schema_for;
@@ -11,15 +11,16 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::generated::{
-    CliArgument, CliCommand, GENERATED_REFERENCE_SCHEMA, GammaLoopReference, GeneratedSource,
-    SettingReference,
+    CliAlias, CliAliasKind, CliArgument, CliArgumentAction, CliCommand, CliValueArity,
+    GENERATED_REFERENCE_SCHEMA, GammaLoopReference, GeneratedSource, SettingReference,
 };
 
 pub fn export() -> Result<GammaLoopReference> {
-    let mut command = OneShot::command();
+    let declared_command = OneShot::command();
+    let mut command = declared_command.clone();
     command.build();
     let mut commands = Vec::new();
-    collect_commands(&command, "", &mut commands);
+    collect_commands(&command, Some(&declared_command), "", &mut commands)?;
 
     let cli_schema = serde_json::to_value(schema_for!(CLISettings))?;
     let runtime_schema = serde_json::to_value(schema_for!(RuntimeSettings))?;
@@ -81,45 +82,213 @@ pub fn export() -> Result<GammaLoopReference> {
     })
 }
 
-fn collect_commands(command: &Command, parent: &str, output: &mut Vec<CliCommand>) {
+fn collect_commands(
+    command: &Command,
+    declared_command: Option<&Command>,
+    parent: &str,
+    output: &mut Vec<CliCommand>,
+) -> Result<()> {
     let path = if parent.is_empty() {
         command.get_name().to_owned()
     } else {
         format!("{parent} {}", command.get_name())
     };
+    let declared_arguments = declared_command
+        .into_iter()
+        .flat_map(Command::get_arguments)
+        .map(|argument| argument.get_id().as_str())
+        .collect::<BTreeSet<_>>();
+    let visible_aliases = command.get_visible_aliases().collect::<BTreeSet<_>>();
+    let visible_short_flag_aliases = command
+        .get_visible_short_flag_aliases()
+        .collect::<BTreeSet<_>>();
+    let visible_long_flag_aliases = command
+        .get_visible_long_flag_aliases()
+        .collect::<BTreeSet<_>>();
+    let aliases = command
+        .get_all_aliases()
+        .map(|alias| CliAlias {
+            name: alias.to_owned(),
+            kind: CliAliasKind::Name,
+            visible: visible_aliases.contains(alias),
+        })
+        .chain(command.get_all_short_flag_aliases().map(|alias| CliAlias {
+            name: alias.to_string(),
+            kind: CliAliasKind::ShortFlag,
+            visible: visible_short_flag_aliases.contains(&alias),
+        }))
+        .chain(command.get_all_long_flag_aliases().map(|alias| CliAlias {
+            name: alias.to_owned(),
+            kind: CliAliasKind::LongFlag,
+            visible: visible_long_flag_aliases.contains(alias),
+        }))
+        .collect();
     output.push(CliCommand {
         path: path.clone(),
         name: command.get_name().to_owned(),
+        usage: command.clone().render_usage().to_string(),
         about: command
             .get_long_about()
             .or_else(|| command.get_about())
             .map(ToString::to_string)
             .unwrap_or_default(),
-        aliases: command.get_visible_aliases().map(str::to_owned).collect(),
-        arguments: command.get_arguments().map(argument).collect(),
+        hidden: command.is_hide_set(),
+        generated_help: declared_command.is_none(),
+        short_flag: command.get_short_flag(),
+        long_flag: command.get_long_flag().map(str::to_owned),
+        aliases,
+        arguments: command
+            .get_arguments()
+            .map(|argument| {
+                argument_metadata(
+                    command,
+                    argument,
+                    argument.is_global_set()
+                        && !declared_arguments.contains(argument.get_id().as_str()),
+                )
+            })
+            .collect::<Result<_>>()?,
     });
     for child in command.get_subcommands() {
-        collect_commands(child, &path, output);
+        let declared_child = declared_command.and_then(|declared| {
+            declared
+                .get_subcommands()
+                .find(|candidate| candidate.get_name() == child.get_name())
+        });
+        collect_commands(child, declared_child, &path, output)?;
     }
+    Ok(())
 }
 
-fn argument(argument: &Arg) -> CliArgument {
-    CliArgument {
+fn argument_metadata(command: &Command, argument: &Arg, inherited: bool) -> Result<CliArgument> {
+    let action = match argument.get_action() {
+        ArgAction::Set => CliArgumentAction::Set,
+        ArgAction::Append => CliArgumentAction::Append,
+        ArgAction::SetTrue => CliArgumentAction::SetTrue,
+        ArgAction::SetFalse => CliArgumentAction::SetFalse,
+        ArgAction::Count => CliArgumentAction::Count,
+        ArgAction::Help => CliArgumentAction::Help,
+        ArgAction::HelpShort => CliArgumentAction::HelpShort,
+        ArgAction::HelpLong => CliArgumentAction::HelpLong,
+        ArgAction::Version => CliArgumentAction::Version,
+        action => bail!(
+            "unsupported Clap action {action:?} for {}",
+            argument.get_id()
+        ),
+    };
+    let arity = argument.get_num_args().unwrap_or_else(|| {
+        if argument.get_action().takes_values() {
+            1.into()
+        } else {
+            0.into()
+        }
+    });
+    let visible_long_aliases = argument
+        .get_visible_aliases()
+        .into_iter()
+        .flatten()
+        .collect::<BTreeSet<_>>();
+    let visible_short_aliases = argument
+        .get_visible_short_aliases()
+        .into_iter()
+        .flatten()
+        .collect::<BTreeSet<_>>();
+    let aliases = argument
+        .get_all_aliases()
+        .into_iter()
+        .flatten()
+        .map(|alias| CliAlias {
+            name: alias.to_owned(),
+            kind: CliAliasKind::LongFlag,
+            visible: visible_long_aliases.contains(alias),
+        })
+        .chain(
+            argument
+                .get_all_short_aliases()
+                .into_iter()
+                .flatten()
+                .map(|alias| CliAlias {
+                    name: alias.to_string(),
+                    kind: CliAliasKind::ShortFlag,
+                    visible: visible_short_aliases.contains(&alias),
+                }),
+        )
+        .collect();
+    let mut conflicts_with = command
+        .get_arg_conflicts_with(argument)
+        .into_iter()
+        .map(|conflict| conflict.get_id().to_string())
+        .collect::<BTreeSet<_>>();
+    for candidate in command.get_arguments() {
+        if candidate.get_id() != argument.get_id()
+            && (candidate.is_exclusive_set()
+                || command
+                    .get_arg_conflicts_with(candidate)
+                    .into_iter()
+                    .any(|conflict| conflict.get_id() == argument.get_id()))
+        {
+            conflicts_with.insert(candidate.get_id().to_string());
+        }
+    }
+    for group in command.get_groups() {
+        let arguments = group.get_args().collect::<Vec<_>>();
+        let mut group = group.clone();
+        if !group.is_multiple() && arguments.contains(&argument.get_id()) {
+            conflicts_with.extend(
+                arguments
+                    .into_iter()
+                    .filter(|id| *id != argument.get_id())
+                    .map(ToString::to_string),
+            );
+        }
+    }
+    if argument.is_exclusive_set() {
+        conflicts_with.extend(
+            command
+                .get_arguments()
+                .filter(|candidate| candidate.get_id() != argument.get_id())
+                .map(|candidate| candidate.get_id().to_string()),
+        );
+    }
+
+    Ok(CliArgument {
         id: argument.get_id().to_string(),
         long: argument.get_long().map(str::to_owned),
         short: argument.get_short(),
-        value_names: argument
-            .get_value_names()
-            .into_iter()
-            .flatten()
-            .map(ToString::to_string)
-            .collect(),
+        aliases,
+        action,
+        arity: CliValueArity {
+            min: arity.min_values(),
+            max: (arity.max_values() != usize::MAX).then_some(arity.max_values()),
+        },
+        takes_values: arity.takes_values(),
+        value_required: arity.min_values() > 0,
+        value_names: if arity.takes_values() {
+            argument
+                .get_value_names()
+                .into_iter()
+                .flatten()
+                .map(ToString::to_string)
+                .collect()
+        } else {
+            Vec::new()
+        },
         help: argument
             .get_long_help()
             .or_else(|| argument.get_help())
             .map(ToString::to_string)
             .unwrap_or_default(),
         required: argument.is_required_set(),
+        positional: argument.is_positional(),
+        index: argument.get_index(),
+        hidden: argument.is_hide_set(),
+        global: argument.is_global_set(),
+        inherited,
+        exclusive: argument.is_exclusive_set(),
+        require_equals: argument.is_require_equals_set(),
+        value_delimiter: argument.get_value_delimiter(),
+        value_terminator: argument.get_value_terminator().map(ToString::to_string),
+        conflicts_with: conflicts_with.into_iter().collect(),
         defaults: argument
             .get_default_values()
             .iter()
@@ -131,7 +300,7 @@ fn argument(argument: &Arg) -> CliArgument {
             .filter(|value| !value.is_hide_set())
             .map(|value| value.get_name().to_owned())
             .collect(),
-    }
+    })
 }
 
 fn settings_defaults(value: &impl Serialize) -> Result<Value> {
@@ -215,10 +384,10 @@ fn object_schema<'a>(root: &'a Value, node: &'a Value) -> Option<&'a Value> {
         return Some(node);
     }
     for key in ["allOf", "anyOf", "oneOf"] {
-        if let Some(values) = node.get(key).and_then(Value::as_array) {
-            if let Some(object) = values.iter().find_map(|value| object_schema(root, value)) {
-                return Some(object);
-            }
+        if let Some(values) = node.get(key).and_then(Value::as_array)
+            && let Some(object) = values.iter().find_map(|value| object_schema(root, value))
+        {
+            return Some(object);
         }
     }
     None
@@ -314,7 +483,39 @@ fn ensure_unique<'a>(values: impl Iterator<Item = &'a str>, kind: &str) -> Resul
 
 #[cfg(test)]
 mod tests {
+    use alphal00p_docs_schema::generated::{
+        CliAliasKind, CliArgument, CliArgumentAction, CliCommand, GammaLoopReference,
+    };
+    use clap::{CommandFactory, error::ErrorKind};
+    use gammaloop_api::OneShot;
+
     use super::export;
+
+    fn command<'a>(reference: &'a GammaLoopReference, path: &str) -> &'a CliCommand {
+        reference
+            .commands
+            .iter()
+            .find(|command| command.path == path)
+            .unwrap_or_else(|| panic!("missing exported command {path}"))
+    }
+
+    fn argument<'a>(
+        reference: &'a GammaLoopReference,
+        command_path: &str,
+        id: &str,
+    ) -> &'a CliArgument {
+        command(reference, command_path)
+            .arguments
+            .iter()
+            .find(|argument| argument.id == id)
+            .unwrap_or_else(|| panic!("missing exported argument {command_path}:{id}"))
+    }
+
+    fn assert_parses(arguments: &[&str]) {
+        OneShot::command()
+            .try_get_matches_from(arguments)
+            .unwrap_or_else(|error| panic!("{arguments:?} did not parse: {error}"));
+    }
 
     #[test]
     fn compiled_cli_and_settings_are_exported() {
@@ -337,5 +538,134 @@ mod tests {
                 .iter()
                 .any(|setting| setting.default.is_some())
         );
+    }
+
+    #[test]
+    fn clean_state_is_exported_as_a_valueless_flag() {
+        let reference = export().unwrap();
+        let root = command(&reference, "gammaLoop");
+        let clean_state = argument(&reference, "gammaLoop", "clean_state");
+
+        assert_eq!(
+            root.usage,
+            "Usage: gammaLoop [OPTIONS] [BOOT_COMMANDS_PATH] [COMMAND]"
+        );
+        assert_eq!(clean_state.long.as_deref(), Some("clean-state"));
+        assert_eq!(clean_state.action, CliArgumentAction::SetTrue);
+        assert_eq!(clean_state.arity.min, 0);
+        assert_eq!(clean_state.arity.max, Some(0));
+        assert!(!clean_state.takes_values);
+        assert!(!clean_state.value_required);
+        assert!(clean_state.value_names.is_empty());
+        assert_parses(&["gammaLoop", "--clean-state"]);
+        assert!(
+            OneShot::command()
+                .try_get_matches_from(["gammaLoop", "--clean-state=true"])
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn value_options_and_positionals_match_the_compiled_parser() {
+        let reference = export().unwrap();
+        let state_folder = argument(&reference, "gammaLoop", "state_folder");
+        let boot_card = argument(&reference, "gammaLoop", "boot_commands_path");
+        let with_uv = argument(&reference, "gammaLoop save dot", "with_uv");
+        let tokens = argument(&reference, "gammaLoop generate amp", "tokens");
+
+        assert_eq!(state_folder.action, CliArgumentAction::Set);
+        assert_eq!(
+            (state_folder.arity.min, state_folder.arity.max),
+            (1, Some(1))
+        );
+        assert!(state_folder.takes_values);
+        assert!(state_folder.value_required);
+        assert!(!state_folder.positional);
+        assert_parses(&["gammaLoop", "--state-folder", "/tmp/docs-parity-state"]);
+
+        assert!(boot_card.positional);
+        assert_eq!(boot_card.index, Some(1));
+        assert_eq!((boot_card.arity.min, boot_card.arity.max), (1, Some(1)));
+        assert_parses(&["gammaLoop", "run-card.toml"]);
+
+        assert_eq!(with_uv.action, CliArgumentAction::Set);
+        assert_eq!((with_uv.arity.min, with_uv.arity.max), (0, Some(1)));
+        assert!(with_uv.takes_values);
+        assert!(!with_uv.value_required);
+        assert_parses(&["gammaLoop", "save", "dot", "--with-uv"]);
+        assert_parses(&["gammaLoop", "save", "dot", "--with-uv=false"]);
+
+        assert_eq!(tokens.action, CliArgumentAction::Append);
+        assert_eq!((tokens.arity.min, tokens.arity.max), (1, None));
+        assert!(tokens.positional);
+        assert_parses(&["gammaLoop", "generate", "amp", "token"]);
+    }
+
+    #[test]
+    fn command_and_argument_aliases_match_nested_parser_routes() {
+        let reference = export().unwrap();
+        let default_runtime = command(&reference, "gammaLoop display settings default-runtime");
+        let amp = command(&reference, "gammaLoop generate amp");
+        let clear = argument(
+            &reference,
+            "gammaLoop generate amp",
+            "clear_existing_processes",
+        );
+
+        assert!(default_runtime.aliases.iter().any(|alias| {
+            alias.name == "defaults" && alias.kind == CliAliasKind::Name && !alias.visible
+        }));
+        assert!(amp.aliases.iter().any(|alias| {
+            alias.name == "amplitude" && alias.kind == CliAliasKind::Name && !alias.visible
+        }));
+        assert!(clear.aliases.iter().any(|alias| {
+            alias.name == "clear" && alias.kind == CliAliasKind::LongFlag && !alias.visible
+        }));
+
+        assert_parses(&["gammaLoop", "display", "settings", "defaults"]);
+        assert_parses(&["gammaLoop", "generate", "amplitude", "token"]);
+        assert_parses(&["gammaLoop", "generate", "amplitude", "token", "--clear"]);
+    }
+
+    #[test]
+    fn conflicts_and_global_inheritance_match_the_compiled_parser() {
+        let reference = export().unwrap();
+        let python = argument(&reference, "gammaLoop save standalone", "python");
+        let no_save_state = argument(&reference, "gammaLoop", "no_save_state");
+        let keep_sources = argument(&reference, "gammaLoop generate", "keep_sources");
+        let inherited_keep_sources = argument(&reference, "gammaLoop generate amp", "keep_sources");
+
+        assert!(python.conflicts_with.iter().any(|id| id == "rust"));
+        assert!(
+            no_save_state
+                .conflicts_with
+                .iter()
+                .any(|id| id == "override_state")
+        );
+        assert!(keep_sources.global);
+        assert!(!keep_sources.inherited);
+        assert!(inherited_keep_sources.global);
+        assert!(inherited_keep_sources.inherited);
+
+        assert_parses(&["gammaLoop", "save", "standalone", "--python"]);
+        let conflict = OneShot::command()
+            .try_get_matches_from(["gammaLoop", "save", "standalone", "--python", "--rust"])
+            .unwrap_err();
+        assert_eq!(conflict.kind(), ErrorKind::ArgumentConflict);
+        let group_conflict = OneShot::command()
+            .try_get_matches_from(["gammaLoop", "--no-save-state", "--override-state"])
+            .unwrap_err();
+        assert_eq!(group_conflict.kind(), ErrorKind::ArgumentConflict);
+        assert_parses(&["gammaLoop", "generate", "amp", "token", "--keep-sources"]);
+    }
+
+    #[test]
+    fn generated_help_tree_is_distinct_from_public_commands() {
+        let reference = export().unwrap();
+
+        assert!(!command(&reference, "gammaLoop generate amp").generated_help);
+        assert!(command(&reference, "gammaLoop help").generated_help);
+        assert!(command(&reference, "gammaLoop help generate amp").generated_help);
+        assert!(command(&reference, "gammaLoop generate help amp").generated_help);
     }
 }

@@ -17,5 +17,5 @@ For reproducible upgrades, record the Idenso version and enabled features with t
 Do not assume that changes between 0.2.5 and 0.3.0 are fully represented in the available notes.
 
 Read the available release notes at
-#source-link("crates/idenso/CHANGELOG.md", label: "crates/idenso/CHANGELOG.md").
+#source-link("crates/idenso/CHANGELOG.typ", label: "crates/idenso/CHANGELOG.typ").
 ]

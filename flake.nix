@@ -51,6 +51,7 @@
           typstPackages: with typstPackages; [
             cetz_0_5_1
             mitex_0_2_6
+            tidy_0_4_3
           ]
         );
 
@@ -112,8 +113,29 @@
         workspacePrebuildPackageDir = "crates/${workspacePrebuildPackage}";
 
         cargoSources = craneLib.fileset.commonCargoSources workspaceRoot;
-        repositoryProseSources = lib.fileset.fileFilter (
-          file: file.hasExt "md" || file.hasExt "html"
+        repositoryDocumentationSources = lib.fileset.fileFilter (
+          file:
+          let
+            name = lib.toLower file.name;
+          in
+          lib.any (extension: lib.hasSuffix ".${extension}" name) [
+            "typ"
+            "md"
+            "markdown"
+            "mdown"
+            "mkd"
+            "mdx"
+            "html"
+            "htm"
+            "xhtml"
+            "shtml"
+            "rst"
+            "rest"
+            "adoc"
+            "asciidoc"
+            "org"
+          ]
+          || file.name == "LICENSE"
         ) workspaceRoot;
 
         cargoVendorDir = craneLib.vendorCargoDeps {
@@ -158,7 +180,7 @@
           fileset = lib.fileset.unions [
             cargoSources
             nonCargoBuildSources
-            repositoryProseSources
+            repositoryDocumentationSources
             ./docs
             ./scripts/render-docs-svg-assets.sh
             ./scripts/update-docs-pages.sh
@@ -167,6 +189,9 @@
             ./examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL000.dot
             ./examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL150.dot
             ./examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL300.dot
+            ./examples/cli/aa_aa/3L/aa_aa_generation_timings.csv
+            ./examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_unfiltered_pre_network.sym
+            ./examples/cli/BNL/profiling/bnl_scalar_alias_captures.ansi.txt
             ./examples/cli/gg_hhh/3L/3L_graph.dot
             ./tests/resources/graphs/gghhh.dot
             ./tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot
@@ -2994,6 +3019,7 @@
           src = documentationSrc;
           nativeBuildInputs = (alphal00pDocsCargoArgs.nativeBuildInputs or [ ]) ++ [
             docsTypst
+            pkgs.gitMinimal
             pkgs.maturin
             pkgs.roboto
             pkgs.uv

@@ -1,37 +1,53 @@
-# Logging
+#import "../../shared.typ": callout, source-link
 
-This file summarizes the default tracing configuration used by the CLI/API at startup.
+#let diagnostics = [
+= Logging and diagnostics
 
-## Default directives
+This guide explains the default tracing configuration used by the CLI and API at startup and
+gives copyable filters for narrowing a noisy calculation to the subsystem and work unit that
+matter.
+
+#callout("Before you start", [
+  *Prerequisites:* a built GammaLoop CLI and a state or run card that reaches the behavior you
+  want to inspect. Filter changes take effect immediately and add negligible setup time, but
+  verbose `inspect` or `dump` events can produce large files and slow a run. The expected
+  invariant is that a narrow directive changes diagnostic visibility, not numerical results.
+  If a filter produces nothing, first use a broader target at `debug`, confirm that release
+  compilation has not removed the callsite, and then add tag constraints. After isolating the
+  event, record the exact directive with the run card and continue to the CLI/settings reference
+  for #link("reference/cli/?q=display_directive")[persistence and state controls].
+])
+
+== Default directives
 
 Normal session defaults come from `GlobalSettings`:
 
-- `display_directive = "info"`
-- `logfile_directive = "off"`
+- #link("reference/cli/?q=cli.global.display_directive")[`display_directive = "info"`]
+- #link("reference/cli/?q=cli.global.logfile_directive")[`logfile_directive = "off"`]
 
 These are the application defaults written into `global_settings.toml` when defaults are shown or persisted.
 
 In practice, `info` is the current convention for normal screen-facing output. Selective internal diagnostics should generally stay on `debug` and be turned on via narrower target/tag filters rather than by raising the whole display logger.
 
-## Startup precedence
+== Startup precedence
 
 Startup applies logging in this order:
 
-1. Base settings come from `GlobalSettings`.
-2. Environment overrides replace the base spec:
++ Base settings come from `GlobalSettings`.
++ Environment overrides replace the base spec:
    - `GL_ALL_LOG_FILTER` overrides both stderr and logfile filters.
    - `GL_DISPLAY_FILTER` overrides only the stderr/display filter.
    - `GL_LOGFILE_FILTER` overrides only the logfile filter.
-3. CLI overrides are then applied:
++ CLI overrides are then applied:
    - `-l/--level` overrides the stderr/display filter for the session.
    - `-L/--logfile-level` overrides the logfile filter for the session.
-4. Some CLI modes hard-disable logfile logging for the session:
++ Some CLI modes hard-disable logfile logging for the session:
    - `--read-only-state`
    - `--logfile-level off`
 
 When logfile logging is hard-disabled at boot, later settings changes cannot re-enable it for that session.
 
-## CLI level mapping
+== CLI level mapping
 
 `-l/--level` and `-L/--logfile-level` expand to explicit crate directives:
 
@@ -42,7 +58,7 @@ When logfile logging is hard-disabled at boot, later settings changes cannot re-
 - `debug` -> `gammaloop_api=debug,gammalooprs=debug`
 - `trace` -> `gammaloop_api=trace,gammalooprs=trace`
 
-## Empty-spec fallback floors
+== Empty-spec fallback floors
 
 The filter builders also have hardcoded fallback floors used when a spec is empty:
 
@@ -54,16 +70,16 @@ This is separate from the normal application defaults above. In other words:
 - if startup uses the normal settings path, the defaults are `info` for display and `off` for logfile
 - if an empty filter string is explicitly parsed, the display builder falls back to `off` and the logfile builder falls back to `warn`
 
-## Runtime updates
+== Runtime updates
 
 Changing `global.display_directive` or `global.logfile_directive` after startup reloads the active tracing filters. The CLI stderr override from `-l/--level` is treated as a session override and is separate from the persisted global setting.
 
-## Tag-based debug filtering
+== Tag-based debug filtering
 
 For selective debug logging, GammaLoop uses its own logging DSL rather than raw `EnvFilter`.
 
-This follows the general idea in Tom Mrazik's tag-based logging note:
-- https://mmapped.blog/posts/44-tag-based-logging
+This follows the general idea in
+#link("https://mmapped.blog/posts/44-tag-based-logging")[Tom Mrazik's tag-based logging note].
 
 The main reason for owning the DSL is that GammaLoop needs composable tag groups and stable semantics around presence, absence, and explicit boolean values.
 
@@ -73,7 +89,7 @@ The main reason for owning the DSL is that GammaLoop needs composable tag groups
 
 This is preferable to span-name filtering because span-based filters can admit child-library events emitted while the span is active. GammaLoop tag filters only look at the event target and the boolean tag fields on the event itself.
 
-### Supported directive syntax
+=== Supported directive syntax
 
 The supported directive forms are:
 
@@ -94,7 +110,7 @@ Notes:
 - `#!tag` means the field is present with boolean value `false`.
 - `field=value` matches an explicit field value.
 
-### Tag matching model
+=== Tag matching model
 
 Tags are represented by event fields.
 
@@ -110,7 +126,7 @@ This means the callsite controls both:
 - whether a log is selectable by a presence/absence query
 - whether a log can be selected by an explicit value query such as `inspect=false` or `mode=summary`
 
-### Static vs dynamic filtering
+=== Static vs dynamic filtering
 
 Presence/absence-only directives stay on the lazy metadata path.
 
@@ -130,7 +146,7 @@ Value-matching directives are dynamic.
 
 Those depend on the event instance, so they are evaluated in the per-event pass.
 
-### Precedence
+=== Precedence
 
 When multiple directives match the same event, GammaLoop prefers the most specific one:
 
@@ -140,7 +156,7 @@ When multiple directives match the same event, GammaLoop prefers the most specif
 
 This lets broad directives such as `gammalooprs=info` coexist with narrow tag-specific directives such as `gammalooprs::uv::forest[{generation,uv,dump}]=debug`.
 
-### Copy-pasteable display tags
+=== Copy-pasteable display tags
 
 Display logs render boolean fields next to the source as a directive tag group:
 
@@ -164,7 +180,7 @@ display_directive = "gammalooprs::uv::forest[{#generation, #uv, #!inspect}]=debu
 
 This copy-paste form assumes the display source is the module target. Enabling `full_line_source` adds file and line information to the source display, which is useful for locating code but is not a valid directive target.
 
-### Sink-only field prefixes
+=== Sink-only field prefixes
 
 This repo also has sink-routing prefixes for fields:
 
@@ -178,7 +194,7 @@ Examples:
 
 These prefixes are a formatting/routing feature, not a separate event kind. They decide where a field is rendered after the event has been emitted. This lets a callsite attach large payloads such as `file.integrands` without dumping them to stderr.
 
-### Pipeline-wide tag set
+=== Pipeline-wide tag set
 
 Prefer a small stable vocabulary that cuts across the whole pipeline.
 
@@ -220,7 +236,7 @@ Common purpose tags:
 - `summary`: the log is a compact roll-up rather than a step-by-step trace
 - `dump`: the log emits large or structured payloads such as expressions, tables, or serialized views
 
-### Tag boundaries
+=== Tag boundaries
 
 Use the most general tag that accurately captures the reason you want to turn the log on or off.
 
@@ -231,7 +247,7 @@ Use the most general tag that accurately captures the reason you want to turn th
 - Add `dump` when the payload is large enough that users may want to suppress it separately from lighter debug logs.
 - Do not use `graph`, `cut`, or `sample` as substitutes for `generation` or `integration`; they refine phase tags rather than replace them.
 
-### Naming guidance
+=== Naming guidance
 
 - Use phase tags first. They answer "when in the pipeline did this happen?"
 - Use domain tags second. They answer "what subsystem is this about?"
@@ -243,7 +259,7 @@ Use the most general tag that accurately captures the reason you want to turn th
 
 `parametric` is usually not a core pipeline tag. It is acceptable as a local refinement when needed, but should not be treated as part of the primary vocabulary unless it becomes a consistently useful cross-cutting concept.
 
-### Example queries
+=== Example queries
 
 - all generation-time UV forest logs:
   - `gammalooprs::uv::forest[{generation,uv}]=debug`
@@ -271,7 +287,7 @@ Example display directive:
 display_directive = "gammaloop_api=info,gammalooprs=info,symbolica=off,poly::gcd=off,gammalooprs::uv::forest[{generation,uv,orientation,dump}]=debug"
 ```
 
-## Unsupported `EnvFilter` syntax
+== Unsupported `EnvFilter` syntax
 
 GammaLoop no longer treats the directive string as generic `EnvFilter` syntax.
 
@@ -283,6 +299,16 @@ In particular, do not rely on:
 
 If those are needed later, they must be added explicitly to the GammaLoop DSL.
 
-## Release-build note
+== Release-build note
 
 `gammalooprs` is compiled with `tracing` feature `release_max_level_info`, so `debug!` and `trace!` callsites in that crate are compiled out in release builds.
+
+== Authoritative implementation
+
+The startup precedence and sink wiring live in
+#source-link("crates/gammaloop-api/src/tracing.rs", label: "the API tracing setup"). The shared
+directive parser, CLI level mapping, and filter behavior live in
+#source-link("crates/gammalooprs/src/utils/tracing.rs", label: "the runtime tracing utilities"),
+while persisted defaults are owned by
+#source-link("crates/gammalooprs/src/settings/mod.rs", label: "GlobalSettings").
+]

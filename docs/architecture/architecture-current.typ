@@ -225,6 +225,9 @@ projection, marker, and backend-boundary invariants are documented in
 + `havana_integrate` runs iterative Monte Carlo updates, merges
   worker-local observable accumulators, and writes integration
   artifacts.
++ Interactive integration status uses a renderer-neutral snapshot and a
+  separately owned terminal event loop, as documented in the maintained
+  #link("ratatui-integration-dashboard.typ")[integration dashboard architecture].
 
 === 3.1 Differential event-processing runtime
 <31-differential-event-processing-runtime>
@@ -481,6 +484,10 @@ Differential runtime configuration currently includes:
 
 This split is good: generation-time and evaluation-time concerns are
 separated and independently serializable.
+
+The maintained #link("../../../products/gammaloop/latest/manual/diagnostics/")[logging and
+diagnostics guide] documents the user-facing startup precedence, filter language, tag
+vocabulary, and sink-routing contract implemented by these settings.
 
 == Concurrency Model
 <concurrency-model>

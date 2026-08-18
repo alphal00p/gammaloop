@@ -18,8 +18,8 @@ For reproducible upgrades, record the versions of Spenso and every companion com
 the application. Do not assume that changes between 0.5.6 and 0.6.0 are fully represented in
 the available notes.
 
-Release notes: #source-link("crates/spenso/CHANGELOG.md", label: "Spenso"),
-#source-link("crates/spenso-macros/CHANGELOG.md", label: "macros"),
-#source-link("crates/spenso-hep-lib/CHANGELOG.md", label: "HEP library"), and
-#source-link("crates/spynso3/CHANGELOG.md", label: "Python adapter").
+Release notes: #source-link("crates/spenso/CHANGELOG.typ", label: "Spenso"),
+#source-link("crates/spenso-macros/CHANGELOG.typ", label: "macros"),
+#source-link("crates/spenso-hep-lib/CHANGELOG.typ", label: "HEP library"), and
+#source-link("crates/spynso3/CHANGELOG.typ", label: "Python adapter").
 ]

@@ -4,7 +4,7 @@ version = "0.3.4"
 edition = "2024"
 
 description = "An implementation of the Local Unitarity method for computing differential collider cross-sections."
-# license-file = "LICENSE.md"
+# license-file = "../../LICENSE"
 readme = "../../README.md"
 repository = "https://github.com/alphal00p/gammaloop"
 license = "MIT OR Apache-2.0"

@@ -201,4 +201,51 @@
       }
     });
   });
+
+  document.querySelectorAll("[data-reference-filter]").forEach((input) => {
+    const scope = input.closest("[data-reference-filter-root]")?.querySelector("[data-reference-filter-scope]") ||
+      document.querySelector("[data-reference-filter-scope]");
+    if (!scope) return;
+    const entries = [...scope.querySelectorAll("[data-reference-entry]")];
+    const groups = [...scope.querySelectorAll("[data-reference-group]")];
+    const indexEntries = [...scope.querySelectorAll("[data-reference-index-entry]")];
+    const implementationGroups = [...scope.querySelectorAll("details[data-reference-implementation]")];
+    const count = input.parentElement?.querySelector("[data-reference-filter-count]") ||
+      document.querySelector("[data-reference-filter-count]");
+    const initialQuery = new URLSearchParams(location.search).get("q");
+    if (initialQuery && !input.value) input.value = initialQuery;
+    const updateReference = () => {
+      const terms = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+      let visible = 0;
+      entries.forEach((entry) => {
+        const haystack = (entry.dataset.referenceSearch || entry.textContent).toLowerCase();
+        const match = terms.every((term) => haystack.includes(term));
+        entry.hidden = !match;
+        if (match) visible += 1;
+      });
+      indexEntries.forEach((entry) => {
+        const haystack = (entry.dataset.referenceSearch || entry.textContent).toLowerCase();
+        entry.hidden = !terms.every((term) => haystack.includes(term));
+      });
+      groups.forEach((group) => {
+        group.hidden = !group.querySelector("[data-reference-entry]:not([hidden])");
+      });
+      if (terms.length) {
+        implementationGroups.forEach((group) => {
+          group.open = Boolean(group.querySelector("[data-reference-entry]:not([hidden])"));
+        });
+      }
+      if (count) {
+        count.textContent = `${visible} of ${entries.length} entr${entries.length === 1 ? "y" : "ies"}`;
+      }
+    };
+    input.addEventListener("input", () => {
+      const params = new URLSearchParams(location.search);
+      if (input.value.trim()) params.set("q", input.value.trim());
+      else params.delete("q");
+      history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
+      updateReference();
+    });
+    updateReference();
+  });
 })();

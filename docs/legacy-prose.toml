@@ -1,27 +1,5 @@
 schema = 1
 
-# This inventory can only shrink. Files named AGENTS.md and README.md are
-# compatibility exceptions and therefore do not appear here.
-source = [
-  "LICENSE.md",
-  "crates/clinnet/CHANGELOG.md",
-  "crates/idenso/CHANGELOG.md",
-  "crates/linnest/typst/LICENSE.md",
-  "crates/linnet/CHANGELOG.md",
-  "crates/spenso-hep-lib/CHANGELOG.md",
-  "crates/spenso-macros/CHANGELOG.md",
-  "crates/spenso/CHANGELOG.md",
-  "crates/spynso3/CHANGELOG.md",
-  "docs/ci-test-failure-summary.md",
-  "docs/current.md",
-  "docs/drawing-architecture.md",
-  "docs/idenso/spenso_symbolica_syntax_and_rewrites.md",
-  "docs/logging.md",
-  "docs/network-execution-rebase-pr-notes.md",
-  "docs/ratatui_plan.md",
-  "docs/uv-scalar-profile-benchmark.md",
-  "examples/cli/BNL/BNL.md",
-  "examples/cli/BNL/profiling/bnl_contraction_order_performance.md",
-  "examples/cli/BNL/profiling/bnl_gamma_chain_captures.md",
-  "examples/cli/aa_aa/3L/3L_aa_aa_performance.md",
-]
+# Migration is complete. This inventory is retired and must remain empty.
+# Files named exactly AGENTS.md and README.md are compatibility exceptions.
+source = []

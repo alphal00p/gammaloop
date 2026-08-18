@@ -3,7 +3,7 @@
 #let changelog = [
 = Releases and change history
 
-The #source-link("crates/linnet/CHANGELOG.md", label: "Linnet changelog") records changes to the
+The #source-link("crates/linnet/CHANGELOG.typ", label: "Linnet changelog") records changes to the
 Rust crate. The standalone `linnet-py` distribution has its own version and does not currently
 have a separate changelog in this repository.
 

@@ -25,6 +25,7 @@
 #outline(depth: 2)
 #let crown = $star$
 
+#let manual = [
 = Linnet
 
 The `linnet` crate that this package wraps around, is built around the half-edge graph data structure.
@@ -730,52 +731,61 @@ Subgraph objects are opaque zero-copy values.
 
 == Generated Reference
 
-#let tidy-style = dictionary(tidy.styles.default)
-#let _ = tidy-style.insert("show-example", tidy-style.show-example.with(scale-preview: 100%))
-#let api-link(prefix, name, display: none) = {
-  link(label(prefix + name + "()"), raw(if display == none { name } else { display }, lang: none))
+#context if target() == "paged" {
+  let tidy-style = dictionary(tidy.styles.default)
+  let show-example-source(code, ..args) = block(code)
+  let _ = tidy-style.insert("show-example", show-example-source)
+  let api-link(prefix, name, display: none) = {
+    raw(if display == none { name } else { display }, lang: none)
+  }
+  let tidy-scope = (
+    api-link: api-link,
+    draw: draw,
+    graph: graph,
+    layout: layout,
+    physics: physics,
+    subgraph: subgraph,
+  )
+
+  let graph-docs = tidy.parse-module(
+    read("../src/graph.typ"),
+    name: "graph",
+    preamble: "#import graph: *\n",
+    scope: tidy-scope,
+  )
+  let draw-docs = tidy.parse-module(
+    read("../src/draw.typ"),
+    name: "draw",
+    scope: tidy-scope,
+  )
+  let layout-docs = tidy.parse-module(
+    read("../src/layout.typ"),
+    name: "layout",
+    scope: tidy-scope,
+  )
+  let physics-docs = tidy.parse-module(
+    read("../src/physics-edge-style.typ"),
+    name: "physics",
+    preamble: "#import graph: *\n",
+    scope: tidy-scope,
+  )
+  let subgraph-docs = tidy.parse-module(
+    read("../src/subgraph.typ"),
+    name: "subgraph",
+    scope: tidy-scope,
+  )
+
+  [
+    #tidy.show-module(graph-docs, style: tidy-style, sort-functions: none, enable-cross-references: false)
+    #tidy.show-module(layout-docs, style: tidy-style, sort-functions: none, enable-cross-references: false)
+    #tidy.show-module(physics-docs, style: tidy-style, sort-functions: none, enable-cross-references: false)
+    #tidy.show-module(draw-docs, style: tidy-style, sort-functions: none, enable-cross-references: false)
+    #tidy.show-module(subgraph-docs, style: tidy-style, sort-functions: none, enable-cross-references: false)
+  ]
+} else {
+  [The complete generated module reference remains in the downloadable PDF
+  manual linked at the end of this page.]
 }
-#let tidy-scope = (
-  api-link: api-link,
-  draw: draw,
-  graph: graph,
-  layout: layout,
-  physics: physics,
-  subgraph: subgraph,
-)
+]
 
-#let graph-docs = tidy.parse-module(
-  read("../src/graph.typ"),
-  name: "graph",
-  preamble: "#import graph: *\n",
-  scope: tidy-scope,
-)
-#let draw-docs = tidy.parse-module(
-  read("../src/draw.typ"),
-  name: "draw",
-  scope: tidy-scope,
-)
-#let layout-docs = tidy.parse-module(
-  read("../src/layout.typ"),
-  name: "layout",
-  scope: tidy-scope,
-)
-
-#let physics-docs = tidy.parse-module(
-  read("../src/physics-edge-style.typ"),
-  name: "physics",preamble: "#import graph: *\n",
-  scope: tidy-scope,
-)
-#let subgraph-docs = tidy.parse-module(
-  read("../src/subgraph.typ"),
-  name: "subgraph",
-  scope: tidy-scope,
-)
-
-
-
-#tidy.show-module(graph-docs, style: tidy-style, sort-functions: none)
-#tidy.show-module(layout-docs, style: tidy-style, sort-functions: none)
-#tidy.show-module(physics-docs, style: tidy-style, sort-functions: none)
-#tidy.show-module(draw-docs, style: tidy-style, sort-functions: none)
-#tidy.show-module(subgraph-docs, style: tidy-style, sort-functions: none)
+#manual

@@ -1,3 +1,5 @@
+#let form-color-dirac-content(namespace) = [
+#let anchor(name) = label(namespace + "-" + name)
 #set document(title: "FORM gamma and color simplification rules")
 #set page(paper: "a4", margin: (x: 19mm, y: 18mm))
 #set text(font: "Libertinus Serif", size: 10pt)
@@ -9,13 +11,15 @@
 }
 
 #let source(url) = link(url)[#url]
+#let source-revision = sys.inputs.at("git-commit", default: "main")
+#let repository-source(path) = "https://github.com/alphal00p/gammaloop/blob/" + source-revision + "/" + path
 #let form-manual = "https://www.nikhef.nl/~form/maindir/documentation/reference/html/manual.html#dx1-85012"
 #let color-doc = "https://www.nikhef.nl/~form/maindir/packages/color/color.html"
 #let color-src = "https://www.nikhef.nl/~form/maindir/packages/color/color.h"
 #let color-examples = "https://www.nikhef.nl/~form/maindir/packages/color/color.tar.gz"
 #let opera = "https://github.com/form-dev/form/blob/master/sources/opera.c"
-#let dirac-rs = "https://github.com/alphal00p/gammaloop/blob/main/crates/idenso/src/dirac/mod.rs"
-#let color-rs = "https://github.com/alphal00p/gammaloop/blob/main/crates/idenso/src/color/mod.rs"
+#let dirac-rs = repository-source("crates/idenso/src/dirac/mod.rs")
+#let color-rs = repository-source("crates/idenso/src/color/mod.rs")
 #let sym-pattern = "https://symbolica.io/docs/pattern_matching.html"
 #let sym-rust-id = "https://docs.rs/symbolica/latest/symbolica/id/index.html"
 #let sym-rust-replace = "https://docs.rs/symbolica/latest/symbolica/id/struct.ReplaceBuilder.html"
@@ -87,16 +91,17 @@ The word `product` denotes an ordered noncommutative string inside a chain. It i
   [Gamma-five and epsilon], [$4$ only], [Use Levi-Civita and gamma-five branch logic in FORM `trace4`.],
 )
 
-== G1. Gamma-chain product and joining <rule-gamma-chain>
+== G1. Gamma-chain product and joining
+#anchor("rule-gamma-chain")
 
 Mathematical identity:
-$ γ(v)_α^β γ(w)_β^χ = (Γ^(v w))_α^χ $ <eq-gamma-chain-join>
+$ γ(v)_α^β γ(w)_β^χ = (Γ^(v w))_α^χ $ #anchor("eq-gamma-chain-join")
 
 For longer strings, the same rule constructs an ordered product inside the chain:
 $
   (Γ^(v_1 ... v_m))_α^β (Γ^(w_1 ... w_n))_β^χ
   = (Γ^(v_1 ... v_m w_1 ... w_n))_α^χ
-$ <eq-gamma-chain-product>
+$ #anchor("eq-gamma-chain-product")
 
 FORM source context:
 ```c
@@ -124,10 +129,11 @@ gamma(bis(4,a),bis(4,b),p(2,mink(4)))
 ```
 Assumptions: `in` and `out` are local slots of each factor in the chain. Dummy bispinor labels consumed during collection are not retained as free indices.
 
-== G2. Chain orientation and reversal <rule-gamma-orientation>
+== G2. Chain orientation and reversal
+#anchor("rule-gamma-orientation")
 
 Mathematical identity:
-$ (Γ^(v_1 ... v_n))_α^β = ((Γ^(v_n ... v_1))_β^α)^"rev" $ <eq-gamma-orientation>
+$ (Γ^(v_1 ... v_n))_α^β = ((Γ^(v_n ... v_1))_β^α)^"rev" $ #anchor("eq-gamma-orientation")
 
 Here `rev` means that the implementation may represent the same contracted tensor network with opposite local slot orientation. This is not a gamma-algebra identity by itself; it is a tensor-pattern canonicalization convention.
 
@@ -142,10 +148,11 @@ B(j,k) * C(l,k)
 
 Source context: Symbolica matches syntactically with wildcard variables and respects function-argument ordering for non-symmetric functions; see #source(sym-pattern). spenso provides symbolic tensor structures and contraction support; see #source(spenso-doc).
 
-== G3. Metric contraction in gamma chains <rule-gamma-metric-contract>
+== G3. Metric contraction in gamma chains
+#anchor("rule-gamma-metric-contract")
 
 Dimension-generic terminal identity:
-$ γ^μ_α^β γ_(μ,β)^χ = D δ_α^χ $ <eq-gamma-metric-contract>
+$ γ^μ_α^β γ_(μ,β)^χ = D δ_α^χ $ #anchor("eq-gamma-metric-contract")
 
 In the approved chain notation:
 ```rs
@@ -175,10 +182,11 @@ Source: #source(dirac-rs + "#L784-L829").
 
 Assumptions: $D$ is the dimension attached to the Lorentz representation. Four-dimensional Chisholm rules below require $D = 4$.
 
-== G4. Trace closure with explicit bispinor contraction <rule-gamma-trace-closure>
+== G4. Trace closure with explicit bispinor contraction
+#anchor("rule-gamma-trace-closure")
 
 Mathematical identity:
-$ (Γ^(v_1 ... v_n))_α^α = γ(v_1)_α^β ... γ(v_n)_χ^α $ <eq-gamma-trace-closure>
+$ (Γ^(v_1 ... v_n))_α^α = γ(v_1)_α^β ... γ(v_n)_χ^α $ #anchor("eq-gamma-trace-closure")
 
 Pattern:
 ```rs
@@ -210,20 +218,21 @@ replace(function!(GS.gamma_chain, RS.a__, RS.x_, RS.x_).to_pattern())
 ```
 Source: #source(dirac-rs + "#L877-L879").
 
-== G5. Odd and even trace recursion <rule-gamma-trace-recursion>
+== G5. Odd and even trace recursion
+#anchor("rule-gamma-trace-recursion")
 
 Odd trace without gamma-five:
-$ (Γ^(v_1 ... v_(2 k + 1)))_α^α = 0 $ <eq-gamma-odd-trace>
+$ (Γ^(v_1 ... v_(2 k + 1)))_α^α = 0 $ #anchor("eq-gamma-odd-trace")
 
 Two-gamma trace:
-$ γ^μ_α^β γ^ν_β^α = 4 η^(μ ν) $ <eq-gamma-two-trace>
+$ γ^μ_α^β γ^ν_β^α = 4 η^(μ ν) $ #anchor("eq-gamma-two-trace")
 
 Recursive even trace:
 $
   (Γ^(v_1 ... v_(2 k)))_α^α
   = sum_(r=2)^(2 k) (-1)^r η^(v_1 v_r)
   (Γ^(v_2 ... hat(v_r) ... v_(2 k)))_β^β
-$ <eq-gamma-even-trace>
+$ #anchor("eq-gamma-even-trace")
 
 FORM source context:
 ```c
@@ -242,26 +251,27 @@ trace(bis(4),
 ```
 Dummy-index freshness: recursive trace replacement removes the paired Lorentz argument and must not reuse bound labels introduced by metric contractions.
 
-== G6. Four-dimensional Chisholm reductions <rule-gamma-chisholm>
+== G6. Four-dimensional Chisholm reductions
+#anchor("rule-gamma-chisholm")
 
 Odd interior:
 $
   γ^μ_α^β (Γ^(ν_1 ... ν_(2 k + 1)))_β^χ γ_(μ,χ)^δ
   = -2 (Γ^(ν_(2 k + 1) ... ν_1))_α^δ
-$ <eq-gamma-chisholm-odd>
+$ #anchor("eq-gamma-chisholm-odd")
 
 Even interior:
 $
   γ^μ_α^β (Γ^(ν_1 ... ν_(2 k)))_β^χ γ_(μ,χ)^δ
   = 2 (Γ^(ν_(2 k) ν_1 ... ν_(2 k - 1)))_α^δ
   + 2 (Γ^(ν_(2 k - 1) ... ν_1 ν_(2 k)))_α^δ
-$ <eq-gamma-chisholm-even>
+$ #anchor("eq-gamma-chisholm-even")
 
 Special two-interior case:
 $
   γ^μ_α^β γ^ν_β^χ γ^ρ_χ^λ γ_(μ,λ)^δ
   = 4 η^(ν ρ) δ_α^δ
-$ <eq-gamma-chisholm-two>
+$ #anchor("eq-gamma-chisholm-two")
 
 FORM source comment:
 ```c
@@ -288,14 +298,15 @@ chain(bis(4,a),bis(4,d),
 ```
 Assumptions: The contracted Lorentz label must belong to a four-dimensional Lorentz representation. The source code checks dimension equality with `4` before applying the Chisholm branches.
 
-== G7. Gamma-five and epsilon rules <rule-gamma-five>
+== G7. Gamma-five and epsilon rules
+#anchor("rule-gamma-five")
 
 FORM `trace4` uses the four-dimensional identity:
 $
   γ^μ γ^ν γ^ρ
   = ε^(μ ν ρ σ) γ_5 γ_σ
   + η^(μ ν) γ^ρ - η^(μ ρ) γ^ν + η^(ν ρ) γ^μ
-$ <eq-gamma-trick>
+$ #anchor("eq-gamma-trick")
 
 Source comment:
 ```c
@@ -337,13 +348,14 @@ This is explicitly four-dimensional and requires a fresh dummy Lorentz label `si
   [`simpli` strategy], [procedure], [Eliminate f tensors in environments of invariants using generalized Jacobi moves.],
 )
 
-== C1. Open color-line joining <rule-color-line-join>
+== C1. Open color-line joining
+#anchor("rule-color-line-join")
 
 Mathematical identity:
 $
   (T^(a_1) ... T^(a_m))_i^j (T^(b_1) ... T^(b_n))_j^k
   = (T^(a_1) ... T^(a_m) T^(b_1) ... T^(b_n))_i^k
-$ <eq-color-line-join>
+$ #anchor("eq-color-line-join")
 
 FORM source:
 ```form
@@ -366,16 +378,17 @@ chain(cof(Nc,j),dind(cof(Nc,k)),
        t(coad(Nc^2-1,b1),in,out))
 ```
 
-== C2. Trace closure and trace normalization <rule-color-trace>
+== C2. Trace closure and trace normalization
+#anchor("rule-color-trace")
 
 Closed line:
-$ (T^(a_1) ... T^(a_n))_i^i = op("tr")_R (T^(a_1) ... T^(a_n)) $ <eq-color-trace-closure>
+$ (T^(a_1) ... T^(a_n))_i^i = op("tr")_R (T^(a_1) ... T^(a_n)) $ #anchor("eq-color-trace-closure")
 
 One generator:
-$ op("tr")_R (T^a) = 0 $ <eq-color-trace-one>
+$ op("tr")_R (T^a) = 0 $ #anchor("eq-color-trace-one")
 
 Two generators:
-$ op("tr")_R (T^a T^b) = T_R δ^(a b) $ <eq-color-trace-two>
+$ op("tr")_R (T^a T^b) = T_R δ^(a b) $ #anchor("eq-color-trace-two")
 
 FORM source:
 ```form
@@ -396,15 +409,16 @@ chain(cof(Nc,i),dind(cof(Nc,i)),
   -> TR * g(coad(Nc^2-1,a),coad(Nc^2-1,b))
 ```
 
-== C3. Fundamental Casimir and adjacent contractions <rule-color-casimir>
+== C3. Fundamental Casimir and adjacent contractions
+#anchor("rule-color-casimir")
 
 Mathematical identities:
-$ (T^a)_i^j (T^a)_j^k = C_F δ_i^k $ <eq-color-casimir-fund>
+$ (T^a)_i^j (T^a)_j^k = C_F δ_i^k $ #anchor("eq-color-casimir-fund")
 
 $
   op("tr")_R (T^a T^b T^a op("product")(X))
   = (C_F - C_A / 2) op("tr")_R (T^b op("product")(X))
-$ <eq-color-casimir-inside-trace>
+$ #anchor("eq-color-casimir-inside-trace")
 
 FORM source:
 ```form
@@ -422,13 +436,14 @@ chain(cof(Nc,i),dind(cof(Nc,k)),
 ```
 Assumptions: `color.h` keeps `C_F` as `cR`, not automatically as $(N_c^2 - 1) / (2 N_c)$.
 
-== C4. Fundamental Fierz generator contraction <rule-color-fierz>
+== C4. Fundamental Fierz generator contraction
+#anchor("rule-color-fierz")
 
 Mathematical identity:
 $
   (T^a)_i^j (T^a)_k^l
   = T_R (δ_i^l δ_k^j - N_c^(-1) δ_i^j δ_k^l)
-$ <eq-color-fierz>
+$ #anchor("eq-color-fierz")
 
 This identity is not written in this explicit form in `color.h`, whose main algorithm uses trace joining and invariant reductions. It is implemented directly in GammaLoop/idenso:
 ```rs
@@ -448,12 +463,13 @@ t(coad(Nc^2-1,a),cof(Nc,i),dind(cof(Nc,j)))
        * g(cof(Nc,k),dind(cof(Nc,l))) / Nc)
 ```
 
-== C5. Structure-constant loop contractions <rule-color-ff>
+== C5. Structure-constant loop contractions
+#anchor("rule-color-ff")
 
 Mathematical identities:
-$ f^(a c d) f^(b c d) = C_A δ^(a b) $ <eq-color-ff-two>
+$ f^(a c d) f^(b c d) = C_A δ^(a b) $ #anchor("eq-color-ff-two")
 
-$ f^(a b e) f^(b c f) f^(c a g) = C_A / 2 f^(e f g) $ <eq-color-fff-three>
+$ f^(a b e) f^(b c f) f^(c a g) = C_A / 2 f^(e f g) $ #anchor("eq-color-fff-three")
 
 FORM source:
 ```form
@@ -471,13 +487,14 @@ f(coad(Nc^2-1,a),coad(Nc^2-1,c),coad(Nc^2-1,d))
 ```
 Sign note: FORM's `ReplaceLoop` loop orientation produces `-cA*d_(...)` for the two-argument cyclic helper. The standard identity above assumes the displayed orientation $f^(a c d) f^(b c d)$.
 
-== C6. Mixed trace--structure contraction <rule-color-trace-f>
+== C6. Mixed trace--structure contraction
+#anchor("rule-color-trace-f")
 
 Mathematical identity:
 $
   op("tr")_R (T^a T^b op("product")(X)) f^(a b c)
   = i C_A / 2 op("tr")_R (T^c op("product")(X))
-$ <eq-color-trace-f>
+$ #anchor("eq-color-trace-f")
 
 FORM source:
 ```form
@@ -498,14 +515,15 @@ trace(cof(Nc),
        rest__)
 ```
 
-== C7. Symmetric invariant contractions <rule-color-dd>
+== C7. Symmetric invariant contractions
+#anchor("rule-color-dd")
 
 `color.h` uses `cOldR` and `cOldA` for symmetric invariant tensors and reduces contractions to named invariants such as `d33`, `d44`, and `d55`.
 
 Representative identities:
-$ d_R^(a b c) d_R^(a b d) = d_(33)(R,R) δ^(c d) / N_A $ <eq-color-d33-partial>
+$ d_R^(a b c) d_R^(a b d) = d_(33)(R,R) δ^(c d) / N_A $ #anchor("eq-color-d33-partial")
 
-$ d_X^(a b c) d_Y^(a b c) = d_(33)(X,Y) $ <eq-color-d33-full>
+$ d_X^(a b c) d_Y^(a b c) = d_(33)(X,Y) $ #anchor("eq-color-d33-full")
 
 FORM source:
 ```form
@@ -527,7 +545,8 @@ d(sym_rep_x,coad(Nc^2-1,a),coad(Nc^2-1,b),coad(Nc^2-1,c))
 ```
 Assumptions: The package treats these as group-invariant placeholders rather than expanding them into $N_c$ polynomials.
 
-== C8. `simpli` and generalized Jacobi strategy <rule-color-simpli>
+== C8. `simpli` and generalized Jacobi strategy
+#anchor("rule-color-simpli")
 
 `simpli` is an implementation strategy, not one scalar identity. It eliminates pairs of structure constants in environments of symmetric invariants and applies generalized Jacobi transformations.
 
@@ -587,7 +606,7 @@ Implementation rules:
 
 == Gamma Collection Patterns
 
-Mathematical identity: @eq-gamma-chain-product. Source: #source(dirac-rs + "#L604-L613").
+Mathematical identity: #ref(anchor("eq-gamma-chain-product")). Source: #source(dirac-rs + "#L604-L613").
 
 Raw gamma pair:
 ```rs
@@ -627,7 +646,7 @@ chain(bis(d_,a_),bis(d_,b_),xs___)
 
 == Gamma Terminal and Trace Patterns
 
-Mathematical identity: @eq-gamma-trace-closure.
+Mathematical identity: #ref(anchor("eq-gamma-trace-closure")).
 
 ```rs
 chain(bis(d_,a_),bis(d_,a_),xs___)
@@ -656,7 +675,7 @@ GammaLoop/idenso currently has the equivalent repeated-object contraction in Rus
 
 == Gamma Chisholm and Trace Recursion Builders
 
-Mathematical identities: @eq-gamma-chisholm-odd, @eq-gamma-chisholm-even, and @eq-gamma-even-trace. Source: #source(opera + "#L670-L680"), #source(opera + "#L978-L1012"), #source(opera + "#L1021-L1096"), #source(opera + "#L1118-L1157").
+Mathematical identities: #ref(anchor("eq-gamma-chisholm-odd")), #ref(anchor("eq-gamma-chisholm-even")), and #ref(anchor("eq-gamma-even-trace")). Source: #source(opera + "#L670-L680"), #source(opera + "#L978-L1012"), #source(opera + "#L1021-L1096"), #source(opera + "#L1118-L1157").
 
 Match contracted endpoints in four dimensions:
 ```rs
@@ -698,7 +717,7 @@ Builder rule: if the trace length is odd, return zero. If the length is two, ret
 
 == Color Collection Patterns
 
-Mathematical identity: @eq-color-line-join.
+Mathematical identity: #ref(anchor("eq-color-line-join")).
 
 Raw generator pair:
 ```rs
@@ -727,7 +746,7 @@ The first two rules correspond to `color.h` line joining and trace closure at pa
 
 == Color Trace and Casimir Patterns
 
-Mathematical identity: @eq-color-trace-closure and @eq-color-trace-two.
+Mathematical identity: #ref(anchor("eq-color-trace-closure")) and #ref(anchor("eq-color-trace-two")).
 
 ```rs
 chain(cof(nc_,i_),dind(cof(nc_,i_)),xs___)
@@ -1088,60 +1107,60 @@ The SU checker procedure uses $T_R = a$, $C_F = a (N_F^2 - 1) / N_F$, $C_A = 2 a
   [Rule], [Identity], [Equation label], [Primary source],
   [G1],
   [$γ(v)_α^β γ(w)_β^χ = (Γ^(v w))_α^χ$],
-  [@eq-gamma-chain-join],
+  [#ref(anchor("eq-gamma-chain-join"))],
   [#source(opera + "#L715-L745"); #source(dirac-rs + "#L604-L613")],
 
-  [G2], [chain orientation], [@eq-gamma-orientation], [#source(sym-pattern); #source(spenso-doc)],
+  [G2], [chain orientation], [#ref(anchor("eq-gamma-orientation"))], [#source(sym-pattern); #source(spenso-doc)],
   [G3],
   [$γ^μ_α^β γ_(μ,β)^χ = D δ_α^χ$],
-  [@eq-gamma-metric-contract],
+  [#ref(anchor("eq-gamma-metric-contract"))],
   [#source(opera + "#L958-L972"); #source(dirac-rs + "#L784-L829")],
 
   [G4],
   [$(Γ^(v_1 ... v_n))_α^α$],
-  [@eq-gamma-trace-closure],
+  [#ref(anchor("eq-gamma-trace-closure"))],
   [#source(opera + "#L730-L745"); #source(dirac-rs + "#L877-L879")],
 
   [G5],
   [odd trace zero, two trace],
-  [@eq-gamma-odd-trace, @eq-gamma-two-trace],
+  [#ref(anchor("eq-gamma-odd-trace")), #ref(anchor("eq-gamma-two-trace"))],
   [#source(opera + "#L424-L432"); #source(opera + "#L830-L856")],
 
   [G6],
   [Chisholm odd/even],
-  [@eq-gamma-chisholm-odd, @eq-gamma-chisholm-even],
+  [#ref(anchor("eq-gamma-chisholm-odd")), #ref(anchor("eq-gamma-chisholm-even"))],
   [#source(opera + "#L670-L680"); #source(opera + "#L978-L1012"); #source(opera + "#L1118-L1157")],
 
   [G7],
   [gamma-five/equation epsilon trick],
-  [@eq-gamma-trick],
+  [#ref(anchor("eq-gamma-trick"))],
   [#source(opera + "#L320-L329"); #source(opera + "#L480-L489")],
 
   [C1],
   [open color-line joining],
-  [@eq-color-line-join],
+  [#ref(anchor("eq-color-line-join"))],
   [`color.h` lines 91--93, #source(color-src); #source(color-doc)],
 
   [C2],
   [trace closure and $T_R$],
-  [@eq-color-trace-closure, @eq-color-trace-two],
+  [#ref(anchor("eq-color-trace-closure")), #ref(anchor("eq-color-trace-two"))],
   [`color.h` lines 459--461, #source(color-src)],
 
   [C3],
   [Casimir inside trace],
-  [@eq-color-casimir-fund, @eq-color-casimir-inside-trace],
+  [#ref(anchor("eq-color-casimir-fund")), #ref(anchor("eq-color-casimir-inside-trace"))],
   [`color.h` lines 108--111, #source(color-src)],
 
-  [C4], [fundamental Fierz], [@eq-color-fierz], [#source(color-rs + "#L407-L414")],
+  [C4], [fundamental Fierz], [#ref(anchor("eq-color-fierz"))], [#source(color-rs + "#L407-L414")],
   [C5],
   [$f f$ and $f f f$],
-  [@eq-color-ff-two, @eq-color-fff-three],
+  [#ref(anchor("eq-color-ff-two")), #ref(anchor("eq-color-fff-three"))],
   [`color.h` lines 148--150 and 505--507, #source(color-src)],
 
-  [C6], [trace--$f$ contraction], [@eq-color-trace-f], [`color.h` lines 108--111 and 173--175, #source(color-src)],
+  [C6], [trace--$f$ contraction], [#ref(anchor("eq-color-trace-f"))], [`color.h` lines 108--111 and 173--175, #source(color-src)],
   [C7],
   [`d33` contractions],
-  [@eq-color-d33-partial, @eq-color-d33-full],
+  [#ref(anchor("eq-color-d33-partial")), #ref(anchor("eq-color-d33-full"))],
   [`color.h` lines 1287--1294 and 1316--1335, #source(color-src)],
 
   [C8], [`simpli` strategy], [`<rule-color-simpli>`], [`color.h` lines 688--713, #source(color-src)],
@@ -1179,21 +1198,26 @@ Source snippets appear next to each detailed rule above. Symbolica/spenso patter
 
 == Typst compile result
 
-Typst version:
-```sh
+The pre-migration standalone source recorded this successful environment:
+```text
 typst 0.14.2 (b33de9de)
 ```
 
-Compilation command attempted:
+Its captured compilation command was:
 ```sh
 typst compile form_gamma_color_rules_from_scratch.typ form_gamma_color_rules_from_scratch.pdf
 ```
 
-Result: succeeded. The PDF file `form_gamma_color_rules_from_scratch.pdf` was produced.
+That historical command succeeded and produced `form_gamma_color_rules_from_scratch.pdf`; the
+old filename is evidence, not the current source path. The maintained specification now builds
+through the Idenso product route and complete PDF with:
+```sh
+cargo run --locked -p alphal00p-docs-builder -- build --product idenso --channel latest --output /tmp/idenso-docs --skip-rustdoc
+```
 
 == Static checks
 
-Checks run against this Typst source:
+Checks captured against the pre-migration Typst filename:
 ```sh
 rg -n '\b\x70rod\b' form_gamma_color_rules_from_scratch.typ
 rg -n 'tr_[A-Za-z]+\(|Tr_[A-Za-z]+\(|op\("tr"\)_[A-Za-z]+\(' form_gamma_color_rules_from_scratch.typ
@@ -1255,3 +1279,6 @@ cd /tmp/form-color && form -q su-gloop.frm
 - spenso symbolic tensor-library source: #source(spenso-symbolic).
 - Typst syntax: #source(typst-syntax).
 - Typst math: #source(typst-math).
+]
+
+#let form-color-dirac = form-color-dirac-content("page")

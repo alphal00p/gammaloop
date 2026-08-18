@@ -623,10 +623,10 @@ shows that recent modification dates and working links are insufficient.
 
 The accepted delivery flow is now clear: `docs` is temporary PR staging and
 `main` is authoritative after merge. The automation should encode that flow.
-A `docs` push or pull request should build the complete preview and quality
-report without promoting `latest`; the merged `main` revision should deploy the
-already-reviewed artifact. This is a workflow-enforcement task, not a choice
-between two long-lived documentation sources.
+Updates to `docs` should build the complete preview and quality report through
+its pull request without promoting `latest`; the merged `main` revision should
+rebuild and deploy the reviewed sources. This is a workflow-enforcement task,
+not a choice between two long-lived documentation sources.
 
 The Pages workflow currently has no pull-request trigger, and its validation
 set differs from the full unit-test group for the six documentation crates. A
@@ -646,8 +646,9 @@ Link validation has additional blind spots:
 *Required change*
 
 - Add one required, path-routed “Documentation quality” pull-request check.
-- Build and retain the complete rendered preview artifact on `docs` and pull
-  requests, but do not let those revisions mutate production `latest`.
+- Build and retain the complete rendered preview artifact on pull requests,
+  including the temporary `docs` staging pull request, but do not let those
+  revisions mutate production `latest`.
 - Promote `latest` only from merged `main`; keep scheduled mutable builds on
   `main` and preserve tag-triggered immutable snapshots independently.
 - Run content checks for content-only changes and the full six-crate docs test
@@ -658,8 +659,8 @@ Link validation has additional blind spots:
 *Complete when*
 
 - no production deployment is the first full validation of its commit;
-- a `docs` push produces a preview but cannot change `latest`, while the merged
-  `main` commit can publish it;
+- an update to the `docs` staging pull request produces a preview but cannot
+  change `latest`, while the merged `main` commit can publish it;
 - local links, fragments, Rustdoc, repository source paths, search entries,
   redirects, and asset references have zero failures;
 - link resolution cannot escape the generated root;
@@ -793,7 +794,7 @@ light and dark modes at 375 px, 768 px, and desktop width.
   [`DOC-010`], [P1], [Enforce developer-architecture freshness and verified code scopes], [Every current note is owned, recently reviewed, scope-clean, symbol-valid, and contextually linked; changed scopes block publication pending owner review],
   [`DOC-011`], [P1], [Make release/version/tool claims generated and complete], [Manifest-to-release coverage is current for every component],
   [`DOC-012`], [P1], [Use ecosystem metadata for task navigation and bidirectional manual/reference links], [Task chooser and contextual cross-link fixtures pass],
-  [`DOC-013`], [P1], [Add the PR quality gate and enforce docs-preview/main-promotion flow], [`docs` retains a complete preview but cannot mutate `latest`; merged `main` deploys],
+  [`DOC-013`], [P1], [Add the PR quality gate and enforce docs-preview/main-promotion flow], [The temporary `docs` pull request retains a complete preview but cannot mutate `latest`; merged `main` deploys],
   [`DOC-014`], [P1], [Complete link, source-path, containment, and redirect validation], [Zero internal failures, including Rustdoc; external report is scheduled],
   [`DOC-015`], [P2], [Add browser, HTML, accessibility, spelling, and no-JS checks], [Zero HTML errors and serious/critical axe findings on representative pages],
   [`DOC-016`], [P2], [Federate search and add edit/report feedback routes], [Task and symbol fixtures rank the correct page in the first five results],

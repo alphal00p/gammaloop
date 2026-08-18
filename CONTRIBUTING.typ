@@ -148,7 +148,9 @@ These rules are intentionally broad and should shape most code changes.
   Cargo, and package indexes discover the latter. Keep those files concise and
   link them to the canonical Typst documentation.
 - Do not add a separately maintained `README.typ`; the compatibility README is
-  its own deliberately small source.
+  its own deliberately small source. This applies in every directory. Changing
+  extension spelling or case (`.MD`, `.mdx`, `.HTML`, `.TYP`, and similar) does
+  not create another exception; canonical Typst sources use lowercase `.typ`.
 - Existing Markdown and HTML prose is legacy migration debt, not precedent for
   new files. Any change to its authored content must migrate the canonical
   source to Typst and update every registry and link in the same change instead
@@ -159,9 +161,9 @@ These rules are intentionally broad and should shape most code changes.
   `docs/developers.toml`. New entries must point directly to `.typ` sources.
   Each source begins with exactly one `= Title`, matching its registry title;
   the builder supplies the page-level heading and verifies that contract.
-- `docs/legacy-prose.toml` is the exact, shrinking inventory of pre-policy
-  Markdown/HTML debt. Update it only while removing or migrating an entry; the
-  documentation check rejects additions and parallel editable copies.
+- `docs/legacy-prose.toml` records that the pre-policy prose migration is
+  complete. Its inventory must remain empty; the documentation check rejects
+  additions and parallel editable copies.
 
 ==== Typst Graph Debugging
 

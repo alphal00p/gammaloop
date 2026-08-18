@@ -1,34 +1,34 @@
-# Changelog
+= Changelog
 
 All notable changes to this project will be documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+The format is based on #link("https://keepachangelog.com/en/1.0.0/")[Keep a Changelog],
+and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semantic Versioning].
 
-## [Unreleased]
+== Unreleased
 
-## [0.5.6](https://github.com/alphal00p/spenso/compare/spenso-v0.5.5...spenso-v0.5.6) - 2026-01-08
+== #link("https://github.com/alphal00p/spenso/compare/spenso-v0.5.5...spenso-v0.5.6")[0.5.6] - 2026-01-08
 
-### Fixed
+=== Fixed
 
-- fix python_stub_gen feature
+- fix `python_stub_gen` feature
 - fix metric initialization and update to symbolica 1.2
 
-### Other
+=== Other
 
 - update linnet
 
-## [0.5.5](https://github.com/alphal00p/spenso/compare/spenso-v0.5.4...spenso-v0.5.5) - 2025-12-15
+== #link("https://github.com/alphal00p/spenso/compare/spenso-v0.5.4...spenso-v0.5.5")[0.5.5] - 2025-12-15
 
-### Fixed
+=== Fixed
 
 - fix canonization in presence of duals
 - fix sum normalization in network parsing
 - fix warnings
 - fix overflowing slot order
-- fix add_assign with sparse tensors
+- fix `add_assign` with sparse tensors
 
-### Other
+=== Other
 
 - Update symbolica to 1.1.0
 - update linnet
@@ -38,7 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - update linnet
 - add readmes
 - formatting and add ref for parametric
-- update to 0.17 pyo3_stub_gen
+- update to 0.17 `pyo3_stub_gen`
 - update linnet and make classattr to classmethods
 - Release spenso-macros 0.3
 - update to symbolica 1.0
@@ -51,7 +51,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - update to linnet 0.13.1
 - working canonize (up to functions) and dirac adjoint
 - spenso canonize buggy
-- robust_conj but with lots of gamma_0s
+- `robust_conj` but with lots of `gamma_0s`
 - first try conj
 - update python api
 - working pow and fun execution
@@ -60,9 +60,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - implement function library trait
 - add function generic key
 
-## [0.5.3](https://github.com/alphal00p/spenso/compare/spenso-v0.5.2...spenso-v0.5.3) - 2025-08-18
+== #link("https://github.com/alphal00p/spenso/compare/spenso-v0.5.2...spenso-v0.5.3")[0.5.3] - 2025-08-18
 
-### Other
+=== Other
 
 - update linnet to crates
 - all tests pass
@@ -77,18 +77,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - update parse problem and add spenso:: to all symbols
 - remove expand
 
-## [0.5.2](https://github.com/alphal00p/spenso/compare/spenso-v0.5.1...spenso-v0.5.2) - 2025-07-15
+== #link("https://github.com/alphal00p/spenso/compare/spenso-v0.5.1...spenso-v0.5.2")[0.5.2] - 2025-07-15
 
-### Other
+=== Other
 
 - remove printout
 
-## [0.5.1](https://github.com/alphal00p/spenso/compare/spenso-v0.5.0...spenso-v0.5.1) - 2025-07-15
+== #link("https://github.com/alphal00p/spenso/compare/spenso-v0.5.0...spenso-v0.5.1")[0.5.1] - 2025-07-15
 
-### Fixed
+=== Fixed
 
 - fix gamma algebra≈
 
-### Other
+=== Other
 
 - allow arbitrary arguments for to dots

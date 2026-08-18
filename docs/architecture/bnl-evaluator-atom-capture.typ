@@ -1,4 +1,21 @@
-```bash
+= BNL evaluator-atom capture
+<bnl-evaluator-atom-capture>
+#quote(block: true)[
+#strong[Lifecycle:] Archived, non-reproducible evidence
+
+#strong[Provenance gap:] The original capture recorded neither a source revision nor a date,
+machine description, fixture digest, or Symbolica version. Its shell prompt reports GammaLoop
+`0.3.3`, Python `3.13.12`, Rust `1.93.1`, and an impure Nix environment. Preserve the output as
+historical diagnostic evidence; do not use its timings or memory sizes as a current benchmark.
+]
+
+The retained command exercises the BNL evaluator-atom example with scalar aliasing enabled. A
+future reproducible comparison must name the revision, hash the input fixture, capture the Nix
+flake revision and hardware, and state the expected result before comparing against this record.
+The companion #link("bnl-scalar-alias-capture.typ")[BNL scalar-alias capture] preserves the four
+threshold-4096 expression payloads from the same input atom as a hashed ANSI data artifact.
+
+```text
 gammaloop/workspaces/dev is 📦 v0.3.3 via 🐍 v3.13.12 via 🦀 v1.93.1 via ❄️  impure (nix-shell-env)
 ❯ cargo run -p gammalooprs --example bnl_evaluator_atom_mwe --profile dev-optim -- examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_unfiltered_pre_network.sym --alias-scalars 8
     Finished `dev-optim` profile [optimized + debuginfo] target(s) in 0.31s

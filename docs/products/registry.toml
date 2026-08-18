@@ -9,8 +9,10 @@ source = "docs/products/gammaloop/main.typ"
 citation = { title = "γLoop: Automated numerical calculations in perturbative quantum field theory with Local Unitarity", creators = ["Zeno Capatti", "Mathijs Fraaije", "Valentin Hirschi", "Lucien Huber", "Ben Ruijl"], year = 2023, repository = "https://github.com/alphal00p/gammaloop" }
 pages = [
   { id = "overview", title = "Overview", summary = "What GammaLoop computes, how stateful runs fit together, and where the surrounding libraries begin.", source = "docs/products/gammaloop/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
-  { id = "tutorial", title = "First calculation", summary = "Build GammaLoop, run a maintained card, inspect its state, and resume the calculation.", source = "docs/products/gammaloop/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
+  { id = "tutorial", title = "Create your first state", summary = "Build GammaLoop, generate a maintained example process, inspect its persisted state, and resume it.", source = "docs/products/gammaloop/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
   { id = "process-generation", title = "Process generation", summary = "Process grammar, generation modes, filters, grouping, and the path from diagrams to evaluation.", source = "docs/products/gammaloop/content/process-generation.typ", symbol = "process-generation", route = "manual/process-generation/", group = "Manual" },
+  { id = "diagnostics", title = "Logging and diagnostics", summary = "Startup precedence, filter syntax, stable pipeline tags, sink routing, and focused troubleshooting workflows.", source = "docs/products/gammaloop/content/diagnostics.typ", symbol = "diagnostics", route = "manual/diagnostics/", group = "Manual" },
+  { id = "kurvst", title = "Kurvst curve and path API", summary = "Bezier and Hobby paths, trimming, patterns, parallel curves, and CeTZ conversion for GammaLoop drawing templates.", source = "docs/products/gammaloop/content/kurvst.typ", symbol = "kurvst", route = "manual/kurvst/", group = "Manual" },
   { id = "interfaces", title = "CLI, Rust, and Python APIs", summary = "Choose an interface, understand precision behavior, and find the relevant API reference.", source = "docs/products/gammaloop/content/api.typ", symbol = "api", route = "manual/interfaces/", group = "Manual" },
   { id = "releases", title = "Releases and change history", summary = "Published versions, compatibility changes, and practical upgrade guidance.", source = "docs/products/gammaloop/content/changelog.typ", symbol = "changelog", route = "manual/releases/", group = "Manual" },
 ]
@@ -33,10 +35,11 @@ pages = [
   { id = "overview", title = "Overview", summary = "Half-edge graphs, subgraph-first operations, typed indices, and the boundaries of the Linnet ecosystem.", source = "docs/products/linnet/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
   { id = "tutorial", title = "Build and explore a graph", summary = "Construct a small graph, inspect its half-edges, and apply a first subgraph-aware operation.", source = "docs/products/linnet/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
   { id = "algorithms", title = "Graph algorithms", summary = "Traversal, connectivity, cycles, cuts, mutation boundaries, DOT interchange, and drawing.", source = "docs/products/linnet/content/algorithms.typ", symbol = "algorithms", route = "manual/algorithms/", group = "Manual" },
+  { id = "linnest", title = "Linnest Typst API", summary = "The complete Typst and WebAssembly manual for Linnet graph construction, layout, queries, and drawing.", source = "docs/products/linnet/content/linnest.typ", symbol = "linnest", route = "manual/linnest/", group = "Manual" },
   { id = "interfaces", title = "Rust and Python interfaces", summary = "Rust crates, feature flags, typed identifiers, and the Linnet Python package.", source = "docs/products/linnet/content/api.typ", symbol = "api", route = "manual/interfaces/", group = "Manual" },
   { id = "releases", title = "Releases and change history", summary = "Published versions, compatibility changes, and practical upgrade guidance.", source = "docs/products/linnet/content/changelog.typ", symbol = "changelog", route = "manual/releases/", group = "Manual" },
 ]
-changelog = "crates/linnet/CHANGELOG.md"
+changelog = "crates/linnet/CHANGELOG.typ"
 related = ["spenso", "gammaloop"]
 rust_components = [
   { id = "linnet", package = "linnet", kind = "library", version_source = "crates/linnet/Cargo.toml", features = ["nodestore-vec", "serde", "bincode", "drawing", "symbolica"] },
@@ -59,7 +62,7 @@ pages = [
   { id = "interfaces", title = "Rust, macros, and Python", summary = "Core Rust APIs, derive macros, HEP helpers, feature flags, and Python bindings.", source = "docs/products/spenso/content/api.typ", symbol = "api", route = "manual/interfaces/", group = "Manual" },
   { id = "releases", title = "Releases and change history", summary = "Published versions, compatibility changes, and practical upgrade guidance.", source = "docs/products/spenso/content/changelog.typ", symbol = "changelog", route = "manual/releases/", group = "Manual" },
 ]
-changelog = "crates/spenso/CHANGELOG.md"
+changelog = "crates/spenso/CHANGELOG.typ"
 related = ["linnet", "idenso", "gammaloop"]
 rust_components = [
   { id = "spenso", package = "spenso", kind = "library", version_source = "crates/spenso/Cargo.toml", features = ["shadowing"] },
@@ -80,10 +83,11 @@ pages = [
   { id = "overview", title = "Overview", summary = "Symbolic tensor identities, controlled rewrite stages, representation setup, and reversible cooking.", source = "docs/products/idenso/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
   { id = "tutorial", title = "A controlled identity pass", summary = "Initialize representations, inspect indices, apply a focused rewrite, and verify the result.", source = "docs/products/idenso/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
   { id = "algebra", title = "Algebra and rewrites", summary = "Index tooling, cooking, metric, epsilon, Dirac, color, and Schoonschip network parsing.", source = "docs/products/idenso/content/algebra.typ", symbol = "algebra", route = "manual/algebra/", group = "Manual" },
+  { id = "form-color-dirac", title = "FORM Gamma- and Color-Algebra Simplification Rules", summary = "A source-backed specification of FORM gamma and color identities, their Symbolica and Spenso pattern forms, validation cases, and implementation constraints.", source = "docs/products/idenso/content/form-symbolica-color-and-dirac.typ", symbol = "form-color-dirac", route = "manual/form-color-dirac/", group = "Manual" },
   { id = "interfaces", title = "Rust and Python interfaces", summary = "Rewrite families, macros, feature flags, and the Symbolica Python module.", source = "docs/products/idenso/content/api.typ", symbol = "api", route = "manual/interfaces/", group = "Manual" },
   { id = "releases", title = "Releases and change history", summary = "Published versions, compatibility changes, and practical upgrade guidance.", source = "docs/products/idenso/content/changelog.typ", symbol = "changelog", route = "manual/releases/", group = "Manual" },
 ]
-changelog = "crates/idenso/CHANGELOG.md"
+changelog = "crates/idenso/CHANGELOG.typ"
 related = ["spenso", "gammaloop"]
 rust_components = [
   { id = "idenso", package = "idenso", kind = "library", version_source = "crates/idenso/Cargo.toml", features = ["bincode", "reference-cases"] },
@@ -100,7 +104,7 @@ source = "docs/products/vakint/main.typ"
 citation = { title = "Vakint", creators = ["Lucien Huber", "Valentin Hirschi"], year = 2026, repository = "https://github.com/alphal00p/vakint" }
 pages = [
   { id = "overview", title = "Overview", summary = "Topology matching, canonicalization, tensor reduction, evaluation backends, and reproducibility.", source = "docs/products/vakint/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
-  { id = "tutorial", title = "Match your first integral", summary = "Configure a dependency-free engine, parse a vacuum integral, canonicalize it, and inspect the match.", source = "docs/products/vakint/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
+  { id = "tutorial", title = "Match your first integral", summary = "Configure a matching-only engine, parse a vacuum integral, canonicalize it, and inspect the match.", source = "docs/products/vakint/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
   { id = "evaluation", title = "Matching and evaluation", summary = "Parsing, topology matching, normalization, tensor reduction, and backend selection.", source = "docs/products/vakint/content/evaluation.typ", symbol = "evaluation", route = "manual/evaluation/", group = "Manual" },
   { id = "interfaces", title = "Rust and Python interfaces", summary = "Engine types, settings, expression formats, and the Symbolica Python module.", source = "docs/products/vakint/content/api.typ", symbol = "api", route = "manual/interfaces/", group = "Manual" },
   { id = "releases", title = "Versions and compatibility", summary = "Published versions, compatibility changes, and practical upgrade guidance.", source = "docs/products/vakint/content/changelog.typ", symbol = "changelog", route = "manual/releases/", group = "Manual" },

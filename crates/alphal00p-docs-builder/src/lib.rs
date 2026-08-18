@@ -6,16 +6,21 @@ mod watch;
 pub use watch::WatchRequest;
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     env, fs,
+    ops::Range,
     path::{Component, Path, PathBuf},
     process::Command,
 };
 
 use alphal00p_docs_schema::{
     ApiLanguage, DocCatalog, DocFormat, DocItem, DocMember, DocScope, SCHEMA_VERSION,
-    generated::{GENERATED_REFERENCE_SCHEMA, GammaLoopReference, VakintReference},
+    generated::{
+        CliAliasKind, CliArgumentAction, GENERATED_REFERENCE_SCHEMA, GammaLoopReference,
+        VakintReference,
+    },
 };
+use chrono::{NaiveDate, Utc};
 use clap::ValueEnum;
 use eyre::{Context, ContextCompat, Result, bail, ensure};
 use regex::Regex;
@@ -39,9 +44,10 @@ const PORTAL_GRAPH_IDS: [&str; 11] = [
     "epem-ttbar-cut",
 ];
 const PORTAL_SCHEMA_VERSION: u32 = 2;
-const DEVELOPER_SCHEMA_VERSION: u32 = 2;
+const DEVELOPER_SCHEMA_VERSION: u32 = 3;
 const LEGACY_PROSE_SCHEMA_VERSION: u32 = 1;
 const PUBLICATION_SCHEMA_VERSION: u32 = 1;
+const PUBLISHED_DOCS_ROOT: &str = "https://alphal00p.github.io/gammaloop";
 const STRICT_RUSTDOC_FLAGS: &str = "-D rustdoc::broken_intra_doc_links \
     -D rustdoc::invalid_html_tags -D rustdoc::bare_urls";
 
@@ -78,10 +84,117 @@ struct ProductBuildOptions<'a> {
     channel: BuildChannel,
     tag: Option<&'a str>,
     output: &'a Path,
+    scope: BuildScope,
     include_typst: bool,
     include_rustdoc: bool,
     rustdoc_target_root: Option<&'a Path>,
     dependency_output: Option<&'a Path>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum BuildScope {
+    FullSite,
+    ProductPreview,
+}
+
+type LinkedPageIndex = HashMap<PathBuf, (HashSet<String>, Option<String>)>;
+type LocalPathIndex = HashMap<PathBuf, Option<fs::FileType>>;
+type LinkRewriteIndex = HashMap<PathBuf, Vec<LinkRewrite>>;
+type LinkValidationState<'a> = (
+    &'a mut LinkedPageIndex,
+    &'a mut LinkRewriteIndex,
+    &'a mut LocalPathIndex,
+);
+
+#[derive(Clone, Debug)]
+struct LinkAttribute {
+    attribute_range: Range<usize>,
+    target_range: Range<usize>,
+    attribute: String,
+}
+
+#[derive(Clone, Debug)]
+struct LinkRewrite {
+    range: Range<usize>,
+    expected: String,
+    replacement: String,
+    target_before: String,
+    target_after: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+struct LinkReference<'a> {
+    source: &'a Path,
+    href: &'a str,
+    attribute: Option<LinkAttribute>,
+    rustdoc: bool,
+}
+
+struct LinkValidationPatterns {
+    script_body: Regex,
+    html_comment: Regex,
+    tag: Regex,
+    href: Regex,
+    id: Regex,
+    name: Regex,
+    named_anchor: Regex,
+    redirect: Regex,
+}
+
+impl LinkValidationPatterns {
+    fn new() -> Result<Self> {
+        Ok(Self {
+            script_body: Regex::new(r"(?is)(<script\b[^>]*>).*?(</script\s*>)")?,
+            html_comment: Regex::new(r"(?is)<!--.*?-->")?,
+            tag: Regex::new(r"(?is)<[a-z][a-z0-9-]*\b[^>]*>")?,
+            href: Regex::new(
+                r#"(?i)(?:^|\s)(?:href|src)\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s"'=<>`]+))"#,
+            )?,
+            id: Regex::new(r#"(?i)(?:^|\s)id\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))"#)?,
+            name: Regex::new(r#"(?i)(?:^|\s)name\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))"#)?,
+            named_anchor: Regex::new(r"(?i)^<a\b")?,
+            redirect: Regex::new(
+                r#"(?i)<meta\b[^>]*\bcontent\s*=\s*["'][^"']*\burl=([^"']+)["'][^>]*>"#,
+            )?,
+        })
+    }
+
+    fn rendered_html(&self, html: &str) -> String {
+        let mut rendered = html.as_bytes().to_vec();
+        for comment in self.html_comment.find_iter(html) {
+            rendered[comment.range()].fill(b' ');
+        }
+        for script in self.script_body.captures_iter(html) {
+            let opening = script.get(1).expect("script opening capture");
+            let closing = script.get(2).expect("script closing capture");
+            rendered[opening.end()..closing.start()].fill(b' ');
+        }
+        String::from_utf8(rendered).expect("masking HTML with spaces preserves UTF-8")
+    }
+
+    fn page_metadata(&self, html: &str) -> (HashSet<String>, Option<String>) {
+        let mut anchors = HashSet::new();
+        for element in self.tag.find_iter(html) {
+            for capture in self.id.captures_iter(element.as_str()) {
+                if let Some(value) = (1..=3).find_map(|index| capture.get(index)) {
+                    anchors.insert(value.as_str().to_owned());
+                }
+            }
+            if self.named_anchor.is_match(element.as_str()) {
+                for capture in self.name.captures_iter(element.as_str()) {
+                    if let Some(value) = (1..=3).find_map(|index| capture.get(index)) {
+                        anchors.insert(value.as_str().to_owned());
+                    }
+                }
+            }
+        }
+        let redirect = self
+            .redirect
+            .captures(html)
+            .and_then(|capture| capture.get(1))
+            .map(|value| decode_html_text(value.as_str()));
+        (anchors, redirect)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -174,7 +287,16 @@ struct DeveloperConfig {
     title: String,
     summary: String,
     #[serde(default)]
+    owner: Vec<DeveloperOwner>,
+    #[serde(default)]
     section: Vec<DeveloperSection>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct DeveloperOwner {
+    id: String,
+    name: String,
+    contact: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -194,6 +316,38 @@ struct DeveloperNote {
     source: PathBuf,
     kind: String,
     status: String,
+    lifecycle: String,
+    owner: String,
+    #[serde(default)]
+    reviewed_at: Option<String>,
+    #[serde(default)]
+    review_ref: Option<String>,
+    #[serde(default)]
+    products: Vec<String>,
+    #[serde(default)]
+    topics: Vec<String>,
+    #[serde(default)]
+    review_triggers: Vec<String>,
+    #[serde(default)]
+    scope: Vec<DeveloperScope>,
+    #[serde(default)]
+    implemented_by: Option<String>,
+    #[serde(default)]
+    superseded_by: Option<String>,
+    #[serde(default)]
+    evidence_revision: Option<String>,
+    #[serde(default)]
+    captured_at: Option<String>,
+    #[serde(default)]
+    evidence_command: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct DeveloperScope {
+    path: PathBuf,
+    symbol: String,
+    anchor: String,
+    digest: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -428,12 +582,29 @@ impl SiteBuilder {
         ensure!(
             !self.developers.title.trim().is_empty()
                 && !self.developers.summary.trim().is_empty()
+                && !self.developers.owner.is_empty()
                 && !self.developers.section.is_empty(),
             "developer documentation metadata must not be empty"
         );
+        let mut developer_owner_ids = BTreeSet::new();
+        for owner in &self.developers.owner {
+            validate_route_segment(&owner.id)?;
+            ensure!(
+                developer_owner_ids.insert(&owner.id),
+                "duplicate developer owner {}",
+                owner.id
+            );
+            ensure!(
+                !owner.name.trim().is_empty() && !owner.contact.trim().is_empty(),
+                "developer owner {} is incomplete",
+                owner.id
+            );
+        }
         let mut developer_section_ids = BTreeSet::new();
         let mut developer_note_ids = BTreeSet::new();
         let mut developer_sources = BTreeSet::new();
+        let mut developer_supersession = BTreeMap::new();
+        let today = Utc::now().date_naive();
         for section in &self.developers.section {
             validate_route_segment(&section.id)?;
             ensure!(
@@ -464,10 +635,172 @@ impl SiteBuilder {
                     !note.title.trim().is_empty()
                         && !note.summary.trim().is_empty()
                         && !note.kind.trim().is_empty()
-                        && !note.status.trim().is_empty(),
+                        && !note.status.trim().is_empty()
+                        && !note.lifecycle.trim().is_empty()
+                        && !note.owner.trim().is_empty(),
                     "developer note {} is incomplete",
                     note.id
                 );
+                ensure!(
+                    matches!(
+                        note.lifecycle.as_str(),
+                        "current" | "proposal" | "investigation" | "archived" | "superseded"
+                    ),
+                    "developer note {} has unsupported lifecycle {}",
+                    note.id,
+                    note.lifecycle
+                );
+                ensure!(
+                    developer_owner_ids.contains(&note.owner),
+                    "developer note {} references unknown owner {}",
+                    note.id,
+                    note.owner
+                );
+                if note.owner == "unassigned" {
+                    eprintln!(
+                        "warning: developer note {} still requires a named owner",
+                        note.id
+                    );
+                }
+                ensure!(
+                    !note.products.is_empty()
+                        && note
+                            .products
+                            .iter()
+                            .all(|product| ids.contains(product.as_str())),
+                    "developer note {} has no valid applicable products",
+                    note.id
+                );
+                ensure!(
+                    !note.topics.is_empty()
+                        && note.topics.iter().all(|topic| !topic.trim().is_empty()),
+                    "developer note {} must declare topics",
+                    note.id
+                );
+                let reviewed_at = note
+                    .reviewed_at
+                    .as_deref()
+                    .map(|date| {
+                        NaiveDate::parse_from_str(date, "%Y-%m-%d").wrap_err_with(|| {
+                            format!("developer note {} has invalid reviewed_at {date}", note.id)
+                        })
+                    })
+                    .transpose()?;
+                ensure!(
+                    note.reviewed_at.is_some() == note.review_ref.is_some(),
+                    "developer note {} must pair reviewed_at with review_ref",
+                    note.id
+                );
+                if matches!(note.lifecycle.as_str(), "current" | "proposal") {
+                    if let Some(reviewed_at) = reviewed_at {
+                        let age = today.signed_duration_since(reviewed_at).num_days();
+                        if note.lifecycle == "current" && age > 60 {
+                            eprintln!(
+                                "warning: current developer note {} was reviewed {age} days ago (publication blocks after owner-ratified enforcement at 90 days)",
+                                note.id
+                            );
+                        } else if note.lifecycle == "proposal" && age > 180 {
+                            eprintln!(
+                                "warning: proposal {} has had no disposition for {age} days",
+                                note.id
+                            );
+                        }
+                    } else {
+                        eprintln!(
+                            "warning: {} developer note {} has no review record",
+                            note.lifecycle, note.id
+                        );
+                    }
+                    if note.review_triggers.is_empty() {
+                        eprintln!(
+                            "warning: {} developer note {} has no review triggers",
+                            note.lifecycle, note.id
+                        );
+                    }
+                }
+                for trigger in &note.review_triggers {
+                    ensure!(
+                        !trigger.trim().is_empty()
+                            && !Path::new(trigger)
+                                .components()
+                                .any(|component| component == Component::ParentDir),
+                        "developer note {} has unsafe review trigger {trigger}",
+                        note.id
+                    );
+                }
+                for scope in &note.scope {
+                    ensure_relative_path(&scope.path)?;
+                    ensure!(
+                        !scope.symbol.trim().is_empty()
+                            && !scope.anchor.trim().is_empty()
+                            && !scope.digest.trim().is_empty(),
+                        "developer note {} has an incomplete verified scope",
+                        note.id
+                    );
+                    let source =
+                        fs::read_to_string(self.root.join(&scope.path)).wrap_err_with(|| {
+                            format!(
+                                "developer note {} cannot read verified scope {}",
+                                note.id,
+                                scope.path.display()
+                            )
+                        })?;
+                    ensure!(
+                        source.matches(&scope.anchor).count() == 1,
+                        "developer note {} symbol {} anchor is missing or ambiguous in {}",
+                        note.id,
+                        scope.symbol,
+                        scope.path.display()
+                    );
+                    let digest = Command::new("git")
+                        .current_dir(&self.root)
+                        .args(["hash-object", "--"])
+                        .arg(&scope.path)
+                        .output()
+                        .wrap_err_with(|| {
+                            format!("failed to hash verified scope {}", scope.path.display())
+                        })?;
+                    ensure!(
+                        digest.status.success(),
+                        "git hash-object failed for verified scope {}",
+                        scope.path.display()
+                    );
+                    let digest = String::from_utf8(digest.stdout)?;
+                    ensure!(
+                        digest.trim() == scope.digest,
+                        "developer note {} verified scope {} changed (expected {}, found {}); owner review or an explicit no-impact attestation is required",
+                        note.id,
+                        scope.path.display(),
+                        scope.digest,
+                        digest.trim()
+                    );
+                }
+                if note.lifecycle == "current" && note.scope.is_empty() {
+                    eprintln!(
+                        "warning: current developer note {} has no verified code scope",
+                        note.id
+                    );
+                }
+                if note.lifecycle == "superseded" {
+                    let replacement = note.superseded_by.as_deref().filter(|id| !id.is_empty());
+                    ensure!(
+                        replacement.is_some(),
+                        "superseded developer note {} must name superseded_by",
+                        note.id
+                    );
+                    developer_supersession.insert(
+                        note.id.clone(),
+                        replacement.expect("replacement was checked").to_owned(),
+                    );
+                }
+                if matches!(note.lifecycle.as_str(), "investigation" | "archived")
+                    && note.evidence_revision.is_none()
+                {
+                    eprintln!(
+                        "warning: {} developer note {} has no immutable evidence revision",
+                        note.lifecycle, note.id
+                    );
+                }
                 ensure!(
                     note.source
                         .extension()
@@ -479,6 +812,21 @@ impl SiteBuilder {
                 self.require_file(&note.source)?;
             }
         }
+        for (note, replacement) in &developer_supersession {
+            ensure!(
+                developer_note_ids.contains(replacement),
+                "developer note {note} is superseded by missing note {replacement}"
+            );
+            let mut seen = BTreeSet::new();
+            let mut next = note.as_str();
+            while let Some(replacement) = developer_supersession.get(next) {
+                ensure!(
+                    seen.insert(next),
+                    "developer supersession cycle contains {next}"
+                );
+                next = replacement;
+            }
+        }
         let architecture_root = self.root.join("docs/architecture");
         let mut architecture_sources = BTreeSet::new();
         for entry in fs::read_dir(&architecture_root)? {
@@ -487,9 +835,7 @@ impl SiteBuilder {
                 continue;
             }
             match path.extension().and_then(|extension| extension.to_str()) {
-                Some("typ")
-                    if path.file_stem().and_then(|name| name.to_str()) != Some("architecture") =>
-                {
+                Some("typ") => {
                     architecture_sources.insert(path.strip_prefix(&self.root)?.to_path_buf());
                 }
                 Some("md" | "html") => bail!(
@@ -696,12 +1042,23 @@ impl SiteBuilder {
             );
             self.require_file(&product.source)?;
             ensure!(
+                product
+                    .source
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    == Some("typ"),
+                "{} product source {} must be canonical Typst",
+                product.id,
+                product.source.display()
+            );
+            ensure!(
                 !product.pages.is_empty(),
                 "{} has no authored documentation pages",
                 product.id
             );
             let mut page_ids = BTreeSet::new();
             let mut page_routes = BTreeSet::new();
+            let mut page_sources = BTreeSet::new();
             let mut root_pages = 0;
             let mut tutorial_pages = 0;
             let mut manual_pages = 0;
@@ -720,6 +1077,12 @@ impl SiteBuilder {
                     page.route
                 );
                 ensure!(
+                    page_sources.insert(page.source.clone()),
+                    "{} registers page source {} more than once",
+                    product.id,
+                    page.source.display()
+                );
+                ensure!(
                     !page.title.trim().is_empty()
                         && !page.summary.trim().is_empty()
                         && !page.group.trim().is_empty(),
@@ -730,10 +1093,45 @@ impl SiteBuilder {
                 validate_typst_symbol(&page.symbol)?;
                 validate_page_route(&page.route)?;
                 self.require_file(&page.source)?;
+                ensure!(
+                    page.source
+                        .extension()
+                        .and_then(|extension| extension.to_str())
+                        == Some("typ"),
+                    "{}:{} source {} must be canonical Typst",
+                    product.id,
+                    page.id,
+                    page.source.display()
+                );
                 root_pages += usize::from(page.route.is_empty());
                 tutorial_pages += usize::from(page.group == "Tutorial");
                 manual_pages += usize::from(page.group == "Manual");
             }
+            let content_root = self
+                .root
+                .join("docs/products")
+                .join(&product.id)
+                .join("content");
+            let mut authored_sources = BTreeSet::new();
+            for entry in WalkDir::new(&content_root) {
+                let entry = entry?;
+                if entry.file_type().is_file()
+                    && entry.path().extension().and_then(|value| value.to_str()) == Some("typ")
+                {
+                    authored_sources.insert(entry.path().strip_prefix(&self.root)?.to_path_buf());
+                }
+            }
+            ensure!(
+                authored_sources == page_sources,
+                "{} content and page registry differ; unregistered: {:?}; missing: {:?}",
+                product.id,
+                authored_sources
+                    .difference(&page_sources)
+                    .collect::<Vec<_>>(),
+                page_sources
+                    .difference(&authored_sources)
+                    .collect::<Vec<_>>()
+            );
             ensure!(
                 root_pages == 1,
                 "{} must have exactly one root page",
@@ -750,6 +1148,12 @@ impl SiteBuilder {
                 product.id
             );
             if let Some(path) = &product.changelog {
+                ensure!(
+                    path.extension().and_then(|extension| extension.to_str()) == Some("typ"),
+                    "{} changelog {} must be canonical Typst",
+                    product.id,
+                    path.display()
+                );
                 self.require_file(path)?;
             }
             for related in &product.related {
@@ -821,6 +1225,10 @@ impl SiteBuilder {
             self.legacy_prose.schema,
             LEGACY_PROSE_SCHEMA_VERSION
         );
+        ensure!(
+            self.legacy_prose.source.is_empty(),
+            "docs/legacy-prose.toml is retired and cannot accept new sources"
+        );
         let declared = self
             .legacy_prose
             .source
@@ -832,10 +1240,16 @@ impl SiteBuilder {
                     "legacy prose path {} must be a normalized repository-relative path",
                     source.display()
                 );
+                let extension = source
+                    .extension()
+                    .and_then(|extension| extension.to_str())
+                    .map(str::to_ascii_lowercase);
                 ensure!(
                     matches!(
-                        source.extension().and_then(|extension| extension.to_str()),
-                        Some("md" | "html")
+                        extension.as_deref(),
+                        Some(
+                            "md" | "markdown" | "mdown" | "mkd" | "mdx" | "html" | "htm" | "xhtml"
+                        )
                     ),
                     "legacy prose path {} must be Markdown or HTML",
                     source.display()
@@ -859,22 +1273,59 @@ impl SiteBuilder {
 
         let mut actual = BTreeSet::new();
         for entry in WalkDir::new(&self.root).into_iter().filter_entry(|entry| {
+            let top_level = entry
+                .path()
+                .strip_prefix(&self.root)
+                .is_ok_and(|path| path.components().count() == 1);
             !entry.file_type().is_dir()
+                || !top_level
                 || !matches!(
                     entry.file_name().to_str(),
                     Some(".git" | ".jj" | ".direnv" | ".venv" | "node_modules" | "target")
                 )
         }) {
             let entry = entry?;
-            if !entry.file_type().is_file()
-                || !matches!(
-                    entry
-                        .path()
-                        .extension()
-                        .and_then(|extension| extension.to_str()),
-                    Some("md" | "html")
+            if !entry.file_type().is_file() && !entry.file_type().is_symlink() {
+                continue;
+            }
+            let file_name = entry.file_name().to_string_lossy();
+            ensure!(
+                !file_name.eq_ignore_ascii_case("README.typ"),
+                "{} is forbidden; README.md is the compatibility source and must not have a parallel README.typ",
+                entry.path().strip_prefix(&self.root)?.display()
+            );
+            let original_extension = entry
+                .path()
+                .extension()
+                .and_then(|extension| extension.to_str());
+            let extension = entry
+                .path()
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .map(str::to_ascii_lowercase);
+            ensure!(
+                extension.as_deref() != Some("typ") || original_extension == Some("typ"),
+                "{} uses a non-canonical Typst extension; use lowercase .typ",
+                entry.path().strip_prefix(&self.root)?.display()
+            );
+            if !matches!(
+                extension.as_deref(),
+                Some(
+                    "md" | "markdown"
+                        | "mdown"
+                        | "mkd"
+                        | "mdx"
+                        | "html"
+                        | "htm"
+                        | "xhtml"
+                        | "shtml"
+                        | "rst"
+                        | "rest"
+                        | "adoc"
+                        | "asciidoc"
+                        | "org"
                 )
-            {
+            ) {
                 continue;
             }
             let source = entry.path().strip_prefix(&self.root)?.to_path_buf();
@@ -922,45 +1373,75 @@ impl SiteBuilder {
             }
         };
 
-        let output = absolute_from(&self.root, &request.output);
-        ensure_safe_output(&self.root, &output)?;
+        let (scope, selected) = if request.product == "all" {
+            (
+                BuildScope::FullSite,
+                self.registry.product.iter().collect::<Vec<_>>(),
+            )
+        } else {
+            (
+                BuildScope::ProductPreview,
+                vec![
+                    self.registry
+                        .product
+                        .iter()
+                        .find(|product| product.id == request.product)
+                        .wrap_err_with(|| format!("unknown product {}", request.product))?,
+                ],
+            )
+        };
+
+        let requested_output = absolute_from(&self.root, &request.output);
+        ensure_safe_output(&self.root, &requested_output)?;
+        let preview_work = if scope == BuildScope::ProductPreview {
+            let target = self.root.join("target");
+            fs::create_dir_all(&target)?;
+            Some(
+                TempDirBuilder::new()
+                    .prefix("alphal00p-product-preview-")
+                    .tempdir_in(target)?,
+            )
+        } else {
+            None
+        };
+        let output = preview_work
+            .as_ref()
+            .map_or_else(|| requested_output.clone(), |work| work.path().join("site"));
         fs::create_dir_all(&output)
             .wrap_err_with(|| format!("failed to create {}", output.display()))?;
         clear_stale_staging(&output)?;
-
-        let selected = if request.product == "all" {
-            self.registry.product.iter().collect::<Vec<_>>()
-        } else {
-            vec![
-                self.registry
-                    .product
-                    .iter()
-                    .find(|product| product.id == request.product)
-                    .wrap_err_with(|| format!("unknown product {}", request.product))?,
-            ]
-        };
 
         let options = ProductBuildOptions {
             channel: request.channel,
             tag,
             output: &output,
+            scope,
             include_typst: request.include_typst,
             include_rustdoc: request.include_rustdoc,
             rustdoc_target_root: request.rustdoc_target_root.as_deref(),
             dependency_output: request.dependency_output.as_deref(),
         };
-        for product in selected {
+        for product in &selected {
             self.build_product(product, &options)?;
         }
 
-        self.write_developer_docs(
-            &output,
-            request.include_typst,
-            request.dependency_output.as_deref(),
-        )?;
-        self.write_portal(&output, request.channel, tag)?;
-        if request.product == "all" {
-            self.validate_generated_links(&output, request.include_rustdoc)?;
+        match scope {
+            BuildScope::FullSite => {
+                self.write_developer_docs(
+                    &output,
+                    request.include_typst,
+                    request.dependency_output.as_deref(),
+                )?;
+                self.write_portal(&output, request.channel, tag)?;
+            }
+            BuildScope::ProductPreview => {
+                self.write_product_preview(&output, selected[0], request.channel, tag)?;
+                clear_stale_staging(&output)?;
+            }
+        }
+        self.validate_generated_links(&output, request.include_rustdoc)?;
+        if scope == BuildScope::ProductPreview {
+            replace_generated_tree(&output, &requested_output)?;
         }
         Ok(())
     }
@@ -1028,7 +1509,7 @@ impl SiteBuilder {
         self.write_rust_reference(product, &metadata, &site)?;
         self.write_reference_hub(product, &site)?;
         self.write_search_index(product, &site)?;
-        self.decorate_site_pages(product, &metadata, &site)?;
+        self.decorate_site_pages(product, &metadata, &site, options.scope)?;
 
         if options.channel == BuildChannel::Snapshot && destination.exists() {
             ensure!(
@@ -1186,7 +1667,7 @@ impl SiteBuilder {
         };
         let destination = site.join("reference/content");
         fs::create_dir_all(&destination)?;
-        fs::copy(self.root.join(changelog), destination.join("changelog.md"))?;
+        fs::copy(self.root.join(changelog), destination.join("changelog.typ"))?;
         Ok(())
     }
 
@@ -1195,13 +1676,22 @@ impl SiteBuilder {
             return Ok(String::new());
         };
         let source = fs::read_to_string(self.root.join(changelog))?;
+        let (title, body) = source
+            .split_once('\n')
+            .context("canonical Typst changelog must begin with `= Changelog`")?;
+        ensure!(
+            title.trim_end() == "= Changelog",
+            "{} must begin with exactly `= Changelog`",
+            changelog.display()
+        );
         let mut rendered = format!(
             "= Canonical package changelog <canonical-package-changelog>\n\
-             The following release history is imported as typed Markdown from \
-             #link(\"reference/content/changelog.md\")[#raw(\"{}\")].\n\n",
+             The following release history is imported from canonical Typst source \
+             #link(\"reference/content/changelog.typ\")[#raw(\"{}\")].\n\n",
             typst_string(&changelog.to_string_lossy())
         );
-        rendered.push_str(&markdown_changelog_to_typst(&source));
+        // The imported changelog is nested below its own canonical heading.
+        rendered.push_str(body.trim_start_matches(['\r', '\n']));
         Ok(rendered)
     }
 
@@ -1836,6 +2326,7 @@ impl SiteBuilder {
         product: &ProductConfig,
         metadata: &SnapshotMetadata<'_>,
         site: &Path,
+        scope: BuildScope,
     ) -> Result<()> {
         let mut pages = product
             .pages
@@ -1878,10 +2369,13 @@ impl SiteBuilder {
                 metadata,
                 site,
                 page,
-                index
-                    .checked_sub(1)
-                    .and_then(|previous| pages.get(previous)),
-                pages.get(index + 1),
+                (
+                    index
+                        .checked_sub(1)
+                        .and_then(|previous| pages.get(previous)),
+                    pages.get(index + 1),
+                ),
+                scope,
             )?;
         }
         Ok(())
@@ -1893,9 +2387,10 @@ impl SiteBuilder {
         metadata: &SnapshotMetadata<'_>,
         site: &Path,
         page: &SitePage,
-        previous: Option<&SitePage>,
-        next: Option<&SitePage>,
+        siblings: (Option<&SitePage>, Option<&SitePage>),
+        scope: BuildScope,
     ) -> Result<()> {
+        let (previous, next) = siblings;
         let path = site.join(&page.route).join("index.html");
         let source = fs::read_to_string(&path)?;
         let mut body = extract_html_body(&source)?.to_owned();
@@ -1907,6 +2402,9 @@ impl SiteBuilder {
         }
         let docs_root = page_root_prefix(&page.route);
         body = rewrite_page_links(&body, &docs_root)?;
+        if scope == BuildScope::ProductPreview {
+            body = self.rewrite_product_preview_links(&body, metadata, page)?;
+        }
         let (body, headings) = inject_heading_ids(&body)?;
         let toc = headings
             .iter()
@@ -1920,8 +2418,8 @@ impl SiteBuilder {
                 )
             })
             .collect::<String>();
-        let sidebar = self.site_sidebar(product, metadata, page, &docs_root);
-        let product_options = self.product_options(product, metadata, &docs_root);
+        let sidebar = self.site_sidebar(product, metadata, page, &docs_root, scope);
+        let product_options = self.product_options(product, metadata, &docs_root, scope);
         let page_navigation = render_page_navigation(previous, next, &docs_root);
         let product_root = if docs_root.is_empty() {
             "./"
@@ -1931,6 +2429,11 @@ impl SiteBuilder {
         let portal = match metadata.channel {
             BuildChannel::Latest => format!("{docs_root}../../../"),
             BuildChannel::Snapshot => format!("{docs_root}../../../../"),
+        };
+        let site_home = if scope == BuildScope::FullSite {
+            &portal
+        } else {
+            product_root
         };
         let version = match metadata.channel {
             BuildChannel::Latest => "latest".to_owned(),
@@ -1954,7 +2457,7 @@ impl SiteBuilder {
             escape_html(&docs_root),
             escape_html(&docs_root),
             escape_html(&docs_root),
-            escape_html(&portal),
+            escape_html(site_home),
             product_options,
             escape_html(product_root),
             escape_html(&product.title),
@@ -1975,6 +2478,7 @@ impl SiteBuilder {
         metadata: &SnapshotMetadata<'_>,
         current: &SitePage,
         docs_root: &str,
+        scope: BuildScope,
     ) -> String {
         let mut groups = BTreeMap::<String, Vec<(String, String)>>::new();
         let mut group_order = Vec::new();
@@ -2033,7 +2537,7 @@ impl SiteBuilder {
                 escape_html(&group)
             ));
         }
-        if metadata.channel == BuildChannel::Latest {
+        if scope == BuildScope::FullSite && metadata.channel == BuildChannel::Latest {
             let portal = format!("{docs_root}../../../");
             navigation.push_str(&format!(
                 "<section class=\"sidebar-group sidebar-developer-group\"><p class=\"sidebar-group-title\">For developers</p><a class=\"sidebar-link\" href=\"{}developers/\">Architecture &amp; engineering notes</a></section>",
@@ -2058,10 +2562,12 @@ impl SiteBuilder {
         current: &ProductConfig,
         metadata: &SnapshotMetadata<'_>,
         docs_root: &str,
+        scope: BuildScope,
     ) -> String {
         self.registry
             .product
             .iter()
+            .filter(|product| scope == BuildScope::FullSite || product.id == current.id)
             .map(|product| {
                 let route = match metadata.channel {
                     BuildChannel::Latest => {
@@ -2085,6 +2591,66 @@ impl SiteBuilder {
                 )
             })
             .collect()
+    }
+
+    fn rewrite_product_preview_links(
+        &self,
+        body: &str,
+        metadata: &SnapshotMetadata<'_>,
+        page: &SitePage,
+    ) -> Result<String> {
+        let attribute = Regex::new(r#"(?P<name>href|src)=\"(?P<target>[^\"]+)\""#)?;
+        let page_root = PathBuf::from(metadata.route.trim_start_matches('/')).join(&page.route);
+        Ok(attribute
+            .replace_all(body, |captures: &regex::Captures<'_>| {
+                let name = captures.name("name").expect("attribute name").as_str();
+                let target = captures.name("target").expect("attribute target").as_str();
+                let local = !target.is_empty()
+                    && !target.starts_with('#')
+                    && !target.starts_with('/')
+                    && !target.starts_with("//")
+                    && !target.split(':').next().is_some_and(|scheme| {
+                        matches!(scheme, "http" | "https" | "mailto" | "data")
+                    });
+                if !local {
+                    return captures[0].to_owned();
+                }
+
+                let suffix_start = target.find(['?', '#']).unwrap_or(target.len());
+                let (path, suffix) = target.split_at(suffix_start);
+                let Some(resolved) = normalize_repository_path(&page_root.join(path)) else {
+                    return captures[0].to_owned();
+                };
+                let segments = resolved
+                    .iter()
+                    .filter_map(|segment| segment.to_str())
+                    .collect::<Vec<_>>();
+                let Some(product_id) = segments
+                    .first()
+                    .filter(|segment| **segment == "products")
+                    .and_then(|_| segments.get(1))
+                else {
+                    return captures[0].to_owned();
+                };
+                if *product_id == metadata.product
+                    || !self
+                        .registry
+                        .product
+                        .iter()
+                        .any(|product| product.id == *product_id)
+                {
+                    return captures[0].to_owned();
+                }
+
+                let resolved = resolved.to_string_lossy().replace('\\', "/");
+                let trailing_slash = if path.ends_with('/') && !resolved.ends_with('/') {
+                    "/"
+                } else {
+                    ""
+                };
+                format!("{name}=\"{PUBLISHED_DOCS_ROOT}/{resolved}{trailing_slash}{suffix}\"")
+            })
+            .into_owned())
     }
 
     fn write_search_index(&self, product: &ProductConfig, site: &Path) -> Result<()> {
@@ -2140,15 +2706,21 @@ impl SiteBuilder {
         match product.id.as_str() {
             "gammaloop" => {
                 let (reference, _) = self.generated_references()?;
-                entries.extend(reference.commands.into_iter().map(|command| SearchEntry {
-                    title: command.path.clone(),
-                    summary: command.about,
-                    href: format!(
-                        "reference/cli/#{}",
-                        generated_anchor("command", &command.path)
-                    ),
-                    kind: "command".to_owned(),
-                }));
+                entries.extend(
+                    reference
+                        .commands
+                        .into_iter()
+                        .filter(|command| !command.hidden && !command.generated_help)
+                        .map(|command| SearchEntry {
+                            title: command.path.clone(),
+                            summary: command.about,
+                            href: format!(
+                                "reference/cli/#{}",
+                                generated_anchor("command", &command.path)
+                            ),
+                            kind: "command".to_owned(),
+                        }),
+                );
                 entries.extend(reference.settings.into_iter().map(|setting| SearchEntry {
                     title: setting.path.clone(),
                     summary: setting.description,
@@ -2359,12 +2931,89 @@ impl SiteBuilder {
                 )
             };
             let status_class = slug(&note.status);
+            let owner = self
+                .developers
+                .owner
+                .iter()
+                .find(|owner| owner.id == note.owner)
+                .expect("developer owners were validated before rendering");
+            let review_age = note.reviewed_at.as_deref().and_then(|date| {
+                NaiveDate::parse_from_str(date, "%Y-%m-%d")
+                    .ok()
+                    .map(|date| {
+                        Utc::now()
+                            .date_naive()
+                            .signed_duration_since(date)
+                            .num_days()
+                    })
+            });
+            let freshness = match (note.lifecycle.as_str(), review_age) {
+                ("current", Some(age)) if age > 90 => "stale",
+                ("current", Some(age)) if age > 60 => "review-due",
+                ("proposal", Some(age)) if age > 180 => "disposition-due",
+                ("current" | "proposal", Some(_)) => "reviewed",
+                ("current" | "proposal", None) => "unreviewed",
+                _ => "frozen-evidence",
+            };
+            let review = note.reviewed_at.as_deref().map_or_else(
+                || "No review record".to_owned(),
+                |date| {
+                    format!(
+                        "{} · <code>{}</code>",
+                        escape_html(date),
+                        escape_html(note.review_ref.as_deref().unwrap_or("missing review ref"))
+                    )
+                },
+            );
+            let evidence = if matches!(note.lifecycle.as_str(), "investigation" | "archived") {
+                format!(
+                    "{}{}",
+                    note.captured_at
+                        .as_deref()
+                        .map(|date| format!("captured {}", escape_html(date)))
+                        .unwrap_or_else(|| "capture date unavailable".to_owned()),
+                    note.evidence_revision
+                        .as_deref()
+                        .map_or_else(String::new, |revision| {
+                            format!(" · <code>{}</code>", escape_html(revision))
+                        })
+                )
+            } else {
+                "Not an evidence record".to_owned()
+            };
+            let scopes = if note.scope.is_empty() {
+                "<span class=\"developer-missing\">No verified code scopes recorded</span>"
+                    .to_owned()
+            } else {
+                let items = note
+                    .scope
+                    .iter()
+                    .map(|scope| {
+                        format!(
+                            "<li><code>{}</code><br><span>{}</span> · digest <code>{}</code></li>",
+                            escape_html(&scope.symbol),
+                            escape_html(&scope.path.to_string_lossy()),
+                            escape_html(&scope.digest.chars().take(12).collect::<String>()),
+                        )
+                    })
+                    .collect::<String>();
+                format!("<ul>{items}</ul>")
+            };
+            let record = format!(
+                "<dl class=\"developer-record-meta\" data-freshness=\"{}\"><div><dt>Lifecycle</dt><dd>{}</dd></div><div><dt>Owner</dt><dd><a href=\"{}\">{}</a></dd></div><div><dt>Review</dt><dd>{review}</dd></div><div><dt>Freshness</dt><dd>{}</dd></div><div><dt>Evidence</dt><dd>{evidence}</dd></div><div class=\"developer-record-scopes\"><dt>Verified scopes</dt><dd>{scopes}</dd></div></dl>",
+                escape_html(freshness),
+                escape_html(&note.lifecycle),
+                escape_html(&owner.contact),
+                escape_html(&owner.name),
+                escape_html(freshness),
+            );
             let article = format!(
-                "<header class=\"developer-note-hero\"><p class=\"product-eyebrow\">For developers</p><div class=\"developer-note-title\"><h1>{}</h1><div class=\"developer-note-badges\"><span class=\"developer-status developer-status-{}\">{}</span><span class=\"developer-kind\">{}</span></div></div><p>{}</p><p class=\"developer-source\"><a href=\"{}\">View the source note <span aria-hidden=\"true\">↗</span></a></p></header>{body}",
+                "<header class=\"developer-note-hero\"><p class=\"product-eyebrow\">For developers</p><div class=\"developer-note-title\"><h1>{}</h1><div class=\"developer-note-badges\"><span class=\"developer-status developer-status-{}\">{}</span><span class=\"developer-kind\">{}</span><span class=\"developer-lifecycle\">{}</span></div></div><p>{}</p><p class=\"developer-source\"><a href=\"{}\">View the source note <span aria-hidden=\"true\">↗</span></a></p></header>{record}{body}",
                 escape_html(&note.title),
                 escape_html(&status_class),
                 escape_html(&note.status),
                 escape_html(&note.kind),
+                escape_html(&note.lifecycle),
                 escape_html(&note.summary),
                 escape_html(&source_url),
             );
@@ -2405,23 +3054,25 @@ impl SiteBuilder {
                 ),
             )?;
 
-            search.push(SearchEntry {
-                title: note.title.clone(),
-                summary: note.summary.clone(),
-                href: page.route.clone(),
-                kind: format!("developer {}", note.status.to_lowercase()),
-            });
-            search.extend(
-                headings
-                    .into_iter()
-                    .filter(|heading| matches!(heading.level, 2 | 3))
-                    .map(|heading| SearchEntry {
-                        title: heading.title,
-                        summary: note.title.clone(),
-                        href: format!("{}#{}", page.route, heading.id),
-                        kind: "developer heading".to_owned(),
-                    }),
-            );
+            if note.lifecycle != "superseded" {
+                search.push(SearchEntry {
+                    title: note.title.clone(),
+                    summary: note.summary.clone(),
+                    href: page.route.clone(),
+                    kind: format!("developer {}", note.status.to_lowercase()),
+                });
+                search.extend(
+                    headings
+                        .into_iter()
+                        .filter(|heading| matches!(heading.level, 2 | 3))
+                        .map(|heading| SearchEntry {
+                            title: heading.title,
+                            summary: note.title.clone(),
+                            href: format!("{}#{}", page.route, heading.id),
+                            kind: "developer heading".to_owned(),
+                        }),
+                );
+            }
         }
 
         fs::write(
@@ -2446,24 +3097,40 @@ impl SiteBuilder {
             .section
             .iter()
             .map(|section| {
+                let render_card = |note: &DeveloperNote| {
+                    format!(
+                        "<article class=\"developer-card\"><div class=\"developer-card-meta\"><span class=\"developer-status developer-status-{}\">{}</span><span class=\"developer-lifecycle\">{}</span><span>{}</span></div><h3><a href=\"architecture/{}/\">{}</a></h3><p>{}</p><a class=\"portal-text-link\" href=\"architecture/{}/\">Read note <span aria-hidden=\"true\">→</span></a></article>",
+                        escape_html(&slug(&note.status)),
+                        escape_html(&note.status),
+                        escape_html(&note.lifecycle),
+                        escape_html(&note.kind),
+                        escape_html(&note.id),
+                        escape_html(&note.title),
+                        escape_html(&note.summary),
+                        escape_html(&note.id),
+                    )
+                };
                 let notes = section
                     .note
                     .iter()
-                    .map(|note| {
-                        format!(
-                            "<article class=\"developer-card\"><div class=\"developer-card-meta\"><span class=\"developer-status developer-status-{}\">{}</span><span>{}</span></div><h3><a href=\"architecture/{}/\">{}</a></h3><p>{}</p><a class=\"portal-text-link\" href=\"architecture/{}/\">Read note <span aria-hidden=\"true\">→</span></a></article>",
-                            escape_html(&slug(&note.status)),
-                            escape_html(&note.status),
-                            escape_html(&note.kind),
-                            escape_html(&note.id),
-                            escape_html(&note.title),
-                            escape_html(&note.summary),
-                            escape_html(&note.id),
-                        )
-                    })
+                    .filter(|note| note.lifecycle != "superseded")
+                    .map(&render_card)
                     .collect::<String>();
+                let superseded = section
+                    .note
+                    .iter()
+                    .filter(|note| note.lifecycle == "superseded")
+                    .map(render_card)
+                    .collect::<String>();
+                let superseded = if superseded.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "<details class=\"developer-archive\"><summary>Superseded records</summary><div class=\"developer-card-grid\">{superseded}</div></details>"
+                    )
+                };
                 format!(
-                    "<section class=\"developer-section\" id=\"{}\"><div class=\"developer-section-heading\"><p class=\"portal-kicker\">Developer notes</p><h2>{}</h2><p>{}</p></div><div class=\"developer-card-grid\">{notes}</div></section>",
+                    "<section class=\"developer-section\" id=\"{}\"><div class=\"developer-section-heading\"><p class=\"portal-kicker\">Developer notes</p><h2>{}</h2><p>{}</p></div><div class=\"developer-card-grid\">{notes}{superseded}</div></section>",
                     escape_html(&section.id),
                     escape_html(&section.title),
                     escape_html(&section.summary),
@@ -2519,6 +3186,7 @@ impl SiteBuilder {
             let links = section
                 .note
                 .iter()
+                .filter(|note| note.lifecycle != "superseded")
                 .map(|note| {
                     format!(
                         "<a class=\"sidebar-link\" href=\"{}architecture/{}/\"{}>{}</a>",
@@ -2871,38 +3539,122 @@ impl SiteBuilder {
         Ok(())
     }
 
+    fn write_product_preview(
+        &self,
+        output: &Path,
+        product: &ProductConfig,
+        channel: BuildChannel,
+        tag: Option<&str>,
+    ) -> Result<()> {
+        let route = match channel {
+            BuildChannel::Latest => format!("products/{}/latest/", product.id),
+            BuildChannel::Snapshot => format!(
+                "products/{}/snapshots/{}/",
+                product.id,
+                tag.expect("snapshot tag was validated before rendering the preview")
+            ),
+        };
+        ensure!(
+            output.join(&route).join("index.html").is_file(),
+            "product preview has no entry page at {route}"
+        );
+        fs::write(
+            output.join("index.html"),
+            generated_reference_redirect(&product.title, &route, "product preview"),
+        )?;
+        fs::write(
+            output.join(".note"),
+            format!(
+                "alphal00p product preview\nproduct={}\nchannel={}\nroute={route}\n",
+                product.id,
+                match channel {
+                    BuildChannel::Latest => "latest",
+                    BuildChannel::Snapshot => "snapshot",
+                },
+            ),
+        )?;
+        fs::write(output.join(".nojekyll"), b"")?;
+        Ok(())
+    }
+
     fn validate_generated_links(&self, output: &Path, include_rustdoc: bool) -> Result<()> {
-        let href = Regex::new(r#"(?:href|src)=["']([^"']+)["']"#)?;
+        let patterns = LinkValidationPatterns::new()?;
+        let documented_revision = self.git_commit();
         let roots = [output.to_path_buf()];
         let mut failures = vec![];
+        let mut linked_pages = HashMap::new();
+        let mut link_rewrites = LinkRewriteIndex::new();
+        let mut local_paths = LocalPathIndex::new();
         for root in roots {
             for entry in WalkDir::new(&root) {
                 let entry = entry?;
+                local_paths.insert(entry.path().to_path_buf(), Some(entry.file_type()));
+                let rustdoc = entry
+                    .path()
+                    .components()
+                    .collect::<Vec<_>>()
+                    .windows(2)
+                    .any(|parts| {
+                        parts[0].as_os_str() == "reference" && parts[1].as_os_str() == "rust"
+                    });
                 if !entry.file_type().is_file()
                     || entry.path().extension().and_then(|value| value.to_str()) != Some("html")
-                    || entry
-                        .path()
-                        .components()
-                        .collect::<Vec<_>>()
-                        .windows(2)
-                        .any(|parts| {
-                            parts[0].as_os_str() == "reference" && parts[1].as_os_str() == "rust"
-                        })
+                    || (!include_rustdoc && rustdoc)
                 {
                     continue;
                 }
                 let html = fs::read_to_string(entry.path())?;
-                for capture in href.captures_iter(&html) {
-                    let target = capture.get(1).expect("capture exists").as_str();
-                    if !include_rustdoc
-                        && target
-                            .split(['?', '#'])
-                            .next()
-                            .is_some_and(|path| path.contains("reference/rust/"))
-                    {
-                        continue;
+                let rendered_html = patterns.rendered_html(&html);
+                if !linked_pages.contains_key(entry.path()) {
+                    linked_pages.insert(
+                        entry.path().to_path_buf(),
+                        patterns.page_metadata(&rendered_html),
+                    );
+                }
+                for element in patterns.tag.find_iter(&rendered_html) {
+                    for capture in patterns.href.captures_iter(element.as_str()) {
+                        let target_capture = capture
+                            .get(1)
+                            .or_else(|| capture.get(2))
+                            .or_else(|| capture.get(3))
+                            .expect("one URL capture exists");
+                        let target = target_capture.as_str();
+                        let target_path = target.split(['?', '#']).next().unwrap_or_default();
+                        if !include_rustdoc && target_path.contains("reference/rust/") {
+                            continue;
+                        }
+                        if rustdoc
+                            && target_path.ends_with(".js")
+                            && target_path
+                                .split('/')
+                                .any(|segment| segment == "trait.impl")
+                        {
+                            // Rustdoc emits optional async implementor sidecars even when
+                            // --no-deps leaves that sidecar absent from this crate-only tree.
+                            continue;
+                        }
+                        let attribute_capture = capture.get(0).expect("URL attribute capture");
+                        let offset = element.start();
+                        self.validate_generated_target(
+                            output,
+                            LinkReference {
+                                source: entry.path(),
+                                href: target,
+                                attribute: Some(LinkAttribute {
+                                    attribute_range: offset + attribute_capture.start()
+                                        ..offset + attribute_capture.end(),
+                                    target_range: offset + target_capture.start()
+                                        ..offset + target_capture.end(),
+                                    attribute: attribute_capture.as_str().to_owned(),
+                                }),
+                                rustdoc,
+                            },
+                            &documented_revision,
+                            &mut failures,
+                            &patterns,
+                            (&mut linked_pages, &mut link_rewrites, &mut local_paths),
+                        )?;
                     }
-                    validate_local_target(output, entry.path(), target, &mut failures)?;
                 }
             }
             for entry in WalkDir::new(&root) {
@@ -2920,9 +3672,67 @@ impl SiteBuilder {
                     if !include_rustdoc && search.kind == "rust-api" {
                         continue;
                     }
-                    validate_local_target(output, &source, &search.href, &mut failures)?;
+                    self.validate_generated_target(
+                        output,
+                        LinkReference {
+                            source: &source,
+                            href: &search.href,
+                            attribute: None,
+                            rustdoc: false,
+                        },
+                        &documented_revision,
+                        &mut failures,
+                        &patterns,
+                        (&mut linked_pages, &mut link_rewrites, &mut local_paths),
+                    )?;
                 }
             }
+        }
+        for (source, mut replacements) in link_rewrites {
+            let mut html = fs::read_to_string(&source)?;
+            replacements.sort_by_key(|rewrite| rewrite.range.start);
+            ensure!(
+                replacements
+                    .windows(2)
+                    .all(|pair| pair[0].range.end <= pair[1].range.start),
+                "overlapping link repairs in {}",
+                source.display()
+            );
+            for rewrite in replacements.iter().rev() {
+                ensure!(
+                    html.get(rewrite.range.clone()) == Some(rewrite.expected.as_str()),
+                    "generated link repair no longer matches {}",
+                    source.display()
+                );
+                html.replace_range(rewrite.range.clone(), &rewrite.replacement);
+            }
+            let rendered_html = patterns.rendered_html(&html);
+            let repaired_targets = patterns
+                .tag
+                .find_iter(&rendered_html)
+                .flat_map(|element| patterns.href.captures_iter(element.as_str()))
+                .filter_map(|capture| {
+                    (1..=3)
+                        .find_map(|index| capture.get(index))
+                        .map(|target| target.as_str())
+                })
+                .collect::<HashSet<_>>();
+            for rewrite in &replacements {
+                ensure!(
+                    !repaired_targets.contains(rewrite.target_before.as_str()),
+                    "generated link repair left {} in {}",
+                    rewrite.target_before,
+                    source.display()
+                );
+                if let Some(target) = &rewrite.target_after {
+                    ensure!(
+                        repaired_targets.contains(target.as_str()),
+                        "generated link repair did not emit {target} in {}",
+                        source.display()
+                    );
+                }
+            }
+            fs::write(source, html)?;
         }
         ensure!(
             failures.is_empty(),
@@ -2930,6 +3740,56 @@ impl SiteBuilder {
             failures.join("\n")
         );
         Ok(())
+    }
+
+    fn validate_generated_target(
+        &self,
+        output: &Path,
+        link: LinkReference<'_>,
+        documented_revision: &str,
+        failures: &mut Vec<String>,
+        patterns: &LinkValidationPatterns,
+        state: LinkValidationState<'_>,
+    ) -> Result<()> {
+        let source_display = link
+            .source
+            .strip_prefix(output)
+            .unwrap_or(link.source)
+            .display();
+        match repository_source_path(link.href) {
+            Ok(Some((revision, _, _))) if revision != documented_revision => {
+                failures.push(format!(
+                    "{source_display} -> {} (repository source revision {revision} does not match documented revision {documented_revision})",
+                    link.href
+                ));
+                Ok(())
+            }
+            Ok(Some((_, path, true))) if !self.root.join(&path).is_file() => {
+                failures.push(format!(
+                    "{source_display} -> {} (missing repository source file {})",
+                    link.href,
+                    path.display()
+                ));
+                Ok(())
+            }
+            Ok(Some((_, path, false))) if !self.root.join(&path).is_dir() => {
+                failures.push(format!(
+                    "{source_display} -> {} (missing repository source directory {})",
+                    link.href,
+                    path.display()
+                ));
+                Ok(())
+            }
+            Ok(Some(_)) => Ok(()),
+            Ok(None) => validate_local_target(output, link, failures, patterns, state),
+            Err(error) => {
+                failures.push(format!(
+                    "{source_display} -> {} (invalid repository source: {error})",
+                    link.href
+                ));
+                Ok(())
+            }
+        }
     }
 
     fn component_version(&self, component: &ComponentConfig) -> Result<String> {
@@ -3225,6 +4085,32 @@ fn normalize_repository_path(path: &Path) -> Option<PathBuf> {
         }
     }
     Some(normalized)
+}
+
+fn repository_source_path(href: &str) -> Result<Option<(String, PathBuf, bool)>> {
+    let target = href.split(['?', '#']).next().unwrap_or_default();
+    let source = [
+        ("https://github.com/alphal00p/gammaloop/blob/", true),
+        ("https://github.com/alphal00p/gammaloop/tree/", false),
+        (
+            "https://raw.githubusercontent.com/alphal00p/gammaloop/",
+            true,
+        ),
+    ]
+    .into_iter()
+    .find_map(|(prefix, file)| target.strip_prefix(prefix).map(|path| (path, file)));
+    let Some((remainder, file)) = source else {
+        return Ok(None);
+    };
+    let (revision, path) = remainder.split_once('/').unwrap_or((remainder, ""));
+    ensure!(!revision.is_empty(), "missing repository revision");
+    let path = normalize_repository_path(Path::new(path))
+        .context("repository source path escapes the repository root")?;
+    ensure!(
+        !file || !path.as_os_str().is_empty(),
+        "repository source file path is empty"
+    );
+    Ok(Some((revision.to_owned(), path, file)))
 }
 
 fn validate_developer_typst_body(source: &str) -> Result<()> {
@@ -3596,108 +4482,6 @@ fn render_page_navigation(
     format!("<nav class=\"page-nav\" aria-label=\"Manual pagination\">{previous}{next}</nav>")
 }
 
-fn markdown_changelog_to_typst(markdown: &str) -> String {
-    let mut output = String::new();
-    let mut code_language = None::<String>;
-    let mut code = String::new();
-    for line in markdown.lines() {
-        if let Some(language) = &code_language {
-            if line.trim_start().starts_with("```") {
-                output.push_str(&format!(
-                    "#raw(\"{}\", block: true, lang: \"{}\")\n\n",
-                    typst_string(code.trim_end()),
-                    typst_string(language)
-                ));
-                code_language = None;
-                code.clear();
-            } else {
-                code.push_str(line);
-                code.push('\n');
-            }
-            continue;
-        }
-        if let Some(language) = line.trim_start().strip_prefix("```") {
-            code_language = Some(language.trim().to_owned());
-            continue;
-        }
-        if line.is_empty() {
-            output.push('\n');
-            continue;
-        }
-        if let Some((marks, title)) = markdown_heading(line) {
-            // The imported changelog is nested below its own canonical heading.
-            let level = (marks + 1).min(6);
-            output.push_str(&format!(
-                "{} {}\n",
-                "=".repeat(level),
-                markdown_inline_to_typst(title)
-            ));
-        } else if let Some(item) = line.strip_prefix("- ") {
-            output.push_str(&format!("- {}\n", markdown_inline_to_typst(item)));
-        } else if let Some(item) = markdown_ordered_item(line) {
-            output.push_str(&format!("+ {}\n", markdown_inline_to_typst(item)));
-        } else {
-            output.push_str(&markdown_inline_to_typst(line));
-            output.push('\n');
-        }
-    }
-    if code_language.is_some() {
-        output.push_str(&format!(
-            "#raw(\"{}\", block: true)\n",
-            typst_string(code.trim_end())
-        ));
-    }
-    output
-}
-
-fn markdown_heading(line: &str) -> Option<(usize, &str)> {
-    let marks = line
-        .chars()
-        .take_while(|character| *character == '#')
-        .count();
-    (marks > 0 && marks <= 6)
-        .then(|| {
-            line.get(marks..)?
-                .strip_prefix(' ')
-                .map(|title| (marks, title))
-        })
-        .flatten()
-}
-
-fn markdown_ordered_item(line: &str) -> Option<&str> {
-    let (number, item) = line.split_once(". ")?;
-    (!number.is_empty() && number.chars().all(|character| character.is_ascii_digit()))
-        .then_some(item)
-}
-
-fn markdown_inline_to_typst(line: &str) -> String {
-    let links = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").expect("static Markdown link regex");
-    let mut rendered = String::new();
-    let mut cursor = 0;
-    for captures in links.captures_iter(line) {
-        let whole = captures.get(0).expect("whole Markdown link");
-        if whole.start() > cursor {
-            rendered.push_str(&format!(
-                "#raw(\"{}\")",
-                typst_string(&line[cursor..whole.start()])
-            ));
-        }
-        rendered.push_str(&format!(
-            "#link(\"{}\")[#raw(\"{}\")]",
-            typst_string(&captures[2]),
-            typst_string(&captures[1])
-        ));
-        cursor = whole.end();
-    }
-    if cursor < line.len() {
-        rendered.push_str(&format!("#raw(\"{}\")", typst_string(&line[cursor..])));
-    }
-    if rendered.is_empty() {
-        rendered.push_str("#raw(\"\")");
-    }
-    rendered
-}
-
 fn count_catalog_items(scope: &DocScope) -> usize {
     scope.items.len()
         + scope
@@ -3707,23 +4491,96 @@ fn count_catalog_items(scope: &DocScope) -> usize {
             .sum::<usize>()
 }
 
+fn count_catalog_surface_items(scope: &DocScope, supported: bool) -> usize {
+    scope
+        .items
+        .values()
+        .filter(|item| item.supported == supported)
+        .count()
+        + scope
+            .scopes
+            .values()
+            .map(|scope| count_catalog_surface_items(scope, supported))
+            .sum::<usize>()
+}
+
+fn api_item_kind_label(kind: alphal00p_docs_schema::DocItemKind) -> &'static str {
+    match kind {
+        alphal00p_docs_schema::DocItemKind::Function
+        | alphal00p_docs_schema::DocItemKind::PythonFunction => "Function",
+        alphal00p_docs_schema::DocItemKind::Type => "Type",
+        alphal00p_docs_schema::DocItemKind::Trait => "Trait",
+        alphal00p_docs_schema::DocItemKind::ExportedMacro => "Macro",
+        alphal00p_docs_schema::DocItemKind::Method => "Method",
+        alphal00p_docs_schema::DocItemKind::Field => "Field",
+        alphal00p_docs_schema::DocItemKind::Variant => "Variant",
+        alphal00p_docs_schema::DocItemKind::Command => "Command",
+        alphal00p_docs_schema::DocItemKind::Setting => "Setting",
+        alphal00p_docs_schema::DocItemKind::PythonClass => "Class",
+        alphal00p_docs_schema::DocItemKind::ContentPage => "Page",
+    }
+}
+
 fn render_python_catalog(
     catalog: &DocCatalog,
     stub_name: &str,
     stub_text: &str,
     git_commit: &str,
 ) -> String {
+    let mut supported = vec![];
+    let mut implementation_count = 0;
+    let mut scopes = vec![(&catalog.root, Vec::<String>::new())];
+    while let Some((scope, path)) = scopes.pop() {
+        for item in scope.items.values() {
+            if item.supported {
+                supported.push((path.clone(), item));
+            } else {
+                implementation_count += 1;
+            }
+        }
+        for child in scope.scopes.values().rev() {
+            let mut child_path = path.clone();
+            child_path.push(child.id.clone());
+            scopes.push((child, child_path));
+        }
+    }
     let mut body = format!(
-        "<p><code>{}</code> · {} documented exports · version {}</p>",
+        "<p><code>{}</code> · {} supported export{} · {} implementation-detail export{} · version {}</p>",
         escape_html(&catalog.component.package),
-        count_catalog_items(&catalog.root),
+        supported.len(),
+        if supported.len() == 1 { "" } else { "s" },
+        implementation_count,
+        if implementation_count == 1 { "" } else { "s" },
         escape_html(&catalog.component.version)
     );
     if let Some(summary) = &catalog.root.summary {
         body.push_str(&format!("<p>{}</p>", escape_html(summary)));
     }
     if let Some(docs) = &catalog.root.docs {
-        body.push_str(&render_doc_text(docs));
+        body.push_str(&render_doc_text(docs, 2));
+    }
+    body.push_str("<nav class=\"reference-guide-links\" aria-label=\"Related Python guides\"><a href=\"tutorial/\">Start with the tutorial</a><a href=\"manual/interfaces/\">Python interface guide</a><a href=\"reference/python/\">All Python modules</a></nav>");
+    let filter_id = format!("{}-symbol-filter", slug(&catalog.component.id));
+    body.push_str(&format!(
+        "<div class=\"reference-tools\"><label for=\"{}\">Filter supported symbols and implementation details</label><input id=\"{}\" type=\"search\" data-reference-filter placeholder=\"Try a class, function, method, or property\"><output data-reference-filter-count aria-live=\"polite\"></output></div><div data-reference-filter-scope>",
+        escape_html(&filter_id),
+        escape_html(&filter_id),
+    ));
+    if !supported.is_empty() {
+        body.push_str("<nav class=\"api-symbol-index reference-index\" aria-label=\"Supported Python symbols\"><h2>Supported symbols</h2><div>");
+        for (path, item) in &supported {
+            let anchor = python_item_anchor(path, item);
+            let kind = api_item_kind_label(item.kind);
+            let search = format!("{} {} {}", item.name, item.title, kind);
+            body.push_str(&format!(
+                "<a href=\"#{}\" data-reference-index-entry data-reference-search=\"{}\"><code>{}</code><span>{}</span></a>",
+                escape_html(&anchor),
+                escape_html(&search),
+                escape_html(&item.name),
+                kind,
+            ));
+        }
+        body.push_str("</div></nav>");
     }
     let mut scope_path = Vec::new();
     render_python_scope(
@@ -3734,6 +4591,7 @@ fn render_python_catalog(
         2,
         &mut body,
     );
+    body.push_str("</div>");
     body.push_str(&format!(
         "<details class=\"stub-source\"><summary>Type-checker stub source</summary><p><a href=\"reference/python/{}\">Download <code>{}</code></a>. This source is retained for type checkers; the structured reference above is the human-facing documentation.</p><pre><code>{}</code></pre></details>",
         escape_html(stub_name),
@@ -3751,22 +4609,81 @@ fn render_python_scope(
     level: usize,
     body: &mut String,
 ) {
-    for item in scope.items.values() {
+    for supported in [true, false] {
+        let item_count = count_catalog_surface_items(scope, supported);
+        if item_count == 0 {
+            continue;
+        }
+        if supported {
+            body.push_str("<div class=\"api-supported-group\" data-reference-group>");
+        } else {
+            body.push_str(&format!(
+                "<details class=\"api-implementation-group\" data-reference-group data-reference-implementation><summary><strong>Implementation-detail exports</strong> · {item_count} reachable symbol{}</summary><p>These names are visible to Python, but are outside the curated compatibility surface. Prefer the supported API above.</p>",
+                if item_count == 1 { "" } else { "s" },
+            ));
+        }
+        render_python_scope_surface(
+            scope,
+            path,
+            git_commit,
+            level,
+            supported,
+            catalog.component.language,
+            body,
+        );
+        body.push_str(if supported { "</div>" } else { "</details>" });
+    }
+}
+
+fn render_python_scope_surface(
+    scope: &DocScope,
+    path: &mut Vec<String>,
+    git_commit: &str,
+    level: usize,
+    supported: bool,
+    language: ApiLanguage,
+    body: &mut String,
+) {
+    for item in scope
+        .items
+        .values()
+        .filter(|item| item.supported == supported)
+    {
         let anchor = python_item_anchor(path, item);
         let heading = level.clamp(2, 6);
+        let section_heading = (heading + 1).clamp(3, 6);
+        let kind = api_item_kind_label(item.kind);
+        let mut search = format!(
+            "{} {} {} {}",
+            item.name,
+            item.title,
+            kind,
+            item.signature.as_deref().unwrap_or_default(),
+        );
+        let mut members = item.members.iter().collect::<Vec<_>>();
+        while let Some(member) = members.pop() {
+            search.push(' ');
+            search.push_str(&member.name);
+            members.extend(&member.members);
+        }
         body.push_str(&format!(
-            "<section class=\"api-item\" id=\"{}\"><h{heading}><code>{}</code></h{heading}><span class=\"api-kind\">{}</span>{}",
-            escape_html(&anchor),
-            escape_html(&item.name),
-            escape_html(&format!("{:?}", item.kind)),
-            if item.supported {
-                ""
-            } else {
-                "<span class=\"api-kind\">implementation detail</span>"
-            }
+                "<section class=\"api-item\" data-api-surface=\"{}\" id=\"{}\" data-reference-entry data-reference-search=\"{}\"><div class=\"api-item-heading\"><h{heading}><code>{}</code></h{heading}><span class=\"api-kind\">{kind}</span>{}</div>",
+                if supported {
+                    "supported"
+                } else {
+                    "implementation"
+                },
+                escape_html(&anchor),
+                escape_html(&search),
+                escape_html(&item.name),
+                if supported {
+                    ""
+                } else {
+                    "<span class=\"api-kind\">Compatibility not promised</span>"
+                }
         ));
         if let Some(docs) = &item.docs {
-            body.push_str(&render_doc_text(docs));
+            body.push_str(&render_doc_text(docs, section_heading));
         } else if let Some(summary) = &item.summary {
             body.push_str(&format!("<p>{}</p>", escape_html(summary)));
         }
@@ -3776,7 +4693,7 @@ fn render_python_scope(
                 escape_html(signature)
             ));
         }
-        if !item.required_features.is_empty() {
+        if language == ApiLanguage::Rust && !item.required_features.is_empty() {
             body.push_str("<p><strong>Requires:</strong> ");
             for feature in &item.required_features {
                 body.push_str(&format!(
@@ -3787,68 +4704,90 @@ fn render_python_scope(
             body.push_str("</p>");
         }
         if !item.params.is_empty() {
-            body.push_str("<h4>Parameters</h4><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>");
+            body.push_str(&format!("<h{section_heading}>Parameters</h{section_heading}><div class=\"reference-table-wrap\"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>"));
             for parameter in &item.params {
                 let docs = parameter
                     .docs
                     .as_ref()
-                    .map(|docs| escape_html(&docs.body))
+                    .map(|docs| render_doc_text(docs, (section_heading + 1).clamp(4, 6)))
                     .unwrap_or_default();
                 body.push_str(&format!(
-                    "<tr><td><code>{}</code>{}</td><td><code>{}</code></td><td><code>{}</code></td><td>{}</td></tr>",
-                    escape_html(&parameter.name),
-                    if parameter.required { " <span class=\"api-kind\">required</span>" } else { "" },
-                    escape_html(parameter.ty.as_deref().unwrap_or("—")),
-                    escape_html(parameter.default.as_deref().unwrap_or("—")),
-                    docs,
-                ));
+                        "<tr><td><code>{}</code>{}</td><td><code>{}</code></td><td><code>{}</code></td><td>{}</td></tr>",
+                        escape_html(&parameter.name),
+                        if parameter.required { " <span class=\"api-kind\">required</span>" } else { "" },
+                        escape_html(parameter.ty.as_deref().unwrap_or("—")),
+                        escape_html(parameter.default.as_deref().unwrap_or("—")),
+                        docs,
+                    ));
             }
-            body.push_str("</tbody></table>");
+            body.push_str("</tbody></table></div>");
         }
         if let Some(returns) = &item.returns {
-            body.push_str("<h4>Returns</h4>");
-            body.push_str(&render_doc_text(returns));
+            body.push_str(&format!("<h{section_heading}>Returns</h{section_heading}>"));
+            body.push_str(&render_doc_text(returns, (section_heading + 1).clamp(4, 6)));
         }
         for example in &item.examples {
             body.push_str(&format!(
-                "<h4>{}</h4><pre><code data-lang=\"{}\">{}</code></pre>",
+                "<h{section_heading}>{}</h{section_heading}><pre><code data-lang=\"{}\">{}</code></pre>",
                 escape_html(&example.title),
                 escape_html(&example.language),
                 escape_html(&example.code)
             ));
         }
-        render_python_members(&item.members, &anchor, 4, body);
+        render_python_members(&item.members, &anchor, heading, body);
         if let Some(source) = &item.source {
             body.push_str(&format!(
-                "<p><a href=\"https://github.com/alphal00p/gammaloop/blob/{}/{}#L{}\">Source: <code>{}:{}</code></a></p>",
-                escape_html(git_commit),
-                escape_html(&source.file),
-                source.line,
-                escape_html(&source.file),
-                source.line,
-            ));
+                    "<p class=\"api-source-link\"><a href=\"https://github.com/alphal00p/gammaloop/blob/{}/{}#L{}\">View {} source: <code>{}:{}</code></a></p>",
+                    escape_html(git_commit),
+                    escape_html(&source.file),
+                    source.line,
+                    if language == ApiLanguage::Python {
+                        "generated signature"
+                    } else {
+                        "implementation"
+                    },
+                    escape_html(&source.file),
+                    source.line,
+                ));
         }
         body.push_str("</section>");
     }
     for child in scope.scopes.values() {
         path.push(child.id.clone());
-        if child.id != "supported" {
+        let mut child_body = String::new();
+        render_python_scope_surface(
+            child,
+            path,
+            git_commit,
+            level + 1,
+            supported,
+            language,
+            &mut child_body,
+        );
+        if !child_body.is_empty() {
+            body.push_str("<section class=\"api-scope\" data-reference-group>");
+        }
+        if !child_body.is_empty() && child.id != "supported" {
             let heading = level.clamp(2, 6);
             body.push_str(&format!(
                 "<h{heading}>{}</h{heading}>",
                 escape_html(&child.title)
             ));
-            if let Some(summary) = &child.summary {
-                body.push_str(&format!("<p>{}</p>", escape_html(summary)));
-            }
-            if let Some(docs) = &child.docs {
-                body.push_str(&render_doc_text(docs));
+            if supported {
+                if let Some(summary) = &child.summary {
+                    body.push_str(&format!("<p>{}</p>", escape_html(summary)));
+                }
+                if let Some(docs) = &child.docs {
+                    body.push_str(&render_doc_text(docs, (level + 1).clamp(3, 6)));
+                }
             }
         }
-        render_python_scope(catalog, child, path, git_commit, level + 1, body);
+        body.push_str(&child_body);
+        if !child_body.is_empty() {
+            body.push_str("</section>");
+        }
         path.pop();
     }
-    let _ = catalog;
 }
 
 fn render_python_members(
@@ -3857,15 +4796,38 @@ fn render_python_members(
     level: usize,
     body: &mut String,
 ) {
+    let member_kind_label = |kind| match kind {
+        alphal00p_docs_schema::DocMemberKind::Parameter => "Parameter",
+        alphal00p_docs_schema::DocMemberKind::Field => "Field",
+        alphal00p_docs_schema::DocMemberKind::Variant => "Variant",
+        alphal00p_docs_schema::DocMemberKind::AssociatedFunction => "Class or static method",
+        alphal00p_docs_schema::DocMemberKind::AssociatedType => "Associated type",
+        alphal00p_docs_schema::DocMemberKind::AssociatedConst => "Associated constant",
+        alphal00p_docs_schema::DocMemberKind::Method => "Method",
+        alphal00p_docs_schema::DocMemberKind::Getter => "Property getter",
+        alphal00p_docs_schema::DocMemberKind::Setter => "Property setter",
+    };
     let mut anchor_counts = BTreeMap::new();
     for member in members {
         let anchor = next_python_member_anchor(parent_anchor, member, &mut anchor_counts);
-        let heading = level.clamp(3, 6);
+        let heading = (level + 1).clamp(3, 6);
+        let kind = member_kind_label(member.kind);
+        let search = format!(
+            "{} {} {} {}",
+            member.name,
+            kind,
+            member.signature.as_deref().unwrap_or_default(),
+            member
+                .docs
+                .as_ref()
+                .and_then(|docs| docs.body.lines().next())
+                .unwrap_or_default(),
+        );
         body.push_str(&format!(
-            "<section class=\"api-member\" id=\"{}\"><h{heading}><code>{}</code></h{heading}><span class=\"api-kind\">{:?}</span>",
+            "<section class=\"api-member\" id=\"{}\" data-reference-entry data-reference-search=\"{}\"><div class=\"api-member-heading\"><h{heading}><code>{}</code></h{heading}><span class=\"api-kind\">{kind}</span></div>",
             escape_html(&anchor),
+            escape_html(&search),
             escape_html(&member.name),
-            member.kind,
         ));
         if let Some(signature) = &member.signature {
             body.push_str(&format!(
@@ -3874,7 +4836,7 @@ fn render_python_members(
             ));
         }
         if let Some(docs) = &member.docs {
-            body.push_str(&render_doc_text(docs));
+            body.push_str(&render_doc_text(docs, (heading + 1).clamp(4, 6)));
         }
         if let Some(default) = &member.default {
             body.push_str(&format!(
@@ -3882,24 +4844,211 @@ fn render_python_members(
                 escape_html(default)
             ));
         }
-        render_python_members(&member.members, &anchor, level + 1, body);
+        render_python_members(&member.members, &anchor, heading, body);
         body.push_str("</section>");
     }
 }
 
-fn render_doc_text(docs: &alphal00p_docs_schema::DocText) -> String {
-    let paragraphs = docs
-        .body
-        .split("\n\n")
-        .filter(|paragraph| !paragraph.trim().is_empty())
-        .map(|paragraph| {
-            escape_html(paragraph.trim())
-                .replace("\r\n", "<br>")
-                .replace('\n', "<br>")
-        })
-        .map(|paragraph| format!("<p>{paragraph}</p>"))
-        .collect::<String>();
-    format!("<div class=\"api-docstring\">{paragraphs}</div>")
+fn render_doc_text(docs: &alphal00p_docs_schema::DocText, heading_level: usize) -> String {
+    let render_paragraphs = |lines: &[&str]| {
+        lines
+            .split(|line| line.trim().is_empty())
+            .filter(|paragraph| paragraph.iter().any(|line| !line.trim().is_empty()))
+            .map(|paragraph| {
+                let text = paragraph
+                    .iter()
+                    .map(|line| line.trim())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                format!(
+                    "<p>{}</p>",
+                    escape_html(&text)
+                        .replace("\r\n", "<br>")
+                        .replace('\n', "<br>")
+                )
+            })
+            .collect::<String>()
+    };
+    if docs.format != DocFormat::PythonDocstring {
+        return format!(
+            "<div class=\"api-docstring\">{}</div>",
+            render_paragraphs(&docs.body.lines().collect::<Vec<_>>())
+        );
+    }
+
+    let lines = docs.body.lines().collect::<Vec<_>>();
+    let mut sections = vec![];
+    let mut start = 0;
+    let mut title = None;
+    let mut index = 0;
+    while index < lines.len() {
+        let raw_heading = lines[index].trim();
+        let heading = raw_heading
+            .trim_start_matches('#')
+            .trim()
+            .trim_end_matches(':');
+        let common_heading = matches!(
+            heading.to_ascii_lowercase().as_str(),
+            "parameters"
+                | "other parameters"
+                | "keyword arguments"
+                | "attributes"
+                | "returns"
+                | "yields"
+                | "raises"
+                | "warns"
+                | "examples"
+                | "notes"
+                | "see also"
+        );
+        let numpy_heading = index + 1 < lines.len()
+            && !heading.is_empty()
+            && lines[index + 1].trim().len() >= 3
+            && lines[index + 1]
+                .trim()
+                .chars()
+                .all(|character| character == '-');
+        let markdown_heading = raw_heading.starts_with('#') && common_heading;
+        let labeled_heading = raw_heading.ends_with(':') && common_heading;
+        if numpy_heading || markdown_heading || labeled_heading {
+            if start < index {
+                sections.push((title.take(), &lines[start..index]));
+            }
+            title = Some(heading);
+            let consumed = if numpy_heading { 2 } else { 1 };
+            start = index + consumed;
+            index += consumed;
+        } else {
+            index += 1;
+        }
+    }
+    if start < lines.len() {
+        sections.push((title, &lines[start..]));
+    } else if let Some(title) = title {
+        sections.push((Some(title), &lines[lines.len()..]));
+    }
+
+    let mut rendered = String::from("<div class=\"api-docstring\">");
+    for (title, content) in sections {
+        let Some(title) = title else {
+            rendered.push_str(&render_paragraphs(content));
+            continue;
+        };
+        let section_class = slug(title);
+        rendered.push_str(&format!(
+            "<section class=\"api-doc-section api-doc-{}\"><h{heading_level}>{}</h{heading_level}>",
+            escape_html(&section_class),
+            escape_html(title),
+        ));
+        match title.to_ascii_lowercase().as_str() {
+            "parameters" | "other parameters" | "keyword arguments" | "attributes" => {
+                let mut definitions = vec![];
+                let mut term = None;
+                let mut description = vec![];
+                for line in content
+                    .iter()
+                    .map(|line| line.trim())
+                    .filter(|line| !line.is_empty())
+                {
+                    if let Some((name, ty)) = line.split_once(" : ") {
+                        if let Some((name, ty)) = term.take() {
+                            definitions.push((name, ty, std::mem::take(&mut description)));
+                        }
+                        term = Some((name.trim(), ty.trim()));
+                    } else {
+                        description.push(line);
+                    }
+                }
+                if let Some((name, ty)) = term {
+                    definitions.push((name, ty, description));
+                }
+                if definitions.is_empty() {
+                    rendered.push_str(&render_paragraphs(content));
+                } else {
+                    rendered.push_str("<dl class=\"api-doc-definitions\">");
+                    for (name, ty, description) in definitions {
+                        rendered.push_str(&format!(
+                            "<dt><code>{}</code> <span>{}</span></dt><dd>{}</dd>",
+                            escape_html(name),
+                            escape_html(ty),
+                            render_paragraphs(&description),
+                        ));
+                    }
+                    rendered.push_str("</dl>");
+                }
+            }
+            "returns" | "yields" => {
+                let content = content
+                    .iter()
+                    .map(|line| line.trim())
+                    .filter(|line| !line.is_empty())
+                    .collect::<Vec<_>>();
+                if let Some((name, ty)) = content.first().and_then(|line| line.split_once(" : ")) {
+                    rendered.push_str(&format!(
+                        "<dl class=\"api-doc-definitions\"><dt><code>{}</code> <span>{}</span></dt><dd>{}</dd></dl>",
+                        escape_html(name.trim()),
+                        escape_html(ty.trim()),
+                        render_paragraphs(&content[1..]),
+                    ));
+                } else if let Some((ty, description)) = content.split_first() {
+                    rendered.push_str(&format!(
+                        "<p class=\"api-doc-type\"><code>{}</code></p>{}",
+                        escape_html(ty),
+                        render_paragraphs(description),
+                    ));
+                }
+            }
+            "raises" | "warns" => {
+                let mut definitions = vec![];
+                let mut exception = None;
+                let mut description = vec![];
+                for line in content
+                    .iter()
+                    .map(|line| line.trim())
+                    .filter(|line| !line.is_empty())
+                {
+                    let is_exception = line.split(',').all(|candidate| {
+                        let candidate = candidate.trim();
+                        candidate.ends_with("Error")
+                            || candidate.ends_with("Exception")
+                            || candidate.ends_with("Warning")
+                    });
+                    if is_exception {
+                        if let Some(exception) = exception.take() {
+                            definitions.push((exception, std::mem::take(&mut description)));
+                        }
+                        exception = Some(line);
+                    } else {
+                        description.push(line);
+                    }
+                }
+                if let Some(exception) = exception {
+                    definitions.push((exception, description));
+                }
+                if definitions.is_empty() {
+                    rendered.push_str(&render_paragraphs(content));
+                } else {
+                    rendered.push_str("<dl class=\"api-doc-definitions\">");
+                    for (exception, description) in definitions {
+                        rendered.push_str(&format!(
+                            "<dt><code>{}</code></dt><dd>{}</dd>",
+                            escape_html(exception),
+                            render_paragraphs(&description),
+                        ));
+                    }
+                    rendered.push_str("</dl>");
+                }
+            }
+            "examples" => rendered.push_str(&format!(
+                "<pre><code data-lang=\"python\">{}</code></pre>",
+                escape_html(content.join("\n").trim()),
+            )),
+            _ => rendered.push_str(&render_paragraphs(content)),
+        }
+        rendered.push_str("</section>");
+    }
+    rendered.push_str("</div>");
+    rendered
 }
 
 fn python_item_anchor(path: &[String], item: &DocItem) -> String {
@@ -3939,6 +5088,9 @@ fn append_catalog_search_at(
     entries: &mut Vec<SearchEntry>,
 ) {
     for item in scope.items.values() {
+        if catalog.component.language == ApiLanguage::Python && !item.supported {
+            continue;
+        }
         let (href, kind, member_anchor) = match catalog.component.language {
             ApiLanguage::Rust => {
                 let anchor = python_item_anchor(path, item);
@@ -4559,7 +5711,11 @@ fn generated_reference_typst(
     match product {
         "gammaloop" => {
             let mut commands = String::new();
-            for command in &gamma.commands {
+            for command in gamma
+                .commands
+                .iter()
+                .filter(|command| !command.hidden && !command.generated_help)
+            {
                 commands.push_str(&format!(
                     "[#raw(\"{}\")], [#raw(\"{}\")],\n",
                     typst_string(&command.path),
@@ -4662,80 +5818,291 @@ fn reference_page(product: &str, title: &str, body: &str) -> String {
 }
 
 fn render_gammaloop_generated_reference(product: &str, reference: &GammaLoopReference) -> String {
+    let visible_commands = reference
+        .commands
+        .iter()
+        .filter(|command| !command.hidden && !command.generated_help);
+    let visible_command_count = visible_commands.clone().count();
+    let visible_argument_count = visible_commands
+        .clone()
+        .flat_map(|command| &command.arguments)
+        .filter(|argument| !argument.hidden)
+        .count();
     let mut body = format!(
-        "<p>Commands and settings available in this version are listed below. <a href=\"reference/generated/gammaloop-reference.json\">Download JSON for tooling</a>.</p><p>{} commands · {} settings</p>",
-        reference.commands.len(),
-        reference.settings.len()
+        "<p>This version-specific reference is generated from the compiled Clap parser and serialized settings schemas. It preserves exact usage, value arity, aliases, inherited options, conflicts, defaults, and allowed values. <a href=\"reference/generated/gammaloop-reference.json\">Download the schema-v{} JSON</a>.</p><p class=\"reference-summary\">{visible_command_count} public commands · {visible_argument_count} public arguments · {} settings</p><nav class=\"reference-guide-links\" aria-label=\"Related task guides\"><a href=\"tutorial/\">Create your first state</a><a href=\"manual/process-generation/\">Generate a process</a><a href=\"manual/diagnostics/\">Diagnose a run</a></nav><div class=\"reference-tools\"><label for=\"cli-reference-filter\">Filter commands, aliases, arguments, and setting paths</label><input id=\"cli-reference-filter\" type=\"search\" data-reference-filter placeholder=\"Try clean-state, integrate, or runtime.integrator\"><output data-reference-filter-count aria-live=\"polite\"></output></div><div data-reference-filter-scope>",
+        reference.schema_version,
+        reference.settings.len(),
     );
-    body.push_str("<h2>Command tree</h2>");
-    for command in &reference.commands {
-        let aliases = if command.aliases.is_empty() {
-            String::new()
-        } else {
+
+    let mut command_families = BTreeMap::<String, Vec<_>>::new();
+    for command in visible_commands {
+        let family = command
+            .path
+            .split_whitespace()
+            .nth(1)
+            .unwrap_or("global")
+            .to_owned();
+        command_families.entry(family).or_default().push(command);
+    }
+    let command_index = command_families
+        .iter()
+        .map(|(family, commands)| {
             format!(
-                "<p>Aliases: <code>{}</code></p>",
-                escape_html(&command.aliases.join(", "))
+                "<a href=\"#command-family-{}\"><code>{}</code><span>{} command{}</span></a>",
+                escape_html(&slug(family)),
+                escape_html(family),
+                commands.len(),
+                if commands.len() == 1 { "" } else { "s" },
             )
-        };
-        let mut arguments = String::new();
-        for argument in &command.arguments {
-            let mut names = Vec::new();
-            if let Some(short) = argument.short {
-                names.push(format!("-{short}"));
-            }
-            if let Some(long) = &argument.long {
-                names.push(format!("--{long}"));
-            }
-            if names.is_empty() {
-                names.push(argument.id.clone());
-            }
-            let values = if argument.value_names.is_empty() {
+        })
+        .collect::<String>();
+    body.push_str(&format!(
+        "<h2 id=\"command-tree\">Command families</h2><div class=\"reference-index\">{command_index}</div>"
+    ));
+    for (family, commands) in command_families {
+        body.push_str(&format!(
+            "<section class=\"reference-group\" data-reference-group><h3 id=\"command-family-{}\"><code>{}</code></h3>",
+            escape_html(&slug(&family)),
+            escape_html(&family),
+        ));
+        for command in commands {
+            let command_anchor = generated_anchor("command", &command.path);
+            let visible_aliases = command
+                .aliases
+                .iter()
+                .filter(|alias| alias.visible)
+                .map(|alias| match alias.kind {
+                    CliAliasKind::Name => alias.name.clone(),
+                    CliAliasKind::ShortFlag => format!("-{}", alias.name),
+                    CliAliasKind::LongFlag => format!("--{}", alias.name),
+                })
+                .collect::<Vec<_>>();
+            let hidden_alias_count = command
+                .aliases
+                .iter()
+                .filter(|alias| !alias.visible)
+                .count();
+            let aliases = if visible_aliases.is_empty() && hidden_alias_count == 0 {
                 String::new()
             } else {
-                format!(" &lt;{}&gt;", escape_html(&argument.value_names.join("|")))
+                format!(
+                    "<p class=\"reference-aliases\"><strong>Aliases:</strong> {}{}</p>",
+                    if visible_aliases.is_empty() {
+                        "none".to_owned()
+                    } else {
+                        visible_aliases
+                            .iter()
+                            .map(|alias| format!("<code>{}</code>", escape_html(alias)))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    },
+                    if hidden_alias_count == 0 {
+                        String::new()
+                    } else {
+                        format!(
+                            " · {hidden_alias_count} hidden parser alias{}",
+                            if hidden_alias_count == 1 { "" } else { "es" }
+                        )
+                    }
+                )
             };
-            arguments.push_str(&format!(
-                "<tr><td><code>{}{values}</code></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
-                escape_html(&names.join(", ")),
-                escape_html(&argument.help),
-                if argument.required { "yes" } else { "no" },
-                escape_html(&argument.defaults.join(", ")),
-                escape_html(&argument.possible_values.join(", ")),
+            let mut arguments = String::new();
+            let mut search_terms = vec![command.path.clone(), command.about.clone()];
+            search_terms.extend(visible_aliases);
+            for argument in command.arguments.iter().filter(|argument| !argument.hidden) {
+                let argument_anchor =
+                    generated_anchor("argument", &format!("{}::{}", command.path, argument.id));
+                let mut names = Vec::new();
+                if let Some(short) = argument.short {
+                    names.push(format!("-{short}"));
+                }
+                if let Some(long) = &argument.long {
+                    names.push(format!("--{long}"));
+                }
+                if names.is_empty() {
+                    names.push(argument.id.clone());
+                }
+                names.extend(
+                    argument
+                        .aliases
+                        .iter()
+                        .filter(|alias| alias.visible)
+                        .map(|alias| match alias.kind {
+                            CliAliasKind::Name => alias.name.clone(),
+                            CliAliasKind::ShortFlag => format!("-{}", alias.name),
+                            CliAliasKind::LongFlag => format!("--{}", alias.name),
+                        }),
+                );
+                search_terms.extend(names.iter().cloned());
+                search_terms.push(argument.help.clone());
+                let action = match argument.action {
+                    CliArgumentAction::Set => "set one value",
+                    CliArgumentAction::Append => "append values",
+                    CliArgumentAction::SetTrue => "boolean flag (true)",
+                    CliArgumentAction::SetFalse => "boolean flag (false)",
+                    CliArgumentAction::Count => "count occurrences",
+                    CliArgumentAction::Help
+                    | CliArgumentAction::HelpShort
+                    | CliArgumentAction::HelpLong => "show help",
+                    CliArgumentAction::Version => "show version",
+                };
+                let arity = match (argument.arity.min, argument.arity.max) {
+                    (0, Some(0)) => "no value".to_owned(),
+                    (min, Some(max)) if min == max => format!("exactly {min}"),
+                    (min, Some(max)) => format!("{min}–{max}"),
+                    (min, None) => format!("{min} or more"),
+                };
+                let mut behavior = vec![action.to_owned(), arity];
+                if argument.required {
+                    behavior.push("required".to_owned());
+                }
+                if argument.inherited {
+                    behavior.push("inherited global".to_owned());
+                } else if argument.global {
+                    behavior.push("global".to_owned());
+                }
+                if argument.exclusive {
+                    behavior.push("exclusive".to_owned());
+                }
+                if argument.require_equals {
+                    behavior.push("requires =".to_owned());
+                }
+                let values = [
+                    (!argument.value_names.is_empty())
+                        .then(|| format!("names: {}", argument.value_names.join(", "))),
+                    (!argument.defaults.is_empty())
+                        .then(|| format!("default: {}", argument.defaults.join(", "))),
+                    (!argument.possible_values.is_empty())
+                        .then(|| format!("allowed: {}", argument.possible_values.join(", "))),
+                    argument
+                        .value_delimiter
+                        .map(|delimiter| format!("delimiter: {delimiter}")),
+                    argument
+                        .value_terminator
+                        .as_ref()
+                        .map(|terminator| format!("terminator: {terminator}")),
+                ]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(" · ");
+                arguments.push_str(&format!(
+                    "<tr id=\"{}\"{}><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+                    escape_html(&argument_anchor),
+                    if argument.inherited { " class=\"reference-inherited\"" } else { "" },
+                    escape_html(&names.join(", ")),
+                    if argument.help.is_empty() { "<span class=\"reference-missing\">Description missing at the parser boundary</span>".to_owned() } else { escape_html(&argument.help) },
+                    escape_html(&behavior.join(" · ")),
+                    if values.is_empty() { "—".to_owned() } else { escape_html(&values) },
+                    if argument.conflicts_with.is_empty() {
+                        "—".to_owned()
+                    } else {
+                        argument
+                            .conflicts_with
+                            .iter()
+                            .map(|conflict| format!("<code>{}</code>", escape_html(conflict)))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    },
+                ));
+            }
+            let table = if arguments.is_empty() {
+                "<p>No public arguments.</p>".to_owned()
+            } else {
+                format!(
+                    "<div class=\"reference-table-wrap\"><table class=\"reference-table\"><thead><tr><th>Argument</th><th>Description</th><th>Action and arity</th><th>Values</th><th>Conflicts</th></tr></thead><tbody>{arguments}</tbody></table></div>"
+                )
+            };
+            let usage_id = format!("{command_anchor}-usage");
+            body.push_str(&format!(
+                "<article class=\"reference-detail\" id=\"{}\" data-reference-entry data-reference-search=\"{}\"><div class=\"reference-detail-heading\"><h4><code>{}</code></h4><a href=\"#{}\" aria-label=\"Permanent link to {}\">#</a></div><p>{}</p>{aliases}<div class=\"reference-copy-row\"><pre class=\"api-signature\" id=\"{}\"><code>{}</code></pre><button type=\"button\" data-copy-target=\"{}\">Copy usage</button></div>{table}</article>",
+                escape_html(&command_anchor),
+                escape_html(&search_terms.join(" ").to_lowercase()),
+                escape_html(&command.path),
+                escape_html(&command_anchor),
+                escape_html(&command.path),
+                if command.about.is_empty() { "<span class=\"reference-missing\">Description missing at the parser boundary.</span>".to_owned() } else { escape_html(&command.about) },
+                escape_html(&usage_id),
+                escape_html(&command.usage),
+                escape_html(&usage_id),
             ));
         }
-        let table = if arguments.is_empty() {
-            "<p>No arguments.</p>".to_owned()
-        } else {
-            format!(
-                "<table><thead><tr><th>Argument</th><th>Description</th><th>Required</th><th>Default</th><th>Values</th></tr></thead><tbody>{arguments}</tbody></table>"
-            )
-        };
+        body.push_str("</section>");
+    }
+    let hidden_command_count = reference
+        .commands
+        .iter()
+        .filter(|command| command.hidden && !command.generated_help)
+        .count();
+    if hidden_command_count > 0 {
         body.push_str(&format!(
-            "<section id=\"{}\"><h3><code>{}</code></h3><p>{}</p>{aliases}{table}</section>",
-            generated_anchor("command", &command.path),
-            escape_html(&command.path),
-            escape_html(&command.about),
+            "<details class=\"reference-internal\"><summary>{hidden_command_count} hidden parser command{}</summary><p>Hidden commands remain in the downloadable generated catalog for parser parity, but are not promoted as supported user tasks.</p></details>",
+            if hidden_command_count == 1 { "" } else { "s" }
         ));
     }
-    body.push_str("<h2>Settings</h2><table><thead><tr><th>Path</th><th>Type</th><th>Description</th><th>Required</th><th>Default</th><th>Values</th></tr></thead><tbody>");
+    let generated_help_count = reference
+        .commands
+        .iter()
+        .filter(|command| command.generated_help)
+        .count();
+    if generated_help_count > 0 {
+        body.push_str(&format!(
+            "<details class=\"reference-internal\"><summary>{generated_help_count} generated help-tree nodes</summary><p>The compiled parser exposes these nodes for nested <code>help</code> traversal. They remain in the downloadable schema for parity but are intentionally omitted from primary command navigation and completeness counts.</p></details>"
+        ));
+    }
+
+    let mut setting_groups = BTreeMap::<String, Vec<_>>::new();
     for setting in &reference.settings {
-        let default = setting
-            .default
-            .as_ref()
-            .map(Value::to_string)
-            .unwrap_or_default();
+        let mut segments = setting.path.split('.');
+        let root = segments.next().unwrap_or("settings");
+        let family = segments.next().unwrap_or("general");
+        setting_groups
+            .entry(format!("{root}.{family}"))
+            .or_default()
+            .push(setting);
+    }
+    let settings_index = setting_groups
+        .iter()
+        .map(|(group, settings)| {
+            format!(
+                "<a href=\"#settings-group-{}\"><code>{}</code><span>{} setting{}</span></a>",
+                escape_html(&slug(group)),
+                escape_html(group),
+                settings.len(),
+                if settings.len() == 1 { "" } else { "s" },
+            )
+        })
+        .collect::<String>();
+    body.push_str(&format!(
+        "<h2 id=\"settings\">Settings groups</h2><p>CLI settings govern startup and session behavior; runtime settings govern generated integrands, sampling, stability, subtraction, events, selectors, and observables. Precedence and live tracing reload behavior are explained in the <a href=\"manual/diagnostics/\">diagnostics guide</a>.</p><div class=\"reference-index\">{settings_index}</div>"
+    ));
+    for (group, settings) in setting_groups {
+        let mut rows = String::new();
+        for setting in settings {
+            let default = setting
+                .default
+                .as_ref()
+                .map(Value::to_string)
+                .unwrap_or_else(|| "—".to_owned());
+            rows.push_str(&format!(
+                "<tr id=\"{}\" data-reference-entry data-reference-search=\"{}\"><td><code>{}</code></td><td><code>{}</code></td><td>{}</td><td>{}</td><td><code>{}</code></td><td>{}</td></tr>",
+                generated_anchor("setting", &setting.path),
+                escape_html(&format!("{} {} {}", setting.path, setting.description, setting.possible_values.join(" ")).to_lowercase()),
+                escape_html(&setting.path),
+                escape_html(&setting.value_type),
+                if setting.description.is_empty() { "<span class=\"reference-missing\">Description missing in the settings schema</span>".to_owned() } else { escape_html(&setting.description) },
+                if setting.required { "yes" } else { "no" },
+                escape_html(&default),
+                if setting.possible_values.is_empty() { "—".to_owned() } else { escape_html(&setting.possible_values.join(", ")) },
+            ));
+        }
         body.push_str(&format!(
-            "<tr id=\"{}\"><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}</td><td><code>{}</code></td><td>{}</td></tr>",
-            generated_anchor("setting", &setting.path),
-            escape_html(&setting.path),
-            escape_html(&setting.value_type),
-            escape_html(&setting.description),
-            if setting.required { "yes" } else { "no" },
-            escape_html(&default),
-            escape_html(&setting.possible_values.join(", ")),
+            "<section class=\"reference-group\" data-reference-group><h3 id=\"settings-group-{}\"><code>{}</code></h3><div class=\"reference-table-wrap\"><table class=\"reference-table\"><thead><tr><th>Path</th><th>Type</th><th>Description</th><th>Required</th><th>Default</th><th>Allowed values</th></tr></thead><tbody>{rows}</tbody></table></div></section>",
+            escape_html(&slug(&group)),
+            escape_html(&group),
         ));
     }
-    body.push_str("</tbody></table>");
+    body.push_str("</div>");
     reference_page(product, "CLI commands and settings", &body)
 }
 
@@ -4853,36 +6220,185 @@ fn directories_equal(left: &Path, right: &Path) -> Result<bool> {
 
 fn validate_local_target(
     output: &Path,
-    source: &Path,
-    href: &str,
+    link: LinkReference<'_>,
     failures: &mut Vec<String>,
+    patterns: &LinkValidationPatterns,
+    state: LinkValidationState<'_>,
 ) -> Result<()> {
-    let Some(resolved) = resolve_local_link(output, source, href) else {
+    let (linked_pages, link_rewrites, local_paths) = state;
+    let Some(resolved) = resolve_local_link(output, link.source, link.href, local_paths) else {
         return Ok(());
     };
-    let source = source.strip_prefix(output).unwrap_or(source).display();
-    if !resolved.is_file() {
-        failures.push(format!("{source} -> {href}"));
+    let source_display = link
+        .source
+        .strip_prefix(output)
+        .unwrap_or(link.source)
+        .display();
+    if !resolved.starts_with(output) {
+        failures.push(format!(
+            "{source_display} -> {} (escapes generated output root)",
+            link.href
+        ));
         return Ok(());
     }
-    let Some((_, fragment)) = href.split_once('#') else {
+    let target_is_file = local_paths
+        .entry(resolved.clone())
+        .or_insert_with(|| {
+            fs::metadata(&resolved)
+                .ok()
+                .map(|metadata| metadata.file_type())
+        })
+        .as_ref()
+        .is_some_and(|file_type| file_type.is_file());
+    if !target_is_file {
+        let target_path = link.href.split(['?', '#']).next().unwrap_or_default();
+        let inherited_rust_path = target_path.contains("::")
+            || (!target_path.is_empty()
+                && !target_path.contains(['/', '.'])
+                && !target_path.starts_with('#'));
+        if link.rustdoc
+            && inherited_rust_path
+            && let Some(attribute) = &link.attribute
+        {
+            // Rustdoc can inline dependency prose whose Rust paths were never
+            // resolved to site URLs. Retain the prose, but remove only this
+            // confirmed-missing, non-navigable attribute from the copied site.
+            link_rewrites
+                .entry(link.source.to_path_buf())
+                .or_default()
+                .push(LinkRewrite {
+                    range: attribute.attribute_range.clone(),
+                    expected: attribute.attribute.clone(),
+                    replacement: String::new(),
+                    target_before: link.href.to_owned(),
+                    target_after: None,
+                });
+            return Ok(());
+        }
+        failures.push(format!("{source_display} -> {}", link.href));
+        return Ok(());
+    }
+    let Some((_, fragment)) = link.href.split_once('#') else {
         return Ok(());
     };
     let fragment = fragment.split('?').next().unwrap_or_default();
     if fragment.is_empty() {
         return Ok(());
     }
-    let html = fs::read_to_string(&resolved)?;
-    let id_double = format!("id=\"{fragment}\"");
-    let id_single = format!("id='{fragment}'");
-    let name_double = format!("name=\"{fragment}\"");
-    let name_single = format!("name='{fragment}'");
-    if ![id_double, id_single, name_double, name_single]
-        .iter()
-        .any(|anchor| html.contains(anchor))
-    {
-        failures.push(format!("{source} -> {href} (missing fragment)"));
+    let load_page = |path: &Path| -> Result<(HashSet<String>, Option<String>)> {
+        let html = fs::read_to_string(path)?;
+        Ok(patterns.page_metadata(&patterns.rendered_html(&html)))
+    };
+    let mut fragment_exists = |anchors: &HashSet<String>| {
+        let rustdoc_source = resolved
+            .ancestors()
+            .any(|ancestor| ancestor.ends_with(Path::new("reference/rust/src")));
+        let rustdoc_target = resolved
+            .ancestors()
+            .any(|ancestor| ancestor.ends_with(Path::new("reference/rust")));
+        let exact_fragment = anchors.contains(fragment)
+            || (rustdoc_source
+                && fragment.split_once('-').is_some_and(|(start, end)| {
+                    start.chars().all(|character| character.is_ascii_digit())
+                        && end.chars().all(|character| character.is_ascii_digit())
+                        && anchors.contains(start)
+                        && anchors.contains(end)
+                }));
+        let normalized = if exact_fragment {
+            Some(fragment.to_owned())
+        } else if rustdoc_target
+            && let Some(method) = fragment.strip_prefix("tymethod.")
+            && anchors.contains(&format!("method.{method}"))
+        {
+            Some(format!("method.{method}"))
+        } else if rustdoc_target
+            && let Some((variant, field)) = fragment.split_once(".field.")
+            && variant.starts_with("variant.")
+            && !field.is_empty()
+            && field.chars().all(|character| character.is_ascii_digit())
+            && anchors.contains(variant)
+        {
+            Some(variant.to_owned())
+        } else {
+            None
+        };
+        let Some(normalized) = normalized else {
+            return false;
+        };
+        if normalized != fragment {
+            let Some(attribute) = &link.attribute else {
+                return false;
+            };
+            let (prefix, raw_fragment) = link
+                .href
+                .split_once('#')
+                .expect("fragment-bearing links were checked above");
+            let query = raw_fragment
+                .find('?')
+                .map_or("", |index| &raw_fragment[index..]);
+            link_rewrites
+                .entry(link.source.to_path_buf())
+                .or_default()
+                .push(LinkRewrite {
+                    range: attribute.target_range.clone(),
+                    expected: link.href.to_owned(),
+                    replacement: format!("{prefix}#{normalized}{query}"),
+                    target_before: link.href.to_owned(),
+                    target_after: Some(format!("{prefix}#{normalized}{query}")),
+                });
+        }
+        true
+    };
+    if !linked_pages.contains_key(&resolved) {
+        linked_pages.insert(resolved.clone(), load_page(&resolved)?);
     }
+    let redirect_target = {
+        let (anchors, redirect_target) = linked_pages
+            .get(&resolved)
+            .expect("linked page was inserted before fragment validation");
+        if fragment_exists(anchors) {
+            return Ok(());
+        }
+        redirect_target.clone()
+    };
+    if let Some(redirect_target) = redirect_target
+        && let Some(redirected) =
+            resolve_local_link(output, &resolved, &redirect_target, local_paths)
+        && redirected.starts_with(output)
+    {
+        let redirected_is_file = local_paths
+            .entry(redirected.clone())
+            .or_insert_with(|| {
+                fs::metadata(&redirected)
+                    .ok()
+                    .map(|metadata| metadata.file_type())
+            })
+            .as_ref()
+            .is_some_and(|file_type| file_type.is_file());
+        if !redirected_is_file {
+            failures.push(format!(
+                "{source_display} -> {} (missing redirect target {})",
+                link.href,
+                redirected.display()
+            ));
+            return Ok(());
+        }
+        if !linked_pages.contains_key(&redirected) {
+            linked_pages.insert(redirected.clone(), load_page(&redirected)?);
+        }
+        if fragment_exists(
+            &linked_pages
+                .get(&redirected)
+                .expect("redirected page was inserted before fragment validation")
+                .0,
+        ) {
+            return Ok(());
+        }
+    }
+    failures.push(format!(
+        "{source_display} -> {} (missing fragment)",
+        link.href
+    ));
     Ok(())
 }
 
@@ -4895,14 +6411,23 @@ fn decode_html_text(value: &str) -> String {
         .replace("&#39;", "'")
 }
 
-fn resolve_local_link(output: &Path, source: &Path, href: &str) -> Option<PathBuf> {
-    if href.is_empty()
-        || href.starts_with("//")
-        || href
-            .split(':')
-            .next()
-            .is_some_and(|scheme| matches!(scheme, "http" | "https" | "mailto" | "data"))
-    {
+fn resolve_local_link(
+    output: &Path,
+    source: &Path,
+    href: &str,
+    local_paths: &mut LocalPathIndex,
+) -> Option<PathBuf> {
+    let external_scheme = href.split_once(':').is_some_and(|(scheme, remainder)| {
+        !remainder.starts_with(':')
+            && scheme
+                .chars()
+                .next()
+                .is_some_and(|character| character.is_ascii_alphabetic())
+            && scheme
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric() || "+-.".contains(character))
+    });
+    if href.is_empty() || href.starts_with("//") || external_scheme {
         return None;
     }
     let href = href.split(['?', '#']).next().unwrap_or_default();
@@ -4926,7 +6451,16 @@ fn resolve_local_link(output: &Path, source: &Path, href: &str) -> Option<PathBu
             Component::Normal(part) => normalized.push(part),
         }
     }
-    if href.ends_with('/') || normalized.is_dir() {
+    let target_is_directory = local_paths
+        .entry(normalized.clone())
+        .or_insert_with(|| {
+            fs::metadata(&normalized)
+                .ok()
+                .map(|metadata| metadata.file_type())
+        })
+        .as_ref()
+        .is_some_and(|file_type| file_type.is_dir());
+    if href.ends_with('/') || target_is_directory {
         normalized.push("index.html");
     }
     Some(normalized)
@@ -4961,7 +6495,7 @@ mod tests {
             route: "products/gammaloop/snapshots/v0.3.4/".to_owned(),
             components: Vec::new(),
         };
-        let sidebar = builder.site_sidebar(product, &metadata, &current, "");
+        let sidebar = builder.site_sidebar(product, &metadata, &current, "", BuildScope::FullSite);
         assert!(!sidebar.contains("developers/"));
         assert!(!sidebar.contains("For developers"));
     }
@@ -5005,14 +6539,53 @@ mod tests {
     }
 
     #[test]
-    fn canonical_markdown_changelogs_render_headings_links_lists_and_code() {
-        let rendered = markdown_changelog_to_typst(
-            "# Changelog\n\n## [1.2.3](https://example.test/release)\n\n- fixed it\n\n```rust\nlet value = 1;\n```\n",
-        );
-        assert!(rendered.contains("== #raw(\"Changelog\")"));
-        assert!(rendered.contains("=== #link(\"https://example.test/release\")[#raw(\"1.2.3\")]"));
-        assert!(rendered.contains("- #raw(\"fixed it\")"));
-        assert!(rendered.contains("block: true, lang: \"rust\""));
+    fn canonical_typst_changelogs_are_embedded_without_duplicate_titles() {
+        let builder = SiteBuilder::discover().unwrap();
+        for product in builder
+            .registry
+            .product
+            .iter()
+            .filter(|product| product.changelog.is_some())
+        {
+            let rendered = builder.changelog_typst(product).unwrap();
+            assert!(
+                rendered
+                    .starts_with("= Canonical package changelog <canonical-package-changelog>\n")
+            );
+            assert!(rendered.contains("reference/content/changelog.typ"));
+            assert!(!rendered.contains("\n= Changelog"), "{}", product.id);
+
+            let site = tempfile::tempdir().unwrap();
+            builder
+                .write_changelog_source(product, site.path())
+                .unwrap();
+            assert!(
+                site.path()
+                    .join("reference/content/changelog.typ")
+                    .is_file()
+            );
+            assert!(!site.path().join("reference/content/changelog.md").exists());
+        }
+    }
+
+    #[test]
+    fn generated_cli_reference_de_ranks_help_and_preserves_flag_semantics() {
+        let builder = SiteBuilder::discover().unwrap();
+        let (reference, _) = builder.generated_references().unwrap();
+        let public_commands = reference
+            .commands
+            .iter()
+            .filter(|command| !command.hidden && !command.generated_help)
+            .count();
+        let rendered = render_gammaloop_generated_reference("GammaLoop", &reference);
+
+        assert!(rendered.contains(&format!("{public_commands} public commands")));
+        assert!(rendered.contains("generated help-tree nodes"));
+        assert!(!rendered.contains("<h4><code>gammaLoop help"));
+        assert!(rendered.contains("data-reference-filter"));
+        assert!(rendered.contains("--clean-state"));
+        assert!(rendered.contains("boolean flag (true) · no value"));
+        assert!(!rendered.contains("--clean-state &lt;"));
     }
 
     #[test]
@@ -5079,8 +6652,44 @@ mod tests {
         assert!(builder.check_prose_sources().is_err());
 
         builder.legacy_prose.source.push("new-note.md".into());
-        assert!(builder.check_prose_sources().is_ok());
+        assert!(builder.check_prose_sources().is_err());
+        builder.legacy_prose.source.clear();
         fs::write(temporary.path().join("new-note.typ"), "= New prose").unwrap();
+        assert!(builder.check_prose_sources().is_err());
+    }
+
+    #[test]
+    fn prose_source_gate_rejects_format_variants_and_readme_typ() {
+        let temporary = tempfile::tempdir().unwrap();
+        fs::write(temporary.path().join("README.md"), "Compatibility readme").unwrap();
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.root = temporary.path().to_path_buf();
+        builder.legacy_prose = LegacyProseConfig {
+            schema: LEGACY_PROSE_SCHEMA_VERSION,
+            source: Vec::new(),
+        };
+
+        for source in [
+            "new-note.MD",
+            "new-note.markdown",
+            "new-note.mdx",
+            "new-note.HTML",
+            "new-note.htm",
+            "new-note.shtml",
+            "new-note.rst",
+            "new-note.adoc",
+            "new-note.org",
+            "new-note.TYP",
+            "readme.md",
+            "readme.typ",
+        ] {
+            let path = temporary.path().join(source);
+            fs::write(&path, "New prose").unwrap();
+            assert!(builder.check_prose_sources().is_err(), "{source}");
+            fs::remove_file(path).unwrap();
+        }
+
+        fs::write(temporary.path().join("README.typ"), "= Duplicate readme").unwrap();
         assert!(builder.check_prose_sources().is_err());
     }
 
@@ -5250,11 +6859,303 @@ mod tests {
     fn local_links_resolve_lexically() {
         let output = Path::new("/tmp/site");
         let source = output.join("products/gammaloop/latest/index.html");
+        let mut local_paths = LocalPathIndex::new();
         assert_eq!(
-            resolve_local_link(output, &source, "../../linnet/latest/").unwrap(),
+            resolve_local_link(output, &source, "../../linnet/latest/", &mut local_paths).unwrap(),
             output.join("products/linnet/latest/index.html")
         );
-        assert!(resolve_local_link(output, &source, "https://example.com").is_none());
+        assert!(
+            resolve_local_link(output, &source, "https://example.com", &mut local_paths).is_none()
+        );
+    }
+
+    #[test]
+    fn generated_links_cannot_escape_the_output_root() {
+        let builder = SiteBuilder::discover().unwrap();
+        let temporary = tempfile::tempdir().unwrap();
+        let output = temporary.path().join("site");
+        fs::create_dir_all(&output).unwrap();
+        fs::write(temporary.path().join("outside.html"), "outside").unwrap();
+        fs::write(
+            output.join("index.html"),
+            r#"<a href="../outside.html">outside</a>"#,
+        )
+        .unwrap();
+
+        let error = builder
+            .validate_generated_links(&output, false)
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("escapes generated output root"));
+    }
+
+    #[test]
+    fn rustdoc_links_are_validated_only_when_rustdoc_is_included() {
+        let builder = SiteBuilder::discover().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let rustdoc = output.path().join("reference/rust/example");
+        fs::create_dir_all(&rustdoc).unwrap();
+        fs::write(
+            rustdoc.join("index.html"),
+            r#"<a href="missing.html">missing</a>"#,
+        )
+        .unwrap();
+
+        builder
+            .validate_generated_links(output.path(), false)
+            .unwrap();
+        let error = builder
+            .validate_generated_links(output.path(), true)
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("missing.html"));
+    }
+
+    #[test]
+    fn rustdoc_link_validation_uses_rendered_tags_and_source_line_ranges() {
+        let builder = SiteBuilder::discover().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let rustdoc = output.path().join("reference/rust/example");
+        let source = output.path().join("reference/rust/src/example");
+        fs::create_dir_all(&rustdoc).unwrap();
+        fs::create_dir_all(rustdoc.join("traits")).unwrap();
+        fs::create_dir_all(&source).unwrap();
+        fs::write(
+            rustdoc.join("index.html"),
+            r##"<script>const template = `<link href="missing/${f}">`;</script>
+                <div data-href="missing-data-link.html">not a link</div>
+                <a href="../src/example/lib.rs.html#10-12">source</a>
+                <a HREF = "enum.Value.html#variant.Grouped.field.0">tuple variant field</a>
+                <a HREF=enum.Value.html#variant.Grouped>unquoted link</a>
+                <a href="traits/trait.Iterable.html#associatedtype.Data">redirected item</a>
+                <a HrEf = trait.Iterable.html#tymethod.iter_flat>trait method</a>
+                <a href=guide>extensionless local page</a>
+                <a HREF = "crate::Span">inherited type</a>
+                <a href="dispatcher#default">inherited module</a>
+                <a href="javascript:void(0)">rustdoc control</a>"##,
+        )
+        .unwrap();
+        fs::write(
+            rustdoc.join("enum.Value.html"),
+            r#"<section id="variant.Grouped">Grouped</section>"#,
+        )
+        .unwrap();
+        fs::write(
+            rustdoc.join("traits/trait.Iterable.html"),
+            r#"<meta http-equiv="refresh" content="0;URL=../trait.Iterable.html">"#,
+        )
+        .unwrap();
+        fs::write(
+            rustdoc.join("trait.Iterable.html"),
+            r#"<section id="associatedtype.Data">Data</section><section id="method.iter_flat">iter_flat</section>"#,
+        )
+        .unwrap();
+        fs::write(
+            source.join("lib.rs.html"),
+            "<a href=#10 id=10 data-nosnippet>10</a><a href=#12 id=12 data-nosnippet>12</a>",
+        )
+        .unwrap();
+        fs::write(rustdoc.join("guide"), "extensionless page").unwrap();
+
+        builder
+            .validate_generated_links(output.path(), true)
+            .unwrap();
+        let normalized = fs::read_to_string(rustdoc.join("index.html")).unwrap();
+        assert!(normalized.contains("HREF = \"enum.Value.html#variant.Grouped\""));
+        assert!(normalized.contains("HrEf = trait.Iterable.html#method.iter_flat"));
+        assert!(normalized.contains("href=guide"));
+        assert!(normalized.contains("href=\"javascript:void(0)\""));
+        assert!(!normalized.contains("crate::Span"));
+        assert!(!normalized.contains("href=\"dispatcher#default\""));
+    }
+
+    #[test]
+    fn generated_link_validation_rejects_phantom_anchors() {
+        let builder = SiteBuilder::discover().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        fs::write(
+            output.path().join("index.html"),
+            r#"<a href="target.html#description">phantom</a>"#,
+        )
+        .unwrap();
+        fs::write(
+            output.path().join("target.html"),
+            r#"<meta name="description"><div data-id="description"></div><!-- <p id="description">comment</p> -->"#,
+        )
+        .unwrap();
+
+        let error = builder
+            .validate_generated_links(output.path(), false)
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("missing fragment"));
+    }
+
+    #[test]
+    fn generated_link_validation_accepts_named_anchors() {
+        let builder = SiteBuilder::discover().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        fs::write(
+            output.path().join("index.html"),
+            r#"<a href="target.html#legacy">legacy anchor</a>"#,
+        )
+        .unwrap();
+        fs::write(
+            output.path().join("target.html"),
+            r#"<meta name="legacy"><a name="legacy"></a>"#,
+        )
+        .unwrap();
+
+        builder
+            .validate_generated_links(output.path(), false)
+            .unwrap();
+    }
+
+    #[test]
+    fn generated_link_validation_rejects_source_ranges_on_ordinary_pages() {
+        let builder = SiteBuilder::discover().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        fs::write(
+            output.path().join("index.html"),
+            r#"<a href="target.html#10-12">not a source range</a>"#,
+        )
+        .unwrap();
+        fs::write(
+            output.path().join("target.html"),
+            r#"<a id="10"></a><a id="12"></a>"#,
+        )
+        .unwrap();
+
+        let error = builder
+            .validate_generated_links(output.path(), false)
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("missing fragment"));
+    }
+
+    #[test]
+    fn generated_search_links_are_validated_without_rewriting_html() {
+        let builder = SiteBuilder::discover().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let rustdoc = output.path().join("reference/rust");
+        fs::create_dir_all(&rustdoc).unwrap();
+        let search_index = rustdoc.join("search-index.json");
+        fs::write(rustdoc.join("index.html"), "index").unwrap();
+        fs::write(
+            rustdoc.join("target.html"),
+            r#"<section id="method.run"></section>"#,
+        )
+        .unwrap();
+        let search = serde_json::to_vec(&vec![SearchEntry {
+            title: "Run".to_owned(),
+            summary: "Run the example".to_owned(),
+            href: "target.html#tymethod.run".to_owned(),
+            kind: "rust-api".to_owned(),
+        }])
+        .unwrap();
+        fs::write(&search_index, &search).unwrap();
+
+        let error = builder
+            .validate_generated_links(output.path(), true)
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("missing fragment"));
+        assert_eq!(fs::read(search_index).unwrap(), search);
+        assert_eq!(
+            fs::read_to_string(rustdoc.join("index.html")).unwrap(),
+            "index"
+        );
+    }
+
+    #[test]
+    fn repository_source_links_are_checked_against_the_workspace() {
+        let builder = SiteBuilder::discover().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let revision = builder.git_commit();
+        fs::write(
+            output.path().join("index.html"),
+            format!(
+                r#"<a href="https://github.com/alphal00p/gammaloop/blob/{revision}/Cargo.toml#L1">source</a>"#
+            ),
+        )
+        .unwrap();
+        builder
+            .validate_generated_links(output.path(), false)
+            .unwrap();
+
+        fs::write(
+            output.path().join("index.html"),
+            format!(
+                r#"<a href="https://github.com/alphal00p/gammaloop/blob/{revision}/does-not-exist.rs#L1">source</a>"#
+            ),
+        )
+        .unwrap();
+        let error = builder
+            .validate_generated_links(output.path(), false)
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("missing repository source"));
+
+        for target in [
+            format!("https://github.com/alphal00p/gammaloop/blob/{revision}/docs"),
+            format!("https://raw.githubusercontent.com/alphal00p/gammaloop/{revision}/docs"),
+        ] {
+            fs::write(
+                output.path().join("index.html"),
+                format!(r#"<a href="{target}">source</a>"#),
+            )
+            .unwrap();
+            let error = builder
+                .validate_generated_links(output.path(), false)
+                .unwrap_err();
+            assert!(format!("{error:#}").contains("missing repository source file"));
+        }
+
+        fs::write(
+            output.path().join("index.html"),
+            r#"<a href="https://github.com/alphal00p/gammaloop/blob/wrong-revision/Cargo.toml#L1">source</a>"#,
+        )
+        .unwrap();
+        let error = builder
+            .validate_generated_links(output.path(), false)
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("does not match documented revision"));
+    }
+
+    #[test]
+    fn repository_source_paths_are_normalized_and_contained() {
+        assert_eq!(
+            repository_source_path(
+                "https://github.com/alphal00p/gammaloop/blob/revision/crates/example/src/lib.rs#L4"
+            )
+            .unwrap(),
+            Some((
+                "revision".to_owned(),
+                PathBuf::from("crates/example/src/lib.rs"),
+                true
+            ))
+        );
+        assert_eq!(
+            repository_source_path(
+                "https://raw.githubusercontent.com/alphal00p/gammaloop/revision/docs/README.md"
+            )
+            .unwrap(),
+            Some(("revision".to_owned(), PathBuf::from("docs/README.md"), true))
+        );
+        assert!(
+            repository_source_path("https://github.com/other/repository/blob/revision/file.rs")
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            repository_source_path(
+                "https://github.com/alphal00p/gammaloop/blob/revision/../../outside.rs"
+            )
+            .is_err()
+        );
+        assert!(
+            repository_source_path("https://github.com/alphal00p/gammaloop/blob/revision/docs")
+                .unwrap()
+                .is_some()
+        );
+        assert!(
+            repository_source_path("https://github.com/alphal00p/gammaloop/blob/revision/")
+                .is_err()
+        );
     }
 
     #[test]
@@ -5278,12 +7179,162 @@ mod tests {
     }
 
     #[test]
+    fn every_product_preview_has_scoped_navigation_and_external_relationship_links() {
+        let builder = SiteBuilder::discover().unwrap();
+        for product in &builder.registry.product {
+            let related = builder
+                .registry
+                .product
+                .iter()
+                .find(|candidate| candidate.id != product.id)
+                .unwrap();
+            let page = SitePage::new("tutorial/", "Tutorial", "Tutorial");
+            let metadata = SnapshotMetadata {
+                schema: SCHEMA_VERSION,
+                product: &product.id,
+                title: &product.title,
+                channel: BuildChannel::Latest,
+                snapshot_tag: None,
+                git_commit: "0123456789abcdef".to_owned(),
+                git_timestamp: 1,
+                route: format!("products/{}/latest/", product.id),
+                components: Vec::new(),
+            };
+
+            let sidebar =
+                builder.site_sidebar(product, &metadata, &page, "../", BuildScope::ProductPreview);
+            assert!(!sidebar.contains("developers/"), "{}", product.id);
+            let options =
+                builder.product_options(product, &metadata, "../", BuildScope::ProductPreview);
+            assert_eq!(options.matches("<option ").count(), 1, "{}", product.id);
+            assert!(options.contains(&format!(">{}</option>", product.title)));
+
+            let body = format!(
+                "<a href=\"../../../{}/latest/#overview\">Related</a><a href=\"../manual/\">Local</a>",
+                related.id
+            );
+            let rendered = builder
+                .rewrite_product_preview_links(&body, &metadata, &page)
+                .unwrap();
+            assert!(
+                rendered.contains(&format!(
+                    "href=\"{PUBLISHED_DOCS_ROOT}/products/{}/latest/#overview\"",
+                    related.id
+                )),
+                "{}",
+                product.id
+            );
+            assert!(rendered.contains("href=\"../manual/\""), "{}", product.id);
+        }
+    }
+
+    #[test]
+    fn every_product_preview_entrypoint_validates_from_an_empty_output() {
+        let builder = SiteBuilder::discover().unwrap();
+        for product in &builder.registry.product {
+            let output = tempfile::tempdir().unwrap();
+            let product_root = output
+                .path()
+                .join("products")
+                .join(&product.id)
+                .join("latest");
+            fs::create_dir_all(&product_root).unwrap();
+            fs::write(
+                product_root.join("index.html"),
+                "<!doctype html><html><body><h1 id=\"overview\">Overview</h1></body></html>",
+            )
+            .unwrap();
+            fs::write(
+                product_root.join("search-index.json"),
+                serde_json::to_vec(&vec![SearchEntry {
+                    title: product.title.clone(),
+                    summary: product.tagline.clone(),
+                    href: "index.html#overview".to_owned(),
+                    kind: "product".to_owned(),
+                }])
+                .unwrap(),
+            )
+            .unwrap();
+
+            builder
+                .write_product_preview(output.path(), product, BuildChannel::Latest, None)
+                .unwrap();
+            builder
+                .validate_generated_links(output.path(), false)
+                .unwrap();
+
+            let entrypoint = fs::read_to_string(output.path().join("index.html")).unwrap();
+            assert!(
+                entrypoint.contains(&format!("products/{}/latest/", product.id)),
+                "{}",
+                product.id
+            );
+            assert!(
+                !entrypoint.contains("portal-project-card"),
+                "{}",
+                product.id
+            );
+            assert!(!output.path().join("developers").exists(), "{}", product.id);
+            assert!(output.path().join(".nojekyll").is_file());
+        }
+    }
+
+    #[test]
+    fn product_preview_validation_rejects_a_broken_search_fragment() {
+        let builder = SiteBuilder::discover().unwrap();
+        let product = &builder.registry.product[0];
+        let output = tempfile::tempdir().unwrap();
+        let product_root = output
+            .path()
+            .join("products")
+            .join(&product.id)
+            .join("latest");
+        fs::create_dir_all(&product_root).unwrap();
+        fs::write(
+            product_root.join("index.html"),
+            "<!doctype html><html><body><h1 id=\"overview\">Overview</h1></body></html>",
+        )
+        .unwrap();
+        fs::write(
+            product_root.join("search-index.json"),
+            serde_json::to_vec(&vec![SearchEntry {
+                title: product.title.clone(),
+                summary: product.tagline.clone(),
+                href: "index.html#missing".to_owned(),
+                kind: "product".to_owned(),
+            }])
+            .unwrap(),
+        )
+        .unwrap();
+        builder
+            .write_product_preview(output.path(), product, BuildChannel::Latest, None)
+            .unwrap();
+
+        let error = builder
+            .validate_generated_links(output.path(), false)
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("missing fragment"));
+    }
+
+    #[test]
     fn python_catalogs_render_as_structured_reference() {
         use alphal00p_docs_schema::{
-            DocComponent, DocMemberKind, DocProduct, DocText, SCHEMA_VERSION,
+            DocComponent, DocExample, DocMemberKind, DocProduct, DocText, SCHEMA_VERSION,
         };
 
         let mut root = DocScope::new("module", "Module exports");
+        let mut internal = DocItem::new(
+            "InternalEngine",
+            "InternalEngine",
+            "InternalEngine",
+            alphal00p_docs_schema::DocItemKind::PythonClass,
+        );
+        internal.supported = false;
+        internal.summary = Some("Internal binding machinery.".to_owned());
+        internal
+            .members
+            .push(DocMember::new("debug", DocMemberKind::Method));
+        root.define_item(internal).unwrap();
         let mut item = DocItem::new(
             "Engine",
             "Engine",
@@ -5298,6 +7349,10 @@ mod tests {
         item.signature = Some("class Engine:".to_owned());
         let mut method = DocMember::new("run", DocMemberKind::Method);
         method.signature = Some("def run(self, value: int) -> int:".to_owned());
+        method.docs = Some(DocText::new(
+            DocFormat::PythonDocstring,
+            "Run one value.\n\nParameters\n----------\nvalue : int\n    Input value.\n\nReturns\n-------\nint\n    Processed value.\n\nRaises\n------\nValueError\n    If the value is invalid.\n\nExamples\n--------\n>>> engine.run(1)\n1\n\nNotes\n-----\nThe engine retains its state.",
+        ));
         item.members.push(method);
         let mut overload = DocMember::new("run", DocMemberKind::Method);
         overload.signature = Some("def run(self, value: str) -> str:".to_owned());
@@ -5307,6 +7362,21 @@ mod tests {
         item.members
             .push(DocMember::new("global_data", DocMemberKind::Setter));
         root.define_item(item).unwrap();
+        let mut curated = DocScope::new("curated", "Curated helpers");
+        let mut later_supported = DocItem::new(
+            "LateSupported",
+            "LateSupported",
+            "LateSupported",
+            alphal00p_docs_schema::DocItemKind::PythonFunction,
+        );
+        later_supported.summary = Some("A supported export in a later scope.".to_owned());
+        later_supported.examples.push(DocExample::new(
+            "Example usage",
+            "python",
+            "LateSupported()",
+        ));
+        curated.define_item(later_supported).unwrap();
+        root.define_scope(curated).unwrap();
         let catalog = DocCatalog {
             schema_version: SCHEMA_VERSION,
             product: DocProduct::new("example", "Example"),
@@ -5326,11 +7396,41 @@ mod tests {
             "class Engine: ...",
             "0123456789abcdef",
         );
-        assert!(rendered.contains("class=\"api-item\""));
+        assert!(rendered.contains("class=\"api-item\" data-api-surface=\"supported\""));
+        assert!(rendered.contains("data-reference-filter"));
+        assert!(rendered.contains("data-reference-index-entry"));
+        assert!(rendered.contains(">Class</span>"));
+        assert!(rendered.contains(">Method</span>"));
+        assert!(rendered.contains(">Property getter</span>"));
+        assert!(rendered.contains("<h2><code>Engine</code></h2>"));
+        assert!(rendered.contains("<h3><code>run</code></h3>"));
+        assert!(rendered.contains("<h2>Curated helpers</h2>"));
+        assert!(rendered.contains("<h3><code>LateSupported</code></h3>"));
+        assert!(rendered.contains("<h4>Example usage</h4>"));
+        assert!(rendered.contains("class=\"api-implementation-group\""));
+        assert!(
+            rendered.find("id=\"engine\"").unwrap()
+                < rendered.find("id=\"internalengine\"").unwrap()
+        );
+        assert!(
+            rendered.find("id=\"curated-latesupported\"").unwrap()
+                < rendered.find("id=\"internalengine\"").unwrap()
+        );
+        assert!(rendered.contains("href=\"tutorial/\""));
+        assert!(rendered.contains("href=\"manual/interfaces/\""));
+        assert!(rendered.contains("href=\"reference/python/example-python.pyi\""));
         assert!(rendered.contains("class Engine:"));
         assert!(rendered.contains("Construct one engine and reuse it."));
         assert_eq!(rendered.matches("Runs the documented workflow.").count(), 1);
         assert!(rendered.contains("def run(self, value: int)"));
+        assert!(
+            rendered.contains("class=\"api-doc-section api-doc-parameters\"><h4>Parameters</h4>")
+        );
+        assert!(rendered.contains("<dt><code>value</code> <span>int</span></dt>"));
+        assert!(rendered.contains("class=\"api-doc-section api-doc-returns\""));
+        assert!(rendered.contains("class=\"api-doc-section api-doc-raises\""));
+        assert!(rendered.contains("class=\"api-doc-section api-doc-examples\""));
+        assert!(rendered.contains("class=\"api-doc-section api-doc-notes\""));
         assert!(rendered.contains("Type-checker stub source"));
         assert_eq!(rendered.matches("id=\"engine-run-method\"").count(), 1);
         assert_eq!(rendered.matches("id=\"engine-run-method-2\"").count(), 1);
@@ -5365,6 +7465,9 @@ mod tests {
         }));
         assert!(entries.iter().any(|entry| {
             entry.href == "reference/python/example-python/#engine-global-data-setter"
+        }));
+        assert!(entries.iter().all(|entry| {
+            !entry.title.contains("InternalEngine") && !entry.href.contains("internalengine")
         }));
     }
 

@@ -11,6 +11,7 @@ larger Spenso network coordinates automatically.
 
 Use Rust 1.85 or newer (Spenso uses Rust 2024 edition), then create a binary project:
 
+// docs-example: syntax
 ```sh
 cargo new spenso-first-contraction
 cd spenso-first-contraction
@@ -24,6 +25,7 @@ This first contraction uses dense integer tensors and needs neither Symbolica no
 
 Replace `src/main.rs` with:
 
+// docs-example: run
 ```rust
 use spenso::{
     contraction::Contract,
@@ -62,6 +64,13 @@ Run `cargo run`. Success means the assertion passes and the printed result conta
 the component selected by the two remaining free indices. Spenso matched `shared` with
 `shared.dual()`, summed that axis, and preserved `left_free` and `right_free` in the output
 structure. The contraction follows index identity and duality, not merely equal dimensions.
+
+#callout("Verification scope and cost", [
+  The docs harness compiles and runs this Rust program; it syntax-checks the setup commands
+  without creating a project or using the network. Success is the asserted component value
+  `10` with two free output indices. The contraction is tiny; a clean external Cargo build can
+  take minutes, while the program itself should finish in well under a second.
+])
 
 #callout("Structure is part of the value", [
   The data vectors alone do not say which axes may contract. Preserve the `OrderedStructure`

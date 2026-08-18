@@ -1,9 +1,18 @@
-# Ratatui Integration Dashboard Plan
+= Ratatui integration dashboard implementation history
+<ratatui-integration-dashboard-history>
+#quote(block: true)[
+#strong[Lifecycle:] Archived implementation plan and chronological status record
+
+This document preserves design reasoning and intermediate implementation status. The maintained
+#link("ratatui-integration-dashboard.typ")[integration dashboard architecture] records the
+current boundary and authoritative sources. Open items below are historical unless they are
+confirmed against the current issue tracker and implementation.
+]
 
 This file is the living plan for the ratatui integration-status dashboard work.
 Update it whenever scope, decisions, or implementation sequencing changes.
 
-## Confirmed decisions
+== Confirmed decisions
 
 - Ratatui becomes the default interactive streaming renderer via
   `--renderer=ratatui|tabled`, with `ratatui` as the new default.
@@ -22,9 +31,9 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   `evaluate_samples(..)` / `evaluate_samples_raw(..)` after each individual
   sample finishes.
 
-## Implementation status (2026-03-21)
+== Implementation status (2026-03-21)
 
-### Implemented
+=== Implemented
 
 - CLI renderer selection is live in
   `crates/gammaloop-api/src/commands/integrate.rs` with
@@ -138,7 +147,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   `crates/gammalooprs/src/integrate/mod.rs` for the overview, convergence-phase
   toggle, and discrete tabs.
 
-### Still open / follow-up
+=== Still open / follow-up
 
 - Python-facing renderer selection has not been threaded through every possible
   API surface yet; the CLI path is implemented.
@@ -157,7 +166,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   - tighter chart/summary spacing on medium-width terminals
   - more aggressive chart-history downsampling tuning
 
-## High-level goals
+== High-level goals
 
 - Build a high-quality ratatui dashboard that feels native to terminal UIs
   rather than a direct port of the current tabled output.
@@ -171,9 +180,9 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - Improve readability for narrow terminals, multi-slot runs, and discrete-grid
   monitoring instead of forcing one static layout.
 
-## Proposed architecture
+== Proposed architecture
 
-### 1. Renderer selection and fallback behavior
+=== 1. Renderer selection and fallback behavior
 
 - Add a `RendererOption` enum to
   `crates/gammaloop-api/src/commands/integrate.rs`.
@@ -188,7 +197,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   - `--show-summary-only`: bypass ratatui entirely and print the current final
     tabled summary.
 
-### 2. Semantic status snapshot refactor
+=== 2. Semantic status snapshot refactor
 
 - Keep `StatusUpdate` as the renderer-neutral contract, but make it less
   table-shaped and more complete for ratatui.
@@ -203,7 +212,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - Prefer attaching behavior to existing section/state structs with methods where
   that improves discoverability, instead of adding more free helper functions.
 
-### 3. Per-slot metrics model
+=== 3. Per-slot metrics model
 
 - The current main table already carries per-slot value and relative error, but
   `chi^2` and max-weight impact are effectively slot-0 metadata.
@@ -216,7 +225,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - Tabled can continue to render the compact slot-0 metadata columns, while the
   ratatui overview can show a richer all-slot metrics matrix.
 
-### 4. Ratatui controller/event-loop design
+=== 4. Ratatui controller/event-loop design
 
 - Implement ratatui in `gammaloop-api`, likely as a small dashboard module
   split into:
@@ -231,7 +240,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - This keeps the integrator hot path simple and makes interactive features like
   sorting and column toggles straightforward.
 
-### 5. Suspend/resume lifecycle
+=== 5. Suspend/resume lifecycle
 
 - Ratatui path should use alternate screen + raw mode while active.
 - Before emitting a tabled iteration summary or final summary:
@@ -242,9 +251,9 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - On the next live update, re-enter alternate screen and redraw from the latest
   cached dashboard state.
 
-## Dashboard UX plan
+== Dashboard UX plan
 
-### Global shell
+=== Global shell
 
 - Keep a stable top-level frame with:
   - top title/tabs row
@@ -257,7 +266,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   - medium: stacked secondary panels
   - narrow: focus-first layout with fewer simultaneous tables
 
-### Tab 1: Overview
+=== Tab 1: Overview
 
 - This is the main landing tab.
 - Layout target on wide terminals:
@@ -267,7 +276,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   - bottom-left: all-slot metrics matrix
   - bottom-right: integration statistics panel
 
-#### Progress ribbon
+==== Progress ribbon
 
 - Fancy ratatui gauge for current iteration progress.
 - Include:
@@ -279,7 +288,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   - elapsed wall time
 - Use color states for healthy / warning / interrupted conditions.
 
-#### Slot ribbon
+==== Slot ribbon
 
 - Show every slot as a compact card so multi-slot runs stay visible together.
 - Each card should include at least:
@@ -291,7 +300,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - One slot is focused at a time; focus drives the right-side detail card and,
   when appropriate, secondary annotations in the chart.
 
-#### Convergence chart
+==== Convergence chart
 
 - Plot the training-slot integral in the selected training phase.
 - Datasets:
@@ -309,7 +318,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   - history window toggle between full history and the last `N` iterations
   - y-range adjustment/reset in units of the current MC uncertainty
 
-#### All-slot metrics matrix
+==== All-slot metrics matrix
 
 - Show all slots together in a compact comparison matrix.
 - Include interactively toggled extra columns:
@@ -324,7 +333,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - On narrow terminals, collapse this matrix into per-slot stacked rows instead
   of truncating columns aggressively.
 
-#### Statistics panel
+==== Statistics panel
 
 - Keep raw numbers readable, but complement them with visual composition bars.
 - Show both exact values and percent-based visuals for metrics that should sum
@@ -353,7 +362,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - That keeps the exact data visible while letting the user perceive balance and
   anomalies immediately.
 
-### Tab 2: Discrete breakdown
+=== Tab 2: Discrete breakdown
 
 - Always present, but show a clear empty-state panel when there is no monitored
   discrete dimension.
@@ -362,7 +371,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   - right: selected-bin detail pane
   - optional bottom strip: slot comparison for the selected bin
 
-#### Discrete-bin table
+==== Discrete-bin table
 
 - Ratatui should improve on the current static sort choice with live sorting.
 - Support:
@@ -374,7 +383,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   - target PDF
   - maybe absolute contribution magnitude
 
-#### Selected-bin detail pane
+==== Selected-bin detail pane
 
 - Show richer detail for the highlighted bin:
   - breadcrumb of fixed coordinates / monitored path
@@ -385,7 +394,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   - per-slot max-weight impact
   - max-weight coordinates if available
 
-### Tab 3: Max weight
+=== Tab 3: Max weight
 
 - Always present, with empty-state handling if no data exists.
 - Layout target:
@@ -397,7 +406,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - For long coordinate payloads, show a wrapped viewer panel rather than forcing
   a huge wide table.
 
-### Help/footer UX
+=== Help/footer UX
 
 - Bottom footer should show the current mode and the most important keys:
   - tab switching
@@ -408,7 +417,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   - help
 - `?` opens a centered help overlay/modal summarizing all keybindings.
 
-## Creative ratatui features to leverage
+== Creative ratatui features to leverage
 
 - Composition bars for timing/precision/stability percentages.
 - Focused-slot cards with threshold-colored metric badges.
@@ -421,7 +430,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - Stable selection coupling between tabs, especially for the focused slot and
   selected discrete bin.
 
-## ETA plan
+== ETA plan
 
 - Add explicit current-iteration elapsed time to the status snapshot so ETA does
   not need to be guessed from total integration runtime.
@@ -433,7 +442,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   - ETA to iteration completion
 - If too little data exists, show `ETA: warming up` instead of a noisy guess.
 
-## Interrupt-responsiveness plan
+== Interrupt-responsiveness plan
 
 - Add interrupt checks after each completed sample inside:
   - `crates/gammalooprs/src/integrands/mod.rs`
@@ -448,9 +457,9 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - Tests should verify prompt return at sample boundaries; persistence semantics
   remain iteration-level, not partial-iteration-level.
 
-## Proposed implementation phases
+== Proposed implementation phases
 
-### Phase 1: Renderer plumbing and status refactor
+=== Phase 1: Renderer plumbing and status refactor
 
 - Status: mostly done for the CLI/runtime path.
 - Add renderer selection to CLI/Python/config surfaces.
@@ -459,7 +468,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - Add typed statistics/timing breakdown structures.
 - Add per-slot metric support for all slots.
 
-### Phase 2: Dashboard controller and terminal lifecycle
+=== Phase 2: Dashboard controller and terminal lifecycle
 
 - Status: done for the current CLI dashboard implementation.
 - Implement alternate-screen/raw-mode guard.
@@ -467,7 +476,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - Add suspend/resume around iteration-summary and final-summary tabled output.
 - Add resize handling and redraw ticks.
 
-### Phase 3: Overview tab
+=== Phase 3: Overview tab
 
 - Status: done for the first production cut.
 - Implement progress ribbon with ETA.
@@ -478,7 +487,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - Implement all-slot metrics matrix with interactive metric toggles.
 - Implement statistics table + composition bars.
 
-### Phase 4: Discrete and max-weight tabs
+=== Phase 4: Discrete and max-weight tabs
 
 - Status: done for the first production cut.
 - Implement discrete-bin table with keyboard sorting and selection.
@@ -486,7 +495,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - Implement overall and per-bin max-weight panels.
 - Couple slot/bin focus across tabs where it helps.
 
-### Phase 5: Interrupt responsiveness
+=== Phase 5: Interrupt responsiveness
 
 - Status: core interrupt checks are done; iteration-level persistence semantics
   stay unchanged.
@@ -494,7 +503,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
 - Ensure partial batch results are returned cleanly.
 - Add targeted tests.
 
-### Phase 6: Polish and tests
+=== Phase 6: Polish and tests
 
 - Status: in progress.
 - Ratatui buffer/snapshot tests for wide and narrow layouts.
@@ -514,7 +523,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   - discrete monitoring
   - long max-weight coordinate payloads
 
-### Phase 7: Accuracy-target termination and ETA-to-target
+=== Phase 7: Accuracy-target termination and ETA-to-target
 
 - Status: in progress.
 - Add optional `integrator.target_relative_accuracy` and
@@ -534,7 +543,7 @@ Update it whenever scope, decisions, or implementation sequencing changes.
   target would be reached first; if the relative reference is zero, treat the
   relative target as inactive.
 
-## Risks to watch
+== Risks to watch
 
 - Overfitting the semantic snapshot to the current tabled structure instead of
   giving ratatui the richer data it needs.

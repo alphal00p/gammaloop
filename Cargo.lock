@@ -78,6 +78,7 @@ name = "alphal00p-docs-builder"
 version = "0.1.0"
 dependencies = [
  "alphal00p-docs-schema",
+ "chrono",
  "clap",
  "eyre",
  "notify",
