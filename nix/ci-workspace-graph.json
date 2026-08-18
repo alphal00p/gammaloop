@@ -268,7 +268,9 @@
     },
     "spenso-macros": {},
     "spynso3": {
-      "idenso": [],
+      "idenso": [
+        "python"
+      ],
       "spenso": [
         "python",
         "shadowing"
@@ -900,7 +902,9 @@
     },
     "spenso-macros": {},
     "spynso3": {
-      "idenso": [],
+      "idenso": [
+        "python"
+      ],
       "spenso": [
         "python",
         "shadowing"

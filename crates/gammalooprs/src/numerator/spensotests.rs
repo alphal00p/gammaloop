@@ -54,6 +54,7 @@ fn algebra() {
     println!(
         "{}",
         expr.schoonschip_net::<Aind>()
+            .expect("Schoonschip tensor-network simplification failed")
             .simplify_gamma()
             .log_print(Some(120))
     );

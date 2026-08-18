@@ -21,7 +21,7 @@ where
             let mut new_structure = self.structure.clone();
             new_structure.trace(trace[0], trace[1]);
 
-            let mut new_result = DenseTensor::from_data_coerced(&self.data, new_structure)
+            let mut new_result = DenseTensor::from_storage_data_coerced(&self.data, new_structure)
                 .unwrap_or_else(|_| unreachable!());
             for (idx, t) in result.iter_trace(trace) {
                 new_result.set(&idx, t).unwrap_or_else(|_| unreachable!());

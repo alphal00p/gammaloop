@@ -32,13 +32,13 @@ use crate::network::library::{DummyKey, FunctionLibrary, FunctionLibraryError, L
 use crate::structure::abstract_index::AbstractIndex;
 #[cfg(feature = "shadowing")]
 use crate::structure::concrete_index::{ConcreteIndex, FlatIndex};
-use crate::structure::permuted::PermuteTensor;
+use crate::structure::permuted::ApplyPendingIndexPermutation;
 // use crate::shadowing::Concretize;
 #[cfg(feature = "shadowing")]
 use crate::structure::StructureContract;
 use crate::structure::representation::LibrarySlot;
 use crate::structure::slot::{AbsInd, IsAbstractSlot};
-use crate::structure::{HasName, PermutedStructure, StructureError, TensorShell};
+use crate::structure::{Canonicalized, HasName, StructureError, TensorShell};
 use std::borrow::Cow;
 #[cfg(feature = "shadowing")]
 use std::collections::HashMap;
@@ -1715,16 +1715,16 @@ fn multiply_atom_by_numeric_coefficient(atom: Atom, coefficient: &Atom) -> Atom 
 /// let a_structure = OrderedStructure::new(vec![
 ///     rep.new_slot(2, 0),
 ///     rep.new_slot(2, 1),
-/// ]).structure;
+/// ]).into_canonical();
 /// let b_structure = OrderedStructure::new(vec![
 ///     rep.new_slot(2, 1),
 ///     rep.new_slot(2, 2),
-/// ]).structure;
-/// let c_structure = OrderedStructure::new(vec![rep.new_slot(2, 2)]).structure;
+/// ]).into_canonical();
+/// let c_structure = OrderedStructure::new(vec![rep.new_slot(2, 2)]).into_canonical();
 ///
-/// let a = DenseTensor::from_data(vec![1.0, 2.0, 3.0, 4.0], a_structure).unwrap();
-/// let b = DenseTensor::from_data(vec![5.0, 6.0, 7.0, 8.0], b_structure).unwrap();
-/// let c = DenseTensor::from_data(vec![2.0, 3.0], c_structure).unwrap();
+/// let a = DenseTensor::from_storage_data(vec![1.0, 2.0, 3.0, 4.0], a_structure).unwrap();
+/// let b = DenseTensor::from_storage_data(vec![5.0, 6.0, 7.0, 8.0], b_structure).unwrap();
+/// let c = DenseTensor::from_storage_data(vec![2.0, 3.0], c_structure).unwrap();
 /// let tensors = DummyLibrary::new();
 /// let functions = ErroringLibrary::new();
 ///
@@ -2466,15 +2466,14 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Network<S, K, FK, 
         }
     }
 
-    pub fn library_tensor<T>(tensor: &T, key: PermutedStructure<K>) -> Self
+    pub fn library_tensor<T>(tensor: &T, key: Canonicalized<K>) -> Self
     where
         T: TensorStructure,
         T::Slot: IsAbstractSlot<Aind = Aind>,
     {
         let _span = profile::span(Timer::LibraryTensor);
         profile::bump(Counter::LibraryTensor, 1);
-        let indices = tensor.external_indices_iter().collect();
-        let graph = NetworkGraph::tensor(tensor, NetworkLeaf::LibraryKey { key, indices });
+        let graph = NetworkGraph::tensor(tensor, NetworkLeaf::library_key(key));
         let state = graph.state();
         Network {
             graph,
@@ -2541,6 +2540,13 @@ pub enum TensorNetworkError<K: Display, FK: Display> {
     /// Resolving a tensor through the tensor library failed.
     #[error("LibraryError:{0}")]
     LibErr(#[from] LibraryError<K>),
+    /// A library tensor graph did not match the requested number of indices.
+    #[error("library tensor graph has {actual} indices, expected {expected}")]
+    LibraryIndexRankMismatch { expected: usize, actual: usize },
+    /// A chain expression had invalid nesting.
+    #[cfg(feature = "shadowing")]
+    #[error(transparent)]
+    ChainNesting(#[from] parsing::ChainNestingError),
     /// Applying a registered tensor function failed.
     #[error("FunctionLibraryError:{0}")]
     FunLibErr(#[from] FunctionLibraryError<FK>),
@@ -2554,10 +2560,10 @@ pub enum TensorNetworkError<K: Display, FK: Display> {
     #[error("Too many arguments for function:{0}")]
     TooManyArgsFunction(String),
     /// A `dot` expression did not have exactly two arguments.
-    #[error("Non self-dual tensor power{0}")]
+    #[error("Invalid dot function: {0}")]
     InvalidDotFunction(String),
     /// An integer power was applied to a non-self-dual tensor.
-    #[error("Invalid dot function{0}")]
+    #[error("Non self-dual tensor power: {0}")]
     NonSelfDualTensorPower(String),
     /// Execution produced a node that cannot represent a final result.
     #[error("invalid resulting node{0}")]
@@ -2702,7 +2708,7 @@ where
                     // let p = Permutation::sort(&reps);
 
                     let n_reps = key
-                        .structure
+                        .canonical()
                         .external_reps_iter()
                         .map(|r| r.to_lib())
                         .collect::<Vec<_>>();
@@ -2748,7 +2754,7 @@ where
     pub fn result(
         &self,
     ) -> Result<
-        ExecutionResult<TensorOrScalarOrKey<&T, &S, &PermutedStructure<K>, Aind>>,
+        ExecutionResult<TensorOrScalarOrKey<&T, &S, &Canonicalized<K>, Aind>>,
         TensorNetworkError<K, FK>,
     >
     where
@@ -2806,7 +2812,7 @@ where
     /// Propagates graph-completeness and library-resolution failures. It also
     /// reports scalar multiplication or summation failures encountered while
     /// materializing lazy terms.
-    pub fn result_tensor<'a, LT, L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>>(
+    pub fn result_tensor<'a, LT, L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>>(
         &'a self,
         lib: &L,
     ) -> Result<ExecutionResult<Cow<'a, T>>, TensorNetworkError<K, FK>>
@@ -2823,7 +2829,7 @@ where
         K: Display + Debug,
         FK: Display + Debug + Clone,
         LT: TensorStructure<Indexed = T> + Clone + LibraryTensor<WithIndices = T>,
-        T: PermuteTensor<Permuted = T>,
+        T: ApplyPendingIndexPermutation<Output = T>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
@@ -3082,7 +3088,7 @@ impl<T, S, FK: Debug, K: Debug, Aind: AbsInd> Network<NetworkStore<T, S>, K, FK,
                 NetworkNode::Leaf(l) => match l {
                     NetworkLeaf::LibraryKey { key, .. } => {
                         // if let Ok(v) = lib.get(l) {
-                        Some(format!("label = \"L:{}\"", library_disp(&key.structure)?))
+                        Some(format!("label = \"L:{}\"", library_disp(key.canonical())?))
                         // } else {
                         // None
                         // }
@@ -3428,11 +3434,11 @@ fn log_sum_leaf_atom_shapes<K, FK, Aind, Store, LT, L>(
     Store::Scalar: 'static,
     Store::Tensor: AtomSumShapeDiagnostics + From<LT::WithIndices> + HasStructure,
     LT: LibraryTensor + Clone,
-    L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
+    L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = Canonicalized<LT>>,
     K: Display + Debug,
     FK: Display + Debug,
     Aind: AbsInd,
-    LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+    LT::WithIndices: ApplyPendingIndexPermutation<Output = LT::WithIndices>,
     <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
         IsAbstractSlot<Aind = Aind>,
 {
@@ -3642,14 +3648,56 @@ fn try_balanced_scalar_sum<K, Aind, Store>(
 ) -> Option<NetworkLeaf<K, Aind>>
 where
     Store: NetworkStoreAccess,
-    Store::Scalar: Clone + Ref + for<'a> AddAssign<<Store::Scalar as Ref>::Ref<'a>>,
+    Store::Tensor: HasStructure + Clone,
+    Store::Scalar: Clone
+        + Ref
+        + From<<Store::Tensor as HasStructure>::Scalar>
+        + for<'a> AddAssign<<Store::Scalar as Ref>::Ref<'a>>
+        + for<'a> MulAssign<<Store::Scalar as Ref>::Ref<'a>>,
 {
+    // Fully contracted tensors can retain lazy sum and coefficient wrappers.
+    // Check every component before doing scalar algebra or modifying the store.
+    if !targets.iter().all(|(_, leaf)| match leaf {
+        NetworkLeaf::Scalar(_) => true,
+        NetworkLeaf::LocalTensor(index) => store.tensor(*index).scalar_ref().is_some(),
+        NetworkLeaf::TensorSum(indices) => indices
+            .iter()
+            .all(|index| store.tensor(*index).scalar_ref().is_some()),
+        NetworkLeaf::ScaledTensor(term) => store.tensor(term.tensor).scalar_ref().is_some(),
+        NetworkLeaf::ScaledTensorSum(terms) => terms
+            .iter()
+            .all(|term| store.tensor(term.tensor).scalar_ref().is_some()),
+        NetworkLeaf::LibraryKey { .. } => false,
+    }) {
+        return None;
+    }
+
+    let scalar_value = |term: &ScaledTensorRef| {
+        let tensor = store.tensor(term.tensor).clone();
+        let mut value = Store::Scalar::from(tensor.scalar().expect("rank-zero tensor"));
+        if let Some(scale) = term.scale {
+            value *= store.scalar_ref(scale).refer();
+        }
+        value
+    };
     let mut terms = Vec::with_capacity(targets.len());
     for (_, leaf) in targets {
-        let NetworkLeaf::Scalar(index) = leaf else {
-            return None;
-        };
-        terms.push(store.scalar_ref(*index).clone());
+        match leaf {
+            NetworkLeaf::Scalar(index) => terms.push(store.scalar_ref(*index).clone()),
+            NetworkLeaf::LocalTensor(index) => {
+                terms.push(scalar_value(&ScaledTensorRef::tensor(*index)));
+            }
+            NetworkLeaf::TensorSum(indices) => terms.extend(
+                indices
+                    .iter()
+                    .map(|index| scalar_value(&ScaledTensorRef::tensor(*index))),
+            ),
+            NetworkLeaf::ScaledTensor(term) => terms.push(scalar_value(term)),
+            NetworkLeaf::ScaledTensorSum(scaled_terms) => {
+                terms.extend(scaled_terms.iter().map(scalar_value));
+            }
+            NetworkLeaf::LibraryKey { .. } => unreachable!("scalar sum has no library keys"),
+        }
     }
 
     let result = balanced_ref_sum(terms, sum_start);
@@ -3675,11 +3723,11 @@ where
         + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>,
     Store::Scalar: Clone,
     LT: LibraryTensor + Clone,
-    L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
+    L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = Canonicalized<LT>>,
     K: Display + Debug,
     FK: Display + Debug,
     Aind: AbsInd,
-    LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+    LT::WithIndices: ApplyPendingIndexPermutation<Output = LT::WithIndices>,
     <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
         IsAbstractSlot<Aind = Aind>,
 {
@@ -4648,7 +4696,7 @@ where
     where
         K: Display + Clone + Debug,
         FK: Display + Clone + Debug,
-        L: Library<S, Key = K, Value = PermutedStructure<LT>> + Sync,
+        L: Library<S, Key = K, Value = Canonicalized<LT>> + Sync,
         FL: FunctionLibrary<Store::Tensor, Store::Scalar, Key = FK>,
         LT: LibraryTensor<WithIndices = Store::Tensor>,
         Store: ExecuteOp<FL, L, K, FK, Aind>,
@@ -4683,11 +4731,11 @@ where
         + From<LT::WithIndices>,
     Store::Scalar: Clone,
     LT: LibraryTensor + Clone,
-    L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
+    L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = Canonicalized<LT>>,
     K: Display + Debug,
     FK: Display + Debug,
     Aind: AbsInd,
-    LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+    LT::WithIndices: ApplyPendingIndexPermutation<Output = LT::WithIndices>,
     <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
         IsAbstractSlot<Aind = Aind>,
 {
@@ -4768,11 +4816,11 @@ where
         + From<LT::WithIndices>,
     Store::Scalar: Clone,
     LT: LibraryTensor + Clone,
-    L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
+    L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = Canonicalized<LT>>,
     K: Display + Debug,
     FK: Display + Debug,
     Aind: AbsInd,
-    LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+    LT::WithIndices: ApplyPendingIndexPermutation<Output = LT::WithIndices>,
     <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
         IsAbstractSlot<Aind = Aind>,
 {
@@ -4867,7 +4915,7 @@ where
     where
         K: Display + Clone + Debug + Send + Sync,
         FK: Display + Clone + Debug + Send + Sync,
-        L: Library<S, Key = K, Value = PermutedStructure<LT>> + Sync,
+        L: Library<S, Key = K, Value = Canonicalized<LT>> + Sync,
         FL: FunctionLibrary<T, Sc, Key = FK> + Sync,
         LT: LibraryTensor<WithIndices = T>,
         NetworkStore<T, Sc>: ExecuteOp<FL, L, K, FK, Aind>,
@@ -4909,7 +4957,7 @@ where
         + AddAssign<LT::WithIndices>
         + From<LT::WithIndices>
         + AtomSumShapeDiagnostics,
-    L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,
+    L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = Canonicalized<LT>>,
     Store::Scalar: Neg<Output = Store::Scalar>
         + RefOne
         + Div<Output = Store::Scalar>
@@ -4924,7 +4972,7 @@ where
     FK: Display + Debug + Clone,
     FL: FunctionLibrary<Store::Tensor, Store::Scalar, Key = FK>,
     Aind: AbsInd,
-    LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+    LT::WithIndices: ApplyPendingIndexPermutation<Output = LT::WithIndices>,
     <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
         IsAbstractSlot<Aind = Aind>,
 {
@@ -5526,7 +5574,7 @@ where
                                 NetworkLeaf::Scalar(pos.into())
                             }
                         }
-                        NetworkLeaf::LibraryKey { key, indices } => {
+                        NetworkLeaf::LibraryKey { key, .. } => {
                             let inds = graph.get_lib_data(lib, child_id)?;
                             let mut t = Store::Tensor::from(inds);
 
@@ -5536,10 +5584,7 @@ where
                                     let pos = self.push_scalar(one);
                                     NetworkLeaf::Scalar(pos.into())
                                 }
-                                1 => NetworkLeaf::LibraryKey {
-                                    key: key.clone(),
-                                    indices: indices.clone(),
-                                },
+                                1 => NetworkLeaf::library_key(key.clone()),
                                 _ => {
                                     let squares = n / 2;
                                     let mut square = t.contract(&t)?;

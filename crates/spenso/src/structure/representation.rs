@@ -792,14 +792,15 @@ impl LibraryRep {
                         return Some(body.clone());
                     }
 
-                    if let Some(PrintUserData::Integer(i)) = opt.custom_print_mode.get("spenso") {
+                    if let Some(resolved) = SpensoPrintSettings::resolve(opt) {
+                        let (script_open, script_close) = resolved.script_delimiters();
                         let SpensoPrintSettings {
                             with_dim,
                             commas,
                             parens,
                             index_subscripts,
                             ..
-                        } = SpensoPrintSettings::from(*i as usize);
+                        } = resolved.presentation;
                         let AtomView::Fun(f) = a else {
                             return None;
                         };
@@ -810,17 +811,24 @@ impl LibraryRep {
                             rep_name.clone()
                         };
 
-                        if index_subscripts {
-                            out.push('_');
-                        }
-                        if parens && index_subscripts {
-                            out.push('(');
+                        let mut arg_iter = f.iter();
+                        let dim = arg_iter.next()?;
+                        if f.get_nargs() == 1 {
+                            if with_dim {
+                                out.push('(');
+                                dim.format(&mut out, opt, PrintState::new()).ok()?;
+                                out.push(')');
+                            }
+                            return Some(out);
                         }
 
                         if f.get_nargs() == 2 {
-                            let mut arg_iter = f.iter();
-                            let dim = arg_iter.next()?;
-
+                            if index_subscripts {
+                                out.push('_');
+                            }
+                            if parens && index_subscripts {
+                                out.push(script_open);
+                            }
                             if with_dim {
                                 dim.format(&mut out, opt, PrintState::new()).unwrap();
                                 if commas {
@@ -833,7 +841,7 @@ impl LibraryRep {
 
                             ind.format(&mut out, opt, PrintState::new()).unwrap();
                             if parens && index_subscripts {
-                                out.push(')');
+                                out.push(script_close);
                             }
 
                             return Some(out);

@@ -1486,7 +1486,7 @@ impl Contracted {
         for i in 0..n_edges {
             let named_structure: NamedStructure<String> =
                 NamedStructure::from_iter([Lorentz {}.new_slot(4, i)], "Q".into(), Some(i))
-                    .structure;
+                    .into_canonical();
             params.extend(
                 named_structure
                     .to_shell()
