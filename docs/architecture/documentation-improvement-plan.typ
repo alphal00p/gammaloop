@@ -183,6 +183,15 @@ Its first attempt restored the reusable producer; the retry classified it as
 attempts are reported separately because queueing, downloading, and a first
 consumer build must not be disguised as compilation time.
 
+The expanded source-owned reference and manual implementation at revision
+`9b4525426311` provides a second honest cold point:
+#link("https://github.com/alphal00p/gammaloop/actions/runs/32144386817")[run 32144386817]
+classified the Cargo producer as `rebuilt` and completed the five-site step in
+1,337 seconds. The same run passed the deterministic semantic/no-JavaScript
+audit on 19 representative pages and retained the complete preview artifact.
+This longer result is recorded rather than averaged into the warm evidence;
+the follow-up content-only run is the cross-run reuse comparison.
+
 The public site is not a preview of this branch. At the review date its latest
 deployment was
 #link("https://github.com/alphal00p/gammaloop/actions/runs/32073830002")[run 32073830002]
