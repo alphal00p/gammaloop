@@ -86,11 +86,13 @@ whose historical and current contracts were not clearly separated. This branch
 corrects or explicitly archives the verified cases; the proposed freshness gate
 is intended to prevent their recurrence.
 
-This revision records the agreed publication model: `docs` is a temporary
-branch used to prepare and review a pull request; after merge, `main` is the
-sole authoritative source of mutable `latest` documentation. That is an
-implementation constraint, not an open governance decision. Tagged snapshots
-remain independent and immutable.
+This revision records the agreed publication model: while pull request 96 is
+open, pushes to its in-repository `docs` branch publish mutable `latest` as a
+development review site. The workflow checks the pull-request state before
+granting that temporary exception. Ordinary pull requests remain artifact-only;
+after pull request 96 closes or merges, `main` is the sole authoritative source
+of mutable `latest` documentation. That is an implementation constraint, not an
+open governance decision. Tagged snapshots remain independent and immutable.
 
 This was a source and build-contract review, not user research. It did not run
 every licensed scientific backend, conduct a screen-reader session, or measure
@@ -130,8 +132,8 @@ not, by itself, a claim that every rendered page currently violates a standard.
   [Full-site local HTML links/fragments/search entries are checked, excluding Rustdoc and external URLs],
   [Important broken targets can still pass CI],
   [Publication policy],
-  [`docs` prepares a reviewed change; `main` is authoritative after merge],
-  [Preview and validation should happen before merge; only the merged main revision should promote `latest`],
+  [`docs` temporarily publishes the development site while pull request 96 is open; `main` is authoritative after merge],
+  [The temporary publisher must retire automatically with the pull request; other pull requests remain artifact-only],
 )
 
 The baseline is a snapshot, not a permanent score. Counts should be generated
@@ -192,12 +194,13 @@ audit on 19 representative pages and retained the complete preview artifact.
 This longer result is recorded rather than averaged into the warm evidence;
 the follow-up content-only run is the cross-run reuse comparison.
 
-The public site is not a preview of this branch. At the review date its latest
-deployment was
+Before the temporary publisher was enabled, the public site was not a preview
+of this branch. At that review point its latest deployment was
 #link("https://github.com/alphal00p/gammaloop/actions/runs/32073830002")[run 32073830002]
-from revision `f46892d216f1`; the pull-request workflow correctly retained the
-newer complete preview as an artifact and skipped publication. The visible
-`latest` site changes only after the reviewed branch is merged to `main`.
+from revision `f46892d216f1`. Pushes to `docs` now build, validate, and publish
+the complete development site while pull request 96 remains open. Once it
+closes or merges, that branch loses publication authority automatically and
+only `main` can update `latest`.
 
 == Acceptance status at this revision
 
@@ -216,7 +219,7 @@ newer complete preview as an artifact and skipped publication. The visible
   [`DOC-010`], [Partial], [Lifecycle, review triggers, and selected digests are checked and changed selected scopes fail validation; named owners, scopes for eight current records, and trigger-aware owner review require maintainer assignment],
   [`DOC-011`], [Partial], [Companion release routes exist, but component-to-release coverage is not complete],
   [`DOC-012`], [Partial], [The portal offers five task-first product routes and each overview has task-to-guide/reference links; a registry-owned shared task model and complete reference backlinks remain open],
-  [`DOC-013`], [Complete], [Pull requests retain complete previews without publishing, while `main` and immutable tags own publication],
+  [`DOC-013`], [Partial], [Ordinary pull requests retain complete previews, and the temporary `docs` publisher is gated on pull request 96's exact open head revision; branch protection does not yet enforce an always-created path-routed documentation check],
   [`DOC-014`], [Partial], [Local links, fragments, containment, source paths, and search targets are checked; scheduled external checking remains open],
   [`DOC-015`], [Partial], [A required deterministic audit checks semantics and no-JavaScript navigation on 19 representative generated pages; standards HTML validation, browser/axe, spelling, keyboard, viewport, and visual gates remain open],
   [`DOC-016`], [Partial], [Search is federated across five products and developer notes with deterministic client scoring, and product/developer pages have pinned source and issue routes; top-five ranking execution and feedback/search on every portal and Rustdoc page remain open],
@@ -707,35 +710,41 @@ shows that recent modification dates and working links are insufficient.
 
 === P1. Production is doing work that belongs in a review gate
 
-The accepted delivery flow is now clear: `docs` is temporary PR staging and
-`main` is authoritative after merge. The automation should encode that flow.
-Updates to `docs` should build the complete preview and quality report through
-its pull request without promoting `latest`; the merged `main` revision should
-rebuild and deploy the reviewed sources. This is a workflow-enforcement task,
-not a choice between two long-lived documentation sources.
+The accepted delivery flow is now clear: `docs` is the temporary live
+development publisher while pull request 96 is open, and `main` is
+authoritative after merge. The automation should encode that lifecycle rather
+than rely on a remembered cleanup. Updates to `docs` should build, validate,
+and publish the complete site once, without duplicating the pull-request build.
+Ordinary pull requests remain artifact-only. When pull request 96 closes or
+merges, the workflow must reject further `docs` publication and the merged
+`main` revision should rebuild and deploy the reviewed sources. This is not a
+choice between two long-lived documentation sources.
 
-The Pages workflow currently has no pull-request trigger, and its validation
-set differs from the full unit-test group for the six documentation crates. A
-documentation edit can therefore reach the deployment workflow before the
-reviewer has a complete rendered artifact and quality report.
+At the audited baseline, the Pages workflow had no pull-request trigger and its
+validation set differed from the documentation-crate checks. The current
+workflow now produces a complete rendered quality result before publication,
+and the temporary `docs` path uses that same result as its publication input.
 
-Link validation has additional blind spots:
+The current validation still has bounded blind spots:
 
-- Rustdoc trees and external URLs are skipped;
-- repository `source-link` targets are constructed without checking that their
-  paths exist;
-- local path normalization does not explicitly require the result to stay under
-  the generated output, allowing a false pass against a host file; and
-- HTML validity, spelling, browser behavior, and accessibility are not checked
-  by standards-based tools.
+- local generated pages, fragments, source paths, containment, redirects, and
+  search targets are checked, but raw Rustdoc trees and external URLs remain
+  outside the deterministic link gate;
+- the semantic/no-JavaScript audit is deterministic but is not a standards HTML
+  validator or browser accessibility engine; and
+- spelling, keyboard behavior, viewport rendering, and visual regression are
+  not yet checked.
 
 *Required change*
 
 - Add one required, path-routed “Documentation quality” pull-request check.
-- Build and retain the complete rendered preview artifact on pull requests,
-  including the temporary `docs` staging pull request, but do not let those
-  revisions mutate production `latest`.
-- Promote `latest` only from merged `main`; keep scheduled mutable builds on
+- Build and retain the complete rendered preview artifact on ordinary pull
+  requests without letting those revisions mutate `latest`.
+- Let pushes to the in-repository `docs` branch publish the development
+  `latest` site only while pull request 96 is open, and skip the duplicate
+  pull-request event for the same head revision.
+- Retire that exception automatically when pull request 96 closes or merges;
+  then promote `latest` only from `main`. Keep scheduled mutable builds on
   `main` and preserve tag-triggered immutable snapshots independently.
 - Run content checks for content-only changes and the full six-crate docs test
   group for renderer, schema, exporter, script, or workflow changes.
@@ -745,8 +754,9 @@ Link validation has additional blind spots:
 *Complete when*
 
 - no production deployment is the first full validation of its commit;
-- an update to the `docs` staging pull request produces a preview but cannot
-  change `latest`, while the merged `main` commit can publish it;
+- a push to `docs` publishes the validated development site exactly once while
+  pull request 96 is open, cannot publish after it closes or merges, and the
+  merged `main` commit can publish the same content;
 - local links, fragments, Rustdoc, repository source paths, search entries,
   redirects, and asset references have zero failures;
 - link resolution cannot escape the generated root;
@@ -880,7 +890,7 @@ light and dark modes at 375 px, 768 px, and desktop width.
   [`DOC-010`], [P1], [Enforce developer-architecture freshness and verified code scopes], [Every current note is owned, recently reviewed, scope-clean, symbol-valid, and contextually linked; changed scopes block publication pending owner review],
   [`DOC-011`], [P1], [Make release/version/tool claims generated and complete], [Manifest-to-release coverage is current for every component],
   [`DOC-012`], [P1], [Use ecosystem metadata for task navigation and bidirectional manual/reference links], [Task chooser and contextual cross-link fixtures pass],
-  [`DOC-013`], [P1], [Add the PR quality gate and enforce docs-preview/main-promotion flow], [The temporary `docs` pull request retains a complete preview but cannot mutate `latest`; merged `main` deploys],
+  [`DOC-013`], [P1], [Add the PR quality gate and enforce the temporary docs-publisher/main-promotion flow], [While pull request 96 is open, a `docs` push validates and publishes once; after it closes or merges, only `main` can update `latest`],
   [`DOC-014`], [P1], [Complete link, source-path, containment, and redirect validation], [Zero internal failures, including Rustdoc; external report is scheduled],
   [`DOC-015`], [P2], [Add browser, HTML, accessibility, spelling, and no-JS checks], [Zero HTML errors and serious/critical axe findings on representative pages],
   [`DOC-016`], [P2], [Federate search and add edit/report feedback routes], [Task and symbol fixtures rank the correct page in the first five results],
@@ -970,7 +980,7 @@ The quality job should publish these measures on every canonical build:
   columns: (4fr, 1.4fr),
   align: (left, right),
   table.header([*Measure*], [*Target*]),
-  [Non-main revisions able to mutate `latest`], [0],
+  [Non-main revisions able to mutate `latest` outside the open pull request 96 exception], [0],
   [False generated CLI invocation syntaxes], [0],
   [Public CLI commands, arguments, and settings with substantive descriptions], [100%],
   [Supported Python exports and public members meeting the documentation contract], [100%],
@@ -1003,9 +1013,12 @@ separately. A content-only edit should never run unrelated workspace tests.
 
 == Decisions required before implementation
 
-The publication source is no longer an open choice: `docs` is PR staging and
-`main` alone is authoritative for mutable `latest`. Maintainers still need to
-record two ownership and execution choices:
+The publication source is no longer an open choice: `docs` is the temporary
+development publisher only while pull request 96 remains open, and `main`
+alone is authoritative for mutable `latest` afterward. A long-lived
+per-branch selector is deferred unless multiple simultaneous documentation
+branches make its routing, retention, and cleanup costs worthwhile.
+Maintainers still need to record two ownership and execution choices:
 
 + Who owns the portal/toolchain, generated Python and CLI reference quality,
    each of the five product manuals, and the GammaLoop runtime/UV,

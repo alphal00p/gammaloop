@@ -6,6 +6,10 @@ on:
   push:
     branches:
       - main
+      # Temporary live publisher while pull request 96 develops the new site.
+      # The publication selector below disables this exception once that pull
+      # request is no longer open.
+      - docs
     tags:
       - 'v*'
       - 'gammaloop-v*'
@@ -87,8 +91,8 @@ permissions:
 
 concurrency:
   # Let Hestia finish its post-job upload before a later PR revision starts.
-  # Main, tag, schedule, and manual publication runs share one serial group so
-  # gh-pages updates cannot race.
+  # Main, the temporary docs publisher, tags, schedules, and manual publication
+  # runs share one serial group so gh-pages updates cannot race.
   group: documentation-${{ github.event_name == 'pull_request' && github.ref || 'publication' }}
   cancel-in-progress: false
 
@@ -103,6 +107,10 @@ env:
 jobs:
   build:
     name: Documentation quality
+    # A push to the in-repository docs branch already runs this revision with
+    # publication rights. Skip its duplicate pull-request event; the push check
+    # is attached to the same head revision in pull request 96.
+    if: ${{ github.event_name != 'pull_request' || github.head_ref != 'docs' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     outputs:
@@ -127,6 +135,7 @@ jobs:
         name: Select publication channel
         shell: bash
         env:
+          GH_TOKEN: ${{ github.token }}
           MANUAL_CHANNEL: ${{ inputs.channel }}
           MANUAL_SNAPSHOT_TAG: ${{ inputs.snapshot_tag }}
         run: |
@@ -140,10 +149,23 @@ jobs:
             snapshot_tag=$MANUAL_SNAPSHOT_TAG
             publish=${{ inputs.publish }}
           elif [ "$GITHUB_EVENT_NAME" = schedule ] \
-            || { [ "$GITHUB_EVENT_NAME" = push ] && [ "$GITHUB_REF" = refs/heads/main ]; }; then
+            || [ "$GITHUB_EVENT_NAME:$GITHUB_REF" = push:refs/heads/main ]; then
             channel=latest
             snapshot_tag=
             publish=true
+          elif [ "$GITHUB_EVENT_NAME:$GITHUB_REF" = push:refs/heads/docs ]; then
+            channel=latest
+            snapshot_tag=
+            if pull_request_authority=$(gh api \
+              "repos/$GITHUB_REPOSITORY/pulls/96" \
+              --jq '[.state, .head.ref, (.head.repo.full_name // ""), .base.ref, .head.sha] | join("|")') \
+              && [ "$pull_request_authority" = "open|docs|$GITHUB_REPOSITORY|main|$GITHUB_SHA" ]; then
+              publish=true
+              echo "Temporary docs-branch publication is enabled while pull request 96 is open"
+            else
+              publish=false
+              echo "::warning::Pull request 96 does not authorize this docs revision; only main may publish latest"
+            fi
           else
             channel=latest
             snapshot_tag=
@@ -159,8 +181,9 @@ jobs:
             exit 2
           fi
           if [ "$publish" = true ] && [ "$channel" = latest ] \
-            && [ "$GITHUB_REF" != refs/heads/main ]; then
-            echo "Mutable latest documentation can only be published from main" >&2
+            && [ "$GITHUB_REF" != refs/heads/main ] \
+            && [ "$GITHUB_REF" != refs/heads/docs ]; then
+            echo "Mutable latest documentation can only be published from main or the temporary docs branch" >&2
             exit 2
           fi
           if [ "$publish" = true ] && [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] \
@@ -391,10 +414,29 @@ jobs:
         env:
           CHANNEL: ${{ needs.build.outputs.channel }}
           DOCS_PATH: ${{ runner.temp }}/documentation-publication
+          GH_TOKEN: ${{ github.token }}
           SNAPSHOT_TAG: ${{ needs.build.outputs.snapshot_tag }}
         run: |
           set -euo pipefail
           pages_root=$RUNNER_TEMP/gh-pages
+
+          authorize_temporary_docs_publication() {
+            local pull_request_authority
+            if ! pull_request_authority=$(gh api \
+              "repos/$GITHUB_REPOSITORY/pulls/96" \
+              --jq '[.state, .head.ref, (.head.repo.full_name // ""), .base.ref, .head.sha] | join("|")'); then
+              echo "Could not revalidate temporary docs-branch publication" >&2
+              return 1
+            fi
+            [ "$pull_request_authority" = "open|docs|$GITHUB_REPOSITORY|main|$GITHUB_SHA" ] || {
+              echo "Pull request 96 no longer authorizes docs-branch publication" >&2
+              return 1
+            }
+          }
+
+          if [ "$GITHUB_REF" = refs/heads/docs ]; then
+            authorize_temporary_docs_publication
+          fi
 
           if git fetch origin gh-pages:refs/remotes/origin/gh-pages; then
             git worktree add --detach "$pages_root" refs/remotes/origin/gh-pages
@@ -418,6 +460,12 @@ jobs:
           git -C "$pages_root" add -A
           if ! git -C "$pages_root" diff --cached --quiet; then
             git -C "$pages_root" commit -m "publish documentation ($CHANNEL${SNAPSHOT_TAG:+: $SNAPSHOT_TAG})"
+          fi
+          if [ "$GITHUB_REF" = refs/heads/docs ]; then
+            # Close the build-time authorization window before mutating the
+            # persistent branch. Main, tags, and manual runs do not use this
+            # temporary exception.
+            authorize_temporary_docs_publication
           fi
           git -C "$pages_root" push origin HEAD:gh-pages
           echo "path=$pages_root" >> "$GITHUB_OUTPUT"

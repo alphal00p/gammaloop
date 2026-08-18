@@ -44,10 +44,14 @@ all` builds the complete portal and all five products. Output defaults to
 `target/alphal00p-docs`; `docs-watch` continuously rebuilds one product and
 keeps the last successful preview available after an error.
 
-Pull requests—including the temporary `docs` staging branch's pull request—
-retain a complete preview artifact but cannot update the mutable `latest` site.
-After review, `main` is the sole source for `latest`. Recognized release tags
-publish immutable snapshots.
+Ordinary pull requests retain a complete preview artifact and cannot update the
+mutable `latest` site. While pull request 96 is open, pushes to its in-repository
+`docs` staging branch are the explicit development exception: they publish the
+complete site to `latest` so it can be reviewed at the public Pages URL. The
+workflow checks that the pull request is still open, so the exception stops
+publishing automatically when it is closed or merged. After merge, `main` is
+the sole source for `latest`. Recognized release tags publish immutable
+snapshots.
 
 ## Generated reference
 
