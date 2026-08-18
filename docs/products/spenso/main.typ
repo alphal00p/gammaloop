@@ -4,6 +4,9 @@
 #import "content/networks.typ": networks
 #import "content/api.typ": api
 #import "content/changelog.typ": changelog
+#import "content/spenso-macros-releases.typ": spenso-macros-releases
+#import "content/spenso-hep-lib-releases.typ": spenso-hep-lib-releases
+#import "content/spynso3-releases.typ": spynso3-releases
 
 #let manual = product-document(
   title: "Spenso",
@@ -16,6 +19,9 @@
     #networks
     #api
     #changelog
+    #spenso-macros-releases
+    #spenso-hep-lib-releases
+    #spynso3-releases
   ],
 )
 

@@ -1,9 +1,9 @@
 = Documentation quality review and improvement plan
 
 #quote(block: true)[
-  *Status:* Proposal
+  *Status:* In progress
 
-  *Review date:* 2026-08-17
+  *Review date:* 2026-08-18
 
   *Reviewed baseline:* `c9f4e32acd2c`
 
@@ -136,6 +136,38 @@ not, by itself, a claim that every rendered page currently violates a standard.
 
 The baseline is a snapshot, not a permanent score. Counts should be generated
 by the quality job once the proposed inventory exists.
+
+== Implementation progress
+
+The first implementation slice is
+#link("https://github.com/alphal00p/gammaloop/commit/6feaba98e48a2cedb4688d3d0cc9a214716a8677")[`6feaba98e48a`]
+(2026-08-18). It delivers foundations and selected content improvements; it
+does not close the full acceptance criteria in this plan.
+
+#table(
+  columns: (1.5fr, 3fr, 3fr),
+  table.header([*Area*], [*Delivered in the first slice*], [*Still open*]),
+  [Python and CLI reference],
+  [Exact Clap actions, arity, aliases, conflicts, globals, and usage; supported-first Python hierarchy, stable anchors, structured docstrings, and a more compact responsive presentation],
+  [42 of 79 public CLI commands, 117 of 412 arguments, and 163 of 166 settings still lack explanatory prose; many Python members still lack useful documentation],
+  [Manuals and examples],
+  [The full Linnest, Kurvst, and Idenso FORM/Symbolica material is routed; 35 catalog and tutorial examples execute or receive language-appropriate syntax checks],
+  [Only two tutorial examples execute end to end; task coverage, expected-output assertions, and several product workflows remain shallow],
+  [Integrated corpus],
+  [Legacy current material is classified and routed, authored prose is Typst-only apart from exact `README.md` and `AGENTS.md` compatibility files, and companion package changelogs now have manual routes],
+  [Version-level headings included from companion changelogs are not yet individually indexed, and release coverage remains incomplete],
+  [Developer architecture],
+  [The reviewed current notes were corrected against implementation and now carry lifecycle, review, trigger, and optional verified-scope metadata],
+  [Named ownership, verified scopes for every current record, deterministic freshness reporting, and review automation remain incomplete],
+  [Cross-run build reuse],
+  [The Pages derivation is split into a Cargo producer and documentation consumer. The cold PR run rebuilt the producer and completed the five-site step in 1,005 seconds; the full quality job took 21 minutes 13 seconds, then Hestia published 1,111 paths (2.0 GiB) in 25.1 seconds],
+  [A following Typst/TOML-only revision must demonstrate that the producer is restored or already present and record the practical warm timing],
+)
+
+The cold-run evidence is
+#link("https://github.com/alphal00p/gammaloop/actions/runs/32131249528")[Documentation Pages run 32131249528].
+The quality summary classified the producer as `rebuilt`; this avoids treating
+a successful cold build as proof of cross-run reuse.
 
 == Developer architecture audit at this baseline
 

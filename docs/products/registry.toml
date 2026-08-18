@@ -38,6 +38,7 @@ pages = [
   { id = "linnest", title = "Linnest Typst API", summary = "The complete Typst and WebAssembly manual for Linnet graph construction, layout, queries, and drawing.", source = "docs/products/linnet/content/linnest.typ", symbol = "linnest", route = "manual/linnest/", group = "Manual" },
   { id = "interfaces", title = "Rust and Python interfaces", summary = "Rust crates, feature flags, typed identifiers, and the Linnet Python package.", source = "docs/products/linnet/content/api.typ", symbol = "api", route = "manual/interfaces/", group = "Manual" },
   { id = "releases", title = "Releases and change history", summary = "Published versions, compatibility changes, and practical upgrade guidance.", source = "docs/products/linnet/content/changelog.typ", symbol = "changelog", route = "manual/releases/", group = "Manual" },
+  { id = "clinnet-releases", title = "Clinnet release history", summary = "Canonical release notes for the independently versioned Clinnet command-line renderer.", source = "docs/products/linnet/content/clinnet-releases.typ", symbol = "clinnet-releases", route = "manual/clinnet-releases/", group = "Manual" },
 ]
 changelog = "crates/linnet/CHANGELOG.typ"
 related = ["spenso", "gammaloop"]
@@ -61,6 +62,9 @@ pages = [
   { id = "networks", title = "Tensor networks", summary = "Dense and sparse data, contraction planning, Symbolica shadowing, representations, and HEP helpers.", source = "docs/products/spenso/content/networks.typ", symbol = "networks", route = "manual/networks/", group = "Manual" },
   { id = "interfaces", title = "Rust, macros, and Python", summary = "Core Rust APIs, derive macros, HEP helpers, feature flags, and Python bindings.", source = "docs/products/spenso/content/api.typ", symbol = "api", route = "manual/interfaces/", group = "Manual" },
   { id = "releases", title = "Releases and change history", summary = "Published versions, compatibility changes, and practical upgrade guidance.", source = "docs/products/spenso/content/changelog.typ", symbol = "changelog", route = "manual/releases/", group = "Manual" },
+  { id = "spenso-macros-releases", title = "Spenso macros release history", summary = "Canonical release notes for the independently versioned Spenso procedural macros.", source = "docs/products/spenso/content/spenso-macros-releases.typ", symbol = "spenso-macros-releases", route = "manual/spenso-macros-releases/", group = "Manual" },
+  { id = "spenso-hep-lib-releases", title = "Spenso HEP library release history", summary = "Canonical release notes for the independently versioned high-energy-physics helper library.", source = "docs/products/spenso/content/spenso-hep-lib-releases.typ", symbol = "spenso-hep-lib-releases", route = "manual/spenso-hep-lib-releases/", group = "Manual" },
+  { id = "spynso3-releases", title = "Spynso3 release history", summary = "Canonical release notes for the independently versioned Symbolica community Python adapter.", source = "docs/products/spenso/content/spynso3-releases.typ", symbol = "spynso3-releases", route = "manual/spynso3-releases/", group = "Manual" },
 ]
 changelog = "crates/spenso/CHANGELOG.typ"
 related = ["linnet", "idenso", "gammaloop"]

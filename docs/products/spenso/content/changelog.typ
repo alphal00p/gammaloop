@@ -18,8 +18,8 @@ For reproducible upgrades, record the versions of Spenso and every companion com
 the application. Do not assume that changes between 0.5.6 and 0.6.0 are fully represented in
 the available notes.
 
-Release notes: #source-link("crates/spenso/CHANGELOG.typ", label: "Spenso"),
-#source-link("crates/spenso-macros/CHANGELOG.typ", label: "macros"),
-#source-link("crates/spenso-hep-lib/CHANGELOG.typ", label: "HEP library"), and
-#source-link("crates/spynso3/CHANGELOG.typ", label: "Python adapter").
+The core #source-link("crates/spenso/CHANGELOG.typ", label: "Spenso changelog") is followed by
+separately routed histories for #link("manual/spenso-macros-releases/")[spenso-macros],
+#link("manual/spenso-hep-lib-releases/")[spenso-hep-lib], and
+#link("manual/spynso3-releases/")[spynso3]. Each page links back to its canonical Typst source.
 ]

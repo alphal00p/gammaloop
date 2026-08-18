@@ -4,8 +4,9 @@
 = Releases and change history
 
 The #source-link("crates/linnet/CHANGELOG.typ", label: "Linnet changelog") records changes to the
-Rust crate. The standalone `linnet-py` distribution has its own version and does not currently
-have a separate changelog in this repository.
+Rust crate. The #link("manual/clinnet-releases/")[rendered Clinnet release history] covers the
+independently versioned command-line renderer. The standalone `linnet-py` distribution also has
+its own version, but does not currently have a separate changelog in this repository.
 
 The changelog records user-visible graph, parser, drawing, and algorithm changes. In particular,
 users moving across releases should check index ordering, DOT serialization, subgraph behavior,

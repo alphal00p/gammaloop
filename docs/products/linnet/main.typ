@@ -5,6 +5,7 @@
 #import "content/linnest.typ": linnest
 #import "content/api.typ": api
 #import "content/changelog.typ": changelog
+#import "content/clinnet-releases.typ": clinnet-releases
 
 #let manual = product-document(
   title: "Linnet",
@@ -18,6 +19,7 @@
     #linnest
     #api
     #changelog
+    #clinnet-releases
   ],
 )
 
