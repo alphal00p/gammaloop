@@ -1139,9 +1139,15 @@ impl RatatuiDashboardState {
                 })
             })
             .unwrap_or((0.0, 1.0));
-        let sigma = current_value
-            .1
-            .max(current_value.0.abs().max(1.0) * 1.0e-12);
+        if !current_value.0.is_finite() || !current_value.1.is_finite() || current_value.1 <= 0.0 {
+            frame.render_widget(
+                Paragraph::new("Waiting for a finite central value and non-zero MC uncertainty...")
+                    .block(titled_block("Convergence")),
+                area,
+            );
+            return;
+        }
+        let sigma = current_value.1;
         let y_span = self.chart_y_sigma_span as f64;
         let y_min = current_value.0 - y_span * sigma;
         let y_max = current_value.0 + y_span * sigma;

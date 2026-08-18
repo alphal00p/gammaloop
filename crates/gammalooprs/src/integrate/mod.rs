@@ -6522,6 +6522,79 @@ mod tests {
     }
 
     #[test]
+    fn ratatui_convergence_axis_uses_small_dimensionful_uncertainty_verbatim() {
+        let mut state = make_integration_state();
+        state.all_integrals[0] = make_accumulator(-2.12e-15, 5.2e-16, 1.0, 1.0e-15, 1.0e-16, 1.0);
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
+        let rendered = render_ratatui_update(
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[None, None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(15),
+                Duration::from_secs(10),
+                25_000,
+                125_000,
+                125_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
+                completed_points: 25_000,
+                target_points: 100_000,
+            })),
+            |_| {},
+        );
+
+        assert!(rendered.contains("-4.200e-15"), "{rendered}");
+        assert!(rendered.contains("-4.000e-17"), "{rendered}");
+        assert!(!rendered.contains("e-12"), "{rendered}");
+    }
+
+    #[test]
+    fn ratatui_convergence_waits_for_non_zero_uncertainty() {
+        let mut state = make_integration_state();
+        state.all_integrals[0] = make_accumulator(1.0e-15, 0.0, 1.0, 1.0e-15, 0.0, 1.0);
+        let view_options = IntegrationStatusViewOptions {
+            show_statistics: false,
+            show_max_weight_details: false,
+            ..default_view_options()
+        };
+        let rendered = render_ratatui_update(
+            StatusUpdateBuildRequest::new(
+                IntegrationStatusKind::Live,
+                &state,
+                &[None, None],
+                &view_options,
+            )
+            .with_timing(
+                4,
+                Duration::from_secs(15),
+                Duration::from_secs(10),
+                25_000,
+                125_000,
+                125_000,
+            )
+            .with_live_progress(Some(status_update::LiveIterationProgress {
+                completed_points: 25_000,
+                target_points: 100_000,
+            })),
+            |_| {},
+        );
+
+        assert!(
+            rendered.contains("Waiting for a finite central value and non-zero MC uncertainty"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
     fn ratatui_discrete_tab_renders_selected_bin_detail() {
         let state = make_discrete_integration_state();
         let view_options = IntegrationStatusViewOptions {
