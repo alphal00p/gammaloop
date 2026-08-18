@@ -1,4 +1,4 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Typed tensors, symbolic structures, and executable tensor networks — spenso supported Rust API"><link rel="icon" type="image/svg+xml" href="../../../../assets/local-unitarity-light.svg"><link rel="icon" type="image/svg+xml" href="../../../../assets/local-unitarity-dark.svg" media="(prefers-color-scheme: dark)"><title>Spenso · spenso supported Rust API</title><link rel="stylesheet" href="../../../../assets/site.css"><script defer src="../../../../assets/site.js"></script></head><body data-docs-root="../../../../"><a class="skip-link" href="#main-content">Skip to content</a><header class="site-header"><button class="header-button menu-button" type="button" data-menu-toggle aria-label="Open navigation" aria-controls="docs-sidebar" aria-expanded="false">☰</button><a class="site-brand" href="../../../../../../../"><span class="site-brand-mark">α</span><span class="site-brand-name">αLoop docs</span></a><div class="site-header-tools"><select class="product-select" data-product-select aria-label="Select project"><option value="../../../../../../gammaloop/latest/">GammaLoop</option><option value="../../../../../../linnet/latest/">Linnet</option><option value="../../../../../../spenso/latest/" selected>Spenso</option><option value="../../../../../../idenso/latest/">Idenso</option><option value="../../../../../../vakint/latest/">Vakint</option></select><button class="header-button" type="button" data-search-open>Search <span class="header-button-label">⌘K</span></button><button class="header-button" type="button" data-theme-toggle aria-label="Toggle color theme">◐</button></div></header><div class="docs-shell"><aside class="docs-sidebar" id="docs-sidebar" aria-label="Spenso manual"><section class="sidebar-group"><p class="sidebar-group-title">Start here</p><a class="sidebar-link" href="../../../../">Overview</a></section><section class="sidebar-group"><p class="sidebar-group-title">Tutorial</p><a class="sidebar-link" href="../../../../tutorial/">Your first tensor workflow</a></section><section class="sidebar-group"><p class="sidebar-group-title">Manual</p><a class="sidebar-link" href="../../../../manual/networks/">Tensor networks</a><a class="sidebar-link" href="../../../../manual/interfaces/">Rust, macros, and Python</a><a class="sidebar-link" href="../../../../manual/releases/">Releases and change history</a></section><section class="sidebar-group"><p class="sidebar-group-title">Reference</p><a class="sidebar-link" href="../../../../reference/">Reference overview</a><a class="sidebar-link" href="../../../../reference/python/">Python API</a><a class="sidebar-link" href="../../../../reference/rust/" aria-current="page">Rust API</a></section><section class="sidebar-group sidebar-developer-group"><p class="sidebar-group-title">For developers</p><a class="sidebar-link" href="../../../../../../../developers/">Architecture &amp; engineering notes</a></section><p class="sidebar-meta"><strong>Spenso</strong><br><code>latest</code><br><a href="../../../../manual.pdf">Download PDF</a></p></aside><main class="docs-main" id="main-content"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../">Spenso</a> / Reference / spenso supported Rust API</nav><article class="docs-article"><h1 id="spenso-spenso-supported-rust-api">Spenso · spenso supported Rust API</h1><p><code>spenso</code> · 6 curated entries · version 0.6.0</p><p><a href="../../../../reference/rust/spenso/">Open the complete generated Rustdoc</a>. The source-backed catalog below highlights the supported public surface with signatures, feature gates, examples, and source links.</p><section class="api-item" id="supported-tensorstructure"><h3 id="tensorstructure"><code>TensorStructure</code></h3><span class="api-kind">Trait</span><div class="api-docstring"><p>Describes ordered slots, dimensions, representations, and contraction compatibility independently of data.</p></div><pre class="api-signature"><code>pub trait TensorStructure
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="Typed tensors, symbolic structures, and executable tensor networks — spenso supported Rust API"><link rel="icon" type="image/svg+xml" href="../../../../assets/local-unitarity-light.svg"><link rel="icon" type="image/svg+xml" href="../../../../assets/local-unitarity-dark.svg" media="(prefers-color-scheme: dark)"><title>Spenso · spenso supported Rust API</title><link rel="stylesheet" href="../../../../assets/site.css"><script defer src="../../../../assets/site.js"></script></head><body data-docs-root="../../../../" data-search-index="../../../../../../../search-index.json" data-search-root="../../../../../../../"><a class="skip-link" href="#main-content">Skip to content</a><header class="site-header"><button class="header-button menu-button" type="button" data-menu-toggle aria-label="Open navigation" aria-controls="docs-sidebar" aria-expanded="false">☰</button><a class="site-brand" href="../../../../../../../"><span class="site-brand-mark">α</span><span class="site-brand-name">αLoop docs</span></a><div class="site-header-tools"><select class="product-select" data-product-select aria-label="Select project"><option value="../../../../../../gammaloop/latest/">GammaLoop</option><option value="../../../../../../linnet/latest/">Linnet</option><option value="../../../../../../spenso/latest/" selected>Spenso</option><option value="../../../../../../idenso/latest/">Idenso</option><option value="../../../../../../vakint/latest/">Vakint</option></select><button class="header-button" type="button" data-search-open>Search <span class="header-button-label">⌘K</span></button><button class="header-button" type="button" data-theme-toggle aria-label="Toggle color theme">◐</button></div></header><div class="docs-shell"><aside class="docs-sidebar" id="docs-sidebar" aria-label="Spenso manual"><section class="sidebar-group"><p class="sidebar-group-title">Start here</p><a class="sidebar-link" href="../../../../">Overview</a></section><section class="sidebar-group"><p class="sidebar-group-title">Tutorial</p><a class="sidebar-link" href="../../../../tutorial/">Your first tensor workflow</a></section><section class="sidebar-group"><p class="sidebar-group-title">Manual</p><a class="sidebar-link" href="../../../../manual/networks/">Tensor networks</a><a class="sidebar-link" href="../../../../manual/interfaces/">Rust, macros, and Python</a><a class="sidebar-link" href="../../../../manual/releases/">Releases and change history</a><a class="sidebar-link" href="../../../../manual/spenso-macros-releases/">Spenso macros release history</a><a class="sidebar-link" href="../../../../manual/spenso-hep-lib-releases/">Spenso HEP library release history</a><a class="sidebar-link" href="../../../../manual/spynso3-releases/">Spynso3 release history</a></section><section class="sidebar-group"><p class="sidebar-group-title">Reference</p><a class="sidebar-link" href="../../../../reference/">Reference overview</a><a class="sidebar-link" href="../../../../reference/python/">Python API</a><a class="sidebar-link" href="../../../../reference/rust/" aria-current="page">Rust API</a></section><section class="sidebar-group sidebar-developer-group"><p class="sidebar-group-title">For developers</p><a class="sidebar-link" href="../../../../../../../developers/">Architecture &amp; engineering notes</a></section><p class="sidebar-meta"><strong>Spenso</strong><br><code>latest</code><br><a href="../../../../manual.pdf">Download PDF</a></p></aside><main class="docs-main" id="main-content"><nav class="breadcrumbs" aria-label="Breadcrumb"><a href="../../../../">Spenso</a> / Reference / spenso supported Rust API</nav><article class="docs-article"><h1 id="spenso-spenso-supported-rust-api">Spenso · spenso supported Rust API</h1><p><code>spenso</code> · 6 curated entries · version 0.6.0</p><p><a href="../../../../reference/rust/spenso/">Open the complete generated Rustdoc</a>. The source-backed catalog below highlights the supported public surface with signatures, feature gates, examples, and source links.</p><div class="api-supported-group" data-reference-group><section class="api-scope" data-reference-group><details class="api-item" data-api-surface="supported" id="supported-tensorstructure" data-reference-entry data-reference-search="TensorStructure Tensor structure Trait pub trait TensorStructure
 {
     type Slot : IsAbstractSlot + DualSlotTo &lt; Dual = Self :: Slot &gt; ; type
     Indexed : TensorStructure &lt; Indexed = Self :: Indexed, Slot = Self :: Slot
@@ -215,26 +215,262 @@
         if self.order() == 0 { return Ok(1); } let mut size = 1; for dim in
         self.shape() { size *= usize :: try_from(dim) ? ; } Ok(size)
     }
-}</code></pre><h4 id="supported-usage">Supported usage</h4><pre><code data-lang="rust">fn accepts_structure&lt;S: spenso::structure::TensorStructure&gt;(_structure: &amp;S) {}</code></pre><section class="api-member" id="supported-tensorstructure-slot-associatedtype"><h4 id="slot"><code>Slot</code></h4><span class="api-kind">AssociatedType</span><pre class="api-member-signature"><code>type Slot : IsAbstractSlot + DualSlotTo &lt; Dual = Self :: Slot &gt; ;</code></pre></section><section class="api-member" id="supported-tensorstructure-indexed-associatedtype"><h4 id="indexed"><code>Indexed</code></h4><span class="api-kind">AssociatedType</span><pre class="api-member-signature"><code>type Indexed : TensorStructure &lt; Indexed = Self :: Indexed, Slot = Self ::
-Slot &gt; ;</code></pre></section><section class="api-member" id="supported-tensorstructure-reindex-method"><h4 id="reindex"><code>reindex</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn reindex(self, indices : &amp; [&lt; Self :: Slot as IsAbstractSlot &gt; :: Aind],) -&gt;
-Result &lt; PermutedStructure &lt; Self :: Indexed &gt; , StructureError &gt; ;</code></pre></section><section class="api-member" id="supported-tensorstructure-dual-method"><h4 id="dual"><code>dual</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn dual(self) -&gt; Self;</code></pre></section><section class="api-member" id="supported-tensorstructure-string-rep-method"><h4 id="string-rep"><code>string_rep</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn string_rep(&amp; self) -&gt; String
+} size is_fully_self_dual is_scalar index_iter co_expanded_index expanded_index flat_index verify_indices strides strides_row_major strides_column_major find_permutation same_external reps shape traces match_indices match_index same_content external_indices external_reps contains_matching to_shell external_structure order get_slot get_dim get_rep get_aind external_indices_iter external_reps_iter external_dims_iter external_structure_iter string_rep dual reindex Indexed Slot"><summary class="api-item-heading"><h3 id="tensorstructure"><code>TensorStructure</code></h3><span class="api-kind">Trait</span></summary><div class="api-item-body"><div class="api-docstring"><p>Describes ordered slots, dimensions, representations, and contraction compatibility independently of data.</p></div><pre class="api-signature"><code>pub trait TensorStructure
+{
+    type Slot : IsAbstractSlot + DualSlotTo &lt; Dual = Self :: Slot &gt; ; type
+    Indexed : TensorStructure &lt; Indexed = Self :: Indexed, Slot = Self :: Slot
+    &gt; ; fn
+    reindex(self, indices : &amp; [&lt; Self :: Slot as IsAbstractSlot &gt; :: Aind],)
+    -&gt; Result &lt; PermutedStructure &lt; Self :: Indexed &gt; , StructureError &gt; ; fn
+    dual(self) -&gt; Self; fn string_rep(&amp; self) -&gt; String
+    {
+        self.external_structure_iter().map(| s | s.to_string()).collect :: &lt;
+        Vec &lt; _ &gt; &gt; ().join(&quot;&quot;)
+    } fn external_structure_iter(&amp; self) -&gt; impl Iterator &lt; Item = Self ::
+    Slot &gt; ; fn external_dims_iter(&amp; self) -&gt; impl Iterator &lt; Item = Dimension
+    &gt; ; fn external_reps_iter(&amp; self,) -&gt; impl Iterator &lt; Item =
+    Representation &lt; &lt; Self :: Slot as IsAbstractSlot &gt; :: R &gt; &gt; ; fn
+    external_indices_iter(&amp; self) -&gt; impl Iterator &lt; Item = &lt; Self :: Slot as
+    IsAbstractSlot &gt; :: Aind &gt; ; fn
+    get_aind(&amp; self, i : impl Into &lt; SlotIndex &gt;) -&gt; Option &lt; &lt; Self :: Slot
+    as IsAbstractSlot &gt; :: Aind &gt; ; fn
+    get_rep(&amp; self, i : impl Into &lt; SlotIndex &gt; ,) -&gt; Option &lt; Representation
+    &lt; &lt; Self :: Slot as IsAbstractSlot &gt; :: R &gt; &gt; ; fn
+    get_dim(&amp; self, i : impl Into &lt; SlotIndex &gt;) -&gt; Option &lt; Dimension &gt; ; fn
+    get_slot(&amp; self, i : impl Into &lt; SlotIndex &gt;) -&gt; Option &lt; Self :: Slot &gt; ;
+    fn order(&amp; self) -&gt; usize;
+    #[doc =
+    &quot; returns the list of slots that are the external indices of the tensor&quot;]
+    fn external_structure(&amp; self) -&gt; Vec &lt; Self :: Slot &gt;
+    { self.external_structure_iter().collect() } fn to_shell(self) -&gt;
+    TensorShell &lt; Self &gt; where Self : Sized, { TensorShell :: new(self) } fn
+    contains_matching(&amp; self, slot : &amp; Self :: Slot) -&gt; bool
+    { self.external_structure_iter().any(| s | s.matches(slot)) } fn
+    external_reps(&amp; self) -&gt; Vec &lt; Representation &lt; &lt; Self :: Slot as
+    IsAbstractSlot &gt; :: R &gt; &gt; { self.external_reps_iter().collect() } fn
+    external_indices(&amp; self) -&gt; Vec &lt; &lt; Self :: Slot as IsAbstractSlot &gt; ::
+    Aind &gt; { self.external_indices_iter().collect() }
+    #[doc =
+    &quot; checks if the tensor has the same exact structure as another tensor&quot;] fn
+    same_content(&amp; self, other : &amp; Self) -&gt; bool { self.same_external(other) }
+    #[doc =
+    &quot; Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list, along with a boolean indicating if there is a single match&quot;]
+    fn match_index(&amp; self, other : &amp; Self) -&gt; Option &lt; (bool, usize, usize) &gt;
+    {
+        let posmap =
+        self.external_structure_iter().enumerate().map(| (i, slot) |
+        (slot, i)).collect :: &lt; AHashMap &lt; _, _ &gt; &gt; (); let mut first_pair :
+        Option &lt; (usize, usize) &gt; = None; for (j, slot) in
+        other.external_structure_iter().enumerate()
+        {
+            if let Some(&amp; i) = posmap.get(&amp; slot.dual())
+            {
+                if let Some((i, j)) = first_pair
+                { return Some((false, i, j)); } first_pair = Some((i, j));
+            }
+        } first_pair.map(| (i, j) | (true, i, j))
+    }
+    #[doc =
+    &quot; Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list&quot;]
+    fn match_indices(&amp; self, other : &amp; Self) -&gt; Option &lt;
+    (Permutation, Vec &lt; bool &gt; , Vec &lt; bool &gt;) &gt;
+    {
+        let mut self_matches = vec! [false; self.order()]; let mut perm = Vec
+        :: new(); let mut other_matches = vec! [false; other.order()]; let
+        posmap =
+        self.external_structure_iter().enumerate().map(| (i, slot) |
+        (slot, i)).collect :: &lt; AHashMap &lt; _, _ &gt; &gt; (); for (j, slot_other) in
+        other.external_structure_iter().enumerate()
+        {
+            if let Some(&amp; i) = posmap.get(&amp; slot_other.dual())
+            {
+                self_matches [i] = true; other_matches [j] = true;
+                perm.push(i);
+            }
+        } if perm.is_empty() { None } else
+        {
+            let p : Permutation = Permutation :: sort(&amp; perm);
+            Some((p, self_matches, other_matches))
+        }
+    } #[doc = &quot; Identify the repeated slots in the external index list&quot;] fn
+    traces(&amp; self) -&gt; Vec &lt; [usize; 2] &gt;
+    {
+        let mut positions : HashMap &lt; &lt; Self as TensorStructure &gt; :: Slot, Vec
+        &lt; usize &gt; &gt; = HashMap :: new(); for (index, key) in
+        self.external_structure_iter().enumerate()
+        {
+            if let Some(v) = positions.get_mut(&amp; key.dual())
+            { v.push(index); } else { positions.insert(key, vec! [index]); }
+        }
+        positions.into_values().filter_map(| indices |
+        {
+            if indices.len() == 2 { Some([indices [0], indices [1]]) } else
+            { None }
+        }).collect()
+    }
+    #[doc =
+    &quot; yields the (outwards facing) shape of the tensor as a list of dimensions&quot;]
+    fn shape(&amp; self) -&gt; Vec &lt; Dimension &gt;
+    { self.external_dims_iter().collect() } fn reps(&amp; self) -&gt; Vec &lt;
+    Representation &lt; &lt; Self :: Slot as IsAbstractSlot &gt; :: R &gt; &gt;
+    { self.external_reps_iter().collect() }
+    #[doc = &quot; checks if externally, the two tensors are the same&quot;] fn
+    same_external(&amp; self, other : &amp; Self) -&gt; bool
+    {
+        let set1 : HashSet &lt; _ &gt; = self.external_structure_iter().collect();
+        let set2 : HashSet &lt; _ &gt; = other.external_structure_iter().collect();
+        set1 == set2
+    }
+    #[doc =
+    &quot; find the permutation of the external indices that would make the two tensors the same. Applying the permutation to other should make it the same as self&quot;]
+    fn find_permutation(&amp; self, other : &amp; Self) -&gt; Result &lt; Permutation &gt;
+    {
+        if self.order() != other.order()
+        {
+            return
+            Err(eyre!
+            (&quot;Mismatched order: {} vs {}&quot;, self.order(), other.order()));
+        } let other_structure = other.external_structure(); let self_structure
+        = self.external_structure(); let other_sort = Permutation ::
+        sort(&amp; other_structure); let self_sort = Permutation ::
+        sort(&amp; self_structure); if other_sort.apply_slice(&amp; other_structure)
+        == self_sort.apply_slice(&amp; self_structure)
+        { Ok(other_sort.compose(&amp; self_sort.inverse())) } else
+        { Err(eyre! (&quot;Mismatched structure&quot;)) }
+    } #[doc = &quot; yields the strides of the tensor in column major order&quot;] fn
+    strides_column_major(&amp; self) -&gt; Result &lt; Vec &lt; usize &gt; &gt;
+    {
+        let mut strides : Vec &lt; usize &gt; = vec! [1; self.order()]; if
+        self.order() == 0 { return Ok(strides); } for i in 0 .. self.order() -
+        1
+        {
+            strides [i + 1] = strides [i] * usize ::
+            try_from(self.shape() [i]) ? ;
+        } Ok(strides)
+    } #[doc = &quot; yields the strides of the tensor in row major order&quot;] fn
+    strides_row_major(&amp; self) -&gt; Result &lt; Vec &lt; usize &gt; &gt;
+    {
+        let mut strides = vec! [1; self.order()]; if self.order() == 0
+        { return Ok(strides); } for i in (0 .. self.order() - 1).rev()
+        {
+            strides [i] = strides [i + 1] * usize ::
+            try_from(self.shape() [i + 1]) ? ;
+        } Ok(strides)
+    } #[doc = &quot; By default, the strides are row major&quot;] fn strides(&amp; self) -&gt;
+    Result &lt; Vec &lt; usize &gt; &gt; { self.strides_row_major() }
+    #[doc =
+    &quot; Verifies that the list of indices provided are valid for the tensor&quot;]
+    #[doc = &quot;&quot;] #[doc = &quot; # Errors&quot;] #[doc = &quot;&quot;]
+    #[doc =
+    &quot; `Mismatched order` = if the length of the indices is different from the order of the tensor,&quot;]
+    #[doc = &quot;&quot;]
+    #[doc =
+    &quot; `Index out of bounds` = if the index is out of bounds for the dimension of that index&quot;]
+    #[doc = &quot;&quot;] fn verify_indices &lt; C : AsRef &lt; [ConcreteIndex] &gt; &gt;
+    (&amp; self, indices : C) -&gt; Result &lt; () &gt;
+    {
+        if indices.as_ref().len() != self.order()
+        {
+            return
+            Err(eyre!
+            (&quot;Mismatched order: {} indices, vs order {}&quot;,
+            indices.as_ref().len(), self.order()));
+        } for (i, dim_len) in
+        self.external_structure_iter().map(| slot | slot.dim()).enumerate()
+        {
+            if indices.as_ref() [i] &gt;= usize :: try_from(dim_len) ?
+            {
+                return
+                Err(eyre!
+                (&quot;Index {} out of bounds for dimension {} of size {}&quot;,
+                indices.as_ref()[i], i, usize::try_from(dim_len)?));
+            }
+        } Ok(())
+    } #[doc = &quot; yields the flat index of the tensor given a list of indices&quot;]
+    #[doc = &quot;&quot;] #[doc = &quot; # Errors&quot;] #[doc = &quot;&quot;]
+    #[doc = &quot; Same as [`Self::verify_indices`]&quot;] fn flat_index &lt; C : AsRef &lt;
+    [ConcreteIndex] &gt; &gt; (&amp; self, indices : C) -&gt; Result &lt; FlatIndex &gt;
+    {
+        let strides = self.strides() ? ; self.verify_indices(&amp; indices) ? ;
+        let mut idx = 0; for (i, &amp; index) in
+        indices.as_ref().iter().enumerate() { idx += index * strides [i]; }
+        Ok(idx.into())
+    } #[doc = &quot; yields the expanded index of the tensor given a flat index&quot;]
+    #[doc = &quot;&quot;] #[doc = &quot; # Errors&quot;] #[doc = &quot;&quot;]
+    #[doc =
+    &quot; `Index out of bounds` = if the flat index is out of bounds for the tensor&quot;]
+    fn expanded_index(&amp; self, flat_index : FlatIndex) -&gt; Result &lt;
+    ExpandedIndex &gt;
+    {
+        let mut indices = vec! []; let mut index : usize = flat_index.into();
+        for &amp; stride in &amp; self.strides() ?
+        { indices.push(index / stride); index %= stride; } if usize ::
+        from(flat_index) &lt; self.size() ? { Ok(indices.into()) } else
+        { Err(eyre! (&quot;Index {flat_index} out of bounds&quot;)) }
+    } fn co_expanded_index(&amp; self, flat_index : FlatIndex) -&gt; Result &lt;
+    DualConciousExpandedIndex &gt;
+    {
+        let mut indices = vec! []; for (r, i) in
+        self.external_reps_iter().zip(self.expanded_index(flat_index) ?
+        .iter())
+        {
+            if r.rep.is_base() &amp;&amp; r.rep.is_dual()
+            { indices.push(DualConciousIndex :: SelfDual(* i)); } else if
+            r.rep.is_base() { indices.push(DualConciousIndex :: Up(* i)); }
+            else { indices.push(DualConciousIndex :: Down(* i)); }
+        } Ok(indices.into())
+    } #[doc = &quot; yields an iterator over the indices of the tensor&quot;] fn
+    index_iter(&amp; self) -&gt; TensorStructureIndexIterator &lt; '_, Self &gt; where Self
+    : Sized, { TensorStructureIndexIterator :: new(self) }
+    #[doc = &quot; if the tensor has no (external) indices, it is a scalar&quot;] fn
+    is_scalar(&amp; self) -&gt; bool { self.order() == 0 } fn
+    is_fully_self_dual(&amp; self) -&gt; bool;
+    #[doc =
+    &quot; yields the size of the tensor, i.e. the product of the dimensions. This is the length of the vector of the data in a dense tensor&quot;]
+    fn size(&amp; self) -&gt; Result &lt; usize &gt;
+    {
+        if self.order() == 0 { return Ok(1); } let mut size = 1; for dim in
+        self.shape() { size *= usize :: try_from(dim) ? ; } Ok(size)
+    }
+}</code></pre><h4 id="supported-usage">Supported usage</h4><pre><code data-lang="rust">fn accepts_structure&lt;S: spenso::structure::TensorStructure&gt;(_structure: &amp;S) {}</code></pre><details class="api-member" id="supported-tensorstructure-slot-associatedtype" data-reference-entry data-reference-search="Slot Associated type type Slot : IsAbstractSlot + DualSlotTo &lt; Dual = Self :: Slot &gt; ; "><summary class="api-member-heading"><h4 id="slot"><code>Slot</code></h4><span class="api-kind">Associated type</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>type Slot : IsAbstractSlot + DualSlotTo &lt; Dual = Self :: Slot &gt; ;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-indexed-associatedtype" data-reference-entry data-reference-search="Indexed Associated type type Indexed : TensorStructure &lt; Indexed = Self :: Indexed, Slot = Self ::
+Slot &gt; ; "><summary class="api-member-heading"><h4 id="indexed"><code>Indexed</code></h4><span class="api-kind">Associated type</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>type Indexed : TensorStructure &lt; Indexed = Self :: Indexed, Slot = Self ::
+Slot &gt; ;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-reindex-method" data-reference-entry data-reference-search="reindex Method fn reindex(self, indices : &amp; [&lt; Self :: Slot as IsAbstractSlot &gt; :: Aind],) -&gt;
+Result &lt; PermutedStructure &lt; Self :: Indexed &gt; , StructureError &gt; ; "><summary class="api-member-heading"><h4 id="reindex"><code>reindex</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn reindex(self, indices : &amp; [&lt; Self :: Slot as IsAbstractSlot &gt; :: Aind],) -&gt;
+Result &lt; PermutedStructure &lt; Self :: Indexed &gt; , StructureError &gt; ;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-dual-method" data-reference-entry data-reference-search="dual Method fn dual(self) -&gt; Self; "><summary class="api-member-heading"><h4 id="dual"><code>dual</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn dual(self) -&gt; Self;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-string-rep-method" data-reference-entry data-reference-search="string_rep Method fn string_rep(&amp; self) -&gt; String
 {
     self.external_structure_iter().map(| s | s.to_string()).collect :: &lt; Vec &lt;
     _ &gt; &gt; ().join(&quot;&quot;)
-}</code></pre></section><section class="api-member" id="supported-tensorstructure-external-structure-iter-method"><h4 id="external-structure-iter"><code>external_structure_iter</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn external_structure_iter(&amp; self) -&gt; impl Iterator &lt; Item = Self :: Slot &gt; ;</code></pre></section><section class="api-member" id="supported-tensorstructure-external-dims-iter-method"><h4 id="external-dims-iter"><code>external_dims_iter</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn external_dims_iter(&amp; self) -&gt; impl Iterator &lt; Item = Dimension &gt; ;</code></pre></section><section class="api-member" id="supported-tensorstructure-external-reps-iter-method"><h4 id="external-reps-iter"><code>external_reps_iter</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn external_reps_iter(&amp; self,) -&gt; impl Iterator &lt; Item = Representation &lt; &lt;
-Self :: Slot as IsAbstractSlot &gt; :: R &gt; &gt; ;</code></pre></section><section class="api-member" id="supported-tensorstructure-external-indices-iter-method"><h4 id="external-indices-iter"><code>external_indices_iter</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn external_indices_iter(&amp; self) -&gt; impl Iterator &lt; Item = &lt; Self :: Slot as
-IsAbstractSlot &gt; :: Aind &gt; ;</code></pre></section><section class="api-member" id="supported-tensorstructure-get-aind-method"><h4 id="get-aind"><code>get_aind</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn get_aind(&amp; self, i : impl Into &lt; SlotIndex &gt;) -&gt; Option &lt; &lt; Self :: Slot as
-IsAbstractSlot &gt; :: Aind &gt; ;</code></pre></section><section class="api-member" id="supported-tensorstructure-get-rep-method"><h4 id="get-rep"><code>get_rep</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn get_rep(&amp; self, i : impl Into &lt; SlotIndex &gt; ,) -&gt; Option &lt; Representation &lt;
-&lt; Self :: Slot as IsAbstractSlot &gt; :: R &gt; &gt; ;</code></pre></section><section class="api-member" id="supported-tensorstructure-get-dim-method"><h4 id="get-dim"><code>get_dim</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn get_dim(&amp; self, i : impl Into &lt; SlotIndex &gt;) -&gt; Option &lt; Dimension &gt; ;</code></pre></section><section class="api-member" id="supported-tensorstructure-get-slot-method"><h4 id="get-slot"><code>get_slot</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn get_slot(&amp; self, i : impl Into &lt; SlotIndex &gt;) -&gt; Option &lt; Self :: Slot &gt; ;</code></pre></section><section class="api-member" id="supported-tensorstructure-order-method"><h4 id="order"><code>order</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn order(&amp; self) -&gt; usize;</code></pre></section><section class="api-member" id="supported-tensorstructure-external-structure-method"><h4 id="external-structure"><code>external_structure</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc =
+} "><summary class="api-member-heading"><h4 id="string-rep"><code>string_rep</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn string_rep(&amp; self) -&gt; String
+{
+    self.external_structure_iter().map(| s | s.to_string()).collect :: &lt; Vec &lt;
+    _ &gt; &gt; ().join(&quot;&quot;)
+}</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-external-structure-iter-method" data-reference-entry data-reference-search="external_structure_iter Method fn external_structure_iter(&amp; self) -&gt; impl Iterator &lt; Item = Self :: Slot &gt; ; "><summary class="api-member-heading"><h4 id="external-structure-iter"><code>external_structure_iter</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn external_structure_iter(&amp; self) -&gt; impl Iterator &lt; Item = Self :: Slot &gt; ;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-external-dims-iter-method" data-reference-entry data-reference-search="external_dims_iter Method fn external_dims_iter(&amp; self) -&gt; impl Iterator &lt; Item = Dimension &gt; ; "><summary class="api-member-heading"><h4 id="external-dims-iter"><code>external_dims_iter</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn external_dims_iter(&amp; self) -&gt; impl Iterator &lt; Item = Dimension &gt; ;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-external-reps-iter-method" data-reference-entry data-reference-search="external_reps_iter Method fn external_reps_iter(&amp; self,) -&gt; impl Iterator &lt; Item = Representation &lt; &lt;
+Self :: Slot as IsAbstractSlot &gt; :: R &gt; &gt; ; "><summary class="api-member-heading"><h4 id="external-reps-iter"><code>external_reps_iter</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn external_reps_iter(&amp; self,) -&gt; impl Iterator &lt; Item = Representation &lt; &lt;
+Self :: Slot as IsAbstractSlot &gt; :: R &gt; &gt; ;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-external-indices-iter-method" data-reference-entry data-reference-search="external_indices_iter Method fn external_indices_iter(&amp; self) -&gt; impl Iterator &lt; Item = &lt; Self :: Slot as
+IsAbstractSlot &gt; :: Aind &gt; ; "><summary class="api-member-heading"><h4 id="external-indices-iter"><code>external_indices_iter</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn external_indices_iter(&amp; self) -&gt; impl Iterator &lt; Item = &lt; Self :: Slot as
+IsAbstractSlot &gt; :: Aind &gt; ;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-get-aind-method" data-reference-entry data-reference-search="get_aind Method fn get_aind(&amp; self, i : impl Into &lt; SlotIndex &gt;) -&gt; Option &lt; &lt; Self :: Slot as
+IsAbstractSlot &gt; :: Aind &gt; ; "><summary class="api-member-heading"><h4 id="get-aind"><code>get_aind</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn get_aind(&amp; self, i : impl Into &lt; SlotIndex &gt;) -&gt; Option &lt; &lt; Self :: Slot as
+IsAbstractSlot &gt; :: Aind &gt; ;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-get-rep-method" data-reference-entry data-reference-search="get_rep Method fn get_rep(&amp; self, i : impl Into &lt; SlotIndex &gt; ,) -&gt; Option &lt; Representation &lt;
+&lt; Self :: Slot as IsAbstractSlot &gt; :: R &gt; &gt; ; "><summary class="api-member-heading"><h4 id="get-rep"><code>get_rep</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn get_rep(&amp; self, i : impl Into &lt; SlotIndex &gt; ,) -&gt; Option &lt; Representation &lt;
+&lt; Self :: Slot as IsAbstractSlot &gt; :: R &gt; &gt; ;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-get-dim-method" data-reference-entry data-reference-search="get_dim Method fn get_dim(&amp; self, i : impl Into &lt; SlotIndex &gt;) -&gt; Option &lt; Dimension &gt; ; "><summary class="api-member-heading"><h4 id="get-dim"><code>get_dim</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn get_dim(&amp; self, i : impl Into &lt; SlotIndex &gt;) -&gt; Option &lt; Dimension &gt; ;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-get-slot-method" data-reference-entry data-reference-search="get_slot Method fn get_slot(&amp; self, i : impl Into &lt; SlotIndex &gt;) -&gt; Option &lt; Self :: Slot &gt; ; "><summary class="api-member-heading"><h4 id="get-slot"><code>get_slot</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn get_slot(&amp; self, i : impl Into &lt; SlotIndex &gt;) -&gt; Option &lt; Self :: Slot &gt; ;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-order-method" data-reference-entry data-reference-search="order Method fn order(&amp; self) -&gt; usize; "><summary class="api-member-heading"><h4 id="order"><code>order</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn order(&amp; self) -&gt; usize;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-external-structure-method" data-reference-entry data-reference-search="external_structure Method #[doc =
 &quot; returns the list of slots that are the external indices of the tensor&quot;] fn
 external_structure(&amp; self) -&gt; Vec &lt; Self :: Slot &gt;
-{ self.external_structure_iter().collect() }</code></pre><div class="api-docstring"><p>returns the list of slots that are the external indices of the tensor</p></div></section><section class="api-member" id="supported-tensorstructure-to-shell-method"><h4 id="to-shell"><code>to_shell</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn to_shell(self) -&gt; TensorShell &lt; Self &gt; where Self : Sized,
-{ TensorShell :: new(self) }</code></pre></section><section class="api-member" id="supported-tensorstructure-contains-matching-method"><h4 id="contains-matching"><code>contains_matching</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn contains_matching(&amp; self, slot : &amp; Self :: Slot) -&gt; bool
-{ self.external_structure_iter().any(| s | s.matches(slot)) }</code></pre></section><section class="api-member" id="supported-tensorstructure-external-reps-method"><h4 id="external-reps"><code>external_reps</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn external_reps(&amp; self) -&gt; Vec &lt; Representation &lt; &lt; Self :: Slot as
-IsAbstractSlot &gt; :: R &gt; &gt; { self.external_reps_iter().collect() }</code></pre></section><section class="api-member" id="supported-tensorstructure-external-indices-method"><h4 id="external-indices"><code>external_indices</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn external_indices(&amp; self) -&gt; Vec &lt; &lt; Self :: Slot as IsAbstractSlot &gt; ::
-Aind &gt; { self.external_indices_iter().collect() }</code></pre></section><section class="api-member" id="supported-tensorstructure-same-content-method"><h4 id="same-content"><code>same_content</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc =
+{ self.external_structure_iter().collect() } returns the list of slots that are the external indices of the tensor"><summary class="api-member-heading"><h4 id="external-structure"><code>external_structure</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc =
+&quot; returns the list of slots that are the external indices of the tensor&quot;] fn
+external_structure(&amp; self) -&gt; Vec &lt; Self :: Slot &gt;
+{ self.external_structure_iter().collect() }</code></pre><div class="api-docstring"><p>returns the list of slots that are the external indices of the tensor</p></div></div></details><details class="api-member" id="supported-tensorstructure-to-shell-method" data-reference-entry data-reference-search="to_shell Method fn to_shell(self) -&gt; TensorShell &lt; Self &gt; where Self : Sized,
+{ TensorShell :: new(self) } "><summary class="api-member-heading"><h4 id="to-shell"><code>to_shell</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn to_shell(self) -&gt; TensorShell &lt; Self &gt; where Self : Sized,
+{ TensorShell :: new(self) }</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-contains-matching-method" data-reference-entry data-reference-search="contains_matching Method fn contains_matching(&amp; self, slot : &amp; Self :: Slot) -&gt; bool
+{ self.external_structure_iter().any(| s | s.matches(slot)) } "><summary class="api-member-heading"><h4 id="contains-matching"><code>contains_matching</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn contains_matching(&amp; self, slot : &amp; Self :: Slot) -&gt; bool
+{ self.external_structure_iter().any(| s | s.matches(slot)) }</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-external-reps-method" data-reference-entry data-reference-search="external_reps Method fn external_reps(&amp; self) -&gt; Vec &lt; Representation &lt; &lt; Self :: Slot as
+IsAbstractSlot &gt; :: R &gt; &gt; { self.external_reps_iter().collect() } "><summary class="api-member-heading"><h4 id="external-reps"><code>external_reps</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn external_reps(&amp; self) -&gt; Vec &lt; Representation &lt; &lt; Self :: Slot as
+IsAbstractSlot &gt; :: R &gt; &gt; { self.external_reps_iter().collect() }</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-external-indices-method" data-reference-entry data-reference-search="external_indices Method fn external_indices(&amp; self) -&gt; Vec &lt; &lt; Self :: Slot as IsAbstractSlot &gt; ::
+Aind &gt; { self.external_indices_iter().collect() } "><summary class="api-member-heading"><h4 id="external-indices"><code>external_indices</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn external_indices(&amp; self) -&gt; Vec &lt; &lt; Self :: Slot as IsAbstractSlot &gt; ::
+Aind &gt; { self.external_indices_iter().collect() }</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-same-content-method" data-reference-entry data-reference-search="same_content Method #[doc =
 &quot; checks if the tensor has the same exact structure as another tensor&quot;] fn
-same_content(&amp; self, other : &amp; Self) -&gt; bool { self.same_external(other) }</code></pre><div class="api-docstring"><p>checks if the tensor has the same exact structure as another tensor</p></div></section><section class="api-member" id="supported-tensorstructure-match-index-method"><h4 id="match-index"><code>match_index</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc =
+same_content(&amp; self, other : &amp; Self) -&gt; bool { self.same_external(other) } checks if the tensor has the same exact structure as another tensor"><summary class="api-member-heading"><h4 id="same-content"><code>same_content</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc =
+&quot; checks if the tensor has the same exact structure as another tensor&quot;] fn
+same_content(&amp; self, other : &amp; Self) -&gt; bool { self.same_external(other) }</code></pre><div class="api-docstring"><p>checks if the tensor has the same exact structure as another tensor</p></div></div></details><details class="api-member" id="supported-tensorstructure-match-index-method" data-reference-entry data-reference-search="match_index Method #[doc =
 &quot; Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list, along with a boolean indicating if there is a single match&quot;]
 fn match_index(&amp; self, other : &amp; Self) -&gt; Option &lt; (bool, usize, usize) &gt;
 {
@@ -250,7 +486,23 @@ fn match_index(&amp; self, other : &amp; Self) -&gt; Option &lt; (bool, usize, u
             first_pair = Some((i, j));
         }
     } first_pair.map(| (i, j) | (true, i, j))
-}</code></pre><div class="api-docstring"><p>Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list, along with a boolean indicating if there is a single match</p></div></section><section class="api-member" id="supported-tensorstructure-match-indices-method"><h4 id="match-indices"><code>match_indices</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc =
+} Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list, along with a boolean indicating if there is a single match"><summary class="api-member-heading"><h4 id="match-index"><code>match_index</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc =
+&quot; Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list, along with a boolean indicating if there is a single match&quot;]
+fn match_index(&amp; self, other : &amp; Self) -&gt; Option &lt; (bool, usize, usize) &gt;
+{
+    let posmap =
+    self.external_structure_iter().enumerate().map(| (i, slot) |
+    (slot, i)).collect :: &lt; AHashMap &lt; _, _ &gt; &gt; (); let mut first_pair :
+    Option &lt; (usize, usize) &gt; = None; for (j, slot) in
+    other.external_structure_iter().enumerate()
+    {
+        if let Some(&amp; i) = posmap.get(&amp; slot.dual())
+        {
+            if let Some((i, j)) = first_pair { return Some((false, i, j)); }
+            first_pair = Some((i, j));
+        }
+    } first_pair.map(| (i, j) | (true, i, j))
+}</code></pre><div class="api-docstring"><p>Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list, along with a boolean indicating if there is a single match</p></div></div></details><details class="api-member" id="supported-tensorstructure-match-indices-method" data-reference-entry data-reference-search="match_indices Method #[doc =
 &quot; Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list&quot;]
 fn match_indices(&amp; self, other : &amp; Self) -&gt; Option &lt;
 (Permutation, Vec &lt; bool &gt; , Vec &lt; bool &gt;) &gt;
@@ -268,7 +520,25 @@ fn match_indices(&amp; self, other : &amp; Self) -&gt; Option &lt;
         let p : Permutation = Permutation :: sort(&amp; perm);
         Some((p, self_matches, other_matches))
     }
-}</code></pre><div class="api-docstring"><p>Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list</p></div></section><section class="api-member" id="supported-tensorstructure-traces-method"><h4 id="traces"><code>traces</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc = &quot; Identify the repeated slots in the external index list&quot;] fn
+} Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list"><summary class="api-member-heading"><h4 id="match-indices"><code>match_indices</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc =
+&quot; Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list&quot;]
+fn match_indices(&amp; self, other : &amp; Self) -&gt; Option &lt;
+(Permutation, Vec &lt; bool &gt; , Vec &lt; bool &gt;) &gt;
+{
+    let mut self_matches = vec! [false; self.order()]; let mut perm = Vec ::
+    new(); let mut other_matches = vec! [false; other.order()]; let posmap =
+    self.external_structure_iter().enumerate().map(| (i, slot) |
+    (slot, i)).collect :: &lt; AHashMap &lt; _, _ &gt; &gt; (); for (j, slot_other) in
+    other.external_structure_iter().enumerate()
+    {
+        if let Some(&amp; i) = posmap.get(&amp; slot_other.dual())
+        { self_matches [i] = true; other_matches [j] = true; perm.push(i); }
+    } if perm.is_empty() { None } else
+    {
+        let p : Permutation = Permutation :: sort(&amp; perm);
+        Some((p, self_matches, other_matches))
+    }
+}</code></pre><div class="api-docstring"><p>Given two [`TensorStructure`]s, returns the index of the first matching slot in each external index list</p></div></div></details><details class="api-member" id="supported-tensorstructure-traces-method" data-reference-entry data-reference-search="traces Method #[doc = &quot; Identify the repeated slots in the external index list&quot;] fn
 traces(&amp; self) -&gt; Vec &lt; [usize; 2] &gt;
 {
     let mut positions : HashMap &lt; &lt; Self as TensorStructure &gt; :: Slot, Vec &lt;
@@ -283,16 +553,40 @@ traces(&amp; self) -&gt; Vec &lt; [usize; 2] &gt;
         if indices.len() == 2 { Some([indices [0], indices [1]]) } else
         { None }
     }).collect()
-}</code></pre><div class="api-docstring"><p>Identify the repeated slots in the external index list</p></div></section><section class="api-member" id="supported-tensorstructure-shape-method"><h4 id="shape"><code>shape</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc =
+} Identify the repeated slots in the external index list"><summary class="api-member-heading"><h4 id="traces"><code>traces</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc = &quot; Identify the repeated slots in the external index list&quot;] fn
+traces(&amp; self) -&gt; Vec &lt; [usize; 2] &gt;
+{
+    let mut positions : HashMap &lt; &lt; Self as TensorStructure &gt; :: Slot, Vec &lt;
+    usize &gt; &gt; = HashMap :: new(); for (index, key) in
+    self.external_structure_iter().enumerate()
+    {
+        if let Some(v) = positions.get_mut(&amp; key.dual()) { v.push(index); }
+        else { positions.insert(key, vec! [index]); }
+    }
+    positions.into_values().filter_map(| indices |
+    {
+        if indices.len() == 2 { Some([indices [0], indices [1]]) } else
+        { None }
+    }).collect()
+}</code></pre><div class="api-docstring"><p>Identify the repeated slots in the external index list</p></div></div></details><details class="api-member" id="supported-tensorstructure-shape-method" data-reference-entry data-reference-search="shape Method #[doc =
 &quot; yields the (outwards facing) shape of the tensor as a list of dimensions&quot;]
-fn shape(&amp; self) -&gt; Vec &lt; Dimension &gt; { self.external_dims_iter().collect() }</code></pre><div class="api-docstring"><p>yields the (outwards facing) shape of the tensor as a list of dimensions</p></div></section><section class="api-member" id="supported-tensorstructure-reps-method"><h4 id="reps"><code>reps</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn reps(&amp; self) -&gt; Vec &lt; Representation &lt; &lt; Self :: Slot as IsAbstractSlot &gt;
-:: R &gt; &gt; { self.external_reps_iter().collect() }</code></pre></section><section class="api-member" id="supported-tensorstructure-same-external-method"><h4 id="same-external"><code>same_external</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc = &quot; checks if externally, the two tensors are the same&quot;] fn
+fn shape(&amp; self) -&gt; Vec &lt; Dimension &gt; { self.external_dims_iter().collect() } yields the (outwards facing) shape of the tensor as a list of dimensions"><summary class="api-member-heading"><h4 id="shape"><code>shape</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc =
+&quot; yields the (outwards facing) shape of the tensor as a list of dimensions&quot;]
+fn shape(&amp; self) -&gt; Vec &lt; Dimension &gt; { self.external_dims_iter().collect() }</code></pre><div class="api-docstring"><p>yields the (outwards facing) shape of the tensor as a list of dimensions</p></div></div></details><details class="api-member" id="supported-tensorstructure-reps-method" data-reference-entry data-reference-search="reps Method fn reps(&amp; self) -&gt; Vec &lt; Representation &lt; &lt; Self :: Slot as IsAbstractSlot &gt;
+:: R &gt; &gt; { self.external_reps_iter().collect() } "><summary class="api-member-heading"><h4 id="reps"><code>reps</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn reps(&amp; self) -&gt; Vec &lt; Representation &lt; &lt; Self :: Slot as IsAbstractSlot &gt;
+:: R &gt; &gt; { self.external_reps_iter().collect() }</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-same-external-method" data-reference-entry data-reference-search="same_external Method #[doc = &quot; checks if externally, the two tensors are the same&quot;] fn
 same_external(&amp; self, other : &amp; Self) -&gt; bool
 {
     let set1 : HashSet &lt; _ &gt; = self.external_structure_iter().collect(); let
     set2 : HashSet &lt; _ &gt; = other.external_structure_iter().collect(); set1 ==
     set2
-}</code></pre><div class="api-docstring"><p>checks if externally, the two tensors are the same</p></div></section><section class="api-member" id="supported-tensorstructure-find-permutation-method"><h4 id="find-permutation"><code>find_permutation</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc =
+} checks if externally, the two tensors are the same"><summary class="api-member-heading"><h4 id="same-external"><code>same_external</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc = &quot; checks if externally, the two tensors are the same&quot;] fn
+same_external(&amp; self, other : &amp; Self) -&gt; bool
+{
+    let set1 : HashSet &lt; _ &gt; = self.external_structure_iter().collect(); let
+    set2 : HashSet &lt; _ &gt; = other.external_structure_iter().collect(); set1 ==
+    set2
+}</code></pre><div class="api-docstring"><p>checks if externally, the two tensors are the same</p></div></div></details><details class="api-member" id="supported-tensorstructure-find-permutation-method" data-reference-entry data-reference-search="find_permutation Method #[doc =
 &quot; find the permutation of the external indices that would make the two tensors the same. Applying the permutation to other should make it the same as self&quot;]
 fn find_permutation(&amp; self, other : &amp; Self) -&gt; Result &lt; Permutation &gt;
 {
@@ -308,7 +602,23 @@ fn find_permutation(&amp; self, other : &amp; Self) -&gt; Result &lt; Permutatio
     self_sort.apply_slice(&amp; self_structure)
     { Ok(other_sort.compose(&amp; self_sort.inverse())) } else
     { Err(eyre! (&quot;Mismatched structure&quot;)) }
-}</code></pre><div class="api-docstring"><p>find the permutation of the external indices that would make the two tensors the same. Applying the permutation to other should make it the same as self</p></div></section><section class="api-member" id="supported-tensorstructure-strides-column-major-method"><h4 id="strides-column-major"><code>strides_column_major</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc = &quot; yields the strides of the tensor in column major order&quot;] fn
+} find the permutation of the external indices that would make the two tensors the same. Applying the permutation to other should make it the same as self"><summary class="api-member-heading"><h4 id="find-permutation"><code>find_permutation</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc =
+&quot; find the permutation of the external indices that would make the two tensors the same. Applying the permutation to other should make it the same as self&quot;]
+fn find_permutation(&amp; self, other : &amp; Self) -&gt; Result &lt; Permutation &gt;
+{
+    if self.order() != other.order()
+    {
+        return
+        Err(eyre!
+        (&quot;Mismatched order: {} vs {}&quot;, self.order(), other.order()));
+    } let other_structure = other.external_structure(); let self_structure =
+    self.external_structure(); let other_sort = Permutation ::
+    sort(&amp; other_structure); let self_sort = Permutation ::
+    sort(&amp; self_structure); if other_sort.apply_slice(&amp; other_structure) ==
+    self_sort.apply_slice(&amp; self_structure)
+    { Ok(other_sort.compose(&amp; self_sort.inverse())) } else
+    { Err(eyre! (&quot;Mismatched structure&quot;)) }
+}</code></pre><div class="api-docstring"><p>find the permutation of the external indices that would make the two tensors the same. Applying the permutation to other should make it the same as self</p></div></div></details><details class="api-member" id="supported-tensorstructure-strides-column-major-method" data-reference-entry data-reference-search="strides_column_major Method #[doc = &quot; yields the strides of the tensor in column major order&quot;] fn
 strides_column_major(&amp; self) -&gt; Result &lt; Vec &lt; usize &gt; &gt;
 {
     let mut strides : Vec &lt; usize &gt; = vec! [1; self.order()]; if self.order()
@@ -317,7 +627,16 @@ strides_column_major(&amp; self) -&gt; Result &lt; Vec &lt; usize &gt; &gt;
         strides [i + 1] = strides [i] * usize :: try_from(self.shape() [i]) ?
         ;
     } Ok(strides)
-}</code></pre><div class="api-docstring"><p>yields the strides of the tensor in column major order</p></div></section><section class="api-member" id="supported-tensorstructure-strides-row-major-method"><h4 id="strides-row-major"><code>strides_row_major</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc = &quot; yields the strides of the tensor in row major order&quot;] fn
+} yields the strides of the tensor in column major order"><summary class="api-member-heading"><h4 id="strides-column-major"><code>strides_column_major</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc = &quot; yields the strides of the tensor in column major order&quot;] fn
+strides_column_major(&amp; self) -&gt; Result &lt; Vec &lt; usize &gt; &gt;
+{
+    let mut strides : Vec &lt; usize &gt; = vec! [1; self.order()]; if self.order()
+    == 0 { return Ok(strides); } for i in 0 .. self.order() - 1
+    {
+        strides [i + 1] = strides [i] * usize :: try_from(self.shape() [i]) ?
+        ;
+    } Ok(strides)
+}</code></pre><div class="api-docstring"><p>yields the strides of the tensor in column major order</p></div></div></details><details class="api-member" id="supported-tensorstructure-strides-row-major-method" data-reference-entry data-reference-search="strides_row_major Method #[doc = &quot; yields the strides of the tensor in row major order&quot;] fn
 strides_row_major(&amp; self) -&gt; Result &lt; Vec &lt; usize &gt; &gt;
 {
     let mut strides = vec! [1; self.order()]; if self.order() == 0
@@ -326,8 +645,18 @@ strides_row_major(&amp; self) -&gt; Result &lt; Vec &lt; usize &gt; &gt;
         strides [i] = strides [i + 1] * usize ::
         try_from(self.shape() [i + 1]) ? ;
     } Ok(strides)
-}</code></pre><div class="api-docstring"><p>yields the strides of the tensor in row major order</p></div></section><section class="api-member" id="supported-tensorstructure-strides-method"><h4 id="strides"><code>strides</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc = &quot; By default, the strides are row major&quot;] fn strides(&amp; self) -&gt; Result
-&lt; Vec &lt; usize &gt; &gt; { self.strides_row_major() }</code></pre><div class="api-docstring"><p>By default, the strides are row major</p></div></section><section class="api-member" id="supported-tensorstructure-verify-indices-method"><h4 id="verify-indices"><code>verify_indices</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc =
+} yields the strides of the tensor in row major order"><summary class="api-member-heading"><h4 id="strides-row-major"><code>strides_row_major</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc = &quot; yields the strides of the tensor in row major order&quot;] fn
+strides_row_major(&amp; self) -&gt; Result &lt; Vec &lt; usize &gt; &gt;
+{
+    let mut strides = vec! [1; self.order()]; if self.order() == 0
+    { return Ok(strides); } for i in (0 .. self.order() - 1).rev()
+    {
+        strides [i] = strides [i + 1] * usize ::
+        try_from(self.shape() [i + 1]) ? ;
+    } Ok(strides)
+}</code></pre><div class="api-docstring"><p>yields the strides of the tensor in row major order</p></div></div></details><details class="api-member" id="supported-tensorstructure-strides-method" data-reference-entry data-reference-search="strides Method #[doc = &quot; By default, the strides are row major&quot;] fn strides(&amp; self) -&gt; Result
+&lt; Vec &lt; usize &gt; &gt; { self.strides_row_major() } By default, the strides are row major"><summary class="api-member-heading"><h4 id="strides"><code>strides</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc = &quot; By default, the strides are row major&quot;] fn strides(&amp; self) -&gt; Result
+&lt; Vec &lt; usize &gt; &gt; { self.strides_row_major() }</code></pre><div class="api-docstring"><p>By default, the strides are row major</p></div></div></details><details class="api-member" id="supported-tensorstructure-verify-indices-method" data-reference-entry data-reference-search="verify_indices Method #[doc =
 &quot; Verifies that the list of indices provided are valid for the tensor&quot;]
 #[doc = &quot;&quot;] #[doc = &quot; # Errors&quot;] #[doc = &quot;&quot;]
 #[doc =
@@ -355,7 +684,35 @@ strides_row_major(&amp; self) -&gt; Result &lt; Vec &lt; usize &gt; &gt;
             indices.as_ref()[i], i, usize::try_from(dim_len)?));
         }
     } Ok(())
-}</code></pre><div class="api-docstring"><p>Verifies that the list of indices provided are valid for the tensor</p><p># Errors</p><p>`Mismatched order` = if the length of the indices is different from the order of the tensor,</p><p>`Index out of bounds` = if the index is out of bounds for the dimension of that index</p></div></section><section class="api-member" id="supported-tensorstructure-flat-index-method"><h4 id="flat-index"><code>flat_index</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc = &quot; yields the flat index of the tensor given a list of indices&quot;]
+} Verifies that the list of indices provided are valid for the tensor"><summary class="api-member-heading"><h4 id="verify-indices"><code>verify_indices</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc =
+&quot; Verifies that the list of indices provided are valid for the tensor&quot;]
+#[doc = &quot;&quot;] #[doc = &quot; # Errors&quot;] #[doc = &quot;&quot;]
+#[doc =
+&quot; `Mismatched order` = if the length of the indices is different from the order of the tensor,&quot;]
+#[doc = &quot;&quot;]
+#[doc =
+&quot; `Index out of bounds` = if the index is out of bounds for the dimension of that index&quot;]
+#[doc = &quot;&quot;] fn verify_indices &lt; C : AsRef &lt; [ConcreteIndex] &gt; &gt;
+(&amp; self, indices : C) -&gt; Result &lt; () &gt;
+{
+    if indices.as_ref().len() != self.order()
+    {
+        return
+        Err(eyre!
+        (&quot;Mismatched order: {} indices, vs order {}&quot;, indices.as_ref().len(),
+        self.order()));
+    } for (i, dim_len) in
+    self.external_structure_iter().map(| slot | slot.dim()).enumerate()
+    {
+        if indices.as_ref() [i] &gt;= usize :: try_from(dim_len) ?
+        {
+            return
+            Err(eyre!
+            (&quot;Index {} out of bounds for dimension {} of size {}&quot;,
+            indices.as_ref()[i], i, usize::try_from(dim_len)?));
+        }
+    } Ok(())
+}</code></pre><div class="api-docstring"><p>Verifies that the list of indices provided are valid for the tensor</p><p># Errors</p><p>`Mismatched order` = if the length of the indices is different from the order of the tensor,</p><p>`Index out of bounds` = if the index is out of bounds for the dimension of that index</p></div></div></details><details class="api-member" id="supported-tensorstructure-flat-index-method" data-reference-entry data-reference-search="flat_index Method #[doc = &quot; yields the flat index of the tensor given a list of indices&quot;]
 #[doc = &quot;&quot;] #[doc = &quot; # Errors&quot;] #[doc = &quot;&quot;]
 #[doc = &quot; Same as [`Self::verify_indices`]&quot;] fn flat_index &lt; C : AsRef &lt;
 [ConcreteIndex] &gt; &gt; (&amp; self, indices : C) -&gt; Result &lt; FlatIndex &gt;
@@ -363,7 +720,15 @@ strides_row_major(&amp; self) -&gt; Result &lt; Vec &lt; usize &gt; &gt;
     let strides = self.strides() ? ; self.verify_indices(&amp; indices) ? ; let
     mut idx = 0; for (i, &amp; index) in indices.as_ref().iter().enumerate()
     { idx += index * strides [i]; } Ok(idx.into())
-}</code></pre><div class="api-docstring"><p>yields the flat index of the tensor given a list of indices</p><p># Errors</p><p>Same as [`Self::verify_indices`]</p></div></section><section class="api-member" id="supported-tensorstructure-expanded-index-method"><h4 id="expanded-index"><code>expanded_index</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc = &quot; yields the expanded index of the tensor given a flat index&quot;]
+} yields the flat index of the tensor given a list of indices"><summary class="api-member-heading"><h4 id="flat-index"><code>flat_index</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc = &quot; yields the flat index of the tensor given a list of indices&quot;]
+#[doc = &quot;&quot;] #[doc = &quot; # Errors&quot;] #[doc = &quot;&quot;]
+#[doc = &quot; Same as [`Self::verify_indices`]&quot;] fn flat_index &lt; C : AsRef &lt;
+[ConcreteIndex] &gt; &gt; (&amp; self, indices : C) -&gt; Result &lt; FlatIndex &gt;
+{
+    let strides = self.strides() ? ; self.verify_indices(&amp; indices) ? ; let
+    mut idx = 0; for (i, &amp; index) in indices.as_ref().iter().enumerate()
+    { idx += index * strides [i]; } Ok(idx.into())
+}</code></pre><div class="api-docstring"><p>yields the flat index of the tensor given a list of indices</p><p># Errors</p><p>Same as [`Self::verify_indices`]</p></div></div></details><details class="api-member" id="supported-tensorstructure-expanded-index-method" data-reference-entry data-reference-search="expanded_index Method #[doc = &quot; yields the expanded index of the tensor given a flat index&quot;]
 #[doc = &quot;&quot;] #[doc = &quot; # Errors&quot;] #[doc = &quot;&quot;]
 #[doc =
 &quot; `Index out of bounds` = if the flat index is out of bounds for the tensor&quot;]
@@ -374,7 +739,18 @@ fn expanded_index(&amp; self, flat_index : FlatIndex) -&gt; Result &lt; Expanded
     { indices.push(index / stride); index %= stride; } if usize ::
     from(flat_index) &lt; self.size() ? { Ok(indices.into()) } else
     { Err(eyre! (&quot;Index {flat_index} out of bounds&quot;)) }
-}</code></pre><div class="api-docstring"><p>yields the expanded index of the tensor given a flat index</p><p># Errors</p><p>`Index out of bounds` = if the flat index is out of bounds for the tensor</p></div></section><section class="api-member" id="supported-tensorstructure-co-expanded-index-method"><h4 id="co-expanded-index"><code>co_expanded_index</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn co_expanded_index(&amp; self, flat_index : FlatIndex) -&gt; Result &lt;
+} yields the expanded index of the tensor given a flat index"><summary class="api-member-heading"><h4 id="expanded-index"><code>expanded_index</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc = &quot; yields the expanded index of the tensor given a flat index&quot;]
+#[doc = &quot;&quot;] #[doc = &quot; # Errors&quot;] #[doc = &quot;&quot;]
+#[doc =
+&quot; `Index out of bounds` = if the flat index is out of bounds for the tensor&quot;]
+fn expanded_index(&amp; self, flat_index : FlatIndex) -&gt; Result &lt; ExpandedIndex &gt;
+{
+    let mut indices = vec! []; let mut index : usize = flat_index.into(); for
+    &amp; stride in &amp; self.strides() ?
+    { indices.push(index / stride); index %= stride; } if usize ::
+    from(flat_index) &lt; self.size() ? { Ok(indices.into()) } else
+    { Err(eyre! (&quot;Index {flat_index} out of bounds&quot;)) }
+}</code></pre><div class="api-docstring"><p>yields the expanded index of the tensor given a flat index</p><p># Errors</p><p>`Index out of bounds` = if the flat index is out of bounds for the tensor</p></div></div></details><details class="api-member" id="supported-tensorstructure-co-expanded-index-method" data-reference-entry data-reference-search="co_expanded_index Method fn co_expanded_index(&amp; self, flat_index : FlatIndex) -&gt; Result &lt;
 DualConciousExpandedIndex &gt;
 {
     let mut indices = vec! []; for (r, i) in
@@ -385,18 +761,40 @@ DualConciousExpandedIndex &gt;
         r.rep.is_base() { indices.push(DualConciousIndex :: Up(* i)); } else
         { indices.push(DualConciousIndex :: Down(* i)); }
     } Ok(indices.into())
-}</code></pre></section><section class="api-member" id="supported-tensorstructure-index-iter-method"><h4 id="index-iter"><code>index_iter</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc = &quot; yields an iterator over the indices of the tensor&quot;] fn
+} "><summary class="api-member-heading"><h4 id="co-expanded-index"><code>co_expanded_index</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn co_expanded_index(&amp; self, flat_index : FlatIndex) -&gt; Result &lt;
+DualConciousExpandedIndex &gt;
+{
+    let mut indices = vec! []; for (r, i) in
+    self.external_reps_iter().zip(self.expanded_index(flat_index) ? .iter())
+    {
+        if r.rep.is_base() &amp;&amp; r.rep.is_dual()
+        { indices.push(DualConciousIndex :: SelfDual(* i)); } else if
+        r.rep.is_base() { indices.push(DualConciousIndex :: Up(* i)); } else
+        { indices.push(DualConciousIndex :: Down(* i)); }
+    } Ok(indices.into())
+}</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-index-iter-method" data-reference-entry data-reference-search="index_iter Method #[doc = &quot; yields an iterator over the indices of the tensor&quot;] fn
 index_iter(&amp; self) -&gt; TensorStructureIndexIterator &lt; '_, Self &gt; where Self :
-Sized, { TensorStructureIndexIterator :: new(self) }</code></pre><div class="api-docstring"><p>yields an iterator over the indices of the tensor</p></div></section><section class="api-member" id="supported-tensorstructure-is-scalar-method"><h4 id="is-scalar"><code>is_scalar</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc = &quot; if the tensor has no (external) indices, it is a scalar&quot;] fn
-is_scalar(&amp; self) -&gt; bool { self.order() == 0 }</code></pre><div class="api-docstring"><p>if the tensor has no (external) indices, it is a scalar</p></div></section><section class="api-member" id="supported-tensorstructure-is-fully-self-dual-method"><h4 id="is-fully-self-dual"><code>is_fully_self_dual</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn is_fully_self_dual(&amp; self) -&gt; bool;</code></pre></section><section class="api-member" id="supported-tensorstructure-size-method"><h4 id="size"><code>size</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>#[doc =
+Sized, { TensorStructureIndexIterator :: new(self) } yields an iterator over the indices of the tensor"><summary class="api-member-heading"><h4 id="index-iter"><code>index_iter</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc = &quot; yields an iterator over the indices of the tensor&quot;] fn
+index_iter(&amp; self) -&gt; TensorStructureIndexIterator &lt; '_, Self &gt; where Self :
+Sized, { TensorStructureIndexIterator :: new(self) }</code></pre><div class="api-docstring"><p>yields an iterator over the indices of the tensor</p></div></div></details><details class="api-member" id="supported-tensorstructure-is-scalar-method" data-reference-entry data-reference-search="is_scalar Method #[doc = &quot; if the tensor has no (external) indices, it is a scalar&quot;] fn
+is_scalar(&amp; self) -&gt; bool { self.order() == 0 } if the tensor has no (external) indices, it is a scalar"><summary class="api-member-heading"><h4 id="is-scalar"><code>is_scalar</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc = &quot; if the tensor has no (external) indices, it is a scalar&quot;] fn
+is_scalar(&amp; self) -&gt; bool { self.order() == 0 }</code></pre><div class="api-docstring"><p>if the tensor has no (external) indices, it is a scalar</p></div></div></details><details class="api-member" id="supported-tensorstructure-is-fully-self-dual-method" data-reference-entry data-reference-search="is_fully_self_dual Method fn is_fully_self_dual(&amp; self) -&gt; bool; "><summary class="api-member-heading"><h4 id="is-fully-self-dual"><code>is_fully_self_dual</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn is_fully_self_dual(&amp; self) -&gt; bool;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-tensorstructure-size-method" data-reference-entry data-reference-search="size Method #[doc =
 &quot; yields the size of the tensor, i.e. the product of the dimensions. This is the length of the vector of the data in a dense tensor&quot;]
 fn size(&amp; self) -&gt; Result &lt; usize &gt;
 {
     if self.order() == 0 { return Ok(1); } let mut size = 1; for dim in
     self.shape() { size *= usize :: try_from(dim) ? ; } Ok(size)
-}</code></pre><div class="api-docstring"><p>yields the size of the tensor, i.e. the product of the dimensions. This is the length of the vector of the data in a dense tensor</p></div></section><p><a href="https://github.com/alphal00p/gammaloop/blob/f46892d216f1dafa21e0fbebbd2c69c328f47fa2/crates/spenso/src/structure.rs#L356">Source: <code>crates/spenso/src/structure.rs:356</code></a></p></section><section class="api-item" id="supported-densetensor"><h3 id="densetensor"><code>DenseTensor</code></h3><span class="api-kind">Type</span><div class="api-docstring"><p>Stores every tensor component in structure-defined flat order.</p></div><pre class="api-signature"><code>#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Hash, Eq, Encode,
+} yields the size of the tensor, i.e. the product of the dimensions. This is the length of the vector of the data in a dense tensor"><summary class="api-member-heading"><h4 id="size"><code>size</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>#[doc =
+&quot; yields the size of the tensor, i.e. the product of the dimensions. This is the length of the vector of the data in a dense tensor&quot;]
+fn size(&amp; self) -&gt; Result &lt; usize &gt;
+{
+    if self.order() == 0 { return Ok(1); } let mut size = 1; for dim in
+    self.shape() { size *= usize :: try_from(dim) ? ; } Ok(size)
+}</code></pre><div class="api-docstring"><p>yields the size of the tensor, i.e. the product of the dimensions. This is the length of the vector of the data in a dense tensor</p></div></div></details><p class="api-source-link"><a href="https://github.com/alphal00p/gammaloop/blob/28275fc5d5154faa43a19dba0233bacd0dafbf1f/crates/spenso/src/structure.rs#L356">View implementation source: <code>crates/spenso/src/structure.rs:356</code></a></p></div></details><details class="api-item" data-api-surface="supported" id="supported-densetensor" data-reference-entry data-reference-search="DenseTensor Dense tensor Type #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Hash, Eq, Encode,
 Decode)] pub struct DenseTensor &lt; T, S = OrderedStructure &gt;
-{ pub data : Vec &lt; T &gt; , pub structure : S, }</code></pre><h4 id="supported-usage-2">Supported usage</h4><pre><code data-lang="rust">use spenso::tensors::data::DenseTensor;</code></pre><section class="api-member" id="supported-densetensor-data-field"><h4 id="data"><code>data</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>Vec &lt; T &gt;</code></pre></section><section class="api-member" id="supported-densetensor-structure-field"><h4 id="structure"><code>structure</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>S</code></pre></section><p><a href="https://github.com/alphal00p/gammaloop/blob/f46892d216f1dafa21e0fbebbd2c69c328f47fa2/crates/spenso/src/tensors/data/dense.rs#L50">Source: <code>crates/spenso/src/tensors/data/dense.rs:50</code></a></p></section><section class="api-item" id="supported-sparsetensor"><h3 id="sparsetensor"><code>SparseTensor</code></h3><span class="api-kind">Type</span><div class="api-docstring"><p>Sparse data tensor, generic on storage type `T`, and structure type `I`.</p><p>Stores data in a hashmap of usize, using ahash's hashmap.<br>The usize key is the flattened index of the corresponding position in the dense tensor</p></div><pre class="api-signature"><code>#[doc =
+{ pub data : Vec &lt; T &gt; , pub structure : S, } structure data"><summary class="api-item-heading"><h3 id="densetensor"><code>DenseTensor</code></h3><span class="api-kind">Type</span></summary><div class="api-item-body"><div class="api-docstring"><p>Stores every tensor component in structure-defined flat order.</p></div><pre class="api-signature"><code>#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Hash, Eq, Encode,
+Decode)] pub struct DenseTensor &lt; T, S = OrderedStructure &gt;
+{ pub data : Vec &lt; T &gt; , pub structure : S, }</code></pre><h4 id="supported-usage-2">Supported usage</h4><pre><code data-lang="rust">use spenso::tensors::data::DenseTensor;</code></pre><details class="api-member" id="supported-densetensor-data-field" data-reference-entry data-reference-search="data Field Vec &lt; T &gt; "><summary class="api-member-heading"><h4 id="data"><code>data</code></h4><span class="api-kind">Field</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>Vec &lt; T &gt;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-densetensor-structure-field" data-reference-entry data-reference-search="structure Field S "><summary class="api-member-heading"><h4 id="structure"><code>structure</code></h4><span class="api-kind">Field</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>S</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><p class="api-source-link"><a href="https://github.com/alphal00p/gammaloop/blob/28275fc5d5154faa43a19dba0233bacd0dafbf1f/crates/spenso/src/tensors/data/dense.rs#L50">View implementation source: <code>crates/spenso/src/tensors/data/dense.rs:50</code></a></p></div></details><details class="api-item" data-api-surface="supported" id="supported-sparsetensor" data-reference-entry data-reference-search="SparseTensor Sparse tensor Type #[doc =
 &quot; Sparse data tensor, generic on storage type `T`, and structure type `I`.&quot;]
 #[doc = &quot;&quot;]
 #[doc = &quot; Stores data in a hashmap of usize, using ahash\'s hashmap.&quot;]
@@ -407,11 +805,26 @@ pub struct SparseTensor &lt; T, I = OrderedStructure &gt;
 {
     pub elements : std :: collections :: HashMap &lt; FlatIndex, T &gt; , pub zero :
     T, pub structure : I,
-}</code></pre><h4 id="supported-usage-3">Supported usage</h4><pre><code data-lang="rust">use spenso::tensors::data::SparseTensor;</code></pre><section class="api-member" id="supported-sparsetensor-elements-field"><h4 id="elements"><code>elements</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>std :: collections :: HashMap &lt; FlatIndex, T &gt;</code></pre></section><section class="api-member" id="supported-sparsetensor-zero-field"><h4 id="zero"><code>zero</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>T</code></pre></section><section class="api-member" id="supported-sparsetensor-structure-field"><h4 id="structure-2"><code>structure</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>I</code></pre></section><p><a href="https://github.com/alphal00p/gammaloop/blob/f46892d216f1dafa21e0fbebbd2c69c328f47fa2/crates/spenso/src/tensors/data/sparse.rs#L50">Source: <code>crates/spenso/src/tensors/data/sparse.rs:50</code></a></p></section><section class="api-item" id="supported-contract"><h3 id="contract"><code>Contract</code></h3><span class="api-kind">Trait</span><div class="api-docstring"><p>Defines pairwise tensor contraction with an explicit settings type and output.</p></div><pre class="api-signature"><code>pub trait Contract &lt; T = Self, Settings = () &gt;
+} structure zero elements"><summary class="api-item-heading"><h3 id="sparsetensor"><code>SparseTensor</code></h3><span class="api-kind">Type</span></summary><div class="api-item-body"><div class="api-docstring"><p>Sparse data tensor, generic on storage type `T`, and structure type `I`.</p><p>Stores data in a hashmap of usize, using ahash's hashmap.<br>The usize key is the flattened index of the corresponding position in the dense tensor</p></div><pre class="api-signature"><code>#[doc =
+&quot; Sparse data tensor, generic on storage type `T`, and structure type `I`.&quot;]
+#[doc = &quot;&quot;]
+#[doc = &quot; Stores data in a hashmap of usize, using ahash\'s hashmap.&quot;]
+#[doc =
+&quot; The usize key is the flattened index of the corresponding position in the dense tensor&quot;]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Encode, Decode)]
+pub struct SparseTensor &lt; T, I = OrderedStructure &gt;
+{
+    pub elements : std :: collections :: HashMap &lt; FlatIndex, T &gt; , pub zero :
+    T, pub structure : I,
+}</code></pre><h4 id="supported-usage-3">Supported usage</h4><pre><code data-lang="rust">use spenso::tensors::data::SparseTensor;</code></pre><details class="api-member" id="supported-sparsetensor-elements-field" data-reference-entry data-reference-search="elements Field std :: collections :: HashMap &lt; FlatIndex, T &gt; "><summary class="api-member-heading"><h4 id="elements"><code>elements</code></h4><span class="api-kind">Field</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>std :: collections :: HashMap &lt; FlatIndex, T &gt;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-sparsetensor-zero-field" data-reference-entry data-reference-search="zero Field T "><summary class="api-member-heading"><h4 id="zero"><code>zero</code></h4><span class="api-kind">Field</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>T</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-sparsetensor-structure-field" data-reference-entry data-reference-search="structure Field I "><summary class="api-member-heading"><h4 id="structure-2"><code>structure</code></h4><span class="api-kind">Field</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>I</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><p class="api-source-link"><a href="https://github.com/alphal00p/gammaloop/blob/28275fc5d5154faa43a19dba0233bacd0dafbf1f/crates/spenso/src/tensors/data/sparse.rs#L50">View implementation source: <code>crates/spenso/src/tensors/data/sparse.rs:50</code></a></p></div></details><details class="api-item" data-api-surface="supported" id="supported-contract" data-reference-entry data-reference-search="Contract Pairwise contraction Trait pub trait Contract &lt; T = Self, Settings = () &gt;
 {
     type LCM; fn contract(&amp; self, other : &amp; T) -&gt; Result &lt; Self :: LCM,
     ContractionError &gt; ;
-}</code></pre><h4 id="supported-usage-4">Supported usage</h4><pre><code data-lang="rust">fn can_contract&lt;T: spenso::contraction::Contract&gt;(_tensor: &amp;T) {}</code></pre><section class="api-member" id="supported-contract-lcm-associatedtype"><h4 id="lcm"><code>LCM</code></h4><span class="api-kind">AssociatedType</span><pre class="api-member-signature"><code>type LCM;</code></pre></section><section class="api-member" id="supported-contract-contract-method"><h4 id="contract-2"><code>contract</code></h4><span class="api-kind">Method</span><pre class="api-member-signature"><code>fn contract(&amp; self, other : &amp; T) -&gt; Result &lt; Self :: LCM, ContractionError &gt; ;</code></pre></section><p><a href="https://github.com/alphal00p/gammaloop/blob/f46892d216f1dafa21e0fbebbd2c69c328f47fa2/crates/spenso/src/contraction.rs#L32">Source: <code>crates/spenso/src/contraction.rs:32</code></a></p></section><section class="api-item" id="supported-network"><h3 id="network"><code>Network</code></h3><span class="api-kind">Type</span><div class="api-docstring"><p>Binds symbolic tensor expressions to libraries and an executable contraction graph.</p></div><pre class="api-signature"><code>#[derive(Debug, Clone, Serialize, Deserialize, bincode_trait_derive::Encode,
+} contract LCM"><summary class="api-item-heading"><h3 id="contract"><code>Contract</code></h3><span class="api-kind">Trait</span></summary><div class="api-item-body"><div class="api-docstring"><p>Defines pairwise tensor contraction with an explicit settings type and output.</p></div><pre class="api-signature"><code>pub trait Contract &lt; T = Self, Settings = () &gt;
+{
+    type LCM; fn contract(&amp; self, other : &amp; T) -&gt; Result &lt; Self :: LCM,
+    ContractionError &gt; ;
+}</code></pre><h4 id="supported-usage-4">Supported usage</h4><pre><code data-lang="rust">fn can_contract&lt;T: spenso::contraction::Contract&gt;(_tensor: &amp;T) {}</code></pre><details class="api-member" id="supported-contract-lcm-associatedtype" data-reference-entry data-reference-search="LCM Associated type type LCM; "><summary class="api-member-heading"><h4 id="lcm"><code>LCM</code></h4><span class="api-kind">Associated type</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>type LCM;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-contract-contract-method" data-reference-entry data-reference-search="contract Method fn contract(&amp; self, other : &amp; T) -&gt; Result &lt; Self :: LCM, ContractionError &gt; ; "><summary class="api-member-heading"><h4 id="contract-2"><code>contract</code></h4><span class="api-kind">Method</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>fn contract(&amp; self, other : &amp; T) -&gt; Result &lt; Self :: LCM, ContractionError &gt; ;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><p class="api-source-link"><a href="https://github.com/alphal00p/gammaloop/blob/28275fc5d5154faa43a19dba0233bacd0dafbf1f/crates/spenso/src/contraction.rs#L32">View implementation source: <code>crates/spenso/src/contraction.rs:32</code></a></p></div></details><details class="api-item" data-api-surface="supported" id="supported-network" data-reference-entry data-reference-search="Network Tensor network Type #[derive(Debug, Clone, Serialize, Deserialize, bincode_trait_derive::Encode,
 bincode_trait_derive::Decode, PartialEq, Eq,)]
 #[cfg_attr(feature = &quot;shadowing&quot;,
 trait_decode(trait = symbolica::state::HasStateMap),)] pub struct Network &lt; S,
@@ -419,8 +832,20 @@ LibKey, FunKey, Aind = AbstractIndex &gt;
 {
     pub graph : NetworkGraph &lt; LibKey, FunKey, Aind &gt; , pub store : S, pub
     state : NetworkState,
-}</code></pre><h4 id="supported-usage-5">Supported usage</h4><pre><code data-lang="rust">use spenso::network::Network;</code></pre><section class="api-member" id="supported-network-graph-field"><h4 id="graph"><code>graph</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>NetworkGraph &lt; LibKey, FunKey, Aind &gt;</code></pre></section><section class="api-member" id="supported-network-store-field"><h4 id="store"><code>store</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>S</code></pre></section><section class="api-member" id="supported-network-state-field"><h4 id="state"><code>state</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>NetworkState</code></pre></section><p><a href="https://github.com/alphal00p/gammaloop/blob/f46892d216f1dafa21e0fbebbd2c69c328f47fa2/crates/spenso/src/network/mod.rs#L1660">Source: <code>crates/spenso/src/network/mod.rs:1660</code></a></p></section><section class="api-item" id="supported-paramtensor"><h3 id="paramtensor"><code>ParamTensor</code></h3><span class="api-kind">Type</span><div class="api-docstring"><p>Stores tensor components as parameter-dependent symbolic coefficients.</p></div><pre class="api-signature"><code>#[derive(Clone, Debug, PartialEq, Eq, Hash, bincode_trait_derive::Encode,
+} state store graph"><summary class="api-item-heading"><h3 id="network"><code>Network</code></h3><span class="api-kind">Type</span></summary><div class="api-item-body"><div class="api-docstring"><p>Binds symbolic tensor expressions to libraries and an executable contraction graph.</p></div><pre class="api-signature"><code>#[derive(Debug, Clone, Serialize, Deserialize, bincode_trait_derive::Encode,
+bincode_trait_derive::Decode, PartialEq, Eq,)]
+#[cfg_attr(feature = &quot;shadowing&quot;,
+trait_decode(trait = symbolica::state::HasStateMap),)] pub struct Network &lt; S,
+LibKey, FunKey, Aind = AbstractIndex &gt;
+{
+    pub graph : NetworkGraph &lt; LibKey, FunKey, Aind &gt; , pub store : S, pub
+    state : NetworkState,
+}</code></pre><h4 id="supported-usage-5">Supported usage</h4><pre><code data-lang="rust">use spenso::network::Network;</code></pre><details class="api-member" id="supported-network-graph-field" data-reference-entry data-reference-search="graph Field NetworkGraph &lt; LibKey, FunKey, Aind &gt; "><summary class="api-member-heading"><h4 id="graph"><code>graph</code></h4><span class="api-kind">Field</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>NetworkGraph &lt; LibKey, FunKey, Aind &gt;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-network-store-field" data-reference-entry data-reference-search="store Field S "><summary class="api-member-heading"><h4 id="store"><code>store</code></h4><span class="api-kind">Field</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>S</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-network-state-field" data-reference-entry data-reference-search="state Field NetworkState "><summary class="api-member-heading"><h4 id="state"><code>state</code></h4><span class="api-kind">Field</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>NetworkState</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><p class="api-source-link"><a href="https://github.com/alphal00p/gammaloop/blob/28275fc5d5154faa43a19dba0233bacd0dafbf1f/crates/spenso/src/network/mod.rs#L1660">View implementation source: <code>crates/spenso/src/network/mod.rs:1660</code></a></p></div></details><details class="api-item" data-api-surface="supported" id="supported-paramtensor" data-reference-entry data-reference-search="ParamTensor Parametric tensor Type #[derive(Clone, Debug, PartialEq, Eq, Hash, bincode_trait_derive::Encode,
 bincode_trait_derive::Decode,)]
 #[trait_decode(trait = symbolica::state::HasStateMap)] pub struct ParamTensor
 &lt; S = OrderedStructure &gt;
-{ pub tensor : DataTensor &lt; Atom, S &gt; , pub param_type : ParamOrComposite, }</code></pre><p><strong>Requires:</strong> <span class="api-feature">shadowing</span></p><h4 id="supported-usage-6">Supported usage</h4><pre><code data-lang="rust">use spenso::tensors::parametric::ParamTensor;</code></pre><section class="api-member" id="supported-paramtensor-tensor-field"><h4 id="tensor"><code>tensor</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>DataTensor &lt; Atom, S &gt;</code></pre></section><section class="api-member" id="supported-paramtensor-param-type-field"><h4 id="param-type"><code>param_type</code></h4><span class="api-kind">Field</span><pre class="api-member-signature"><code>ParamOrComposite</code></pre></section><p><a href="https://github.com/alphal00p/gammaloop/blob/f46892d216f1dafa21e0fbebbd2c69c328f47fa2/crates/spenso/src/tensors/parametric.rs#L353">Source: <code>crates/spenso/src/tensors/parametric.rs:353</code></a></p></section></article><nav class="page-nav" aria-label="Manual pagination"><a class="page-nav-link" href="../../../../reference/rust/"><span class="page-nav-label">← Previous</span>Rust API</a><a class="page-nav-link next" href="../../../../reference/rust/supported/spenso-macros/"><span class="page-nav-label">Next →</span>spenso-macros supported Rust API</a></nav><footer class="page-footer">latest · <a href="../../../../manual.pdf">Complete PDF manual</a> · <a href="https://github.com/alphal00p/gammaloop/tree/f46892d216f1dafa21e0fbebbd2c69c328f47fa2">source f46892d216f1</a></footer></main><aside class="docs-toc" aria-label="On this page"><p class="toc-title">On this page</p><a class="toc-link" data-level="3" href="#tensorstructure">TensorStructure</a><a class="toc-link" data-level="3" href="#densetensor">DenseTensor</a><a class="toc-link" data-level="3" href="#sparsetensor">SparseTensor</a><a class="toc-link" data-level="3" href="#contract">Contract</a><a class="toc-link" data-level="3" href="#network">Network</a><a class="toc-link" data-level="3" href="#paramtensor">ParamTensor</a></aside></div><button class="sidebar-backdrop" type="button" data-sidebar-backdrop aria-label="Close navigation"></button><dialog class="search-dialog" data-search-dialog><form class="search-form" method="dialog"><input class="search-input" type="search" data-search-input placeholder="Search this project" aria-label="Search documentation"><button class="header-button" value="close">Close</button></form><ul class="search-results" data-search-results aria-live="polite"></ul></dialog></body></html>
+{ pub tensor : DataTensor &lt; Atom, S &gt; , pub param_type : ParamOrComposite, } param_type tensor"><summary class="api-item-heading"><h3 id="paramtensor"><code>ParamTensor</code></h3><span class="api-kind">Type</span></summary><div class="api-item-body"><div class="api-docstring"><p>Stores tensor components as parameter-dependent symbolic coefficients.</p></div><pre class="api-signature"><code>#[derive(Clone, Debug, PartialEq, Eq, Hash, bincode_trait_derive::Encode,
+bincode_trait_derive::Decode,)]
+#[trait_decode(trait = symbolica::state::HasStateMap)] pub struct ParamTensor
+&lt; S = OrderedStructure &gt;
+{ pub tensor : DataTensor &lt; Atom, S &gt; , pub param_type : ParamOrComposite, }</code></pre><p><strong>Requires:</strong> <span class="api-feature">shadowing</span></p><h4 id="supported-usage-6">Supported usage</h4><pre><code data-lang="rust">use spenso::tensors::parametric::ParamTensor;</code></pre><details class="api-member" id="supported-paramtensor-tensor-field" data-reference-entry data-reference-search="tensor Field DataTensor &lt; Atom, S &gt; "><summary class="api-member-heading"><h4 id="tensor"><code>tensor</code></h4><span class="api-kind">Field</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>DataTensor &lt; Atom, S &gt;</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><details class="api-member" id="supported-paramtensor-param-type-field" data-reference-entry data-reference-search="param_type Field ParamOrComposite "><summary class="api-member-heading"><h4 id="param-type"><code>param_type</code></h4><span class="api-kind">Field</span></summary><div class="api-member-body"><pre class="api-member-signature"><code>ParamOrComposite</code></pre><p class="reference-missing">Member description missing from the generated catalog.</p></div></details><p class="api-source-link"><a href="https://github.com/alphal00p/gammaloop/blob/28275fc5d5154faa43a19dba0233bacd0dafbf1f/crates/spenso/src/tensors/parametric.rs#L353">View implementation source: <code>crates/spenso/src/tensors/parametric.rs:353</code></a></p></div></details></section></div></article><nav class="page-nav" aria-label="Manual pagination"><a class="page-nav-link" href="../../../../reference/rust/"><span class="page-nav-label">← Previous</span>Rust API</a><a class="page-nav-link next" href="../../../../reference/rust/supported/spenso-macros/"><span class="page-nav-label">Next →</span>spenso-macros supported Rust API</a></nav><nav class="page-feedback" aria-label="Documentation feedback"><a href="https://github.com/alphal00p/gammaloop/blob/28275fc5d5154faa43a19dba0233bacd0dafbf1f/crates/spenso/Cargo.toml">View page source at this revision <span aria-hidden="true">↗</span></a><a href="https://github.com/alphal00p/gammaloop/issues/new?labels=documentation&amp;title=%5Bdocs%5D%20Spenso%3A%20spenso%20supported%20Rust%20API&amp;body=Documentation%20page%3A%20https%3A%2F%2Falphal00p%2Egithub%2Eio%2Fgammaloop%2F%2Fproducts%2Fspenso%2Flatest%2Freference%2Frust%2Fsupported%2Fspenso%2F%0ADocumented%20revision%3A%2028275fc5d5154faa43a19dba0233bacd0dafbf1f%0A%0AWhat%20should%20be%20corrected%20or%20clarified%3F">Report a documentation issue <span aria-hidden="true">↗</span></a></nav><footer class="page-footer">latest · <a href="../../../../manual.pdf">Complete PDF manual</a> · documented revision <code>28275fc5d515</code></footer></main><aside class="docs-toc" aria-label="On this page"><p class="toc-title">On this page</p><a class="toc-link" data-level="3" href="#tensorstructure">TensorStructure</a><a class="toc-link" data-level="3" href="#densetensor">DenseTensor</a><a class="toc-link" data-level="3" href="#sparsetensor">SparseTensor</a><a class="toc-link" data-level="3" href="#contract">Contract</a><a class="toc-link" data-level="3" href="#network">Network</a><a class="toc-link" data-level="3" href="#paramtensor">ParamTensor</a></aside></div><button class="sidebar-backdrop" type="button" data-sidebar-backdrop aria-label="Close navigation"></button><dialog class="search-dialog" data-search-dialog><form class="search-form" method="dialog"><input class="search-input" type="search" data-search-input placeholder="Search all projects and developer notes" aria-label="Search all documentation"><button class="header-button" value="close">Close</button></form><ul class="search-results" data-search-results aria-live="polite"></ul></dialog></body></html>

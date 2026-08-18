@@ -144,6 +144,36 @@
     "kind": "developer heading"
   },
   {
+    "title": "Integration dashboard architecture",
+    "summary": "Renderer-neutral status flow, Ratatui terminal ownership, suspend/shutdown behavior, keyboard controls, and verification boundaries.",
+    "href": "architecture/integration-dashboard/",
+    "kind": "developer implemented"
+  },
+  {
+    "title": "User-facing boundary",
+    "summary": "Integration dashboard architecture",
+    "href": "architecture/integration-dashboard/#user-facing-boundary",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Ownership and data flow",
+    "summary": "Integration dashboard architecture",
+    "href": "architecture/integration-dashboard/#ownership-and-data-flow",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Terminal lifecycle and failure containment",
+    "summary": "Integration dashboard architecture",
+    "href": "architecture/integration-dashboard/#terminal-lifecycle-and-failure-containment",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Verification contract",
+    "summary": "Integration dashboard architecture",
+    "href": "architecture/integration-dashboard/#verification-contract",
+    "kind": "developer heading"
+  },
+  {
     "title": "UV renormalization architecture",
     "summary": "Orchestrator ownership, sign conventions, projections, disconnected composition, and current boundaries.",
     "href": "architecture/uv-renormalization/",
@@ -462,6 +492,132 @@
     "kind": "developer heading"
   },
   {
+    "title": "GammaLoop Drawing Architecture",
+    "summary": "The current GammaLoop/Linnest/Kurvst drawing pipeline, DOT data ownership and style callbacks, with the superseded evaluated-field proposal kept behind an explicit historical boundary.",
+    "href": "architecture/gammaloop-drawing-architecture/",
+    "kind": "developer partially current · reviewed 2026-08-18"
+  },
+  {
+    "title": "Pipeline",
+    "summary": "GammaLoop Drawing Architecture",
+    "href": "architecture/gammaloop-drawing-architecture/#pipeline",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Components",
+    "summary": "GammaLoop Drawing Architecture",
+    "href": "architecture/gammaloop-drawing-architecture/#components",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Data Ownership",
+    "summary": "GammaLoop Drawing Architecture",
+    "href": "architecture/gammaloop-drawing-architecture/#data-ownership",
+    "kind": "developer heading"
+  },
+  {
+    "title": "DOT Shape",
+    "summary": "GammaLoop Drawing Architecture",
+    "href": "architecture/gammaloop-drawing-architecture/#dot-shape",
+    "kind": "developer heading"
+  },
+  {
+    "title": "GammaLoop DOT Syntax",
+    "summary": "GammaLoop Drawing Architecture",
+    "href": "architecture/gammaloop-drawing-architecture/#gammaloop-dot-syntax",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Graph Attributes",
+    "summary": "GammaLoop Drawing Architecture",
+    "href": "architecture/gammaloop-drawing-architecture/#graph-attributes",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Node Attributes",
+    "summary": "GammaLoop Drawing Architecture",
+    "href": "architecture/gammaloop-drawing-architecture/#node-attributes",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Edge Attributes",
+    "summary": "GammaLoop Drawing Architecture",
+    "href": "architecture/gammaloop-drawing-architecture/#edge-attributes",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Drawing DOT Syntax",
+    "summary": "GammaLoop Drawing Architecture",
+    "href": "architecture/gammaloop-drawing-architecture/#drawing-dot-syntax",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Node Data In Drawing",
+    "summary": "GammaLoop Drawing Architecture",
+    "href": "architecture/gammaloop-drawing-architecture/#node-data-in-drawing",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Edge Data In Drawing",
+    "summary": "GammaLoop Drawing Architecture",
+    "href": "architecture/gammaloop-drawing-architecture/#edge-data-in-drawing",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Current Callback Precedence And Eval Mode",
+    "summary": "GammaLoop Drawing Architecture",
+    "href": "architecture/gammaloop-drawing-architecture/#current-callback-precedence-and-eval-mode",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Pattern Style Dictionaries",
+    "summary": "GammaLoop Drawing Architecture",
+    "href": "architecture/gammaloop-drawing-architecture/#pattern-style-dictionaries",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Subgraph Drawing",
+    "summary": "GammaLoop Drawing Architecture",
+    "href": "architecture/gammaloop-drawing-architecture/#subgraph-drawing",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Practical Guidance",
+    "summary": "GammaLoop Drawing Architecture",
+    "href": "architecture/gammaloop-drawing-architecture/#practical-guidance",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Spenso Symbolica Syntax And Rewrite Idioms",
+    "summary": "Implemented Spenso surface forms, tag-aware builders and patterns, and the Idenso pass boundaries used for static and dynamic algebraic rewrites.",
+    "href": "architecture/spenso-symbolica-syntax-and-rewrites/",
+    "kind": "developer implemented reference · reviewed 2026-08-18"
+  },
+  {
+    "title": "Tensor Syntax",
+    "summary": "Spenso Symbolica Syntax And Rewrite Idioms",
+    "href": "architecture/spenso-symbolica-syntax-and-rewrites/#tensor-syntax",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Supported Surface Forms",
+    "summary": "Spenso Symbolica Syntax And Rewrite Idioms",
+    "href": "architecture/spenso-symbolica-syntax-and-rewrites/#supported-surface-forms",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Tagged Builders And Patterns",
+    "summary": "Spenso Symbolica Syntax And Rewrite Idioms",
+    "href": "architecture/spenso-symbolica-syntax-and-rewrites/#tagged-builders-and-patterns",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Rust Rewrite Idioms",
+    "summary": "Spenso Symbolica Syntax And Rewrite Idioms",
+    "href": "architecture/spenso-symbolica-syntax-and-rewrites/#rust-rewrite-idioms",
+    "kind": "developer heading"
+  },
+  {
     "title": "GammaLoop architecture roadmap",
     "summary": "Candidate service boundaries, cache sessions, pipeline unification, error handling, orchestration, and observability improvements.",
     "href": "architecture/gammaloop-roadmap/",
@@ -576,6 +732,228 @@
     "kind": "developer heading"
   },
   {
+    "title": "GammaLoop Evaluated-Field Proposal",
+    "summary": "The superseded proposal for executable Typst fields in DOT drawing data, preserved separately from the maintained callback-based drawing architecture.",
+    "href": "architecture/gammaloop-drawing-evaluated-fields-history/",
+    "kind": "developer archived · superseded"
+  },
+  {
+    "title": "Label Fields",
+    "summary": "GammaLoop Evaluated-Field Proposal",
+    "href": "architecture/gammaloop-drawing-evaluated-fields-history/#label-fields",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Style Fields",
+    "summary": "GammaLoop Evaluated-Field Proposal",
+    "href": "architecture/gammaloop-drawing-evaluated-fields-history/#style-fields",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Precedence",
+    "summary": "GammaLoop Evaluated-Field Proposal",
+    "href": "architecture/gammaloop-drawing-evaluated-fields-history/#precedence",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Interpolation And Templating",
+    "summary": "GammaLoop Evaluated-Field Proposal",
+    "href": "architecture/gammaloop-drawing-evaluated-fields-history/#interpolation-and-templating",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Eval Mode",
+    "summary": "GammaLoop Evaluated-Field Proposal",
+    "href": "architecture/gammaloop-drawing-evaluated-fields-history/#eval-mode",
+    "kind": "developer heading"
+  },
+  {
+    "title": "BNL Benchmark Investigation",
+    "summary": "A 2026-05-25 threshold-subtraction and four-mass integration study whose cards and graph remain, but whose generated states, workspaces, command blocks, and result logs are absent.",
+    "href": "architecture/bnl-benchmark-investigation/",
+    "kind": "developer archived · non-reproducible"
+  },
+  {
+    "title": "Kinematics and helicities",
+    "summary": "BNL Benchmark Investigation",
+    "href": "architecture/bnl-benchmark-investigation/#kinematics-and-helicities",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Threshold localization knobs",
+    "summary": "BNL Benchmark Investigation",
+    "href": "architecture/bnl-benchmark-investigation/#threshold-localization-knobs",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Generated states",
+    "summary": "BNL Benchmark Investigation",
+    "href": "architecture/bnl-benchmark-investigation/#generated-states",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Inspect benchmark timings",
+    "summary": "BNL Benchmark Investigation",
+    "href": "architecture/bnl-benchmark-investigation/#inspect-benchmark-timings",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Final four-mass integrations",
+    "summary": "BNL Benchmark Investigation",
+    "href": "architecture/bnl-benchmark-investigation/#final-four-mass-integrations",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Ratios",
+    "summary": "BNL Benchmark Investigation",
+    "href": "architecture/bnl-benchmark-investigation/#ratios",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Extended precision and corroboration update",
+    "summary": "BNL Benchmark Investigation",
+    "href": "architecture/bnl-benchmark-investigation/#extended-precision-and-corroboration-update",
+    "kind": "developer heading"
+  },
+  {
+    "title": "BNL Contraction Order Performance Notes",
+    "summary": "A 2026-05-27 to 2026-05-28 contraction-order comparison with retained input atoms and example code, but incomplete machine and dependency controls.",
+    "href": "architecture/bnl-contraction-order-performance/",
+    "kind": "developer archived · partially reproducible"
+  },
+  {
+    "title": "Direct Concrete Network",
+    "summary": "BNL Contraction Order Performance Notes",
+    "href": "architecture/bnl-contraction-order-performance/#direct-concrete-network",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Symbolic Then Concrete Baseline",
+    "summary": "BNL Contraction Order Performance Notes",
+    "href": "architecture/bnl-contraction-order-performance/#symbolic-then-concrete-baseline",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Notes",
+    "summary": "BNL Contraction Order Performance Notes",
+    "href": "architecture/bnl-contraction-order-performance/#notes",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Direct All Follow-Up",
+    "summary": "BNL Contraction Order Performance Notes",
+    "href": "architecture/bnl-contraction-order-performance/#direct-all-follow-up",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Unfiltered Pre-Network Follow-Up",
+    "summary": "BNL Contraction Order Performance Notes",
+    "href": "architecture/bnl-contraction-order-performance/#unfiltered-pre-network-follow-up",
+    "kind": "developer heading"
+  },
+  {
+    "title": "BNL Scalar Alias Capture",
+    "summary": "An undated four-alias evaluator rendering preserved as a concise provenance page plus a hashed ANSI data artifact instead of 9,500 lines of authored prose.",
+    "href": "architecture/bnl-scalar-alias-capture/",
+    "kind": "developer archived raw capture"
+  },
+  {
+    "title": "Provenance",
+    "summary": "BNL Scalar Alias Capture",
+    "href": "architecture/bnl-scalar-alias-capture/#provenance",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Captured aliases",
+    "summary": "BNL Scalar Alias Capture",
+    "href": "architecture/bnl-scalar-alias-capture/#captured-aliases",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Three-Loop aa to aa Performance Smoke",
+    "summary": "A 2026-06-15 generation and integration smoke record with retained cards, DOTs, scripts, and CSV summaries, explicit missing-state boundaries, and a warning for 400--570 GiB attempts.",
+    "href": "architecture/aa-aa-three-loop-performance-smoke/",
+    "kind": "developer archived · partially reproducible"
+  },
+  {
+    "title": "Card and Artifacts",
+    "summary": "Three-Loop aa to aa Performance Smoke",
+    "href": "architecture/aa-aa-three-loop-performance-smoke/#card-and-artifacts",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Diagram Generation",
+    "summary": "Three-Loop aa to aa Performance Smoke",
+    "href": "architecture/aa-aa-three-loop-performance-smoke/#diagram-generation",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Release-Build Scalar-Rescaling Grouping Attempt",
+    "summary": "Three-Loop aa to aa Performance Smoke",
+    "href": "architecture/aa-aa-three-loop-performance-smoke/#release-build-scalar-rescaling-grouping-attempt",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Integrand Generation",
+    "summary": "Three-Loop aa to aa Performance Smoke",
+    "href": "architecture/aa-aa-three-loop-performance-smoke/#integrand-generation",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Whole-Amplitude Integration Smoke",
+    "summary": "Three-Loop aa to aa Performance Smoke",
+    "href": "architecture/aa-aa-three-loop-performance-smoke/#whole-amplitude-integration-smoke",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Slowest Generation Graphs",
+    "summary": "Three-Loop aa to aa Performance Smoke",
+    "href": "architecture/aa-aa-three-loop-performance-smoke/#slowest-generation-graphs",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Follow-Up",
+    "summary": "Three-Loop aa to aa Performance Smoke",
+    "href": "architecture/aa-aa-three-loop-performance-smoke/#follow-up",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Grouped Rescaling Follow-Up",
+    "summary": "Three-Loop aa to aa Performance Smoke",
+    "href": "architecture/aa-aa-three-loop-performance-smoke/#grouped-rescaling-follow-up",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Grouped Diagram Generation",
+    "summary": "Three-Loop aa to aa Performance Smoke",
+    "href": "architecture/aa-aa-three-loop-performance-smoke/#grouped-diagram-generation",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Grouped Integrand Generation",
+    "summary": "Three-Loop aa to aa Performance Smoke",
+    "href": "architecture/aa-aa-three-loop-performance-smoke/#grouped-integrand-generation",
+    "kind": "developer heading"
+  },
+  {
+    "title": "All-Grouped-Amplitude Smoke",
+    "summary": "Three-Loop aa to aa Performance Smoke",
+    "href": "architecture/aa-aa-three-loop-performance-smoke/#all-grouped-amplitude-smoke",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Per-Diagram Grouped Smoke Scan",
+    "summary": "Three-Loop aa to aa Performance Smoke",
+    "href": "architecture/aa-aa-three-loop-performance-smoke/#per-diagram-grouped-smoke-scan",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Real vs Imaginary Training Probe",
+    "summary": "Three-Loop aa to aa Performance Smoke",
+    "href": "architecture/aa-aa-three-loop-performance-smoke/#real-vs-imaginary-training-probe",
+    "kind": "developer heading"
+  },
+  {
     "title": "Network simplification status",
     "summary": "Direct sum contraction behavior, profiling controls, current bottlenecks, reproduction commands, and open experiments.",
     "href": "architecture/network-simplification/",
@@ -651,72 +1029,6 @@
     "title": "Practical Checklist for Next Experiments",
     "summary": "Network simplification status",
     "href": "architecture/network-simplification/#practical-checklist-for-next-experiments",
-    "kind": "developer heading"
-  },
-  {
-    "title": "Spenso large-expression pathology record",
-    "summary": "A superseded large-input investigation whose root fixtures and controls are no longer present; retained as historical evidence.",
-    "href": "architecture/spenso-large-expressions/",
-    "kind": "developer superseded investigation"
-  },
-  {
-    "title": "Status at capture",
-    "summary": "Spenso large-expression pathology record",
-    "href": "architecture/spenso-large-expressions/#status-at-capture",
-    "kind": "developer heading"
-  },
-  {
-    "title": "Rerun Context",
-    "summary": "Spenso large-expression pathology record",
-    "href": "architecture/spenso-large-expressions/#rerun-context",
-    "kind": "developer heading"
-  },
-  {
-    "title": "spenso_eval_input_0.txt",
-    "summary": "Spenso large-expression pathology record",
-    "href": "architecture/spenso-large-expressions/#spenso-eval-input-0-txt",
-    "kind": "developer heading"
-  },
-  {
-    "title": "symbolica_expression.txt",
-    "summary": "Spenso large-expression pathology record",
-    "href": "architecture/spenso-large-expressions/#symbolica-expression-txt",
-    "kind": "developer heading"
-  },
-  {
-    "title": "BNL Four-Term MWE",
-    "summary": "Spenso large-expression pathology record",
-    "href": "architecture/spenso-large-expressions/#bnl-four-term-mwe",
-    "kind": "developer heading"
-  },
-  {
-    "title": "Contraction Order",
-    "summary": "Spenso large-expression pathology record",
-    "href": "architecture/spenso-large-expressions/#contraction-order",
-    "kind": "developer heading"
-  },
-  {
-    "title": "Component-Level Hornering",
-    "summary": "Spenso large-expression pathology record",
-    "href": "architecture/spenso-large-expressions/#component-level-hornering",
-    "kind": "developer heading"
-  },
-  {
-    "title": "Staged Disconnection",
-    "summary": "Spenso large-expression pathology record",
-    "href": "architecture/spenso-large-expressions/#staged-disconnection",
-    "kind": "developer heading"
-  },
-  {
-    "title": "Lazy Tensor Sums",
-    "summary": "Spenso large-expression pathology record",
-    "href": "architecture/spenso-large-expressions/#lazy-tensor-sums",
-    "kind": "developer heading"
-  },
-  {
-    "title": "Diagnosis at capture",
-    "summary": "Spenso large-expression pathology record",
-    "href": "architecture/spenso-large-expressions/#diagnosis-at-capture",
     "kind": "developer heading"
   },
   {
@@ -838,6 +1150,486 @@
     "summary": "An archived test/timeout record with unresolved revision and removed tests; preserved as non-reproducible evidence only.",
     "href": "architecture/spenso-test-baseline/",
     "kind": "developer archived · non-reproducible"
+  },
+  {
+    "title": "BNL evaluator-atom capture",
+    "summary": "An undated GammaLoop 0.3.3 evaluator-atom output capture retained as non-reproducible BNL performance evidence, with its missing controls made explicit.",
+    "href": "architecture/bnl-evaluator-atom-capture/",
+    "kind": "developer archived · non-reproducible"
+  },
+  {
+    "title": "UV scalar profile benchmark notes",
+    "summary": "A 2026-05-18 dev-optim profiling record for UV scalar tests, preserved with its removed extraction hooks and missing revision controls made explicit.",
+    "href": "architecture/uv-scalar-profile-benchmark/",
+    "kind": "developer archived · partially reproducible"
+  },
+  {
+    "title": "Scope",
+    "summary": "UV scalar profile benchmark notes",
+    "href": "architecture/uv-scalar-profile-benchmark/#scope",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Benchmark commands",
+    "summary": "UV scalar profile benchmark notes",
+    "href": "architecture/uv-scalar-profile-benchmark/#benchmark-commands",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Benchmark results",
+    "summary": "UV scalar profile benchmark notes",
+    "href": "architecture/uv-scalar-profile-benchmark/#benchmark-results",
+    "kind": "developer heading"
+  },
+  {
+    "title": "High-level timing breakdown",
+    "summary": "UV scalar profile benchmark notes",
+    "href": "architecture/uv-scalar-profile-benchmark/#high-level-timing-breakdown",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Main hotspot",
+    "summary": "UV scalar profile benchmark notes",
+    "href": "architecture/uv-scalar-profile-benchmark/#main-hotspot",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Historical color-simplification extraction",
+    "summary": "UV scalar profile benchmark notes",
+    "href": "architecture/uv-scalar-profile-benchmark/#historical-color-simplification-extraction",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Evaluator-build hotspot",
+    "summary": "UV scalar profile benchmark notes",
+    "href": "architecture/uv-scalar-profile-benchmark/#evaluator-build-hotspot",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Debug logging impact",
+    "summary": "UV scalar profile benchmark notes",
+    "href": "architecture/uv-scalar-profile-benchmark/#debug-logging-impact",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Summary",
+    "summary": "UV scalar profile benchmark notes",
+    "href": "architecture/uv-scalar-profile-benchmark/#summary",
+    "kind": "developer heading"
+  },
+  {
+    "title": "CI test failure summary",
+    "summary": "A 2026-03-25 workspace failure inventory retained as historical triage evidence rather than a current CI status page.",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/",
+    "kind": "developer archived investigation"
+  },
+  {
+    "title": "Scope",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#scope",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Commands Run",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#commands-run",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Top-Level Result",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#top-level-result",
+    "kind": "developer heading"
+  },
+  {
+    "title": "just test-ci",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#just-test-ci",
+    "kind": "developer heading"
+  },
+  {
+    "title": "just test-nix",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#just-test-nix",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Follow-up run excluding linnet-py",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#follow-up-run-excluding-linnet-py",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Confirmed Failures And Likely Fixes",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#confirmed-failures-and-likely-fixes",
+    "kind": "developer heading"
+  },
+  {
+    "title": "1. Workspace build blocker: linnet-py links as an extension module during workspace tests",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#1-workspace-build-blocker-linnet-py-links-as-an-extension-module-during-workspace-tests",
+    "kind": "developer heading"
+  },
+  {
+    "title": "2. gammaloop-api REPL completion regression",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#2-gammaloop-api-repl-completion-regression",
+    "kind": "developer heading"
+  },
+  {
+    "title": "3. State roundtrip regression: required file missing",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#3-state-roundtrip-regression-required-file-missing",
+    "kind": "developer heading"
+  },
+  {
+    "title": "4. Histogram/event-processing regression",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#4-histogram-event-processing-regression",
+    "kind": "developer heading"
+  },
+  {
+    "title": "5. Vakint / analytical evaluation regression",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#5-vakint-analytical-evaluation-regression",
+    "kind": "developer heading"
+  },
+  {
+    "title": "6. Feyngen snapshot regressions",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#6-feyngen-snapshot-regressions",
+    "kind": "developer heading"
+  },
+  {
+    "title": "7. Feyngen workspace/path regression",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#7-feyngen-workspace-path-regression",
+    "kind": "developer heading"
+  },
+  {
+    "title": "8. Python API tests are not prepared in the Rust CI path",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#8-python-api-tests-are-not-prepared-in-the-rust-ci-path",
+    "kind": "developer heading"
+  },
+  {
+    "title": "9. Additional test_runs stack overflows",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#9-additional-test-runs-stack-overflows",
+    "kind": "developer heading"
+  },
+  {
+    "title": "10. More feyngen snapshot regressions appeared",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#10-more-feyngen-snapshot-regressions-appeared",
+    "kind": "developer heading"
+  },
+  {
+    "title": "11. Run-card schema incompatibility",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#11-run-card-schema-incompatibility",
+    "kind": "developer heading"
+  },
+  {
+    "title": "12. Missing example command-card files",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#12-missing-example-command-card-files",
+    "kind": "developer heading"
+  },
+  {
+    "title": "13. More run/integration failures are present but not fully triaged yet",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#13-more-run-integration-failures-are-present-but-not-fully-triaged-yet",
+    "kind": "developer heading"
+  },
+  {
+    "title": "14. Completed follow-up run surfaced more concrete regressions",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#14-completed-follow-up-run-surfaced-more-concrete-regressions",
+    "kind": "developer heading"
+  },
+  {
+    "title": "15. Nix-specific likely fix",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#15-nix-specific-likely-fix",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Prioritized Fix Order",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#prioritized-fix-order",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Notes",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#notes",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Local Validation Update",
+    "summary": "CI test failure summary",
+    "href": "architecture/ci-test-failure-summary-2026-03-25/#local-validation-update",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Network execution rebase record",
+    "summary": "A trace-label-indexed record of changes preserved during the symbolic-network-simplify-v2 rebase, retained as implementation history rather than current guidance.",
+    "href": "architecture/network-execution-rebase-record/",
+    "kind": "developer archived record"
+  },
+  {
+    "title": "Integrated Changes",
+    "summary": "Network execution rebase record",
+    "href": "architecture/network-execution-rebase-record/#integrated-changes",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Direct Boundary Contractions Over Sums",
+    "summary": "Network execution rebase record",
+    "href": "architecture/network-execution-rebase-record/#direct-boundary-contractions-over-sums",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Full-Depth Parse And Execution Profiling",
+    "summary": "Network execution rebase record",
+    "href": "architecture/network-execution-rebase-record/#full-depth-parse-and-execution-profiling",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Live Operation Descriptors",
+    "summary": "Network execution rebase record",
+    "href": "architecture/network-execution-rebase-record/#live-operation-descriptors",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Product Contraction Without Graph Cloning",
+    "summary": "Network execution rebase record",
+    "href": "architecture/network-execution-rebase-record/#product-contraction-without-graph-cloning",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Optional Rayon Ready-Batch Execution",
+    "summary": "Network execution rebase record",
+    "href": "architecture/network-execution-rebase-record/#optional-rayon-ready-batch-execution",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Concrete Tensor Parse/Execution Diagnostics",
+    "summary": "Network execution rebase record",
+    "href": "architecture/network-execution-rebase-record/#concrete-tensor-parse-execution-diagnostics",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Contraction Order MWE And MinResultRank Diagnostic",
+    "summary": "Network execution rebase record",
+    "href": "architecture/network-execution-rebase-record/#contraction-order-mwe-and-minresultrank-diagnostic",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Opt-In Lazy Tensor Sums",
+    "summary": "Network execution rebase record",
+    "href": "architecture/network-execution-rebase-record/#opt-in-lazy-tensor-sums",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Component Horner Diagnostics",
+    "summary": "Network execution rebase record",
+    "href": "architecture/network-execution-rebase-record/#component-horner-diagnostics",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Staged Index Disconnection Diagnostic",
+    "summary": "Network execution rebase record",
+    "href": "architecture/network-execution-rebase-record/#staged-index-disconnection-diagnostic",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Scalar-Preserving Tensor Sum Terms",
+    "summary": "Network execution rebase record",
+    "href": "architecture/network-execution-rebase-record/#scalar-preserving-tensor-sum-terms",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Ratatui integration dashboard implementation history",
+    "summary": "The design plan and chronological implementation notes that led to the maintained integration dashboard architecture.",
+    "href": "architecture/ratatui-integration-dashboard-history/",
+    "kind": "developer archived record"
+  },
+  {
+    "title": "Confirmed decisions",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#confirmed-decisions",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Implementation status (2026-03-21)",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#implementation-status-2026-03-21",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Implemented",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#implemented",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Still open / follow-up",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#still-open-follow-up",
+    "kind": "developer heading"
+  },
+  {
+    "title": "High-level goals",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#high-level-goals",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Proposed architecture",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#proposed-architecture",
+    "kind": "developer heading"
+  },
+  {
+    "title": "1. Renderer selection and fallback behavior",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#1-renderer-selection-and-fallback-behavior",
+    "kind": "developer heading"
+  },
+  {
+    "title": "2. Semantic status snapshot refactor",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#2-semantic-status-snapshot-refactor",
+    "kind": "developer heading"
+  },
+  {
+    "title": "3. Per-slot metrics model",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#3-per-slot-metrics-model",
+    "kind": "developer heading"
+  },
+  {
+    "title": "4. Ratatui controller/event-loop design",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#4-ratatui-controller-event-loop-design",
+    "kind": "developer heading"
+  },
+  {
+    "title": "5. Suspend/resume lifecycle",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#5-suspend-resume-lifecycle",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Dashboard UX plan",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#dashboard-ux-plan",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Global shell",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#global-shell",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Tab 1: Overview",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#tab-1-overview",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Tab 2: Discrete breakdown",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#tab-2-discrete-breakdown",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Tab 3: Max weight",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#tab-3-max-weight",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Help/footer UX",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#help-footer-ux",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Creative ratatui features to leverage",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#creative-ratatui-features-to-leverage",
+    "kind": "developer heading"
+  },
+  {
+    "title": "ETA plan",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#eta-plan",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Interrupt-responsiveness plan",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#interrupt-responsiveness-plan",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Proposed implementation phases",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#proposed-implementation-phases",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Phase 1: Renderer plumbing and status refactor",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#phase-1-renderer-plumbing-and-status-refactor",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Phase 2: Dashboard controller and terminal lifecycle",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#phase-2-dashboard-controller-and-terminal-lifecycle",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Phase 3: Overview tab",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#phase-3-overview-tab",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Phase 4: Discrete and max-weight tabs",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#phase-4-discrete-and-max-weight-tabs",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Phase 5: Interrupt responsiveness",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#phase-5-interrupt-responsiveness",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Phase 6: Polish and tests",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#phase-6-polish-and-tests",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Phase 7: Accuracy-target termination and ETA-to-target",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#phase-7-accuracy-target-termination-and-eta-to-target",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Risks to watch",
+    "summary": "Ratatui integration dashboard implementation history",
+    "href": "architecture/ratatui-integration-dashboard-history/#risks-to-watch",
+    "kind": "developer heading"
   },
   {
     "title": "Nix and Crane artifact reuse",
@@ -996,6 +1788,12 @@
     "kind": "developer heading"
   },
   {
+    "title": "Architecture notes",
+    "summary": "How contributor architecture records are classified, reviewed, scoped, superseded, and kept separate from supported product interfaces.",
+    "href": "architecture/architecture-notes/",
+    "kind": "developer current guide"
+  },
+  {
     "title": "Documentation quality review and improvement plan",
     "summary": "A critical review and phased plan for truthful Python/CLI reference, deeper manuals/examples, an integrated corpus, verified developer architecture, and measurable quality gates.",
     "href": "architecture/documentation-improvement-plan/",
@@ -1023,6 +1821,18 @@
     "title": "Baseline",
     "summary": "Documentation quality review and improvement plan",
     "href": "architecture/documentation-improvement-plan/#baseline",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Implementation progress",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#implementation-progress",
+    "kind": "developer heading"
+  },
+  {
+    "title": "Acceptance status at this revision",
+    "summary": "Documentation quality review and improvement plan",
+    "href": "architecture/documentation-improvement-plan/#acceptance-status-at-this-revision",
     "kind": "developer heading"
   },
   {

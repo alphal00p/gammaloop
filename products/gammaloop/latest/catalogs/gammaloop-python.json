@@ -61,7 +61,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import AdditionalWeight\nhelp(AdditionalWeight)"
               }
@@ -114,7 +114,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import BatchEvaluationResult\nhelp(BatchEvaluationResult)"
               }
@@ -183,7 +183,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import ComponentDiscreteBreakdown\nhelp(ComponentDiscreteBreakdown)"
               }
@@ -236,7 +236,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import CutInfo\nhelp(CutInfo)"
               }
@@ -337,7 +337,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import DiscreteBreakdown\nhelp(DiscreteBreakdown)"
               }
@@ -398,7 +398,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import DiscreteBreakdownEntry\nhelp(DiscreteBreakdownEntry)"
               }
@@ -491,7 +491,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import DiscreteCoordinate\nhelp(DiscreteCoordinate)"
               }
@@ -552,7 +552,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import DotExportSettings\nhelp(DotExportSettings)"
               }
@@ -772,7 +772,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import EvaluationResult\nhelp(EvaluationResult)"
               }
@@ -913,7 +913,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import Event\nhelp(Event)"
               }
@@ -1006,7 +1006,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import EventGroup\nhelp(EventGroup)"
               }
@@ -1067,7 +1067,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import FourMomentum\nhelp(FourMomentum)"
               }
@@ -1126,9 +1126,9 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Stateful entry point for loading, evaluating, and integrating GammaLoop processes."
+              "body": "Load, inspect, and evaluate one mutable GammaLoop session.\n\nOne instance owns a GammaLoop state, run history, CLI settings, default runtime\nsettings, and session state. Calls to ``run`` and the evaluation methods all act\non that same in-memory session.\n\nNotes\n-----\n``read_only_state=True`` prevents writes inside the active state directory; it\ndoes not make this Python object immutable. Commands may still change in-memory\nsettings, processes, or run history. Create separate instances when independent\nsessions are required."
             },
-            "summary": "Stateful entry point for loading, evaluating, and integrating GammaLoop processes.",
+            "summary": "Load, inspect, and evaluate one mutable GammaLoop session.",
             "signature": "class GammaLoopAPI:",
             "since": null,
             "keywords": [],
@@ -1136,7 +1136,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import GammaLoopAPI\nhelp(GammaLoopAPI)"
               }
@@ -1145,14 +1145,20 @@
               {
                 "name": "__new__",
                 "kind": "associated-function",
-                "docs": null,
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Load or create a GammaLoop state and initialize its CLI session.\n\nParameters\n----------\nstate_folder : path-like, optional\nState directory to load or create. The default is ``./gammaloop_state``.\nboot_commands_path : path-like, optional\nTOML run card whose commands are applied during startup.\nmodel_file : path-like, optional\nModel file override used while loading or initializing the state.\ntrace_logs_filename : str, optional\nFile receiving native trace records for this session.\nlevel : LogLevel, optional\nTerminal log-level override for this session.\nlogfile_level : LogLevel, optional\nFile log-level override for this session.\nlogging_prefix : object, optional\nNative logging-prefix configuration.\nread_only_state : bool, default=False\nPrevent writes whose target lies inside the active state directory and\ndisable file logging there. In-memory session changes remain possible.\nsettings_global_path : path-like, optional\nTOML file overriding the global settings loaded at startup.\nsettings_runtime_defaults_path : path-like, optional\nTOML file overriding the default runtime settings loaded at startup.\nclean_state : bool, default=False\nRemove the resolved state path before startup. This is destructive and\ncannot be combined with ``read_only_state=True``.\n\nReturns\n-------\nGammaLoopAPI\nA stateful API instance sharing one state, history, and settings session.\n\nRaises\n------\nException\nIf startup options conflict, the state or settings cannot be loaded, a\nboot command fails, or a boot card requests process exit.\n\nExamples\n--------\nOpen an existing generated state without permitting writes to it::\n\napi = GammaLoopAPI(state_folder=\"./state\", read_only_state=True)"
+                },
                 "signature": "def __new__(cls, state_folder: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, boot_commands_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, model_file: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, trace_logs_filename: typing.Optional[builtins.str] = None, level: typing.Optional[LogLevel] = None, logfile_level: typing.Optional[LogLevel] = None, logging_prefix: builtins.object | None = None, read_only_state: builtins.bool = ..., settings_global_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, clean_state: builtins.bool = ...) -> GammaLoopAPI:",
                 "default": null,
                 "members": [
                   {
                     "name": "state_folder",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "State directory to load or create. The default is ``./gammaloop_state``."
+                    },
                     "signature": "state_folder: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
                     "default": "None",
                     "members": []
@@ -1160,7 +1166,10 @@
                   {
                     "name": "boot_commands_path",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "TOML run card whose commands are applied during startup."
+                    },
                     "signature": "boot_commands_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
                     "default": "None",
                     "members": []
@@ -1168,7 +1177,10 @@
                   {
                     "name": "model_file",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Model file override used while loading or initializing the state."
+                    },
                     "signature": "model_file: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
                     "default": "None",
                     "members": []
@@ -1176,7 +1188,10 @@
                   {
                     "name": "trace_logs_filename",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "File receiving native trace records for this session."
+                    },
                     "signature": "trace_logs_filename: typing.Optional[builtins.str] = None",
                     "default": "None",
                     "members": []
@@ -1184,7 +1199,10 @@
                   {
                     "name": "level",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Terminal log-level override for this session."
+                    },
                     "signature": "level: typing.Optional[LogLevel] = None",
                     "default": "None",
                     "members": []
@@ -1192,7 +1210,10 @@
                   {
                     "name": "logfile_level",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "File log-level override for this session."
+                    },
                     "signature": "logfile_level: typing.Optional[LogLevel] = None",
                     "default": "None",
                     "members": []
@@ -1200,7 +1221,10 @@
                   {
                     "name": "logging_prefix",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Native logging-prefix configuration."
+                    },
                     "signature": "logging_prefix: builtins.object | None = None",
                     "default": "None",
                     "members": []
@@ -1208,7 +1232,10 @@
                   {
                     "name": "read_only_state",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Prevent writes whose target lies inside the active state directory and disable file logging there. In-memory session changes remain possible."
+                    },
                     "signature": "read_only_state: builtins.bool = ...",
                     "default": "...",
                     "members": []
@@ -1216,7 +1243,10 @@
                   {
                     "name": "settings_global_path",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "TOML file overriding the global settings loaded at startup."
+                    },
                     "signature": "settings_global_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
                     "default": "None",
                     "members": []
@@ -1224,7 +1254,10 @@
                   {
                     "name": "settings_runtime_defaults_path",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "TOML file overriding the default runtime settings loaded at startup."
+                    },
                     "signature": "settings_runtime_defaults_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None",
                     "default": "None",
                     "members": []
@@ -1232,7 +1265,10 @@
                   {
                     "name": "clean_state",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Remove the resolved state path before startup. This is destructive and cannot be combined with ``read_only_state=True``."
+                    },
                     "signature": "clean_state: builtins.bool = ...",
                     "default": "...",
                     "members": []
@@ -1242,14 +1278,20 @@
               {
                 "name": "evaluate_sample",
                 "kind": "method",
-                "docs": null,
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Evaluate one integration or momentum-space sample.\n\nParameters\n----------\npoint : Sequence[float]\nCoordinates for one sample. In integration space, the length must match\nthe selected integrand and ``discrete_dim``. In momentum space, values\nare grouped as ``(px, py, pz)`` and the length must be a multiple of 3.\nprocess_id : int, optional\nProcess containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\nIntegrand to evaluate. Supply this when selection is ambiguous.\nuse_arb_prec : bool, default=False\nRequest arbitrary-precision internal evaluation.\nminimal_output : bool, default=False\nOmit the optional evaluation metadata from the returned sample.\nreturn_events : bool, optional\nTemporarily override event generation for this call. The integrand setting\nis restored afterward.\nmomentum_space : bool, default=False\nInterpret ``point`` as flattened three-momenta instead of integration-space\ncoordinates.\nintegrator_weight : float, optional\nWeight associated with this sample. The default is 1.0.\ndiscrete_dim : Sequence[int], optional\nDiscrete integration coordinates used to determine the expected dimension.\ngraph_name : str, optional\nGraph selected for momentum-space evaluation.\norientation : int, optional\nOrientation index for ``graph_name`` in momentum-space evaluation.\n\nReturns\n-------\nEvaluationResult\nThe sample evaluation and the observable snapshot for its one-row batch.\n\nRaises\n------\nException\nIf integrand selection is ambiguous or invalid, dimensions do not match,\ngraph or orientation selection is invalid, or warm-up/evaluation fails.\n\nNotes\n-----\nArbitrary precision affects the internal calculation, but Python-visible\nnumeric fields use the package's ``float64`` output contract. Evaluation may\nwarm the integrand and update in-memory caches or observable snapshots even in\na read-only-state session.\n\nExamples\n--------\nEvaluate a point whose dimension matches integrand 0::\n\nresult = api.evaluate_sample(point, process_id=0, minimal_output=True)\nvalue = result.integrand_result"
+                },
                 "signature": "def evaluate_sample(self, point: typing.Sequence[builtins.float], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = ..., minimal_output: builtins.bool = ..., return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = ..., integrator_weight: typing.Optional[builtins.float] = None, discrete_dim: typing.Optional[typing.Sequence[builtins.int]] = None, graph_name: typing.Optional[builtins.str] = None, orientation: typing.Optional[builtins.int] = None) -> EvaluationResult:",
                 "default": null,
                 "members": [
                   {
                     "name": "point",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Coordinates for one sample. In integration space, the length must match the selected integrand and ``discrete_dim``. In momentum space, values are grouped as ``(px, py, pz)`` and the length must be a multiple of 3."
+                    },
                     "signature": "point: typing.Sequence[builtins.float]",
                     "default": null,
                     "members": []
@@ -1257,7 +1299,10 @@
                   {
                     "name": "process_id",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Process containing the integrand. Supply this when selection is ambiguous."
+                    },
                     "signature": "process_id: typing.Optional[builtins.int] = None",
                     "default": "None",
                     "members": []
@@ -1265,7 +1310,10 @@
                   {
                     "name": "integrand_name",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Integrand to evaluate. Supply this when selection is ambiguous."
+                    },
                     "signature": "integrand_name: typing.Optional[builtins.str] = None",
                     "default": "None",
                     "members": []
@@ -1273,7 +1321,10 @@
                   {
                     "name": "use_arb_prec",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Request arbitrary-precision internal evaluation."
+                    },
                     "signature": "use_arb_prec: builtins.bool = ...",
                     "default": "...",
                     "members": []
@@ -1281,7 +1332,10 @@
                   {
                     "name": "minimal_output",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Omit the optional evaluation metadata from the returned sample."
+                    },
                     "signature": "minimal_output: builtins.bool = ...",
                     "default": "...",
                     "members": []
@@ -1289,7 +1343,10 @@
                   {
                     "name": "return_events",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Temporarily override event generation for this call. The integrand setting is restored afterward."
+                    },
                     "signature": "return_events: typing.Optional[builtins.bool] = None",
                     "default": "None",
                     "members": []
@@ -1297,7 +1354,10 @@
                   {
                     "name": "momentum_space",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Interpret ``point`` as flattened three-momenta instead of integration-space coordinates."
+                    },
                     "signature": "momentum_space: builtins.bool = ...",
                     "default": "...",
                     "members": []
@@ -1305,7 +1365,10 @@
                   {
                     "name": "integrator_weight",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Weight associated with this sample. The default is 1.0."
+                    },
                     "signature": "integrator_weight: typing.Optional[builtins.float] = None",
                     "default": "None",
                     "members": []
@@ -1313,7 +1376,10 @@
                   {
                     "name": "discrete_dim",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Discrete integration coordinates used to determine the expected dimension."
+                    },
                     "signature": "discrete_dim: typing.Optional[typing.Sequence[builtins.int]] = None",
                     "default": "None",
                     "members": []
@@ -1321,7 +1387,10 @@
                   {
                     "name": "graph_name",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Graph selected for momentum-space evaluation."
+                    },
                     "signature": "graph_name: typing.Optional[builtins.str] = None",
                     "default": "None",
                     "members": []
@@ -1329,7 +1398,10 @@
                   {
                     "name": "orientation",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Orientation index for ``graph_name`` in momentum-space evaluation."
+                    },
                     "signature": "orientation: typing.Optional[builtins.int] = None",
                     "default": "None",
                     "members": []
@@ -1339,14 +1411,20 @@
               {
                 "name": "evaluate_samples",
                 "kind": "method",
-                "docs": null,
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Evaluate a batch of integration or momentum-space samples.\n\nParameters\n----------\npoints : numpy.ndarray[numpy.float64]\nTwo-dimensional array with one sample per row. Integration-space columns\nmust match the selected integrand; momentum-space columns are flattened\n``(px, py, pz)`` groups.\nprocess_id : int, optional\nProcess containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\nIntegrand to evaluate. Supply this when selection is ambiguous.\nuse_arb_prec : bool, default=False\nRequest arbitrary-precision internal evaluation.\nminimal_output : bool, default=False\nOmit the optional evaluation metadata from every returned sample.\nreturn_events : bool, optional\nTemporarily override event generation for this call. The integrand setting\nis restored afterward.\nmomentum_space : bool, default=False\nInterpret each row as flattened three-momenta instead of integration-space\ncoordinates.\nintegrator_weights : numpy.ndarray[numpy.float64], optional\nOne weight per row. Defaults to 1.0 for every sample.\ndiscrete_dims : numpy.ndarray[numpy.unsignedinteger], optional\nTwo-dimensional array with one row of discrete coordinates per sample.\ngraph_names : Sequence[str | None], optional\nMomentum-space graph selection for each sample.\norientations : Sequence[int | None], optional\nMomentum-space orientation selection for each sample.\n\nReturns\n-------\nBatchEvaluationResult\nPer-sample evaluations and one observable snapshot for the complete batch.\n\nRaises\n------\nException\nIf integrand selection is ambiguous or invalid, array or option lengths do\nnot match, dimensions are invalid, or warm-up/evaluation fails.\n\nNotes\n-----\nArbitrary precision affects the internal calculation, but Python-visible\nnumeric fields use the package's ``float64`` output contract. Evaluation may\nupdate in-memory caches or observable snapshots in a read-only-state session.\n\nExamples\n--------\nEvaluate a caller-provided two-dimensional array::\n\npoints = numpy.asarray(points, dtype=numpy.float64)\nresult = api.evaluate_samples(points, process_id=0, minimal_output=True)"
+                },
                 "signature": "def evaluate_samples(self, points: numpy.typing.NDArray[numpy.float64], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = ..., minimal_output: builtins.bool = ..., return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = ..., integrator_weights: typing.Optional[numpy.typing.NDArray[numpy.float64]] = None, discrete_dims: numpy.typing.NDArray[numpy.unsignedinteger] | None = None, graph_names: typing.Optional[typing.Sequence[typing.Optional[builtins.str]]] = None, orientations: typing.Optional[typing.Sequence[typing.Optional[builtins.int]]] = None) -> BatchEvaluationResult:",
                 "default": null,
                 "members": [
                   {
                     "name": "points",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Two-dimensional array with one sample per row. Integration-space columns must match the selected integrand; momentum-space columns are flattened ``(px, py, pz)`` groups."
+                    },
                     "signature": "points: numpy.typing.NDArray[numpy.float64]",
                     "default": null,
                     "members": []
@@ -1354,7 +1432,10 @@
                   {
                     "name": "process_id",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Process containing the integrand. Supply this when selection is ambiguous."
+                    },
                     "signature": "process_id: typing.Optional[builtins.int] = None",
                     "default": "None",
                     "members": []
@@ -1362,7 +1443,10 @@
                   {
                     "name": "integrand_name",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Integrand to evaluate. Supply this when selection is ambiguous."
+                    },
                     "signature": "integrand_name: typing.Optional[builtins.str] = None",
                     "default": "None",
                     "members": []
@@ -1370,7 +1454,10 @@
                   {
                     "name": "use_arb_prec",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Request arbitrary-precision internal evaluation."
+                    },
                     "signature": "use_arb_prec: builtins.bool = ...",
                     "default": "...",
                     "members": []
@@ -1378,7 +1465,10 @@
                   {
                     "name": "minimal_output",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Omit the optional evaluation metadata from every returned sample."
+                    },
                     "signature": "minimal_output: builtins.bool = ...",
                     "default": "...",
                     "members": []
@@ -1386,7 +1476,10 @@
                   {
                     "name": "return_events",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Temporarily override event generation for this call. The integrand setting is restored afterward."
+                    },
                     "signature": "return_events: typing.Optional[builtins.bool] = None",
                     "default": "None",
                     "members": []
@@ -1394,7 +1487,10 @@
                   {
                     "name": "momentum_space",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Interpret each row as flattened three-momenta instead of integration-space coordinates."
+                    },
                     "signature": "momentum_space: builtins.bool = ...",
                     "default": "...",
                     "members": []
@@ -1402,7 +1498,10 @@
                   {
                     "name": "integrator_weights",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "One weight per row. Defaults to 1.0 for every sample."
+                    },
                     "signature": "integrator_weights: typing.Optional[numpy.typing.NDArray[numpy.float64]] = None",
                     "default": "None",
                     "members": []
@@ -1410,7 +1509,10 @@
                   {
                     "name": "discrete_dims",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Two-dimensional array with one row of discrete coordinates per sample."
+                    },
                     "signature": "discrete_dims: numpy.typing.NDArray[numpy.unsignedinteger] | None = None",
                     "default": "None",
                     "members": []
@@ -1418,7 +1520,10 @@
                   {
                     "name": "graph_names",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Momentum-space graph selection for each sample."
+                    },
                     "signature": "graph_names: typing.Optional[typing.Sequence[typing.Optional[builtins.str]]] = None",
                     "default": "None",
                     "members": []
@@ -1426,7 +1531,10 @@
                   {
                     "name": "orientations",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Momentum-space orientation selection for each sample."
+                    },
                     "signature": "orientations: typing.Optional[typing.Sequence[typing.Optional[builtins.int]]] = None",
                     "default": "None",
                     "members": []
@@ -1649,14 +1757,20 @@
               {
                 "name": "get_integrand_info",
                 "kind": "method",
-                "docs": null,
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Describe the selected generated integrand and its graph structure.\n\nParameters\n----------\nprocess_id : int, optional\nProcess containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\nIntegrand to inspect. Supply this when selection is ambiguous.\n\nReturns\n-------\nIntegrandInfo\nStructured process, backend, graph, orientation, cut, and size metadata.\n\nRaises\n------\nException\nIf no unique generated integrand matches the selection.\n\nExamples\n--------\nInspect the active evaluation backend and graph count::\n\ninfo = api.get_integrand_info(process_id=0)\nprint(info.active_f64_backend, info.graph_count)"
+                },
                 "signature": "def get_integrand_info(self, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> IntegrandInfo:",
                 "default": null,
                 "members": [
                   {
                     "name": "process_id",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Process containing the integrand. Supply this when selection is ambiguous."
+                    },
                     "signature": "process_id: typing.Optional[builtins.int] = None",
                     "default": "None",
                     "members": []
@@ -1664,7 +1778,10 @@
                   {
                     "name": "integrand_name",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Integrand to inspect. Supply this when selection is ambiguous."
+                    },
                     "signature": "integrand_name: typing.Optional[builtins.str] = None",
                     "default": "None",
                     "members": []
@@ -1674,14 +1791,20 @@
               {
                 "name": "get_integrand_settings",
                 "kind": "method",
-                "docs": null,
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Return a detached, read-only snapshot of one integrand's settings.\n\nParameters\n----------\nprocess_id : int, optional\nProcess containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\nIntegrand whose settings are required.\n\nReturns\n-------\nSettingsValue\nSerialized settings snapshot supporting ``get(path)``, attribute access,\nindexing, and ``to_dict()``. Mutating it does not update the live session.\n\nRaises\n------\nException\nIf selection fails, the integrand has not been generated, or its settings\ncannot be serialized.\n\nExamples\n--------\nRead a nested setting without changing the live integrand::\n\nsettings = api.get_integrand_settings(process_id=0)\nprint(settings.get(\"general.generate_events\"))"
+                },
                 "signature": "def get_integrand_settings(self, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> SettingsValue:",
                 "default": null,
                 "members": [
                   {
                     "name": "process_id",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Process containing the integrand. Supply this when selection is ambiguous."
+                    },
                     "signature": "process_id: typing.Optional[builtins.int] = None",
                     "default": "None",
                     "members": []
@@ -1689,7 +1812,10 @@
                   {
                     "name": "integrand_name",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Integrand whose settings are required."
+                    },
                     "signature": "integrand_name: typing.Optional[builtins.str] = None",
                     "default": "None",
                     "members": []
@@ -1699,7 +1825,10 @@
               {
                 "name": "get_run_history",
                 "kind": "method",
-                "docs": null,
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Render the current in-memory run history as TOML.\n\nReturns\n-------\nstr\nTOML representation of the history owned by this API instance.\n\nRaises\n------\nException\nIf the current history cannot be serialized.\n\nNotes\n-----\nThis reports the live session, including commands run through ``run``; it does\nnot imply that the history has been persisted to the state directory.\n\nExamples\n--------\nCapture a reproducible run card from the current session::\n\nrun_card_toml = api.get_run_history()"
+                },
                 "signature": "def get_run_history(self) -> builtins.str:",
                 "default": null,
                 "members": []
@@ -1707,7 +1836,10 @@
               {
                 "name": "get_global_settings",
                 "kind": "method",
-                "docs": null,
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Render the current effective CLI and global settings as TOML.\n\nReturns\n-------\nstr\nTOML representation of the settings used by this API session.\n\nRaises\n------\nException\nIf the settings cannot be rendered.\n\nExamples\n--------\nRecord the effective settings after applying startup overrides::\n\nsettings_toml = api.get_global_settings()"
+                },
                 "signature": "def get_global_settings(self) -> builtins.str:",
                 "default": null,
                 "members": []
@@ -1715,7 +1847,10 @@
               {
                 "name": "get_active_command_blocks",
                 "kind": "method",
-                "docs": null,
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Return the named command blocks in the current run history.\n\nReturns\n-------\ndict[str, list[str]]\nMapping from block name to its rendered CLI commands.\n\nExamples\n--------\nInspect the commands currently grouped under each block::\n\nfor name, commands in api.get_active_command_blocks().items():\nprint(name, commands)"
+                },
                 "signature": "def get_active_command_blocks(self) -> builtins.dict[builtins.str, builtins.list[builtins.str]]:",
                 "default": null,
                 "members": []
@@ -1723,7 +1858,10 @@
               {
                 "name": "get_default_runtime_settings",
                 "kind": "method",
-                "docs": null,
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Return a detached, read-only snapshot of the default runtime settings.\n\nReturns\n-------\nSettingsValue\nSerialized settings including defaults. Use ``get(path)`` or ``to_dict()``\nto inspect it; changes to derived Python values do not affect the session.\n\nRaises\n------\nException\nIf the settings cannot be serialized.\n\nExamples\n--------\nInspect a runtime default by its documented settings path::\n\nruntime = api.get_default_runtime_settings()\nprint(runtime.get(\"integrator.n_start\"))"
+                },
                 "signature": "def get_default_runtime_settings(self) -> SettingsValue:",
                 "default": null,
                 "members": []
@@ -1764,14 +1902,20 @@
               {
                 "name": "run",
                 "kind": "method",
-                "docs": null,
+                "docs": {
+                  "format": "python-docstring",
+                  "body": "Parse and execute a CLI command in this API instance's session.\n\nParameters\n----------\ncommand : str\nGammaLoop CLI command text.\n\nReturns\n-------\nNone\nThe command's normal output is emitted through the configured CLI/logging\nsinks; inspect structured state through the corresponding getter methods.\n\nRaises\n------\nException\nIf the command cannot be parsed or execution fails.\n\nNotes\n-----\nCommands share and may mutate the instance's in-memory state, settings, and run\nhistory. ``read_only_state=True`` only blocks writes inside the active state\ndirectory. The API does not automatically persist the session after this call;\npersistence depends on the executed command's explicit output behavior.\n\nExamples\n--------\nDisplay the processes loaded in the current state::\n\napi.run(\"display processes\")"
+                },
                 "signature": "def run(self, command: builtins.str) -> None:",
                 "default": null,
                 "members": [
                   {
                     "name": "command",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "GammaLoop CLI command text."
+                    },
                     "signature": "command: builtins.str",
                     "default": null,
                     "members": []
@@ -1891,7 +2035,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import HistogramAccumulator\nhelp(HistogramAccumulator)"
               }
@@ -2173,7 +2317,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramAccumulator",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 208,
+              "line": 546,
               "column": 1
             }
           },
@@ -2200,7 +2344,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import HistogramBin\nhelp(HistogramBin)"
               }
@@ -2308,7 +2452,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramBin",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 223,
+              "line": 561,
               "column": 1
             }
           },
@@ -2335,7 +2479,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import HistogramSnapshot\nhelp(HistogramSnapshot)"
               }
@@ -2481,7 +2625,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramSnapshot",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 244,
+              "line": 582,
               "column": 1
             }
           },
@@ -2508,7 +2652,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import HistogramStats\nhelp(HistogramStats)"
               }
@@ -2542,7 +2686,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramStats",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 281,
+              "line": 619,
               "column": 1
             }
           },
@@ -2569,7 +2713,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import IntegralEstimate\nhelp(IntegralEstimate)"
               }
@@ -2635,7 +2779,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegralEstimate",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 290,
+              "line": 628,
               "column": 1
             }
           },
@@ -2662,7 +2806,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import IntegrandActiveThresholdCut\nhelp(IntegrandActiveThresholdCut)"
               }
@@ -2688,7 +2832,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandActiveThresholdCut",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 307,
+              "line": 645,
               "column": 1
             }
           },
@@ -2715,7 +2859,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import IntegrandCut\nhelp(IntegrandCut)"
               }
@@ -2765,7 +2909,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandCut",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 314,
+              "line": 652,
               "column": 1
             }
           },
@@ -2792,7 +2936,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import IntegrandCutThreshold\nhelp(IntegrandCutThreshold)"
               }
@@ -2842,7 +2986,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandCutThreshold",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 327,
+              "line": 665,
               "column": 1
             }
           },
@@ -2869,7 +3013,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import IntegrandGraph\nhelp(IntegrandGraph)"
               }
@@ -2903,7 +3047,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandGraph",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 340,
+              "line": 678,
               "column": 1
             }
           },
@@ -2930,7 +3074,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import IntegrandGraphGroup\nhelp(IntegrandGraphGroup)"
               }
@@ -3004,7 +3148,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandGraphGroup",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 349,
+              "line": 687,
               "column": 1
             }
           },
@@ -3031,7 +3175,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import IntegrandInfo\nhelp(IntegrandInfo)"
               }
@@ -3129,7 +3273,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandInfo",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 368,
+              "line": 706,
               "column": 1
             }
           },
@@ -3156,7 +3300,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import IntegrandLoopMomentumBasis\nhelp(IntegrandLoopMomentumBasis)"
               }
@@ -3198,7 +3342,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandLoopMomentumBasis",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 393,
+              "line": 731,
               "column": 1
             }
           },
@@ -3225,7 +3369,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import IntegrandOrientation\nhelp(IntegrandOrientation)"
               }
@@ -3251,7 +3395,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandOrientation",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 404,
+              "line": 742,
               "column": 1
             }
           },
@@ -3278,7 +3422,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import IntegrandThresholdEsurface\nhelp(IntegrandThresholdEsurface)"
               }
@@ -3328,7 +3472,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandThresholdEsurface",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 411,
+              "line": 749,
               "column": 1
             }
           },
@@ -3355,7 +3499,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import IntegrationOutput\nhelp(IntegrationOutput)"
               }
@@ -3397,7 +3541,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationOutput",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 424,
+              "line": 762,
               "column": 1
             }
           },
@@ -3424,7 +3568,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import IntegrationResult\nhelp(IntegrationResult)"
               }
@@ -3467,7 +3611,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 434,
+              "line": 772,
               "column": 1
             }
           },
@@ -3494,7 +3638,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import IntegrationStatisticsSnapshot\nhelp(IntegrationStatisticsSnapshot)"
               }
@@ -3624,7 +3768,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationStatisticsSnapshot",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 441,
+              "line": 779,
               "column": 1
             }
           },
@@ -3651,7 +3795,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import IntegrationTableComponentResult\nhelp(IntegrationTableComponentResult)"
               }
@@ -3725,7 +3869,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationTableComponentResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 474,
+              "line": 812,
               "column": 1
             }
           },
@@ -3752,7 +3896,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import MaxWeightInfoEntry\nhelp(MaxWeightInfoEntry)"
               }
@@ -3794,7 +3938,7 @@
             "source": {
               "identifier": "gammaloop-python::MaxWeightInfoEntry",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 493,
+              "line": 831,
               "column": 1
             }
           },
@@ -3821,7 +3965,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import SampleEvaluationResult\nhelp(SampleEvaluationResult)"
               }
@@ -3919,7 +4063,7 @@
             "source": {
               "identifier": "gammaloop-python::SampleEvaluationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 504,
+              "line": 842,
               "column": 1
             }
           },
@@ -3946,7 +4090,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import SettingsValue\nhelp(SettingsValue)"
               }
@@ -4095,7 +4239,7 @@
             "source": {
               "identifier": "gammaloop-python::SettingsValue",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 527,
+              "line": 865,
               "column": 1
             }
           },
@@ -4122,7 +4266,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import SlotIntegrationResult\nhelp(SlotIntegrationResult)"
               }
@@ -4204,7 +4348,7 @@
             "source": {
               "identifier": "gammaloop-python::SlotIntegrationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 546,
+              "line": 884,
               "column": 1
             }
           },
@@ -4231,7 +4375,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import StabilityResult\nhelp(StabilityResult)"
               }
@@ -4281,7 +4425,7 @@
             "source": {
               "identifier": "gammaloop-python::StabilityResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 567,
+              "line": 905,
               "column": 1
             }
           },
@@ -4308,7 +4452,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import LogLevel\nhelp(LogLevel)"
               }
@@ -4317,7 +4461,7 @@
             "source": {
               "identifier": "gammaloop-python::LogLevel",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 580,
+              "line": 918,
               "column": 1
             }
           },
@@ -4334,7 +4478,7 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Parse a Symbolica expression and return its canonical string form."
+              "body": "Parse a Symbolica expression and return its canonical string form.\n\nParameters\n----------\natom_str : str\nSymbolica expression to parse and normalize.\n\nReturns\n-------\nstr\nThe parsed expression in canonical string form.\n\nRaises\n------\nException\nIf ``atom_str`` is not a valid Symbolica expression.\n\nExamples\n--------\nNormalize a symbolic expression before comparing or storing it::\n\natom_to_canonical_string(\"x + x\")"
             },
             "summary": "Parse a Symbolica expression and return its canonical string form.",
             "signature": "def atom_to_canonical_string(atom_str: builtins.str) -> builtins.str:",
@@ -4344,7 +4488,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import atom_to_canonical_string\nhelp(atom_to_canonical_string)"
               }
@@ -4353,7 +4497,7 @@
             "source": {
               "identifier": "gammaloop-python::atom_to_canonical_string",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 606,
+              "line": 944,
               "column": 1
             }
           },
@@ -4370,7 +4514,7 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Evaluate a graph's symbolic overall factor and return its canonical form."
+              "body": "Evaluate a graph's symbolic overall factor and return its canonical form.\n\nParameters\n----------\noverall_factor : str\nSymbolica expression used as the graph's overall factor.\n\nReturns\n-------\nstr\nThe evaluated factor in canonical Symbolica form.\n\nRaises\n------\nException\nIf the expression cannot be parsed or evaluated.\n\nExamples\n--------\nEvaluate the symmetry and fermion-loop factors attached to a graph::\n\nevaluate_graph_overall_factor(\n\"AutG(2)^-1*InternalFermionLoopSign(-1)\"\n)"
             },
             "summary": "Evaluate a graph's symbolic overall factor and return its canonical form.",
             "signature": "def evaluate_graph_overall_factor(overall_factor: builtins.str) -> builtins.str:",
@@ -4380,7 +4524,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import evaluate_graph_overall_factor\nhelp(evaluate_graph_overall_factor)"
               }
@@ -4389,7 +4533,7 @@
             "source": {
               "identifier": "gammaloop-python::evaluate_graph_overall_factor",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 611,
+              "line": 970,
               "column": 1
             }
           },
@@ -4406,7 +4550,7 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Rewrite a Symbolica tensor expression into Idenso dot-product notation."
+              "body": "Rewrite a Symbolica tensor expression into Idenso dot-product notation.\n\nParameters\n----------\natom_str : str\nSymbolica tensor expression whose repeated indices encode contractions.\n\nReturns\n-------\nstr\nThe equivalent expression using Idenso dot-product notation.\n\nRaises\n------\nException\nIf ``atom_str`` cannot be parsed or converted.\n\nExamples\n--------\nRewrite a contraction before passing it to an Idenso workflow::\n\nto_dots(\"p(mu) * q(mu)\")"
             },
             "summary": "Rewrite a Symbolica tensor expression into Idenso dot-product notation.",
             "signature": "def to_dots(atom_str: builtins.str) -> builtins.str:",
@@ -4416,7 +4560,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from gammaloop._gammaloop import to_dots\nhelp(to_dots)"
               }
@@ -4425,7 +4569,7 @@
             "source": {
               "identifier": "gammaloop-python::to_dots",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 616,
+              "line": 998,
               "column": 1
             }
           }

@@ -59,7 +59,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.idenso import cook_function\nhelp(cook_function)"
               }
@@ -94,7 +94,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.idenso import cook_indices\nhelp(cook_indices)"
               }
@@ -129,7 +129,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.idenso import dirac_adjoint\nhelp(dirac_adjoint)"
               }
@@ -164,7 +164,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.idenso import expand_bis\nhelp(expand_bis)"
               }
@@ -199,7 +199,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.idenso import expand_color\nhelp(expand_color)"
               }
@@ -234,7 +234,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.idenso import expand_metrics\nhelp(expand_metrics)"
               }
@@ -269,7 +269,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.idenso import expand_mink\nhelp(expand_mink)"
               }
@@ -304,7 +304,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.idenso import expand_mink_bis\nhelp(expand_mink_bis)"
               }
@@ -339,7 +339,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.idenso import initialize\nhelp(initialize)"
               }
@@ -374,7 +374,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.idenso import list_dangling\nhelp(list_dangling)"
               }
@@ -409,7 +409,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.idenso import simplify_color\nhelp(simplify_color)"
               }
@@ -444,7 +444,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.idenso import simplify_gamma\nhelp(simplify_gamma)"
               }
@@ -479,7 +479,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.idenso import simplify_metrics\nhelp(simplify_metrics)"
               }
@@ -514,7 +514,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.idenso import to_dots\nhelp(to_dots)"
               }
@@ -549,7 +549,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.idenso import wrap_dummies\nhelp(wrap_dummies)"
               }
@@ -584,7 +584,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.idenso import wrap_indices\nhelp(wrap_indices)"
               }

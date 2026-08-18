@@ -181,11 +181,182 @@ class FourMomentum:
 @typing.final
 class GammaLoopAPI:
     r"""
-    Stateful entry point for loading, evaluating, and integrating GammaLoop processes.
+    Load, inspect, and evaluate one mutable GammaLoop session.
+
+    One instance owns a GammaLoop state, run history, CLI settings, default runtime
+    settings, and session state. Calls to ``run`` and the evaluation methods all act
+    on that same in-memory session.
+
+    Notes
+    -----
+    ``read_only_state=True`` prevents writes inside the active state directory; it
+    does not make this Python object immutable. Commands may still change in-memory
+    settings, processes, or run history. Create separate instances when independent
+    sessions are required.
     """
-    def __new__(cls, state_folder: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, boot_commands_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, model_file: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, trace_logs_filename: typing.Optional[builtins.str] = None, level: typing.Optional[LogLevel] = None, logfile_level: typing.Optional[LogLevel] = None, logging_prefix: builtins.object | None = None, read_only_state: builtins.bool = ..., settings_global_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, clean_state: builtins.bool = ...) -> GammaLoopAPI: ...
-    def evaluate_sample(self, point: typing.Sequence[builtins.float], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = ..., minimal_output: builtins.bool = ..., return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = ..., integrator_weight: typing.Optional[builtins.float] = None, discrete_dim: typing.Optional[typing.Sequence[builtins.int]] = None, graph_name: typing.Optional[builtins.str] = None, orientation: typing.Optional[builtins.int] = None) -> EvaluationResult: ...
-    def evaluate_samples(self, points: numpy.typing.NDArray[numpy.float64], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = ..., minimal_output: builtins.bool = ..., return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = ..., integrator_weights: typing.Optional[numpy.typing.NDArray[numpy.float64]] = None, discrete_dims: numpy.typing.NDArray[numpy.unsignedinteger] | None = None, graph_names: typing.Optional[typing.Sequence[typing.Optional[builtins.str]]] = None, orientations: typing.Optional[typing.Sequence[typing.Optional[builtins.int]]] = None) -> BatchEvaluationResult: ...
+    def __new__(cls, state_folder: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, boot_commands_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, model_file: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, trace_logs_filename: typing.Optional[builtins.str] = None, level: typing.Optional[LogLevel] = None, logfile_level: typing.Optional[LogLevel] = None, logging_prefix: builtins.object | None = None, read_only_state: builtins.bool = ..., settings_global_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, clean_state: builtins.bool = ...) -> GammaLoopAPI:
+        r"""
+        Load or create a GammaLoop state and initialize its CLI session.
+
+        Parameters
+        ----------
+        state_folder : path-like, optional
+            State directory to load or create. The default is ``./gammaloop_state``.
+        boot_commands_path : path-like, optional
+            TOML run card whose commands are applied during startup.
+        model_file : path-like, optional
+            Model file override used while loading or initializing the state.
+        trace_logs_filename : str, optional
+            File receiving native trace records for this session.
+        level : LogLevel, optional
+            Terminal log-level override for this session.
+        logfile_level : LogLevel, optional
+            File log-level override for this session.
+        logging_prefix : object, optional
+            Native logging-prefix configuration.
+        read_only_state : bool, default=False
+            Prevent writes whose target lies inside the active state directory and
+            disable file logging there. In-memory session changes remain possible.
+        settings_global_path : path-like, optional
+            TOML file overriding the global settings loaded at startup.
+        settings_runtime_defaults_path : path-like, optional
+            TOML file overriding the default runtime settings loaded at startup.
+        clean_state : bool, default=False
+            Remove the resolved state path before startup. This is destructive and
+            cannot be combined with ``read_only_state=True``.
+
+        Returns
+        -------
+        GammaLoopAPI
+            A stateful API instance sharing one state, history, and settings session.
+
+        Raises
+        ------
+        Exception
+            If startup options conflict, the state or settings cannot be loaded, a
+            boot command fails, or a boot card requests process exit.
+
+        Examples
+        --------
+        Open an existing generated state without permitting writes to it::
+
+            api = GammaLoopAPI(state_folder="./state", read_only_state=True)
+        """
+    def evaluate_sample(self, point: typing.Sequence[builtins.float], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = ..., minimal_output: builtins.bool = ..., return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = ..., integrator_weight: typing.Optional[builtins.float] = None, discrete_dim: typing.Optional[typing.Sequence[builtins.int]] = None, graph_name: typing.Optional[builtins.str] = None, orientation: typing.Optional[builtins.int] = None) -> EvaluationResult:
+        r"""
+        Evaluate one integration or momentum-space sample.
+
+        Parameters
+        ----------
+        point : Sequence[float]
+            Coordinates for one sample. In integration space, the length must match
+            the selected integrand and ``discrete_dim``. In momentum space, values
+            are grouped as ``(px, py, pz)`` and the length must be a multiple of 3.
+        process_id : int, optional
+            Process containing the integrand. Supply this when selection is ambiguous.
+        integrand_name : str, optional
+            Integrand to evaluate. Supply this when selection is ambiguous.
+        use_arb_prec : bool, default=False
+            Request arbitrary-precision internal evaluation.
+        minimal_output : bool, default=False
+            Omit the optional evaluation metadata from the returned sample.
+        return_events : bool, optional
+            Temporarily override event generation for this call. The integrand setting
+            is restored afterward.
+        momentum_space : bool, default=False
+            Interpret ``point`` as flattened three-momenta instead of integration-space
+            coordinates.
+        integrator_weight : float, optional
+            Weight associated with this sample. The default is 1.0.
+        discrete_dim : Sequence[int], optional
+            Discrete integration coordinates used to determine the expected dimension.
+        graph_name : str, optional
+            Graph selected for momentum-space evaluation.
+        orientation : int, optional
+            Orientation index for ``graph_name`` in momentum-space evaluation.
+
+        Returns
+        -------
+        EvaluationResult
+            The sample evaluation and the observable snapshot for its one-row batch.
+
+        Raises
+        ------
+        Exception
+            If integrand selection is ambiguous or invalid, dimensions do not match,
+            graph or orientation selection is invalid, or warm-up/evaluation fails.
+
+        Notes
+        -----
+        Arbitrary precision affects the internal calculation, but Python-visible
+        numeric fields use the package's ``float64`` output contract. Evaluation may
+        warm the integrand and update in-memory caches or observable snapshots even in
+        a read-only-state session.
+
+        Examples
+        --------
+        Evaluate a point whose dimension matches integrand 0::
+
+            result = api.evaluate_sample(point, process_id=0, minimal_output=True)
+            value = result.integrand_result
+        """
+    def evaluate_samples(self, points: numpy.typing.NDArray[numpy.float64], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = ..., minimal_output: builtins.bool = ..., return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = ..., integrator_weights: typing.Optional[numpy.typing.NDArray[numpy.float64]] = None, discrete_dims: numpy.typing.NDArray[numpy.unsignedinteger] | None = None, graph_names: typing.Optional[typing.Sequence[typing.Optional[builtins.str]]] = None, orientations: typing.Optional[typing.Sequence[typing.Optional[builtins.int]]] = None) -> BatchEvaluationResult:
+        r"""
+        Evaluate a batch of integration or momentum-space samples.
+
+        Parameters
+        ----------
+        points : numpy.ndarray[numpy.float64]
+            Two-dimensional array with one sample per row. Integration-space columns
+            must match the selected integrand; momentum-space columns are flattened
+            ``(px, py, pz)`` groups.
+        process_id : int, optional
+            Process containing the integrand. Supply this when selection is ambiguous.
+        integrand_name : str, optional
+            Integrand to evaluate. Supply this when selection is ambiguous.
+        use_arb_prec : bool, default=False
+            Request arbitrary-precision internal evaluation.
+        minimal_output : bool, default=False
+            Omit the optional evaluation metadata from every returned sample.
+        return_events : bool, optional
+            Temporarily override event generation for this call. The integrand setting
+            is restored afterward.
+        momentum_space : bool, default=False
+            Interpret each row as flattened three-momenta instead of integration-space
+            coordinates.
+        integrator_weights : numpy.ndarray[numpy.float64], optional
+            One weight per row. Defaults to 1.0 for every sample.
+        discrete_dims : numpy.ndarray[numpy.unsignedinteger], optional
+            Two-dimensional array with one row of discrete coordinates per sample.
+        graph_names : Sequence[str | None], optional
+            Momentum-space graph selection for each sample.
+        orientations : Sequence[int | None], optional
+            Momentum-space orientation selection for each sample.
+
+        Returns
+        -------
+        BatchEvaluationResult
+            Per-sample evaluations and one observable snapshot for the complete batch.
+
+        Raises
+        ------
+        Exception
+            If integrand selection is ambiguous or invalid, array or option lengths do
+            not match, dimensions are invalid, or warm-up/evaluation fails.
+
+        Notes
+        -----
+        Arbitrary precision affects the internal calculation, but Python-visible
+        numeric fields use the package's ``float64`` output contract. Evaluation may
+        update in-memory caches or observable snapshots in a read-only-state session.
+
+        Examples
+        --------
+        Evaluate a caller-provided two-dimensional array::
+
+            points = numpy.asarray(points, dtype=numpy.float64)
+            result = api.evaluate_samples(points, process_id=0, minimal_output=True)
+        """
     def import_graphs(self, graphs: builtins.str, process_name: typing.Optional[builtins.str] = None, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, format: builtins.str = ..., overwrite: builtins.bool = ..., append: builtins.bool = ...) -> None: ...
     def get_lmbs(self, graphs: builtins.str, format: builtins.str = ...) -> builtins.list[builtins.list[tuple[builtins.list[builtins.int], builtins.list[builtins.int], builtins.dict[builtins.int, tuple[builtins.list[builtins.int], builtins.list[builtins.int]]]]]]: ...
     def get_orientations(self, graph_name: builtins.str, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> builtins.list[builtins.dict[builtins.int, builtins.int]]: ...
@@ -193,14 +364,181 @@ class GammaLoopAPI:
     def evaluate(self, process_id: typing.Optional[builtins.int] = None, graphs_group_name: typing.Optional[builtins.str] = None, result_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, numerical: builtins.bool = ..., number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None) -> builtins.str: ...
     def import_model(self, model_specifier: builtins.str | os.PathLike | pathlib.Path, simplify_model: builtins.bool = ...) -> None: ...
     def list_outputs(self) -> tuple[builtins.dict[builtins.str, builtins.int], builtins.dict[builtins.str, builtins.int]]: ...
-    def get_integrand_info(self, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> IntegrandInfo: ...
-    def get_integrand_settings(self, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> SettingsValue: ...
-    def get_run_history(self) -> builtins.str: ...
-    def get_global_settings(self) -> builtins.str: ...
-    def get_active_command_blocks(self) -> builtins.dict[builtins.str, builtins.list[builtins.str]]: ...
-    def get_default_runtime_settings(self) -> SettingsValue: ...
+    def get_integrand_info(self, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> IntegrandInfo:
+        r"""
+        Describe the selected generated integrand and its graph structure.
+
+        Parameters
+        ----------
+        process_id : int, optional
+            Process containing the integrand. Supply this when selection is ambiguous.
+        integrand_name : str, optional
+            Integrand to inspect. Supply this when selection is ambiguous.
+
+        Returns
+        -------
+        IntegrandInfo
+            Structured process, backend, graph, orientation, cut, and size metadata.
+
+        Raises
+        ------
+        Exception
+            If no unique generated integrand matches the selection.
+
+        Examples
+        --------
+        Inspect the active evaluation backend and graph count::
+
+            info = api.get_integrand_info(process_id=0)
+            print(info.active_f64_backend, info.graph_count)
+        """
+    def get_integrand_settings(self, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> SettingsValue:
+        r"""
+        Return a detached, read-only snapshot of one integrand's settings.
+
+        Parameters
+        ----------
+        process_id : int, optional
+            Process containing the integrand. Supply this when selection is ambiguous.
+        integrand_name : str, optional
+            Integrand whose settings are required.
+
+        Returns
+        -------
+        SettingsValue
+            Serialized settings snapshot supporting ``get(path)``, attribute access,
+            indexing, and ``to_dict()``. Mutating it does not update the live session.
+
+        Raises
+        ------
+        Exception
+            If selection fails, the integrand has not been generated, or its settings
+            cannot be serialized.
+
+        Examples
+        --------
+        Read a nested setting without changing the live integrand::
+
+            settings = api.get_integrand_settings(process_id=0)
+            print(settings.get("general.generate_events"))
+        """
+    def get_run_history(self) -> builtins.str:
+        r"""
+        Render the current in-memory run history as TOML.
+
+        Returns
+        -------
+        str
+            TOML representation of the history owned by this API instance.
+
+        Raises
+        ------
+        Exception
+            If the current history cannot be serialized.
+
+        Notes
+        -----
+        This reports the live session, including commands run through ``run``; it does
+        not imply that the history has been persisted to the state directory.
+
+        Examples
+        --------
+        Capture a reproducible run card from the current session::
+
+            run_card_toml = api.get_run_history()
+        """
+    def get_global_settings(self) -> builtins.str:
+        r"""
+        Render the current effective CLI and global settings as TOML.
+
+        Returns
+        -------
+        str
+            TOML representation of the settings used by this API session.
+
+        Raises
+        ------
+        Exception
+            If the settings cannot be rendered.
+
+        Examples
+        --------
+        Record the effective settings after applying startup overrides::
+
+            settings_toml = api.get_global_settings()
+        """
+    def get_active_command_blocks(self) -> builtins.dict[builtins.str, builtins.list[builtins.str]]:
+        r"""
+        Return the named command blocks in the current run history.
+
+        Returns
+        -------
+        dict[str, list[str]]
+            Mapping from block name to its rendered CLI commands.
+
+        Examples
+        --------
+        Inspect the commands currently grouped under each block::
+
+            for name, commands in api.get_active_command_blocks().items():
+                print(name, commands)
+        """
+    def get_default_runtime_settings(self) -> SettingsValue:
+        r"""
+        Return a detached, read-only snapshot of the default runtime settings.
+
+        Returns
+        -------
+        SettingsValue
+            Serialized settings including defaults. Use ``get(path)`` or ``to_dict()``
+            to inspect it; changes to derived Python values do not affect the session.
+
+        Raises
+        ------
+        Exception
+            If the settings cannot be serialized.
+
+        Examples
+        --------
+        Inspect a runtime default by its documented settings path::
+
+            runtime = api.get_default_runtime_settings()
+            print(runtime.get("integrator.n_start"))
+        """
     def get_dot_files(self, process: typing.Optional[builtins.int | builtins.str] = None, integrand_name: typing.Optional[builtins.str] = None, settings: DotExportSettings = ...) -> builtins.str: ...
-    def run(self, command: builtins.str) -> None: ...
+    def run(self, command: builtins.str) -> None:
+        r"""
+        Parse and execute a CLI command in this API instance's session.
+
+        Parameters
+        ----------
+        command : str
+            GammaLoop CLI command text.
+
+        Returns
+        -------
+        None
+            The command's normal output is emitted through the configured CLI/logging
+            sinks; inspect structured state through the corresponding getter methods.
+
+        Raises
+        ------
+        Exception
+            If the command cannot be parsed or execution fails.
+
+        Notes
+        -----
+        Commands share and may mutate the instance's in-memory state, settings, and run
+        history. ``read_only_state=True`` only blocks writes inside the active state
+        directory. The API does not automatically persist the session after this call;
+        persistence depends on the executed command's explicit output behavior.
+
+        Examples
+        --------
+        Display the processes loaded in the current state::
+
+            api.run("display processes")
+        """
     def generate_cff(self, dot_string: builtins.str, subgraph_nodes: typing.Sequence[builtins.str], reverse_dangling: typing.Sequence[builtins.int], orientation_pattern: typing.Optional[builtins.str] = None) -> builtins.list[tuple[builtins.dict[builtins.int, builtins.int], builtins.str]]: ...
     def generate_cff_as_json_string(self, dot_string: builtins.str, subgraph_nodes: typing.Sequence[builtins.str], reverse_dangling: typing.Sequence[builtins.int], orientation_pattern: typing.Optional[builtins.str] = None) -> builtins.str: ...
 
@@ -606,15 +944,80 @@ class LogLevel(enum.Enum):
 def atom_to_canonical_string(atom_str: builtins.str) -> builtins.str:
     r"""
     Parse a Symbolica expression and return its canonical string form.
+
+    Parameters
+    ----------
+    atom_str : str
+        Symbolica expression to parse and normalize.
+
+    Returns
+    -------
+    str
+        The parsed expression in canonical string form.
+
+    Raises
+    ------
+    Exception
+        If ``atom_str`` is not a valid Symbolica expression.
+
+    Examples
+    --------
+    Normalize a symbolic expression before comparing or storing it::
+
+        atom_to_canonical_string("x + x")
     """
 
 def evaluate_graph_overall_factor(overall_factor: builtins.str) -> builtins.str:
     r"""
     Evaluate a graph's symbolic overall factor and return its canonical form.
+
+    Parameters
+    ----------
+    overall_factor : str
+        Symbolica expression used as the graph's overall factor.
+
+    Returns
+    -------
+    str
+        The evaluated factor in canonical Symbolica form.
+
+    Raises
+    ------
+    Exception
+        If the expression cannot be parsed or evaluated.
+
+    Examples
+    --------
+    Evaluate the symmetry and fermion-loop factors attached to a graph::
+
+        evaluate_graph_overall_factor(
+            "AutG(2)^-1*InternalFermionLoopSign(-1)"
+        )
     """
 
 def to_dots(atom_str: builtins.str) -> builtins.str:
     r"""
     Rewrite a Symbolica tensor expression into Idenso dot-product notation.
+
+    Parameters
+    ----------
+    atom_str : str
+        Symbolica tensor expression whose repeated indices encode contractions.
+
+    Returns
+    -------
+    str
+        The equivalent expression using Idenso dot-product notation.
+
+    Raises
+    ------
+    Exception
+        If ``atom_str`` cannot be parsed or converted.
+
+    Examples
+    --------
+    Rewrite a contraction before passing it to an Idenso workflow::
+
+        to_dots("p(mu) * q(mu)")
     """
 

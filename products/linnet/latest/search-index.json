@@ -12,6 +12,12 @@
     "kind": "start here"
   },
   {
+    "title": "Choose a task",
+    "summary": "Linnet · Overview",
+    "href": "index.html#choose-a-task",
+    "kind": "start here"
+  },
+  {
     "title": "A working model",
     "summary": "Linnet · Overview",
     "href": "index.html#a-working-model",
@@ -78,6 +84,12 @@
     "kind": "manual"
   },
   {
+    "title": "Enumerate separating cuts",
+    "summary": "Linnet · Graph algorithms",
+    "href": "manual/algorithms/#enumerate-separating-cuts",
+    "kind": "manual"
+  },
+  {
     "title": "Mutation boundaries",
     "summary": "Linnet · Graph algorithms",
     "href": "manual/algorithms/#mutation-boundaries",
@@ -87,6 +99,12 @@
     "title": "DOT and drawing",
     "summary": "Linnet · Graph algorithms",
     "href": "manual/algorithms/#dot-and-drawing",
+    "kind": "manual"
+  },
+  {
+    "title": "Linnest Typst API",
+    "summary": "The complete Typst and WebAssembly manual for Linnet graph construction, layout, queries, and drawing.",
+    "href": "manual/linnest/",
     "kind": "manual"
   },
   {
@@ -117,6 +135,12 @@
     "title": "Choosing the matching documentation",
     "summary": "Linnet · Releases and change history",
     "href": "manual/releases/#choosing-the-matching-documentation",
+    "kind": "manual"
+  },
+  {
+    "title": "Clinnet release history",
+    "summary": "Canonical release notes for the independently versioned Clinnet command-line renderer.",
+    "href": "manual/clinnet-releases/",
     "kind": "manual"
   },
   {

@@ -59,7 +59,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import Cycle\nhelp(Cycle)"
               }
@@ -128,7 +128,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import DotEdgeData\nhelp(DotEdgeData)"
               }
@@ -272,7 +272,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import DotGraph\nhelp(DotGraph)"
               }
@@ -1081,7 +1081,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import DotGraphBuilder\nhelp(DotGraphBuilder)"
               }
@@ -1271,7 +1271,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import DotHedgeData\nhelp(DotHedgeData)"
               }
@@ -1406,7 +1406,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import DotVertexData\nhelp(DotVertexData)"
               }
@@ -1550,7 +1550,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import EdgeData\nhelp(EdgeData)"
               }
@@ -1647,7 +1647,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import EdgeIndex\nhelp(EdgeIndex)"
               }
@@ -1736,7 +1736,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import EdgeStatements\nhelp(EdgeStatements)"
               }
@@ -2004,7 +2004,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import Flow\nhelp(Flow)"
               }
@@ -2073,7 +2073,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import GlobalData\nhelp(GlobalData)"
               }
@@ -2360,7 +2360,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import GlobalStatements\nhelp(GlobalStatements)"
               }
@@ -2628,7 +2628,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import Hedge\nhelp(Hedge)"
               }
@@ -2717,7 +2717,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import HedgeNode\nhelp(HedgeNode)"
               }
@@ -2814,7 +2814,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import HedgePair\nhelp(HedgePair)"
               }
@@ -2927,7 +2927,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import NodeIndex\nhelp(NodeIndex)"
               }
@@ -3016,7 +3016,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import NodeStatements\nhelp(NodeStatements)"
               }
@@ -3284,7 +3284,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import Orientation\nhelp(Orientation)"
               }
@@ -3364,7 +3364,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import OrientedCut\nhelp(OrientedCut)"
               }
@@ -3433,7 +3433,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import Subgraph\nhelp(Subgraph)"
               }
@@ -3681,7 +3681,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from linnet_py import TraversalTree\nhelp(TraversalTree)"
               }

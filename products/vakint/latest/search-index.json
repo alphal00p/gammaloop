@@ -12,6 +12,12 @@
     "kind": "start here"
   },
   {
+    "title": "Choose a task",
+    "summary": "Vakint · Overview",
+    "href": "index.html#choose-a-task",
+    "kind": "start here"
+  },
+  {
     "title": "Workflow",
     "summary": "Vakint · Overview",
     "href": "index.html#workflow",
@@ -31,7 +37,7 @@
   },
   {
     "title": "Match your first integral",
-    "summary": "Configure a dependency-free engine, parse a vacuum integral, canonicalize it, and inspect the match.",
+    "summary": "Configure a matching-only engine, parse a vacuum integral, canonicalize it, and inspect the match.",
     "href": "tutorial/",
     "kind": "tutorial"
   },
@@ -87,6 +93,12 @@
     "title": "Evaluation order and backends",
     "summary": "Vakint · Matching and evaluation",
     "href": "manual/evaluation/#evaluation-order-and-backends",
+    "kind": "manual"
+  },
+  {
+    "title": "Configure one analytic tensor reduction",
+    "summary": "Vakint · Matching and evaluation",
+    "href": "manual/evaluation/#configure-one-analytic-tensor-reduction",
     "kind": "manual"
   },
   {

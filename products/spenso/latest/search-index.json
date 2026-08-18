@@ -12,6 +12,12 @@
     "kind": "start here"
   },
   {
+    "title": "Choose a task",
+    "summary": "Spenso · Overview",
+    "href": "index.html#choose-a-task",
+    "kind": "start here"
+  },
+  {
     "title": "From tensors to networks",
     "summary": "Spenso · Overview",
     "href": "index.html#from-tensors-to-networks",
@@ -72,6 +78,12 @@
     "kind": "manual"
   },
   {
+    "title": "Execute a small tensor/scalar network",
+    "summary": "Spenso · Tensor networks",
+    "href": "manual/networks/#execute-a-small-tensor-scalar-network",
+    "kind": "manual"
+  },
+  {
     "title": "Symbolica shadowing",
     "summary": "Spenso · Tensor networks",
     "href": "manual/networks/#symbolica-shadowing",
@@ -111,6 +123,24 @@
     "title": "Releases and change history",
     "summary": "Published versions, compatibility changes, and practical upgrade guidance.",
     "href": "manual/releases/",
+    "kind": "manual"
+  },
+  {
+    "title": "Spenso macros release history",
+    "summary": "Canonical release notes for the independently versioned Spenso procedural macros.",
+    "href": "manual/spenso-macros-releases/",
+    "kind": "manual"
+  },
+  {
+    "title": "Spenso HEP library release history",
+    "summary": "Canonical release notes for the independently versioned high-energy-physics helper library.",
+    "href": "manual/spenso-hep-lib-releases/",
+    "kind": "manual"
+  },
+  {
+    "title": "Spynso3 release history",
+    "summary": "Canonical release notes for the independently versioned Symbolica community Python adapter.",
+    "href": "manual/spynso3-releases/",
     "kind": "manual"
   },
   {
@@ -472,192 +502,6 @@
     "summary": "Creates the standard sparse SU(3) fundamental-generator tensor.",
     "href": "reference/rust/supported/spenso-hep-lib/#supported-su3-generator-data",
     "kind": "rust-api"
-  },
-  {
-    "title": "spynso3 · CompiledTensorEvaluator",
-    "summary": "A compiled and optimized evaluator for maximum performance tensor evaluation.",
-    "href": "reference/python/spynso3/#exports-compiledtensorevaluator",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · CompiledTensorEvaluator.evaluate_complex",
-    "summary": "Evaluate the tensor expression for multiple complex-valued parameter inputs. Evaluate the tensor expression for multiple complex-valued parameter inputs. Uses the compiled C++ code for maximum performance evaluation with complex numbers. Parameters ---------- inputs : list of list of complex List of parameter value lists, where each inner list contains complex values for all parameters in the same order as specified when creating the original evaluator Returns ------- list of Tensor List of evaluated tensors, one for each input parameter set Examples -------- >>> complex_inputs = [ ... [1.0+2.0j, 3.0+0.0j], ... [0.0+1.0j, 2.0+1.0j] ... ] >>> results = compiled_evaluator.evaluate_complex(complex_inputs)",
-    "href": "reference/python/spynso3/#exports-compiledtensorevaluator-evaluate-complex-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · CompiledTensorEvaluator.evaluate_complex.inputs",
-    "summary": "List of parameter value lists, where each inner list contains complex values for all parameters in the same order as specified when creating the original evaluator",
-    "href": "reference/python/spynso3/#exports-compiledtensorevaluator-evaluate-complex-method-inputs-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor",
-    "summary": "A library tensor class optimized for use in tensor libraries and networks.",
-    "href": "reference/python/spynso3/#exports-librarytensor",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.structure",
-    "summary": "def structure(self) -> TensorStructure:",
-    "href": "reference/python/spynso3/#exports-librarytensor-structure-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.sparse",
-    "summary": "Create a new sparse empty library tensor with the given structure and data type. Creates a sparse tensor that initially contains no non-zero elements. Elements can be set individually using indexing operations. Parameters ---------- structure : TensorStructure, list of Representations, or list of int The tensor structure defining shape and index properties type_info : type The data type - either `float` or `Expression` class Returns ------- LibraryTensor A new sparse library tensor with all elements initially zero Examples -------- >>> import symbolica as sp >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation >>> rep = Representation.euc(3) >>> structure = TensorStructure(rep, rep) >>> sparse_float = LibraryTensor.sparse(structure, float) >>> sparse_sym = LibraryTensor.sparse(structure, sp.Expression) >>> sparse_float[0, 0] = 1.0 >>> sparse_float[1, 1] = 2.0",
-    "href": "reference/python/spynso3/#exports-librarytensor-sparse-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.sparse.structure",
-    "summary": "The tensor structure defining shape and index properties",
-    "href": "reference/python/spynso3/#exports-librarytensor-sparse-associatedfunction-structure-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.sparse.type_info",
-    "summary": "The data type - either `float` or `Expression` class",
-    "href": "reference/python/spynso3/#exports-librarytensor-sparse-associatedfunction-type-info-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.dense",
-    "summary": "Create a new dense library tensor with the given structure and data. Dense tensors store all elements explicitly in row-major order. The structure defines the tensor's shape and indexing properties. Parameters ---------- structure : TensorStructure, list of Representations, or list of int The tensor structure defining shape and index properties data : list of float, complex, or Expression The tensor data in row-major order Returns ------- LibraryTensor A new dense library tensor with the specified data Examples -------- >>> from symbolica import S >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation >>> rep = Representation.euc(2) >>> sigma = S(\"sigma\") >>> structure = TensorStructure(rep, rep, name=sigma) >>> data = [0.0, 1.0, 1.0, 0.0] >>> tensor = LibraryTensor.dense(structure, data) >>> x, y = S(\"x\", \"y\") >>> sym_data = [x, y, -y, x] >>> sym_tensor = LibraryTensor.dense(structure, sym_data)",
-    "href": "reference/python/spynso3/#exports-librarytensor-dense-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.dense.structure",
-    "summary": "The tensor structure defining shape and index properties",
-    "href": "reference/python/spynso3/#exports-librarytensor-dense-associatedfunction-structure-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.dense.data",
-    "summary": "The tensor data in row-major order",
-    "href": "reference/python/spynso3/#exports-librarytensor-dense-associatedfunction-data-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.one",
-    "summary": "Create a scalar library tensor with value 1.0. Returns ------- LibraryTensor A scalar library tensor containing the value 1.0 Examples -------- >>> from symbolica.community.spenso import LibraryTensor >>> one = LibraryTensor.one()",
-    "href": "reference/python/spynso3/#exports-librarytensor-one-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.zero",
-    "summary": "Create a scalar library tensor with value 0.0. Returns ------- LibraryTensor A scalar library tensor containing the value 0.0 Examples -------- >>> from symbolica.community.spenso import LibraryTensor >>> zero = LibraryTensor.zero()",
-    "href": "reference/python/spynso3/#exports-librarytensor-zero-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.to_dense",
-    "summary": "Convert this library tensor to dense storage format. Converts sparse tensors to dense format in-place. Dense tensors are unchanged. This allocates memory for all tensor elements. # Examples: ```python from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation rep = Representation.cof(2) structure = TensorStructure([rep, rep]) tensor = LibraryTensor.sparse(structure, float) tensor[0, 0] = 1.0 tensor.to_dense() # Now stores all 4 elements explicitly ```",
-    "href": "reference/python/spynso3/#exports-librarytensor-to-dense-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.to_sparse",
-    "summary": "Convert this library tensor to sparse storage format. Converts dense tensors to sparse format in-place, only storing non-zero elements. This can save memory for tensors with many zero elements. # Examples: ```python from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation rep = Representation.euc(2) structure = TensorStructure(rep, rep) data = [1.0, 0.0, 0.0, 2.0] tensor = LibraryTensor.dense(structure, data) tensor.to_sparse() # Now only stores 2 non-zero elements ```",
-    "href": "reference/python/spynso3/#exports-librarytensor-to-sparse-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.__repr__",
-    "summary": "def __repr__(self) -> builtins.str:",
-    "href": "reference/python/spynso3/#exports-librarytensor-repr-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.__str__",
-    "summary": "def __str__(self) -> builtins.str:",
-    "href": "reference/python/spynso3/#exports-librarytensor-str-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.__len__",
-    "summary": "def __len__(self) -> builtins.int:",
-    "href": "reference/python/spynso3/#exports-librarytensor-len-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.__getitem__",
-    "summary": "def __getitem__(self, item: builtins.slice | builtins.int | builtins.list[builtins.int]) -> typing.Any:",
-    "href": "reference/python/spynso3/#exports-librarytensor-getitem-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.__getitem__.item",
-    "summary": "item: builtins.slice | builtins.int | builtins.list[builtins.int]",
-    "href": "reference/python/spynso3/#exports-librarytensor-getitem-method-item-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.__getitem__",
-    "summary": "Get library tensor elements at the specified range of indices. Parameters ---------- item : slice Slice object defining the range of indices Returns ------- list of float, complex, or Expression The tensor elements at the specified range",
-    "href": "reference/python/spynso3/#exports-librarytensor-getitem-method-2",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.__getitem__.item",
-    "summary": "Slice object defining the range of indices",
-    "href": "reference/python/spynso3/#exports-librarytensor-getitem-method-2-item-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.__getitem__",
-    "summary": "Get library tensor element at the specified index or indices. Parameters ---------- item : int or list of int Index specification (int for flat index, list of int for coordinates) Returns ------- float, complex, or Expression The tensor element at the specified index",
-    "href": "reference/python/spynso3/#exports-librarytensor-getitem-method-3",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.__getitem__.item",
-    "summary": "Index specification (int for flat index, list of int for coordinates)",
-    "href": "reference/python/spynso3/#exports-librarytensor-getitem-method-3-item-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.__setitem__",
-    "summary": "Set library tensor element(s) at the specified index or indices. Parameters ---------- item : int or list of int Index specification (int for flat index, list of int for coordinates) value : float, complex, or Expression The value to set Examples -------- >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation >>> rep = Representation.euc(2) >>> structure = TensorStructure(rep, rep) >>> tensor = LibraryTensor.sparse(structure, float) >>> tensor[0] = 1.0 >>> tensor[1, 1] = 2.0",
-    "href": "reference/python/spynso3/#exports-librarytensor-setitem-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.__setitem__.item",
-    "summary": "Index specification (int for flat index, list of int for coordinates)",
-    "href": "reference/python/spynso3/#exports-librarytensor-setitem-method-item-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.__setitem__.value",
-    "summary": "The value to set",
-    "href": "reference/python/spynso3/#exports-librarytensor-setitem-method-value-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.__setitem__",
-    "summary": "Set library tensor element(s) at the specified index or indices. Parameters ---------- item : int or list of int Index specification (int for flat index, list of int for coordinates) value : float, complex, or Expression The value to set Examples -------- >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation >>> rep = Representation.euc(2) >>> structure = TensorStructure(rep, rep) >>> tensor = LibraryTensor.sparse(structure, float) >>> tensor[0] = 1.0 >>> tensor[1, 1] = 2.0",
-    "href": "reference/python/spynso3/#exports-librarytensor-setitem-method-2",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.__setitem__.item",
-    "summary": "Index specification (int for flat index, list of int for coordinates)",
-    "href": "reference/python/spynso3/#exports-librarytensor-setitem-method-2-item-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.__setitem__.value",
-    "summary": "The value to set",
-    "href": "reference/python/spynso3/#exports-librarytensor-setitem-method-2-value-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · LibraryTensor.scalar",
-    "summary": "Extract the scalar value from a rank-0 (scalar) library tensor. Returns ------- Expression The scalar expression contained in this tensor Raises ------ RuntimeError If the tensor is not a scalar Examples -------- >>> from symbolica.community.spenso import LibraryTensor >>> scalar_tensor = LibraryTensor.one() >>> value = scalar_tensor.scalar()",
-    "href": "reference/python/spynso3/#exports-librarytensor-scalar-method",
-    "kind": "python-api"
   },
   {
     "title": "spynso3 · Representation",
@@ -1140,84 +984,6 @@
     "kind": "python-api"
   },
   {
-    "title": "spynso3 · TensorEvaluator",
-    "summary": "An optimized evaluator for symbolic tensor expressions.",
-    "href": "reference/python/spynso3/#exports-tensorevaluator",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorEvaluator.evaluate",
-    "summary": "Evaluate the tensor expression for multiple real-valued parameter inputs. Parameters ---------- inputs : list of list of float List of parameter value lists, where each inner list contains numerical values for all parameters in the same order as specified when creating the evaluator Returns ------- list of Tensor List of evaluated tensors, one for each input parameter set Raises ------ ValueError If the evaluator contains complex coefficients Examples -------- >>> results = evaluator.evaluate([[1.0, 2.0], [3.0, 4.0]])",
-    "href": "reference/python/spynso3/#exports-tensorevaluator-evaluate-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorEvaluator.evaluate.inputs",
-    "summary": "List of parameter value lists, where each inner list contains numerical values for all parameters in the same order as specified when creating the evaluator",
-    "href": "reference/python/spynso3/#exports-tensorevaluator-evaluate-method-inputs-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorEvaluator.evaluate_complex",
-    "summary": "Evaluate the expression for multiple inputs and return the results.",
-    "href": "reference/python/spynso3/#exports-tensorevaluator-evaluate-complex-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorEvaluator.evaluate_complex.inputs",
-    "summary": "inputs: typing.Sequence[typing.Sequence[builtins.complex]]",
-    "href": "reference/python/spynso3/#exports-tensorevaluator-evaluate-complex-method-inputs-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorEvaluator.compile",
-    "summary": "Compile the evaluator to a shared library using C++ for maximum performance. Compile the evaluator to a shared library using C++ for maximum performance. Generates optimized C++ code with optional inline assembly and compiles it into a shared library that can be loaded for extremely fast evaluation. Parameters ---------- function_name : str Name for the generated C++ function filename : str Path for the generated C++ source file library_name : str Name for the compiled shared library inline_asm : str, optional Type of inline assembly optimization (\"default\", \"x64\", \"aarch64\", \"none\") optimization_level : int, optional Compiler optimization level 0-3 (default: 3) compiler_path : str, optional Path to specific C++ compiler (default: system default) custom_header : str, optional Additional C++ header code to include Returns ------- CompiledTensorEvaluator A compiled evaluator for maximum performance evaluation Examples -------- >>> compiled = evaluator.compile( ... function_name=\"fast_eval\", ... filename=\"tensor_eval.cpp\", ... library_name=\"tensor_lib\", ... optimization_level=3, ... ) >>> results = compiled.evaluate_complex([[1.0, 2.0], [3.0, 4.0]])",
-    "href": "reference/python/spynso3/#exports-tensorevaluator-compile-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorEvaluator.compile.function_name",
-    "summary": "Name for the generated C++ function",
-    "href": "reference/python/spynso3/#exports-tensorevaluator-compile-method-function-name-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorEvaluator.compile.filename",
-    "summary": "Path for the generated C++ source file",
-    "href": "reference/python/spynso3/#exports-tensorevaluator-compile-method-filename-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorEvaluator.compile.library_name",
-    "summary": "Name for the compiled shared library",
-    "href": "reference/python/spynso3/#exports-tensorevaluator-compile-method-library-name-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorEvaluator.compile.inline_asm",
-    "summary": "Type of inline assembly optimization (\"default\", \"x64\", \"aarch64\", \"none\")",
-    "href": "reference/python/spynso3/#exports-tensorevaluator-compile-method-inline-asm-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorEvaluator.compile.optimization_level",
-    "summary": "Compiler optimization level 0-3 (default: 3)",
-    "href": "reference/python/spynso3/#exports-tensorevaluator-compile-method-optimization-level-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorEvaluator.compile.compiler_path",
-    "summary": "Path to specific C++ compiler (default: system default)",
-    "href": "reference/python/spynso3/#exports-tensorevaluator-compile-method-compiler-path-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorEvaluator.compile.custom_header",
-    "summary": "Additional C++ header code to include",
-    "href": "reference/python/spynso3/#exports-tensorevaluator-compile-method-custom-header-parameter",
-    "kind": "python-api"
-  },
-  {
     "title": "spynso3 · TensorIndices",
     "summary": "A tensor structure with abstract indices for symbolic tensor operations.",
     "href": "reference/python/spynso3/#exports-tensorindices",
@@ -1443,150 +1209,6 @@
     "title": "spynso3 · TensorLibrary.hep_lib_atom",
     "summary": "Create a library pre-loaded with High Energy Physics tensor definitions. Returns a library containing standard HEP tensors such as gamma matrices, color generators, metric tensors, and other commonly used structures in particle physics calculations. They are tensors with atom numeric entries. Returns ------- TensorLibrary A TensorLibrary pre-populated with HEP tensor definitions Examples -------- >>> import symbolica >>> from symbolica.community.spenso import TensorLibrary, TensorName >>> hep_lib = TensorLibrary.hep_lib_atom() >>> gamma_structure = hep_lib[symbolica.S(\"spenso::gamma\")]",
     "href": "reference/python/spynso3/#exports-tensorlibrary-hep-lib-atom-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName",
-    "summary": "A symbolic name for tensor functions and structures.",
-    "href": "reference/python/spynso3/#exports-tensorname",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.__new__",
-    "summary": "Create a new tensor name with optional mathematical properties. Parameters ---------- name : str The string name for the tensor function is_symmetric : bool, optional If True, tensor is symmetric under index permutation is_antisymmetric : bool, optional If True, tensor is antisymmetric under index permutation is_cyclesymmetric : bool, optional If True, tensor is symmetric under cyclic permutations is_linear : bool, optional If True, tensor is linear in its arguments custom_normalization : Transformer, optional Custom normalization function (advanced) Returns ------- TensorName A new TensorName with the specified properties Examples -------- >>> from symbolica.community.spenso import TensorName >>> T = TensorName(\"T\") >>> g = TensorName(\"g\", is_symmetric=True) >>> F = TensorName(\"F\", is_antisymmetric=True) >>> D = TensorName(\"D\", is_linear=True)",
-    "href": "reference/python/spynso3/#exports-tensorname-new-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.__new__.name",
-    "summary": "The string name for the tensor function",
-    "href": "reference/python/spynso3/#exports-tensorname-new-associatedfunction-name-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.__new__.is_symmetric",
-    "summary": "If True, tensor is symmetric under index permutation",
-    "href": "reference/python/spynso3/#exports-tensorname-new-associatedfunction-is-symmetric-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.__new__.is_antisymmetric",
-    "summary": "If True, tensor is antisymmetric under index permutation",
-    "href": "reference/python/spynso3/#exports-tensorname-new-associatedfunction-is-antisymmetric-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.__new__.is_cyclesymmetric",
-    "summary": "If True, tensor is symmetric under cyclic permutations",
-    "href": "reference/python/spynso3/#exports-tensorname-new-associatedfunction-is-cyclesymmetric-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.__new__.is_linear",
-    "summary": "If True, tensor is linear in its arguments",
-    "href": "reference/python/spynso3/#exports-tensorname-new-associatedfunction-is-linear-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.__new__.custom_normalization",
-    "summary": "Custom normalization function (advanced)",
-    "href": "reference/python/spynso3/#exports-tensorname-new-associatedfunction-custom-normalization-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.__repr__",
-    "summary": "def __repr__(self) -> builtins.str:",
-    "href": "reference/python/spynso3/#exports-tensorname-repr-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.__str__",
-    "summary": "def __str__(self) -> builtins.str:",
-    "href": "reference/python/spynso3/#exports-tensorname-str-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.to_expression",
-    "summary": "Convert the tensor name to a symbolic expression. Returns ------- Expression A symbolic Expression representing this tensor name Examples -------- >>> T = TensorName(\"T\") >>> expr = T.to_expression()",
-    "href": "reference/python/spynso3/#exports-tensorname-to-expression-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.g",
-    "summary": "Predefined metric tensor name.",
-    "href": "reference/python/spynso3/#exports-tensorname-g-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.flat",
-    "summary": "Predefined musical isomorphism tensor name. This enables dualizing self dual indices.",
-    "href": "reference/python/spynso3/#exports-tensorname-flat-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.gamma",
-    "summary": "Predefined gamma matrix name.",
-    "href": "reference/python/spynso3/#exports-tensorname-gamma-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.gamma5",
-    "summary": "Predefined gamma5 matrix name.",
-    "href": "reference/python/spynso3/#exports-tensorname-gamma5-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.projm",
-    "summary": "Predefined left chiral projector name.",
-    "href": "reference/python/spynso3/#exports-tensorname-projm-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.projp",
-    "summary": "Predefined right chiral projector name.",
-    "href": "reference/python/spynso3/#exports-tensorname-projp-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.sigma",
-    "summary": "Predefined sigma matrix name.",
-    "href": "reference/python/spynso3/#exports-tensorname-sigma-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.f",
-    "summary": "Predefined color structure constant name.",
-    "href": "reference/python/spynso3/#exports-tensorname-f-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.t",
-    "summary": "Predefined color generator name.",
-    "href": "reference/python/spynso3/#exports-tensorname-t-associatedfunction",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.__call__",
-    "summary": "Call the tensor name with arguments to create tensor structures. Accepts a mix of slots and symbolic expressions (for additional arguments). Parameters ---------- *args : Slot or Expression Slot objects and Expressions for additional arguments Returns ------- TensorIndices A new TensorIndices object Examples -------- >>> from symbolica.community.spenso import TensorName, Slot, Representation >>> import symbolica as sp >>> T = TensorName(\"T\") >>> rep = Representation.euc(3) >>> mu = rep(\"mu\") >>> nu = rep(\"nu\") >>> indexed_tensor = T(mu, nu)",
-    "href": "reference/python/spynso3/#exports-tensorname-call-method",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.__call__.args",
-    "summary": "*args: Slot | Expression | int | str | float | builtins.complex",
-    "href": "reference/python/spynso3/#exports-tensorname-call-method-args-parameter",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.__call__",
-    "summary": "Call the tensor name with arguments to create a TensorStructure. Accepts a mix of representations and symbolic expressions (for additional arguments). Parameters ---------- *args : Representation or Expression Representation objects and Expressions for additional arguments Returns ------- TensorStructure A new TensorStructure object Examples -------- >>> from symbolica.community.spenso import TensorName, Slot, Representation >>> import symbolica as sp >>> T = TensorName(\"T\") >>> rep = Representation.euc(3) >>> structure_tensor = T(rep, rep)",
-    "href": "reference/python/spynso3/#exports-tensorname-call-method-2",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · TensorName.__call__.args",
-    "summary": "*args: Representation | Expression",
-    "href": "reference/python/spynso3/#exports-tensorname-call-method-2-args-parameter",
     "kind": "python-api"
   },
   {
@@ -2013,12 +1635,6 @@
     "title": "spynso3 · SymbolicParallelism",
     "summary": "Policy for Rayon operations that manipulate Symbolica expressions.",
     "href": "reference/python/spynso3/#exports-symbolicparallelism",
-    "kind": "python-api"
-  },
-  {
-    "title": "spynso3 · set_symbolica_rayon_enabled",
-    "summary": "Configure whether Spenso may use Rayon for Symbolica operations.",
-    "href": "reference/python/spynso3/#exports-set-symbolica-rayon-enabled",
     "kind": "python-api"
   }
 ]

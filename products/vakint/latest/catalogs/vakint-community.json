@@ -59,7 +59,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.vakint import Vakint\nhelp(Vakint)"
               }
@@ -441,7 +441,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.vakint import VakintEvaluationMethod\nhelp(VakintEvaluationMethod)"
               }
@@ -678,7 +678,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.vakint import VakintExpression\nhelp(VakintExpression)"
               }
@@ -759,7 +759,7 @@
             "returns": null,
             "examples": [
               {
-                "title": "Inspect the registered export",
+                "title": "Introspection scaffold (not a task example)",
                 "language": "python",
                 "code": "from symbolica.community.vakint import VakintNumericalResult\nhelp(VakintNumericalResult)"
               }

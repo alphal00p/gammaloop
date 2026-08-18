@@ -158,7 +158,7 @@
             "source": {
               "identifier": "gammaloop_api::StateLoadOption",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 463,
+              "line": 469,
               "column": 1
             }
           },
@@ -201,7 +201,7 @@
             "source": {
               "identifier": "gammaloop_api::StateLoadOption::load",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 530,
+              "line": 536,
               "column": 1
             }
           },
@@ -244,7 +244,7 @@
             "source": {
               "identifier": "gammaloop_api::LoadedState::cli_session",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 487,
+              "line": 493,
               "column": 1
             }
           },
@@ -260,7 +260,7 @@
               "body": "Owns the generated command-line, global, session, and state-loading settings."
             },
             "summary": "Owns the generated command-line, global, session, and state-loading settings.",
-            "signature": "#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]\n#[serde(default, deny_unknown_fields)] pub struct CLISettings\n{\n    #[serde(skip_serializing_if = \"is_true\")] pub try_strings : bool,\n    #[serde(skip_serializing_if = \"is_false\")] pub override_state : bool,\n    #[serde(skip_serializing_if = \"IsDefault::is_default\")] pub state :\n    StateSettings, #[serde(skip_serializing_if = \"IsDefault::is_default\")] pub\n    global : GlobalSettings, #[serde(skip)] #[schemars(skip)] pub session :\n    SessionSettings,\n}",
+            "signature": "#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]\n#[serde(default, deny_unknown_fields)] pub struct CLISettings\n{\n    #[doc =\n    \" Serialize replayable commands as compact strings when their structured form permits it.\"]\n    #[serde(skip_serializing_if = \"is_true\")] pub try_strings : bool,\n    #[doc =\n    \" Permit generated artifacts to replace compatible files in the active state folder.\"]\n    #[serde(skip_serializing_if = \"is_false\")] pub override_state : bool,\n    #[doc =\n    \" Location and optional display name of the persistent GammaLoop state.\"]\n    #[serde(skip_serializing_if = \"IsDefault::is_default\")] pub state :\n    StateSettings,\n    #[doc =\n    \" Generation, logging, and parallelization settings shared by the CLI session.\"]\n    #[serde(skip_serializing_if = \"IsDefault::is_default\")] pub global :\n    GlobalSettings, #[serde(skip)] #[schemars(skip)] pub session :\n    SessionSettings,\n}",
             "since": null,
             "keywords": [],
             "params": [],
@@ -276,7 +276,10 @@
               {
                 "name": "try_strings",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Serialize replayable commands as compact strings when their structured form permits it."
+                },
                 "signature": "bool",
                 "default": null,
                 "members": []
@@ -284,7 +287,10 @@
               {
                 "name": "override_state",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Permit generated artifacts to replace compatible files in the active state folder."
+                },
                 "signature": "bool",
                 "default": null,
                 "members": []
@@ -292,7 +298,10 @@
               {
                 "name": "state",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Location and optional display name of the persistent GammaLoop state."
+                },
                 "signature": "StateSettings",
                 "default": null,
                 "members": []
@@ -300,7 +309,10 @@
               {
                 "name": "global",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Generation, logging, and parallelization settings shared by the CLI session."
+                },
                 "signature": "GlobalSettings",
                 "default": null,
                 "members": []
@@ -349,7 +361,10 @@
               {
                 "name": "try_strings",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Serialize replayable commands as compact strings when their structured form permits it."
+                },
                 "signature": "bool",
                 "default": null,
                 "members": []
@@ -357,7 +372,10 @@
               {
                 "name": "override_state",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Permit generated artifacts to replace compatible files in the active state folder."
+                },
                 "signature": "bool",
                 "default": null,
                 "members": []
@@ -365,7 +383,10 @@
               {
                 "name": "state",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Location and optional display name of the persistent GammaLoop state."
+                },
                 "signature": "StateSettings",
                 "default": null,
                 "members": []
@@ -373,7 +394,10 @@
               {
                 "name": "global",
                 "kind": "field",
-                "docs": null,
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Generation, logging, and parallelization settings shared by the CLI session."
+                },
                 "signature": "GlobalSettings",
                 "default": null,
                 "members": []

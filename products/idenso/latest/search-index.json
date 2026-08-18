@@ -12,6 +12,12 @@
     "kind": "start here"
   },
   {
+    "title": "Choose a task",
+    "summary": "Idenso · Overview",
+    "href": "index.html#choose-a-task",
+    "kind": "start here"
+  },
+  {
     "title": "A controlled rewrite pipeline",
     "summary": "Idenso · Overview",
     "href": "index.html#a-controlled-rewrite-pipeline",
@@ -66,6 +72,12 @@
     "kind": "manual"
   },
   {
+    "title": "Keep independent dummy namespaces independent",
+    "summary": "Idenso · Algebra and rewrites",
+    "href": "manual/algebra/#keep-independent-dummy-namespaces-independent",
+    "kind": "manual"
+  },
+  {
     "title": "Metric and epsilon operations",
     "summary": "Idenso · Algebra and rewrites",
     "href": "manual/algebra/#metric-and-epsilon-operations",
@@ -81,6 +93,210 @@
     "title": "Schoonschip network parsing",
     "summary": "Idenso · Algebra and rewrites",
     "href": "manual/algebra/#schoonschip-network-parsing",
+    "kind": "manual"
+  },
+  {
+    "title": "FORM Gamma- and Color-Algebra Simplification Rules",
+    "summary": "A source-backed specification of FORM gamma and color identities, their Symbolica and Spenso pattern forms, validation cases, and implementation constraints.",
+    "href": "manual/form-color-dirac/",
+    "kind": "manual"
+  },
+  {
+    "title": "Source Inventory",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#source-inventory",
+    "kind": "manual"
+  },
+  {
+    "title": "Notational Conventions",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#notational-conventions",
+    "kind": "manual"
+  },
+  {
+    "title": "Overview",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#overview",
+    "kind": "manual"
+  },
+  {
+    "title": "G1. Gamma-chain product and joining",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#g1-gamma-chain-product-and-joining",
+    "kind": "manual"
+  },
+  {
+    "title": "G2. Chain orientation and reversal",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#g2-chain-orientation-and-reversal",
+    "kind": "manual"
+  },
+  {
+    "title": "G3. Metric contraction in gamma chains",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#g3-metric-contraction-in-gamma-chains",
+    "kind": "manual"
+  },
+  {
+    "title": "G4. Trace closure with explicit bispinor contraction",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#g4-trace-closure-with-explicit-bispinor-contraction",
+    "kind": "manual"
+  },
+  {
+    "title": "G5. Odd and even trace recursion",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#g5-odd-and-even-trace-recursion",
+    "kind": "manual"
+  },
+  {
+    "title": "G6. Four-dimensional Chisholm reductions",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#g6-four-dimensional-chisholm-reductions",
+    "kind": "manual"
+  },
+  {
+    "title": "G7. Gamma-five and epsilon rules",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#g7-gamma-five-and-epsilon-rules",
+    "kind": "manual"
+  },
+  {
+    "title": "Overview",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#overview",
+    "kind": "manual"
+  },
+  {
+    "title": "C1. Open color-line joining",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#c1-open-color-line-joining",
+    "kind": "manual"
+  },
+  {
+    "title": "C2. Trace closure and trace normalization",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#c2-trace-closure-and-trace-normalization",
+    "kind": "manual"
+  },
+  {
+    "title": "C3. Fundamental Casimir and adjacent contractions",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#c3-fundamental-casimir-and-adjacent-contractions",
+    "kind": "manual"
+  },
+  {
+    "title": "C4. Fundamental Fierz generator contraction",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#c4-fundamental-fierz-generator-contraction",
+    "kind": "manual"
+  },
+  {
+    "title": "C5. Structure-constant loop contractions",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#c5-structure-constant-loop-contractions",
+    "kind": "manual"
+  },
+  {
+    "title": "C6. Mixed trace--structure contraction",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#c6-mixed-trace-structure-contraction",
+    "kind": "manual"
+  },
+  {
+    "title": "C7. Symmetric invariant contractions",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#c7-symmetric-invariant-contractions",
+    "kind": "manual"
+  },
+  {
+    "title": "C8. `simpli` and generalized Jacobi strategy",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#c8-simpli-and-generalized-jacobi-strategy",
+    "kind": "manual"
+  },
+  {
+    "title": "Rust Pattern Construction Guidelines",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#rust-pattern-construction-guidelines",
+    "kind": "manual"
+  },
+  {
+    "title": "Gamma Collection Patterns",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#gamma-collection-patterns",
+    "kind": "manual"
+  },
+  {
+    "title": "Gamma Terminal and Trace Patterns",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#gamma-terminal-and-trace-patterns",
+    "kind": "manual"
+  },
+  {
+    "title": "Gamma Chisholm and Trace Recursion Builders",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#gamma-chisholm-and-trace-recursion-builders",
+    "kind": "manual"
+  },
+  {
+    "title": "Color Collection Patterns",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#color-collection-patterns",
+    "kind": "manual"
+  },
+  {
+    "title": "Color Trace and Casimir Patterns",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#color-trace-and-casimir-patterns",
+    "kind": "manual"
+  },
+  {
+    "title": "Color Structure-Constant and Invariant Patterns",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#color-structure-constant-and-invariant-patterns",
+    "kind": "manual"
+  },
+  {
+    "title": "FORM Short-Circuit Rewrite Order",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#form-short-circuit-rewrite-order",
+    "kind": "manual"
+  },
+  {
+    "title": "Gamma Trace Tests",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#gamma-trace-tests",
+    "kind": "manual"
+  },
+  {
+    "title": "Compact Color Rule Tests",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#compact-color-rule-tests",
+    "kind": "manual"
+  },
+  {
+    "title": "FORM `color.tar.gz` Example Families",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#form-color-tar-gz-example-families",
+    "kind": "manual"
+  },
+  {
+    "title": "Typst compile result",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#typst-compile-result",
+    "kind": "manual"
+  },
+  {
+    "title": "Static checks",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#static-checks",
+    "kind": "manual"
+  },
+  {
+    "title": "Unresolved uncertainties",
+    "summary": "Idenso · FORM Gamma- and Color-Algebra Simplification Rules",
+    "href": "manual/form-color-dirac/#unresolved-uncertainties",
     "kind": "manual"
   },
   {
