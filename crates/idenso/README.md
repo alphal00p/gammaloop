@@ -1,5 +1,9 @@
-# idenso
+# Idenso
 
-Idenso is the symbolic counterpart to spenso, providing extensions to symbolica's `Atom` to use algebraic relations to simplify expressions containing tensors written in spenso parsable format. 
+Idenso is Spenso's symbolic counterpart, extending Symbolica expressions with representation-aware
+tensor identities, including Dirac and color algebra.
 
-It includes dirac algebra, color algebra, and various tensor simplification routines commonly used in high-energy physics calculations.
+Use the canonical [Idenso overview](https://alphal00p.github.io/gammaloop/products/idenso/latest/),
+[controlled-identity tutorial](https://alphal00p.github.io/gammaloop/products/idenso/latest/tutorial/), and
+[algebra guide](https://alphal00p.github.io/gammaloop/products/idenso/latest/guides/algebra/) for maintained workflows.
+Contributor policy is in [`CONTRIBUTING.typ`](../../CONTRIBUTING.typ).

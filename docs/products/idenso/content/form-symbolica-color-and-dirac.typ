@@ -1,14 +1,7 @@
 #let form-color-dirac-content(namespace) = [
 #let anchor(name) = label(namespace + "-" + name)
-#set document(title: "FORM gamma and color simplification rules")
-#set page(paper: "a4", margin: (x: 19mm, y: 18mm))
-#set text(font: "Libertinus Serif", size: 10pt)
 #set raw(tab-size: 2)
 #set math.equation(numbering: "(1)")
-#show heading.where(level: 1): it => {
-  pagebreak(weak: true)
-  it
-}
 
 #let source(url) = link(url)[#url]
 #let source-revision = sys.inputs.at("git-commit", default: "main")
@@ -28,7 +21,7 @@
 #let typst-syntax = "https://typst.app/docs/reference/syntax/"
 #let typst-math = "https://typst.app/docs/reference/math/"
 
-= FORM Gamma- and Color-Algebra Simplification Rules
+= FORM color and Dirac rules
 
 This specification records source-backed replacement rules for FORM gamma-algebra simplification and the FORM `color.h` color-algebra package. The mathematical notation is independent of FORM token names except where a source symbol is documented literally. Open gamma strings always carry explicit bispinor indices; closed gamma traces are written as explicit bispinor contractions, not as a separate trace-index placeholder.
 
@@ -69,13 +62,13 @@ Fundamental color indices are $i, j, k, l$. Adjoint color indices are $a, b, c, 
 
 The word `product` denotes an ordered noncommutative string inside a chain. It is not used as FORM syntax.
 
-= Gamma-Algebra Replacement Rules
+== Gamma-algebra replacement rules
 
-== Overview
+=== Overview
 
 #table(
   columns: (2.4cm, 4.4cm, 6.8cm),
-  [Rule], [Dimension], [Purpose],
+  table.header([Rule], [Dimension], [Purpose]),
   [Gamma collection], [all], [Collect adjacent bispinor-contracted gamma factors into an ordered chain.],
   [Chain joining],
   [all],
@@ -91,7 +84,7 @@ The word `product` denotes an ordered noncommutative string inside a chain. It i
   [Gamma-five and epsilon], [$4$ only], [Use Levi-Civita and gamma-five branch logic in FORM `trace4`.],
 )
 
-== G1. Gamma-chain product and joining
+=== G1. Gamma-chain product and joining
 #anchor("rule-gamma-chain")
 
 Mathematical identity:
@@ -129,7 +122,7 @@ gamma(bis(4,a),bis(4,b),p(2,mink(4)))
 ```
 Assumptions: `in` and `out` are local slots of each factor in the chain. Dummy bispinor labels consumed during collection are not retained as free indices.
 
-== G2. Chain orientation and reversal
+=== G2. Chain orientation and reversal
 #anchor("rule-gamma-orientation")
 
 Mathematical identity:
@@ -148,7 +141,7 @@ B(j,k) * C(l,k)
 
 Source context: Symbolica matches syntactically with wildcard variables and respects function-argument ordering for non-symmetric functions; see #source(sym-pattern). spenso provides symbolic tensor structures and contraction support; see #source(spenso-doc).
 
-== G3. Metric contraction in gamma chains
+=== G3. Metric contraction in gamma chains
 #anchor("rule-gamma-metric-contract")
 
 Dimension-generic terminal identity:
@@ -182,7 +175,7 @@ Source: #source(dirac-rs + "#L784-L829").
 
 Assumptions: $D$ is the dimension attached to the Lorentz representation. Four-dimensional Chisholm rules below require $D = 4$.
 
-== G4. Trace closure with explicit bispinor contraction
+=== G4. Trace closure with explicit bispinor contraction
 #anchor("rule-gamma-trace-closure")
 
 Mathematical identity:
@@ -218,7 +211,7 @@ replace(function!(GS.gamma_chain, RS.a__, RS.x_, RS.x_).to_pattern())
 ```
 Source: #source(dirac-rs + "#L877-L879").
 
-== G5. Odd and even trace recursion
+=== G5. Odd and even trace recursion
 #anchor("rule-gamma-trace-recursion")
 
 Odd trace without gamma-five:
@@ -251,7 +244,7 @@ trace(bis(4),
 ```
 Dummy-index freshness: recursive trace replacement removes the paired Lorentz argument and must not reuse bound labels introduced by metric contractions.
 
-== G6. Four-dimensional Chisholm reductions
+=== G6. Four-dimensional Chisholm reductions
 #anchor("rule-gamma-chisholm")
 
 Odd interior:
@@ -298,7 +291,7 @@ chain(bis(4,a),bis(4,d),
 ```
 Assumptions: The contracted Lorentz label must belong to a four-dimensional Lorentz representation. The source code checks dimension equality with `4` before applying the Chisholm branches.
 
-== G7. Gamma-five and epsilon rules
+=== G7. Gamma-five and epsilon rules
 #anchor("rule-gamma-five")
 
 FORM `trace4` uses the four-dimensional identity:
@@ -332,13 +325,13 @@ chain(bis(4,a),bis(4,b),
 ```
 This is explicitly four-dimensional and requires a fresh dummy Lorentz label `sigma`.
 
-= Color-Algebra Replacement Rules from `color.h`
+== Color-algebra replacement rules from `color.h`
 
-== Overview
+=== Overview
 
 #table(
   columns: (2.8cm, 4cm, 6.8cm),
-  [Rule], [Convention], [Purpose],
+  table.header([Rule], [Convention], [Purpose]),
   [Line joining], [`T(i,j,?a)`], [Join open noncommutative color lines.],
   [Trace closure], [`cOlTr`, `cOlTt`], [Convert closed lines to trace blocks and choose trace blocks to simplify.],
   [Casimir reduction], [`cR`, `cA`], [Remove repeated adjacent or separated generators in traces.],
@@ -348,7 +341,7 @@ This is explicitly four-dimensional and requires a fresh dummy Lorentz label `si
   [`simpli` strategy], [procedure], [Eliminate f tensors in environments of invariants using generalized Jacobi moves.],
 )
 
-== C1. Open color-line joining
+=== C1. Open color-line joining
 #anchor("rule-color-line-join")
 
 Mathematical identity:
@@ -378,7 +371,7 @@ chain(cof(Nc,j),dind(cof(Nc,k)),
        t(coad(Nc^2-1,b1),in,out))
 ```
 
-== C2. Trace closure and trace normalization
+=== C2. Trace closure and trace normalization
 #anchor("rule-color-trace")
 
 Closed line:
@@ -409,7 +402,7 @@ chain(cof(Nc,i),dind(cof(Nc,i)),
   -> TR * g(coad(Nc^2-1,a),coad(Nc^2-1,b))
 ```
 
-== C3. Fundamental Casimir and adjacent contractions
+=== C3. Fundamental Casimir and adjacent contractions
 #anchor("rule-color-casimir")
 
 Mathematical identities:
@@ -436,7 +429,7 @@ chain(cof(Nc,i),dind(cof(Nc,k)),
 ```
 Assumptions: `color.h` keeps `C_F` as `cR`, not automatically as $(N_c^2 - 1) / (2 N_c)$.
 
-== C4. Fundamental Fierz generator contraction
+=== C4. Fundamental Fierz generator contraction
 #anchor("rule-color-fierz")
 
 Mathematical identity:
@@ -463,7 +456,7 @@ t(coad(Nc^2-1,a),cof(Nc,i),dind(cof(Nc,j)))
        * g(cof(Nc,k),dind(cof(Nc,l))) / Nc)
 ```
 
-== C5. Structure-constant loop contractions
+=== C5. Structure-constant loop contractions
 #anchor("rule-color-ff")
 
 Mathematical identities:
@@ -487,7 +480,7 @@ f(coad(Nc^2-1,a),coad(Nc^2-1,c),coad(Nc^2-1,d))
 ```
 Sign note: FORM's `ReplaceLoop` loop orientation produces `-cA*d_(...)` for the two-argument cyclic helper. The standard identity above assumes the displayed orientation $f^(a c d) f^(b c d)$.
 
-== C6. Mixed trace--structure contraction
+=== C6. Mixed trace--structure contraction
 #anchor("rule-color-trace-f")
 
 Mathematical identity:
@@ -515,7 +508,7 @@ trace(cof(Nc),
        rest__)
 ```
 
-== C7. Symmetric invariant contractions
+=== C7. Symmetric invariant contractions
 #anchor("rule-color-dd")
 
 `color.h` uses `cOldR` and `cOldA` for symmetric invariant tensors and reduces contractions to named invariants such as `d33`, `d44`, and `d55`.
@@ -545,7 +538,7 @@ d(sym_rep_x,coad(Nc^2-1,a),coad(Nc^2-1,b),coad(Nc^2-1,c))
 ```
 Assumptions: The package treats these as group-invariant placeholders rather than expanding them into $N_c$ polynomials.
 
-== C8. `simpli` and generalized Jacobi strategy
+=== C8. `simpli` and generalized Jacobi strategy
 #anchor("rule-color-simpli")
 
 `simpli` is an implementation strategy, not one scalar identity. It eliminates pairs of structure constants in environments of symmetric invariants and applies generalized Jacobi transformations.
@@ -571,7 +564,7 @@ f(coad(Nc^2-1,x),coad(Nc^2-1,a),coad(Nc^2-1,c))
 ```
 This rule class requires canonicalization of symmetric invariants and freshness of all auxiliary adjoint labels introduced during generalized Jacobi expansion.
 
-= Symbolica + spenso Rewrite Patterns
+== Symbolica and Spenso rewrite patterns
 
 This section is written for a Rust implementation with Symbolica as a dependency. Symbolica's Rust `id` module exposes pattern matching through `AtomCore::replace`, `AtomCore::pattern_match`, `Replacement`, `MatchSettings`, and `ReplaceBuilder`; complex right-hand sides can be built with `ReplaceBuilder::with_map` or with `replace_map` callbacks. See #source(sym-rust-id) and #source(sym-rust-replace). spenso represents tensor slots through symbolic structures and representation slots; the crate documents tensor structures, symbolic tensors, and contraction support at #source(spenso-doc), with symbolic tensor-library keys in #source(spenso-symbolic).
 
@@ -584,7 +577,7 @@ chain(bis(4,a),bis(4,c),
   gamma(in,out,mink(4,mu)))
 ```
 
-== Rust Pattern Construction Guidelines
+=== Rust pattern construction guidelines
 
 Use concrete spenso builders for tensor slots where available and Symbolica wildcards only for the abstract labels. This keeps representation constraints attached to the pattern.
 
@@ -604,7 +597,7 @@ Implementation rules:
 - Add `MatchSettings { rhs_cache_size: 0, ..Default::default() }` for replacement maps whose right side depends on match-local fresh symbols.
 - Keep `chain` and `trace` non-symmetric. Their argument order is algebraically meaningful.
 
-== Gamma Collection Patterns
+=== Gamma collection patterns
 
 Mathematical identity: #ref(anchor("eq-gamma-chain-product")). Source: #source(dirac-rs + "#L604-L613").
 
@@ -644,7 +637,7 @@ chain(bis(d_,a_),bis(d_,b_),xs___)
 
 `reverse_flip` is not a plain Symbolica replacement. Build it in Rust by reading the matched `ys___` argument list, reversing the entries, and swapping `in` and `out` in each tensor factor.
 
-== Gamma Terminal and Trace Patterns
+=== Gamma terminal and trace patterns
 
 Mathematical identity: #ref(anchor("eq-gamma-trace-closure")).
 
@@ -673,7 +666,7 @@ chain(bis(d_,a_),bis(d_,b_),
 
 GammaLoop/idenso currently has the equivalent repeated-object contraction in Rust at #source(dirac-rs + "#L784-L829") and trace closure at #source(dirac-rs + "#L877-L879"). FORM's corresponding short-circuit in `Trace4Gen` removes adjacent equal objects before deeper recursion; source #source(opera + "#L958-L972").
 
-== Gamma Chisholm and Trace Recursion Builders
+=== Gamma Chisholm and trace recursion builders
 
 Mathematical identities: #ref(anchor("eq-gamma-chisholm-odd")), #ref(anchor("eq-gamma-chisholm-even")), and #ref(anchor("eq-gamma-even-trace")). Source: #source(opera + "#L670-L680"), #source(opera + "#L978-L1012"), #source(opera + "#L1021-L1096"), #source(opera + "#L1118-L1157").
 
@@ -715,7 +708,7 @@ trace(bis(4),first_,rest___)
 
 Builder rule: if the trace length is odd, return zero. If the length is two, return `4 * g(first, second)`. Otherwise sum over all pairings of `first_` with one later gamma, alternating signs and recursively rebuilding `trace(bis(4), ...)`. This mirrors the source branch that uses zero/two-gamma terminals and then recursive generation; see #source(opera + "#L424-L432") and #source(opera + "#L830-L856").
 
-== Color Collection Patterns
+=== Color collection patterns
 
 Mathematical identity: #ref(anchor("eq-color-line-join")).
 
@@ -744,7 +737,7 @@ chain(cof(nc_,i_),dind(cof(nc_,j_)),xs___)
 
 The first two rules correspond to `color.h` line joining and trace closure at package lines 91--93. GammaLoop/idenso's current direct color simplifier starts from raw `spenso::t` and `spenso::f` patterns; source #source(color-rs + "#L360-L414").
 
-== Color Trace and Casimir Patterns
+=== Color trace and Casimir patterns
 
 Mathematical identity: #ref(anchor("eq-color-trace-closure")) and #ref(anchor("eq-color-trace-two")).
 
@@ -787,7 +780,7 @@ trace(cof(nc_),
 
 Source: `color.h` selected-trace terminal rules at lines 459--464 and easy contraction rules at lines 108--111 and 173--175.
 
-== Color Structure-Constant and Invariant Patterns
+=== Color structure-constant and invariant patterns
 
 Structure-constant contractions:
 ```rs
@@ -820,7 +813,7 @@ d(sym_x_,coad(na_,a_),coad(na_,b_),coad(na_,c_))
 
 `f` must be registered or canonicalized as antisymmetric. Symbolica's documentation warns that antisymmetric functions canonicalize written patterns; implementers should either use canonical argument order in the pattern or absorb the sign in a pre-canonicalization pass. Source for small `f` loop reductions: `color.h` lines 148--150, 208--210, 505--507, and 537--541. Source for `d33` and higher invariant contractions: `color.h` lines 1287--1348.
 
-== FORM Short-Circuit Rewrite Order
+=== FORM short-circuit rewrite order
 
 These are the high-priority short-circuit patterns FORM uses before falling back to expensive generic recursion.
 
@@ -846,11 +839,11 @@ Color `color.h` short-circuit order:
 
 Rust implementation note: implement the short-circuit order as ordered passes, not as one unordered `replace_multiple` containing every rule. FORM's performance relies on reducing the expression before the broader searches are attempted.
 
-= FORM-Side Test Cases in Symbolica/spenso Syntax
+== FORM-side test cases in Symbolica/Spenso syntax
 
 This section translates the compact FORM-side rule tests and the package example cases into the `chain`/`trace` notation used above. Expected values are written in the same symbolic convention: `TR` for `I2R`, `CA` for `cA`, `CF` for `cR`, and `NA` for adjoint dimension. The local validation used FORM 4.3.1 for the explicitly listed compact values.
 
-== Gamma Trace Tests
+=== Gamma trace tests
 
 Source basis: FORM manual gamma algebra and `trace4` implementation; see #source(form-manual), #source(opera + "#L424-L432"), and #source(opera + "#L867-L875").
 
@@ -939,7 +932,7 @@ trace(bis(4),gamma5(in,out),gamma(in,out,mink(4,m1)),...,gamma(in,out,mink(4,m12
 ```
 These are term-count regression tests from the manual, not compact algebraic values.
 
-== Compact Color Rule Tests
+=== Compact color-rule tests
 
 Source basis: `color.h` line joining, selected trace terminals, and small `f` loops; see #source(color-src), especially lines 91--93, 459--464, and 505--507.
 
@@ -996,7 +989,7 @@ trace(cof(Nc),
        * f(coad(NA,b),coad(NA,c),coad(NA,x))
 ```
 
-== FORM `color.tar.gz` Example Families
+=== FORM `color.tar.gz` example families
 
 The color package page links `color.tar.gz` as "some FORM programs that use color.h"; see #source(color-doc) and #source(color-examples). The example programs define source-side graph families. The following schematics preserve their topology in Symbolica/spenso notation.
 
@@ -1091,7 +1084,7 @@ G6 -> 0
 
 The SU checker procedure uses $T_R = a$, $C_F = a (N_F^2 - 1) / N_F$, $C_A = 2 a N_F$, and $N_A = N_F^2 - 1$; source `SUn.prc` lines 26--58.
 
-= Implementation Caveats
+== Implementation caveats
 
 - FORM's four-dimensional gamma simplifications depend on index dimension checks in `Trace4Gen`; applying them in dimension-generic algebra is wrong.
 - `trace4` accepts gamma-five branches with special sign changes and gamma-six/gamma-seven toggles; `tracen` is dimension-generic and does not tolerate gamma-five variants.
@@ -1100,11 +1093,11 @@ The SU checker procedure uses $T_R = a$, $C_F = a (N_F^2 - 1) / N_F$, $C_A = 2 a
 - Symbolica matching is syntactic. Sequence reversal, parity tests, fresh dummy generation, and antisymmetric signs require Rust-side construction or explicit pattern restrictions.
 - The approved `chain` and `trace` syntax in this document is a target specification for tensor-pattern rules, not a claim that Symbolica ships built-in functions with those names.
 
-= Appendix: Source Map
+== Appendix: source map
 
 #table(
   columns: (2.4cm, 4.2cm, 3.8cm, 4.4cm),
-  [Rule], [Identity], [Equation label], [Primary source],
+  table.header([Rule], [Identity], [Equation label], [Primary source]),
   [G1],
   [$γ(v)_α^β γ(w)_β^χ = (Γ^(v w))_α^χ$],
   [#ref(anchor("eq-gamma-chain-join"))],
@@ -1194,9 +1187,9 @@ The SU checker procedure uses $T_R = a$, $C_F = a (N_F^2 - 1) / N_F$, $C_A = 2 a
 
 Source snippets appear next to each detailed rule above. Symbolica/spenso pattern references are the code blocks in the corresponding detailed rule and in the Symbolica + spenso rewrite-pattern section.
 
-= Appendix: Validation
+== Appendix: validation
 
-== Typst compile result
+=== Typst compile result
 
 The pre-migration standalone source recorded this successful environment:
 ```text
@@ -1215,7 +1208,7 @@ through the Idenso product route and complete PDF with:
 cargo run --locked -p alphal00p-docs-builder -- build --product idenso --channel latest --output /tmp/idenso-docs --skip-rustdoc
 ```
 
-== Static checks
+=== Static checks
 
 Checks captured against the pre-migration Typst filename:
 ```sh
@@ -1258,12 +1251,12 @@ cd /tmp/form-color && form -q su-qloop.frm
 cd /tmp/form-color && form -q su-gloop.frm
 ```
 
-== Unresolved uncertainties
+=== Unresolved uncertainties
 
 - The current official FORM GitHub repository contains `sources/opera.c` but not the legacy `color.h` package file. The package page links the actual source. Therefore color rules cite exact package-source line numbers and the package source URL, but they do not have official GitHub line anchors.
 - The approved `chain` and `trace` notation is a specification-level Symbolica/spenso tensor-pattern notation. Exact Rust constructors for sequence reversal and parity-filtered Chisholm replacement must be implemented with Rust-side match processing.
 
-= References
+== References
 
 - FORM manual gamma algebra: #source(form-manual).
 - FORM `opera.c`: #source(opera).

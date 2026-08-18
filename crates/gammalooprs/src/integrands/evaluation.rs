@@ -383,13 +383,21 @@ pub struct PreciseSampleEvaluationResult {
 
 #[derive(Clone, Serialize, Debug)]
 pub struct SingleSampleEvaluationResult {
+    /// Evaluation record for the requested f64 sample.
     pub sample: SampleEvaluationResult,
+    /// Persistent runtime-observable snapshot after processing the requested sample.
+    ///
+    /// The snapshot can include samples accumulated by earlier API calls.
     pub observables: ObservableSnapshotBundle,
 }
 
 #[derive(Clone, Serialize, Debug)]
 pub struct BatchSampleEvaluationResult {
+    /// Evaluation records in the same order as the requested f64 samples.
     pub samples: Vec<SampleEvaluationResult>,
+    /// Persistent runtime-observable snapshot after processing the requested batch.
+    ///
+    /// The snapshot can include samples accumulated by earlier API calls.
     pub observables: ObservableSnapshotBundle,
 }
 
@@ -401,13 +409,17 @@ pub struct RawBatchEvaluationResult {
 
 #[derive(Clone, Debug)]
 pub struct PreciseSingleSampleEvaluationResult {
+    /// Evaluation record retaining the numerical precision selected for the sample.
     pub sample: PreciseSampleEvaluationResult,
+    /// Observable snapshot produced from the same Monte Carlo sample.
     pub observables: ObservableSnapshotBundle,
 }
 
 #[derive(Clone, Debug)]
 pub struct PreciseBatchSampleEvaluationResult {
+    /// Precision-preserving evaluation records in requested sample order.
     pub samples: Vec<PreciseSampleEvaluationResult>,
+    /// Observable snapshot accumulated across the complete sample batch.
     pub observables: ObservableSnapshotBundle,
 }
 

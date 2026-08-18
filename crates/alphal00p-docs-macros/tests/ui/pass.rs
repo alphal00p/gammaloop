@@ -18,6 +18,8 @@ pub struct Pair {
     pub left: u32,
     /// Right value.
     pub right: u32,
+    private: u32,
+    pub(crate) crate_visible: u32,
 }
 
 #[ty]
@@ -42,7 +44,9 @@ pub trait Named {
     /// Returns this object's #emph[name].
     fn name(&self) -> Result<String, Self::Error>;
     /// Returns the default #emph[name].
-    fn default_name() -> String;
+    fn default_name() -> String {
+        "fallback".to_owned()
+    }
 }
 
 pub struct Counter(u32);
@@ -165,6 +169,13 @@ fn main() {
     );
 
     let pair = __alphal00p_docs_ty_Pair();
+    assert_eq!(
+        pair.members
+            .iter()
+            .map(|member| member.name.as_str())
+            .collect::<Vec<_>>(),
+        vec!["left", "right"]
+    );
     assert_eq!(pair.members[0].kind, DocMemberKind::Field);
     assert_eq!(
         pair.members[0].docs.as_ref().unwrap().format,
@@ -195,6 +206,16 @@ fn main() {
     assert_eq!(named.members[1].kind, DocMemberKind::AssociatedType);
     assert_eq!(named.members[2].kind, DocMemberKind::Method);
     assert_eq!(named.members[3].kind, DocMemberKind::AssociatedFunction);
+    assert!(
+        named.members[2]
+            .signature
+            .as_deref()
+            .unwrap()
+            .ends_with(';')
+    );
+    let default_signature = named.members[3].signature.as_deref().unwrap();
+    assert!(default_signature.ends_with("{ … }"));
+    assert!(!default_signature.contains("fallback"));
     assert!(
         named
             .members

@@ -1,12 +1,18 @@
-#import "../../shared.typ": callout, source-link
+#import "../../shared.typ": release-note
 
 #let changelog = [
-= Releases and change history
+= Version history
 
-The #source-link("crates/linnet/CHANGELOG.typ", label: "Linnet changelog") records changes to the
-Rust crate. The #link("manual/clinnet-releases/")[rendered Clinnet release history] covers the
-independently versioned command-line renderer. The standalone `linnet-py` distribution also has
-its own version, but does not currently have a separate changelog in this repository.
+#release-note([
+  Linnet and Clinnet have canonical histories. The independently versioned `linnet-py`
+  distribution does not yet have a separate changelog in this repository.
+])
+
+== Available histories
+
+- #link("version-history/linnet/")[Linnet Rust library versions]
+- #link("version-history/clinnet/")[Clinnet command-line renderer versions]
+- `linnet-py`: no standalone history yet
 
 The changelog records user-visible graph, parser, drawing, and algorithm changes. In particular,
 users moving across releases should check index ordering, DOT serialization, subgraph behavior,
@@ -19,8 +25,13 @@ The `latest` channel may describe unreleased behavior. Documentation under `snap
 fixed to a tagged repository revision. Choose a snapshot whose component information lists your
 Rust crate version, and check the `linnet-py` version separately when using the Python bindings.
 
-#callout("Before upgrading", [
-  Review changes to index ordering, DOT serialization, subgraph behavior, and enabled features.
-  Re-validate serialized graphs and any code that depends on traversal or iteration order.
-])
+== Upgrade checklist
+
+Review changes to index ordering, DOT serialization, subgraph behavior, and enabled features.
+Re-validate serialized graphs and any code that depends on traversal or iteration order.
+
+== Reproducibility record
+
+Record the repository revision, `linnet` and `linnet-py` versions, enabled features, and the input
+graph format. These distinguish a library change from a parser, serializer, or binding change.
 ]

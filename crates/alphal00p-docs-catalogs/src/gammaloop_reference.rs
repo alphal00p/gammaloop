@@ -1,6 +1,6 @@
 //! GammaLoop CLI and settings metadata exported from the compiled application types.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use clap::{Arg, ArgAction, Command, CommandFactory};
 use eyre::{Result, bail, ensure};
@@ -366,11 +366,12 @@ fn collect_settings(
     for (name, child) in properties {
         let path = format!("{prefix}.{name}");
         let child_default = defaults.and_then(|value| value.get(name));
-        if object_schema(root, child)
-            .and_then(|value| value.get("properties"))
-            .and_then(Value::as_object)
-            .is_some_and(|properties| !properties.is_empty())
-        {
+        if object_schema(root, child).is_some_and(|value| {
+            value
+                .get("properties")
+                .and_then(Value::as_object)
+                .is_some_and(|properties| !properties.is_empty())
+        }) {
             collect_settings(&path, root, child, child_default, output, depth + 1);
         } else {
             output.push(setting_reference(
@@ -380,6 +381,16 @@ fn collect_settings(
                 child_default,
                 required.contains(name.as_str()),
             ));
+            if let Some(items) = array_items_schema(root, child)
+                && object_schema(root, items).is_some_and(|value| {
+                    value
+                        .get("properties")
+                        .and_then(Value::as_object)
+                        .is_some_and(|properties| !properties.is_empty())
+                })
+            {
+                collect_settings(&format!("{path}[]"), root, items, None, output, depth + 1);
+            }
         }
     }
 }
@@ -404,6 +415,9 @@ fn setting_reference(
             "Selects the integrated-counterterm radial domain: `infinite` with damping or `compact`."
                 .to_owned()
         }
+        (description, "runtime.stability.rotation_axis[].type") if description.is_empty() => {
+            "Selects a Cartesian quarter-turn, no rotation, or explicit Euler angles.".to_owned()
+        }
         (description, _) => description,
     };
     SettingReference {
@@ -418,19 +432,107 @@ fn setting_reference(
     }
 }
 
-fn object_schema<'a>(root: &'a Value, node: &'a Value) -> Option<&'a Value> {
+fn object_schema(root: &Value, node: &Value) -> Option<Value> {
     let node = resolved_schema(root, node);
-    if node.get("properties").and_then(Value::as_object).is_some() {
-        return Some(node);
+    let mut components = Vec::new();
+    if let Some(properties) = node.get("properties").and_then(Value::as_object) {
+        let mut object = serde_json::Map::new();
+        object.insert("properties".to_owned(), Value::Object(properties.clone()));
+        if let Some(required) = node.get("required").and_then(Value::as_array) {
+            object.insert("required".to_owned(), Value::Array(required.clone()));
+        }
+        components.push(Value::Object(object));
     }
-    for key in ["allOf", "anyOf", "oneOf"] {
-        if let Some(values) = node.get(key).and_then(Value::as_array)
-            && let Some(object) = values.iter().find_map(|value| object_schema(root, value))
-        {
-            return Some(object);
+
+    if let Some(values) = node.get("allOf").and_then(Value::as_array) {
+        components.extend(values.iter().filter_map(|value| object_schema(root, value)));
+    }
+    for key in ["anyOf", "oneOf"] {
+        let Some(values) = node.get(key).and_then(Value::as_array) else {
+            continue;
+        };
+        let alternatives = values
+            .iter()
+            .map(|value| {
+                object_schema(root, value).unwrap_or_else(|| {
+                    serde_json::json!({
+                        "properties": {},
+                        "required": [],
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
+        let has_object = alternatives.iter().any(|value| {
+            value
+                .get("properties")
+                .and_then(Value::as_object)
+                .is_some_and(|properties| !properties.is_empty())
+        });
+        if has_object && let Some(object) = merge_object_schemas(alternatives, false) {
+            components.push(object);
         }
     }
-    None
+    merge_object_schemas(components, true)
+}
+
+fn merge_object_schemas(objects: Vec<Value>, require_every_component: bool) -> Option<Value> {
+    let mut properties = BTreeMap::<String, Value>::new();
+    let mut required = None::<BTreeSet<String>>;
+    for object in objects {
+        let object_required = object
+            .get("required")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .map(str::to_owned)
+            .collect::<BTreeSet<_>>();
+        required = Some(match required {
+            None => object_required,
+            Some(mut required) if require_every_component => {
+                required.extend(object_required);
+                required
+            }
+            Some(mut required) => {
+                required.retain(|name| object_required.contains(name));
+                required
+            }
+        });
+        for (name, schema) in object
+            .get("properties")
+            .and_then(Value::as_object)
+            .into_iter()
+            .flatten()
+        {
+            match properties.entry(name.clone()) {
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(schema.clone());
+                }
+                std::collections::btree_map::Entry::Occupied(mut entry)
+                    if entry.get() != schema =>
+                {
+                    let previous = std::mem::take(entry.get_mut());
+                    entry.insert(serde_json::json!({ "anyOf": [previous, schema] }));
+                }
+                std::collections::btree_map::Entry::Occupied(_) => {}
+            }
+        }
+    }
+    if properties.is_empty() {
+        return None;
+    }
+    let mut object = serde_json::Map::new();
+    object.insert(
+        "properties".to_owned(),
+        Value::Object(properties.into_iter().collect()),
+    );
+    if let Some(required) = required.filter(|required| !required.is_empty()) {
+        object.insert(
+            "required".to_owned(),
+            Value::Array(required.into_iter().map(Value::String).collect()),
+        );
+    }
+    Some(Value::Object(object))
 }
 
 fn resolved_schema<'a>(root: &'a Value, node: &'a Value) -> &'a Value {
@@ -444,21 +546,65 @@ fn resolved_schema<'a>(root: &'a Value, node: &'a Value) -> &'a Value {
 }
 
 fn schema_description(root: &Value, node: &Value) -> String {
-    node.get("description")
+    let description = node
+        .get("description")
         .and_then(Value::as_str)
-        .or_else(|| {
-            resolved_schema(root, node)
-                .get("description")
-                .and_then(Value::as_str)
-        })
-        .unwrap_or_default()
-        .to_owned()
+        .filter(|description| !description.trim().is_empty());
+    if let Some(description) = description {
+        return description.to_owned();
+    }
+    let node = resolved_schema(root, node);
+    if let Some(description) = node
+        .get("description")
+        .and_then(Value::as_str)
+        .filter(|description| !description.trim().is_empty())
+    {
+        return description.to_owned();
+    }
+    for key in ["allOf", "anyOf", "oneOf"] {
+        if let Some(description) = node
+            .get(key)
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .map(|value| schema_description(root, value))
+            .find(|description| !description.is_empty())
+        {
+            return description;
+        }
+    }
+    String::new()
 }
 
 fn schema_type(root: &Value, node: &Value) -> String {
+    let reference_name = node
+        .get("$ref")
+        .and_then(Value::as_str)
+        .and_then(|reference| reference.rsplit('/').next());
     let node = resolved_schema(root, node);
+    if let Some(reference_name) = reference_name
+        && (node.get("enum").is_some() || node.get("properties").is_some())
+    {
+        return reference_name.to_owned();
+    }
     if let Some(value) = node.get("type") {
         return match value {
+            Value::String(value) if value == "array" => {
+                if let Some(items) = node.get("prefixItems").and_then(Value::as_array) {
+                    return format!(
+                        "tuple<{}>",
+                        items
+                            .iter()
+                            .map(|item| schema_type(root, item))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    );
+                }
+                node.get("items").map_or_else(
+                    || "array".to_owned(),
+                    |items| format!("array<{}>", schema_type(root, items)),
+                )
+            }
             Value::String(value) => value.clone(),
             Value::Array(values) => values
                 .iter()
@@ -496,6 +642,17 @@ fn schema_values(root: &Value, node: &Value) -> Vec<String> {
     if let Some(value) = node.get("const") {
         values.insert(json_label(value));
     }
+    if let Some(items) = node.get("prefixItems").and_then(Value::as_array) {
+        for (index, item) in items.iter().enumerate() {
+            values.extend(
+                schema_values(root, item)
+                    .into_iter()
+                    .map(|value| format!("item {}: {value}", index + 1)),
+            );
+        }
+    } else if let Some(items) = node.get("items") {
+        values.extend(schema_values(root, items));
+    }
     for key in ["anyOf", "oneOf", "allOf"] {
         if let Some(items) = node.get(key).and_then(Value::as_array) {
             for item in items {
@@ -504,6 +661,19 @@ fn schema_values(root: &Value, node: &Value) -> Vec<String> {
         }
     }
     values.into_iter().collect()
+}
+
+fn array_items_schema<'a>(root: &'a Value, node: &'a Value) -> Option<&'a Value> {
+    let node = resolved_schema(root, node);
+    node.get("items").or_else(|| {
+        ["anyOf", "oneOf", "allOf"].into_iter().find_map(|key| {
+            node.get(key)
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .find_map(|candidate| array_items_schema(root, candidate))
+        })
+    })
 }
 
 fn json_label(value: &Value) -> String {
@@ -525,6 +695,7 @@ fn ensure_unique<'a>(values: impl Iterator<Item = &'a str>, kind: &str) -> Resul
 mod tests {
     use alphal00p_docs_schema::generated::{
         CliAliasKind, CliArgument, CliArgumentAction, CliCommand, GammaLoopReference,
+        SettingReference,
     };
     use clap::{CommandFactory, error::ErrorKind};
     use gammaloop_api::OneShot;
@@ -549,6 +720,14 @@ mod tests {
             .iter()
             .find(|argument| argument.id == id)
             .unwrap_or_else(|| panic!("missing exported argument {command_path}:{id}"))
+    }
+
+    fn setting<'a>(reference: &'a GammaLoopReference, path: &str) -> &'a SettingReference {
+        reference
+            .settings
+            .iter()
+            .find(|setting| setting.path == path)
+            .unwrap_or_else(|| panic!("missing exported setting {path}"))
     }
 
     fn assert_parses(arguments: &[&str]) {
@@ -577,6 +756,80 @@ mod tests {
                 .settings
                 .iter()
                 .any(|setting| setting.default.is_some())
+        );
+
+        let execution_mode = reference
+            .settings
+            .iter()
+            .find(|setting| setting.path == "cli.global.generation.evaluator.spenso_execution_mode")
+            .expect("Spenso execution setting is exported");
+        assert_eq!(
+            execution_mode.value_type,
+            "tuple<ExecutionMode, ContractionMode>"
+        );
+        assert_eq!(
+            execution_mode.default.as_ref(),
+            Some(&serde_json::json!(["Sequential", "MinResultRank"]))
+        );
+        assert!(
+            execution_mode
+                .possible_values
+                .iter()
+                .any(|value| value == "item 1: Parallel")
+        );
+        assert!(
+            execution_mode
+                .possible_values
+                .iter()
+                .any(|value| value == "item 2: MinResultRank")
+        );
+
+        let stability_precision = reference
+            .settings
+            .iter()
+            .find(|setting| setting.path == "runtime.stability.levels[].precision")
+            .expect("array item settings are exported");
+        assert_eq!(stability_precision.value_type, "Precision");
+        assert!(
+            stability_precision
+                .possible_values
+                .iter()
+                .any(|value| value == "Arb")
+        );
+
+        let rotation_type = setting(&reference, "runtime.stability.rotation_axis[].type");
+        assert_eq!(
+            rotation_type.possible_values,
+            ["euler_angles", "none", "x", "y", "z"]
+        );
+        assert!(rotation_type.required);
+        for (angle, description) in [
+            ("alpha", "First Euler angle, in radians."),
+            ("beta", "Second Euler angle, in radians."),
+            ("gamma", "Third Euler angle, in radians."),
+        ] {
+            let angle = setting(
+                &reference,
+                &format!("runtime.stability.rotation_axis[].{angle}"),
+            );
+            assert_eq!(angle.value_type, "number");
+            assert_eq!(angle.description, description);
+            assert!(!angle.required);
+        }
+
+        let range_type = setting(
+            &reference,
+            "runtime.subtraction.integrated_ct_settings.range.type",
+        );
+        assert_eq!(range_type.possible_values, ["compact", "infinite"]);
+        assert!(range_type.required);
+        let damping_function = setting(
+            &reference,
+            "runtime.subtraction.integrated_ct_settings.range.h_function_settings.function",
+        );
+        assert_eq!(
+            damping_function.description,
+            "Functional form of the counterterm damping profile."
         );
     }
 

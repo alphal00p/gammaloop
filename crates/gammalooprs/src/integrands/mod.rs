@@ -71,10 +71,13 @@ impl Default for IntegrandSettings {
 
 #[enum_dispatch]
 pub trait HasIntegrand {
+    /// Constructs the continuous or discrete integration grid required by this integrand.
     fn create_grid(&self) -> Grid<F<f64>>;
 
+    /// Returns the integrand name used in state inspection, logs, and status output.
     fn name(&self) -> String;
 
+    /// Evaluates one weighted grid sample against the supplied model and numerical controls.
     fn evaluate_sample(
         &mut self,
         sample: &Sample<F<f64>>,
@@ -85,25 +88,33 @@ pub trait HasIntegrand {
         max_eval: Complex<F<f64>>,
     ) -> Result<EvaluationResult>;
 
+    /// Returns the number of continuous sampling dimensions used by the integrand.
     fn get_n_dim(&self) -> usize;
 
+    /// Returns integrator settings specialized for this integrand, or the defaults.
     fn get_integrator_settings(&self) -> IntegratorSettings {
         IntegratorSettings::default()
     }
 
+    /// Merges iteration-local result state from another worker integrand.
     // In case your integrand supports observable, then overload this function to combine the observables
     fn merge_results<I: HasIntegrand>(&mut self, _other: &mut I, _iter: usize) {}
 
+    /// Finalizes or writes iteration-local result state after an integration iteration.
     // In case your integrand supports observable, then overload this function to write the observables to file
     fn update_results(&mut self, _iter: usize) {}
 }
 
 #[derive(Clone)]
 pub enum Integrand {
+    /// Built-in diagnostic integrand over a unit hypersurface.
     UnitSurface(UnitSurfaceIntegrand),
+    /// Built-in diagnostic integrand over a unit integration volume.
     UnitVolume(UnitVolumeIntegrand),
+    /// One-dimensional diagnostic integrand for the configured H-function profile.
     HFunctionTest(HFunctionTestIntegrand),
     // ProcessIntegrandImpl(ProcessIntegrandImpl),
+    /// Generated amplitude or cross-section process integrand.
     ProcessIntegrand(Box<ProcessIntegrand>),
 }
 

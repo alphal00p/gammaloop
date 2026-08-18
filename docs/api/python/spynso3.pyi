@@ -1593,7 +1593,8 @@ class TensorNetwork:
         n_steps : int, optional
             Maximum number of execution steps (None for complete execution)
         mode : ExecutionMode, optional
-            Execution strategy (ExecutionMode.All, ExecutionMode.Scalar, or ExecutionMode.Single)
+            Execution strategy. ExecutionMode.Single selects one smallest-degree rewrite per
+            step; use n_steps to bound how many steps run.
 
         Examples
         --------
@@ -1845,7 +1846,7 @@ class TensorStructure:
         list of int
             Multi-dimensional index coordinates
         """
-    def __call__(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression | int | str | float | builtins.complex] = []) -> Expression:
+    def __call__(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression | int | str | float | builtins.complex] | None = None) -> Expression:
         r"""
         Convenience method for creating symbolic expressions.
 
@@ -1869,7 +1870,7 @@ class TensorStructure:
         >>> structure = TensorStructure(rep, rep, name="T")
         >>> expr = structure('mu', 'nu')
         """
-    def symbolic(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression | int | str | float | builtins.complex] = []) -> Expression:
+    def symbolic(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression | int | str | float | builtins.complex] | None = None) -> Expression:
         r"""
         Create a symbolic expression representing this tensor structure.
 
@@ -1901,7 +1902,7 @@ class TensorStructure:
         >>> expr = structure.symbolic(x, ';', 'mu', 'nu')
         >>> expr = structure.symbolic('mu', 'nu', extra_args=[x])
         """
-    def index(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression] = [], cook_indices: builtins.bool = False) -> TensorIndices:
+    def index(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression] | None = None, cook_indices: builtins.bool = False) -> TensorIndices:
         r"""
         Create an indexed tensor (TensorIndices) from this structure.
 
@@ -1943,7 +1944,7 @@ class ExecutionMode(enum.Enum):
 
     Variants
     --------
-    Single : Execute one contraction at a time, useful for debugging
+    Single : Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains
     Scalar : Only contract scalar operations, leaving tensor structure intact
     All : Execute all possible contractions for complete evaluation
     """

@@ -138,6 +138,19 @@
           || file.name == "LICENSE"
         ) workspaceRoot;
 
+        documentationDeveloperScopePaths = lib.unique (
+          map (scope: scope.path) (
+            lib.concatMap (section: lib.concatMap (note: note.scope or [ ]) (section.note or [ ])) (
+              (builtins.fromTOML (builtins.readFile ./docs/developers.toml)).section or [ ]
+            )
+          )
+        );
+        # Developer notes verify these source digests during the hermetic site
+        # build, including scopes such as flake.nix that are not Cargo or prose.
+        documentationDeveloperScopeSources = map (
+          path: workspaceRoot + "/${path}"
+        ) documentationDeveloperScopePaths;
+
         cargoVendorDir = craneLib.vendorCargoDeps {
           cargoLock = ./Cargo.lock;
           overrideVendorGitCheckout =
@@ -177,33 +190,37 @@
 
         documentationSrc = lib.fileset.toSource {
           root = workspaceRoot;
-          fileset = lib.fileset.unions [
-            cargoSources
-            nonCargoBuildSources
-            repositoryDocumentationSources
-            ./docs
-            ./scripts/check-docs-html.py
-            ./scripts/render-docs-svg-assets.sh
-            ./scripts/update-docs-pages.sh
-            ./examples/cli/aa_aa/2L/graphs/GL00.dot
-            ./examples/cli/aa_aa/2L/graphs/GL08.dot
-            ./examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL000.dot
-            ./examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL150.dot
-            ./examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL300.dot
-            ./examples/cli/aa_aa/3L/aa_aa_generation_timings.csv
-            ./examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_unfiltered_pre_network.sym
-            ./examples/cli/BNL/profiling/bnl_scalar_alias_captures.ansi.txt
-            ./examples/cli/gg_hhh/3L/3L_graph.dot
-            ./tests/resources/graphs/gghhh.dot
-            ./tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot
-            ./tests/resources/graphs/uv_tests/ad_ad_1L_gluon.dot
-            ./tests/resources/graphs/uv_tests/epem_a_bbx.dot
-            ./tests/resources/graphs/epemttbar.dot
-            ./pyproject.toml
-            ./crates/linnet-py/pyproject.toml
-            ./crates/linnet-py/linnet_py.pyi
-            ./crates/linnet-py/tests/test_basic.py
-          ];
+          fileset = lib.fileset.unions (
+            documentationDeveloperScopeSources
+            ++ [
+              cargoSources
+              nonCargoBuildSources
+              repositoryDocumentationSources
+              ./docs
+              ./scripts/check-docs-html.py
+              ./scripts/render-docs-svg-assets.sh
+              ./scripts/update-docs-pages.sh
+              ./examples/api/python
+              ./examples/cli/aa_aa/2L/graphs/GL00.dot
+              ./examples/cli/aa_aa/2L/graphs/GL08.dot
+              ./examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL000.dot
+              ./examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL150.dot
+              ./examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL300.dot
+              ./examples/cli/aa_aa/3L/aa_aa_generation_timings.csv
+              ./examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_unfiltered_pre_network.sym
+              ./examples/cli/BNL/profiling/bnl_scalar_alias_captures.ansi.txt
+              ./examples/cli/gg_hhh/3L/3L_graph.dot
+              ./tests/resources/graphs/gghhh.dot
+              ./tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot
+              ./tests/resources/graphs/uv_tests/ad_ad_1L_gluon.dot
+              ./tests/resources/graphs/uv_tests/epem_a_bbx.dot
+              ./tests/resources/graphs/epemttbar.dot
+              ./pyproject.toml
+              ./crates/linnet-py/pyproject.toml
+              ./crates/linnet-py/linnet_py.pyi
+              ./crates/linnet-py/tests/test_basic.py
+            ]
+          );
         };
 
         snapshotSources = lib.fileset.unions [
@@ -3120,6 +3137,9 @@
           test "$(grep -o '<body' "$plan_page" | wc -l)" -eq 1
           grep -Fq '"title": "Executive assessment"' "${output}/developers/search-index.json"
           grep -Fq '"href": "architecture/documentation-improvement-plan/#executive-assessment"' "${output}/developers/search-index.json"
+          for product in gammaloop linnet spenso idenso vakint; do
+            test -s "${output}/developers/architecture/$product-architecture/index.html"
+          done
           test -s "${output}/developers/architecture/spenso-parsing-flow/index.html"
           test ! -e "${output}/developers/architecture/spenso-parsing-flow/diagram.html"
         '';
@@ -3217,8 +3237,14 @@
                 test -s "$product_root/latest/search-index.json"
                 test -s "$product_root/latest/snapshot.json"
                 test -s "$product_root/latest/tutorial/index.html"
+                test -s "$product_root/latest/reference/interfaces/index.html"
+                test -s "$product_root/latest/version-history/index.html"
                 test -s "$product_root/latest/manual/interfaces/index.html"
                 test -s "$product_root/latest/manual/releases/index.html"
+                grep -Fq 'url=../../reference/interfaces/' \
+                  "$product_root/latest/manual/interfaces/index.html"
+                grep -Fq 'url=../../version-history/' \
+                  "$product_root/latest/manual/releases/index.html"
                 test -s "$product_root/latest/assets/site.css"
                 test -s "$product_root/latest/assets/site.js"
                 test -s "$product_root/latest/assets/local-unitarity-light.svg"

@@ -7,33 +7,36 @@
 
 #set document(title: "Linnest Typst API")
 #set page(margin: 22mm)
-#set text(size: 10pt, font: "Atkinson Hyperlegible Next")
+#set text(size: 10pt, font: "Roboto")
 
 #align(center)[
-  #set text(size: 3em, font: "Hanken Grotesk")
+  #set text(size: 3em, font: "Roboto")
   linnest
-  #set text(size: 0.3em, font: "Atkinson Hyperlegible Next")
+  #set text(size: 0.3em, font: "Roboto")
 
   _a typst interface to the `linnet` crate_
 
-  `linnet` is a rust crate that provides a graph data structure and many graph algorithms, and crucially for this package, multiple layout algorithms, as well as a dot parser (using the `dot_parser` crate).
+  `linnet` is a Rust crate that provides a graph data structure, graph algorithms,
+  several layout algorithms, and a DOT parser built on `dot_parser`.
 
 
 
 ]
 
-#outline(depth: 2)
+= Linnest Typst API
+
+#outline(depth: 3)
 #let crown = $star$
 
 #let manual = [
-= Linnet
+== Linnet
 
-The `linnet` crate that this package wraps around, is built around the half-edge graph data structure.
+The `linnet` crate wrapped by this package is built around a half-edge graph data structure.
 This means that instead of a graph being represented as a set of nodes and edges, it is represented as a set of half-edges $H$, and a set of vertices $V$.
 The graph structure is then encoded through two maps.
 The first map, $partial : H --> V$ maps each half-edge to its corresponding vertex.
 The preimage of any vertex $v$ is the set of half-edges that map to it, called the crown of $v$.
-The second map, $iota : H --> H$, is an involution that _glues_ half edges together to form edges.
+The second map, $iota : H --> H$, is an involution that _glues_ half-edges together to form edges.
 If a half-edge is glued to itself, we call that an external half-edge. This means that linnet graphs are strictly more capable than normal edge and vertex graphs.
 
 #let g = build({
@@ -44,21 +47,27 @@ If a half-edge is glued to itself, we call that an external half-edge. This mean
   edge(source(<a>), <in-a2>, label: [e])
 })
 // #edges(g)
-#align(center, draw(layout(g, g-center: 0.005, length-scale: .3)))
+#context if target() == "paged" {
+  figure(draw(layout(g, g-center: 0.005, length-scale: .3)))
+}
 
 
-A side effect of natively supporting half-edges, is that subgraphs can be more granular, as we can encode them as sets of half-edges. This naturally supports vertex induced subgraphs (the union of the crowns of a set of vertices).
+Native half-edges also make subgraphs more granular because they can be encoded
+as sets of half-edges. This directly supports vertex-induced subgraphs: the
+union of the crowns of a set of vertices.
 
 
-= Linnest
+== Linnest
 
-Linnest is the typst plugin + API to integrate with linnet and access some of its capabilities. This means layouting algorithms, and dot parsing (all through wasm, so no dependencies/ external tooling required) along with a selection of graph algorithms (that can be expanded upon as needed).
+Linnest is the Typst and WebAssembly interface to Linnet. It provides layout
+algorithms, DOT parsing, and selected graph algorithms without a separate
+runtime process.
 
-Graphs can be constructed in two ways, parsing from a dot string using `parse`:
+Graphs can be constructed in two ways: parse a DOT string with `parse`:
 ```typ
 #let g = parse("digraph { a -> b }")
 ```
-or building from edges and nodes using `build`, with a fletcher inspired syntax:
+or build from edges and nodes with `build`, using a Fletcher-inspired syntax:
 ```typ
 #let g = build({
   node(<a>, label: [$v$])
@@ -68,9 +77,13 @@ or building from edges and nodes using `build`, with a fletcher inspired syntax:
   edge(source(<a>), <in-a2>, label: [e])
 })```
 
-In either case, ```typst type(g)```=#type(g), because graph values are Typst dictionaries that wrap an archived linnet graph plus native Typst data. Rust owns topology, layout state, statement metadata, and internal opaque payload bytes; user data captured from Typst stays in Typst and is merged back into query records.
+In either case, `type(g)` is `dictionary`: graph values wrap an archived Linnet
+graph together with native Typst data. Rust owns topology, layout state,
+statement metadata, and internal opaque payload bytes. User data captured from
+Typst stays in Typst and is merged back into query records.
 
-The main usecase however is of course to automatically place the nodes and edges on a canvas, using the `layout` function.
+The main use case is to place nodes and edges on a canvas with the `layout`
+function and render the result with `draw`.
 
 
 
@@ -80,7 +93,22 @@ The main usecase however is of course to automatically place the nodes and edges
 - `draw` for rendering a laid-out graph object with CeTZ.
 - `physics` for reusable particle-line edge styles.
 
-== Minimal Build Example
+=== Choose an import path
+
+Linnest and Kurvst are currently bundled source packages, not Typst Universe
+packages. A Clinnet run writes both package trees below `build/templates/`.
+From a custom template in that directory, import Linnest with:
+
+```typ
+#import "crates/linnest/typst/src/lib.typ": draw, graph, layout, subgraph
+```
+
+From this repository's `crates/linnest/typst/examples/` directory, the equivalent
+checkout-relative import is `../src/lib.typ`. Keep the package directory and its
+`linnest.wasm` file together when copying it elsewhere. The examples below use
+the checkout-relative form because they are also compiled as repository tests.
+
+=== Minimal Build Example
 
 ```typ
 #import "../src/lib.typ": draw, graph, layout, subgraph
@@ -110,14 +138,20 @@ The main usecase however is of course to automatically place the nodes and edges
 #let edge-label(edge) = text(fill: rgb("#" + edge.color))[#edge.label]
 #let source-style(edge) = (stroke: rgb("#" + edge.source-color) + 0.5pt)
 #let sink-style(edge) = (stroke: rgb("#" + edge.sink-color) + 0.5pt)
-#draw(
-  g,
-  subgraph: east,
-  edge-label: edge-label,
-  edge-label-style: (anchor: "south"),
-  source-style: source-style,
-  sink-style: sink-style,
-)
+#context if target() == "paged" {
+  draw(
+    g,
+    subgraph: east,
+    edge-label: edge-label,
+    edge-label-style: (anchor: "south"),
+    source-style: source-style,
+    sink-style: sink-style,
+  )
+} else {
+  [The downloadable PDF renders this CeTZ result. The HTML manual keeps the
+  copyable source because Typst's experimental HTML target does not yet emit
+  the drawing content.]
+}
 ```
 
 #import "../src/lib.typ": draw, graph, layout, subgraph
@@ -157,7 +191,7 @@ The main usecase however is of course to automatically place the nodes and edges
   sink-style: sink-style,
 )
 
-== Graph Objects
+=== Graph Objects
 
 Graph objects are Typst dictionaries wrapping archived Rust graph bytes plus
 native Typst data arrays for graph, node, edge, source, and sink data. The Rust
@@ -192,7 +226,7 @@ zero-copy values.
 - `draw(graph, ..)` draws a laid-out graph object with CeTZ.
 - `dot(graph)` returns a DOT string for inspection or export.
 
-== Graph Specs
+=== Graph Specs
 
 The Typst construction API is half-edge first: create node items, create source
 and sink half-edge endpoints, then pass edge items to `graph.build`.
@@ -325,7 +359,7 @@ edge(source(<c>), <outgoing>)
 
 `graph.build` does not interpolate statement strings on the Rust side. Use
 `graph.eval-fields` or `graph.map` when a default statement should turn into
-Typst content or structured data data. The evaluation scope includes the
+Typst content or structured data. The evaluation scope includes the
 record's merged fields, so default edge statements can still refer to local edge
 fields:
 
@@ -349,7 +383,7 @@ fields:
 #let g = graph.eval-fields(g, eval-edge-fields: ("display-label",))
 ```
 
-== Placements
+=== Placements
 
 `graph.pos` creates a first-class placement. The default `mode: "pin"` turns a
 coordinate into a fixed layout constraint and a drawable position. Use
@@ -448,7 +482,7 @@ flipped, and undirected edges suppress the mark.
 #draw(layout(g), source-style: oriented-arrow, sink-style: oriented-arrow)
 ```
 
-== Physics Edge Styles
+=== Physics Edge Styles
 
 `physics.style(..)` returns `source-style`, `sink-style`, and `edge-label`
 callbacks for `draw`. The default source/sink strokes use darker/lighter halves
@@ -598,7 +632,7 @@ fields to the Rust topology spec:
 )
 ```
 
-== Graph Queries
+=== Graph Queries
 
 `graph.info(g)` returns graph metadata. `nodes(g)` returns node records,
 and `edges(g)` returns edge records. Node and edge record `name` values are
@@ -612,7 +646,7 @@ The key is read from half-edge statements or numeric ids and can be
 `graph.cycles(g)` returns subgraph objects for a cycle basis.
 `graph.forests(g)` returns subgraph objects for spanning forests.
 
-== Layout Model
+=== Layout Model
 
 `layout` starts from a traversal-tree placement, then optimizes the positions of
 graph nodes and edge control points. The initial tree spacing is
@@ -718,7 +752,7 @@ at distance $L_l$ from the edge point and only rotates around it under repulsive
 forces. `label-steps`, `label-step`, `label-early-tol`, and
 `label-max-delta-scale` control the label relaxation iteration.
 
-== Subgraphs
+=== Subgraphs
 
 Subgraph objects are opaque zero-copy values.
 
@@ -729,9 +763,9 @@ Subgraph objects are opaque zero-copy values.
 - `subgraph.hedges(sg)` returns included hedge indices.
 - `subgraph.contains(sg, hedge)` tests hedge membership.
 
-== Generated Reference
+=== Generated Reference
 
-#context if target() == "paged" {
+#context {
   let tidy-style = dictionary(tidy.styles.default)
   let show-example-source(code, ..args) = block(code)
   let _ = tidy-style.insert("show-example", show-example-source)
@@ -782,9 +816,6 @@ Subgraph objects are opaque zero-copy values.
     #tidy.show-module(draw-docs, style: tidy-style, sort-functions: none, enable-cross-references: false)
     #tidy.show-module(subgraph-docs, style: tidy-style, sort-functions: none, enable-cross-references: false)
   ]
-} else {
-  [The complete generated module reference remains in the downloadable PDF
-  manual linked at the end of this page.]
 }
 ]
 

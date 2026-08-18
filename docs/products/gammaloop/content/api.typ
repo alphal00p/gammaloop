@@ -35,6 +35,37 @@ as stable integration points. Prefer the state-loading and structured-operation 
 here; start with the #link("reference/rust/")[curated Rust API] and use its Rustdoc links when
 you need lower-level types or trait implementations.
 
+=== Rust reference map
+
+The curated reference now separates the supported workflow from the much larger compiled
+surface. Follow these paths instead of beginning in an arbitrary internal module:
+
+- *Load and command a state:* begin with
+  #link("reference/rust/supported/gammaloop-api/#supported-stateloadoption")[`StateLoadOption`],
+  retain the returned
+  #link("reference/rust/supported/gammaloop-api/#supported-loadedstate")[`LoadedState`], and
+  execute parsed
+  #link("reference/rust/supported/gammaloop-api/#supported-commandhistory")[`CommandHistory`]
+  values through
+  #link("reference/rust/supported/gammaloop-api/#supported-clisession")[`CliSession`].
+- *Replay and inspect:* use
+  #link("reference/rust/supported/gammaloop-api/#supported-runhistory")[`RunHistory`] for run
+  cards and
+  #link("reference/rust/supported/gammaloop-api/#supported-integrandinfo")[`IntegrandInfo`] for
+  structured graph-group, orientation, loop-basis, cut, and threshold metadata.
+- *Evaluate samples:* construct
+  #link("reference/rust/supported/gammaloop-api/#supported-evaluatesamples")[`EvaluateSamples`]
+  for the ordinary `f64` boundary. Use
+  #link("reference/rust/supported/gammaloop-api/#supported-evaluatesamplesprecise")[`EvaluateSamplesPrecise`]
+  only when the caller must retain the active `f64`, `f128`, or arbitrary-precision result type.
+- *Work below the facade:* the `gammalooprs` catalog documents the
+  #link("reference/rust/supported/gammalooprs/#supported-hasintegrand")[integrand contract],
+  #link("reference/rust/supported/gammalooprs/#supported-runtimesettings")[runtime settings],
+  precision-specific result records, and the mergeable
+  #link("reference/rust/supported/gammalooprs/#supported-histogramsnapshot")[histogram snapshot]
+  boundary. Treat the exhaustive Rustdoc beyond this catalog as implementation-facing unless a
+  manual names the type explicitly.
+
 == Python packaging
 
 #boundary("A standalone GammaLoop distribution", [
@@ -62,6 +93,50 @@ gl.run("display settings global")
 
 The Python package requires Python 3.11 or newer. Run `just build-api` when building the bindings
 from a source checkout.
+
+=== Python reference map
+
+The generated module reference covers every registered public export, but the objects form a few
+connected workflows rather than forty unrelated entry points:
+
+- *Session lifecycle:* construct
+  #link("reference/python/gammaloop-python/#exports-gammaloopapi")[`GammaLoopAPI`], then use
+  #link("reference/python/gammaloop-python/#exports-gammaloopapi-run-method")[`run`], the history
+  getters, and
+  #link("reference/python/gammaloop-python/#exports-settingsvalue")[`SettingsValue`] to automate
+  the same state and commands as the CLI.
+- *Point evaluation:* `evaluate_sample` returns
+  #link("reference/python/gammaloop-python/#exports-evaluationresult")[`EvaluationResult`], whose
+  `sample` is a
+  #link("reference/python/gammaloop-python/#exports-sampleevaluationresult")[`SampleEvaluationResult`].
+  `evaluate_samples` returns
+  #link("reference/python/gammaloop-python/#exports-batchevaluationresult")[`BatchEvaluationResult`]
+  with the same sample records and one batch-level observable snapshot.
+- *Generated-integrand structure:* start at
+  #link("reference/python/gammaloop-python/#exports-integrandinfo")[`IntegrandInfo`], then follow its
+  graph groups into graph, orientation, loop-momentum-basis, cut, and threshold records. These
+  objects describe compiled structure; they do not mutate it.
+- *Events and observables:* evaluation records lead to
+  #link("reference/python/gammaloop-python/#exports-eventgroup")[`EventGroup`] and
+  #link("reference/python/gammaloop-python/#exports-event")[`Event`]. For caller-owned aggregation,
+  #link("reference/python/gammaloop-python/#exports-histogramaccumulator")[`HistogramAccumulator`]
+  produces immutable
+  #link("reference/python/gammaloop-python/#exports-histogramsnapshot")[`HistogramSnapshot`]
+  records with raw statistics that remain mergeable and reconstructible.
+
+#boundary("Full integrations still use the command interface", [
+  The current Python module does not expose a supported structured `integrate()` method. Run an
+  integration through `GammaLoopAPI.run("integrate ...")` or the CLI and consume its persisted
+  workspace/results. Several integration-result record classes are registered by the native
+  module for ongoing API work, but without a public producer they are not part of the curated
+  Python boundary yet.
+])
+
+#boundary("Result ownership", [
+  Objects returned by evaluation and integration are snapshots. Mutating a Python list or
+  dictionary derived from them does not update the live GammaLoop session. The explicit mutable
+  exception is `HistogramAccumulator`, whose methods update caller-owned aggregation state.
+])
 
 == Inspect and evaluate an existing state
 
@@ -136,6 +211,10 @@ integrand and update in-memory caches or observable snapshots, including in a re
 session. Rust-only callers that must retain the active precision use `evaluate_sample_precise` and
 `evaluate_samples_precise`.
 
+For a complete, source-backed run card and scripts that expose event groups, cut metadata,
+selectors, and merged histogram snapshots, follow the
+#link("guides/events-and-observables/")[events and observables guide].
+
 == Symbolic conversion helpers
 
 The supported module-level helpers are
@@ -149,9 +228,34 @@ return values, failure modes, and task-oriented examples.
 
 == CLI and settings reference
 
+=== Shell completion
+
+`--completions` emits a static script from the same Clap command tree as `--help`. Load it for
+the current shell or save it in the shell's normal completion directory:
+
+// docs-example: syntax
+```sh
+# Bash for the current session
+source <(./gammaloop --completions bash)
+
+# Zsh for the current session
+source <(./gammaloop --completions zsh)
+```
+
+Fish, Elvish, PowerShell, and Nushell are also supported values. For Fish, pipe the output to
+`source`; for Nushell, save the generated module and then source it. Bash and Fish output also
+registers the repository wrapper spelling `./gammaloop`.
+
+#boundary("Static and state-aware completion", [
+  The generated shell script covers executable subcommands, flags, enumerated values, and path
+  hints. Completion inside the interactive GammaLoop prompt additionally knows the active
+  state's processes, integrands, settings, model objects, graphs, cuts, and orientations. A
+  static shell script cannot contain that changing session data.
+])
+
 Use `./gammaloop --help` and the generated #link("reference/cli/")[CLI and settings reference]
 for command names, aliases, flags, positional arguments, defaults, possible values, and setting
 paths. The tutorials explain how commands and settings combine into a persistent workflow. The
-#link("manual/diagnostics/")[logging and diagnostics guide] covers startup precedence, selective tag
+#link("guides/diagnostics/")[logging and diagnostics guide] covers startup precedence, selective tag
 filters, sink routing, release-build limitations, and copyable investigation patterns.
 ]

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Version of the serialized catalog schema.
-pub const SCHEMA_VERSION: u32 = 2;
+pub const SCHEMA_VERSION: u32 = 3;
 
 /// How a documentation body must be interpreted by a renderer.
 #[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -111,6 +111,8 @@ impl DocComponent {
 #[serde(rename_all = "kebab-case")]
 pub enum DocMemberKind {
     Parameter,
+    /// One signature and its documentation within an overloaded callable.
+    Overload,
     Field,
     Variant,
     AssociatedFunction,
@@ -207,7 +209,7 @@ impl DocExample {
     }
 }
 
-/// Parameter, field, variant, or associated item nested under a documented item.
+/// Parameter, overload, field, variant, or associated item nested under a documented item.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct DocMember {
     pub name: String,

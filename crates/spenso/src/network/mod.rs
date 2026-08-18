@@ -1658,8 +1658,11 @@ fn multiply_atom_by_numeric_coefficient(atom: Atom, coefficient: &Atom) -> Atom 
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
 pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {
+    /// Expression and contraction topology whose leaves reference stored values.
     pub graph: NetworkGraph<LibKey, FunKey, Aind>,
+    /// Backing tensor and scalar storage referenced by graph leaves.
     pub store: S,
+    /// Classification of the network result as scalar or tensor, including self-duality.
     pub state: NetworkState,
 }
 
@@ -2387,72 +2390,106 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Network<S, K, FK, 
 
 #[derive(Error, Debug)]
 pub enum TensorNetworkError<K: Display, FK: Display> {
+    /// A tensor-slot edge terminated at a product operation.
     #[error("Slot edge to prod node")]
     SlotEdgeToProdNode,
+    /// A tensor-slot edge terminated at a scalar node.
     #[error("Slot edge to scalar node")]
     SlotEdgeToScalarNode,
+    /// A negation operation did not have exactly one child.
     #[error("More than one neg")]
     MoreThanOneNeg,
+    /// A unary operation had no executable leaf child.
     #[error("Childless neg")]
     ChildlessNeg,
+    /// Tensor contraction failed with the attached contraction error.
     #[error("Contraction Error:{0}")]
     ContractionError(#[from] ContractionError),
+    /// A scalar leaf was connected through a tensor-slot edge.
     #[error("Scalar connected by a slot edge")]
     ScalarSlotEdge,
+    /// Tensor-structure validation or manipulation failed.
     #[error("Structure Error:{0}")]
     StructErr(#[from] StructureError),
+    /// Resolving a tensor through the tensor library failed.
     #[error("LibraryError:{0}")]
     LibErr(#[from] LibraryError<K>),
+    /// Applying a registered tensor function failed.
     #[error("FunctionLibraryError:{0}")]
     FunLibErr(#[from] FunctionLibraryError<FK>),
+    /// A tensor-only graph operation encountered another node kind.
     #[error("Non tensor node still present")]
     NonTensorNodePresent,
+    /// A negative exponent was applied to a non-scalar result.
     #[error("Negative non-even power on non-scalar node:{0}")]
     NegativeExponentNonScalar(String),
+    /// A function received an unsupported number of tensor arguments.
     #[error("Too many arguments for function:{0}")]
     TooManyArgsFunction(String),
+    /// A `dot` expression did not have exactly two arguments.
     #[error("Non self-dual tensor power{0}")]
     InvalidDotFunction(String),
+    /// An integer power was applied to a non-self-dual tensor.
     #[error("Invalid dot function{0}")]
     NonSelfDualTensorPower(String),
+    /// Execution produced a node that cannot represent a final result.
     #[error("invalid resulting node{0}")]
     InvalidResultNode(NetworkNode<DummyKey, FK>),
+    /// A final graph still contained an internal edge requiring contraction.
     #[error("internal edge still present, contract it first")]
     InternalEdgePresent,
+    /// A scalar factor remained uncontracted in the final graph.
     #[error("uncontracted scalar")]
     UncontractedScalar,
+    /// No contraction rule exists for the two endpoint node kinds.
     #[error("Cannot contract edge between {0} and {1}")]
     CannotContractEdgeBetween(String, String),
+    /// A result was requested from an empty graph.
     #[error("no nodes in the graph")]
     NoNodes,
+    /// A scalar result was requested but no scalar value was available.
     #[error("no scalar present")]
     NoScalar,
+    /// A single result was requested from a graph with multiple nodes.
     #[error("more than one node in the graph")]
     MoreThanOneNode,
+    /// A scalar result was requested from a non-scalar network.
     #[error("is not scalar output")]
     NotScalarOutput,
+    /// Multiplying scalar values failed to produce a result.
     #[error("failed scalar multiplication")]
     FailedScalarMul,
+    /// Scalar storage was unexpectedly empty.
     #[error("scalar field is empty")]
     ScalarFieldEmpty,
+    /// A scalar-only operation encountered one or more tensor values.
     #[error("not all scalars: {0}")]
     NotAllScalars(String),
+    /// A sum attempted to combine a scalar with a library tensor.
     #[error("try to sum scalar with library tensor: {0}")]
     ScalarLibSum(String),
+    /// A sum attempted to combine a scalar with a materialized tensor.
     #[error("try to sum scalar with a tensor: {0}")]
     SumScalarTensor(String),
+    /// Summands had incompatible tensor structures or result states.
     #[error("Incompatible summands: {0}")]
     IncompatibleSummand(String),
+    /// A contraction operation failed.
     #[error("failed to contract")]
     FailedContract(ContractionError),
+    /// The requested negative exponent is not supported.
     #[error("negative exponent not yet supported")]
     NegativeExponent,
+    /// A contraction operation failed with additional context.
     #[error("failed to contract: {0}")]
     FailedContractMsg(String),
+    /// An uncategorized network operation failed.
     #[error(transparent)]
     Other(#[from] eyre::Error),
+    /// Reading or writing network data failed.
     #[error("Io error")]
     InOut(#[from] std::io::Error),
+    /// Marks the impossible conversion from an infallible error.
     #[error("Infallible")]
     Infallible,
 }
@@ -2476,8 +2513,11 @@ pub enum TensorOrScalarOrKey<T, S, K, Aind> {
 }
 
 pub enum ExecutionResult<T> {
+    /// Multiplicative identity produced by an empty product.
     One,
+    /// Additive identity produced by an empty sum.
     Zero,
+    /// Concrete scalar, tensor, or library-key result.
     Val(T),
 }
 
@@ -3686,9 +3726,16 @@ pub struct SequentialRef;
 pub struct SequentialExtract;
 
 pub enum ExecutionMode {
+    /// Executes ready operations serially against the original graph.
     Sequential,
+    /// Requests concurrent execution of independent ready operations with Rayon.
+    ///
+    /// Execution falls back to the sequential path when Rayon is unavailable or
+    /// partial graph rewriting requires it.
     Parallel,
+    /// Executes serially after locating ready operations through borrowed graph views.
     SequentialRef,
+    /// Executes serially by extracting each ready operation's owned subgraph.
     SequentialExtract,
 }
 

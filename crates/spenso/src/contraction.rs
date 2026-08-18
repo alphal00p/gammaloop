@@ -30,7 +30,9 @@ pub enum ContractionError {
 }
 
 pub trait Contract<T = Self, Settings = ()> {
+    /// Result type produced by contracting with `T`.
     type LCM;
+    /// Contracts matching dual slots with `other` and returns the resulting tensor.
     fn contract(&self, other: &T) -> Result<Self::LCM, ContractionError>;
 }
 

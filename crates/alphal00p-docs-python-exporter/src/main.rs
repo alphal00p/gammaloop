@@ -523,6 +523,34 @@ def validate(runtime_module, stub_source):
         })
     }
 
+    #[cfg(feature = "gammaloop")]
+    #[test]
+    fn gammaloop_stub_preserves_supported_reference_prose() {
+        let (module_name, stub_info) =
+            super::gather("gammaloop-python").expect("GammaLoop StubInfo");
+        let rendered = stub_info
+            .modules
+            .get(module_name)
+            .expect("GammaLoop extension module")
+            .to_string()
+            .lines()
+            .map(str::trim_end)
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        for excerpt in [
+            "def e(self) -> builtins.float:\n        r\"\"\"\n        Energy component.",
+            "def graph_groups(self) -> builtins.list[IntegrandGraphGroup]:\n        r\"\"\"\n        Per-group graph, orientation, basis, threshold, and cut metadata.",
+            "def sample(self) -> SampleEvaluationResult:\n        r\"\"\"\n        Evaluation record for the requested sample.",
+            "def combine_diagrams(self, value: builtins.bool) -> None:\n        r\"\"\"\n        Write all diagrams of an integrand to one file during filesystem export.",
+            "Create an evenly binned continuous histogram accumulator.\n\n        Parameters\n        ----------\n        title : str",
+            "Resolve a relative string path or array index.\n\n        Parameters\n        ----------\n        key : str or int",
+            "Return the causal-flow orientations generated for one graph.\n\n        Each returned dictionary maps an edge id to ``1`` (default), ``-1``\n        (reversed), or ``0`` (undirected). Supply process and integrand selectors when\n        the active state does not identify a unique integrand.\n\n        Parameters\n        ----------\n        graph_name : str",
+        ] {
+            assert!(rendered.contains(excerpt), "missing `{excerpt}`");
+        }
+    }
+
     #[cfg(feature = "spenso")]
     #[test]
     fn spenso_stub_tracks_registered_and_returned_opaque_types() {
@@ -536,5 +564,28 @@ def validate(runtime_module, stub_source):
         let rendered = module.to_string();
         assert!(!rendered.contains("TensorFunctionLibrary"));
         assert!(!rendered.contains("TensorNamespace"));
+    }
+
+    #[cfg(feature = "spenso")]
+    #[test]
+    fn spenso_stub_preserves_optional_structure_defaults_and_execution_semantics() {
+        let (module_name, stub_info) = super::gather("spynso3").expect("Spenso StubInfo");
+        let module = stub_info
+            .modules
+            .get(module_name)
+            .expect("Spenso community module");
+        let rendered = module.to_string();
+
+        for signature in [
+            "def __call__(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression | int | str | float | builtins.complex] | None = None)",
+            "def symbolic(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression | int | str | float | builtins.complex] | None = None)",
+            "def index(self, *args: builtins.int | Expression | str, extra_args: typing.Sequence[Expression] | None = None, cook_indices: builtins.bool = False)",
+        ] {
+            assert!(rendered.contains(signature), "missing `{signature}`");
+        }
+        assert!(rendered.contains(
+            "Single : Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains"
+        ));
+        assert!(!rendered.contains("Single : Execute one contraction at a time"));
     }
 }

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check deterministic accessibility invariants in representative built docs pages."""
+"""Check deterministic accessibility invariants in every generated docs shell page."""
 
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ from html.parser import HTMLParser
 from pathlib import Path
 
 
-PRODUCTS = ("gammaloop", "linnet", "spenso", "idenso", "vakint")
 VOID_ELEMENTS = {
     "area",
     "base",
@@ -239,40 +238,21 @@ class DocumentAudit(HTMLParser):
         )
 
 
-def representative_pages(root: Path) -> list[tuple[str, Path, bool]]:
-    pages = [("portal", root / "index.html", False)]
-    for product in PRODUCTS:
-        product_root = root / "products" / product / "latest"
-        pages.extend(
-            (
-                (f"{product} tutorial", product_root / "tutorial" / "index.html", True),
-                (
-                    f"{product} interface manual",
-                    product_root / "manual" / "interfaces" / "index.html",
-                    True,
-                ),
-                (
-                    f"{product} Python reference",
-                    product_root / "reference" / "python" / "index.html",
-                    True,
-                ),
-            )
-        )
-    pages.extend(
-        (
-            (
-                "gammaloop CLI reference",
-                root / "products" / "gammaloop" / "latest" / "reference" / "cli" / "index.html",
-                True,
-            ),
-            ("developer overview", root / "developers" / "index.html", True),
-            (
-                "developer architecture",
-                root / "developers" / "architecture" / "gammaloop-architecture" / "index.html",
-                True,
-            ),
-        )
-    )
+def generated_shell_pages(root: Path) -> list[tuple[str, Path, bool]]:
+    """Discover non-redirect pages owned by the shared portal/manual shell."""
+
+    pages: list[tuple[str, Path, bool]] = []
+    stylesheet = re.compile(r'<link\b[^>]*\bhref="[^"]*assets/site\.css"')
+    for path in sorted(root.rglob("*.html")):
+        document = path.read_text(encoding="utf-8")
+        if not stylesheet.search(document):
+            continue
+        relative = path.relative_to(root)
+        require_sidebar = bool(relative.parts) and relative.parts[0] in {
+            "developers",
+            "products",
+        }
+        pages.append((relative.as_posix(), path, require_sidebar))
     return pages
 
 
@@ -313,7 +293,14 @@ def main() -> int:
         return 2
     root = Path(sys.argv[1])
     failures: list[str] = []
-    pages = representative_pages(root)
+    try:
+        pages = generated_shell_pages(root)
+    except (OSError, UnicodeError) as error:
+        print(f"could not discover generated documentation pages: {error}", file=sys.stderr)
+        return 1
+    if not pages:
+        print("no generated documentation shell pages found", file=sys.stderr)
+        return 1
     try:
         failures.extend(
             f"navigation assets: {error}" for error in progressive_navigation_errors(root)
@@ -341,7 +328,10 @@ def main() -> int:
         for failure in failures:
             print(f"- {failure}", file=sys.stderr)
         return 1
-    print(f"checked {len(pages)} representative HTML pages with deterministic semantic/no-JS rules")
+    print(
+        f"checked all {len(pages)} generated HTML shell pages "
+        "with deterministic semantic/no-JS rules"
+    )
     return 0
 
 

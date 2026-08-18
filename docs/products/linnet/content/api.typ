@@ -10,7 +10,7 @@ The `linnet` package is organized into these principal areas:
 - `half_edge` provides `HedgeGraph`, builders, the involution and edge data, subgraph types,
   traversal trees, and graph algorithms;
 - `parser` provides DOT parsing and DOT-backed graph data;
-- `drawing` provides rendering data and layout helpers;
+- `half_edge::layout` provides layout helpers when the `drawing` feature is enabled;
 - `permutation`, `tree`, and `union_find` provide supporting algorithms and stores.
 
 The generic graph types separate edge, vertex, and half-edge payloads from the node-storage
@@ -22,11 +22,17 @@ Cargo features enable optional capabilities:
 
 - `serde` adds serialization traits;
 - `bincode` adds binary encoding support;
-- `drawing` adds the drawing stack;
+- `drawing` enables Linnet's layout module and its optional geometry dependency;
 - `symbolica` adds Symbolica interoperability.
 
 An item shown in an all-features API reference may not be available in a default build. Check
 its required feature and your `Cargo.toml` before using it.
+
+#boundary("Layout is not rendering", [
+  Linnet can compute layout coordinates, but it does not own a supported Rust renderer. Emit DOT
+  for interchange, use #link("guides/clinnet/")[Clinnet] for command-line figure batches, or use
+  #link("guides/linnest/")[Linnest] when a Typst document owns the final drawing.
+])
 
 == Standalone Python distribution
 

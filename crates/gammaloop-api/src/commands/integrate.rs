@@ -87,7 +87,7 @@ pub struct Integrate {
     #[arg(short = 'c', long)]
     pub n_cores: Option<usize>,
 
-    /// The path to run the integrationg within
+    /// Workspace directory used for resumable integration state and persisted results
     #[arg(short = 'w', long, value_hint = clap::ValueHint::DirPath)]
     pub workspace_path: Option<PathBuf>,
 
@@ -181,8 +181,11 @@ pub struct Integrate {
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct IntegrationOutput {
+    /// Final estimates and convergence data for every selected process/integrand slot.
     pub result: IntegrationResult,
+    /// Observable snapshots keyed by each slot's `process@integrand` identifier.
     pub observables: BTreeMap<String, ObservableSnapshotBundle>,
+    /// Workspace that stores resumable integration state, results, and observable snapshots.
     pub workspace_path: PathBuf,
 }
 

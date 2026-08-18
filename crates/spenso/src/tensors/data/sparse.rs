@@ -49,8 +49,11 @@ use super::{
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Encode, Decode)]
 pub struct SparseTensor<T, I = OrderedStructure> {
     // #[bincode(with_serde)]
+    /// Explicitly stored components keyed by their flat indices.
     pub elements: std::collections::HashMap<FlatIndex, T>,
+    /// Value used for components absent from `elements`.
     pub zero: T,
+    /// Tensor structure that maps external slots to flat component indices.
     pub structure: I,
 }
 

@@ -303,8 +303,10 @@ pub enum ContractionMode {
 }
 
 pub trait ContractionStrategy<E, L, K, FK, Aind>: Sized {
+    /// Whether this strategy can incrementally rewrite a ready product subgraph in place.
     const SUPPORTS_PARTIAL_GRAPH_REWRITE: bool = false;
 
+    /// Contracts one ready network operation into its replacement leaf.
     #[allow(clippy::result_large_err)]
     fn contract(
         executor: &mut E,
@@ -316,6 +318,7 @@ pub trait ContractionStrategy<E, L, K, FK, Aind>: Sized {
         K: Display,
         FK: Display;
 
+    /// Attempts an in-place product rewrite and reports whether it made progress.
     #[allow(clippy::result_large_err)]
     fn contract_product_in_place(
         executor: &mut E,

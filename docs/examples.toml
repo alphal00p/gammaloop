@@ -1,11 +1,12 @@
-schema = 1
+schema = 2
 
-# This registry covers the ten canonical manual journeys. The example harness
+# This registry covers the canonical manual journeys. The example harness
 # still checks every fenced block; repository examples and scheduled scientific
 # cases must be added here as they are promoted to maintained user journeys.
 
 [[example]]
 id = "gammaloop-first-state"
+marker = "gammaloop-first-state"
 product = "gammaloop"
 task = "Create and resume a persisted GammaLoop state"
 audience = "beginner"
@@ -20,11 +21,12 @@ test_command = "cargo test --locked -p alphal00p-docs-examples"
 
 [[example]]
 id = "gammaloop-process-generation"
+marker = "gammaloop-process-generation"
 product = "gammaloop"
 task = "Generate and inspect a filtered process"
 audience = "real-value"
 source = "docs/products/gammaloop/content/process-generation.typ"
-route = "manual/process-generation/"
+route = "guides/process-generation/"
 prerequisites = ["Built GammaLoop CLI", "A supported model and process card"]
 expected = "The process name, amplitude/cross-section mode, coupling orders, and filters agree before evaluation starts."
 verification = "syntax"
@@ -33,7 +35,23 @@ owner = "GammaLoop maintainers"
 test_command = "cargo test --locked -p alphal00p-docs-examples"
 
 [[example]]
+id = "gammaloop-event-inspection"
+marker = "gammaloop-event-inspection"
+product = "gammaloop"
+task = "Inspect generated cut events, selectors, and merged observable snapshots"
+audience = "real-value"
+source = "docs/products/gammaloop/content/events.typ"
+route = "guides/events-and-observables/"
+prerequisites = ["Built GammaLoop Python or Rust API", "Differential example dependencies", "An appropriate Symbolica license"]
+expected = "The Rust request compiles with event return enabled and the Python source preserves per-sample event groups versus one batch-level observable snapshot; licensed script execution remains a separate acceptance tier."
+verification = "compile"
+tier = "pull-request"
+owner = "GammaLoop maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
 id = "linnet-first-graph"
+marker = "linnet-first-graph"
 product = "linnet"
 task = "Construct a graph and inspect a subgraph-aware operation"
 audience = "beginner"
@@ -48,11 +66,12 @@ test_command = "cargo test --locked -p alphal00p-docs-examples"
 
 [[example]]
 id = "linnet-separating-cuts"
+marker = "linnet-separating-cuts"
 product = "linnet"
 task = "Enumerate cuts that separate two selected graph nodes"
 audience = "real-value"
 source = "docs/products/linnet/content/algorithms.typ"
-route = "manual/algorithms/"
+route = "guides/algorithms/"
 prerequisites = ["Rust toolchain", "Linnet with the documented graph features"]
 expected = "The graph invariant check passes and the square-with-diagonal example returns four separating partitions."
 verification = "run"
@@ -61,7 +80,23 @@ owner = "Linnet maintainers"
 test_command = "cargo test --locked -p alphal00p-docs-examples"
 
 [[example]]
+id = "clinnet-render-dot"
+marker = "clinnet-render-dot"
+product = "linnet"
+task = "Render a directory of DOT figures and make cache-aware targeted rebuilds"
+audience = "real-value"
+source = "docs/products/linnet/content/clinnet.typ"
+route = "guides/clinnet/"
+prerequisites = ["Clinnet command-line package", "Typst 0.15.0 or newer", "A directory containing DOT files"]
+expected = "A full draw creates per-figure PDFs, a combined grid, and metadata that targeted redraw commands can reuse."
+verification = "syntax"
+tier = "pull-request"
+owner = "Linnet maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
 id = "spenso-first-contraction"
+marker = "spenso-first-contraction"
 product = "spenso"
 task = "Contract a compatible tensor pair"
 audience = "beginner"
@@ -76,11 +111,12 @@ test_command = "cargo test --locked -p alphal00p-docs-examples"
 
 [[example]]
 id = "spenso-network-execution"
+marker = "spenso-network-execution"
 product = "spenso"
 task = "Assemble and inspect an executable tensor network"
 audience = "real-value"
 source = "docs/products/spenso/content/networks.typ"
-route = "manual/networks/"
+route = "guides/networks/"
 prerequisites = ["Rust toolchain", "Spenso workspace dependencies", "Symbolica runtime"]
 expected = "Executing the weighted tensor sum preserves its rank-one structure and produces the component vector [11.0, 16.0]."
 verification = "compile"
@@ -90,12 +126,13 @@ test_command = "cargo test --locked -p alphal00p-docs-examples"
 
 [[example]]
 id = "idenso-controlled-identity"
+marker = "idenso-controlled-identity"
 product = "idenso"
 task = "Apply one representation-aware identity pass"
 audience = "beginner"
 source = "docs/products/idenso/content/tutorial.typ"
 route = "tutorial/"
-prerequisites = ["Rust toolchain", "Idenso reference-case features", "Symbolica runtime"]
+prerequisites = ["Python 3", "A Symbolica distribution containing the Idenso community module"]
 expected = "Representation initialization and the focused rewrite preserve the documented free-index structure."
 verification = "compile"
 tier = "pull-request"
@@ -104,11 +141,12 @@ test_command = "cargo test --locked -p alphal00p-docs-examples"
 
 [[example]]
 id = "idenso-dummy-namespaces"
+marker = "idenso-dummy-namespaces"
 product = "idenso"
 task = "Protect independent dummy-index namespaces before multiplication"
 audience = "real-value"
 source = "docs/products/idenso/content/algebra.typ"
-route = "manual/algebra/"
+route = "guides/algebra/"
 prerequisites = ["Python 3", "Symbolica with the Idenso and Spenso community modules"]
 expected = "Wrapping the two local dummy namespaces preserves exactly the two intended free indices."
 verification = "compile"
@@ -118,6 +156,7 @@ test_command = "cargo test --locked -p alphal00p-docs-examples"
 
 [[example]]
 id = "vakint-first-match"
+marker = "vakint-first-match"
 product = "vakint"
 task = "Match and canonicalize a vacuum integral without external backends"
 audience = "beginner"
@@ -125,18 +164,19 @@ source = "docs/products/vakint/content/tutorial.typ"
 route = "tutorial/"
 prerequisites = ["Repository checkout", "Rust toolchain or the documented Python environment"]
 expected = "The matching-only engine recognizes the topology and returns its canonical routing without invoking FORM or pySecDec."
-verification = "syntax"
+verification = "compile"
 tier = "pull-request"
 owner = "Vakint maintainers"
 test_command = "cargo test --locked -p alphal00p-docs-examples"
 
 [[example]]
 id = "vakint-backend-policy"
+marker = "vakint-backend-policy"
 product = "vakint"
 task = "Choose an explicit tensor-reduction and evaluation policy"
 audience = "real-value"
 source = "docs/products/vakint/content/evaluation.typ"
-route = "manual/evaluation/"
+route = "guides/evaluation/"
 prerequisites = ["Rust toolchain", "Vakint workspace dependencies", "Configured external backend for full evaluation"]
 expected = "Matching, tensor reduction, and evaluation failures remain attributable to the documented owning stage and backend order."
 verification = "compile"

@@ -37,16 +37,16 @@ wrapper selects the binary built under `target/dev-optim/`.
 The run card declares a state folder, settings, and named command blocks. Run its `generate`
 block and persist the result on exit:
 
-// docs-example: syntax
+// docs-example: syntax gammaloop-first-state
 ```sh
 ./gammaloop --clean-state \
   ./examples/cli/gg_hhh/1L/gg_hhh_1L.toml \
   run generate -c "quit -o"
 ```
 
-#callout("`--clean-state` removes the resolved state first", [
+#callout([`--clean-state` removes the resolved state first], [
   Use it only for this first, reproducible run. Omit it when resuming work you want to keep.
-  Its generated #link("reference/cli/?q=clean-state")[argument reference] records the exact
+  Its generated #link("reference/cli/#argument-gammaloop-clean-state-349074e9fab4dbbb")[argument reference] records the exact
   valueless-flag semantics.
   The example card resolves its state to `examples/cli/gg_hhh/1L/state` and requests ten
   worker cores; make a private copy of the card before changing either value.
@@ -73,6 +73,36 @@ keeping the same state. You can now run the card's `integrate_euclidean` or
 `integrate_physical` block, but those are deliberately beyond the first-success path because
 they request a substantial Monte Carlo integration.
 
+== Inspect before expensive work
+
+Reopen the state read-only and inspect both the generated structure and the effective integrator
+settings before launching either integration block:
+
+// docs-example: syntax
+```sh
+./gammaloop --read-only-state \
+  -s ./examples/cli/gg_hhh/1L/state \
+  run -c "display integrand -p gg_hhh -i 1L; display settings process -p gg_hhh -i 1L integrator; quit"
+```
+
+`display integrand` reports the generation backend, compiled record size, graph and graph-group
+counts, and detailed orientation, loop-momentum-basis, cut, and threshold tables. The settings
+command resolves the values attached to this generated integrand, which may differ from the
+current defaults. Check these records together: an unexpected graph count points back to process
+generation, while an unexpected sample budget, target accuracy, or seed belongs to runtime
+settings.
+
+#callout("Read-only inspection is not persistence", [
+  `--read-only-state` prevents commands from writing inside the active state directory and
+  disables file logging there. It does not make the in-memory session immutable. This command
+  intentionally exits without `-o`; change settings in a separate writable session or in the
+  run card that reconstructs the state.
+])
+
+The exact fields and selectors are kept current in the generated
+#link("reference/cli/#command-gammaloop-display-integrand-7515b87f5a3f8b18")[integrand display] and
+#link("reference/cli/#command-gammaloop-display-settings-process-66a6624acc30949a")[process-settings] references.
+
 == Troubleshooting and next steps
 
 - If the wrapper cannot find a binary, rerun `just build-cli` and confirm that
@@ -82,8 +112,8 @@ they request a substantial Monte Carlo integration.
 - If startup reports a state fingerprint or settings mismatch, replay the card with a new
   state folder instead of transplanting only its `processes/` directory.
 - Use `./gammaloop help generate` to inspect the flags supported by your installed version,
-  then continue with the process-generation manual and the
-  #link("reference/cli/?q=gammaLoop%20generate")[filtered generate-command reference].
+  then continue with the #link("guides/process-generation/")[process-generation guide] and the
+  #link("reference/cli/#command-gammaloop-generate-9dcc9f488fe75777")[generate-command reference].
 
 #boundary("Example run card", [
   See the complete

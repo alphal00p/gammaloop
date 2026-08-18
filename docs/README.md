@@ -67,14 +67,19 @@ Canonical product routes have this shape:
 products/<product>/<channel>/
   index.html
   tutorial/index.html
-  manual/<chapter>/index.html
+  guides/<topic>/index.html
+  reference/interfaces/index.html
   reference/index.html
   reference/python/<component>/index.html
   reference/rust/supported/<component>/index.html
   reference/rust/<crate>/...
+  version-history/index.html
+  version-history/<component>/index.html
   manual.pdf
 ```
 
 GammaLoop additionally publishes `reference/cli/`; Vakint publishes
-`reference/topologies/`. Contributor architecture is published under
-`developers/` in a complete build.
+`reference/topologies/`. Authored task-oriented material belongs under
+`guides/`, generated API material under `reference/`, and release notes under
+`version-history/`. Contributor architecture is published under `developers/`
+in a complete build.

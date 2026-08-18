@@ -15,15 +15,15 @@ matter.
   If a filter produces nothing, first use a broader target at `debug`, confirm that release
   compilation has not removed the callsite, and then add tag constraints. After isolating the
   event, record the exact directive with the run card and continue to the CLI/settings reference
-  for #link("reference/cli/?q=display_directive")[persistence and state controls].
+  for #link("reference/cli/#setting-cli-global-display-directive-6a4c9a96965b6130")[persistence and state controls].
 ])
 
 == Default directives
 
 Normal session defaults come from `GlobalSettings`:
 
-- #link("reference/cli/?q=cli.global.display_directive")[`display_directive = "info"`]
-- #link("reference/cli/?q=cli.global.logfile_directive")[`logfile_directive = "off"`]
+- #link("reference/cli/#setting-cli-global-display-directive-6a4c9a96965b6130")[`display_directive = "info"`]
+- #link("reference/cli/#setting-cli-global-logfile-directive-e534bdfa5512b136")[`logfile_directive = "off"`]
 
 These are the application defaults written into `global_settings.toml` when defaults are shown or persisted.
 

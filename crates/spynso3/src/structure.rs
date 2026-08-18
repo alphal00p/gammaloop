@@ -1900,9 +1900,6 @@ impl SpensoSlot {
 }
 
 #[cfg(feature = "python_stubgen")]
-static EMPTY: fn() -> String = || "[]".into();
-
-#[cfg(feature = "python_stubgen")]
 static FALSE: fn() -> String = || "False".to_string();
 
 #[cfg(feature = "python_stubgen")]
@@ -2314,8 +2311,8 @@ list of int
                     ParameterInfo {
                         name: "extra_args",
                         kind:ParameterKind::KeywordOnly,
-                        default:ParameterDefault::Expr(EMPTY),
-                        type_info: Vec::<ConvertibleToExpression>::type_input,
+                        default:ParameterDefault::Expr(NONE_ARG),
+                        type_info: || Vec::<ConvertibleToExpression>::type_input() | TypeInfo::none(),
                     },
                 ],
                 r#type: MethodType::Instance,
@@ -2361,8 +2358,8 @@ Examples
 
                         name: "extra_args",
                         kind:ParameterKind::KeywordOnly,
-                        default:ParameterDefault::Expr(EMPTY),
-                        type_info: Vec::<ConvertibleToExpression>::type_input,
+                        default:ParameterDefault::Expr(NONE_ARG),
+                        type_info: || Vec::<ConvertibleToExpression>::type_input() | TypeInfo::none(),
                     },
                 ],
                 r#type: MethodType::Instance,
@@ -2415,8 +2412,8 @@ Examples
                     ParameterInfo {
                         name: "extra_args",
                         kind:ParameterKind::KeywordOnly,
-                        default:ParameterDefault::Expr(EMPTY),
-                        type_info: std::vec::Vec::<PythonExpression>::type_input,
+                        default:ParameterDefault::Expr(NONE_ARG),
+                        type_info: || std::vec::Vec::<PythonExpression>::type_input() | TypeInfo::none(),
                     },
                     ParameterInfo {
                         name: "cook_indices",

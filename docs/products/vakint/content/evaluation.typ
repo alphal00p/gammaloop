@@ -39,11 +39,12 @@ and Vakint temporary directory so that the failing reduction can be inspected.
 
 == Evaluation order and backends
 
-The evaluation order is an ordered fallback policy, not a request to combine backend results.
-Vakint tries each configured method whose capability matches the canonical topology and stops
-at the first successful evaluation. AlphaLoop, MATAD, and FMFT are analytic FORM-backed paths.
-pySecDec is numerical and additionally needs numeric parameters and external momenta where the
-topology requires them.
+The evaluation order is an ordered selection policy, not a request to combine backend results.
+Vakint skips methods whose capability declaration does not match the canonical topology, then
+uses the first matching method. An error from that selected backend is returned immediately; it
+does not trigger fallback to the next method. AlphaLoop, MATAD, and FMFT are analytic FORM-backed
+paths. pySecDec is numerical and additionally needs numeric parameters and external momenta where
+the topology requires them.
 
 For reproducible comparisons record:
 
@@ -59,8 +60,10 @@ This program makes normalization, precision, and backend order explicit before r
 rank-two one-loop numerator. It compiles without running external tools in the documentation
 harness; running it requires a supported FORM installation for the AlphaLoop path.
 
-// docs-example: compile
+// docs-example: compile vakint-backend-policy
 ```rust
+use std::collections::HashMap;
+
 use vakint::{
     EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings, vakint_parse,
 };
@@ -82,7 +85,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let scalar = vakint.tensor_reduce(&settings, canonical.as_view())?;
     let evaluated = vakint.evaluate_integral(&settings, scalar.as_view())?;
 
-    println!("{evaluated}");
+    let parameter_values = HashMap::from([
+        ("muvsq".to_owned(), 1.0),
+        (settings.mu_r_sq_symbol.clone(), 1.0),
+    ]);
+    let real_parameters = vakint.params_from_f64(&settings, &parameter_values);
+    let complex_parameters = HashMap::default();
+    let (numerical, numerical_error) = vakint.numerical_evaluation(
+        &settings,
+        evaluated.as_view(),
+        &real_parameters,
+        &complex_parameters,
+        None,
+    )?;
+
+    for (epsilon_power, coefficient) in numerical.get_epsilon_coefficients() {
+        println!("epsilon^{epsilon_power}: {coefficient}");
+    }
+    if let Some(error) = numerical_error {
+        println!("backend uncertainty: {error}");
+    }
     Ok(())
 }
 ```
@@ -95,6 +117,25 @@ successful method in `alphaloop_only()` contributes. Inspect the exact
 reduction], and
 #link("reference/rust/supported/vakint/#supported-vakintexpression-evaluate-integral")[evaluation]
 references before changing normalization or backend order.
+
+== Numerical substitution and result interpretation
+
+Backend evaluation returns a symbolic Laurent series. Numerical substitution is a separate
+boundary: supply every remaining real/complex parameter and, when the numerator contains
+external scalar products, the external four-momenta. `params_from_f64` and
+`externals_from_f64` convert ordinary inputs to the configured decimal precision before the
+series is evaluated.
+
+`NumericalEvaluationResult` stores sorted `(epsilon power, complex coefficient)` pairs. Negative
+powers are poles, power zero is the finite term, and positive powers are higher orders. The
+optional second result carries a backend-reported uncertainty series when the evaluated
+expression contains one. Compare corresponding powers; do not collapse the series to one complex
+number or silently discard the uncertainty.
+
+Use `partial_numerical_evaluation` when you intentionally want to substitute known constants and
+retain unresolved symbolic factors for inspection. Use `numerical_evaluation` for the final
+boundary: it reports an error when tensor structure or a required symbol remains. This distinction
+prevents a partially substituted expression from being mistaken for a fully numerical result.
 
 #callout("Interpret failures at the owning stage", [
   An engine-construction error means the topology library could not be initialized. A
@@ -113,4 +154,20 @@ references before changing normalization or backend order.
 See the supported-topology and external-dependency reference for the patterns and minimum tool
 versions available here. Their Rust definitions begin in
 #source-link("crates/vakint/src/topologies.rs", label: "Vakint's topology module").
+
+== Methods and software to cite
+
+Vakint combines distinct methods rather than treating every backend as interchangeable. Cite the
+software version and the method actually selected for the reported result:
+
+- #link("https://arxiv.org/abs/1203.6543")[FORM] for the symbolic reduction engine;
+- #link("https://arxiv.org/abs/hep-ph/0009029")[MATAD] when its massive tadpole tables are used;
+- #link("https://arxiv.org/abs/1707.01710")[FMFT] for the four-loop fully massive
+  tadpole path; and
+- #link("https://arxiv.org/abs/1703.09692")[pySecDec] for numerical sector
+  decomposition.
+
+Vakint also uses #link("https://symbolica.io/")[Symbolica] for expression manipulation. Record the
+Vakint revision, normalization, epsilon depth, precision, selected backend and dependency
+versions with the result; a generic citation to the package does not encode those choices.
 ]

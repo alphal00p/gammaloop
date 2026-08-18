@@ -894,9 +894,13 @@ impl Default for StabilityRecordingSettings {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct StabilityLevelSetting {
+    /// Numeric precision used for this escalation level.
     pub precision: Precision,
+    /// Maximum accepted relative error in the real component before escalating.
     pub required_precision_for_re: f64,
+    /// Maximum accepted relative error in the imaginary component before escalating.
     pub required_precision_for_im: f64,
+    /// Ratio threshold for the large-weight escalation check; a non-positive value disables it.
     pub escalate_for_large_weight_threshold: f64,
 }
 
@@ -946,7 +950,14 @@ pub enum RotationSetting {
     #[serde(rename = "none")]
     None {},
     #[serde(rename = "euler_angles")]
-    EulerAngles { alpha: f64, beta: f64, gamma: f64 },
+    EulerAngles {
+        /// First Euler angle, in radians.
+        alpha: f64,
+        /// Second Euler angle, in radians.
+        beta: f64,
+        /// Third Euler angle, in radians.
+        gamma: f64,
+    },
 }
 
 impl Default for RotationSetting {

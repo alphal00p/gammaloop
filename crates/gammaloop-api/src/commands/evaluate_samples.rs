@@ -21,16 +21,27 @@ use crate::state::{ProcessRef, State};
 
 #[derive(Debug, Clone)]
 pub struct EvaluateSamples<'a> {
+    /// Process containing the integrand; required when process selection is ambiguous.
     pub process_id: Option<usize>,
+    /// Integrand to evaluate; required when the selected process has multiple candidates.
     pub integrand_name: Option<String>,
+    /// Request arbitrary-precision internal evaluation.
     pub use_arb_prec: bool,
+    /// Omit optional evaluation metadata from each returned sample.
     pub minimal_output: bool,
+    /// Temporary event-generation override restored after this evaluation.
     pub return_generated_events: Option<bool>,
+    /// Interpret point rows as flattened three-momenta instead of integration coordinates.
     pub momentum_space: bool,
+    /// Two-dimensional coordinates with one sample per row.
     pub points: ArrayView2<'a, f64>,
+    /// Optional weight for each sample row; omitted weights default to one.
     pub integrator_weights: Option<ArrayView1<'a, f64>>,
+    /// Optional discrete integration coordinates with one row per sample.
     pub discrete_dims: Option<ArrayView2<'a, usize>>,
+    /// Optional momentum-space graph selection for each sample.
     pub graph_names: Option<Vec<Option<String>>>,
+    /// Optional momentum-space orientation selection for each sample.
     pub orientations: Option<Vec<Option<usize>>>,
 }
 
@@ -138,16 +149,27 @@ impl<'a> EvaluateSamples<'a> {
 
 #[derive(Debug, Clone)]
 pub struct EvaluateSamplesPrecise<'a> {
+    /// Process containing the integrand; required when process selection is ambiguous.
     pub process_id: Option<usize>,
+    /// Integrand to evaluate; required when the selected process has multiple candidates.
     pub integrand_name: Option<String>,
+    /// Request arbitrary-precision internal evaluation.
     pub use_arb_prec: bool,
+    /// Omit optional evaluation metadata from each returned sample.
     pub minimal_output: bool,
+    /// Temporary event-generation override restored after this evaluation.
     pub return_generated_events: Option<bool>,
+    /// Interpret point rows as flattened three-momenta instead of integration coordinates.
     pub momentum_space: bool,
+    /// Two-dimensional coordinates with one sample per row.
     pub points: ArrayView2<'a, f64>,
+    /// Optional weight for each sample row; omitted weights default to one.
     pub integrator_weights: Option<ArrayView1<'a, f64>>,
+    /// Optional discrete integration coordinates with one row per sample.
     pub discrete_dims: Option<ArrayView2<'a, usize>>,
+    /// Optional momentum-space graph selection for each sample.
     pub graph_names: Option<Vec<Option<String>>>,
+    /// Optional momentum-space orientation selection for each sample.
     pub orientations: Option<Vec<Option<usize>>>,
 }
 

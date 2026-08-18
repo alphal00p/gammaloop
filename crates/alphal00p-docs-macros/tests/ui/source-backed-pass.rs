@@ -96,11 +96,15 @@ fn main() {
     assert_eq!(method.params[1].name, "amount");
 
     let ty = __alphal00p_docs_ty_type_marker();
+    assert_eq!(ty.members.len(), 1);
     assert_eq!(ty.members[0].kind, DocMemberKind::Field);
     assert_eq!(ty.members[0].name, "value");
 
     let documented_trait = __alphal00p_docs_trait_trait_marker();
     assert_eq!(documented_trait.members[0].kind, DocMemberKind::Method);
+    let signature = documented_trait.members[0].signature.as_deref().unwrap();
+    assert!(signature.ends_with("{ … }"));
+    assert!(!signature.contains("{ value }"));
 
     let documented_macro = __alphal00p_docs_macro_macro_marker();
     assert_eq!(documented_macro.kind, DocItemKind::ExportedMacro);
@@ -113,7 +117,7 @@ fn main() {
             .unwrap()
             .starts_with("external_bang!(...)")
     );
-    assert_eq!(function_like.source.unwrap().line, 44);
+    assert_eq!(function_like.source.unwrap().line, 46);
 
     let attribute = __alphal00p_docs_macro_attribute_marker();
     assert!(
@@ -123,7 +127,7 @@ fn main() {
             .unwrap()
             .starts_with("#[external_attribute]")
     );
-    assert_eq!(attribute.source.unwrap().line, 50);
+    assert_eq!(attribute.source.unwrap().line, 52);
 
     let derive = __alphal00p_docs_macro_derive_marker();
     assert!(
@@ -133,7 +137,7 @@ fn main() {
             .unwrap()
             .starts_with("#[derive(ExternalDerive)]")
     );
-    assert_eq!(derive.source.unwrap().line, 56);
+    assert_eq!(derive.source.unwrap().line, 58);
 
     let fallback = __alphal00p_docs_ty_undocumented_marker();
     assert_eq!(

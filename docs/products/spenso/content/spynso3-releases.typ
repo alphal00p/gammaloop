@@ -1,10 +1,10 @@
 #import "../../shared.typ": source-link
 
 #let spynso3-releases = [
-= Spynso3 release history
+= Spynso3 versions
 
 The Python adapter is versioned independently from Spenso. Its canonical
-history remains the #source-link("crates/spynso3/CHANGELOG.typ", label:
+version history remains the #source-link("crates/spynso3/CHANGELOG.typ", label:
 "spynso3 changelog source"). This rendered copy integrates it with the manual,
 navigation, search, and product PDF.
 

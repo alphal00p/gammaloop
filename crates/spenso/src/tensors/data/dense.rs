@@ -48,7 +48,9 @@ use symbolica::{atom::Atom, atom::Symbol};
 
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Hash, Eq, Encode, Decode)]
 pub struct DenseTensor<T, S = OrderedStructure> {
+    /// Components in the flat order defined by `structure`.
     pub data: Vec<T>,
+    /// Tensor structure that maps external slots to flat component indices.
     pub structure: S,
 }
 

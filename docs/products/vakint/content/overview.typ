@@ -1,4 +1,4 @@
-#import "../../shared.typ": callout, boundary, product-link, source-link
+#import "../../shared.typ": callout, boundary, developer-link, product-link
 
 #let overview = [
 = Overview
@@ -21,11 +21,11 @@ a `topo(...)` structure built from propagators.
   #link("tutorial/")[matching-only tutorial] and compare with the
   #link("reference/topologies/")[generated topology table].
 - To tensor-reduce and evaluate with an explicit backend policy, use the
-  #link("manual/evaluation/")[evaluation manual] with the exact
+  #link("guides/evaluation/")[evaluation guide] with the exact
   #link("reference/rust/supported/vakint/#supported-evaluationorder")[`EvaluationOrder`]
   reference.
 - To embed Vakint in Rust or `symbolica.community.vakint`, use the
-  #link("manual/interfaces/")[interface guide] and generated Rust/Python signatures before
+  #link("reference/interfaces/")[interface guide] and generated Rust/Python signatures before
   selecting external tools.
 
 == Workflow
@@ -73,7 +73,8 @@ On macOS, if a GNU-compiler link fails with missing `__emul...` symbols, retry t
 `EXTRA_MACOS_LIBS_FOR_GNU_GCC=T` set.
 
 Vakint is used by #product-link("gammaloop", label: "GammaLoop") for vacuum-integral work, but it
-owns its topology and evaluation conventions independently. The
-#source-link("crates/vakint/README.md", label: "Vakint README") contains additional Rust examples;
-use the API and topology references in this manual for the selected version.
+owns its topology and evaluation conventions independently. Use this guide and the generated
+API/topology references for the selected version. Contributors can follow topology construction,
+canonicalization, backend selection, and external-process ownership in the
+#developer-link("vakint-architecture", "vakint-architecture.typ", "Vakint implementation architecture").
 ]

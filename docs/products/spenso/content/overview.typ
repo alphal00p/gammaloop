@@ -1,4 +1,4 @@
-#import "../../shared.typ": callout, boundary, product-link, source-link
+#import "../../shared.typ": callout, boundary, developer-link, product-link
 
 #let overview = [
 = Overview
@@ -21,10 +21,13 @@ network execution build on that separation.
   #link("tutorial/")[first-contraction tutorial] and the exact
   #link("reference/rust/supported/spenso/#supported-contract")[`Contract` reference].
 - To assemble and execute several tensor/scalar nodes, use the
-  #link("manual/networks/")[tensor-network manual] with the
+  #link("guides/networks/")[tensor-network guide] with the
   #link("reference/rust/supported/spenso/#supported-network")[`Network` reference].
+- To construct tensors or execute a network from Python, follow the
+  #link("guides/python/")[Python tensor-workflow guide] with the exact
+  #link("reference/python/spynso3/#exports-tensornetwork")[`TensorNetwork` reference].
 - To parse symbolic tensor functions or apply Dirac/color identities, review the
-  #link("manual/interfaces/")[feature and interface guide], then continue with
+  #link("reference/interfaces/")[feature and interface guide], then continue with
   #product-link("idenso", label: "Idenso") for representation-aware rewrites.
 
 == From tensors to networks
@@ -66,7 +69,10 @@ Spenso uses #product-link("linnet", label: "Linnet") for the underlying network 
 Symbolica expressions. #product-link("gammaloop", label: "GammaLoop") consumes these components
 inside a broader collider workflow.
 
-The #source-link("crates/spenso/README.md", label: "Spenso README") gives a compact package
-summary. The Rust and Python API sections list the public modules, traits, feature gates, and
-import paths.
+The #link("reference/interfaces/")[interface guide] and generated Rust/Python references list
+the public modules, traits, feature gates, and import paths.
+
+Contributors changing structures, contraction, parsing, storage, or network scheduling should
+also read the source-audited
+#developer-link("spenso-architecture", "spenso-architecture.typ", "Spenso implementation architecture").
 ]

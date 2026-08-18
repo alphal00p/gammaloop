@@ -1,4 +1,4 @@
-#import "../../shared.typ": callout, product-link, source-link
+#import "../../shared.typ": callout, developer-link, product-link
 
 #let algebra = [
 = Syntax, indices, and algebra passes
@@ -25,7 +25,7 @@ head or index structure.
 Two factors may legitimately print the same local dummy name before they are multiplied. Wrap
 each factor with a distinct header first, while leaving its external indices untouched:
 
-// docs-example: compile
+// docs-example: compile idenso-dummy-namespaces
 ```python
 import symbolica as sp
 from symbolica.community.idenso import initialize, list_dangling, wrap_dummies
@@ -49,7 +49,7 @@ assert len(list_dangling(safe_product)) == 2
 
 The stable invariant is two free indices, `nu` and `rho`; the two occurrences of local `mu`
 belong to separate contractions after wrapping. The generated
-#link("reference/python/idenso-community/?q=wrap_dummies")[`wrap_dummies` reference] records the
+#link("reference/python/idenso-community/#wrap-dummies")[`wrap_dummies` reference] records the
 Python signature, while the exact
 #link("reference/rust/supported/idenso/#supported-indextooling")[`IndexTooling` reference] covers
 the underlying Rust boundary.
@@ -90,10 +90,18 @@ the representation and algebra rules. Avoid substituting scalar parameters too e
 can substantially increase intermediate expression size even when the resulting tensor network
 is unchanged.
 
-Concrete syntax and rewrite cases are documented in
-#source-link("docs/architecture/spenso-symbolica-syntax-and-rewrites.typ", label: "the Spenso/Symbolica syntax note")
-and the rendered #link("manual/form-color-dirac/")[FORM color and Dirac specification].
-The #source-link("docs/architecture/schoonschip-net-parsing.typ", label: "Schoonschip parsing guide")
+Concrete syntax and rewrite cases are documented in the
+#developer-link(
+  "spenso-symbolica-syntax-and-rewrites",
+  "spenso-symbolica-syntax-and-rewrites.typ",
+  "Spenso/Symbolica syntax note",
+)
+and the rendered #link("reference/form-color-dirac/")[FORM color and Dirac specification].
+The #developer-link(
+  "schoonschip-network",
+  "schoonschip-net-parsing.typ",
+  "Schoonschip parsing guide",
+)
 shows how normalization, network construction, and contraction fit together.
 
 Tensor storage and execution remain owned by #product-link("spenso", label: "Spenso").

@@ -29,7 +29,7 @@ file does not mount the native module.
 
 Save the following as `metric_first.py`:
 
-// docs-example: compile
+// docs-example: compile idenso-controlled-identity
 ```python
 from symbolica.community.idenso import initialize, list_dangling, simplify_metrics
 from symbolica.community.spenso import Representation, TensorName

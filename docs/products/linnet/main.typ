@@ -2,9 +2,11 @@
 #import "content/overview.typ": overview
 #import "content/tutorial.typ": tutorial
 #import "content/algorithms.typ": algorithms
+#import "content/clinnet.typ": clinnet
 #import "content/linnest.typ": linnest
 #import "content/api.typ": api
 #import "content/changelog.typ": changelog
+#import "content/linnet-releases.typ": linnet-releases
 #import "content/clinnet-releases.typ": clinnet-releases
 
 #let manual = product-document(
@@ -16,9 +18,11 @@
     #overview
     #tutorial
     #algorithms
+    #clinnet
     #linnest
     #api
     #changelog
+    #linnet-releases
     #clinnet-releases
   ],
 )

@@ -1,4 +1,4 @@
-#import "../../shared.typ": callout, boundary, source-link
+#import "../../shared.typ": callout, boundary, developer-link, source-link
 
 #let process-generation = [
 = Process generation and state workflows
@@ -85,7 +85,7 @@ command exercised by the maintained scalar-topology example. Save it as `manual-
 and run `./gammaloop --clean-state manual-bubble.toml run generate -c "quit -o"` from the
 repository root.
 
-// docs-example: syntax
+// docs-example: syntax gammaloop-process-generation
 ```toml
 commands = []
 
@@ -106,9 +106,9 @@ commands = [
 The acceptance invariant is a persisted state in which `display processes` identifies process
 `bubble` and integrand `scalar_bubble`; replaying the card with a clean destination must produce
 the same named objects. The exact command and setting semantics are linked from the
-#link("reference/cli/?q=generate%20amp")[amplitude-generation reference],
-#link("reference/cli/?q=save%20state")[state-persistence reference], and
-#link("reference/cli/?q=cli.state.folder")[state-folder setting]. The full maintained source is
+#link("reference/cli/#command-gammaloop-generate-amp-23b125bb12cb4529")[amplitude-generation reference],
+#link("reference/cli/#command-gammaloop-save-state-6caa72db99ca51d0")[state-persistence reference], and
+#link("reference/cli/#setting-cli-state-folder-ea5760beb855f86c")[state-folder setting]. The full maintained source is
 the #source-link("examples/cli/scalar_topologies/bubble.toml", label: "scalar bubble run card").
 
 #callout("Interpret the first failing stage", [
@@ -129,6 +129,68 @@ A reproducible run keeps its stages explicit:
 - evaluate samples or run an integration command block;
 - exit with persistence enabled when the state should be resumed.
 
+== Select integration slots and targets
+
+An integration slot is one `(process, integrand)` pair. Repeat `-p/--process` and
+`-i/--integrand-name` in matching order to integrate several slots together. By default those
+slots train and sample a shared grid, so their sample shapes must be compatible; add
+`--uncorrelated` when each slot needs an independent grid.
+
+A single `--target re im` (or `--target re,im`) applies the same known comparison value to every
+selected slot. Multi-slot runs can instead use one keyed value per slot:
+
+// docs-example: syntax
+```text
+integrate \
+  -p bubble_no_integrated_UV -i scalar_bubble_below_thres \
+  -p bubble -i scalar_bubble_below_thres \
+  --target bubble_no_integrated_UV@scalar_bubble_below_thres=1.471664021721597e-2,0.0 \
+           bubble@scalar_bubble_below_thres=2.7029875684552542e-3,0.0 \
+  --workspace-path ./integration/bubble-below-threshold \
+  --n-cores 1
+```
+
+Targets annotate result deltas; they do not replace `integrator.target_relative_accuracy`,
+`integrator.target_absolute_accuracy`, or the sample-budget settings that control convergence.
+The maintained
+#source-link("examples/cli/scalar_topologies/bubble.toml", label: "scalar bubble run card")
+contains the complete settings and both below- and above-threshold target sets. The generated
+#link("reference/cli/#command-gammaloop-integrate-eac2ec37911d2fab")[integration reference] is authoritative for
+selectors, renderers, batching controls, and allowed values.
+
+== Resume or replace an integration workspace
+
+An integration workspace is a completed-iteration checkpoint, not a second GammaLoop state.
+Without `--workspace-path`, writable sessions use `STATE_FOLDER/integration_workspace`;
+read-only sessions use `./integration_workspace_STATE_NAME` (or `./integration_workspace`) so
+they do not write into the active state.
+
+- Without `--restart`, GammaLoop resumes when the workspace already contains a compatible
+  checkpoint. Slots, shared-versus-uncorrelated sampling, effective model parameters, and
+  generated-integrand fingerprints must match. Saved targets and non-model runtime settings win
+  over changed values and produce a warning.
+- With `--restart`, GammaLoop removes that specific workspace and starts the integration from
+  scratch. Use it when changing slots, sampling correlation, generated integrands, or settings
+  that should take effect. It does not mean “resume”.
+- `--show-summary-only` reads the last completed result without evaluating more samples and
+  cannot be combined with `--restart`.
+
+The workspace root contains `manifest.json`, the latest user-facing `integration_result.json`,
+per-slot settings and results under `integrands/`, and the internal resume checkpoint under
+`state/integration_state.bin`. Observable resume snapshots live at
+`state/observables/<process@integrand>/latest.json`. Configured user-facing output is written per
+slot as `integrands/<process@integrand>/observables_final.json` or
+`integrands/<process@integrand>/observables_final.hwu`. `--write-results-for-each-iteration`
+additionally retains numbered result and observable history at the corresponding root or slot
+boundary.
+
+#callout("Archive the right boundary", [
+  `integration_result.json` is a presentation snapshot, not the authoritative resume state.
+  Keep the complete integration workspace when a run must be resumed, and keep the GammaLoop
+  state/run card that produced the referenced integrands. A copied result JSON alone is suitable
+  for analysis, not continuation.
+])
+
 #boundary("Keep the complete state together", [
   `run.toml` records boot settings, reusable command blocks, and top-level commands. Generated
   process and integrand artifacts live beside it. Resume with `-s STATE_FOLDER`; replay the run
@@ -136,4 +198,9 @@ A reproducible run keeps its stages explicit:
   than moving a generated subdirectory on its own, because settings and fingerprints are
   checked together.
 ])
+
+Contributor-facing ownership and data flow are documented in the
+#developer-link("gammaloop-architecture", "architecture-current.typ", "GammaLoop architecture")
+and the
+#developer-link("uv-renormalization", "uv-renormalization.typ", "UV renormalization architecture").
 ]

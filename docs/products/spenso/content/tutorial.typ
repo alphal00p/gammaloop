@@ -25,7 +25,7 @@ This first contraction uses dense integer tensors and needs neither Symbolica no
 
 Replace `src/main.rs` with:
 
-// docs-example: run
+// docs-example: run spenso-first-contraction
 ```rust
 use spenso::{
     contraction::Contract,

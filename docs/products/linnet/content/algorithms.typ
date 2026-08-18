@@ -17,15 +17,17 @@ Breadth-first traversal is useful for distance layers and connectivity; depth-fi
 is useful for trees, back edges, and decompositions. A traversal tree is a derived view, not a
 new graph, so mutations must be coordinated with the indexes it contains.
 
-Connected components, bridges, articulation structure, and biconnected regions all depend on
-the chosen subgraph. Run them on the full graph only when external half-edges and excluded nodes
-should participate in the answer.
+Connectivity and traversal results depend on the chosen subgraph. Run an operation on the full
+graph only when external half-edges and excluded nodes should participate in the answer. Linnet
+does not currently expose a dedicated articulation-point or biconnected-component API; derive
+those from traversal data only when your application owns that algorithm and its tests.
 
 == Cycles and cuts
 
-`cycle_basis` returns an independent basis and rank information. `all_cycles` expands that basis
-and can grow exponentially; prefer a basis when assigning loop momenta or computing a loop
-count. Symmetric differences combine cycle bitsets without inventing new graph identities.
+`cycle_basis` returns an independent cycle vector together with the spanning forest used to
+construct it. Use `cyclotomatic_number` when the numerical cycle rank itself is the result.
+`all_cycles` expands a basis and can grow exponentially; prefer a basis when assigning loop
+momenta. Symmetric differences combine cycle bitsets without inventing new graph identities.
 
 Cut enumeration separates required left and right node sets and returns the left region, cut
 content, and right region. A cut edge is represented through its half-edges, preserving which
@@ -44,7 +46,7 @@ This complete example builds a square with a diagonal and asks for every cut sep
 nodes. It is the smallest graph that makes the distinction between a path and a cut family
 visible without external data or drawing support.
 
-// docs-example: run
+// docs-example: run linnet-separating-cuts
 ```rust
 use linnet::half_edge::{HedgeGraph, builder::HedgeGraphBuilder};
 
@@ -96,9 +98,9 @@ resulting graph.
 
 DOT parsing and emission are interchange/debugging boundaries. Attributes can carry graph,
 node, edge, and half-edge data, but the typed Rust invariants are reconstructed by the parser;
-handle parser errors before running algorithms. The `drawing` feature adds layout and rendering.
-Layout coordinates are presentation data and may vary without changing topology, subgraph
-membership, or edge flow.
+handle parser errors before running algorithms. The `drawing` feature enables layout; rendering
+belongs to a DOT consumer, Clinnet, or Linnest. Layout coordinates are presentation data and may
+vary without changing topology, subgraph membership, or edge flow.
 
 #boundary("Tensor contraction uses Spenso", [
   Linnet determines connectivity and graph transformations. Tensor compatibility, contraction

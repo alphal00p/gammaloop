@@ -2,8 +2,10 @@
 #import "content/overview.typ": overview
 #import "content/tutorial.typ": tutorial
 #import "content/networks.typ": networks
+#import "content/python.typ": python
 #import "content/api.typ": api
 #import "content/changelog.typ": changelog
+#import "content/spenso-releases.typ": spenso-releases
 #import "content/spenso-macros-releases.typ": spenso-macros-releases
 #import "content/spenso-hep-lib-releases.typ": spenso-hep-lib-releases
 #import "content/spynso3-releases.typ": spynso3-releases
@@ -17,8 +19,10 @@
     #overview
     #tutorial
     #networks
+    #python
     #api
     #changelog
+    #spenso-releases
     #spenso-macros-releases
     #spenso-hep-lib-releases
     #spynso3-releases

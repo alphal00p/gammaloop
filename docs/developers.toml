@@ -21,29 +21,29 @@ kind = "System architecture"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-17"
+reviewed_at = "2026-08-18"
 review_ref = "c9f4e32acd2c"
 products = ["gammaloop"]
-topics = ["state", "evaluation", "events", "integration", "persistence"]
+topics = ["state", "python", "generation", "evaluation", "events", "integration", "persistence"]
 review_triggers = ["crates/gammaloop-api/src/**", "crates/gammaloop-api/python/**", "crates/gammalooprs/src/**"]
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/state.rs"
 symbol = "gammaloop_api::state::State::load"
 anchor = "load_state_manifest(&save_path)?"
-digest = "585b57a4a52209493288e8ef657e8144d382011c"
+digest = "a923d12cfaa66872454cd1be83212eb03faad754"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
 symbol = "gammaloop_api::commands::integrate::Integrate::default_workspace_path"
 anchor = "fn default_workspace_path(&self"
-digest = "84a9ff4697c822832eae80b41bb6ffe7d431278a"
+digest = "8c949ca9510175675eff692c8e93adf87318d65b"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/evaluation.rs"
 symbol = "gammalooprs::integrands::evaluation::EvaluationResult"
 anchor = "pub struct EvaluationResult {"
-digest = "9853f32a5035259fca3db4c9ca60c2892854400b"
+digest = "e9dd13bbf6172e526731689a87d74c4d8ab8f356"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/process/mod.rs"
@@ -61,7 +61,25 @@ digest = "0f9cc30132cbe0106c4354f5afbee4709debf4a8"
 path = "crates/gammalooprs/src/observables/mod.rs"
 symbol = "gammalooprs::observables::EventProcessingRuntime"
 anchor = "pub struct EventProcessingRuntime {"
-digest = "14cc6ea676345299b17f1460e183a096ae07546c"
+digest = "afea0cf9f45b3ce7526c91b708dbd3e360aad060"
+
+[[section.note.scope]]
+path = "crates/gammaloop-api/src/python.rs"
+symbol = "gammaloop_api::python::GammaLoopAPI"
+anchor = "struct GammaLoopAPI {"
+digest = "206804596b1bb7ea2ec67ce0fe6edd5c29f33c8d"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/lib.rs"
+symbol = "gammalooprs module topology"
+anchor = "pub mod cff;"
+digest = "25cda2dff8fd5a5c01f6b00c42311089a120e503"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/feyngen/diagram_generator.rs"
+symbol = "gammalooprs::feyngen::DiagramGenerator::generate"
+anchor = "pub fn generate("
+digest = "9dfe1cebc820269c5784de100912053bf605613f"
 
 [[section.note]]
 id = "integration-dashboard"
@@ -82,7 +100,7 @@ review_triggers = ["crates/gammaloop-api/src/commands/integrate.rs", "crates/gam
 path = "crates/gammaloop-api/src/commands/integrate.rs"
 symbol = "gammaloop_api::commands::integrate::dashboard_event_loop"
 anchor = "fn dashboard_event_loop(receiver"
-digest = "84a9ff4697c822832eae80b41bb6ffe7d431278a"
+digest = "8c949ca9510175675eff692c8e93adf87318d65b"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrate/render_ratatui.rs"
@@ -111,6 +129,12 @@ products = ["gammaloop"]
 topics = ["uv", "renormalization"]
 review_triggers = ["crates/gammalooprs/src/uv/**", "crates/gammalooprs/src/graph/**"]
 
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/orchestrator.rs"
+symbol = "gammalooprs::uv::UVOrchestrator"
+anchor = "impl UVOrchestrator {"
+digest = "b57273870e63895f229215175919b8a9e15e1054"
+
 [[section.note]]
 id = "spenso-parsing-flow"
 title = "Spenso parsing flow"
@@ -126,6 +150,12 @@ products = ["spenso", "idenso"]
 topics = ["parsing", "tensor-network"]
 review_triggers = ["crates/spenso/src/network/parsing/**", "crates/idenso/src/tensor/mod.rs"]
 
+[[section.note.scope]]
+path = "crates/spenso/src/network/parsing/mod.rs"
+symbol = "spenso::network::parsing::ShorthandParsing"
+anchor = "pub enum ShorthandParsing {"
+digest = "aaa5b8535c3920a7a8831cd785af176b64136b86"
+
 [[section.note]]
 id = "schoonschip-network"
 title = "Schoonschip network architecture"
@@ -140,6 +170,12 @@ review_ref = "c9f4e32acd2c"
 products = ["spenso", "idenso"]
 topics = ["parsing", "schoonschip", "rewrites"]
 review_triggers = ["crates/idenso/src/shorthands/schoonschip/**", "crates/spenso/src/network/**"]
+
+[[section.note.scope]]
+path = "crates/idenso/src/shorthands/schoonschip/api.rs"
+symbol = "idenso::shorthands::schoonschip::Schoonschip"
+anchor = "pub trait Schoonschip {"
+digest = "07aadf239a22ed4bb7b99cdd3ebe843667c27863"
 
 [[section.note]]
 id = "gammaloop-draw-style-migration"
@@ -157,6 +193,12 @@ products = ["gammaloop", "linnet"]
 topics = ["drawing", "typst"]
 review_triggers = ["crates/gammaloop-api/src/commands/save.rs", "crates/gammaloop-api/src/templates.rs", "crates/gammalooprs/src/graph/parse/from_dot.rs", "crates/gammalooprs/src/model/mod.rs", "crates/linnest/typst/**", "assets/embedded/drawing/**"]
 
+[[section.note.scope]]
+path = "crates/gammaloop-api/src/templates.rs"
+symbol = "gammaloop_api::templates::Assets::extract_templates"
+anchor = "pub fn extract_templates<P: AsRef<Path>>"
+digest = "6a4b2fc71790f146c77bc6686401f3094eea2430"
+
 [[section.note]]
 id = "gammaloop-drawing-architecture"
 title = "GammaLoop Drawing Architecture"
@@ -172,6 +214,12 @@ products = ["gammaloop", "linnet"]
 topics = ["drawing", "dot", "typst"]
 review_triggers = ["crates/gammaloop-api/src/commands/save.rs", "crates/gammaloop-api/src/templates.rs", "crates/gammalooprs/src/graph/parse/from_dot.rs", "crates/gammalooprs/src/model/mod.rs", "crates/linnet/src/**", "crates/linnest/src/**", "crates/linnest/typst/src/**", "crates/kurvst/src/**", "crates/kurvst/typst/src/**", "crates/clinnet/src/**", "assets/embedded/drawing/templates/**"]
 
+[[section.note.scope]]
+path = "crates/linnest/typst/src/lib.typ"
+symbol = "linnest::typst::layout-sequence"
+anchor = "#let layout-sequence = layouts.sequence"
+digest = "82e7f18d12a2707349685de415a6c32af1b53418"
+
 [[section.note]]
 id = "spenso-symbolica-syntax-and-rewrites"
 title = "Spenso Symbolica Syntax And Rewrite Idioms"
@@ -186,6 +234,186 @@ review_ref = "6feaba98e48a2cedb4688d3d0cc9a214716a8677"
 products = ["spenso", "idenso"]
 topics = ["symbolica", "tensor syntax", "rewriting"]
 review_triggers = ["crates/spenso/src/network/parsing/**", "crates/spenso/src/shadowing/**", "crates/idenso/src/lib.rs", "crates/idenso/src/epsilon.rs", "crates/idenso/src/shorthands/**", "crates/idenso/src/dirac/**", "crates/idenso/src/color/**"]
+
+[[section.note.scope]]
+path = "crates/idenso/src/lib.rs"
+symbol = "idenso::IndexTooling"
+anchor = "pub trait IndexTooling {"
+digest = "f57c607c0b36833c9f630aa82082aca34cb52671"
+
+[[section.note]]
+id = "spenso-architecture"
+title = "Spenso implementation architecture"
+summary = "Tensor structures and payloads, direct contraction, network graph/store execution, Symbolica parsing, serialization and ownership boundaries, invariants, and tests."
+source = "docs/architecture/spenso-architecture.typ"
+kind = "System architecture"
+status = "Implemented · reviewed 2026-08-18"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-18"
+review_ref = "28275fc5d5154faa43a19dba0233bacd0dafbf1f"
+products = ["spenso"]
+topics = ["tensor structure", "contraction", "tensor network", "parallelism", "parsing", "serialization"]
+review_triggers = ["crates/spenso/Cargo.toml", "crates/spenso/src/structure.rs", "crates/spenso/src/structure/**", "crates/spenso/src/tensors/**", "crates/spenso/src/contraction.rs", "crates/spenso/src/contraction/**", "crates/spenso/src/network/**", "crates/spenso/src/shadowing/**", "crates/spenso/src/symbolic_parallelism.rs", "crates/spenso/src/symbolica_init.rs"]
+
+[[section.note.scope]]
+path = "crates/spenso/src/structure.rs"
+symbol = "spenso::structure::TensorStructure"
+anchor = "pub trait TensorStructure {"
+digest = "759930f73a92dcb35ae24716a803d4bb345e70d8"
+
+[[section.note.scope]]
+path = "crates/spenso/src/tensors/data.rs"
+symbol = "spenso::tensors::data::DataTensor"
+anchor = "pub enum DataTensor<T, I = OrderedStructure> {"
+digest = "090c832fa7615c126e7fbc54747b687f75e21dd4"
+
+[[section.note.scope]]
+path = "crates/spenso/src/contraction.rs"
+symbol = "spenso::contraction::Contract blanket implementation"
+anchor = "impl<T, U, O> Contract<T> for U"
+digest = "29a1af94793a0b1ae3bf3cc4e306c89f91582a55"
+
+[[section.note.scope]]
+path = "crates/spenso/src/network/mod.rs"
+symbol = "spenso::network::Network"
+anchor = "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {"
+digest = "5dbcfbc152494f12bc03ab512d9346a4bf5cb2d8"
+
+[[section.note.scope]]
+path = "crates/spenso/src/network/parsing/mod.rs"
+symbol = "spenso::network::parsing::ParseSettings"
+anchor = "pub struct ParseSettings {"
+digest = "aaa5b8535c3920a7a8831cd785af176b64136b86"
+
+[[section.note.scope]]
+path = "crates/spenso/src/symbolic_parallelism.rs"
+symbol = "spenso::symbolic_parallelism::SymbolicParallelism"
+anchor = "pub enum SymbolicParallelism {"
+digest = "addbd2fb76dc603478b106c13f14503f37b81667"
+
+[[section.note]]
+id = "idenso-architecture"
+title = "Idenso implementation architecture"
+summary = "Representation and symbol initialization, symbolic tensor/network boundaries, rewrite families, Schoonschip execution, feature and serialization limits, index ownership, invariants, and tests."
+source = "docs/architecture/idenso-architecture.typ"
+kind = "System architecture"
+status = "Implemented · reviewed 2026-08-18"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-18"
+review_ref = "28275fc5d5154faa43a19dba0233bacd0dafbf1f"
+products = ["idenso"]
+topics = ["symbolica", "tensor identities", "rewriting", "schoonschip", "index ownership"]
+review_triggers = ["crates/idenso/Cargo.toml", "crates/idenso/src/lib.rs", "crates/idenso/src/representations.rs", "crates/idenso/src/rep_symbols.rs", "crates/idenso/src/tensor/**", "crates/idenso/src/shorthands/**", "crates/idenso/src/dirac/**", "crates/idenso/src/color/**", "crates/idenso/src/epsilon.rs", "crates/idenso/src/selective_expand.rs", "crates/idenso/src/cook.rs", "crates/idenso/src/python.rs"]
+
+[[section.note.scope]]
+path = "crates/idenso/src/representations.rs"
+symbol = "idenso::representations::initialize"
+anchor = "pub fn initialize() {"
+digest = "1143c258ff6209248ee14320962629d9109c149e"
+
+[[section.note.scope]]
+path = "crates/idenso/src/lib.rs"
+symbol = "idenso::IndexTooling"
+anchor = "pub trait IndexTooling {"
+digest = "f57c607c0b36833c9f630aa82082aca34cb52671"
+
+[[section.note.scope]]
+path = "crates/idenso/src/cook.rs"
+symbol = "idenso::CookSettings"
+anchor = "pub struct CookSettings {"
+digest = "c6c01c1ca4825ae4d4c79ed645a55faaa2dc5a3c"
+
+[[section.note.scope]]
+path = "crates/idenso/src/tensor/mod.rs"
+symbol = "idenso::tensor::SymbolicTensor"
+anchor = "pub struct SymbolicTensor<Aind: AbsInd = AbstractIndex> {"
+digest = "07ae06321c939c183891e2f6fdda331987979c73"
+
+[[section.note.scope]]
+path = "crates/idenso/src/shorthands/schoonschip/settings.rs"
+symbol = "idenso::shorthands::schoonschip::SchoonschipSettings"
+anchor = "pub struct SchoonschipSettings {"
+digest = "6924df328f8de538c789d2b07b312508e7c87534"
+
+[[section.note]]
+id = "linnet-architecture"
+title = "Linnet implementation architecture"
+summary = "Half-edge storage, subgraph views, mutation and DOT flows, feature and serialization boundaries, invariants, and verification."
+source = "docs/architecture/linnet-architecture.typ"
+kind = "System architecture"
+status = "Implemented · reviewed 2026-08-18"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-18"
+review_ref = "28275fc5d5154faa43a19dba0233bacd0dafbf1f"
+products = ["linnet"]
+topics = ["half-edge", "subgraph", "dot", "serialization", "algorithms"]
+review_triggers = ["crates/linnet/src/lib.rs", "crates/linnet/src/half_edge.rs", "crates/linnet/src/half_edge/**", "crates/linnet/src/parser/**", "crates/linnet/src/permutation.rs", "crates/linnet/src/tree/**", "crates/linnet/src/union_find/**", "crates/linnet/src/drawing.rs", "crates/linnet/src/num_traits.rs", "crates/linnet/Cargo.toml"]
+
+[[section.note.scope]]
+path = "crates/linnet/src/half_edge.rs"
+symbol = "linnet::half_edge::HedgeGraph"
+anchor = "pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {"
+digest = "bce399647d3ffcc8f3e1a52d3773db95719bde8d"
+
+[[section.note.scope]]
+path = "crates/linnet/src/half_edge/involution.rs"
+symbol = "linnet::half_edge::involution::Involution"
+anchor = "pub struct Involution<E = EdgeIndex> {"
+digest = "aafadafcd5bd741effcaf4c77d68cd51ac0dc8a1"
+
+[[section.note.scope]]
+path = "crates/linnet/src/half_edge/subgraph.rs"
+symbol = "linnet::half_edge::subgraph::SubGraphLike"
+anchor = "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {"
+digest = "05983dad9fdb3db00351c9e536a439ce48efd94b"
+
+[[section.note.scope]]
+path = "crates/linnet/src/parser/mod.rs"
+symbol = "linnet::parser::DotGraph"
+anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {"
+digest = "9c216349b08fcc8bbce6bfa7176f5b1e9ae7a82a"
+
+[[section.note]]
+id = "vakint-architecture"
+title = "Vakint implementation architecture"
+summary = "Topology construction, canonicalization and tensor-reduction flow, backend selection, external-process ownership, persistence boundaries, invariants, and tests."
+source = "docs/architecture/vakint-architecture.typ"
+kind = "System architecture"
+status = "Implemented · reviewed 2026-08-18"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-08-18"
+review_ref = "28275fc5d5154faa43a19dba0233bacd0dafbf1f"
+products = ["vakint"]
+topics = ["topologies", "canonicalization", "tensor reduction", "FORM", "pySecDec"]
+review_triggers = ["crates/vakint/src/**", "crates/vakint/templates/**", "crates/vakint/form_src/**", "crates/vakint/build.rs", "crates/vakint/Cargo.toml"]
+
+[[section.note.scope]]
+path = "crates/vakint/src/lib.rs"
+symbol = "vakint::Vakint"
+anchor = "pub struct Vakint {"
+digest = "754171cea0bd0c11a4bf78fa6e62e96ec4fe2843"
+
+[[section.note.scope]]
+path = "crates/vakint/src/topologies.rs"
+symbol = "vakint::topologies::Topologies::match_topologies_to_user_input"
+anchor = "pub fn match_topologies_to_user_input("
+digest = "7c79eb9d7e43b05b04f258ff40f4b54184017d8e"
+
+[[section.note.scope]]
+path = "crates/vakint/src/graph.rs"
+symbol = "vakint::graph::Graph::new_from_atom"
+anchor = "pub fn new_from_atom("
+digest = "39e48cf8f2a5f368b6eac525e5b2e19ebe41854e"
+
+[[section.note.scope]]
+path = "crates/vakint/src/symbolica_community_module/mod.rs"
+symbol = "vakint::symbolica_community_module::VakintWrapper"
+anchor = "pub struct VakintWrapper {"
+digest = "3b48fdfb6f13802d2363b5c259dbca84bfb6b030"
 
 [[section]]
 id = "proposals"
@@ -432,6 +660,12 @@ products = ["gammaloop"]
 topics = ["nix", "ci", "cache", "documentation"]
 review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/**", "crates/gammaloop-workspace-hack/**"]
 
+[[section.note.scope]]
+path = "flake.nix"
+symbol = "alphal00pDocsCargoArtifacts"
+anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
+digest = "73e7342390117ecda49fc7a4ec0e2d3e8eeff34d"
+
 [[section]]
 id = "documentation"
 title = "Documentation system"
@@ -451,6 +685,12 @@ review_ref = "6feaba98e48a2cedb4688d3d0cc9a214716a8677"
 products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
 topics = ["documentation", "architecture", "governance"]
 review_triggers = ["docs/developers.toml", "crates/alphal00p-docs-builder/src/lib.rs", "CONTRIBUTING.typ"]
+
+[[section.note.scope]]
+path = "crates/alphal00p-docs-builder/src/lib.rs"
+symbol = "alphal00p_docs_builder::SiteBuilder::check"
+anchor = "pub fn check(&self) -> Result<()> {"
+digest = "23462bb4149114ea306a6588344532dd284c7fc6"
 
 [[section.note]]
 id = "documentation-improvement-plan"

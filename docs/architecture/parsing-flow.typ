@@ -17,6 +17,7 @@ on the input `AtomView`.
 #table(
     columns: 2,
     align: (auto,auto,),
+    table.header([*Concept*], [*Role*]),
     [`ParseState`], [Tracks recursion depth and owns the dummy-index
     allocator used by shorthand materialization.],
     [Tensor library], [Maps parsed structures to library tensors when a
@@ -32,6 +33,7 @@ on the input `AtomView`.
 #table(
     columns: 2,
     align: (auto,auto,),
+    table.header([*Setting*], [*Behavior*]),
     [`precontract_scalars`], [When parsing products or sums, combine
     factors/summands that parse as pure scalars instead of keeping them
     as separate graph nodes.],
@@ -63,6 +65,7 @@ on the input `AtomView`.
 #table(
     columns: 2,
     align: (auto,auto,),
+    table.header([*Option*], [*Behavior*]),
     [`ShorthandParsing::expand_all()`], [`F(p(mink(D)), mink(D,i))` is
     rewritten before generic leaf parsing as
     `F(mink(D,d), mink(D,i)) * p(mink(D,d))`, where `d` is a fresh
@@ -126,6 +129,8 @@ match value {
 }
 ```
 
+#context if target() == "paged" {
+[
 == Flow Diagrams
 <flow-diagrams>
 === Top Level
@@ -330,6 +335,8 @@ trace
 + Branch: non-empty traces allocate one cyclic link per factor.
 + Replace placeholders, optionally materialize factor shorthand, parse,
   and multiply.
+]
+}
 
 == Function Flow
 <function-flow>
@@ -491,6 +498,7 @@ Fast structure inference is syntactic and intentionally non-semantic.
 #table(
     columns: 2,
     align: (auto,auto,),
+    table.header([*Syntax*], [*Inferred structure*]),
     [Function], [Direct slot arguments expose slots. `aind(...)` bundles
     are flattened. Other arguments are metadata.],
     [Product], [Merge the structures of all factors. Scalar factors
@@ -702,6 +710,7 @@ let factor = ChainExpansion::replace_placeholders(factor, &left, &right);
 #table(
     columns: 2,
     align: (auto,auto,),
+    table.header([*Syntax*], [*Parsing behavior*]),
     [Product], [Parse every factor recursively. If scalar precontraction
     is enabled, pure scalar factors are combined. The old special case
     `p(rep) * q(rep)` is intentionally not a shorthand materialization
@@ -719,6 +728,7 @@ let factor = ChainExpansion::replace_placeholders(factor, &left, &right);
 #table(
     columns: 2,
     align: (auto,auto,),
+    table.header([*Input*], [*Behavior*]),
     [`F(p(rep), slot)`], [Must materialize before ordinary function
     parsing. Expected expansion is `F(dummy, slot) * p(dummy)`, leaving
     `slot` external and the dummy internal.],

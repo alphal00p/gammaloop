@@ -25,7 +25,7 @@ No drawing feature or external layout program is needed to construct the graph a
 
 Replace `src/main.rs` with the following program:
 
-// docs-example: run
+// docs-example: run linnet-first-graph
 ```rust
 use linnet::half_edge::{
     builder::HedgeGraphBuilder,

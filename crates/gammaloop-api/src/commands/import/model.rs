@@ -28,7 +28,7 @@ static BUILTIN_MODEL_NAMES: OnceLock<Vec<String>> = OnceLock::new();
 static BUILTIN_MODEL_RESTRICTIONS: OnceLock<BTreeMap<String, Vec<String>>> = OnceLock::new();
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
-/// Generate integrands
+/// Imports a built-in JSON model, a JSON model file, or a UFO model directory into the active state.
 pub struct ImportModel {
     /// Built-in model name, JSON model path, or UFO directory to import.
     #[arg(value_hint = clap::ValueHint::AnyPath)]

@@ -303,6 +303,89 @@ fn external_type_name(ty: &Type) -> Option<String> {
     }
 }
 
+fn elide_braced_body(mut declaration: String) -> String {
+    if declaration.ends_with("{ }") {
+        declaration.truncate(declaration.len() - "{ }".len());
+        declaration.push_str("{ … }");
+    }
+    declaration
+}
+
+fn struct_signature(item: &ItemStruct) -> String {
+    let mut declaration = item.clone();
+    declaration.attrs.clear();
+    match &mut declaration.fields {
+        Fields::Named(fields) => {
+            fields.named.clear();
+            elide_braced_body(declaration.to_token_stream().to_string())
+        }
+        Fields::Unnamed(fields) => {
+            fields.unnamed.clear();
+            let declaration = declaration.to_token_stream().to_string();
+            declaration
+                .strip_suffix("( ) ;")
+                .map_or(declaration.clone(), |head| format!("{head}(…);"))
+        }
+        Fields::Unit => declaration.to_token_stream().to_string(),
+    }
+}
+
+fn enum_signature(item: &ItemEnum) -> String {
+    let mut declaration = item.clone();
+    declaration.attrs.clear();
+    declaration.variants.clear();
+    elide_braced_body(declaration.to_token_stream().to_string())
+}
+
+fn trait_signature(item: &ItemTrait) -> String {
+    let mut declaration = item.clone();
+    declaration.attrs.clear();
+    declaration.items.clear();
+    elide_braced_body(declaration.to_token_stream().to_string())
+}
+
+fn trait_function_signature(item: &syn::TraitItemFn) -> String {
+    let terminator = if item.default.is_some() {
+        " { … }"
+    } else {
+        ";"
+    };
+    format!("{}{terminator}", item.sig.to_token_stream())
+}
+
+fn trait_type_signature(item: &syn::TraitItemType) -> String {
+    let mut declaration = item.clone();
+    declaration.attrs.clear();
+    let defaulted = declaration.default.take().is_some();
+    let declaration = declaration.to_token_stream().to_string();
+    if defaulted {
+        format!("{} = …;", declaration.trim_end_matches(';').trim_end())
+    } else {
+        declaration
+    }
+}
+
+fn trait_const_signature(item: &syn::TraitItemConst) -> String {
+    let mut declaration = item.clone();
+    declaration.attrs.clear();
+    let defaulted = declaration.default.take().is_some();
+    let declaration = declaration.to_token_stream().to_string();
+    if defaulted {
+        format!("{} = …;", declaration.trim_end_matches(';').trim_end())
+    } else {
+        declaration
+    }
+}
+
+fn macro_signature(item: &ItemMacro) -> String {
+    let name = item
+        .ident
+        .as_ref()
+        .map(ToString::to_string)
+        .unwrap_or_else(|| "macro".to_owned());
+    format!("macro_rules! {name} {{ … }}")
+}
+
 fn external_type_descriptor(
     arguments: &CommonArgs,
     items: &[Item],
@@ -327,8 +410,8 @@ fn external_type_descriptor(
                 let mut item = item.clone();
                 let docs = prepare_external_docs(arguments, &mut item.attrs);
                 let format = arguments.format_tokens()?;
-                let members = fields(&mut item.fields, arguments, &format);
-                let signature = item.to_token_stream().to_string();
+                let members = fields(&mut item.fields, arguments, &format, true);
+                let signature = struct_signature(&item);
                 return Ok(item_descriptor(
                     arguments,
                     name.to_owned(),
@@ -350,7 +433,7 @@ fn external_type_descriptor(
                     .map(|variant| {
                         let name = variant.ident.to_string();
                         let docs = prepare_member_docs(&mut variant.attrs, arguments, &format);
-                        let fields = fields(&mut variant.fields, arguments, &format);
+                        let fields = fields(&mut variant.fields, arguments, &format, false);
                         quote! {
                             {
                                 let mut member = ::alphal00p_docs_schema::DocMember::new(
@@ -364,7 +447,7 @@ fn external_type_descriptor(
                         }
                     })
                     .collect::<Vec<_>>();
-                let signature = item.to_token_stream().to_string();
+                let signature = enum_signature(&item);
                 return Ok(item_descriptor(
                     arguments,
                     name.to_owned(),
@@ -437,7 +520,7 @@ fn external_trait_descriptor(
                 Some(trait_member(
                     item.sig.ident.to_string(),
                     kind,
-                    item.to_token_stream().to_string(),
+                    trait_function_signature(item),
                     docs,
                 ))
             }
@@ -446,7 +529,7 @@ fn external_trait_descriptor(
                 Some(trait_member(
                     item.ident.to_string(),
                     quote!(::alphal00p_docs_schema::DocMemberKind::AssociatedType),
-                    item.to_token_stream().to_string(),
+                    trait_type_signature(item),
                     docs,
                 ))
             }
@@ -455,14 +538,14 @@ fn external_trait_descriptor(
                 Some(trait_member(
                     item.ident.to_string(),
                     quote!(::alphal00p_docs_schema::DocMemberKind::AssociatedConst),
-                    item.to_token_stream().to_string(),
+                    trait_const_signature(item),
                     docs,
                 ))
             }
             _ => None,
         })
         .collect::<Vec<_>>();
-    let signature = item.to_token_stream().to_string();
+    let signature = trait_signature(&item);
     let descriptor = format_ident!("__alphal00p_docs_trait_{}", marker);
     let kind = external_kind_tokens(arguments, "trait")?;
     let line = external_source_line(source, name, None, ExternalKind::Trait)?;
@@ -508,7 +591,7 @@ fn external_macro_descriptor(
             descriptor,
             kind,
             &docs,
-            Some(item.to_token_stream().to_string()),
+            Some(macro_signature(&item)),
             quote!(),
             SourceContext::External {
                 identifier: source_id,
@@ -1030,8 +1113,8 @@ pub fn ty(arguments: TokenStream, input: TokenStream) -> TokenStream {
         };
         let ident = item.ident.clone();
         let descriptor = format_ident!("__alphal00p_docs_ty_{}", ident);
-        let members = fields(&mut item.fields, &arguments, &format);
-        let signature = item.to_token_stream().to_string();
+        let members = fields(&mut item.fields, &arguments, &format, true);
+        let signature = struct_signature(&item);
         let generated = item_descriptor(
             &arguments,
             ident.to_string(),
@@ -1059,7 +1142,7 @@ pub fn ty(arguments: TokenStream, input: TokenStream) -> TokenStream {
             .map(|variant| {
                 let name = variant.ident.to_string();
                 let docs = prepare_member_docs(&mut variant.attrs, &arguments, &format);
-                let fields = fields(&mut variant.fields, &arguments, &format);
+                let fields = fields(&mut variant.fields, &arguments, &format, false);
                 quote! {
                     {
                         let mut member = ::alphal00p_docs_schema::DocMember::new(
@@ -1073,7 +1156,7 @@ pub fn ty(arguments: TokenStream, input: TokenStream) -> TokenStream {
                 }
             })
             .collect::<Vec<_>>();
-        let signature = item.to_token_stream().to_string();
+        let signature = enum_signature(&item);
         let generated = item_descriptor(
             &arguments,
             ident.to_string(),
@@ -1095,11 +1178,20 @@ pub fn ty(arguments: TokenStream, input: TokenStream) -> TokenStream {
     .into()
 }
 
-fn fields(fields: &mut Fields, arguments: &CommonArgs, format: &TokenStream2) -> Vec<TokenStream2> {
+fn fields(
+    fields: &mut Fields,
+    arguments: &CommonArgs,
+    format: &TokenStream2,
+    public_only: bool,
+) -> Vec<TokenStream2> {
     fields
         .iter_mut()
         .enumerate()
-        .map(|(index, field)| field_descriptor(index, field, arguments, format))
+        .filter_map(|(index, field)| {
+            let include = !public_only || matches!(&field.vis, syn::Visibility::Public(_));
+            let descriptor = field_descriptor(index, field, arguments, format);
+            include.then_some(descriptor)
+        })
         .collect()
 }
 
@@ -1190,7 +1282,7 @@ pub fn trait_item(arguments: TokenStream, input: TokenStream) -> TokenStream {
                 Some(trait_member(
                     item.sig.ident.to_string(),
                     kind,
-                    item.to_token_stream().to_string(),
+                    trait_function_signature(item),
                     docs,
                 ))
             }
@@ -1199,7 +1291,7 @@ pub fn trait_item(arguments: TokenStream, input: TokenStream) -> TokenStream {
                 Some(trait_member(
                     item.ident.to_string(),
                     quote!(::alphal00p_docs_schema::DocMemberKind::AssociatedType),
-                    item.to_token_stream().to_string(),
+                    trait_type_signature(item),
                     docs,
                 ))
             }
@@ -1208,14 +1300,14 @@ pub fn trait_item(arguments: TokenStream, input: TokenStream) -> TokenStream {
                 Some(trait_member(
                     item.ident.to_string(),
                     quote!(::alphal00p_docs_schema::DocMemberKind::AssociatedConst),
-                    item.to_token_stream().to_string(),
+                    trait_const_signature(item),
                     docs,
                 ))
             }
             _ => None,
         })
         .collect::<Vec<_>>();
-    let signature = item.to_token_stream().to_string();
+    let signature = trait_signature(&item);
     let generated = item_descriptor(
         &arguments,
         ident.to_string(),
@@ -1267,7 +1359,7 @@ pub fn macro_item(arguments: TokenStream, input: TokenStream) -> TokenStream {
         };
         let full_docs = prepare_item_docs(&arguments, &mut item.attrs);
         let descriptor = format_ident!("__alphal00p_docs_macro_{}", ident);
-        let signature = item.to_token_stream().to_string();
+        let signature = macro_signature(&item);
         let generated = item_descriptor(
             &arguments,
             ident.to_string(),
@@ -1576,11 +1668,127 @@ fn item_descriptor_with_visibility(
 mod tests {
     use super::{
         CommonArgs, ExternalKind, expand_proc_macro_function, external_proc_macro_source_line,
-        external_source_line, is_exported_proc_macro, prepare_item_docs, prepare_member_docs,
+        external_source_line, fields, is_exported_proc_macro, macro_signature, prepare_item_docs,
+        prepare_member_docs, struct_signature, trait_const_signature, trait_function_signature,
+        trait_signature, trait_type_signature,
     };
     use crate::args::docs;
     use quote::ToTokens;
-    use syn::{Item, ItemFn, ItemStruct, Visibility, parse_quote};
+    use syn::{Item, ItemEnum, ItemFn, ItemMacro, ItemStruct, ItemTrait, Visibility, parse_quote};
+
+    #[test]
+    fn catalog_signatures_elide_implementation_bodies() {
+        let structure: ItemStruct = parse_quote! {
+            #[derive(Clone)]
+            pub struct State<T> {
+                pub value: T,
+            }
+        };
+        let structure = struct_signature(&structure);
+        assert!(structure.contains("pub struct State"));
+        assert!(structure.contains("…"));
+        assert!(!structure.contains("derive"));
+        assert!(!structure.contains("value"));
+
+        let definition: ItemTrait = parse_quote! {
+            pub trait Engine {
+                fn required(&self) -> usize;
+                fn run(&self) -> usize { 42 }
+            }
+        };
+        let declaration = trait_signature(&definition);
+        assert!(declaration.contains("pub trait Engine"));
+        assert!(declaration.contains("…"));
+        assert!(!declaration.contains("run"));
+        let syn::TraitItem::Fn(required) = &definition.items[0] else {
+            panic!("expected required trait method");
+        };
+        let required = trait_function_signature(required);
+        assert!(required.ends_with(';'));
+        assert!(!required.contains('…'));
+        let syn::TraitItem::Fn(run) = &definition.items[1] else {
+            panic!("expected trait method");
+        };
+        let run = trait_function_signature(run);
+        assert!(run.contains("fn run"));
+        assert!(run.ends_with("{ … }"));
+        assert!(!run.contains("42"));
+
+        let associated: ItemTrait = parse_quote! {
+            trait Associated {
+                type Required;
+                type Defaulted = Vec<Self::Required>;
+                const REQUIRED: usize;
+                const DEFAULTED: usize = expensive_default();
+            }
+        };
+        let syn::TraitItem::Type(required) = &associated.items[0] else {
+            panic!("expected required associated type");
+        };
+        let required = trait_type_signature(required);
+        assert!(required.ends_with(';'));
+        assert!(!required.contains('…'));
+        let syn::TraitItem::Type(defaulted) = &associated.items[1] else {
+            panic!("expected defaulted associated type");
+        };
+        let defaulted = trait_type_signature(defaulted);
+        assert!(defaulted.ends_with("= …;"));
+        assert!(!defaulted.contains("Vec"));
+        let syn::TraitItem::Const(required) = &associated.items[2] else {
+            panic!("expected required associated constant");
+        };
+        let required = trait_const_signature(required);
+        assert!(required.ends_with(';'));
+        assert!(!required.contains('…'));
+        let syn::TraitItem::Const(defaulted) = &associated.items[3] else {
+            panic!("expected defaulted associated constant");
+        };
+        let defaulted = trait_const_signature(defaulted);
+        assert!(defaulted.ends_with("= …;"));
+        assert!(!defaulted.contains("expensive_default"));
+
+        let exported: ItemMacro = parse_quote! {
+            macro_rules! exported {
+                ($value:expr) => { complicated_expansion($value) };
+            }
+        };
+        assert_eq!(macro_signature(&exported), "macro_rules! exported { … }");
+    }
+
+    #[test]
+    fn supported_fields_follow_the_public_type_surface() {
+        let arguments = CommonArgs::default();
+        let format = arguments.format_tokens().unwrap();
+        let mut structure: ItemStruct = parse_quote! {
+            pub struct Record {
+                pub visible: u8,
+                pub(crate) crate_visible: u8,
+                private: u8,
+            }
+        };
+        let members = fields(&mut structure.fields, &arguments, &format, true);
+        assert_eq!(members.len(), 1);
+        let members = members[0].to_string();
+        assert!(members.contains("visible"));
+        assert!(!members.contains("crate_visible"));
+        assert!(!members.contains("private"));
+
+        let mut enumeration: ItemEnum = parse_quote! {
+            pub enum Message {
+                Unit,
+                Structured { inherited_public_field: u8 },
+            }
+        };
+        assert_eq!(enumeration.variants.len(), 2);
+        let fields = fields(
+            &mut enumeration.variants[1].fields,
+            &arguments,
+            &format,
+            false,
+        );
+        assert_eq!(fields.len(), 1);
+        assert!(fields[0].to_string().contains("inherited_public_field"));
+    }
 
     #[test]
     fn only_typst_item_docs_are_shortened_for_rustdoc() {

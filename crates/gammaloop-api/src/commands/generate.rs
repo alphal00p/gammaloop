@@ -54,6 +54,8 @@ pub struct Generate {
     #[arg(long = "keep-sources", default_value_t = false, global = true)]
     #[serde(default)]
     pub keep_sources: bool,
+    /// Selects cross-section, amplitude, or existing-process generation; when
+    /// omitted, generates all integrands in the active state.
     #[command(subcommand)]
     pub mode: Option<GenerateCmd>,
 }

@@ -11,6 +11,7 @@ gammaloop-api = { path = "../gammaloop-api", default-features = false, features 
 gammalooprs = { path = "../gammalooprs", default-features = false }
 idenso = { workspace = true, features = ["bincode", "reference-cases"] }
 linnet = { path = "../linnet", default-features = false, features = ["nodestore-vec", "bincode", "drawing", "serde", "symbolica"] }
+ndarray.workspace = true
 spenso = { workspace = true, features = ["shadowing"] }
 spenso-hep-lib.workspace = true
 spenso-macros = { workspace = true, features = ["shadowing"] }

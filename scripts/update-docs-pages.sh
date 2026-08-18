@@ -28,6 +28,8 @@ require_bundle() {
         snapshot.json \
         search-index.json \
         tutorial/index.html \
+        reference/interfaces/index.html \
+        version-history/index.html \
         manual/interfaces/index.html \
         manual/releases/index.html \
         assets/site.css \
@@ -136,6 +138,10 @@ case "$mode" in
             fail "latest build has no developer script"
         [ -f "$build_root/developers/architecture/gammaloop-architecture/index.html" ] ||
             fail "latest build has no implemented GammaLoop architecture note"
+        for product in linnet spenso idenso vakint; do
+            [ -f "$build_root/developers/architecture/$product-architecture/index.html" ] ||
+                fail "latest build has no implemented $product architecture note"
+        done
         [ -f "$build_root/developers/architecture/spenso-parsing-flow/index.html" ] ||
             fail "latest build has no native Spenso parsing page"
         [ ! -e "$build_root/developers/architecture/spenso-parsing-flow/diagram.html" ] ||

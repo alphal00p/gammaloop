@@ -14,7 +14,8 @@ use std::{
 };
 
 use alphal00p_docs_schema::{
-    ApiLanguage, DocCatalog, DocFormat, DocItem, DocMember, DocScope, SCHEMA_VERSION,
+    ApiLanguage, DocCatalog, DocFormat, DocItem, DocMember, DocMemberKind, DocScope,
+    SCHEMA_VERSION,
     generated::{
         CliAliasKind, CliArgumentAction, GENERATED_REFERENCE_SCHEMA, GammaLoopReference,
         VakintReference,
@@ -411,6 +412,8 @@ struct PageConfig {
     source: PathBuf,
     symbol: String,
     route: String,
+    #[serde(default)]
+    aliases: Vec<String>,
     group: String,
 }
 
@@ -455,6 +458,8 @@ struct SearchEntry {
     summary: String,
     href: String,
     kind: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    text: String,
 }
 
 #[derive(Clone, Debug)]
@@ -480,6 +485,57 @@ fn supplemental_reference(product: &str) -> Option<(&'static str, &'static str)>
         "vakint" => Some(("reference/topologies/", "Topologies and dependencies")),
         _ => None,
     }
+}
+
+fn product_site_pages(product: &ProductConfig) -> Vec<SitePage> {
+    let mut groups = BTreeMap::<String, Vec<SitePage>>::new();
+    let mut group_order = Vec::new();
+    for page in &product.pages {
+        if !groups.contains_key(&page.group) {
+            group_order.push(page.group.clone());
+        }
+        groups
+            .entry(page.group.clone())
+            .or_default()
+            .push(SitePage {
+                route: page.route.clone(),
+                title: page.title.clone(),
+                group: page.group.clone(),
+            });
+    }
+    if !groups.contains_key("Reference") {
+        group_order.push("Reference".to_owned());
+    }
+    let reference = groups.entry("Reference".to_owned()).or_default();
+    reference.push(SitePage::new("reference/", "Reference", "Reference"));
+    reference.push(SitePage::new(
+        "reference/python/",
+        "Python API",
+        "Reference",
+    ));
+    reference.extend(product.python_components.iter().map(|component| {
+        let module = component.module.as_deref().unwrap_or(&component.package);
+        SitePage::new(
+            format!("reference/python/{}/", component.id),
+            format!("{module} Python API"),
+            "Reference",
+        )
+    }));
+    reference.push(SitePage::new("reference/rust/", "Rust API", "Reference"));
+    reference.extend(product.rust_components.iter().map(|component| {
+        SitePage::new(
+            format!("reference/rust/supported/{}/", component.id),
+            format!("{} supported Rust API", component.package),
+            "Reference",
+        )
+    }));
+    if let Some((route, title)) = supplemental_reference(&product.id) {
+        reference.push(SitePage::new(route, title, "Reference"));
+    }
+    group_order
+        .into_iter()
+        .flat_map(|group| groups.remove(&group).unwrap_or_default())
+        .collect()
 }
 
 #[derive(Clone, Debug)]
@@ -783,12 +839,10 @@ impl SiteBuilder {
                         digest.trim()
                     );
                 }
-                if note.lifecycle == "current" && note.scope.is_empty() {
-                    eprintln!(
-                        "warning: current developer note {} has no verified code scope",
-                        note.id
-                    );
-                }
+                ensure!(
+                    note.lifecycle != "current" || !note.scope.is_empty(),
+                    "current note must declare a verified code scope"
+                );
                 if note.lifecycle == "superseded" {
                     let replacement = note.superseded_by.as_deref().filter(|id| !id.is_empty());
                     ensure!(
@@ -1064,12 +1118,76 @@ impl SiteBuilder {
                 "{} has no authored documentation pages",
                 product.id
             );
+            let manual_source = fs::read_to_string(self.root.join(&product.source))?;
+            ensure!(
+                manual_source.contains("#let manual = product-document(")
+                    && manual_source.trim_end().ends_with("#manual"),
+                "{} product source must define and emit the complete PDF manual",
+                product.id
+            );
+            let product_source_root = product
+                .source
+                .parent()
+                .context("product source must have a parent directory")?;
+            let content_import_count = manual_source
+                .lines()
+                .filter(|line| line.trim_start().starts_with("#import \"content/"))
+                .count();
+            ensure!(
+                content_import_count == product.pages.len(),
+                "{} PDF manual imports {content_import_count} content chapters but the registry has {}",
+                product.id,
+                product.pages.len()
+            );
+            let mut previous_manual_page = 0;
+            for page in &product.pages {
+                let relative_source = page
+                    .source
+                    .strip_prefix(product_source_root)
+                    .wrap_err_with(|| {
+                        format!(
+                            "{}:{} source {} is outside the product source directory",
+                            product.id,
+                            page.id,
+                            page.source.display()
+                        )
+                    })?
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                let import = format!("#import \"{relative_source}\": {}", page.symbol);
+                ensure!(
+                    manual_source.contains(&import),
+                    "{} PDF manual does not import registered page {} as {}",
+                    product.id,
+                    page.id,
+                    page.symbol
+                );
+                let body_entry = Regex::new(&format!(
+                    r"#{}(?:-content)?(?:\(|\r?\n)",
+                    regex::escape(&page.symbol)
+                ))?;
+                let body_entries = body_entry.find_iter(&manual_source).collect::<Vec<_>>();
+                ensure!(
+                    body_entries.len() == 1,
+                    "{} PDF manual must include registered page {} exactly once",
+                    product.id,
+                    page.id
+                );
+                let body_entry = body_entries[0];
+                ensure!(
+                    body_entry.start() >= previous_manual_page,
+                    "{} PDF manual chapter order differs from the page registry at {}",
+                    product.id,
+                    page.id
+                );
+                previous_manual_page = body_entry.end();
+            }
             let mut page_ids = BTreeSet::new();
             let mut page_routes = BTreeSet::new();
             let mut page_sources = BTreeSet::new();
             let mut root_pages = 0;
             let mut tutorial_pages = 0;
-            let mut manual_pages = 0;
+            let mut guide_pages = 0;
             for page in &product.pages {
                 validate_route_segment(&page.id)?;
                 ensure!(
@@ -1100,6 +1218,16 @@ impl SiteBuilder {
                 );
                 validate_typst_symbol(&page.symbol)?;
                 validate_page_route(&page.route)?;
+                for alias in &page.aliases {
+                    validate_page_route(alias)?;
+                    ensure!(
+                        !alias.is_empty() && page_routes.insert(alias),
+                        "{}:{} alias {} conflicts with another authored route or alias",
+                        product.id,
+                        page.id,
+                        alias
+                    );
+                }
                 self.require_file(&page.source)?;
                 ensure!(
                     page.source
@@ -1113,7 +1241,7 @@ impl SiteBuilder {
                 );
                 root_pages += usize::from(page.route.is_empty());
                 tutorial_pages += usize::from(page.group == "Tutorial");
-                manual_pages += usize::from(page.group == "Manual");
+                guide_pages += usize::from(page.group == "Guides");
             }
             let content_root = self
                 .root
@@ -1151,8 +1279,20 @@ impl SiteBuilder {
                 product.id
             );
             ensure!(
-                manual_pages >= 2,
-                "{} must have a manual with subpages",
+                guide_pages >= 1,
+                "{} must have at least one task-oriented guide",
+                product.id
+            );
+            let version_history = product
+                .pages
+                .iter()
+                .find(|page| page.id == "releases")
+                .wrap_err_with(|| format!("{} has no version-history page", product.id))?;
+            ensure!(
+                version_history.title == "Version history"
+                    && version_history.route == "version-history/"
+                    && version_history.group == "Version history",
+                "{} version history must use the shared title, route, and navigation group",
                 product.id
             );
             if let Some(path) = &product.changelog {
@@ -1502,7 +1642,6 @@ impl SiteBuilder {
         )?;
         self.write_component_catalogs(product, &site)?;
         self.write_generated_reference(product, &site)?;
-        self.write_changelog_source(product, &site)?;
 
         if options.include_typst {
             self.render_typst(product, &metadata, &site, options.dependency_output)?;
@@ -1517,8 +1656,8 @@ impl SiteBuilder {
         }
         self.write_rust_reference(product, &metadata, &site)?;
         self.write_reference_hub(product, &site)?;
-        self.write_search_index(product, &site)?;
         self.decorate_site_pages(product, &metadata, &site, options.scope)?;
+        self.write_search_index(product, &site)?;
 
         if options.channel == BuildChannel::Snapshot && destination.exists() {
             ensure!(
@@ -1668,40 +1807,6 @@ impl SiteBuilder {
             )?;
         }
         Ok(())
-    }
-
-    fn write_changelog_source(&self, product: &ProductConfig, site: &Path) -> Result<()> {
-        let Some(changelog) = &product.changelog else {
-            return Ok(());
-        };
-        let destination = site.join("reference/content");
-        fs::create_dir_all(&destination)?;
-        fs::copy(self.root.join(changelog), destination.join("changelog.typ"))?;
-        Ok(())
-    }
-
-    fn changelog_typst(&self, product: &ProductConfig) -> Result<String> {
-        let Some(changelog) = &product.changelog else {
-            return Ok(String::new());
-        };
-        let source = fs::read_to_string(self.root.join(changelog))?;
-        let (title, body) = source
-            .split_once('\n')
-            .context("canonical Typst changelog must begin with `= Changelog`")?;
-        ensure!(
-            title.trim_end() == "= Changelog",
-            "{} must begin with exactly `= Changelog`",
-            changelog.display()
-        );
-        let mut rendered = format!(
-            "= Canonical package changelog <canonical-package-changelog>\n\
-             The following release history is imported from canonical Typst source \
-             #link(\"reference/content/changelog.typ\")[#raw(\"{}\")].\n\n",
-            typst_string(&changelog.to_string_lossy())
-        );
-        // The imported changelog is nested below its own canonical heading.
-        rendered.push_str(body.trim_start_matches(['\r', '\n']));
-        Ok(rendered)
     }
 
     fn generated_references(&self) -> Result<(GammaLoopReference, VakintReference)> {
@@ -1939,7 +2044,6 @@ impl SiteBuilder {
         let title = typst_string(&product.title);
         let provenance = provenance_typst(metadata);
         let catalog_reference = self.catalog_reference_typst(product, metadata, site)?;
-        let canonical_changelog = self.changelog_typst(product)?;
         let (gamma_reference, vakint_reference) = self.generated_references()?;
         let generated_reference =
             generated_reference_typst(&product.id, &gamma_reference, &vakint_reference);
@@ -1958,9 +2062,6 @@ impl SiteBuilder {
         if !generated_reference.is_empty() {
             document_sections.push("#generated-reference");
         }
-        if !canonical_changelog.is_empty() {
-            document_sections.push("#canonical-changelog");
-        }
         document_sections.push("#provenance");
         let document_body = document_sections.join(" #pagebreak() ");
         fs::write(
@@ -1970,7 +2071,6 @@ impl SiteBuilder {
                  {page_imports}\
                  #let catalog-reference = [{catalog_reference}]\n\
                  #let generated-reference = [{generated_reference}]\n\
-                 #let canonical-changelog = [{canonical_changelog}]\n\
                  #let provenance = [{provenance}]\n\
                  {page_documents}\
                  #document(\"manual.pdf\", title: [{title}])[{document_body}]\n"
@@ -2121,17 +2221,15 @@ impl SiteBuilder {
         for component in &product.python_components {
             let stub = self.python_stub_source(component);
             let stub_name = format!("{}.pyi", component.id);
-            let stub_text = if let Some(path) = stub {
+            if let Some(path) = stub {
                 let text = fs::read_to_string(&path)
                     .wrap_err_with(|| format!("failed to read {}", path.display()))?;
                 fs::write(destination.join(&stub_name), &text)?;
-                text
             } else {
                 let module = component.module.as_deref().unwrap_or(&component.package);
                 let text = format!("# Python interface for {module}\n");
                 fs::write(destination.join(&stub_name), &text)?;
-                text
-            };
+            }
             let catalog_path = site.join("catalogs").join(format!("{}.json", component.id));
             let catalog = serde_json::from_slice::<DocCatalog>(&fs::read(&catalog_path)?)
                 .wrap_err_with(|| format!("failed to parse {}", catalog_path.display()))?;
@@ -2154,8 +2252,8 @@ impl SiteBuilder {
                 component_page.join("index.html"),
                 reference_page(
                     &product.title,
-                    &format!("{} Python API", component.id),
-                    &render_python_catalog(&catalog, &stub_name, &stub_text, &metadata.git_commit),
+                    &format!("{} Python API", module),
+                    &render_python_catalog(&catalog, &stub_name, &metadata.git_commit),
                 ),
             )?;
         }
@@ -2165,7 +2263,7 @@ impl SiteBuilder {
                 &product.title,
                 "Python API",
                 &format!(
-                    "<p>Choose a Python module to browse classes, functions, signatures, parameters, examples, and feature requirements. Type-checker <code>.pyi</code> files are also available for download.</p><div class=\"api-component-grid\">{cards}</div>"
+                    "<p>Choose a Python module to browse classes, functions, signatures, parameters, examples, and feature requirements. Type-checker <code>.pyi</code> files are also available for download.</p><nav class=\"reference-guide-links\" aria-label=\"Related Python documentation\"><a href=\"reference/interfaces/\">Python interface guide</a></nav><div class=\"api-component-grid\">{cards}</div>"
                 ),
             ),
         )?;
@@ -2203,8 +2301,19 @@ impl SiteBuilder {
                 escape_html(&component.package),
                 escape_html(&catalog.component.version),
             );
+            body.push_str("<nav class=\"reference-guide-links\" aria-label=\"Related Rust guides\"><a href=\"tutorial/\">Start with the tutorial</a><a href=\"reference/interfaces/\">Rust interface guide</a><a href=\"reference/rust/\">All Rust crates</a></nav>");
+            let filter_id = format!("{}-symbol-filter", slug(&catalog.component.id));
+            body.push_str(&render_reference_filter_start(
+                &filter_id,
+                "Filter supported Rust symbols and members",
+                "Try a type, trait, function, method, or field",
+            ));
+            body.push_str(&render_api_symbol_index(
+                &catalog_surface_items(&catalog.root, true),
+                "Rust",
+            ));
             let mut path = Vec::new();
-            render_python_scope(
+            render_api_scope(
                 &catalog,
                 &catalog.root,
                 &mut path,
@@ -2212,13 +2321,14 @@ impl SiteBuilder {
                 2,
                 &mut body,
             );
+            body.push_str("</div></div>");
             let component_page = supported.join(&component.id);
             fs::create_dir_all(&component_page)?;
             fs::write(
                 component_page.join("index.html"),
                 reference_page(
                     &product.title,
-                    &format!("{} supported Rust API", component.id),
+                    &format!("{} supported Rust API", component.package),
                     &body,
                 ),
             )?;
@@ -2229,7 +2339,7 @@ impl SiteBuilder {
                 &product.title,
                 "Rust API",
                 &format!(
-                    "<p>Browse curated, source-backed API catalogs first; use the complete Rustdoc sidecars for implementation-level detail.</p><div class=\"api-component-grid\">{cards}</div>"
+                    "<p>Browse curated, source-backed API catalogs first; use the complete Rustdoc sidecars for implementation-level detail.</p><nav class=\"reference-guide-links\" aria-label=\"Related Rust documentation\"><a href=\"reference/interfaces/\">Rust interface guide</a></nav><div class=\"api-component-grid\">{cards}</div>"
                 ),
             ),
         )?;
@@ -2237,11 +2347,24 @@ impl SiteBuilder {
     }
 
     fn write_reference_hub(&self, product: &ProductConfig, site: &Path) -> Result<()> {
-        let mut cards = format!(
+        let mut cards = product
+            .pages
+            .iter()
+            .find(|page| page.route == "reference/interfaces/")
+            .map(|page| {
+                format!(
+                    "<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Choose an interface</p><h2><a href=\"{}\">{}</a></h2><p>{}</p></article>",
+                    escape_html(&page.route),
+                    escape_html(&page.title),
+                    escape_html(&page.summary),
+                )
+            })
+            .unwrap_or_default();
+        cards.push_str(&format!(
             "<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Curated + exhaustive</p><h2><a href=\"reference/rust/\">Rust API</a></h2><p>{} source-backed components with complete Rustdoc sidecars.</p></article><article class=\"reference-hub-card\"><p class=\"portal-kicker\">Generated signatures</p><h2><a href=\"reference/python/\">Python API</a></h2><p>{} modules rendered from checked runtime inventories; stubs remain downloadable for type checkers.</p></article>",
             product.rust_components.len(),
             product.python_components.len(),
-        );
+        ));
         if let Some((route, title)) = supplemental_reference(&product.id) {
             cards.push_str(&format!(
                 "<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Generated from the implementation</p><h2><a href=\"{route}\">{}</a></h2><p>Version-specific reference data, also available as JSON for tooling.</p></article>",
@@ -2337,39 +2460,7 @@ impl SiteBuilder {
         site: &Path,
         scope: BuildScope,
     ) -> Result<()> {
-        let mut pages = product
-            .pages
-            .iter()
-            .map(|page| SitePage {
-                route: page.route.clone(),
-                title: page.title.clone(),
-                group: page.group.clone(),
-            })
-            .collect::<Vec<_>>();
-        pages.push(SitePage::new("reference/", "Reference", "Reference"));
-        pages.push(SitePage::new(
-            "reference/python/",
-            "Python API",
-            "Reference",
-        ));
-        for component in &product.python_components {
-            pages.push(SitePage::new(
-                format!("reference/python/{}/", component.id),
-                format!("{} Python API", component.id),
-                "Reference",
-            ));
-        }
-        pages.push(SitePage::new("reference/rust/", "Rust API", "Reference"));
-        for component in &product.rust_components {
-            pages.push(SitePage::new(
-                format!("reference/rust/supported/{}/", component.id),
-                format!("{} supported Rust API", component.id),
-                "Reference",
-            ));
-        }
-        if let Some((route, title)) = supplemental_reference(&product.id) {
-            pages.push(SitePage::new(route, title, "Reference"));
-        }
+        let mut pages = product_site_pages(product);
         pages.retain(|page| site.join(&page.route).join("index.html").is_file());
 
         for (index, page) in pages.iter().enumerate() {
@@ -2386,6 +2477,21 @@ impl SiteBuilder {
                 ),
                 scope,
             )?;
+            if let Some(authored) = product
+                .pages
+                .iter()
+                .find(|authored| authored.route == page.route)
+            {
+                for alias in &authored.aliases {
+                    let directory = site.join(alias);
+                    fs::create_dir_all(&directory)?;
+                    let target = format!("{}{}", page_root_prefix(alias), authored.route);
+                    fs::write(
+                        directory.join("index.html"),
+                        generated_reference_redirect(&product.title, &target, &authored.title),
+                    )?;
+                }
+            }
         }
         Ok(())
     }
@@ -2403,7 +2509,7 @@ impl SiteBuilder {
         let path = site.join(&page.route).join("index.html");
         let source = fs::read_to_string(&path)?;
         let mut body = extract_html_body(&source)?.to_owned();
-        body = body.replace("<nav><a href=\"../../\">Manual</a></nav>", "");
+        body = body.replace("<nav><a href=\"../../\">Documentation home</a></nav>", "");
         if page.route.is_empty() {
             body = format!("{}{body}", product_hero(product));
         } else {
@@ -2552,7 +2658,9 @@ impl SiteBuilder {
                 .or_default()
                 .push((page.route.clone(), page.title.clone()));
         }
-        group_order.push("Reference".to_owned());
+        if !groups.contains_key("Reference") {
+            group_order.push("Reference".to_owned());
+        }
         let reference = groups.entry("Reference".to_owned()).or_default();
         reference.push(("reference/".to_owned(), "Reference overview".to_owned()));
         reference.push(("reference/python/".to_owned(), "Python API".to_owned()));
@@ -2605,16 +2713,30 @@ impl SiteBuilder {
                 escape_html(&portal),
             ));
         }
+        let citation_href = match scope {
+            BuildScope::FullSite => {
+                let portal = match metadata.channel {
+                    BuildChannel::Latest => format!("{docs_root}../../../"),
+                    BuildChannel::Snapshot => format!("{docs_root}../../../../"),
+                };
+                format!("{portal}citations/#{}", product.id)
+            }
+            BuildScope::ProductPreview => {
+                format!("{PUBLISHED_DOCS_ROOT}/citations/#{}", product.id)
+            }
+        };
         let version = match metadata.channel {
             BuildChannel::Latest => "latest".to_owned(),
             BuildChannel::Snapshot => metadata.snapshot_tag.unwrap_or("unknown").to_owned(),
         };
         format!(
-            "<aside class=\"docs-sidebar\" id=\"docs-sidebar\" aria-label=\"{} manual\">{navigation}<p class=\"sidebar-meta\"><strong>{}</strong><br><code>{}</code><br><a href=\"{}manual.pdf\">Download PDF</a></p></aside>",
+            "<aside class=\"docs-sidebar\" id=\"docs-sidebar\" aria-label=\"{} manual\">{navigation}<p class=\"sidebar-meta\"><strong>{}</strong><br><code>{}</code><br><a href=\"{}manual.pdf\">Download PDF</a><br><a href=\"{}\">Cite {}</a></p></aside>",
             escape_html(&product.title),
             escape_html(&product.title),
             escape_html(&version),
-            escape_html(docs_root)
+            escape_html(docs_root),
+            escape_html(&citation_href),
+            escape_html(&product.title),
         )
     }
 
@@ -2686,6 +2808,28 @@ impl SiteBuilder {
                     .iter()
                     .filter_map(|segment| segment.to_str())
                     .collect::<Vec<_>>();
+                if segments.len() == 3
+                    && segments.first() == Some(&"developers")
+                    && segments.get(1) == Some(&"architecture")
+                {
+                    let developer_id = segments[2];
+                    if let Some(note) = self
+                        .developers
+                        .section
+                        .iter()
+                        .flat_map(|section| &section.note)
+                        .find(|note| note.id == developer_id)
+                    {
+                        let target = format!(
+                            "https://github.com/alphal00p/gammaloop/blob/{}/{}{}",
+                            metadata.git_commit,
+                            note.source.to_string_lossy().replace('\\', "/"),
+                            suffix,
+                        );
+                        return format!("{name}=\"{}\"", escape_html(&target));
+                    }
+                    return captures[0].to_owned();
+                }
                 let Some(product_id) = segments
                     .first()
                     .filter(|segment| **segment == "products")
@@ -2720,6 +2864,7 @@ impl SiteBuilder {
             summary: product.tagline.clone(),
             href: "index.html".to_owned(),
             kind: "product".to_owned(),
+            text: String::new(),
         }];
         for page in &product.pages {
             let page_href = if page.route.is_empty() {
@@ -2727,31 +2872,27 @@ impl SiteBuilder {
             } else {
                 page.route.clone()
             };
+            let rendered = site.join(&page.route).join("index.html");
+            let html = rendered
+                .is_file()
+                .then(|| {
+                    fs::read_to_string(&rendered)
+                        .wrap_err_with(|| format!("failed to read {}", rendered.display()))
+                })
+                .transpose()?;
             entries.push(SearchEntry {
                 title: page.title.clone(),
                 summary: page.summary.clone(),
                 href: page_href.clone(),
                 kind: page.group.to_lowercase(),
+                text: html
+                    .as_deref()
+                    .map(rendered_article_search_text)
+                    .transpose()?
+                    .unwrap_or_default(),
             });
-            let source = fs::read_to_string(self.root.join(&page.source))?;
-            for line in source.lines() {
-                let trimmed = line.trim();
-                let level = trimmed
-                    .chars()
-                    .take_while(|character| *character == '=')
-                    .count();
-                if level >= 2
-                    && let Some(title) = trimmed
-                        .get(level..)
-                        .and_then(|title| title.strip_prefix(' '))
-                {
-                    entries.push(SearchEntry {
-                        title: title.trim().to_owned(),
-                        summary: format!("{} · {}", product.title, page.title),
-                        href: format!("{page_href}#{}", slug(title)),
-                        kind: page.group.to_lowercase(),
-                    });
-                }
+            if let Some(html) = html {
+                append_rendered_page_search(product, page, &page_href, &html, &mut entries)?;
             }
         }
         for component in product
@@ -2780,6 +2921,7 @@ impl SiteBuilder {
                                 generated_anchor("command", &command.path)
                             ),
                             kind: "command".to_owned(),
+                            text: String::new(),
                         }),
                 );
                 entries.extend(reference.settings.into_iter().map(|setting| SearchEntry {
@@ -2790,6 +2932,7 @@ impl SiteBuilder {
                         generated_anchor("setting", &setting.path)
                     ),
                     kind: "setting".to_owned(),
+                    text: String::new(),
                 }));
             }
             "vakint" => {
@@ -2809,6 +2952,7 @@ impl SiteBuilder {
                                 generated_anchor("topology", &topology.name)
                             ),
                             kind: "topology".to_owned(),
+                            text: String::new(),
                         }),
                 );
                 entries.extend(
@@ -2823,6 +2967,7 @@ impl SiteBuilder {
                             ),
                             href: "reference/topologies/#external-dependencies".to_owned(),
                             kind: "dependency".to_owned(),
+                            text: String::new(),
                         }),
                 );
             }
@@ -2872,6 +3017,30 @@ impl SiteBuilder {
             entry.href = format!("developers/{}", entry.href);
             entry.kind = format!("Developers · {}", entry.kind);
             entry
+        }));
+        entries.extend(self.registry.product.iter().map(|product| {
+            let persistent = product.citation.doi.as_ref().map_or_else(
+                || "the versioned source repository".to_owned(),
+                |doi| format!("DOI {doi}"),
+            );
+            SearchEntry {
+                title: format!("Cite {}", product.title),
+                summary: format!(
+                    "Version-specific software citation and BibTeX for {} using {persistent}.",
+                    product.title
+                ),
+                href: format!("citations/#{}", product.id),
+                kind: "citation".to_owned(),
+                text: format!(
+                    "{} {} software citation cite BibTeX",
+                    product.citation.title,
+                    product
+                        .citation
+                        .doi
+                        .as_deref()
+                        .unwrap_or(&product.citation.repository),
+                ),
+            }
         }));
 
         let mut seen = BTreeSet::new();
@@ -3137,7 +3306,7 @@ impl SiteBuilder {
                 pages.get(index + 1),
                 &docs_root,
             )
-            .replace("Manual pagination", "Developer note pagination");
+            .replace("Documentation pagination", "Developer note pagination");
             let portal_root = format!("{docs_root}../");
             let issue_url = documentation_issue_url(
                 &format!("Developer note: {}", note.title),
@@ -3173,27 +3342,19 @@ impl SiteBuilder {
             )?;
 
             if note.lifecycle != "superseded" {
-                let search_kind = if note.lifecycle == "proposal" {
-                    note.lifecycle.as_str()
-                } else {
-                    note.status.as_str()
-                };
+                let classification = developer_search_classification(note);
                 search.push(SearchEntry {
                     title: note.title.clone(),
                     summary: note.summary.clone(),
                     href: page.route.clone(),
-                    kind: format!("developer {}", search_kind.to_lowercase()),
+                    kind: format!("developer {classification}"),
+                    text: String::new(),
                 });
                 search.extend(
                     headings
                         .into_iter()
                         .filter(|heading| matches!(heading.level, 2 | 3))
-                        .map(|heading| SearchEntry {
-                            title: heading.title,
-                            summary: note.title.clone(),
-                            href: format!("{}#{}", page.route, heading.id),
-                            kind: "developer heading".to_owned(),
-                        }),
+                        .map(|heading| developer_heading_search_entry(note, &page.route, heading)),
                 );
             }
         }
@@ -3270,7 +3431,7 @@ impl SiteBuilder {
             escape_html(&issue_url),
         );
         let main = format!(
-            "<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"../\">αLoop</a> / Developers</nav><article class=\"docs-article developer-article\"><header class=\"developer-hero\"><p class=\"product-eyebrow\">For developers</p><h1>{}</h1><p>{}</p><aside class=\"developer-audience\" aria-label=\"Documentation audience\"><strong>Looking for usage documentation?</strong><span>Tutorials and manuals live with each research project. This area documents implementation details, design work, and engineering investigations for contributors.</span><a href=\"../#projects\">Browse project documentation <span aria-hidden=\"true\">→</span></a></aside></header>{sections}</article>{feedback}<footer class=\"page-footer\">{} classified notes · documented revision <code>{}</code></footer>",
+            "<nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"../\">αLoop</a> / Developers</nav><article class=\"docs-article developer-article\"><header class=\"developer-hero\"><p class=\"product-eyebrow\">For developers</p><h1>{}</h1><p>{}</p><aside class=\"developer-audience\" aria-label=\"Documentation audience\"><strong>Looking for usage documentation?</strong><span>Product guides and reference live with each research project. This area documents implementation details, design work, and engineering investigations for contributors.</span><a href=\"../#projects\">Browse project documentation <span aria-hidden=\"true\">→</span></a></aside></header>{sections}</article>{feedback}<footer class=\"page-footer\">{} classified notes · documented revision <code>{}</code></footer>",
             escape_html(&self.developers.title),
             escape_html(&self.developers.summary),
             self.developers
@@ -3335,7 +3496,7 @@ impl SiteBuilder {
             ));
         }
         format!(
-            "<aside class=\"docs-sidebar developer-sidebar\" id=\"docs-sidebar\" aria-label=\"Developer architecture\">{navigation}<p class=\"sidebar-meta\"><strong>For developers</strong><br>Implementation and engineering notes.<br><a href=\"{}../#projects\">Tutorials &amp; manuals</a></p></aside>",
+            "<aside class=\"docs-sidebar developer-sidebar\" id=\"docs-sidebar\" aria-label=\"Developer architecture\">{navigation}<p class=\"sidebar-meta\"><strong>For developers</strong><br>Implementation and engineering notes.<br><a href=\"{}../#projects\">Product guides and reference</a></p></aside>",
             escape_html(docs_root),
         )
     }
@@ -3405,18 +3566,14 @@ impl SiteBuilder {
                         )
                     })
                     .collect::<String>();
-                let manual_route = product
+                let guide_route = product
                     .pages
                     .iter()
-                    .find(|page| page.group == "Manual")
-                    .map(|page| {
-                        page.route
-                            .trim_start_matches("manual/")
-                            .trim_end_matches('/')
-                    })
-                    .unwrap_or_default();
+                    .find(|page| page.group == "Guides")
+                    .map(|page| page.route.as_str())
+                    .wrap_err_with(|| format!("{} has no portal guide", product.id))?;
                 Ok(format!(
-                    r#"<article class="portal-project-card" data-product="{}"><div class="portal-project-meta"><span>{:02}</span><span>{}</span></div><h3><a href="products/{}/{}/">{}</a></h3><p class="portal-project-summary">{}</p><div class="portal-packages" aria-label="{} crates and modules"><span class="portal-packages-label">Crates &amp; modules</span>{}</div><nav class="portal-card-links" aria-label="{} documentation"><a class="portal-card-primary" href="products/{}/{}/">Overview <span aria-hidden="true">↗</span></a><a href="products/{}/{}/tutorial/">Tutorial</a><a href="products/{}/{}/manual/{}/">Manual</a><a href="products/{}/{}/reference/">Reference</a><a class="portal-card-cite" href="citations/#{}">Cite</a></nav></article>"#,
+                    r#"<article class="portal-project-card" data-product="{}"><div class="portal-project-meta"><span>{:02}</span><span>{}</span></div><h3><a href="products/{}/{}/">{}</a></h3><p class="portal-project-summary">{}</p><div class="portal-packages" aria-label="{} crates and modules"><span class="portal-packages-label">Crates &amp; modules</span>{}</div><nav class="portal-card-links" aria-label="{} documentation"><a class="portal-card-primary" href="products/{}/{}/">Overview <span aria-hidden="true">↗</span></a><a href="products/{}/{}/tutorial/">Tutorial</a><a href="products/{}/{}/{}">Guides</a><a href="products/{}/{}/reference/">Reference</a><a class="portal-card-cite" href="citations/#{}">Cite</a></nav></article>"#,
                     escape_html(&product.id),
                     index + 1,
                     escape_html(role),
@@ -3433,7 +3590,7 @@ impl SiteBuilder {
                     escape_html(&channel_route),
                     escape_html(&product.id),
                     escape_html(&channel_route),
-                    escape_html(manual_route),
+                    escape_html(guide_route),
                     escape_html(&product.id),
                     escape_html(&channel_route),
                     escape_html(&product.id),
@@ -3754,6 +3911,20 @@ impl SiteBuilder {
         for root in roots {
             for entry in WalkDir::new(&root) {
                 let entry = entry?;
+                let relative = entry.path().strip_prefix(output)?;
+                if entry.file_type().is_file()
+                    && relative.starts_with("products")
+                    && entry.path().extension().and_then(|value| value.to_str()) == Some("typ")
+                {
+                    let parts = relative.components().collect::<Vec<_>>();
+                    ensure!(
+                        parts.windows(2).any(|parts| {
+                            parts[0].as_os_str() == "assets" && parts[1].as_os_str() == "typst"
+                        }),
+                        "authored Typst source was published instead of rendered: {}",
+                        relative.display()
+                    );
+                }
                 local_paths.insert(entry.path().to_path_buf(), Some(entry.file_type()));
                 let rustdoc = entry
                     .path()
@@ -4105,6 +4276,7 @@ fn favicon_links(asset_root: &str) -> String {
 
 fn documentation_issue_url(title: &str, route: &str, commit: &str) -> String {
     let title = format!("[docs] {title}");
+    let route = route.trim_start_matches('/');
     let body = format!(
         "Documentation page: {PUBLISHED_DOCS_ROOT}/{route}\nDocumented revision: {commit}\n\nWhat should be corrected or clarified?"
     );
@@ -4443,6 +4615,36 @@ fn developer_inline_toc(headings: &[HeadingLink]) -> String {
     }
 }
 
+fn developer_search_classification(note: &DeveloperNote) -> String {
+    let lifecycle = note.lifecycle.to_lowercase();
+    let status = note.status.to_lowercase();
+    if status == lifecycle
+        || status.starts_with(&format!("{lifecycle} "))
+        || status.starts_with(&format!("{lifecycle} ·"))
+    {
+        status
+    } else {
+        format!("{lifecycle} {status}")
+    }
+}
+
+fn developer_heading_search_entry(
+    note: &DeveloperNote,
+    route: &str,
+    heading: HeadingLink,
+) -> SearchEntry {
+    SearchEntry {
+        title: heading.title,
+        summary: note.title.clone(),
+        href: format!("{route}#{}", heading.id),
+        kind: format!(
+            "developer {} heading",
+            developer_search_classification(note)
+        ),
+        text: String::new(),
+    }
+}
+
 fn developer_document(
     metadata: (&str, &str),
     docs_root: &str,
@@ -4523,12 +4725,12 @@ fn page_root_prefix(route: &str) -> String {
 }
 
 fn product_hero(product: &ProductConfig) -> String {
-    let first_manual = product
+    let first_guide = product
         .pages
         .iter()
-        .find(|page| page.group == "Manual")
+        .find(|page| page.group == "Guides")
         .map(|page| page.route.as_str())
-        .unwrap_or("manual/");
+        .unwrap_or("guides/");
     let logo = product.logo.as_deref().map_or_else(String::new, |logo| {
         format!(
             "<span class=\"product-hero-logo product-logo-{}\" role=\"img\" aria-label=\"{} logo\"></span>",
@@ -4537,10 +4739,10 @@ fn product_hero(product: &ProductConfig) -> String {
         )
     });
     format!(
-        "<header class=\"product-hero\">{logo}<p class=\"product-eyebrow\">Research software documentation</p><h1>{}</h1><p>{}</p><div class=\"hero-actions\"><a class=\"hero-action primary\" href=\"tutorial/\">Start the tutorial</a><a class=\"hero-action\" href=\"{}\">Read the manual</a><a class=\"hero-action\" href=\"reference/\">Browse reference</a></div></header>",
+        "<header class=\"product-hero\">{logo}<p class=\"product-eyebrow\">Research software documentation</p><h1>{}</h1><p>{}</p><div class=\"hero-actions\"><a class=\"hero-action primary\" href=\"tutorial/\">Start the tutorial</a><a class=\"hero-action\" href=\"{}\">Read the guides</a><a class=\"hero-action\" href=\"reference/\">Browse reference</a></div></header>",
         escape_html(&product.title),
         escape_html(&product.tagline),
-        escape_html(first_manual),
+        escape_html(first_guide),
     )
 }
 
@@ -4632,6 +4834,51 @@ fn inject_heading_ids(body: &str) -> Result<(String, Vec<HeadingLink>)> {
     Ok((rendered, headings))
 }
 
+fn rendered_article_search_text(html: &str) -> Result<String> {
+    const ARTICLE: &str = "<article class=\"docs-article\">";
+    let start = html
+        .find(ARTICLE)
+        .map(|start| start + ARTICLE.len())
+        .context("rendered page has no documentation article")?;
+    let end = html
+        .rfind("</article>")
+        .context("rendered page has no documentation article end")?;
+    ensure!(start <= end, "rendered documentation article is malformed");
+    let ignored = Regex::new(
+        r"(?is)<nav\b[^>]*>.*?</nav>|<pre\b[^>]*>.*?</pre>|<script\b[^>]*>.*?</script>|<style\b[^>]*>.*?</style>",
+    )?;
+    let tags = Regex::new(r"(?is)<[^>]+>")?;
+    let without_noise = ignored.replace_all(&html[start..end], " ");
+    Ok(decode_html_text(&tags.replace_all(&without_noise, " "))
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" "))
+}
+
+fn append_rendered_page_search(
+    product: &ProductConfig,
+    page: &PageConfig,
+    page_href: &str,
+    html: &str,
+    entries: &mut Vec<SearchEntry>,
+) -> Result<()> {
+    let body = extract_html_body(html)?;
+    let (_, headings) = inject_heading_ids(body)?;
+    entries.extend(
+        headings
+            .into_iter()
+            .filter(|heading| heading.level >= 2 && heading.title != page.title)
+            .map(|heading| SearchEntry {
+                title: heading.title,
+                summary: format!("{} · {}", product.title, page.title),
+                href: format!("{page_href}#{}", heading.id),
+                kind: page.group.to_lowercase(),
+                text: String::new(),
+            }),
+    );
+    Ok(())
+}
+
 fn render_page_navigation(
     previous: Option<&SitePage>,
     next: Option<&SitePage>,
@@ -4659,7 +4906,9 @@ fn render_page_navigation(
             )
         },
     );
-    format!("<nav class=\"page-nav\" aria-label=\"Manual pagination\">{previous}{next}</nav>")
+    format!(
+        "<nav class=\"page-nav\" aria-label=\"Documentation pagination\">{previous}{next}</nav>"
+    )
 }
 
 fn count_catalog_items(scope: &DocScope) -> usize {
@@ -4684,6 +4933,32 @@ fn count_catalog_surface_items(scope: &DocScope, supported: bool) -> usize {
             .sum::<usize>()
 }
 
+fn catalog_surface_items(scope: &DocScope, supported: bool) -> Vec<(Vec<String>, &DocItem)> {
+    fn collect<'a>(
+        scope: &'a DocScope,
+        path: &mut Vec<String>,
+        supported: bool,
+        items: &mut Vec<(Vec<String>, &'a DocItem)>,
+    ) {
+        items.extend(
+            scope
+                .items
+                .values()
+                .filter(|item| item.supported == supported)
+                .map(|item| (path.clone(), item)),
+        );
+        for child in scope.scopes.values() {
+            path.push(child.id.clone());
+            collect(child, path, supported, items);
+            path.pop();
+        }
+    }
+
+    let mut items = Vec::new();
+    collect(scope, &mut Vec::new(), supported, &mut items);
+    items
+}
+
 fn api_item_kind_label(kind: alphal00p_docs_schema::DocItemKind) -> &'static str {
     match kind {
         alphal00p_docs_schema::DocItemKind::Function
@@ -4701,12 +4976,106 @@ fn api_item_kind_label(kind: alphal00p_docs_schema::DocItemKind) -> &'static str
     }
 }
 
-fn render_python_catalog(
-    catalog: &DocCatalog,
-    stub_name: &str,
-    stub_text: &str,
-    git_commit: &str,
+fn render_api_symbol_index(entries: &[(Vec<String>, &DocItem)], language: &str) -> String {
+    if entries.is_empty() {
+        return String::new();
+    }
+    let mut rendered = format!(
+        "<nav class=\"api-symbol-index reference-index\" aria-label=\"Supported {language} symbols\"><h2>Supported symbols</h2><p>Use this compact index for scanning; the disclosures below contain signatures, parameters, examples, members, and source links.</p><div>"
+    );
+    for (path, item) in entries {
+        let anchor = api_item_anchor(path, item);
+        let kind = api_item_kind_label(item.kind);
+        let search = format!("{} {} {}", item.name, item.title, kind);
+        rendered.push_str(&format!(
+            "<a href=\"#{}\" data-reference-index-entry data-reference-search=\"{}\"><code>{}</code><span>{}</span></a>",
+            escape_html(&anchor),
+            escape_html(&search),
+            escape_html(&item.name),
+            kind,
+        ));
+    }
+    rendered.push_str("</div></nav>");
+    rendered
+}
+
+fn render_reference_filter_start(id: &str, label: &str, placeholder: &str) -> String {
+    format!(
+        "<div data-reference-filter-root><div class=\"reference-tools\"><label for=\"{}\">{}</label><input id=\"{}\" type=\"search\" data-reference-filter placeholder=\"{}\"><output data-reference-filter-count aria-live=\"polite\"></output><div class=\"reference-disclosure-actions\"><button type=\"button\" data-reference-expand>Expand all</button><button type=\"button\" data-reference-collapse>Collapse all</button></div></div><div data-reference-filter-scope>",
+        escape_html(id),
+        escape_html(label),
+        escape_html(id),
+        escape_html(placeholder),
+    )
+}
+
+fn catalog_item_links(catalog: &DocCatalog) -> BTreeMap<String, String> {
+    fn collect(
+        scope: &DocScope,
+        path: &mut Vec<String>,
+        candidates: &mut BTreeMap<String, Vec<String>>,
+    ) {
+        for item in scope.items.values() {
+            candidates
+                .entry(item.name.clone())
+                .or_default()
+                .push(api_item_anchor(path, item));
+        }
+        for child in scope.scopes.values() {
+            path.push(child.id.clone());
+            collect(child, path, candidates);
+            path.pop();
+        }
+    }
+
+    let mut candidates = BTreeMap::new();
+    collect(&catalog.root, &mut Vec::new(), &mut candidates);
+    candidates
+        .into_iter()
+        .filter_map(|(name, anchors)| {
+            (anchors.len() == 1).then(|| (name, anchors.into_iter().next().unwrap()))
+        })
+        .collect()
+}
+
+fn render_signature_code(
+    signature: &str,
+    links: &BTreeMap<String, String>,
+    current_anchor: &str,
 ) -> String {
+    let mut rendered = String::new();
+    let mut characters = signature.char_indices().peekable();
+    while let Some((start, character)) = characters.next() {
+        let mut end = start + character.len_utf8();
+        if character == '_' || character.is_ascii_alphabetic() {
+            while let Some((index, character)) = characters.peek().copied() {
+                if character != '_' && !character.is_ascii_alphanumeric() {
+                    break;
+                }
+                characters.next();
+                end = index + character.len_utf8();
+            }
+            let identifier = &signature[start..end];
+            if let Some(anchor) = links
+                .get(identifier)
+                .filter(|anchor| anchor.as_str() != current_anchor)
+            {
+                rendered.push_str(&format!(
+                    "<a href=\"#{}\">{}</a>",
+                    escape_html(anchor),
+                    escape_html(identifier),
+                ));
+            } else {
+                rendered.push_str(&escape_html(identifier));
+            }
+        } else {
+            rendered.push_str(&escape_html(&signature[start..end]));
+        }
+    }
+    rendered
+}
+
+fn render_python_catalog(catalog: &DocCatalog, stub_name: &str, git_commit: &str) -> String {
     let mut supported = vec![];
     let mut implementation_count = 0;
     let mut documented_supported = 0;
@@ -4727,13 +5096,25 @@ fn render_python_catalog(
             }
             let mut members = item.members.iter().collect::<Vec<_>>();
             while let Some(member) = members.pop() {
-                member_count += 1;
-                documented_members += usize::from(
-                    member
-                        .docs
-                        .as_ref()
-                        .is_some_and(|docs| !docs.body.trim().is_empty()),
-                );
+                if !matches!(
+                    member.kind,
+                    DocMemberKind::Parameter | DocMemberKind::Overload
+                ) {
+                    member_count += 1;
+                    documented_members += usize::from(
+                        member
+                            .docs
+                            .as_ref()
+                            .is_some_and(|docs| !docs.body.trim().is_empty())
+                            || member.members.iter().any(|member| {
+                                member.kind == DocMemberKind::Overload
+                                    && member
+                                        .docs
+                                        .as_ref()
+                                        .is_some_and(|docs| !docs.body.trim().is_empty())
+                            }),
+                    );
+                }
                 members.extend(&member.members);
             }
         }
@@ -4767,31 +5148,16 @@ fn render_python_catalog(
     if let Some(docs) = &catalog.root.docs {
         body.push_str(&render_doc_text(docs, 2));
     }
-    body.push_str("<nav class=\"reference-guide-links\" aria-label=\"Related Python guides\"><a href=\"tutorial/\">Start with the tutorial</a><a href=\"manual/interfaces/\">Python interface guide</a><a href=\"reference/python/\">All Python modules</a></nav>");
+    body.push_str("<nav class=\"reference-guide-links\" aria-label=\"Related Python guides\"><a href=\"tutorial/\">Start with the tutorial</a><a href=\"reference/interfaces/\">Python interface guide</a><a href=\"reference/python/\">All Python modules</a></nav>");
     let filter_id = format!("{}-symbol-filter", slug(&catalog.component.id));
-    body.push_str(&format!(
-        "<div data-reference-filter-root><div class=\"reference-tools\"><label for=\"{}\">Filter supported symbols and implementation details</label><input id=\"{}\" type=\"search\" data-reference-filter placeholder=\"Try a class, function, method, or property\"><output data-reference-filter-count aria-live=\"polite\"></output><div class=\"reference-disclosure-actions\"><button type=\"button\" data-reference-expand>Expand all</button><button type=\"button\" data-reference-collapse>Collapse all</button></div></div><div data-reference-filter-scope>",
-        escape_html(&filter_id),
-        escape_html(&filter_id),
+    body.push_str(&render_reference_filter_start(
+        &filter_id,
+        "Filter supported symbols and implementation details",
+        "Try a class, function, method, or property",
     ));
-    if !supported.is_empty() {
-        body.push_str("<nav class=\"api-symbol-index reference-index\" aria-label=\"Supported Python symbols\"><h2>Supported symbols</h2><p>Use this compact index for scanning; the disclosures below contain signatures, parameters, examples, members, and source links.</p><div>");
-        for (path, item) in &supported {
-            let anchor = python_item_anchor(path, item);
-            let kind = api_item_kind_label(item.kind);
-            let search = format!("{} {} {}", item.name, item.title, kind);
-            body.push_str(&format!(
-                "<a href=\"#{}\" data-reference-index-entry data-reference-search=\"{}\"><code>{}</code><span>{}</span></a>",
-                escape_html(&anchor),
-                escape_html(&search),
-                escape_html(&item.name),
-                kind,
-            ));
-        }
-        body.push_str("</div></nav>");
-    }
+    body.push_str(&render_api_symbol_index(&supported, "Python"));
     let mut scope_path = Vec::new();
-    render_python_scope(
+    render_api_scope(
         catalog,
         &catalog.root,
         &mut scope_path,
@@ -4801,15 +5167,16 @@ fn render_python_catalog(
     );
     body.push_str("</div></div>");
     body.push_str(&format!(
-        "<details class=\"stub-source\"><summary>Type-checker stub source</summary><p><a href=\"reference/python/{}\">Download <code>{}</code></a>. This source is retained for type checkers; the structured reference above is the human-facing documentation.</p><pre><code>{}</code></pre></details>",
+        "<aside class=\"stub-source\" aria-label=\"Type-checker stub\"><strong>Type-checker stub source</strong><p><a href=\"reference/python/{}\" download>Download <code>{}</code></a> or <a href=\"https://github.com/alphal00p/gammaloop/blob/{}/docs/api/python/{}\">view its generated source</a>. The structured reference above is the human-facing documentation.</p></aside>",
         escape_html(stub_name),
         escape_html(stub_name),
-        escape_html(stub_text)
+        escape_html(git_commit),
+        escape_html(stub_name),
     ));
     body
 }
 
-fn render_python_scope(
+fn render_api_scope(
     catalog: &DocCatalog,
     scope: &DocScope,
     path: &mut Vec<String>,
@@ -4817,6 +5184,7 @@ fn render_python_scope(
     level: usize,
     body: &mut String,
 ) {
+    let item_links = catalog_item_links(catalog);
     for supported in [true, false] {
         let item_count = count_catalog_surface_items(scope, supported);
         if item_count == 0 {
@@ -4830,26 +5198,28 @@ fn render_python_scope(
                 if item_count == 1 { "" } else { "s" },
             ));
         }
-        render_python_scope_surface(
+        render_api_scope_surface(
+            catalog,
             scope,
             path,
             git_commit,
             level,
             supported,
-            catalog.component.language,
+            &item_links,
             body,
         );
         body.push_str(if supported { "</div>" } else { "</details>" });
     }
 }
 
-fn render_python_scope_surface(
+fn render_api_scope_surface(
+    catalog: &DocCatalog,
     scope: &DocScope,
     path: &mut Vec<String>,
     git_commit: &str,
     level: usize,
     supported: bool,
-    language: ApiLanguage,
+    item_links: &BTreeMap<String, String>,
     body: &mut String,
 ) {
     for item in scope
@@ -4857,7 +5227,7 @@ fn render_python_scope_surface(
         .values()
         .filter(|item| item.supported == supported)
     {
-        let anchor = python_item_anchor(path, item);
+        let anchor = api_item_anchor(path, item);
         let item_heading = level.clamp(2, 6);
         let section_heading = (item_heading + 1).clamp(3, 6);
         let kind = api_item_kind_label(item.kind);
@@ -4895,6 +5265,20 @@ fn render_python_scope_surface(
                     .map(|summary| format!("<span class=\"reference-card-summary\">{}</span>", escape_html(summary)))
                     .unwrap_or_default(),
         ));
+        body.push_str(&format!(
+            "<nav class=\"api-entry-links\" aria-label=\"Links for {}\"><a href=\"#{}\">Permanent link</a>{}</nav>",
+            escape_html(&item.name),
+            escape_html(&anchor),
+            if catalog.component.language == ApiLanguage::Rust {
+                format!(
+                    "<a href=\"{}\">{}</a>",
+                    escape_html(&rustdoc_href(catalog, item)),
+                    rustdoc_link_label(item.kind),
+                )
+            } else {
+                String::new()
+            },
+        ));
         if let Some(docs) = &item.docs {
             body.push_str(&render_doc_text(docs, section_heading));
         } else if item.summary.is_none() {
@@ -4903,10 +5287,10 @@ fn render_python_scope_surface(
         if let Some(signature) = &item.signature {
             body.push_str(&format!(
                 "<pre class=\"api-signature\"><code>{}</code></pre>",
-                escape_html(signature)
+                render_signature_code(signature, item_links, &anchor),
             ));
         }
-        if language == ApiLanguage::Rust && !item.required_features.is_empty() {
+        if catalog.component.language == ApiLanguage::Rust && !item.required_features.is_empty() {
             body.push_str("<p><strong>Requires:</strong> ");
             for feature in &item.required_features {
                 body.push_str(&format!(
@@ -4930,7 +5314,11 @@ fn render_python_scope_surface(
                         "<tr><td><code>{}</code>{}</td><td><code>{}</code></td><td><code>{}</code></td><td>{}</td></tr>",
                         escape_html(&parameter.name),
                         if parameter.required { " <span class=\"api-kind\">required</span>" } else { "" },
-                        escape_html(parameter.ty.as_deref().unwrap_or("—")),
+                        render_signature_code(
+                            parameter.ty.as_deref().unwrap_or("—"),
+                            item_links,
+                            &anchor,
+                        ),
                         escape_html(parameter.default.as_deref().unwrap_or("—")),
                         docs,
                     ));
@@ -4949,14 +5337,14 @@ fn render_python_scope_surface(
                 escape_html(&example.code)
             ));
         }
-        render_python_members(&item.members, &anchor, item_heading, body);
+        render_api_members(&item.members, &anchor, item_heading, item_links, body);
         if let Some(source) = &item.source {
             body.push_str(&format!(
                     "<p class=\"api-source-link\"><a href=\"https://github.com/alphal00p/gammaloop/blob/{}/{}#L{}\">View {} source: <code>{}:{}</code></a></p>",
                     escape_html(git_commit),
                     escape_html(&source.file),
                     source.line,
-                    if language == ApiLanguage::Python {
+                    if catalog.component.language == ApiLanguage::Python {
                         "generated signature"
                     } else {
                         "implementation"
@@ -4970,13 +5358,14 @@ fn render_python_scope_surface(
     for child in scope.scopes.values() {
         path.push(child.id.clone());
         let mut child_body = String::new();
-        render_python_scope_surface(
+        render_api_scope_surface(
+            catalog,
             child,
             path,
             git_commit,
             level + 1,
             supported,
-            language,
+            item_links,
             &mut child_body,
         );
         if !child_body.is_empty() {
@@ -5005,29 +5394,42 @@ fn render_python_scope_surface(
     }
 }
 
-fn render_python_members(
+fn render_api_members(
     members: &[DocMember],
     parent_anchor: &str,
     level: usize,
+    item_links: &BTreeMap<String, String>,
     body: &mut String,
 ) {
     let member_kind_label = |kind| match kind {
         alphal00p_docs_schema::DocMemberKind::Parameter => "Parameter",
+        alphal00p_docs_schema::DocMemberKind::Overload => "Overload",
         alphal00p_docs_schema::DocMemberKind::Field => "Field",
         alphal00p_docs_schema::DocMemberKind::Variant => "Variant",
         alphal00p_docs_schema::DocMemberKind::AssociatedFunction => "Class or static method",
         alphal00p_docs_schema::DocMemberKind::AssociatedType => "Associated type",
         alphal00p_docs_schema::DocMemberKind::AssociatedConst => "Associated constant",
         alphal00p_docs_schema::DocMemberKind::Method => "Method",
-        alphal00p_docs_schema::DocMemberKind::Getter => "Property getter",
+        alphal00p_docs_schema::DocMemberKind::Getter => "Property · read-only",
         alphal00p_docs_schema::DocMemberKind::Setter => "Property setter",
     };
-    let mut anchor_counts = BTreeMap::new();
-    for member in members {
-        let anchor = next_python_member_anchor(parent_anchor, member, &mut anchor_counts);
+    render_api_overloads(members, parent_anchor, level, item_links, body);
+    let anchored = anchored_api_members(members, parent_anchor);
+    let (property_setters, paired_setters) = paired_property_setters(&anchored);
+    for (index, (member, anchor)) in anchored.iter().enumerate() {
+        if member.kind == DocMemberKind::Overload || paired_setters.contains(&index) {
+            continue;
+        }
+        let setter = property_setters
+            .get(&index)
+            .map(|setter| &anchored[*setter]);
         let heading = (level + 1).clamp(3, 6);
-        let kind = member_kind_label(member.kind);
-        let search = format!(
+        let kind = if setter.is_some() {
+            "Property · read/write"
+        } else {
+            member_kind_label(member.kind)
+        };
+        let mut search = format!(
             "{} {} {} {}",
             member.name,
             kind,
@@ -5038,60 +5440,552 @@ fn render_python_members(
                 .and_then(|docs| docs.body.lines().next())
                 .unwrap_or_default(),
         );
+        if let Some((setter, _)) = setter {
+            search.push(' ');
+            search.push_str(setter.signature.as_deref().unwrap_or_default());
+            search.push(' ');
+            search.push_str(
+                setter
+                    .docs
+                    .as_ref()
+                    .and_then(|docs| docs.body.lines().next())
+                    .unwrap_or_default(),
+            );
+        }
+        for overload in member
+            .members
+            .iter()
+            .filter(|member| member.kind == DocMemberKind::Overload)
+        {
+            search.push(' ');
+            search.push_str(overload.signature.as_deref().unwrap_or_default());
+            search.push(' ');
+            search.push_str(
+                overload
+                    .docs
+                    .as_ref()
+                    .and_then(|docs| docs.body.lines().next())
+                    .unwrap_or_default(),
+            );
+        }
+        if let Some((_, setter_anchor)) = setter {
+            body.push_str(&format!(
+                "<div class=\"api-member-anchor-alias\" id=\"{}\">",
+                escape_html(setter_anchor),
+            ));
+        }
         body.push_str(&format!(
             "<details class=\"api-member\" id=\"{}\" data-reference-entry data-reference-search=\"{}\"><summary class=\"api-member-heading\"><h{heading}><code>{}</code></h{heading}><span class=\"api-kind\">{kind}</span></summary><div class=\"api-member-body\">",
             escape_html(&anchor),
             escape_html(&search),
             escape_html(&member.name),
         ));
+        body.push_str(&format!(
+            "<a class=\"reference-permalink\" href=\"#{}\">Permanent link</a>{}",
+            escape_html(&anchor),
+            setter.map_or_else(String::new, |(_, setter_anchor)| format!(
+                "<a class=\"reference-permalink\" href=\"#{}\">Setter fragment</a>",
+                escape_html(setter_anchor),
+            )),
+        ));
         if let Some(signature) = &member.signature {
             body.push_str(&format!(
                 "<pre class=\"api-member-signature\"><code>{}</code></pre>",
-                escape_html(signature)
+                render_signature_code(signature, item_links, &anchor),
             ));
         }
         if let Some(docs) = &member.docs {
-            body.push_str(&render_doc_text(docs, (heading + 1).clamp(4, 6)));
-        } else {
+            body.push_str(&render_doc_text_omitting_parameters(
+                docs,
+                (heading + 1).clamp(4, 6),
+                member
+                    .members
+                    .iter()
+                    .any(|member| member.kind == DocMemberKind::Parameter),
+            ));
+        } else if !member
+            .members
+            .iter()
+            .any(|member| member.kind == DocMemberKind::Overload)
+        {
             body.push_str("<p class=\"reference-missing\">Member description missing from the generated catalog.</p>");
         }
         if let Some(default) = &member.default {
             body.push_str(&format!(
-                "<p><strong>Default:</strong> <code>{}</code></p>",
+                "<p><strong>{}:</strong> <code>{}</code></p>",
+                if member.kind == DocMemberKind::Variant {
+                    "Value"
+                } else {
+                    "Default"
+                },
                 escape_html(default)
             ));
         }
-        render_python_members(&member.members, &anchor, heading, body);
+        render_member_parameters(&member.members, &anchor, heading, item_links, body);
+        render_api_members(&member.members, &anchor, heading, item_links, body);
+        if let Some((setter, setter_anchor)) = setter {
+            let setter_heading = (heading + 1).clamp(4, 6);
+            body.push_str(&format!(
+                "<section class=\"api-property-setter\"><h{setter_heading}>Setter</h{setter_heading}>"
+            ));
+            if let Some(signature) = &setter.signature {
+                body.push_str(&format!(
+                    "<pre class=\"api-member-signature api-property-setter-signature\"><code>{}</code></pre>",
+                    render_signature_code(signature, item_links, setter_anchor),
+                ));
+            }
+            if let Some(docs) = &setter.docs {
+                body.push_str(&render_doc_text_omitting_parameters(
+                    docs,
+                    (setter_heading + 1).clamp(5, 6),
+                    setter
+                        .members
+                        .iter()
+                        .any(|member| member.kind == DocMemberKind::Parameter),
+                ));
+            }
+            if let Some(default) = &setter.default {
+                body.push_str(&format!(
+                    "<p><strong>Default:</strong> <code>{}</code></p>",
+                    escape_html(default)
+                ));
+            }
+            render_member_parameters(
+                &setter.members,
+                setter_anchor,
+                setter_heading,
+                item_links,
+                body,
+            );
+            render_api_members(
+                &setter.members,
+                setter_anchor,
+                setter_heading,
+                item_links,
+                body,
+            );
+            body.push_str("</section>");
+        }
         body.push_str("</div></details>");
+        if setter.is_some() {
+            body.push_str("</div>");
+        }
     }
 }
 
-fn render_doc_text(docs: &alphal00p_docs_schema::DocText, heading_level: usize) -> String {
-    let render_paragraphs = |lines: &[&str]| {
+fn render_api_overloads(
+    members: &[DocMember],
+    parent_anchor: &str,
+    level: usize,
+    item_links: &BTreeMap<String, String>,
+    body: &mut String,
+) {
+    let overloads = anchored_api_members(members, parent_anchor)
+        .into_iter()
+        .filter(|(member, _)| member.kind == DocMemberKind::Overload)
+        .collect::<Vec<_>>();
+    if overloads.is_empty() {
+        return;
+    }
+    let heading = (level + 1).clamp(4, 6);
+    let overload_heading = (heading + 1).clamp(5, 6);
+    body.push_str(&format!(
+        "<section class=\"api-overloads\"><h{heading}>Overloads</h{heading}>"
+    ));
+    for (index, (overload, anchor)) in overloads.iter().enumerate() {
+        let search = format!(
+            "overload {} {} {}",
+            index + 1,
+            overload.signature.as_deref().unwrap_or_default(),
+            overload
+                .docs
+                .as_ref()
+                .and_then(|docs| docs.body.lines().next())
+                .unwrap_or_default(),
+        );
+        body.push_str(&format!(
+            "<article class=\"api-overload\" id=\"{}\" data-reference-entry data-reference-search=\"{}\"><h{overload_heading}>Overload {}</h{overload_heading}><a class=\"reference-permalink\" href=\"#{}\">Permanent link</a>",
+            escape_html(anchor),
+            escape_html(&search),
+            index + 1,
+            escape_html(anchor),
+        ));
+        if let Some(signature) = &overload.signature {
+            body.push_str(&format!(
+                "<pre class=\"api-member-signature api-overload-signature\"><code>{}</code></pre>",
+                render_signature_code(signature, item_links, anchor),
+            ));
+        }
+        if let Some(docs) = &overload.docs {
+            body.push_str(&render_doc_text_omitting_parameters(
+                docs,
+                6,
+                overload
+                    .members
+                    .iter()
+                    .any(|member| member.kind == DocMemberKind::Parameter),
+            ));
+        } else {
+            body.push_str("<p class=\"reference-missing\">Overload description missing from the generated catalog.</p>");
+        }
+        render_member_parameters(
+            &overload.members,
+            anchor,
+            overload_heading,
+            item_links,
+            body,
+        );
+        body.push_str("</article>");
+    }
+    body.push_str("</section>");
+}
+
+fn anchored_api_members<'a>(
+    members: &'a [DocMember],
+    parent_anchor: &str,
+) -> Vec<(&'a DocMember, String)> {
+    let mut anchor_counts = BTreeMap::new();
+    members
+        .iter()
+        .filter(|member| member.kind != DocMemberKind::Parameter)
+        .map(|member| {
+            (
+                member,
+                next_api_member_anchor(parent_anchor, member, &mut anchor_counts),
+            )
+        })
+        .collect()
+}
+
+fn paired_property_setters(
+    members: &[(&DocMember, String)],
+) -> (BTreeMap<usize, usize>, BTreeSet<usize>) {
+    let mut pairs = BTreeMap::new();
+    let mut setters = BTreeSet::new();
+    for (getter_index, (getter, _)) in members.iter().enumerate() {
+        if getter.kind != DocMemberKind::Getter {
+            continue;
+        }
+        if let Some((setter_index, _)) = members.iter().enumerate().find(|(index, (setter, _))| {
+            setter.kind == DocMemberKind::Setter
+                && setter.name == getter.name
+                && !setters.contains(index)
+        }) {
+            pairs.insert(getter_index, setter_index);
+            setters.insert(setter_index);
+        }
+    }
+    (pairs, setters)
+}
+
+fn render_member_parameters(
+    members: &[DocMember],
+    parent_anchor: &str,
+    level: usize,
+    item_links: &BTreeMap<String, String>,
+    body: &mut String,
+) {
+    let parameters = members
+        .iter()
+        .filter(|member| member.kind == DocMemberKind::Parameter)
+        .collect::<Vec<_>>();
+    if parameters.is_empty() {
+        return;
+    }
+    let heading = (level + 1).clamp(4, 6);
+    body.push_str(&format!(
+        "<h{heading}>Parameters</h{heading}><div class=\"reference-table-wrap\"><table class=\"api-parameter-table\"><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>"
+    ));
+    for parameter in parameters {
+        let docs = parameter
+            .docs
+            .as_ref()
+            .map(|docs| render_doc_text(docs, (heading + 1).clamp(5, 6)))
+            .unwrap_or_else(|| "<span class=\"reference-missing\">—</span>".to_owned());
+        body.push_str(&format!(
+            "<tr><td><code>{}</code></td><td><code>{}</code></td><td><code>{}</code></td><td>{}</td></tr>",
+            escape_html(&parameter.name),
+            render_signature_code(
+                parameter.signature.as_deref().unwrap_or("—"),
+                item_links,
+                parent_anchor,
+            ),
+            escape_html(parameter.default.as_deref().unwrap_or("—")),
+            docs,
+        ));
+    }
+    body.push_str("</tbody></table></div>");
+}
+
+fn render_doc_inline(text: &str, format: DocFormat) -> String {
+    let mut rendered = escape_html(text);
+    match format {
+        DocFormat::RustMarkdown => {
+            let links = Regex::new(r"\[([^\]]+)\]\(([^)]+)\)").expect("static Markdown link regex");
+            rendered = links
+                .replace_all(&rendered, |captures: &regex::Captures<'_>| {
+                    format!("<a href=\"{}\">{}</a>", &captures[2], &captures[1])
+                })
+                .into_owned();
+            let intra_doc = Regex::new(r"\[`([^`]+)`\]").expect("static intra-doc link regex");
+            rendered = intra_doc
+                .replace_all(&rendered, "<code>$1</code>")
+                .into_owned();
+            let code = Regex::new(r"`([^`]+)`").expect("static Markdown code regex");
+            rendered = code.replace_all(&rendered, "<code>$1</code>").into_owned();
+            let strong = Regex::new(r"\*\*([^*]+)\*\*").expect("static Markdown strong regex");
+            strong
+                .replace_all(&rendered, "<strong>$1</strong>")
+                .into_owned()
+        }
+        DocFormat::PythonDocstring => {
+            let code = Regex::new(r"``([^`]+)``").expect("static Python code regex");
+            rendered = code.replace_all(&rendered, "<code>$1</code>").into_owned();
+            let code = Regex::new(r"`([^`]+)`").expect("static Python code regex");
+            rendered = code.replace_all(&rendered, "<code>$1</code>").into_owned();
+            let strong = Regex::new(r"\*\*([^*]+)\*\*").expect("static Python strong regex");
+            strong
+                .replace_all(&rendered, "<strong>$1</strong>")
+                .into_owned()
+        }
+        DocFormat::TypstMarkup => {
+            let links = Regex::new(r#"#link\(&quot;(.*?)&quot;\)\[([^\]]+)\]"#)
+                .expect("static Typst link regex");
+            rendered = links
+                .replace_all(&rendered, |captures: &regex::Captures<'_>| {
+                    format!("<a href=\"{}\">{}</a>", &captures[1], &captures[2])
+                })
+                .into_owned();
+            let emphasis = Regex::new(r"#emph\[([^\]]+)\]").expect("static Typst emphasis regex");
+            rendered = emphasis.replace_all(&rendered, "<em>$1</em>").into_owned();
+            let raw = Regex::new(r#"#raw\(&quot;(.*?)&quot;\)"#).expect("static Typst raw regex");
+            raw.replace_all(&rendered, "<code>$1</code>").into_owned()
+        }
+        DocFormat::PlainText => rendered,
+    }
+}
+
+fn render_prose_blocks(lines: &[&str], format: DocFormat) -> String {
+    let render_unfenced = |lines: &[&str]| {
         lines
             .split(|line| line.trim().is_empty())
             .filter(|paragraph| paragraph.iter().any(|line| !line.trim().is_empty()))
             .map(|paragraph| {
-                let text = paragraph
+                let first_bullet = paragraph
                     .iter()
-                    .map(|line| line.trim())
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                format!(
-                    "<p>{}</p>",
-                    escape_html(&text)
-                        .replace("\r\n", "<br>")
-                        .replace('\n', "<br>")
-                )
+                    .position(|line| line.trim_start().starts_with("- "));
+                let Some(first_bullet) = first_bullet else {
+                    return format!(
+                        "<p>{}</p>",
+                        render_doc_inline(
+                            &paragraph
+                                .iter()
+                                .map(|line| line.trim())
+                                .collect::<Vec<_>>()
+                                .join(" "),
+                            format,
+                        )
+                    );
+                };
+                let mut rendered = String::new();
+                if first_bullet > 0 {
+                    rendered.push_str(&format!(
+                        "<p>{}</p>",
+                        render_doc_inline(
+                            &paragraph[..first_bullet]
+                                .iter()
+                                .map(|line| line.trim())
+                                .collect::<Vec<_>>()
+                                .join(" "),
+                            format,
+                        )
+                    ));
+                }
+                rendered.push_str("<ul>");
+                for item in &paragraph[first_bullet..] {
+                    rendered.push_str(&format!(
+                        "<li>{}</li>",
+                        render_doc_inline(item.trim().trim_start_matches("- "), format),
+                    ));
+                }
+                rendered.push_str("</ul>");
+                rendered
             })
             .collect::<String>()
     };
+    let mut rendered = String::new();
+    let mut prose_start = 0;
+    let mut index = 0;
+    while index < lines.len() {
+        let Some(language) = lines[index].trim().strip_prefix("```") else {
+            index += 1;
+            continue;
+        };
+        rendered.push_str(&render_unfenced(&lines[prose_start..index]));
+        index += 1;
+        let code_start = index;
+        while index < lines.len() && !lines[index].trim().starts_with("```") {
+            index += 1;
+        }
+        rendered.push_str(&format!(
+            "<pre><code data-lang=\"{}\">{}</code></pre>",
+            escape_html(language.trim()),
+            escape_html(&lines[code_start..index].join("\n")),
+        ));
+        index += usize::from(index < lines.len());
+        prose_start = index;
+    }
+    rendered.push_str(&render_unfenced(&lines[prose_start..]));
+    rendered
+}
+
+fn render_rust_markdown(body: &str, heading_level: usize) -> String {
+    let lines = body.lines().collect::<Vec<_>>();
+    let mut rendered = String::new();
+    let mut prose = Vec::new();
+    let mut index = 0;
+    while index < lines.len() {
+        let line = lines[index].trim();
+        if let Some(language) = line.strip_prefix("```") {
+            rendered.push_str(&render_prose_blocks(&prose, DocFormat::RustMarkdown));
+            prose.clear();
+            index += 1;
+            let start = index;
+            while index < lines.len() && !lines[index].trim().starts_with("```") {
+                index += 1;
+            }
+            rendered.push_str(&format!(
+                "<pre><code data-lang=\"{}\">{}</code></pre>",
+                escape_html(language.trim()),
+                escape_html(&lines[start..index].join("\n")),
+            ));
+        } else if line.starts_with('#') {
+            let hashes = line
+                .chars()
+                .take_while(|character| *character == '#')
+                .count();
+            let title = line[hashes..].trim();
+            if !title.is_empty() {
+                rendered.push_str(&render_prose_blocks(&prose, DocFormat::RustMarkdown));
+                prose.clear();
+                let level = (heading_level + hashes.saturating_sub(1)).clamp(2, 6);
+                rendered.push_str(&format!(
+                    "<h{level}>{}</h{level}>",
+                    render_doc_inline(title, DocFormat::RustMarkdown),
+                ));
+            }
+        } else {
+            prose.push(lines[index]);
+        }
+        index += 1;
+    }
+    rendered.push_str(&render_prose_blocks(&prose, DocFormat::RustMarkdown));
+    rendered
+}
+
+fn render_python_example(content: &[&str]) -> String {
+    let start = content
+        .iter()
+        .position(|line| !line.trim().is_empty())
+        .unwrap_or(content.len());
+    let end = content
+        .iter()
+        .rposition(|line| !line.trim().is_empty())
+        .map_or(start, |index| index + 1);
+    let content = &content[start..end];
+    if content
+        .iter()
+        .any(|line| line.trim_start().starts_with("```"))
+    {
+        return render_prose_blocks(content, DocFormat::PythonDocstring);
+    }
+
+    let render_code = |lines: &[&str]| {
+        let indent = lines
+            .iter()
+            .filter(|line| !line.trim().is_empty())
+            .map(|line| line.len() - line.trim_start().len())
+            .min()
+            .unwrap_or(0);
+        let code = lines
+            .iter()
+            .map(|line| {
+                if line.trim().is_empty() {
+                    ""
+                } else {
+                    &line[indent.min(line.len())..]
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!(
+            "<pre><code data-lang=\"python\">{}</code></pre>",
+            escape_html(code.trim_end()),
+        )
+    };
+
+    if let Some(marker) = content.iter().enumerate().position(|(index, line)| {
+        line.trim_end().ends_with("::")
+            && content[index + 1..].iter().any(|candidate| {
+                !candidate.trim().is_empty() && candidate.len() > candidate.trim_start().len()
+            })
+    }) {
+        let mut rendered = render_prose_blocks(&content[..marker], DocFormat::PythonDocstring);
+        let marker_text = content[marker]
+            .trim()
+            .strip_suffix("::")
+            .unwrap_or(content[marker].trim());
+        rendered.push_str(&format!(
+            "<p>{}:</p>",
+            render_doc_inline(marker_text, DocFormat::PythonDocstring),
+        ));
+        let code_start = (marker + 1..content.len())
+            .find(|index| !content[*index].trim().is_empty())
+            .unwrap_or(content.len());
+        rendered.push_str(&render_code(&content[code_start..]));
+        return rendered;
+    }
+
+    if content
+        .first()
+        .is_some_and(|line| line.trim_start().starts_with(">>>"))
+    {
+        return render_code(content);
+    }
+    if let Some(code_start) = content
+        .iter()
+        .position(|line| !line.trim().is_empty() && line.len() > line.trim_start().len())
+    {
+        let mut rendered = render_prose_blocks(&content[..code_start], DocFormat::PythonDocstring);
+        rendered.push_str(&render_code(&content[code_start..]));
+        return rendered;
+    }
+    render_code(content)
+}
+
+fn render_doc_text(docs: &alphal00p_docs_schema::DocText, heading_level: usize) -> String {
+    render_doc_text_omitting_parameters(docs, heading_level, false)
+}
+
+fn render_doc_text_omitting_parameters(
+    docs: &alphal00p_docs_schema::DocText,
+    heading_level: usize,
+    omit_parameters: bool,
+) -> String {
+    if docs.format == DocFormat::RustMarkdown {
+        return format!(
+            "<div class=\"api-docstring\">{}</div>",
+            render_rust_markdown(&docs.body, heading_level),
+        );
+    }
     if docs.format != DocFormat::PythonDocstring {
         return format!(
             "<div class=\"api-docstring\">{}</div>",
-            render_paragraphs(&docs.body.lines().collect::<Vec<_>>())
+            render_prose_blocks(&docs.body.lines().collect::<Vec<_>>(), docs.format),
         );
     }
+
+    let render_paragraphs = |lines: &[&str]| render_prose_blocks(lines, docs.format);
 
     let lines = docs.body.lines().collect::<Vec<_>>();
     let mut sections = vec![];
@@ -5107,9 +6001,11 @@ fn render_doc_text(docs: &alphal00p_docs_schema::DocText, heading_level: usize) 
         let common_heading = matches!(
             heading.to_ascii_lowercase().as_str(),
             "parameters"
+                | "arguments"
                 | "other parameters"
                 | "keyword arguments"
                 | "attributes"
+                | "variants"
                 | "returns"
                 | "yields"
                 | "raises"
@@ -5151,6 +6047,14 @@ fn render_doc_text(docs: &alphal00p_docs_schema::DocText, heading_level: usize) 
             rendered.push_str(&render_paragraphs(content));
             continue;
         };
+        if omit_parameters
+            && matches!(
+                title.to_ascii_lowercase().as_str(),
+                "parameters" | "arguments" | "other parameters" | "keyword arguments"
+            )
+        {
+            continue;
+        }
         let section_class = slug(title);
         rendered.push_str(&format!(
             "<section class=\"api-doc-section api-doc-{}\"><h{heading_level}>{}</h{heading_level}>",
@@ -5158,7 +6062,9 @@ fn render_doc_text(docs: &alphal00p_docs_schema::DocText, heading_level: usize) 
             escape_html(title),
         ));
         match title.to_ascii_lowercase().as_str() {
-            "parameters" | "other parameters" | "keyword arguments" | "attributes" => {
+            "parameters" | "arguments" | "other parameters" | "keyword arguments"
+            | "attributes" | "variants" => {
+                let variants = title.eq_ignore_ascii_case("variants");
                 let mut definitions = vec![];
                 let mut term = None;
                 let mut description = vec![];
@@ -5184,12 +6090,22 @@ fn render_doc_text(docs: &alphal00p_docs_schema::DocText, heading_level: usize) 
                 } else {
                     rendered.push_str("<dl class=\"api-doc-definitions\">");
                     for (name, ty, description) in definitions {
-                        rendered.push_str(&format!(
-                            "<dt><code>{}</code> <span>{}</span></dt><dd>{}</dd>",
-                            escape_html(name),
-                            escape_html(ty),
-                            render_paragraphs(&description),
-                        ));
+                        if variants {
+                            let mut variant_description = vec![ty];
+                            variant_description.extend(description);
+                            rendered.push_str(&format!(
+                                "<dt><code>{}</code></dt><dd>{}</dd>",
+                                escape_html(name),
+                                render_paragraphs(&variant_description),
+                            ));
+                        } else {
+                            rendered.push_str(&format!(
+                                "<dt><code>{}</code> <span>{}</span></dt><dd>{}</dd>",
+                                escape_html(name),
+                                escape_html(ty),
+                                render_paragraphs(&description),
+                            ));
+                        }
                     }
                     rendered.push_str("</dl>");
                 }
@@ -5256,10 +6172,7 @@ fn render_doc_text(docs: &alphal00p_docs_schema::DocText, heading_level: usize) 
                     rendered.push_str("</dl>");
                 }
             }
-            "examples" => rendered.push_str(&format!(
-                "<pre><code data-lang=\"python\">{}</code></pre>",
-                escape_html(content.join("\n").trim()),
-            )),
+            "examples" => rendered.push_str(&render_python_example(content)),
             _ => rendered.push_str(&render_paragraphs(content)),
         }
         rendered.push_str("</section>");
@@ -5268,22 +6181,26 @@ fn render_doc_text(docs: &alphal00p_docs_schema::DocText, heading_level: usize) 
     rendered
 }
 
-fn python_item_anchor(path: &[String], item: &DocItem) -> String {
+fn api_item_anchor(path: &[String], item: &DocItem) -> String {
     let mut parts = path.iter().map(String::as_str).collect::<Vec<_>>();
     parts.push(&item.id);
     slug(&parts.join("-"))
 }
 
-fn next_python_member_anchor(
+fn next_api_member_anchor(
     parent_anchor: &str,
     member: &DocMember,
     counts: &mut BTreeMap<String, usize>,
 ) -> String {
-    let base = format!(
-        "{parent_anchor}-{}-{}",
-        slug(&member.name),
-        slug(&format!("{:?}", member.kind))
-    );
+    let base = if member.kind == DocMemberKind::Overload {
+        format!("{parent_anchor}-overload")
+    } else {
+        format!(
+            "{parent_anchor}-{}-{}",
+            slug(&member.name),
+            slug(&format!("{:?}", member.kind))
+        )
+    };
     let occurrence = counts.entry(base.clone()).or_default();
     *occurrence += 1;
     if *occurrence == 1 {
@@ -5310,7 +6227,7 @@ fn append_catalog_search_at(
         }
         let (href, kind, member_anchor) = match catalog.component.language {
             ApiLanguage::Rust => {
-                let anchor = python_item_anchor(path, item);
+                let anchor = api_item_anchor(path, item);
                 (
                     format!(
                         "reference/rust/supported/{}/#{anchor}",
@@ -5321,7 +6238,7 @@ fn append_catalog_search_at(
                 )
             }
             ApiLanguage::Python => {
-                let anchor = python_item_anchor(path, item);
+                let anchor = api_item_anchor(path, item);
                 (
                     format!("reference/python/{}/#{anchor}", catalog.component.id),
                     "python-api",
@@ -5335,6 +6252,7 @@ fn append_catalog_search_at(
             summary: item.summary.clone().unwrap_or_default(),
             href: href.clone(),
             kind: kind.to_owned(),
+            text: String::new(),
         });
         append_member_search(
             &catalog.component.id,
@@ -5362,37 +6280,90 @@ fn append_member_search(
     members: &[DocMember],
     entries: &mut Vec<SearchEntry>,
 ) {
-    let mut anchor_counts = BTreeMap::new();
-    for member in members {
-        let title = format!("{parent}.{}", member.name);
-        let member_anchor = parent_anchor
-            .map(|anchor| next_python_member_anchor(anchor, member, &mut anchor_counts));
-        let member_href = member_anchor.as_ref().map_or_else(
-            || href.to_owned(),
-            |anchor| format!("{}#{anchor}", href.split('#').next().unwrap_or(href)),
-        );
-        let summary = member
+    let anchored = parent_anchor
+        .map(|anchor| anchored_api_members(members, anchor))
+        .unwrap_or_else(|| {
+            members
+                .iter()
+                .filter(|member| member.kind != DocMemberKind::Parameter)
+                .map(|member| (member, String::new()))
+                .collect()
+        });
+    let (property_setters, paired_setters) = paired_property_setters(&anchored);
+    let mut overload_index = 0;
+    for (index, (member, member_anchor)) in anchored.iter().enumerate() {
+        if paired_setters.contains(&index) {
+            continue;
+        }
+        let setter = property_setters
+            .get(&index)
+            .map(|setter| &anchored[*setter]);
+        let title = if member.kind == DocMemberKind::Overload {
+            overload_index += 1;
+            format!("{parent} · overload {overload_index}")
+        } else {
+            format!("{parent}.{}", member.name)
+        };
+        let member_href = if member_anchor.is_empty() {
+            href.to_owned()
+        } else {
+            format!("{}#{member_anchor}", href.split('#').next().unwrap_or(href))
+        };
+        let mut summary = member
             .docs
             .as_ref()
             .map(|docs| docs.body.split_whitespace().collect::<Vec<_>>().join(" "))
             .filter(|docs| !docs.is_empty())
             .or_else(|| member.signature.clone())
             .unwrap_or_default();
+        if summary.is_empty()
+            && let Some((setter, _)) = setter
+        {
+            summary = setter
+                .docs
+                .as_ref()
+                .map(|docs| docs.body.split_whitespace().collect::<Vec<_>>().join(" "))
+                .filter(|docs| !docs.is_empty())
+                .or_else(|| setter.signature.clone())
+                .unwrap_or_default();
+        }
+        if summary.is_empty() {
+            summary = member
+                .members
+                .iter()
+                .filter(|member| member.kind == DocMemberKind::Overload)
+                .filter_map(|member| member.signature.as_deref())
+                .collect::<Vec<_>>()
+                .join(" | ");
+        }
         entries.push(SearchEntry {
             title: format!("{component} · {title}"),
             summary,
             href: member_href.clone(),
             kind: kind.to_owned(),
+            text: String::new(),
         });
         append_member_search(
             component,
             &title,
             &member_href,
             kind,
-            member_anchor.as_deref(),
+            (!member_anchor.is_empty()).then_some(member_anchor.as_str()),
             &member.members,
             entries,
         );
+        if let Some((setter, setter_anchor)) = setter {
+            let setter_href = format!("{}#{setter_anchor}", href.split('#').next().unwrap_or(href));
+            append_member_search(
+                component,
+                &title,
+                &setter_href,
+                kind,
+                Some(setter_anchor),
+                &setter.members,
+                entries,
+            );
+        }
     }
 }
 
@@ -5592,6 +6563,19 @@ fn rustdoc_href(catalog: &DocCatalog, item: &DocItem) -> String {
     }
 }
 
+fn rustdoc_link_label(kind: alphal00p_docs_schema::DocItemKind) -> &'static str {
+    use alphal00p_docs_schema::DocItemKind;
+    match kind {
+        DocItemKind::Function
+        | DocItemKind::Trait
+        | DocItemKind::ExportedMacro
+        | DocItemKind::Method
+        | DocItemKind::Type
+        | DocItemKind::Setting => "Open this item in complete Rustdoc",
+        _ => "Open the complete crate Rustdoc",
+    }
+}
+
 fn rustdoc_macro_prefix(signature: Option<&str>) -> &'static str {
     if signature.is_some_and(|signature| signature.contains("#[derive(")) {
         "derive"
@@ -5607,9 +6591,9 @@ fn rustdoc_type_prefix(item: &DocItem) -> &'static str {
         .filter(|token| !token.is_empty())
         .collect::<Vec<_>>();
 
-    // Source-backed signatures retain doc attributes, so looking for a bare
-    // keyword misclassifies structs whenever their prose says "type". Match
-    // the declaration keyword immediately preceding this item's name instead.
+    // Match the declaration keyword immediately preceding this item's name.
+    // This remains robust for compact signatures and older serialized catalogs
+    // whose signature text may still include attributes or prose.
     tokens
         .windows(2)
         .rev()
@@ -6026,12 +7010,50 @@ fn generated_reference_redirect(product: &str, target: &str, label: &str) -> Str
 
 fn reference_page(product: &str, title: &str, body: &str) -> String {
     format!(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>{} · {}</title><style>body{{max-width:75rem;margin:auto;padding:2rem 1rem;color:#172033;font:16px/1.5 system-ui}}a{{color:#5b4bdb}}pre{{overflow:auto;padding:1rem;background:#f1f3f7}}table{{width:100%;border-collapse:collapse;margin:1rem 0 2rem}}th,td{{padding:.45rem .6rem;border:1px solid #d9dce5;text-align:left;vertical-align:top}}th{{background:#f1f3f7}}section{{padding-top:.5rem}}</style></head><body><nav><a href=\"../../\">Manual</a></nav><h1>{} · {}</h1>{body}</body></html>",
+        "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>{} · {}</title><style>body{{max-width:75rem;margin:auto;padding:2rem 1rem;color:#172033;font:16px/1.5 system-ui}}a{{color:#5b4bdb}}pre{{overflow:auto;padding:1rem;background:#f1f3f7}}table{{width:100%;border-collapse:collapse;margin:1rem 0 2rem}}th,td{{padding:.45rem .6rem;border:1px solid #d9dce5;text-align:left;vertical-align:top}}th{{background:#f1f3f7}}section{{padding-top:.5rem}}</style></head><body><nav><a href=\"../../\">Documentation home</a></nav><h1>{} · {}</h1>{body}</body></html>",
         escape_html(product),
         escape_html(title),
         escape_html(product),
         escape_html(title),
     )
+}
+
+fn compact_help_summary(help: &str) -> String {
+    help.lines()
+        .map(str::trim)
+        .find(|line| !line.is_empty())
+        .map(|line| {
+            line.trim_start_matches('#')
+                .trim()
+                .trim_start_matches("- ")
+                .to_owned()
+        })
+        .unwrap_or_default()
+}
+
+fn render_cli_help(help: &str) -> String {
+    help.split("\n\n")
+        .filter(|block| !block.trim().is_empty())
+        .map(|block| {
+            if let Some((lead, items)) = block.trim().split_once(": - ") {
+                let items = items
+                    .split(" - ")
+                    .map(|item| {
+                        format!(
+                            "<li>{}</li>",
+                            render_doc_inline(item.trim(), DocFormat::RustMarkdown)
+                        )
+                    })
+                    .collect::<String>();
+                format!(
+                    "<p>{}:</p><ul>{items}</ul>",
+                    render_doc_inline(lead.trim(), DocFormat::RustMarkdown),
+                )
+            } else {
+                render_rust_markdown(block, 6)
+            }
+        })
+        .collect()
 }
 
 fn render_gammaloop_generated_reference(product: &str, reference: &GammaLoopReference) -> String {
@@ -6060,7 +7082,7 @@ fn render_gammaloop_generated_reference(product: &str, reference: &GammaLoopRefe
         .filter(|setting| !setting.description.trim().is_empty())
         .count();
     let mut body = format!(
-        "<p>This version-specific reference is generated from the compiled Clap parser and serialized settings schemas. It preserves exact usage, value arity, aliases, inherited options, conflicts, defaults, and allowed values. <a href=\"reference/generated/gammaloop-reference.json\">Download the schema-v{} JSON</a>.</p><p>Start from the compact family indexes, then expand only the command or settings group you need. Stable command, argument, and setting fragments remain valid.</p><p class=\"reference-summary\">{visible_command_count} public commands · {visible_argument_count} public arguments · {} settings</p><section class=\"reference-coverage\" aria-labelledby=\"cli-coverage-title\"><h2 id=\"cli-coverage-title\">Reference coverage</h2><p>Parser and schema facts are exhaustive. The description counts below expose prose that is still missing at those source boundaries.</p><div class=\"reference-coverage-grid\"><article><strong>{visible_command_count}</strong><span>public commands</span><progress value=\"{documented_command_count}\" max=\"{visible_command_count}\">{documented_command_count} of {visible_command_count}</progress><small>{documented_command_count} described</small></article><article><strong>{visible_argument_count}</strong><span>public arguments</span><progress value=\"{documented_argument_count}\" max=\"{visible_argument_count}\">{documented_argument_count} of {visible_argument_count}</progress><small>{documented_argument_count} described</small></article><article><strong>{}</strong><span>settings</span><progress value=\"{documented_setting_count}\" max=\"{}\">{documented_setting_count} of {}</progress><small>{documented_setting_count} described</small></article></div></section><nav class=\"reference-guide-links\" aria-label=\"Related task guides\"><a href=\"tutorial/\">Create your first state</a><a href=\"manual/process-generation/\">Generate a process</a><a href=\"manual/diagnostics/\">Diagnose a run</a></nav><div data-reference-filter-root><div class=\"reference-tools\"><label for=\"cli-reference-filter\">Filter commands, aliases, arguments, and setting paths</label><input id=\"cli-reference-filter\" type=\"search\" data-reference-filter placeholder=\"Try clean-state, integrate, or runtime.integrator\"><output data-reference-filter-count aria-live=\"polite\"></output><div class=\"reference-disclosure-actions\"><button type=\"button\" data-reference-expand>Expand all</button><button type=\"button\" data-reference-collapse>Collapse all</button></div></div><div data-reference-filter-scope>",
+        "<p>This version-specific reference is generated from the compiled Clap parser and serialized settings schemas. It preserves exact usage, value arity, aliases, inherited options, conflicts, defaults, and allowed values. <a href=\"reference/generated/gammaloop-reference.json\">Download the schema-v{} JSON</a>.</p><p>Start from the compact family indexes, then expand only the command or settings group you need. Stable command, argument, and setting fragments remain valid.</p><p class=\"reference-summary\">{visible_command_count} public commands · {visible_argument_count} public arguments · {} settings</p><section class=\"reference-coverage\" aria-labelledby=\"cli-coverage-title\"><h2 id=\"cli-coverage-title\">Reference coverage</h2><p>Parser and schema facts are exhaustive. The description counts below expose prose that is still missing at those source boundaries.</p><div class=\"reference-coverage-grid\"><article><strong>{visible_command_count}</strong><span>public commands</span><progress value=\"{documented_command_count}\" max=\"{visible_command_count}\">{documented_command_count} of {visible_command_count}</progress><small>{documented_command_count} described</small></article><article><strong>{visible_argument_count}</strong><span>public arguments</span><progress value=\"{documented_argument_count}\" max=\"{visible_argument_count}\">{documented_argument_count} of {visible_argument_count}</progress><small>{documented_argument_count} described</small></article><article><strong>{}</strong><span>settings</span><progress value=\"{documented_setting_count}\" max=\"{}\">{documented_setting_count} of {}</progress><small>{documented_setting_count} described</small></article></div></section><nav class=\"reference-guide-links\" aria-label=\"Related task guides\"><a href=\"tutorial/\">Create your first state</a><a href=\"guides/process-generation/\">Generate a process</a><a href=\"guides/diagnostics/\">Diagnose a run</a></nav><div data-reference-filter-root><div class=\"reference-tools\"><label for=\"cli-reference-filter\">Filter commands, aliases, arguments, and setting paths</label><input id=\"cli-reference-filter\" type=\"search\" data-reference-filter placeholder=\"Try clean-state, integrate, or runtime.integrator\"><output data-reference-filter-count aria-live=\"polite\"></output><div class=\"reference-disclosure-actions\"><button type=\"button\" data-reference-expand>Expand all</button><button type=\"button\" data-reference-collapse>Collapse all</button></div></div><div data-reference-filter-scope>",
         reference.schema_version,
         reference.settings.len(),
         reference.settings.len(),
@@ -6236,7 +7258,7 @@ fn render_gammaloop_generated_reference(product: &str, reference: &GammaLoopRefe
                     escape_html(&argument_anchor),
                     if argument.inherited { " class=\"reference-inherited\"" } else { "" },
                     escape_html(&names.join(", ")),
-                    if argument.help.is_empty() { "<span class=\"reference-missing\">Description missing at the parser boundary</span>".to_owned() } else { escape_html(&argument.help) },
+                    if argument.help.is_empty() { "<span class=\"reference-missing\">Description missing at the parser boundary</span>".to_owned() } else { render_cli_help(&argument.help) },
                     escape_html(&behavior.join(" · ")),
                     if values.is_empty() { "—".to_owned() } else { escape_html(&values) },
                     if argument.conflicts_with.is_empty() {
@@ -6264,13 +7286,29 @@ fn render_gammaloop_generated_reference(product: &str, reference: &GammaLoopRefe
                 .iter()
                 .filter(|argument| !argument.hidden)
                 .count();
+            let command_summary = if command.about.is_empty() {
+                "<span class=\"reference-missing\">Description missing at the parser boundary.</span>"
+                    .to_owned()
+            } else {
+                render_doc_inline(
+                    &compact_help_summary(&command.about),
+                    DocFormat::RustMarkdown,
+                )
+            };
+            let command_description = if command.about.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "<div class=\"reference-description\">{}</div>",
+                    render_cli_help(&command.about)
+                )
+            };
             body.push_str(&format!(
-                "<details class=\"reference-detail\" id=\"{}\" data-reference-entry data-reference-search=\"{}\"><summary class=\"reference-detail-heading\"><span class=\"reference-title\"><code>{}</code></span><span class=\"api-kind\">{public_argument_count} argument{}</span><span class=\"reference-card-summary\">{}</span></summary><div class=\"reference-detail-body\"><a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to {}\">Permanent link</a>{aliases}<div class=\"reference-copy-row\"><pre class=\"api-signature\" id=\"{}\"><code>{}</code></pre><button type=\"button\" data-copy-target=\"{}\">Copy usage</button></div>{table}</div></details>",
+                "<details class=\"reference-detail\" id=\"{}\" data-reference-entry data-reference-search=\"{}\"><summary class=\"reference-detail-heading\"><span class=\"reference-title\"><code>{}</code></span><span class=\"api-kind\">{public_argument_count} argument{}</span><span class=\"reference-card-summary\">{command_summary}</span></summary><div class=\"reference-detail-body\"><a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to {}\">Permanent link</a>{aliases}{command_description}<div class=\"reference-copy-row\"><pre class=\"api-signature\" id=\"{}\"><code>{}</code></pre><button type=\"button\" data-copy-target=\"{}\">Copy usage</button></div>{table}</div></details>",
                 escape_html(&command_anchor),
-                escape_html(&search_terms.join(" ").to_lowercase()),
+                escape_html(&search_terms.join(" ").split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()),
                 escape_html(&command.path),
                 if public_argument_count == 1 { "" } else { "s" },
-                if command.about.is_empty() { "<span class=\"reference-missing\">Description missing at the parser boundary.</span>".to_owned() } else { escape_html(&command.about) },
                 escape_html(&command_anchor),
                 escape_html(&command.path),
                 escape_html(&usage_id),
@@ -6334,7 +7372,7 @@ fn render_gammaloop_generated_reference(product: &str, reference: &GammaLoopRefe
         })
         .collect::<String>();
     body.push_str(&format!(
-        "<h2 id=\"settings\">Settings groups</h2><p>CLI settings govern startup and session behavior; runtime settings govern generated integrands, sampling, stability, subtraction, events, selectors, and observables. Precedence and live tracing reload behavior are explained in the <a href=\"manual/diagnostics/\">diagnostics guide</a>.</p><div class=\"reference-index\">{settings_index}</div>"
+        "<h2 id=\"settings\">Settings groups</h2><p>CLI settings govern startup and session behavior; runtime settings govern generated integrands, sampling, stability, subtraction, events, selectors, and observables. Precedence and live tracing reload behavior are explained in the <a href=\"guides/diagnostics/\">diagnostics guide</a>.</p><div class=\"reference-index\">{settings_index}</div>"
     ));
     for (group, settings) in setting_groups {
         let setting_count = settings.len();
@@ -6351,13 +7389,13 @@ fn render_gammaloop_generated_reference(product: &str, reference: &GammaLoopRefe
                 .unwrap_or_else(|| "no serialized default".to_owned());
             let anchor = generated_anchor("setting", &setting.path);
             cards.push_str(&format!(
-                "<article class=\"reference-setting\" id=\"{}\" data-reference-entry data-reference-search=\"{}\"><div class=\"reference-setting-heading\"><code>{}</code><a href=\"#{}\" aria-label=\"Permanent link to {}\">#</a></div><p>{}</p><dl class=\"reference-facts\"><div><dt>Type</dt><dd><code>{}</code></dd></div><div><dt>Required</dt><dd>{}</dd></div><div><dt>Default</dt><dd><code>{}</code></dd></div><div><dt>Allowed values</dt><dd>{}</dd></div></dl></article>",
+                "<article class=\"reference-setting\" id=\"{}\" data-reference-entry data-reference-search=\"{}\"><div class=\"reference-setting-heading\"><code>{}</code><a href=\"#{}\" aria-label=\"Permanent link to {}\">#</a></div><div class=\"reference-description\">{}</div><dl class=\"reference-facts\"><div><dt>Type</dt><dd><code>{}</code></dd></div><div><dt>Required</dt><dd>{}</dd></div><div><dt>Default</dt><dd><code>{}</code></dd></div><div><dt>Allowed values</dt><dd>{}</dd></div></dl></article>",
                 escape_html(&anchor),
-                escape_html(&format!("{} {} {} {}", setting.path, setting.value_type, setting.description, setting.possible_values.join(" ")).to_lowercase()),
+                escape_html(&format!("{} {} {} {}", setting.path, setting.value_type, setting.description, setting.possible_values.join(" ")).split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()),
                 escape_html(&setting.path),
                 escape_html(&anchor),
                 escape_html(&setting.path),
-                if setting.description.is_empty() { "<span class=\"reference-missing\">Description missing in the settings schema.</span>".to_owned() } else { escape_html(&setting.description) },
+                if setting.description.is_empty() { "<span class=\"reference-missing\">Description missing in the settings schema.</span>".to_owned() } else { render_cli_help(&setting.description) },
                 escape_html(&setting.value_type),
                 if setting.required { "yes" } else { "no" },
                 escape_html(&default),
@@ -6767,6 +7805,7 @@ mod tests {
         let sidebar = builder.site_sidebar(product, &metadata, &current, "", BuildScope::FullSite);
         assert!(!sidebar.contains("developers/"));
         assert!(!sidebar.contains("For developers"));
+        assert!(sidebar.contains("href=\"../../../../citations/#gammaloop\">Cite GammaLoop</a>"));
     }
 
     #[test]
@@ -6808,33 +7847,30 @@ mod tests {
     }
 
     #[test]
-    fn canonical_typst_changelogs_are_embedded_without_duplicate_titles() {
+    fn product_bundles_render_authored_typst_but_allow_package_assets() {
         let builder = SiteBuilder::discover().unwrap();
-        for product in builder
-            .registry
-            .product
-            .iter()
-            .filter(|product| product.changelog.is_some())
-        {
-            let rendered = builder.changelog_typst(product).unwrap();
-            assert!(
-                rendered
-                    .starts_with("= Canonical package changelog <canonical-package-changelog>\n")
-            );
-            assert!(rendered.contains("reference/content/changelog.typ"));
-            assert!(!rendered.contains("\n= Changelog"), "{}", product.id);
+        let site = tempfile::tempdir().unwrap();
+        let package = site
+            .path()
+            .join("products/linnet/latest/assets/typst/linnest/src");
+        fs::create_dir_all(&package).unwrap();
+        fs::write(package.join("lib.typ"), "#let package-asset = true\n").unwrap();
+        builder
+            .validate_generated_links(site.path(), false)
+            .unwrap();
 
-            let site = tempfile::tempdir().unwrap();
-            builder
-                .write_changelog_source(product, site.path())
-                .unwrap();
-            assert!(
-                site.path()
-                    .join("reference/content/changelog.typ")
-                    .is_file()
-            );
-            assert!(!site.path().join("reference/content/changelog.md").exists());
-        }
+        let leaked = site
+            .path()
+            .join("products/linnet/latest/reference/content/changelog.typ");
+        fs::create_dir_all(leaked.parent().unwrap()).unwrap();
+        fs::write(&leaked, "= Changelog\n").unwrap();
+        let error = builder
+            .validate_generated_links(site.path(), false)
+            .unwrap_err();
+        assert!(format!("{error:#}").contains(
+            "authored Typst source was published instead of rendered: products/linnet/latest/reference/content/changelog.typ"
+        ));
+        assert!(package.join("lib.typ").is_file());
     }
 
     #[test]
@@ -6854,7 +7890,27 @@ mod tests {
         assert!(rendered.contains("data-reference-filter"));
         assert!(rendered.contains("--clean-state"));
         assert!(rendered.contains("boolean flag (true) · no value"));
+        assert!(rendered.contains(
+            "Process reference: <code>#&lt;id&gt;</code>, <code>name:&lt;name&gt;</code>"
+        ));
+        assert!(rendered.contains("dotted <code>KEY=VALUE</code> assignments"));
         assert!(!rendered.contains("--clean-state &lt;"));
+    }
+
+    #[test]
+    fn multiline_cli_help_uses_compact_summaries_and_block_markup() {
+        let help = "Quote-free process specification.\n\nNotes: - `veto` excludes particles. - `only` keeps particles.\n\nA final paragraph\ncontinues on another line.";
+
+        assert_eq!(
+            compact_help_summary(help),
+            "Quote-free process specification."
+        );
+        let rendered = render_cli_help(help);
+        assert!(rendered.contains("<p>Quote-free process specification.</p>"));
+        assert!(rendered.contains("<p>Notes:</p><ul>"));
+        assert!(rendered.contains("<li><code>veto</code> excludes particles.</li>"));
+        assert!(rendered.contains("<li><code>only</code> keeps particles.</li>"));
+        assert!(rendered.contains("<p>A final paragraph continues on another line.</p>"));
     }
 
     #[test]
@@ -6910,7 +7966,10 @@ mod tests {
             "Runs one documented workflow.",
         ));
         let mut run = DocMember::new("run", DocMemberKind::Method);
-        run.signature = Some("def run(self) -> None:".to_owned());
+        run.signature = Some("def run(self, engine: Engine) -> None:".to_owned());
+        let mut engine_parameter = DocMember::new("engine", DocMemberKind::Parameter);
+        engine_parameter.signature = Some("Engine".to_owned());
+        run.members.push(engine_parameter);
         engine.members.push(run);
         root.define_item(engine).unwrap();
         let catalog = DocCatalog {
@@ -6926,12 +7985,7 @@ mod tests {
             root,
         };
 
-        let rendered = render_python_catalog(
-            &catalog,
-            "example-python.pyi",
-            "class Engine: ...",
-            "0123456789abcdef",
-        );
+        let rendered = render_python_catalog(&catalog, "example-python.pyi", "0123456789abcdef");
         assert!(rendered.contains("id=\"python-coverage-title\""));
         assert!(rendered.contains("0 of 1"));
         assert!(rendered.contains("data-reference-expand"));
@@ -6941,7 +7995,84 @@ mod tests {
             )
         );
         assert!(rendered.contains("<details class=\"api-member\" id=\"engine-run-method\""));
+        assert!(rendered.contains("class=\"api-parameter-table\""));
+        assert!(!rendered.contains("engine-run-method-engine-parameter"));
+        assert!(rendered.contains("engine: <a href=\"#engine\">Engine</a>"));
+        assert!(!rendered.contains("builtins."));
         assert!(rendered.contains("Member description missing from the generated catalog."));
+    }
+
+    #[test]
+    fn catalog_doc_text_renders_markup_instead_of_exposing_source_syntax() {
+        let rust = render_doc_text(
+            &alphal00p_docs_schema::DocText::new(
+                DocFormat::RustMarkdown,
+                "Use [`Engine`] with the [interface guide](reference/interfaces/).\n\n# Safety\nKeep `state` alive.",
+            ),
+            3,
+        );
+        assert!(rust.contains("<code>Engine</code>"));
+        assert!(rust.contains("href=\"reference/interfaces/\""));
+        assert!(rust.contains("<h3>Safety</h3>"));
+        assert!(!rust.contains("[`Engine`]"));
+
+        let typst = render_doc_text(
+            &alphal00p_docs_schema::DocText::new(
+                DocFormat::TypstMarkup,
+                "Read the #link(\"reference/rust/\")[Rust API] for the #emph[complete] surface.",
+            ),
+            3,
+        );
+        assert!(typst.contains("href=\"reference/rust/\""));
+        assert!(typst.contains("<em>complete</em>"));
+        assert!(!typst.contains("#link"));
+
+        let python = render_doc_text(
+            &alphal00p_docs_schema::DocText::new(
+                DocFormat::PythonDocstring,
+                "Construct one engine.\n\n**Lifecycle:** retained.\n\n# Arguments\n- engine: active engine\n\n```python\nengine = Engine()\n```\n\n## Examples\n```python\nengine.run()\n```\n\nReuse the engine.\n\n",
+            ),
+            3,
+        );
+        assert!(python.contains("<strong>Lifecycle:</strong> retained."));
+        assert!(python.contains("<h3>Arguments</h3>"));
+        assert!(python.contains("<code data-lang=\"python\">engine = Engine()</code>"));
+        assert!(python.contains("<code data-lang=\"python\">engine.run()</code>"));
+        assert!(python.contains("<p>Reuse the engine.</p>"));
+        assert!(!python.contains("```"));
+    }
+
+    #[test]
+    fn python_variant_sections_render_as_definitions() {
+        let rendered = render_doc_text(
+            &alphal00p_docs_schema::DocText::new(
+                DocFormat::PythonDocstring,
+                "Execution modes.\n\nVariants\n--------\nSingle : Execute one rewrite\nAll : Execute every rewrite",
+            ),
+            3,
+        );
+
+        assert!(rendered.contains("class=\"api-doc-section api-doc-variants\""));
+        assert!(rendered.contains("<dt><code>Single</code></dt>"));
+        assert!(rendered.contains("<dd><p>Execute one rewrite</p></dd>"));
+        assert!(!rendered.contains("<p>Single : Execute one rewrite"));
+    }
+
+    #[test]
+    fn numpy_examples_render_prose_and_indented_python_separately() {
+        let rendered = render_doc_text(
+            &alphal00p_docs_schema::DocText::new(
+                DocFormat::PythonDocstring,
+                "Examples\n--------\nIterate over grouped values::\n\n    for name, values in groups.items():\n        for value in values:\n            print(name, value)",
+            ),
+            3,
+        );
+
+        assert!(rendered.contains("<p>Iterate over grouped values:</p>"));
+        assert!(rendered.contains(
+            "<code data-lang=\"python\">for name, values in groups.items():\n    for value in values:\n        print(name, value)</code>"
+        ));
+        assert!(!rendered.contains("<code data-lang=\"python\">Iterate over grouped values"));
     }
 
     #[test]
@@ -6977,6 +8108,17 @@ mod tests {
         assert_eq!(&source[title.range], "<h2>Architecture &amp; design</h2>");
         assert!(leading_developer_title("<p>Before</p><h2>Title</h2>").is_err());
         assert!(leading_developer_title("<h2>One</h2><h2>Two</h2>").is_err());
+    }
+
+    #[test]
+    fn documentation_issue_routes_have_one_root_separator() {
+        let url = documentation_issue_url(
+            "GammaLoop tutorial",
+            "/products/gammaloop/latest/tutorial/",
+            "0123456789abcdef",
+        );
+        assert!(url.contains("%2Fgammaloop%2Fproducts%2Fgammaloop"));
+        assert!(!url.contains("%2Fgammaloop%2F%2Fproducts"));
     }
 
     #[test]
@@ -7052,6 +8194,10 @@ mod tests {
     #[test]
     fn rustdoc_uses_the_derive_page_for_derive_macros() {
         assert_eq!(
+            rustdoc_link_label(alphal00p_docs_schema::DocItemKind::Command),
+            "Open the complete crate Rustdoc"
+        );
+        assert_eq!(
             rustdoc_macro_prefix(Some(
                 "#[derive(SimpleRepresentation)] #[representation(...)]"
             )),
@@ -7087,6 +8233,19 @@ mod tests {
         assert_eq!(
             rustdoc_href(&catalog, item),
             "reference/rust/spenso_macros/derive.SimpleRepresentation.html"
+        );
+        let mut rendered = String::new();
+        render_api_scope(
+            &catalog,
+            &catalog.root,
+            &mut Vec::new(),
+            "0123456789abcdef",
+            2,
+            &mut rendered,
+        );
+        assert!(
+            rendered
+                .contains("href=\"reference/rust/spenso_macros/derive.SimpleRepresentation.html\"")
         );
     }
 
@@ -7403,6 +8562,7 @@ mod tests {
             summary: "Run the example".to_owned(),
             href: "target.html#tymethod.run".to_owned(),
             kind: "rust-api".to_owned(),
+            text: String::new(),
         }])
         .unwrap();
         fs::write(&search_index, &search).unwrap();
@@ -7515,11 +8675,41 @@ mod tests {
     }
 
     #[test]
-    fn nested_pages_rebase_product_relative_links() {
+    fn full_site_developer_links_rebase_from_root_and_nested_pages() {
         assert_eq!(page_root_prefix(""), "");
         assert_eq!(page_root_prefix("tutorial/"), "../");
-        assert_eq!(page_root_prefix("manual/interfaces/"), "../../");
+        assert_eq!(page_root_prefix("reference/interfaces/"), "../../");
         assert_eq!(page_root_prefix("reference/python/component/"), "../../../");
+
+        let developer_link = r#"<a href="../../../developers/architecture/gammaloop-architecture/">Architecture</a>"#;
+        let output = Path::new("/tmp/site");
+        let mut local_paths = LocalPathIndex::new();
+        for (route, expected) in [
+            (
+                "",
+                "../../../developers/architecture/gammaloop-architecture/",
+            ),
+            (
+                "tutorial/",
+                "../../../../developers/architecture/gammaloop-architecture/",
+            ),
+            (
+                "reference/interfaces/",
+                "../../../../../developers/architecture/gammaloop-architecture/",
+            ),
+        ] {
+            let rendered = rewrite_page_links(developer_link, &page_root_prefix(route)).unwrap();
+            assert!(rendered.contains(&format!("href=\"{expected}\"")));
+            let source = output
+                .join("products/gammaloop/latest")
+                .join(route)
+                .join("index.html");
+            assert_eq!(
+                resolve_local_link(output, &source, expected, &mut local_paths).unwrap(),
+                output.join("developers/architecture/gammaloop-architecture/index.html"),
+            );
+        }
+
         let rendered = rewrite_page_links(
             r##"<a href="reference/python/">API</a><a href="#local">Local</a><a href="https://example.test">External</a>"##,
             "../../",
@@ -7535,7 +8725,132 @@ mod tests {
     }
 
     #[test]
-    fn every_product_preview_has_scoped_navigation_and_external_relationship_links() {
+    fn pagination_keeps_generated_reference_before_version_history() {
+        let builder = SiteBuilder::discover().unwrap();
+        for product in &builder.registry.product {
+            let pages = product_site_pages(product);
+            let authored = product
+                .pages
+                .iter()
+                .map(|page| page.route.as_str())
+                .collect::<BTreeSet<_>>();
+            let last_authored_reference = pages
+                .iter()
+                .rposition(|page| {
+                    page.group == "Reference" && authored.contains(page.route.as_str())
+                })
+                .unwrap();
+            let first_version_history = pages
+                .iter()
+                .position(|page| page.group == "Version history")
+                .unwrap();
+            let generated_reference = pages
+                .iter()
+                .enumerate()
+                .filter(|(_, page)| {
+                    page.group == "Reference" && !authored.contains(page.route.as_str())
+                })
+                .map(|(index, _)| index)
+                .collect::<Vec<_>>();
+
+            assert!(!generated_reference.is_empty(), "{}", product.id);
+            assert!(
+                generated_reference.iter().all(|index| {
+                    *index > last_authored_reference && *index < first_version_history
+                }),
+                "{}",
+                product.id
+            );
+        }
+    }
+
+    #[test]
+    fn rendered_search_text_keeps_prose_without_chrome_or_code_blocks() {
+        let html = r#"<!doctype html><html><body><nav>Install chrome noise</nav><article class="docs-article"><h1>Install Linnet</h1><p>Install Linnet for graph work.</p><nav>Draw graph navigation</nav><pre><code>cargo install noisy-example</code></pre><p>Version <code>0.6</code> is current.</p></article><footer>Footer noise</footer></body></html>"#;
+
+        let text = rendered_article_search_text(html).unwrap();
+
+        assert_eq!(
+            text,
+            "Install Linnet Install Linnet for graph work. Version 0.6 is current."
+        );
+    }
+
+    #[test]
+    fn site_search_uses_body_text_and_de_ranks_non_current_developer_hits() {
+        let script = fs::read_to_string(
+            SiteBuilder::discover()
+                .unwrap()
+                .root
+                .join("docs/assets/site.js"),
+        )
+        .unwrap();
+        for contract in [
+            "const text = normalizeSearch(entry.text);",
+            "if (text.includes(term)) score += 3;",
+            "if (/command|setting/.test(kind)) score += 120;",
+            "if (!/developer current /.test(kind)) score -= 120;",
+        ] {
+            assert!(
+                script.contains(contract),
+                "missing search contract: {contract}"
+            );
+        }
+    }
+
+    #[test]
+    fn rendered_transitive_typst_headings_are_searchable() {
+        let builder = SiteBuilder::discover().unwrap();
+        for (product_id, page_id, html, expected_title, expected_href) in [
+            (
+                "linnet",
+                "linnest",
+                r#"<!doctype html><html><body><article><h3 id="graph-objects">Graph <code>Objects</code></h3></article></body></html>"#,
+                "Graph Objects",
+                "guides/linnest/#graph-objects",
+            ),
+            (
+                "gammaloop",
+                "kurvst",
+                r#"<!doctype html><html><body><article><h2 id="path-wire-format">Path Wire Format</h2></article></body></html>"#,
+                "Path Wire Format",
+                "guides/kurvst/#path-wire-format",
+            ),
+            (
+                "linnet",
+                "clinnet-releases",
+                r#"<!doctype html><html><body><article><h2 id="0-1-8-2025-12-04"><a href="https://example.test">0.1.8</a> - 2025-12-04</h2></article></body></html>"#,
+                "0.1.8 - 2025-12-04",
+                "version-history/clinnet/#0-1-8-2025-12-04",
+            ),
+        ] {
+            let product = builder
+                .registry
+                .product
+                .iter()
+                .find(|product| product.id == product_id)
+                .unwrap();
+            let page = product
+                .pages
+                .iter()
+                .find(|page| page.id == page_id)
+                .unwrap();
+            let mut entries = Vec::new();
+
+            append_rendered_page_search(product, page, &page.route, html, &mut entries).unwrap();
+
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].title, expected_title);
+            assert_eq!(entries[0].href, expected_href);
+            assert_eq!(
+                entries[0].summary,
+                format!("{} · {}", product.title, page.title)
+            );
+        }
+    }
+
+    #[test]
+    fn product_preview_developer_links_use_revision_pinned_sources() {
         let builder = SiteBuilder::discover().unwrap();
         for product in &builder.registry.product {
             let related = builder
@@ -7543,6 +8858,17 @@ mod tests {
                 .product
                 .iter()
                 .find(|candidate| candidate.id != product.id)
+                .unwrap();
+            let developer_note = builder
+                .developers
+                .section
+                .iter()
+                .flat_map(|section| &section.note)
+                .find(|note| {
+                    note.products
+                        .iter()
+                        .any(|candidate| candidate == &product.id)
+                })
                 .unwrap();
             let page = SitePage::new("tutorial/", "Tutorial", "Tutorial");
             let metadata = SnapshotMetadata {
@@ -7560,14 +8886,22 @@ mod tests {
             let sidebar =
                 builder.site_sidebar(product, &metadata, &page, "../", BuildScope::ProductPreview);
             assert!(!sidebar.contains("developers/"), "{}", product.id);
+            assert!(
+                sidebar.contains(&format!(
+                    "href=\"{PUBLISHED_DOCS_ROOT}/citations/#{}\">Cite {}</a>",
+                    product.id, product.title
+                )),
+                "{}",
+                product.id
+            );
             let options =
                 builder.product_options(product, &metadata, "../", BuildScope::ProductPreview);
             assert_eq!(options.matches("<option ").count(), 1, "{}", product.id);
             assert!(options.contains(&format!(">{}</option>", product.title)));
 
             let body = format!(
-                "<a href=\"../../../{}/latest/#overview\">Related</a><a href=\"../manual/\">Local</a>",
-                related.id
+                "<a href=\"../../../{}/latest/#overview\">Related</a><a href=\"../guides/\">Local</a><a href=\"../../../../developers/architecture/{}/\">Developer</a>",
+                related.id, developer_note.id,
             );
             let rendered = builder
                 .rewrite_product_preview_links(&body, &metadata, &page)
@@ -7580,7 +8914,26 @@ mod tests {
                 "{}",
                 product.id
             );
-            assert!(rendered.contains("href=\"../manual/\""), "{}", product.id);
+            assert!(rendered.contains("href=\"../guides/\""), "{}", product.id);
+            assert!(
+                rendered.contains(&format!(
+                    "href=\"https://github.com/alphal00p/gammaloop/blob/0123456789abcdef/{}\"",
+                    developer_note.source.to_string_lossy().replace('\\', "/"),
+                )),
+                "{}",
+                product.id,
+            );
+
+            let snapshot_link = format!(
+                "<a href=\"https://github.com/alphal00p/gammaloop/blob/0123456789abcdef/{}\">Developer at this revision</a>",
+                developer_note.source.to_string_lossy().replace('\\', "/"),
+            );
+            assert_eq!(
+                builder
+                    .rewrite_product_preview_links(&snapshot_link, &metadata, &page)
+                    .unwrap(),
+                snapshot_link,
+            );
         }
     }
 
@@ -7607,6 +8960,7 @@ mod tests {
                     summary: product.tagline.clone(),
                     href: "index.html#overview".to_owned(),
                     kind: "product".to_owned(),
+                    text: String::new(),
                 }])
                 .unwrap(),
             )
@@ -7658,6 +9012,7 @@ mod tests {
                 summary: product.tagline.clone(),
                 href: "index.html#missing".to_owned(),
                 kind: "product".to_owned(),
+                text: String::new(),
             }])
             .unwrap(),
         )
@@ -7704,19 +9059,37 @@ mod tests {
         ));
         item.signature = Some("class Engine:".to_owned());
         let mut method = DocMember::new("run", DocMemberKind::Method);
-        method.signature = Some("def run(self, value: int) -> int:".to_owned());
-        method.docs = Some(DocText::new(
+        let mut integer_overload = DocMember::new("run", DocMemberKind::Overload);
+        integer_overload.signature = Some("def run(self, value: int) -> int:".to_owned());
+        integer_overload.docs = Some(DocText::new(
             DocFormat::PythonDocstring,
             "Run one value.\n\nParameters\n----------\nvalue : int\n    Input value.\n\nReturns\n-------\nint\n    Processed value.\n\nRaises\n------\nValueError\n    If the value is invalid.\n\nExamples\n--------\n>>> engine.run(1)\n1\n\nNotes\n-----\nThe engine retains its state.",
         ));
-        item.members.push(method);
-        let mut overload = DocMember::new("run", DocMemberKind::Method);
+        let mut value = DocMember::new("value", DocMemberKind::Parameter);
+        value.signature = Some("int".to_owned());
+        value.docs = Some(DocText::new(DocFormat::PythonDocstring, "Input value."));
+        integer_overload.members.push(value);
+        method.members.push(integer_overload);
+        let mut overload = DocMember::new("run", DocMemberKind::Overload);
         overload.signature = Some("def run(self, value: str) -> str:".to_owned());
-        item.members.push(overload);
-        item.members
-            .push(DocMember::new("global_data", DocMemberKind::Getter));
-        item.members
-            .push(DocMember::new("global_data", DocMemberKind::Setter));
+        method.members.push(overload);
+        item.members.push(method);
+        let mut property_getter = DocMember::new("global_data", DocMemberKind::Getter);
+        property_getter.signature = Some("def global_data(self) -> str:".to_owned());
+        property_getter.docs = Some(DocText::new(
+            DocFormat::PythonDocstring,
+            "Current global data.",
+        ));
+        item.members.push(property_getter);
+        let mut property_setter = DocMember::new("global_data", DocMemberKind::Setter);
+        property_setter.signature = Some("def global_data(self, value: str) -> None:".to_owned());
+        let mut property_value = DocMember::new("value", DocMemberKind::Parameter);
+        property_value.signature = Some("str".to_owned());
+        property_setter.members.push(property_value);
+        item.members.push(property_setter);
+        let mut read_only = DocMember::new("status", DocMemberKind::Getter);
+        read_only.signature = Some("def status(self) -> str:".to_owned());
+        item.members.push(read_only);
         root.define_item(item).unwrap();
         let mut curated = DocScope::new("curated", "Curated helpers");
         let mut later_supported = DocItem::new(
@@ -7746,18 +9119,14 @@ mod tests {
             root,
         };
 
-        let rendered = render_python_catalog(
-            &catalog,
-            "example-python.pyi",
-            "class Engine: ...",
-            "0123456789abcdef",
-        );
+        let rendered = render_python_catalog(&catalog, "example-python.pyi", "0123456789abcdef");
         assert!(rendered.contains("class=\"api-item\" data-api-surface=\"supported\""));
         assert!(rendered.contains("data-reference-filter"));
         assert!(rendered.contains("data-reference-index-entry"));
         assert!(rendered.contains(">Class</span>"));
         assert!(rendered.contains(">Method</span>"));
-        assert!(rendered.contains(">Property getter</span>"));
+        assert!(rendered.contains(">Property · read/write</span>"));
+        assert!(rendered.contains(">Property · read-only</span>"));
         assert!(rendered.contains("<h2><code>Engine</code></h2>"));
         assert!(rendered.contains("<h3><code>run</code></h3>"));
         assert!(rendered.contains("<h2>Curated helpers</h2>"));
@@ -7773,29 +9142,53 @@ mod tests {
                 < rendered.find("id=\"internalengine\"").unwrap()
         );
         assert!(rendered.contains("href=\"tutorial/\""));
-        assert!(rendered.contains("href=\"manual/interfaces/\""));
+        assert!(rendered.contains("href=\"reference/interfaces/\""));
         assert!(rendered.contains("href=\"reference/python/example-python.pyi\""));
         assert!(rendered.contains("class Engine:"));
         assert!(rendered.contains("Construct one engine and reuse it."));
         assert_eq!(rendered.matches("Runs the documented workflow.").count(), 1);
         assert!(rendered.contains("def run(self, value: int)"));
-        assert!(
-            rendered.contains("class=\"api-doc-section api-doc-parameters\"><h4>Parameters</h4>")
-        );
-        assert!(rendered.contains("<dt><code>value</code> <span>int</span></dt>"));
+        assert!(!rendered.contains("class=\"api-doc-section api-doc-parameters\""));
+        assert!(rendered.contains("class=\"api-parameter-table\""));
+        assert!(rendered.contains("<td><code>value</code></td><td><code>int</code></td>"));
         assert!(rendered.contains("class=\"api-doc-section api-doc-returns\""));
         assert!(rendered.contains("class=\"api-doc-section api-doc-raises\""));
         assert!(rendered.contains("class=\"api-doc-section api-doc-examples\""));
         assert!(rendered.contains("class=\"api-doc-section api-doc-notes\""));
         assert!(rendered.contains("Type-checker stub source"));
+        assert!(rendered.contains("view its generated source"));
+        assert!(!rendered.contains("<details class=\"stub-source\""));
         assert_eq!(rendered.matches("id=\"engine-run-method\"").count(), 1);
-        assert_eq!(rendered.matches("id=\"engine-run-method-2\"").count(), 1);
+        assert_eq!(
+            rendered
+                .matches("id=\"engine-run-method-overload\"")
+                .count(),
+            1
+        );
+        assert_eq!(
+            rendered
+                .matches("id=\"engine-run-method-overload-2\"")
+                .count(),
+            1
+        );
+        assert_eq!(rendered.matches("<h4>Overloads</h4>").count(), 1);
+        assert_eq!(rendered.matches("<h5>Overload ").count(), 2);
+        assert_eq!(rendered.matches("<h3><code>run</code></h3>").count(), 1);
         assert_eq!(
             rendered.matches("id=\"engine-global-data-getter\"").count(),
             1
         );
         assert_eq!(
             rendered.matches("id=\"engine-global-data-setter\"").count(),
+            1
+        );
+        assert!(rendered.contains("api-property-setter-signature"));
+        assert!(rendered.contains("def global_data(self, value: str)"));
+        assert!(rendered.contains("<td><code>value</code></td><td><code>str</code></td>"));
+        assert_eq!(
+            rendered
+                .matches("<h3><code>global_data</code></h3>")
+                .count(),
             1
         );
 
@@ -7811,17 +9204,39 @@ mod tests {
                 entry.href == "reference/python/example-python/#engine-run-method"
             })
         );
-        assert!(
-            entries.iter().any(|entry| {
-                entry.href == "reference/python/example-python/#engine-run-method-2"
-            })
+        assert!(entries.iter().any(|entry| {
+            entry.href == "reference/python/example-python/#engine-run-method-overload"
+        }));
+        assert!(entries.iter().any(|entry| {
+            entry.href == "reference/python/example-python/#engine-run-method-overload-2"
+        }));
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry.title.ends_with("Engine.run"))
+                .count(),
+            1
+        );
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry.title.contains("Engine.run · overload"))
+                .count(),
+            2
         );
         assert!(entries.iter().any(|entry| {
             entry.href == "reference/python/example-python/#engine-global-data-getter"
         }));
-        assert!(entries.iter().any(|entry| {
+        assert!(!entries.iter().any(|entry| {
             entry.href == "reference/python/example-python/#engine-global-data-setter"
         }));
+        assert_eq!(
+            entries
+                .iter()
+                .filter(|entry| entry.title.ends_with("Engine.global_data"))
+                .count(),
+            1
+        );
         assert!(entries.iter().all(|entry| {
             !entry.title.contains("InternalEngine") && !entry.href.contains("internalengine")
         }));
@@ -7867,6 +9282,31 @@ mod tests {
     #[test]
     fn checked_in_registry_is_valid() {
         SiteBuilder::discover().unwrap().check().unwrap();
+    }
+
+    #[test]
+    fn pdf_manual_chapter_order_must_match_the_page_registry() {
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.registry.product[0].pages.swap(0, 1);
+
+        let error = builder.check().unwrap_err();
+        assert!(format!("{error:#}").contains("PDF manual chapter order differs"));
+    }
+
+    #[test]
+    fn current_developer_notes_require_a_verified_code_scope() {
+        let mut builder = SiteBuilder::discover().unwrap();
+        let note = builder
+            .developers
+            .section
+            .iter_mut()
+            .flat_map(|section| &mut section.note)
+            .find(|note| note.lifecycle == "current")
+            .expect("checked-in registry has a current developer note");
+        note.scope.clear();
+
+        let error = builder.check().unwrap_err();
+        assert!(format!("{error:#}").contains("current note must declare a verified code scope"));
     }
 
     #[test]
@@ -8100,6 +9540,12 @@ mod tests {
 
         let citations = fs::read_to_string(output.path().join("citations/index.html")).unwrap();
         assert_eq!(citations.matches("class=\"citation-card\"").count(), 5);
+        for product in &builder.registry.product {
+            assert!(citations.contains(&format!(
+                "<article class=\"citation-card\" id=\"{}\"",
+                product.id
+            )));
+        }
         assert!(citations.contains("10.5281/zenodo.18429583"));
         assert!(citations.contains("No registered software DOI is currently configured"));
     }
@@ -8276,12 +9722,40 @@ mod tests {
         .unwrap();
         assert!(search.iter().any(|entry| {
             entry.href == "architecture/gammaloop-architecture/"
-                && entry.kind == "developer implemented"
+                && entry.kind == "developer current implemented"
         }));
         assert!(search.iter().any(|entry| {
             entry.href == "architecture/documentation-improvement-plan/"
-                && entry.kind == "developer proposal"
+                && entry.kind == "developer proposal in progress"
         }));
+
+        let heading = HeadingLink {
+            level: 2,
+            title: "Scope".to_owned(),
+            id: "scope".to_owned(),
+        };
+        let current_note = builder
+            .developers
+            .section
+            .iter()
+            .flat_map(|section| &section.note)
+            .find(|note| note.lifecycle == "current")
+            .unwrap();
+        let archived_note = builder
+            .developers
+            .section
+            .iter()
+            .flat_map(|section| &section.note)
+            .find(|note| note.lifecycle == "archived")
+            .unwrap();
+        let current_heading =
+            developer_heading_search_entry(current_note, "architecture/current/", heading.clone());
+        let archived_heading =
+            developer_heading_search_entry(archived_note, "architecture/archived/", heading);
+        assert!(current_heading.kind.starts_with("developer current "));
+        assert!(current_heading.kind.ends_with(" heading"));
+        assert!(archived_heading.kind.starts_with("developer archived "));
+        assert!(archived_heading.kind.ends_with(" heading"));
     }
 
     #[test]
@@ -8302,6 +9776,7 @@ mod tests {
                     summary: product.tagline.clone(),
                     href: "tutorial/#first-result".to_owned(),
                     kind: "tutorial".to_owned(),
+                    text: String::new(),
                 }])
                 .unwrap(),
             )
@@ -8315,7 +9790,8 @@ mod tests {
                 title: "Current architecture".to_owned(),
                 summary: "Implementation boundaries".to_owned(),
                 href: "architecture/current/".to_owned(),
-                kind: "developer implemented".to_owned(),
+                kind: "developer current implemented".to_owned(),
+                text: String::new(),
             }])
             .unwrap(),
         )
@@ -8328,16 +9804,24 @@ mod tests {
             &fs::read(output.path().join("search-index.json")).unwrap(),
         )
         .unwrap();
-        assert_eq!(search.len(), PRODUCT_IDS.len() + 1);
+        assert_eq!(search.len(), PRODUCT_IDS.len() * 2 + 1);
         for product in &builder.registry.product {
             assert!(search.iter().any(|entry| {
                 entry.href == format!("products/{}/latest/tutorial/#first-result", product.id)
                     && entry.kind == format!("{} · tutorial", product.title)
             }));
+            let citation = search
+                .iter()
+                .find(|entry| entry.title == format!("Cite {}", product.title))
+                .unwrap();
+            assert_eq!(citation.href, format!("citations/#{}", product.id));
+            assert_eq!(citation.kind, "citation");
+            assert!(citation.summary.contains("software citation and BibTeX"));
+            assert!(citation.text.contains(&product.citation.title));
         }
         assert!(search.iter().any(|entry| {
             entry.href == "developers/architecture/current/"
-                && entry.kind == "Developers · developer implemented"
+                && entry.kind == "Developers · developer current implemented"
         }));
     }
 
@@ -8362,16 +9846,18 @@ mod tests {
             route: "products/gammaloop/latest/".to_owned(),
             components: Vec::new(),
         };
-        for (page, expected_source, expected_search) in [
+        for (page, expected_source, expected_search, expected_citation) in [
             (
                 SitePage::new("tutorial/", "Create your first state", "Tutorial"),
                 "docs/products/gammaloop/content/tutorial.typ",
                 "../../../../search-index.json",
+                "../../../../citations/#gammaloop",
             ),
             (
                 SitePage::new("reference/cli/", "CLI commands and settings", "Reference"),
                 "crates/gammaloop-api/src/commands/mod.rs",
                 "../../../../../search-index.json",
+                "../../../../../citations/#gammaloop",
             ),
         ] {
             let destination = site.path().join(&page.route);
@@ -8393,12 +9879,69 @@ mod tests {
                 .unwrap();
             let rendered = fs::read_to_string(destination.join("index.html")).unwrap();
             assert!(rendered.contains(&format!("data-search-index=\"{expected_search}\"")));
+            assert!(rendered.contains(&format!("href=\"{expected_citation}\">Cite GammaLoop</a>")));
             assert!(rendered.contains(&format!(
                 "https://github.com/alphal00p/gammaloop/blob/0123456789abcdef/{expected_source}"
             )));
             assert!(rendered.contains("issues/new?labels=documentation&amp;title="));
             assert!(rendered.contains("Report a documentation issue"));
         }
+    }
+
+    #[test]
+    fn moved_manual_routes_redirect_without_entering_navigation() {
+        let builder = SiteBuilder::discover().unwrap();
+        let site = tempfile::tempdir().unwrap();
+        let mut alias_count = 0;
+
+        for product in &builder.registry.product {
+            let product_site = site.path().join(&product.id);
+            for page in &product.pages {
+                let directory = product_site.join(&page.route);
+                fs::create_dir_all(&directory).unwrap();
+                fs::write(
+                    directory.join("index.html"),
+                    "<!doctype html><html><body><h1>Page</h1></body></html>",
+                )
+                .unwrap();
+            }
+            let metadata = SnapshotMetadata {
+                schema: SCHEMA_VERSION,
+                product: &product.id,
+                title: &product.title,
+                channel: BuildChannel::Latest,
+                snapshot_tag: None,
+                git_commit: "0123456789abcdef".to_owned(),
+                git_timestamp: 1,
+                route: format!("products/{}/latest/", product.id),
+                components: Vec::new(),
+            };
+            builder
+                .decorate_site_pages(product, &metadata, &product_site, BuildScope::FullSite)
+                .unwrap();
+
+            let navigation_routes = product_site_pages(product)
+                .into_iter()
+                .map(|page| page.route)
+                .collect::<BTreeSet<_>>();
+            for page in &product.pages {
+                for alias in &page.aliases {
+                    alias_count += 1;
+                    assert!(alias.starts_with("manual/"), "{}:{alias}", product.id);
+                    assert!(!navigation_routes.contains(alias));
+                    let target = format!("{}{}", page_root_prefix(alias), page.route);
+                    let redirect =
+                        fs::read_to_string(product_site.join(alias).join("index.html")).unwrap();
+                    assert!(redirect.contains(&format!(
+                        "http-equiv=\"refresh\" content=\"0; url={target}\""
+                    )));
+                    assert!(redirect.contains(&format!("rel=\"canonical\" href=\"{target}\"")));
+                    assert!(!redirect.contains("assets/site.css"));
+                }
+            }
+        }
+
+        assert_eq!(alias_count, 23);
     }
 
     #[test]

@@ -11,6 +11,7 @@ use tracing_subscriber::{fmt, prelude::*};
     feature = "python_api",
     pyo3::pyclass(from_py_object, get_all, set_all)
 )]
+/// Amount of prefix and source detail shown by the terminal and logfile sinks.
 #[repr(usize)]
 #[derive(
     Clone,

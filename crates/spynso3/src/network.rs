@@ -130,7 +130,7 @@ fn insert_function_values<'a>(
 ///
 /// Variants
 /// --------
-/// Single : Execute one contraction at a time, useful for debugging
+/// Single : Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains
 /// Scalar : Only contract scalar operations, leaving tensor structure intact
 /// All : Execute all possible contractions for complete evaluation
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
@@ -507,7 +507,8 @@ impl SpensoNet {
     /// n_steps : int, optional
     ///     Maximum number of execution steps (None for complete execution)
     /// mode : ExecutionMode, optional
-    ///     Execution strategy (ExecutionMode.All, ExecutionMode.Scalar, or ExecutionMode.Single)
+    ///     Execution strategy. ExecutionMode.Single selects one smallest-degree rewrite per
+    ///     step; use n_steps to bound how many steps run.
     ///
     /// Examples
     /// --------

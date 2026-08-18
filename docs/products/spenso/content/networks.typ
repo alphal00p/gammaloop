@@ -1,4 +1,4 @@
-#import "../../shared.typ": callout, boundary, product-link
+#import "../../shared.typ": callout, boundary, developer-link, product-link
 
 #let networks = [
 = Tensor data, contraction, and network execution
@@ -45,7 +45,7 @@ This self-contained network computes `2 a + 3 b` for two equally structured tens
 libraries make the execution boundary explicit: every tensor is already concrete and any
 unresolved function key is an error.
 
-// docs-example: compile
+// docs-example: compile spenso-network-execution
 ```rust
 use spenso::{
     network::{
@@ -111,6 +111,15 @@ Shadowing is useful for extracting a contraction problem while retaining a rever
 the source expression. Keep the replacement map until the computed result has been substituted
 back. For rewrite identities and index cooking, use #product-link("idenso", label: "Idenso");
 Spenso itself owns storage, contraction, and execution.
+
+The implementation handoff from symbolic syntax into network nodes is traced in the
+#developer-link("spenso-parsing-flow", "parsing-flow.typ", "Spenso parsing flow"). The
+#developer-link(
+  "spenso-symbolica-syntax-and-rewrites",
+  "spenso-symbolica-syntax-and-rewrites.typ",
+  "Symbolica syntax and rewrite guide",
+)
+records the contributor-facing matching and replacement conventions.
 
 == Custom representations and the HEP library
 

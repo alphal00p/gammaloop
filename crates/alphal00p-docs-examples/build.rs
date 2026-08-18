@@ -11,6 +11,11 @@ use alphal00p_docs_schema::{ApiLanguage, DocCatalog, DocItem, DocScope};
 use eyre::{Context, ContextCompat, Result, ensure};
 use serde::Deserialize;
 
+#[path = "src/example_markers.rs"]
+mod example_markers;
+
+use example_markers::{FencedBlock, fenced_blocks, named_blocks, require_named_block};
+
 #[derive(Debug, Deserialize)]
 struct Registry {
     product: Vec<Product>,
@@ -43,6 +48,7 @@ struct ExampleRegistry {
 #[derive(Debug, Deserialize)]
 struct RegisteredExample {
     id: String,
+    marker: String,
     product: String,
     task: String,
     audience: String,
@@ -69,12 +75,10 @@ struct Component {
 #[derive(Default)]
 struct ManualExamples {
     rust: Vec<(String, String, String)>,
-    python: Vec<(String, String)>,
+    python: Vec<(String, String, String)>,
     shell: Vec<(String, String)>,
     data_blocks: usize,
 }
-
-type FencedBlock = (String, Option<String>, usize, String);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RustExampleMode {
@@ -222,7 +226,8 @@ fn main() -> Result<()> {
         }
         rust_count += 1;
     }
-    for (case, code) in &manual.python {
+    for (product, case, code) in &manual.python {
+        python_products.insert(product);
         writeln!(
             python_source,
             "    ({}, {}),",
@@ -289,14 +294,39 @@ fn validate_example_registry(
     products: &Registry,
     registry: &ExampleRegistry,
 ) -> Result<()> {
-    ensure!(registry.schema == 1, "unsupported example registry schema");
+    ensure!(registry.schema == 2, "unsupported example registry schema");
+    let page_sources = products
+        .product
+        .iter()
+        .flat_map(|product| &product.pages)
+        .map(|page| page.source.clone())
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .map(|path| {
+            fs::read_to_string(workspace_root.join(&path))
+                .map(|source| (path.clone(), source))
+                .wrap_err_with(|| format!("failed to read {}", path.display()))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let named = named_blocks(&page_sources)?;
     let mut ids = BTreeSet::new();
+    let mut markers = BTreeSet::new();
     let mut coverage = BTreeSet::new();
     for example in &registry.example {
         ensure!(
             ids.insert(&example.id),
             "duplicate example id {}",
             example.id
+        );
+        ensure!(
+            example.marker == example.id,
+            "example {} marker must equal its example id",
+            example.id
+        );
+        ensure!(
+            markers.insert(&example.marker),
+            "duplicate example marker {}",
+            example.marker
         );
         let product = products
             .product
@@ -344,15 +374,22 @@ fn validate_example_registry(
             "example {} has incomplete maintenance metadata",
             example.id
         );
-        let source = fs::read_to_string(workspace_root.join(&example.source))?;
-        ensure!(
-            source.contains(&format!("// docs-example: {}", example.verification)),
-            "example {} source has no {} verification block",
-            example.id,
-            example.verification
-        );
+        require_named_block(
+            &named,
+            &example.marker,
+            &example.source,
+            &example.verification,
+        )?;
         coverage.insert((example.product.as_str(), example.audience.as_str()));
     }
+    let unregistered = named
+        .keys()
+        .filter(|marker| !markers.contains(*marker))
+        .collect::<Vec<_>>();
+    ensure!(
+        unregistered.is_empty(),
+        "named documentation example markers are missing registry records: {unregistered:?}"
+    );
     let expected = products
         .product
         .iter()
@@ -393,16 +430,25 @@ fn manual_examples(workspace_root: &Path, registry: &Registry) -> Result<ManualE
             let is_tutorial = relative
                 .file_name()
                 .is_some_and(|name| name == "tutorial.typ");
-            for (language, declared_mode, line, code) in fenced_blocks(&source, relative)? {
+            for FencedBlock {
+                language,
+                marker,
+                line,
+                code,
+            } in fenced_blocks(&source, relative)?
+            {
                 let case = format!("manual::{}::{}:{line}", product.id, relative.display());
                 ensure!(
-                    !is_tutorial || declared_mode.is_some(),
+                    !is_tutorial || marker.is_some(),
                     "tutorial example {case} needs an immediately preceding // docs-example: MODE marker"
                 );
-                let mode = declared_mode.as_deref().unwrap_or(match language.as_str() {
-                    "rust" | "python" => "compile",
-                    _ => "syntax",
-                });
+                let mode = marker
+                    .as_ref()
+                    .map(|marker| marker.mode.as_str())
+                    .unwrap_or(match language.as_str() {
+                        "rust" | "python" => "compile",
+                        _ => "syntax",
+                    });
                 match (language.as_str(), mode) {
                     ("rust", mode @ ("run" | "compile" | "syntax")) => {
                         if matches!(mode, "run" | "syntax") {
@@ -412,7 +458,9 @@ fn manual_examples(workspace_root: &Path, registry: &Registry) -> Result<ManualE
                         }
                         examples.rust.push((case, code, mode.to_owned()));
                     }
-                    ("python", "compile") => examples.python.push((case, code)),
+                    ("python", "compile") => {
+                        examples.python.push((product.id.clone(), case, code));
+                    }
                     ("sh" | "bash" | "shell", "syntax") => {
                         examples.shell.push((case, code));
                     }
@@ -442,51 +490,6 @@ fn manual_examples(workspace_root: &Path, registry: &Registry) -> Result<ManualE
         }
     }
     Ok(examples)
-}
-
-fn fenced_blocks(source: &str, path: &Path) -> Result<Vec<FencedBlock>> {
-    let lines = source.lines().collect::<Vec<_>>();
-    let mut blocks = Vec::new();
-    let mut index = 0;
-    while index < lines.len() {
-        let Some(language) = lines[index].strip_prefix("```") else {
-            index += 1;
-            continue;
-        };
-        let language = language.trim().to_owned();
-        ensure!(
-            !language.is_empty(),
-            "untyped fenced block at {}:{}",
-            path.display(),
-            index + 1
-        );
-        let mode = index
-            .checked_sub(1)
-            .and_then(|line| lines[line].trim().strip_prefix("// docs-example: "))
-            .map(str::to_owned);
-        ensure!(
-            mode.as_ref().is_none_or(|mode| !mode.is_empty()),
-            "empty documentation example mode at {}:{}",
-            path.display(),
-            index
-        );
-        let start = index + 1;
-        index += 1;
-        let mut code = Vec::new();
-        while index < lines.len() && lines[index] != "```" {
-            code.push(lines[index]);
-            index += 1;
-        }
-        ensure!(
-            index < lines.len(),
-            "unterminated {language} block at {}:{}",
-            path.display(),
-            start
-        );
-        blocks.push((language, mode, start, code.join("\n")));
-        index += 1;
-    }
-    Ok(blocks)
 }
 
 fn component_catalog(
@@ -566,10 +569,28 @@ fn rust_example_mode(component: &str, item: &str, language: &str) -> Result<Rust
     );
     if matches!(
         (component, item),
-        ("gammalooprs", "set_interrupt_handler")
-            | ("gammaloop-api", "StateLoadOption::load")
-            | ("gammaloop-api", "LoadedState::cli_session")
-            | ("vakint", "vakint_parse" | "vakint_symbol" | "Vakint")
+        (
+            "gammalooprs",
+            "set_interrupt_handler"
+                | "request_interrupt"
+                | "is_interrupt_requested"
+                | "clear_interrupt_request"
+        ) | (
+            "gammaloop-api",
+            "StateLoadOption::load"
+                | "LoadedState::cli_session"
+                | "CliSession::execute_command"
+                | "RunHistory::load"
+                | "State::get_integrand_info"
+                | "ImportModel::run"
+                | "Generate::run"
+                | "Integrate::run"
+                | "evaluate_sample"
+                | "evaluate_samples"
+                | "evaluate_sample_precise"
+                | "evaluate_samples_precise"
+                | "classify_state_folder"
+        ) | ("vakint", "vakint_parse" | "vakint_symbol" | "Vakint")
             | (
                 "idenso",
                 "bis"
@@ -589,26 +610,76 @@ fn rust_example_mode(component: &str, item: &str, language: &str) -> Result<Rust
     ensure!(
         matches!(
             (component, item),
-            ("gammalooprs", "GammaLoopContext" | "HasModel")
-                | ("gammaloop-api", "StateLoadOption" | "CLISettings")
-                | (
-                    "linnet",
-                    "HedgeGraph"
-                        | "HedgeGraphBuilder"
-                        | "SuBitGraph"
-                        | "SimpleTraversalTree"
-                        | "DotGraph"
-                )
-                | (
-                    "spenso",
-                    "TensorStructure"
-                        | "DenseTensor"
-                        | "SparseTensor"
-                        | "Contract"
-                        | "Network"
-                        | "ParamTensor"
-                )
-                | ("spenso-macros", "SimpleRepresentation")
+            (
+                "gammalooprs",
+                "GammaLoopContext"
+                    | "HasModel"
+                    | "GammaLoopContextContainer"
+                    | "HasIntegrand"
+                    | "Integrand"
+                    | "GlobalSettings"
+                    | "RuntimeSettings"
+                    | "SingleSampleEvaluationResult"
+                    | "BatchSampleEvaluationResult"
+                    | "PreciseSingleSampleEvaluationResult"
+                    | "PreciseBatchSampleEvaluationResult"
+                    | "HistogramSnapshot"
+                    | "HistogramSnapshot::merge"
+                    | "HistogramSnapshot::rebin"
+                    | "HistogramAccumulatorState"
+                    | "HistogramAccumulatorState::snapshot"
+            ) | (
+                "gammaloop-api",
+                "StateLoadOption"
+                    | "LoadedState"
+                    | "CliSession"
+                    | "CommandHistory"
+                    | "CommandHistory::from_raw_string"
+                    | "RunHistory"
+                    | "State"
+                    | "IntegrandInfo"
+                    | "ImportModel"
+                    | "Generate"
+                    | "Integrate"
+                    | "IntegrationOutput"
+                    | "EvaluateSamples"
+                    | "EvaluateSamplesPrecise"
+                    | "StateFolderKind"
+                    | "CLISettings"
+            ) | (
+                "linnet",
+                "HedgeGraph"
+                    | "HedgeGraphBuilder"
+                    | "SuBitGraph"
+                    | "SimpleTraversalTree"
+                    | "DotGraph"
+                    | "HedgePair"
+                    | "Flow"
+                    | "Orientation"
+                    | "SubSetLike"
+                    | "SubSetOps"
+                    | "Inclusion"
+                    | "BaseSubgraph"
+                    | "SubGraphLike"
+                    | "NodeStorage"
+                    | "NodeStorageOps"
+            ) | (
+                "spenso",
+                "TensorStructure"
+                    | "DenseTensor"
+                    | "SparseTensor"
+                    | "Contract"
+                    | "Network"
+                    | "ContractionStrategy"
+                    | "ExecutionStrategy"
+                    | "ExecutionMode"
+                    | "ExecutionResult"
+                    | "TensorNetworkError"
+                    | "ParseSettings"
+                    | "NetworkParse"
+                    | "SymbolicParallelism"
+                    | "ParamTensor"
+            ) | ("spenso-macros", "SimpleRepresentation")
                 | (
                     "spenso-hep-lib",
                     "hep_lib" | "gamma_data_dirac" | "su3_generator_data"

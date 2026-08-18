@@ -147,7 +147,9 @@ pub use hedge::DotHedgeData;
 )]
 #[cfg_attr(feature = "rkyv", archive(check_bytes))]
 pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {
+    /// Graph-level DOT metadata, including its name, payload, and attribute defaults.
     pub global_data: GlobalData,
+    /// Parsed half-edge topology together with its DOT edge, vertex, and half-edge data.
     pub graph: HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData, N>,
 }
 

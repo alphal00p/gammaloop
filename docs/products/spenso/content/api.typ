@@ -73,10 +73,10 @@ indices = TensorIndices(rep("i"), rep("j"))
 identity = Tensor.dense(indices, [1.0, 0.0, 0.0, 1.0])
 ```
 
-The structured #link("reference/python/")[Python reference] includes tensor and structure types, tensor networks, execution modes,
-tensor libraries, expression evaluators, and symbolic-parallelism controls. Its signatures can
-differ from the generic Rust API because `spynso3` provides the Python-specific conversions and
-defaults.
+The #link("guides/python/")[Python tensor-workflow guide] connects construction, libraries,
+network execution, evaluators, and symbolic-parallelism policy. Use it with the structured
+#link("reference/python/")[Python reference], whose exact signatures can differ from the generic
+Rust API because `spynso3` provides Python-specific conversions and defaults.
 
 Source starting points are #source-link("crates/spenso/src/spenso.rs", label: "the core crate"),
 #source-link("crates/spenso-macros/src/lib.rs", label: "the derive crate"),

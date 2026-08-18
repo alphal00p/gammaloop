@@ -101,6 +101,20 @@ It exposes Bezier utilities that are awkward or unavailable in native Typst:
 - fitting Kurbo offset/parallel paths,
 - converting returned path geometry to CeTZ drawing commands.
 
+== Choose an import path
+
+Kurvst is currently a bundled source package, not a Typst Universe package. A
+Clinnet run writes it below `build/templates/crates/kurvst/typst/`; a custom
+template in `build/templates/` can therefore import it with:
+
+```typ
+#import "crates/kurvst/typst/src/lib.typ" as kurvst
+```
+
+Repository examples live one directory beside `src/` and instead use
+`#import "../src/lib.typ" as kurvst`. Keep `kurvst.wasm`, `typst.toml`, and the
+`src/` tree together when copying the package to another Typst project.
+
 Path geometry points are two-item tuples:
 
 ```typ
@@ -395,7 +409,7 @@ CeTZ path merging and styling:
 
 == Generated Reference
 
-#context if target() == "paged" {
+#context {
   let tidy-style = dictionary(tidy.styles.default)
   let _ = tidy-style.insert("show-example", tidy-style.show-example.with(scale-preview: 100%))
   let docs = tidy.parse-module(
@@ -416,9 +430,6 @@ CeTZ path merging and styling:
     ),
   )
   [#tidy.show-module(docs, style: tidy-style, enable-cross-references: false)]
-} else {
-  [The complete generated module reference remains in the downloadable PDF
-  manual linked at the end of this page.]
 }
 ]
 

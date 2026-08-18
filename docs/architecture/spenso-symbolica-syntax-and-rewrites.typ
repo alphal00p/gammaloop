@@ -13,7 +13,7 @@ This note describes the Symbolica syntax Spenso uses for tensor expressions and
 the Rust idioms for implementing algebraic rewrites over that syntax. It is
 meant as a general reference for tensor, metric, Schoonschip, Dirac, and color
 simplifiers; the FORM-derived identities in
-#link("../../../products/idenso/latest/manual/form-color-dirac/")[the rendered color and Dirac specification] are examples of this style, not
+#link("../../../products/idenso/latest/reference/form-color-dirac/")[the rendered color and Dirac specification] are examples of this style, not
 the definition of the syntax.
 
 == Tensor Syntax

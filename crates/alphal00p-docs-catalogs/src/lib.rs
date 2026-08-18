@@ -137,8 +137,57 @@ pub fn export_catalog(
     );
     component.features.clone_from(&request.features);
     let catalog = DocCatalog::new(product, component, root);
-    catalog.validate_supported()?;
+    match request.language {
+        ApiLanguage::Python => validate_python_catalog(&catalog)?,
+        _ => catalog.validate_supported()?,
+    }
     Ok(catalog)
+}
+
+fn validate_python_catalog(catalog: &DocCatalog) -> Result<()> {
+    fn validate_scope(scope: &DocScope, supported: &mut usize) -> Result<()> {
+        for item in scope.items.values().filter(|item| item.supported) {
+            *supported += 1;
+            ensure!(
+                item.docs
+                    .as_ref()
+                    .is_some_and(|docs| !docs.body.trim().is_empty()),
+                "supported Python export {} is missing docs",
+                item.id
+            );
+            ensure!(
+                item.summary
+                    .as_ref()
+                    .is_some_and(|summary| !summary.trim().is_empty()),
+                "supported Python export {} is missing a summary",
+                item.id
+            );
+            ensure!(
+                item.signature
+                    .as_ref()
+                    .is_some_and(|signature| !signature.trim().is_empty()),
+                "supported Python export {} is missing a signature",
+                item.id
+            );
+            ensure!(
+                item.source.as_ref().is_some_and(|source| {
+                    !source.identifier.trim().is_empty() && !source.file.trim().is_empty()
+                }),
+                "supported Python export {} is missing a source location",
+                item.id
+            );
+        }
+        for child in scope.scopes.values() {
+            validate_scope(child, supported)?;
+        }
+        Ok(())
+    }
+
+    catalog.validate()?;
+    let mut supported = 0;
+    validate_scope(&catalog.root, &mut supported)?;
+    ensure!(supported > 0, "Python catalog has no supported exports");
+    Ok(())
 }
 
 #[derive(Clone, Copy)]
@@ -235,7 +284,9 @@ fn rust_item_required_features(component: &str, item: &str) -> &'static [&'stati
     match (component, item) {
         // The entire parametric module is behind Spenso's Symbolica-backed
         // `shadowing` feature, not merely extra implementations on the type.
-        ("spenso", "ParamTensor") => &["shadowing"],
+        ("spenso", "NetworkParse" | "ParamTensor" | "ParseSettings" | "SymbolicParallelism") => {
+            &["shadowing"]
+        }
         _ => &[],
     }
 }
@@ -266,9 +317,94 @@ const GAMMALOOPRS: &[RustExampleSpec] = &[
         "fn model_owner<C: gammalooprs::HasModel>(_context: &C) {}"
     ),
     example!(
+        "GammaLoopContextContainer",
+        "rust",
+        "use gammalooprs::GammaLoopContextContainer;"
+    ),
+    example!(
+        "HasIntegrand",
+        "rust",
+        "fn accepts_integrand<I: gammalooprs::integrands::HasIntegrand>(_integrand: &I) {}"
+    ),
+    example!(
+        "Integrand",
+        "rust",
+        "use gammalooprs::integrands::Integrand;"
+    ),
+    example!(
+        "GlobalSettings",
+        "rust",
+        "let global = gammalooprs::settings::GlobalSettings::default();"
+    ),
+    example!(
+        "RuntimeSettings",
+        "rust",
+        "let runtime = gammalooprs::settings::RuntimeSettings::default();"
+    ),
+    example!(
+        "SingleSampleEvaluationResult",
+        "rust",
+        "use gammalooprs::integrands::evaluation::SingleSampleEvaluationResult;"
+    ),
+    example!(
+        "BatchSampleEvaluationResult",
+        "rust",
+        "use gammalooprs::integrands::evaluation::BatchSampleEvaluationResult;"
+    ),
+    example!(
+        "PreciseSingleSampleEvaluationResult",
+        "rust",
+        "use gammalooprs::integrands::evaluation::PreciseSingleSampleEvaluationResult;"
+    ),
+    example!(
+        "PreciseBatchSampleEvaluationResult",
+        "rust",
+        "use gammalooprs::integrands::evaluation::PreciseBatchSampleEvaluationResult;"
+    ),
+    example!(
+        "HistogramSnapshot",
+        "rust",
+        "use gammalooprs::observables::HistogramSnapshot;"
+    ),
+    example!(
+        "HistogramSnapshot::merge",
+        "rust",
+        "let left = gammalooprs::observables::HistogramAccumulatorState::default().snapshot(); let right = gammalooprs::observables::HistogramAccumulatorState::default().snapshot(); let merged = left.merge(&right)?;"
+    ),
+    example!(
+        "HistogramSnapshot::rebin",
+        "rust",
+        "let accumulator = gammalooprs::observables::HistogramAccumulatorState::continuous(\"energy\".into(), \"weighted events\".into(), gammalooprs::observables::ObservablePhase::Real, gammalooprs::observables::ObservableValueTransform::Identity, 0.0, 4.0, false, false, 4); let coarser = accumulator.snapshot().rebin(2)?; assert_eq!(coarser.bins.len(), 2);"
+    ),
+    example!(
+        "HistogramAccumulatorState",
+        "rust",
+        "let accumulator = gammalooprs::observables::HistogramAccumulatorState::default();"
+    ),
+    example!(
+        "HistogramAccumulatorState::snapshot",
+        "rust",
+        "let accumulator = gammalooprs::observables::HistogramAccumulatorState::default(); let snapshot = accumulator.snapshot();"
+    ),
+    example!(
         "set_interrupt_handler",
         "rust",
         "gammalooprs::set_interrupt_handler();"
+    ),
+    example!(
+        "request_interrupt",
+        "rust",
+        "gammalooprs::request_interrupt();"
+    ),
+    example!(
+        "is_interrupt_requested",
+        "rust",
+        "let interrupted = gammalooprs::is_interrupt_requested();"
+    ),
+    example!(
+        "clear_interrupt_request",
+        "rust",
+        "gammalooprs::clear_interrupt_request();"
     ),
 ];
 
@@ -278,6 +414,7 @@ const GAMMALOOP_API: &[RustExampleSpec] = &[
         "rust",
         "let options = gammaloop_api::StateLoadOption::default();"
     ),
+    example!("LoadedState", "rust", "use gammaloop_api::LoadedState;"),
     example!(
         "StateLoadOption::load",
         "rust",
@@ -286,7 +423,119 @@ const GAMMALOOP_API: &[RustExampleSpec] = &[
     example!(
         "LoadedState::cli_session",
         "rust",
-        "let mut loaded = gammaloop_api::StateLoadOption::default().load()?; let session = loaded.cli_session();"
+        "fn open_session(loaded: &mut gammaloop_api::LoadedState) -> gammaloop_api::session::CliSession<'_> { loaded.cli_session() }"
+    ),
+    example!(
+        "CliSession",
+        "rust",
+        "use gammaloop_api::session::CliSession;"
+    ),
+    example!(
+        "CliSession::execute_command",
+        "rust",
+        "fn execute(session: &mut gammaloop_api::session::CliSession<'_>, command: gammaloop_api::state::CommandHistory) -> eyre::Result<()> { session.execute_command(command)?; Ok(()) }"
+    ),
+    example!(
+        "CommandHistory",
+        "rust",
+        "use gammaloop_api::state::CommandHistory;"
+    ),
+    example!(
+        "CommandHistory::from_raw_string",
+        "rust",
+        "let command = gammaloop_api::state::CommandHistory::from_raw_string(\"display processes\")?;"
+    ),
+    example!(
+        "RunHistory",
+        "rust",
+        "use gammaloop_api::state::RunHistory;"
+    ),
+    example!(
+        "RunHistory::load",
+        "rust",
+        "let history = gammaloop_api::state::RunHistory::load(\"run.toml\")?;"
+    ),
+    example!("State", "rust", "use gammaloop_api::state::State;"),
+    example!(
+        "State::get_integrand_info",
+        "rust",
+        "fn inspect(state: &gammaloop_api::state::State) -> eyre::Result<gammaloop_api::integrand_info::IntegrandInfo> { state.get_integrand_info(None, None) }"
+    ),
+    example!(
+        "IntegrandInfo",
+        "rust",
+        "use gammaloop_api::integrand_info::IntegrandInfo;"
+    ),
+    example!(
+        "ImportModel",
+        "rust",
+        "use gammaloop_api::commands::import::model::ImportModel;"
+    ),
+    example!(
+        "ImportModel::run",
+        "rust",
+        "fn import(request: &gammaloop_api::commands::import::model::ImportModel, state: &mut gammaloop_api::state::State) -> eyre::Result<()> { request.run(state) }"
+    ),
+    example!("Generate", "rust", "use gammaloop_api::commands::Generate;"),
+    example!(
+        "Generate::run",
+        "rust",
+        "fn generate(request: &gammaloop_api::commands::Generate, state: &mut gammaloop_api::state::State, global: &gammalooprs::settings::GlobalSettings, runtime: &gammalooprs::settings::RuntimeSettings) -> eyre::Result<()> { request.run(state, \"compiled\", false, global, runtime) }"
+    ),
+    example!(
+        "Integrate",
+        "rust",
+        "use gammaloop_api::commands::Integrate;"
+    ),
+    example!(
+        "Integrate::run",
+        "rust",
+        "fn integrate(request: &gammaloop_api::commands::Integrate, state: &mut gammaloop_api::state::State, settings: &gammaloop_api::CLISettings) -> eyre::Result<gammaloop_api::commands::IntegrationOutput> { request.run(state, settings) }"
+    ),
+    example!(
+        "IntegrationOutput",
+        "rust",
+        "use gammaloop_api::commands::IntegrationOutput;"
+    ),
+    example!(
+        "EvaluateSamples",
+        "rust",
+        "use gammaloop_api::commands::evaluate_samples::EvaluateSamples;"
+    ),
+    example!(
+        "evaluate_sample",
+        "rust",
+        "fn evaluate(state: &mut gammaloop_api::state::State, request: &gammaloop_api::commands::evaluate_samples::EvaluateSamples<'_>) -> eyre::Result<()> { let _result = gammaloop_api::commands::evaluate_samples::evaluate_sample(state, request)?; Ok(()) }"
+    ),
+    example!(
+        "evaluate_samples",
+        "rust",
+        "fn evaluate(state: &mut gammaloop_api::state::State, request: &gammaloop_api::commands::evaluate_samples::EvaluateSamples<'_>) -> eyre::Result<()> { let _batch = gammaloop_api::commands::evaluate_samples::evaluate_samples(state, request)?; Ok(()) }"
+    ),
+    example!(
+        "EvaluateSamplesPrecise",
+        "rust",
+        "use gammaloop_api::commands::evaluate_samples::EvaluateSamplesPrecise;"
+    ),
+    example!(
+        "evaluate_sample_precise",
+        "rust",
+        "fn evaluate(state: &mut gammaloop_api::state::State, request: &gammaloop_api::commands::evaluate_samples::EvaluateSamplesPrecise<'_>) -> eyre::Result<()> { let _result = gammaloop_api::commands::evaluate_samples::evaluate_sample_precise(state, request)?; Ok(()) }"
+    ),
+    example!(
+        "evaluate_samples_precise",
+        "rust",
+        "fn evaluate(state: &mut gammaloop_api::state::State, request: &gammaloop_api::commands::evaluate_samples::EvaluateSamplesPrecise<'_>) -> eyre::Result<()> { let _batch = gammaloop_api::commands::evaluate_samples::evaluate_samples_precise(state, request)?; Ok(()) }"
+    ),
+    example!(
+        "StateFolderKind",
+        "rust",
+        "use gammaloop_api::state::StateFolderKind;"
+    ),
+    example!(
+        "classify_state_folder",
+        "rust",
+        "let kind = gammaloop_api::state::classify_state_folder(std::path::Path::new(\"./state\"))?;"
     ),
     example!(
         "CLISettings",
@@ -319,6 +568,52 @@ const LINNET: &[RustExampleSpec] = &[
         "use linnet::half_edge::tree::SimpleTraversalTree;"
     ),
     example!("DotGraph", "rust", "use linnet::parser::DotGraph;"),
+    example!(
+        "HedgePair",
+        "rust",
+        "use linnet::half_edge::involution::HedgePair;"
+    ),
+    example!("Flow", "rust", "use linnet::half_edge::involution::Flow;"),
+    example!(
+        "Orientation",
+        "rust",
+        "use linnet::half_edge::involution::Orientation;"
+    ),
+    example!(
+        "SubSetLike",
+        "rust",
+        "use linnet::half_edge::subgraph::SubSetLike;"
+    ),
+    example!(
+        "SubSetOps",
+        "rust",
+        "use linnet::half_edge::subgraph::SubSetOps;"
+    ),
+    example!(
+        "Inclusion",
+        "rust",
+        "use linnet::half_edge::subgraph::Inclusion;"
+    ),
+    example!(
+        "BaseSubgraph",
+        "rust",
+        "use linnet::half_edge::subgraph::BaseSubgraph;"
+    ),
+    example!(
+        "SubGraphLike",
+        "rust",
+        "use linnet::half_edge::subgraph::SubGraphLike;"
+    ),
+    example!(
+        "NodeStorage",
+        "rust",
+        "use linnet::half_edge::nodestore::NodeStorage;"
+    ),
+    example!(
+        "NodeStorageOps",
+        "rust",
+        "use linnet::half_edge::nodestore::NodeStorageOps;"
+    ),
 ];
 
 const SPENSO: &[RustExampleSpec] = &[
@@ -343,6 +638,46 @@ const SPENSO: &[RustExampleSpec] = &[
         "fn can_contract<T: spenso::contraction::Contract>(_tensor: &T) {}"
     ),
     example!("Network", "rust", "use spenso::network::Network;"),
+    example!(
+        "ContractionStrategy",
+        "rust",
+        "use spenso::network::ContractionStrategy;"
+    ),
+    example!(
+        "ExecutionStrategy",
+        "rust",
+        "use spenso::network::ExecutionStrategy;"
+    ),
+    example!(
+        "ExecutionMode",
+        "rust",
+        "use spenso::network::ExecutionMode;"
+    ),
+    example!(
+        "ExecutionResult",
+        "rust",
+        "use spenso::network::ExecutionResult;"
+    ),
+    example!(
+        "TensorNetworkError",
+        "rust",
+        "use spenso::network::TensorNetworkError;"
+    ),
+    example!(
+        "ParseSettings",
+        "rust",
+        "let settings = spenso::network::parsing::ParseSettings::default();"
+    ),
+    example!(
+        "NetworkParse",
+        "rust",
+        "use spenso::network::parsing::NetworkParse;"
+    ),
+    example!(
+        "SymbolicParallelism",
+        "rust",
+        "use spenso::symbolic_parallelism::SymbolicParallelism;"
+    ),
     example!(
         "ParamTensor",
         "rust",
@@ -533,16 +868,6 @@ fn python_scope(request: &CatalogRequest, workspace_root: &Path, stub: &Path) ->
         item.summary = Some(summary);
         item.signature = Some(declaration.signature);
         item.members = declaration.members;
-        item.examples.push(DocExample::new(
-            "Introspection scaffold (not a task example)",
-            "python",
-            format!(
-                "from {} import {}\nhelp({})",
-                request.module.as_deref().unwrap_or(&request.package),
-                declaration.name,
-                declaration.name
-            ),
-        ));
         item.source = Some(SourceLocation::new(
             format!("{}::{}", request.component_id, declaration.name),
             &source_file,
@@ -558,21 +883,50 @@ fn python_scope(request: &CatalogRequest, workspace_root: &Path, stub: &Path) ->
 fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
     match component {
         "gammaloop-python" => Ok(&[
+            "AdditionalWeight",
+            "BatchEvaluationResult",
+            "CutInfo",
+            "DotExportSettings",
+            "EvaluationResult",
+            "Event",
+            "EventGroup",
+            "FourMomentum",
             "GammaLoopAPI",
+            "HistogramAccumulator",
+            "HistogramBin",
+            "HistogramSnapshot",
+            "HistogramStats",
+            "IntegrandActiveThresholdCut",
+            "IntegrandCut",
+            "IntegrandCutThreshold",
+            "IntegrandGraph",
+            "IntegrandGraphGroup",
+            "IntegrandInfo",
+            "IntegrandLoopMomentumBasis",
+            "IntegrandOrientation",
+            "IntegrandThresholdEsurface",
+            "SampleEvaluationResult",
+            "SettingsValue",
+            "StabilityResult",
             "atom_to_canonical_string",
             "evaluate_graph_overall_factor",
             "to_dots",
         ]),
         "spynso3" => Ok(&[
+            "CompiledTensorEvaluator",
+            "LibraryTensor",
             "Representation",
             "Slot",
             "Tensor",
+            "TensorEvaluator",
             "TensorIndices",
             "TensorStructure",
             "TensorNetwork",
             "TensorLibrary",
+            "TensorName",
             "ExecutionMode",
             "SymbolicParallelism",
+            "set_symbolica_rayon_enabled",
         ]),
         "linnet-py" | "idenso-community" | "vakint-community" => Ok(&[]),
         _ => bail!("unknown Python component {component}"),
@@ -667,6 +1021,21 @@ mod tests {
                 "linnet::half_edge::subgraph::subset::SuBitGraph",
             ),
             (
+                "linnet",
+                "HedgePair",
+                "linnet::half_edge::involution::HedgePair",
+            ),
+            (
+                "linnet",
+                "SubSetLike",
+                "linnet::half_edge::subgraph::SubSetLike",
+            ),
+            (
+                "linnet",
+                "NodeStorageOps",
+                "linnet::half_edge::nodestore::NodeStorageOps",
+            ),
+            (
                 "spenso",
                 "DenseTensor",
                 "spenso::tensors::data::dense::DenseTensor",
@@ -676,12 +1045,42 @@ mod tests {
                 "SparseTensor",
                 "spenso::tensors::data::sparse::SparseTensor",
             ),
+            (
+                "spenso",
+                "ContractionStrategy",
+                "spenso::network::contract::ContractionStrategy",
+            ),
+            (
+                "spenso",
+                "NetworkParse",
+                "spenso::network::parsing::NetworkParse",
+            ),
+            (
+                "spenso",
+                "SymbolicParallelism",
+                "spenso::symbolic_parallelism::SymbolicParallelism",
+            ),
             ("idenso", "CookSettings", "idenso::cook::CookSettings"),
             ("idenso", "Cookable", "idenso::cook::Cookable"),
             (
                 "vakint",
                 "VakintExpression::canonicalize",
                 "vakint::VakintExpression::canonicalize",
+            ),
+            (
+                "gammaloop-api",
+                "ImportModel",
+                "gammaloop_api::commands::import::model::ImportModel",
+            ),
+            (
+                "gammaloop-api",
+                "Generate::run",
+                "gammaloop_api::commands::generate::Generate::run",
+            ),
+            (
+                "gammaloop-api",
+                "IntegrationOutput",
+                "gammaloop_api::commands::integrate::IntegrationOutput",
             ),
         ] {
             let item = annotated_items::for_component(component)
@@ -697,6 +1096,287 @@ mod tests {
                     .is_some_and(|signature| !signature.is_empty())
             );
         }
+    }
+
+    #[test]
+    fn gammaloop_supported_surfaces_have_regression_guarded_coverage() {
+        assert_eq!(rust_examples("gammalooprs").unwrap().len(), 20);
+        let rust = rust_examples("gammaloop-api").unwrap();
+        assert_eq!(rust.len(), 30);
+        for entry in [
+            "ImportModel",
+            "ImportModel::run",
+            "Generate",
+            "Generate::run",
+            "Integrate",
+            "Integrate::run",
+            "IntegrationOutput",
+        ] {
+            assert!(
+                rust.iter().any(|example| example.id == entry),
+                "missing supported Rust entry {entry}"
+            );
+        }
+
+        let python = python_required_exports("gammaloop-python").unwrap();
+        assert_eq!(python.len(), 28);
+        for entry in [
+            "GammaLoopAPI",
+            "IntegrandInfo",
+            "HistogramAccumulator",
+            "EventGroup",
+            "SettingsValue",
+        ] {
+            assert!(
+                python.contains(&entry),
+                "missing supported Python entry {entry}"
+            );
+        }
+    }
+
+    #[test]
+    fn gammalooprs_curated_direct_members_are_documented() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .unwrap();
+        let request = CatalogRequest {
+            product_id: "gammaloop".to_owned(),
+            product_title: "GammaLoop".to_owned(),
+            component_id: "gammalooprs".to_owned(),
+            package: "gammalooprs".to_owned(),
+            component_title: "GammaLoop Rust core".to_owned(),
+            version: "0.1.0".to_owned(),
+            language: ApiLanguage::Rust,
+            module: None,
+            features: vec![],
+        };
+        let catalog = export_catalog(&request, root, None).unwrap();
+        let supported = &catalog.root.scopes["supported"];
+        assert_eq!(supported.items.len(), 20);
+
+        let members = supported
+            .items
+            .values()
+            .flat_map(|item| item.members.iter().map(move |member| (item, member)))
+            .collect::<Vec<_>>();
+        assert_eq!(members.len(), 74);
+        let undocumented = members
+            .iter()
+            .filter(|(_, member)| {
+                member
+                    .docs
+                    .as_ref()
+                    .is_none_or(|docs| docs.body.trim().is_empty())
+            })
+            .map(|(item, member)| format!("{}.{}", item.id, member.name))
+            .collect::<Vec<_>>();
+        assert!(
+            undocumented.is_empty(),
+            "undocumented curated gammalooprs members: {undocumented:?}"
+        );
+    }
+
+    #[test]
+    fn gammaloop_lifecycle_source_docs_are_complete() {
+        let items = annotated_items::for_component("gammaloop-api").unwrap();
+        let import_model = items.iter().find(|item| item.id == "ImportModel").unwrap();
+        assert_eq!(
+            import_model.docs.as_ref().map(|docs| docs.body.as_str()),
+            Some(
+                "Imports a built-in JSON model, a JSON model file, or a UFO model directory into the active state."
+            )
+        );
+
+        for (item_id, member_name, expected) in [
+            (
+                "Generate",
+                "mode",
+                "Selects cross-section, amplitude, or existing-process generation; when\nomitted, generates all integrands in the active state.",
+            ),
+            (
+                "Integrate",
+                "workspace_path",
+                "Workspace directory used for resumable integration state and persisted results",
+            ),
+            (
+                "IntegrationOutput",
+                "result",
+                "Final estimates and convergence data for every selected process/integrand slot.",
+            ),
+            (
+                "IntegrationOutput",
+                "observables",
+                "Observable snapshots keyed by each slot's `process@integrand` identifier.",
+            ),
+            (
+                "IntegrationOutput",
+                "workspace_path",
+                "Workspace that stores resumable integration state, results, and observable snapshots.",
+            ),
+        ] {
+            let item = items.iter().find(|item| item.id == item_id).unwrap();
+            let member = item
+                .members
+                .iter()
+                .find(|member| member.name == member_name)
+                .unwrap();
+            assert_eq!(
+                member.docs.as_ref().map(|docs| docs.body.as_str()),
+                Some(expected),
+                "unexpected source docs for {item_id}.{member_name}"
+            );
+        }
+    }
+
+    #[test]
+    fn spenso_supported_rust_surface_covers_execution_and_parsing() {
+        let rust = rust_examples("spenso").unwrap();
+        assert_eq!(rust.len(), 14);
+        for entry in [
+            "ContractionStrategy",
+            "ExecutionStrategy",
+            "ExecutionMode",
+            "ExecutionResult",
+            "TensorNetworkError",
+            "ParseSettings",
+            "NetworkParse",
+            "SymbolicParallelism",
+        ] {
+            assert!(
+                rust.iter().any(|example| example.id == entry),
+                "missing supported Rust entry {entry}"
+            );
+        }
+        for entry in ["ParseSettings", "NetworkParse", "SymbolicParallelism"] {
+            assert_eq!(rust_item_required_features("spenso", entry), &["shadowing"]);
+        }
+    }
+
+    #[test]
+    fn linnet_supported_rust_surface_covers_foundational_graph_contracts() {
+        let rust = rust_examples("linnet").unwrap();
+        assert_eq!(rust.len(), 15);
+        for entry in [
+            "HedgePair",
+            "Flow",
+            "Orientation",
+            "SubSetLike",
+            "SubSetOps",
+            "Inclusion",
+            "BaseSubgraph",
+            "SubGraphLike",
+            "NodeStorage",
+            "NodeStorageOps",
+        ] {
+            assert!(
+                rust.iter().any(|example| example.id == entry),
+                "missing supported Rust entry {entry}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_supported_gammaloop_python_export_has_docs() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .unwrap();
+        let source = fs::read_to_string(root.join("docs/api/python/gammaloop-python.pyi"))
+            .expect("checked-in GammaLoop Python stub");
+        let declarations = python_declarations(&source).unwrap();
+        for entry in python_required_exports("gammaloop-python").unwrap() {
+            let declaration = declarations
+                .iter()
+                .find(|declaration| declaration.name == *entry)
+                .unwrap_or_else(|| panic!("missing supported Python declaration {entry}"));
+            assert!(
+                !declaration.docs.trim().is_empty(),
+                "supported Python declaration {entry} has no docs"
+            );
+        }
+    }
+
+    #[test]
+    fn spynso_supported_surface_covers_the_documented_workflow_types() {
+        let required = python_required_exports("spynso3").unwrap();
+        assert_eq!(required.len(), 14);
+        for entry in [
+            "CompiledTensorEvaluator",
+            "LibraryTensor",
+            "TensorEvaluator",
+            "TensorName",
+            "set_symbolica_rayon_enabled",
+        ] {
+            assert!(
+                required.contains(&entry),
+                "missing supported Python entry {entry}"
+            );
+        }
+
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .unwrap();
+        let source = fs::read_to_string(root.join("docs/api/python/spynso3.pyi"))
+            .expect("checked-in spynso3 Python stub");
+        let declarations = python_declarations(&source).unwrap();
+        let promoted = declarations
+            .iter()
+            .filter(|declaration| {
+                matches!(
+                    declaration.name.as_str(),
+                    "CompiledTensorEvaluator"
+                        | "LibraryTensor"
+                        | "TensorEvaluator"
+                        | "TensorName"
+                        | "set_symbolica_rayon_enabled"
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(promoted.len(), 5);
+        assert!(
+            promoted
+                .iter()
+                .all(|declaration| !declaration.docs.trim().is_empty())
+        );
+        let members = promoted
+            .iter()
+            .flat_map(|declaration| &declaration.members)
+            .collect::<Vec<_>>();
+        assert_eq!(members.len(), 31);
+        let overload_groups = members
+            .iter()
+            .filter(|member| {
+                member
+                    .members
+                    .iter()
+                    .any(|member| member.kind == alphal00p_docs_schema::DocMemberKind::Overload)
+            })
+            .count();
+        let overloads = members
+            .iter()
+            .flat_map(|member| &member.members)
+            .filter(|member| member.kind == alphal00p_docs_schema::DocMemberKind::Overload)
+            .collect::<Vec<_>>();
+        assert_eq!(members.len() - overload_groups + overloads.len(), 35);
+        assert_eq!(
+            members
+                .iter()
+                .filter(|member| {
+                    !member
+                        .members
+                        .iter()
+                        .any(|member| member.kind == alphal00p_docs_schema::DocMemberKind::Overload)
+                        && member.docs.is_some()
+                })
+                .count()
+                + overloads
+                    .iter()
+                    .filter(|member| member.docs.is_some())
+                    .count(),
+            28
+        );
     }
 
     #[test]
@@ -729,5 +1409,46 @@ def run(value: int) -> int:
             python_declarations("class Engine:\n    \"\"\"Runs work without setup.\"\"\"\n")
                 .unwrap();
         assert_eq!(declarations[0].docs, "Runs work without setup.");
+    }
+
+    #[test]
+    fn python_catalogs_keep_source_examples_without_introspection_scaffolds() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(2)
+            .unwrap();
+        let request = CatalogRequest {
+            product_id: "test".to_owned(),
+            product_title: "Test".to_owned(),
+            component_id: "idenso-community".to_owned(),
+            package: "idenso".to_owned(),
+            component_title: "Idenso Python".to_owned(),
+            version: "0.1.0".to_owned(),
+            language: ApiLanguage::Python,
+            module: Some("symbolica.community.idenso".to_owned()),
+            features: vec![],
+        };
+        let catalog = export_catalog(
+            &request,
+            root,
+            Some(&root.join("docs/api/python/idenso-community.pyi")),
+        )
+        .unwrap();
+        let items = catalog.root.scopes["exports"]
+            .items
+            .values()
+            .collect::<Vec<_>>();
+
+        assert!(items.iter().all(|item| item.examples.is_empty()));
+        assert!(items.iter().any(|item| {
+            item.docs
+                .as_ref()
+                .is_some_and(|docs| docs.body.contains("Examples"))
+        }));
+        assert!(items.iter().all(|item| {
+            item.examples.iter().all(|example| {
+                !example.title.contains("Introspection scaffold") && !example.code.contains("help(")
+            })
+        }));
     }
 }

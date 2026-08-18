@@ -9,6 +9,8 @@ pub fn compute(value: u32) -> Result<u32, &'static str> {
 pub struct ExternalRecord {
     /// Stored value.
     pub value: u32,
+    pub(crate) crate_visible: u32,
+    private: u32,
 }
 
 impl ExternalRecord {
@@ -21,7 +23,7 @@ impl ExternalRecord {
 /// Describes an externally parsed operation.
 pub trait ExternalOperation {
     /// Applies the operation.
-    fn apply(&self, value: u32) -> u32;
+    fn apply(&self, value: u32) -> u32 { value }
 }
 
 /// Builds one external record.

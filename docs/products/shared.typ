@@ -27,6 +27,14 @@
   link("https://github.com/alphal00p/gammaloop/blob/" + source-revision + "/" + path)[#shown]
 }
 
+#let developer-link(id, source, label) = {
+  if docs-channel == "snapshot" {
+    source-link("docs/architecture/" + source, label: label + " at this revision")
+  } else {
+    link("../../../developers/architecture/" + id + "/")[#label]
+  }
+}
+
 #let callout(title, body) = block(
   width: 100%,
   fill: accent-soft,
@@ -71,7 +79,7 @@
   ])
 }
 
-#let release-note(body) = callout("Release information", body)
+#let release-note(body) = callout("History coverage", body)
 
 #let product-document(
   title: none,

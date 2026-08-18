@@ -1,4 +1,4 @@
-#import "../../shared.typ": callout, boundary, product-link, source-link
+#import "../../shared.typ": callout, boundary, developer-link, product-link
 
 #let overview = [
 = Overview
@@ -19,11 +19,13 @@ and diagnostics meet in one stateful workflow.
 
 - To create and resume a known state, follow the #link("tutorial/")[first-state tutorial].
 - To adapt a process specification or generation filters, use the
-  #link("manual/process-generation/")[process-generation manual] with the
-  #link("reference/cli/?q=gammaLoop%20generate")[generated `generate` reference].
+  #link("guides/process-generation/")[process-generation guide] with the
+  #link("reference/cli/#command-gammaloop-generate-9dcc9f488fe75777")[generated `generate` reference].
+- To inspect concrete cut events, selectors, and histogram snapshots without a full integration,
+  follow the #link("guides/events-and-observables/")[events and observables guide].
 - To automate a loaded state or diagnose a long run, choose the
-  #link("manual/interfaces/")[Rust/Python interface guide] or
-  #link("manual/diagnostics/")[logging and diagnostics guide].
+  #link("reference/interfaces/")[Rust/Python interface guide] or
+  #link("guides/diagnostics/")[logging and diagnostics guide].
 
 == A stateful run
 
@@ -64,7 +66,9 @@ just build-api
 ```
 
 Diagram rendering is a separate concern and uses Clinnet and Typst. Building the CLI does
-not imply that these drawing tools are installed.
+not imply that these drawing tools are installed. Use
+#link("../../linnet/latest/guides/clinnet/")[the Clinnet DOT-rendering guide] for their independent
+versions, templates, and cache boundary.
 
 == Related crates
 
@@ -78,8 +82,12 @@ not imply that these drawing tools are installed.
 ])
 
 For a deeper view of how the command layer, state, integrands, and external components fit
-together, see
-#source-link("docs/architecture/architecture-current.typ", label: "the architecture overview").
+together, see the
+#developer-link(
+  "gammaloop-architecture",
+  "architecture-current.typ",
+  "GammaLoop implementation architecture",
+).
 
 == Where to begin
 

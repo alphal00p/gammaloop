@@ -25,9 +25,9 @@ Python and CLI inventories are valuable correctness artifacts, but generation
 has been treated too much as the end of the documentation job: long, flat
 pages expose hundreds of entries with weak hierarchy, incomplete descriptions,
 and presentation that is difficult to scan. At least one first-user tutorial
-is not runnable in the environment it prescribes, and the uniform five-page
-manuals stop before several products' headline workflows. Substantial current
-notes and examples also remain outside the rendered documentation system.
+is not runnable in the environment it prescribes, and the expanded manuals
+still stop before several products' headline results. Substantial maintained
+examples also remain outside the rendered documentation system.
 
 The right next step is not a new documentation framework. It is to make the
 existing system clear, task-complete, integrated, owned, and continuously
@@ -157,17 +157,17 @@ coverage gate is still absent.
   columns: (1.5fr, 3fr, 3fr),
   table.header([*Area*], [*Implemented on the documentation PR*], [*Still open*]),
   [Python and CLI reference],
-  [Exact Clap actions, arity, aliases, conflicts, globals, and usage; compact family and symbol indexes; nested disclosures; stable deep links; responsive setting cards; structured Python docstrings; and a generation gate that now rejects empty descriptions for all 79 public commands, 412 public arguments, and 166 settings],
-  [The non-empty gate does not yet measure substantive prose or task backlinks. Python coverage remains uneven outside the GammaLoop vertical slice, and responsive/light/dark/accessibility browser fixtures are not yet enforced],
+  [Exact Clap actions, arity, aliases, conflicts, globals, and usage; compact family and symbol indexes; stable deep links; responsive setting cards; structured Python docstrings; normalized signatures; documented enum variants; coalesced overloads; composite settings types/defaults; non-recursive parameter tables; linked internal types; concise Rust declarations with item-level Rustdoc/source links; and no inline raw-stub dump. GammaLoop's curated surface expands materially in both Rust and Python],
+  [The non-empty gate does not yet measure substantive prose or task backlinks. Linnet Python member and parameter prose remains uneven; GammaLoop's 12 implementation-detail exports remain deliberately de-ranked, including eleven currently unreachable integration-result records; and responsive/light/dark/accessibility browser fixtures are not yet enforced],
   [Manuals and examples],
-  [Every product overview now offers a three-way task chooser. The GammaLoop process-generation, Linnet algorithms, Spenso networks, Idenso algebra, and Vakint evaluation chapters now include realistic source/configuration examples, expected invariants, failure interpretation, and targeted next references. A structurally validated registry records one beginner and one real-value canonical journey per product with its source, route, prerequisites, expected invariant, verification tier, owner group, and test command],
-  [Only three authored examples currently execute; clean external beginner journeys, remaining repository/scientific examples, named individual ownership, and the scheduled licensed/heavy tier remain open],
+  [Every product overview now offers a task chooser. The hierarchy is consistently Start here, Tutorial, Guides, Reference, and Version history. GammaLoop state/integration workflows, Linnet algorithms and the Clinnet rendering/cache guide, Spenso Rust and Python networks, Idenso algebra, and Vakint evaluation include realistic source/configuration examples, expected invariants, failure interpretation, and exact reference links. The Vakint tutorial now follows the checked-out API rather than an incompatible published-source example],
+  [Only three authored examples currently execute; Clinnet's documented commands do not yet come from a generated parser-parity inventory, and clean external beginner journeys, remaining repository/scientific examples, named individual ownership, and the scheduled licensed/heavy tier remain open],
   [Integrated corpus],
-  [Legacy current material is classified and routed, authored prose is Typst-only apart from exact `README.md` and `AGENTS.md` compatibility files, companion package changelogs now have manual routes, and the portal routes calculations, graphs, tensors, identities, and integrals to the appropriate product with accurate ecosystem roles],
-  [Version-level headings included from companion changelogs are not yet individually indexed, and release coverage remains incomplete],
+  [Legacy current material is classified and routed, authored prose is Typst-only apart from exact `README.md` and `AGENTS.md` compatibility files, long README manuals were reduced to concise compatibility indexes, every product has a common Version history route, and search is derived from rendered HTML so imported Linnest/Kurvst manuals and included companion versions are indexed],
+  [Release coverage remains incomplete, repository examples are not yet fully registered, and a generated graph proving that every current concept has a canonical route and contextual inbound link remains open],
   [Developer architecture],
-  [The reviewed current notes were corrected against implementation and now carry lifecycle, review, trigger, and optional verified-scope metadata],
-  [Named ownership, verified scopes for eight of the ten current records, trigger-aware owner review, and review automation remain incomplete],
+  [The reviewed current notes were corrected against implementation and carry constrained lifecycle, review, trigger, and verified-scope metadata. The builder now rejects every current note without a scope, all 14 current records are tied to reviewed code digests, and current high-level architecture is registered for all five products. Long imported pages are also checked for a single semantic page heading],
+  [All 31 records still resolve to the placeholder owner; review aging, trigger-aware owner approval, contextual inbound-link coverage, and browser-level architecture-page checks remain incomplete],
   [Cross-run build reuse],
   [The Pages derivation is split into a Cargo producer and documentation consumer. The cold PR run rebuilt the producer and completed the five-site step in 1,005 seconds. A following docs-only run restored the producer, and its retry found the producer already present and completed the five-site step in 6 seconds],
   [Collect at least five comparable canonical warm runs before enforcing the proposed percentile objective],
@@ -202,6 +202,51 @@ the complete development site while pull request 96 remains open. Once it
 closes or merges, that branch loses publication authority automatically and
 only `main` can update `latest`.
 
+== Cross-site audit at this revision
+
+The examples that initiated this review were symptoms rather than the audit
+boundary. The follow-up review compared navigation, rendered output, search,
+reference generation, task journeys, release coverage, source ownership, and
+developer freshness across the whole site. It found these broader conditions:
+
+The current registries contain 39 authored product routes, 12 canonical
+journeys, and 31 developer records, of which 14 are current. The counts below
+are derived from `docs/products/registry.toml`, `docs/examples.toml`, and
+`docs/developers.toml`; they are not estimates from the rendered navigation.
+
+#table(
+  columns: (1.5fr, 3fr, 3fr),
+  table.header([*System*], [*What this revision establishes*], [*What is still lacking*]),
+  [Information architecture],
+  [39 authored product routes now use one visible hierarchy: 5 Start pages, 5 Tutorials, 11 Guides, 6 authored Reference pages, and 12 Version history pages. Product and task navigation no longer mixes guides, interfaces, and releases under a generic Manual label, while all 23 moved `manual/*` routes remain as non-navigated redirects. The builder also rejects a PDF chapter set or order that differs from the HTML page registry],
+  [Depth is still unbalanced: GammaLoop has 8 authored routes, Linnet 9, Spenso 10, Idenso 7, and Vakint 5. A shared installation/compatibility matrix and a maintained three-task map per product are absent],
+  [Reference generation],
+  [Rust signatures are elided declarations instead of full trait/type bodies; Python signatures drop `typing.`/`builtins.` noise; parameters render as tables; enum assignments become documented variants; overloads share one callable card with individually addressable signatures; composite settings expose element types, real defaults, allowed values, and nested fields; structured doc sections, stable fragments, source/Rustdoc permalinks, supported-first ordering, and guide links are shared across products. Authored task links now target exact reference fragments instead of JavaScript-only search queries],
+  [Direct-member prose is now complete for the curated GammaLoop, Linnet, Spenso, and Vakint Rust surfaces, and for GammaLoop's 191 supported reachable Python members. Parameters, meaningful task examples, and backlinks remain uneven: GammaLoop Rust still lacks all 34 parameter descriptions; Vakint lacks all 10; and many usage blocks only import an item. Vakint's 27-row topology inventory exposes only name, loop count, and slot count—not the match expression, mass/propagator pattern, backend applicability, or epsilon-depth limits needed to compare an unrecognized integral. Clinnet is not in the generated CLI inventory. Linnest and Kurvst now expose their generated Tidy module APIs in HTML, but compact symbol indexes and browser-level presentation checks remain absent. Exhaustive Rustdoc remains implementation-oriented, and visual/browser regression coverage is not enforced],
+  [Search and inclusion],
+  [Product search is built from rendered HTML body prose and headings, so content imported or included by Typst—most visibly Linnest, Kurvst, and companion version histories—is searchable. Representative task-query fixtures cover installation, integration, drawing, and version lookups; the portal federates all products and developer notes; and five registry-backed citation entries plus per-product `Cite` links expose the software citation hub],
+  [Synonym coverage, Rustdoc federation, browser-level search behavior, a generated orphan-content report, and product-to-method/publication mappings beyond the software citation remain open],
+  [Product journeys],
+  [GammaLoop now maps its supported Rust/Python workflow and integration persistence, Spenso adds a complete Python tensor/network guide, Linnet covers cuts and drawing boundaries, Idenso preserves its source-backed identity specification, and Vakint's setup/API contradiction is corrected],
+  [GammaLoop's events and observables guide still needs a bounded executed integration through `observables_final.json` and HWU output with a checked result; Linnet needs a complete mutation/drawing result; Spenso's HEP library needs a worked tensor/projector workflow and convention table; Idenso needs a worked Rust pipeline; Vakint needs evaluated Laurent coefficients; scientific conventions and citations remain uneven],
+  [Examples and outcomes],
+  [12 canonical journeys record prerequisites, expected invariants, routes, owner groups, verification tiers, commands, and exact source markers],
+  [Only 3 execute; 6 compile and 3 are syntax-only. The wider maintained example corpus, licensed/heavy scheduled tier, result-value checks, and named owners are not integrated],
+  [Version history],
+  [Every product has the same Version history entry point; the canonical core Linnet, Spenso, and Idenso changelogs now have rendered nested routes alongside the companion histories, and each PDF keeps that complete history together before generated API appendices],
+  [GammaLoop and Vakint lack consolidated changelogs; current Idenso/Spenso versions exceed their latest narrative entries; Linnet's Python distribution lacks an independent history; and readers have no generated selector from `latest` to available immutable snapshots],
+  [Developer architecture],
+  [All 14 current notes require resolving anchors and reviewed digests; their registered scopes were rechecked, high-level system architecture is now included for all five products, and the rendered lifecycle/evidence boundary distinguishes current guidance from 17 proposal, investigation, superseded, or archived records],
+  [Every one of the 31 records still has placeholder ownership; nine historical/investigation records lack immutable evidence revisions. Review expiry, CODEOWNERS integration, contextual product links, and automatic changed-trigger review remain open],
+  [Semantic quality],
+  [The deterministic HTML gate discovers and checks every non-redirect page owned by the shared portal/manual shell. The current full build contains 105 such pages; invalid multiple-page-heading structures and nine headerless data tables in current architecture notes were corrected],
+  [Standards HTML validation, axe/browser execution, keyboard/viewport/visual regression, spelling, and scheduled external-link health remain open],
+)
+
+This table is the current prioritization boundary. Uniform labels and generated
+inventories are not counted as task completeness, and acknowledged missing
+release notes are not counted as complete history.
+
 == Acceptance status at this revision
 
 #table(
@@ -211,19 +256,20 @@ only `main` can update `latest`.
   [`DOC-002`], [Partial], [The misleading beginner promises were corrected, but five clean external runs and the scheduled tier are not complete],
   [`DOC-003`], [Complete], [Clean single-product previews rewrite ecosystem links and pass local-link validation],
   [`DOC-004`], [Partial], [Shared compact reference components are implemented; browser visual and accessibility fixtures remain open],
-  [`DOC-005`], [Partial], [GammaLoop's principal Python workflow is documented from implementation-owned docstrings; all-module member coverage remains open],
-  [`DOC-006`], [Partial], [Catalog generation rejects empty public CLI, argument, or settings prose; current non-empty coverage is 79/79, 412/412, and 166/166, but substantive-quality and task-backlink gates remain open],
-  [`DOC-007`], [Partial], [Five task choosers and five deeper subject chapters are present; checked beginner and real-value paths do not yet cover every headline capability],
-  [`DOC-008`], [Partial], [Ten canonical product journeys now have validated owner-group, route, tier, invariant, and command metadata; remaining maintained repository/scientific examples and scheduled verification are not yet registered],
+  [`DOC-005`], [Partial], [GammaLoop's curated Python surface expands from 4 to 28 of 40 exports, all 191 supported reachable members and 96 of 103 supported parameter rows have source-owned documentation, and Spynso3's 14 top-level exports are promoted; implementation-detail prose, generated setter parameters, and task coverage remain open],
+  [`DOC-006`], [Partial], [Catalog generation rejects empty public CLI, argument, or settings prose; current non-empty coverage is 79/79, 412/412, and 181/181, including nested array and tagged-union settings, but substantive-quality and task-backlink gates remain open],
+  [`DOC-007`], [Partial], [Five task choosers, a normalized Guides hierarchy, deeper subject chapters, and a new Spenso Python workflow are present; checked beginner and real-value paths do not yet cover every headline capability],
+  [`DOC-008`], [Partial], [12 canonical product journeys now have validated owner-group, route, tier, invariant, command, and exact source-marker metadata; their modes are 3 run, 6 compile, and 3 syntax. Remaining maintained repository/scientific examples and scheduled verification are not yet registered],
   [`DOC-009`], [Partial], [Canonical prose is Typst-only and the declared legacy corpus is routed; a generated zero-orphan content graph remains open],
-  [`DOC-010`], [Partial], [Lifecycle, review triggers, and selected digests are checked and changed selected scopes fail validation; named owners, scopes for eight current records, and trigger-aware owner review require maintainer assignment],
-  [`DOC-011`], [Partial], [Companion release routes exist, but component-to-release coverage is not complete],
+  [`DOC-010`], [Partial], [Lifecycle, review triggers, anchors, and digests are checked; every current record must declare a scope and all 14 do. Named owners, review aging, and trigger-aware owner approval still require maintainer assignment],
+  [`DOC-011`], [Partial], [Every product has a consistently named Version history route; canonical core Linnet, Spenso, and Idenso changelogs and the companion histories are nested below it. GammaLoop/Vakint histories, component-to-release coverage, and a generated selector for available immutable snapshots remain open],
   [`DOC-012`], [Partial], [The portal offers five task-first product routes and each overview has task-to-guide/reference links; a registry-owned shared task model and complete reference backlinks remain open],
   [`DOC-013`], [Partial], [Ordinary pull requests retain complete previews, and the temporary `docs` publisher is gated on pull request 96's exact open head revision; branch protection does not yet enforce an always-created path-routed documentation check],
   [`DOC-014`], [Partial], [Local links, fragments, containment, source paths, and search targets are checked; scheduled external checking remains open],
-  [`DOC-015`], [Partial], [A required deterministic audit checks semantics and no-JavaScript navigation on 19 representative generated pages; standards HTML validation, browser/axe, spelling, keyboard, viewport, and visual gates remain open],
-  [`DOC-016`], [Partial], [Search is federated across five products and developer notes with deterministic client scoring, and product/developer pages have pinned source and issue routes; top-five ranking execution and feedback/search on every portal and Rustdoc page remain open],
+  [`DOC-015`], [Partial], [A required deterministic audit discovers all generated shell pages and checks their headings, table headers, control labels, landmarks, internal ARIA references, and no-JavaScript navigation; the current full build covers 105 pages. Standards HTML validation, browser/axe, spelling, keyboard, viewport, and visual gates remain open],
+  [`DOC-016`], [Partial], [Search is federated across five products, developer notes, and registry-backed software citations; it indexes rendered body prose and imported/included headings and has representative task-query ranking fixtures. Product pages link their exact citation fragment, while product/developer pages have pinned source and issue routes. Synonyms, Rustdoc federation, and browser-level search checks remain open],
   [`DOC-017`], [Partial], [The source-backed Idenso convention specification is deep; equivalent auditable anchors remain uneven across products],
+  [`DOC-018`], [Partial], [Rust catalogs now render concise declarations with exact source/Rustdoc links; GammaLoop's supported top-level surface expands from 8 to 50 items and now includes import, generation, and integration lifecycle boundaries. The curated GammaLoop, Linnet, Spenso, and Vakint surfaces document all 384 direct members, while parameter, meaningful-example, and task-backlink completeness remains low and un-gated],
 )
 
 == Developer architecture audit at this baseline
@@ -264,22 +310,20 @@ point-in-time evidence, not a substitute for the continuous contract below.
 
 == Critical findings
 
-=== P0. The generated CLI reference can emit false invocation syntax
+=== P0. Generated CLI syntax needs exhaustive parity evidence
 
-GammaLoop's compiled Clap tree is a sound source of truth, but the exported
-schema does not preserve enough of that truth. It records argument names,
-defaults, and value names without the action and arity needed to distinguish a
-flag from a value-taking option. The renderer consequently documents the valid
-boolean flag `--clean-state` as `--clean-state <CLEAN_STATE>`. A generated page
-that looks exhaustive while showing an invocation the parser rejects is more
-dangerous than an obviously incomplete page.
+At baseline the exported schema omitted action and arity, so the renderer
+falsely documented the boolean `--clean-state` flag as requiring a value and
+mixed user operations with generated help/choice nodes. The current schema and
+renderer preserve exact usage, actions, value requirements, aliases, conflicts,
+globals, and arity; generated internals are separated from primary navigation,
+and representative parser fixtures cover the corrected semantics.
 
-The 285-node command export also mixes user operations with generated help and
-choice nodes without explaining the distinction. Generation prevents manual
-drift only when the generated representation and renderer preserve the
-semantics of the compiled interface.
+The remaining integrity boundary is exhaustive parity. A generated page that
+looks complete while one less-common nested/alias/positional combination is
+wrong is still more dangerous than an obviously partial page.
 
-*Required change*
+*Implemented contract and remaining gate*
 
 - Export exact Clap usage, action, arity, value requirements, conflicts, and
   inherited/global option semantics.
@@ -300,31 +344,26 @@ semantics of the compiled interface.
 
 === P0. First-user promises are not consistently executable
 
-The manuals are careful and polished, but three visible promises do not match
-the verified behavior:
+The baseline exposed three misleading promises: a Vakint sibling-path setup
+whose workspace override was not inherited, a Linnet description that
+overstated the identifiers/subgraph operation shown, and a GammaLoop “First
+calculation” that stopped after state generation. This branch corrects the
+Linnet promise, renames GammaLoop's entry journey to “Create your first state”,
+and makes Vakint's `latest` tutorial follow the checked-out source API and Nix
+workspace instead of combining incompatible source and release contracts.
 
-- Vakint tells a user to create a sibling project and add
-  `../gammaloop/crates/vakint`. In a clean sibling project, dependency
-  resolution fails because the required Symbolica override is owned by the
-  workspace root and is not inherited by a path consumer.
-- Linnet's registry promises a first subgraph-aware operation and its tutorial
-  says the builder returns node and half-edge identifiers. The example retains
-  only node identifiers and calls `cycle_basis()` on the full graph.
-- GammaLoop calls its tutorial “First calculation”, but the first-success path
-  stops after process generation and explicitly defers integration.
-
-These are more serious than missing prose: they teach users to distrust the
-rest of the manual.
+The residual P0 is execution evidence. Only three canonical journeys run;
+compile/syntax checks do not prove the five empty-environment tutorials or
+their promised scientific results.
 
 *Required change*
 
 - Run every beginner tutorial verbatim in a clean temporary environment outside
   the workspace.
-- Fix the dependency contract or documented installation path for Vakint.
-- Either demonstrate an actual Linnet subgraph operation or change the promise
-  to the operation shown.
-- Add a bounded GammaLoop sample-evaluation result, or rename the tutorial to
-  “Create your first state”.
+- Keep mutable `latest` source instructions distinct from immutable released
+  package instructions, and parity-test both supported installation boundaries.
+- Add a bounded GammaLoop integration/result journey and equivalent
+  result-bearing paths where the other products still stop at compilation.
 - Give every procedural example prerequisites, expected output or invariant,
   expected runtime/resource class, failure modes, and a next step.
 
@@ -336,57 +375,74 @@ rest of the manual.
 - heavy, licensed, or external-tool examples are visibly classified and run in
   a provisioned scheduled tier rather than silently skipped.
 
-=== P0. The advertised partial-build contract can emit broken navigation
+=== Resolved P0. Product-scoped previews have an honest navigation contract
 
-`just docs-site PRODUCT` selects and builds one product, then renders a portal
-containing links to all five products. Generated-link validation runs only when
-the selected product is `all`. A clean single-product output can therefore
-finish successfully with four sets of broken portal links.
+At baseline `just docs-site PRODUCT` emitted a five-product portal while only
+building one product and skipped generated-link validation, leaving four sets
+of broken links. Product-scoped builds now rewrite ecosystem routes for the
+preview they actually contain and always validate local links, fragments, and
+search targets. Clean preview fixtures cover each product. Keep this as a
+required regression contract; it no longer belongs in the open work queue.
 
-*Required change*
-
-Define one honest partial-build contract:
-
-- render a product-scoped preview without the multi-product portal;
-- emit safe links to the canonical deployed products; or
-- build the minimal redirect/stub set needed for a complete local portal.
-
-*Complete when*
-
-- every documented `docs-site` form is tested from an empty output directory;
-- local link and fragment validation always runs for the artifact it emits; and
-- a single-product build contains zero broken navigation or search targets.
-
-=== P1. Generated Python and CLI data is not yet a good reference experience
+=== P1. Generated references are not yet a uniformly good experience
 
 The reference pipeline has strong implementation provenance, but the rendered
 result is mechanically broad and editorially shallow. Autogeneration is a
 sourcing mechanism; it does not reduce the need for hierarchy, explanation,
 examples, or visual design.
 
-The Python reference currently exposes 95 top-level exports across five
-modules. Each module is rendered as one long sequence of generic cards, with
-no local symbol index or filter and no per-symbol route. NumPy-style docstrings
-are escaped and split into paragraphs instead of being parsed into semantic
-Parameters, Returns, Raises, Notes, and Examples sections. Method parameters
-become recursively nested member blocks, internal enum labels such as
-`PythonClass` and `Getter` leak into the UI, and internal build features receive
-user-facing badges. All 95 automatically attached examples amount to importing
-the symbol and calling `help(...)`, rather than demonstrating a task.
-
-Completeness varies sharply. GammaLoop renders 40 exports, but only four are in
-the curated supported surface; 36 implementation-detail entries receive almost
-equal visual and search prominence. All 360 rendered GammaLoop members lack
-member documentation. Linnet has 189 undocumented members out of 313, while
-Spenso has 69 out of 244. Inventory parity is therefore not yet documentation
+At the reviewed baseline, the Python reference exposed 95 top-level exports
+across five modules as long sequences of generic cards. It lacked a local
+symbol index and rendered NumPy-style sections, recursive parameter objects,
+internal kind labels, feature flags, and generated `help(...)` placeholders as
+though they were user documentation. GammaLoop rendered 40 exports but curated
+only four, all of its rendered members lacked prose, and Linnet and Spenso also
+had large undocumented member counts. Inventory parity was not documentation
 parity.
 
-The CLI/settings page has a related shape problem. It puts 285 commands, 412
-arguments, and 166 settings on one route. Beyond the truthfulness issue above,
-132 command nodes and 117 arguments have no explanatory text, while only three
-settings have descriptions. Full command paths and a flat settings table expose
-the data, but do not help a user understand command families, configuration
-groups, precedence, or which settings matter to a particular task.
+This branch fixes the shared rendering defects: supported items come first;
+signatures and kind labels are normalized; docstrings become Parameters,
+Returns, Raises, Notes, and Examples; parameters use tables instead of nested
+disclosures; internal types and exact source/Rustdoc items are linked; and the
+downloadable stub no longer occupies the human page. GammaLoop now curates 28
+of 40 exports and documents all 191 supported reachable members and 96 of 103
+supported parameter rows; Spynso3 promotes all 14 top-level exports.
+Implementation-detail prose, generated setter parameters, task examples, and
+backlinks remain uneven, so the quality finding remains open even though the
+visual pathology is corrected.
+
+The rendered artifact makes the remaining editorial debt measurable:
+
+#table(
+  columns: (1.1fr, 2.8fr, 2.8fr),
+  table.header([*Surface*], [*Missing substantive prose*], [*Missing task evidence*]),
+  [GammaLoop Python], [All 191 supported reachable members are documented; 7 of 103 supported parameter rows are generated setter values without distinct prose. Across the deliberately separated implementation-detail exports, 65 of 71 members and the only parameter lack descriptions], [Only 13 genuine Examples sections; automatic `help(...)` placeholders are no longer rendered as examples],
+  [GammaLoop Rust], [All 178 direct members across 50 curated items are documented; all 34 parameter rows still lack descriptions], [20 of 50 supported-item usage blocks are import-only],
+  [Linnet Python], [56 of 180 members and all 133 parameter rows lack descriptions], [No genuine Examples section; automatic introspection placeholders are no longer added],
+  [Linnet Rust], [All 82 direct members across 15 curated items are documented; macro-generated typed indexes are still absent from the source descriptor], [14 of 15 usage blocks are import-only],
+  [Spenso Rust], [All 106 direct members across 14 curated core items are documented; the HEP catalog selects only 3 items from roughly 25 public functions, types, and statics], [11 of 14 core and all 3 HEP usage blocks are import-only; all 6 selected HEP parameters are undescribed],
+  [Vakint], [All 18 curated Rust members are documented, but all 10 Rust parameter rows lack descriptions; Python is comparatively strong at 20 of 20 members and 41 of 42 parameters documented], [5 of 10 Rust usage blocks are import-only],
+)
+
+These are usefulness measures, not a demand to promote every implementation
+detail. The supported inventory should be deliberate, and every promoted item
+should satisfy the stronger prose/example contract.
+
+At baseline the CLI/settings page put 285 command-tree nodes, 412 arguments,
+and 166 settings on one flat route, with false value syntax and extensive empty
+prose. The current renderer preserves compiled action/arity semantics, separates
+public commands from help-tree internals, groups command families and setting
+paths, adds filtering and stable fragments, and rejects empty public
+descriptions. It still needs a substantive-quality/backlink contract and
+browser evidence that the densest pages remain usable at narrow widths.
+
+The imported Linnest and Kurvst manuals exposed a different but equally visible
+reference gap at baseline: their prose rendered in HTML, while each generated
+Tidy module reference was guarded by `target() == "paged"`. This branch now
+renders those inventories in both HTML and PDF and documents the actual bundled
+source-package import paths. The remaining work is to prove stable per-symbol
+linking, provide compact indexes for the long inventories, and cover their web
+presentation in a browser rather than merely proving compilation.
 
 *Required change — Python*
 
@@ -421,6 +477,8 @@ groups, precedence, or which settings matter to a particular task.
 - Use the shared manual shell and design tokens for every reference route, with
   readable long signatures, responsive parameter/settings layouts, useful
   local navigation, and restrained visual density.
+- Add compact Linnest and Kurvst symbol indexes, stable per-symbol anchors, and
+  focused search entries for their now-rendered HTML inventories.
 - Add light/dark visual regression coverage and browser/accessibility checks at
   375 px, 768 px, and a desktop width.
 
@@ -436,32 +494,39 @@ groups, precedence, or which settings matter to a particular task.
 - no raw docstring markup, schema debug label, or internal-only feature name is
   exposed as primary user documentation;
 - each module and primary command family links to meaningful, tested examples
-  for its principal tasks; and
+  for its principal tasks;
+- Linnest and Kurvst symbols have stable direct links and focused search entries;
+  and
 - representative pages have no viewport-level horizontal scroll at 375 px and
   no serious or critical accessibility findings.
 
 === P1. The manuals cover a template, not each product's real task surface
 
-The five manuals each have exactly five short authored pages. Their common
-shape is useful, but one tutorial and one subject chapter cannot carry all of
-the distinct workflows:
+At the reviewed baseline each product had exactly five short authored pages.
+The current branch replaces that quota with a common Start, Tutorial, Guides,
+Reference, and Version history hierarchy and grows the products to between five
+and ten authored routes. The shape is easier to navigate, but route count is
+not task completeness and the remaining depth is still uneven:
 
 #table(
   columns: (1.2fr, 2.2fr, 3.5fr),
   table.header([*Product*], [*Strong current entry point*], [*Highest-value missing worked path*]),
-  [GammaLoop], [Stateful CLI generation and resume], [A bounded calculation, sample evaluation, observables, output interpretation, precision/stability, and validation],
-  [Linnet], [Half-edge construction and cycle basis], [Subgraph traversal, cuts, mutation mappings, and one drawing workflow],
-  [Spenso], [Pairwise tensor contraction], [Network construction, planning, execution, and inspection],
-  [Idenso], [One Python metric contraction], [Dummy-index handling, reversible cooking, Dirac/color passes, and a Rust path],
-  [Vakint], [Dependency-free topology matching], [One analytic or numerical evaluation with normalization and expected Laurent coefficients],
+  [GammaLoop], [State generation, inspection, sample APIs, integration slots, workspace resume, and source-level event/observable inspection], [A bounded executed integration carrying the existing observables/selectors guide through `observables_final.json` and HWU interpretation, precision/stability, and validation],
+  [Linnet], [Half-edge construction, subgraph-aware traversal, cuts, and drawing boundaries], [A checked mutation-mapping workflow and one complete layout/rendered drawing result],
+  [Spenso], [Rust contraction/network execution and Python tensor/network ownership], [Planning diagnostics, compiled evaluator lifecycle, a checked representative network result across both interfaces, and an owned HEP conventions/workflow chapter covering gamma/projector and SU(3) data],
+  [Idenso], [Python metric/dummy-index passes and a deep source-backed FORM rule specification], [A complete Rust identity pipeline with reversible cooking and checked Dirac/color output],
+  [Vakint], [Current-source topology matching, normalization, and explicit backend policy], [One analytic or numerical evaluation with expected Laurent coefficients and backend reproducibility, plus topology entries that expose match/mass patterns and backend/epsilon limits rather than only counts],
 )
 
-API hubs are broad, but tutorials rarely deep-link the generated item anchors
-for the symbols they use. Some Python snippets are explanatory fragments with
-undefined inputs while looking like runnable examples. Conceptual physics
-claims also need stronger anchors: Local Unitarity, normalization/sign
-conventions, and precision-sensitive backend behavior should point to defining
-references and regression-backed examples.
+GammaLoop and the new Spenso Python guide now deep-link the exact generated
+items they use, but equivalent backlinks remain sparse in other tutorials and
+on reference items themselves. Authored item links currently number 27 Python,
+11 Rust, and 12 CLI for GammaLoop; Linnet has 0 Python and 4 Rust, Spenso 9 and
+5, Idenso 0 and 3, and Vakint 0 and 4. Some snippets are still compile-only fragments
+where users need an observed result. Conceptual physics claims also need
+stronger anchors: Local Unitarity, normalization/sign conventions, and
+precision-sensitive backend behavior should point to defining references and
+regression-backed examples.
 
 *Required change*
 
@@ -535,8 +600,12 @@ no longer demonstrating a meaningful result.
 The manuals honestly disclose their debt: Spenso 0.6.0 notes stop at 0.5.6,
 Idenso 0.3.0 notes stop at 0.2.5, Vakint has no standalone changelog,
 GammaLoop has no consolidated changelog, and Linnet's Python distribution has
-no separate history. Several prose pages also repeat manifest versions or
-external-tool minima that the builder already knows from generated metadata.
+no separate history. The core Linnet, Spenso, and Idenso changelog sources are
+now rendered directly under their products' Version history sections, so those
+records are discoverable without maintaining a duplicate. Their presence does
+not fill the missing Spenso/Idenso releases or create histories for GammaLoop
+and Vakint. Several prose pages also repeat manifest versions or external-tool
+minima that the builder already knows from generated metadata.
 
 The publication cache has a resilience fallback, but the rendered portal does
 not expose a stale-data state and the builder does not enforce cache age.
@@ -561,55 +630,48 @@ not expose a stale-data state and the builder does not enforce cache age.
 
 === P1. The documentation corpus is fragmented instead of integrated
 
-Classification is enforced only for files directly under
-`docs/architecture/`. At least 4,203 lines elsewhere under `docs/` include
-current logging and drawing guidance, Idenso references, living plans, dated
-CI/benchmark evidence, rebase notes, and a raw terminal dump. Some are linked
-only as GitHub source; most have no public route, audience, owner, status, or
-supersession relationship. Classification alone would not solve this: useful
-material must be migrated into the manuals, shared guides, reference, and
-search rather than merely labelled in place.
+At the reviewed baseline, at least 4,203 lines of current guidance, references,
+plans, dated evidence, and raw output lived outside the product and developer
+registries. The current branch completes that declared migration: maintained
+prose is canonical Typst, architecture records are lifecycle-classified,
+logging/drawing/Idenso material has rendered routes, compatibility READMEs point
+to canonical pages, and the source-format gate rejects a new parallel Markdown
+or HTML manual.
 
-The configured ecosystem model is also underused. `pillar`, `affiliation`,
-`featured`, and product `related` metadata is validated or deserialized but is
-not turned into task-oriented navigation. All five portal cards are called a
-“Research project” even though one is the application and the others are
-specialized libraries or layers. Product manuals link registered developer
-notes to raw GitHub blobs instead of their rendered, searchable pages.
+The portal now turns the ecosystem into task routes for calculations, graphs,
+tensors, identities, and integrals and distinguishes the application from its
+supporting layers. The remaining integration problem is finer grained: there is
+no generated content graph proving that repository examples, shared concepts,
+generated items, developer records, and every current page have one canonical
+route plus contextual inbound links. Companion tools are also only partly in
+that graph: Kurvst, Linnest, and Clinnet have manuals, but they are not all
+first-class versioned components in the product registry, and Clinnet lacks the
+compiled-parser reference contract used by GammaLoop. Migration is complete;
+connection, component provenance, and ownership are not.
 
-*Required change*
+*Established invariant*
 
-- Make Typst the canonical source format for all maintained authored
-  documentation. Do not create Markdown or HTML mirrors: rendered HTML/PDF is
-  build output, not a second editable source. Files named exactly `AGENTS.md`
-  and `README.md` remain the only compatibility exceptions because external
-  tooling discovers those names.
-- Treat every other existing Markdown or hand-authored HTML document as
-  explicit migration debt. New registry entries must use `.typ`; a substantive
-  revision to a legacy source must migrate it to Typst, update its routes and
-  links, and remove the old source in the same change.
-- Establish one content graph with multiple views. Each concept or example has
-  one canonical source; product manuals, generated reference, developer notes,
-  examples, navigation, and search provide contextual routes to it.
-- Classify every authored source as product documentation, current developer
-  guidance, proposal, investigation, archive, source-only reference, fixture,
-  or draft.
-- Extend registry metadata with a constrained lifecycle status, named owner,
-  `reviewed_at`, applicable products/topics, and optional
-  `supersedes`/`superseded_by`.
-- Publish current logging and diagnostics guidance and link it from the
-  GammaLoop CLI/API and developer material. Publish drawing guidance with clear
-  GammaLoop/Linnet/Linnest ownership. Migrate `docs/idenso/*` into Idenso manual
-  reference or appendices with Spenso syntax cross-links.
-- Turn living plans into lifecycle-labelled proposals or current-status pages.
-  Move CI summaries, benchmarks, raw terminal output, and rebase notes to dated
-  investigation/archive routes with a current summary or explicit supersession
-  link; preserve the evidence rather than deleting it.
-- Use product relationships and ecosystem roles to let users choose by task.
-- Link registered developer notes to their rendered routes, keeping the pinned
-  source link as secondary provenance.
-- Keep README files as contributor entry points that link to rendered canonical
-  guidance rather than acting as parallel manuals.
+- Maintained prose is Typst; only files named exactly `AGENTS.md` and
+  `README.md` are compatibility entry points, and the source-format check
+  rejects parallel Markdown/HTML manuals.
+- Product, developer, proposal, investigation, archive, and supersession
+  lifecycles are registry-owned. Current diagnostics, drawing, and Idenso
+  reference material has rendered routes; READMEs link to those routes.
+- Portal task routes and federated rendered-content search provide the first
+  integrated views without copying the underlying prose.
+
+*Still required*
+
+- Generate the content/reference/example graph and fail orphan current sources,
+  missing canonical routes, duplicate editable concepts, and missing
+  contextual inbound links.
+- Extend ownership/review metadata from developer records to current product
+  pages and canonical examples.
+- Split long living logs into current contracts plus dated evidence and finish
+  contextual links from product guides to relevant developer records.
+- Register independently versioned companion tools as components, expose their
+  compatibility and provenance, and generate Clinnet's command reference from
+  its compiled parser.
 
 *Complete when*
 
@@ -627,71 +689,45 @@ notes to raw GitHub blobs instead of their rendered, searchable pages.
 - a new user can choose “calculations”, “graphs”, “tensors”, “identities”, or
   “integrals” from the portal and reach the correct first task.
 
-=== P1. “Current” developer architecture has no freshness contract
+=== P1. “Current” developer architecture lacks owned freshness enforcement
 
-`docs/developers.toml` schema 1 gives a note an ID, title, summary, source,
-kind, and free-form status. The builder checks that those strings are non-empty,
-that the source exists, and that every top-level architecture file is
-classified. It does not know who owns a claim, when it was reviewed, which code
-proves it, whether that code changed, or whether a proposal was implemented or
-superseded. A note can therefore say “Implemented” forever while remaining
-fully green.
+Schema 3 now separates lifecycle from display status, requires review metadata
+and triggers, resolves stable anchors, hashes verified code scopes, rejects a
+current record without a scope, validates supersession/evidence, and renders
+those facts separately from the build revision. All 14 current records pass
+that contract at this revision, including high-level architecture for all five
+products. This closes the earlier failure mode where a
+recent-looking “Implemented” page could remain green without any code evidence.
 
-The rendered source link makes this worse by pinning the note and its
-hand-authored code links to the current Pages build SHA. That proves which prose
-was published, not that the architecture was verified at that revision. Fixed
-line anchors in the legacy HTML diagrams can move to unrelated code while their paths
-continue to pass link validation. The concrete drift corrected by this audit
-shows that recent modification dates and working links are insufficient.
+The remaining weakness is governance and ecosystem composition. All 31
+records resolve to the `unassigned` placeholder, scope digests are refreshed by
+the documentation author rather than an accountable owner, trigger globs do not
+yet map a changed pull request to a required review, and age warnings do not
+escalate into owner review or publication failures. A digest proves that the
+reviewed bytes did not change; it does not prove that the chosen scope is
+sufficient or that the prose
+is architecturally complete. The five product notes intentionally describe
+their own cores; no current contributor map composes their dependency,
+language/binding, code-generation, release, and ownership boundaries across
+GammaLoop, Linnet/Clinnet/Linnest, Spenso/Spynso3, Idenso, Vakint, and Kurvst.
 
-*Required change*
+*Still required*
 
-- Introduce a developer-registry schema with a constrained lifecycle separate
-  from freshness: `current`, `proposal`, `investigation`, `archived`, or
-  `superseded`. Drafts remain unpublished. An implemented proposal is not a
-  lifecycle of its own: migrate it to `current` when the page is maintained as
-  the active contract, or to `archived` when it is only a design record, and
-  require `implemented_by` evidence in either case.
-- Migrate the existing free-form values explicitly:
-  #table(
-    columns: (2fr, 4fr),
-    table.header([*Existing status*], [*Schema-2 lifecycle*]),
-    [`Implemented`], [`current`],
-    [`Implemented record`], [`current` if it retains an active contract; otherwise `archived`, with `implemented_by`],
-    [`Proposal`], [`proposal`],
-    [`Investigation record`], [`investigation`],
-    [`Superseded investigation`], [`superseded`, with `superseded_by`],
-    [`Historical experiment` and `Archived · non-reproducible`], [`archived`],
-    [`Living engineering record`], [split into a `current` contract and `archived` evidence before migration],
-  )
-
-- Resolve owners through one owner table. Require `reviewed_at`, a review/PR
-  record, applicable products/topics, stable code paths and symbols, and broad
-  review-trigger globs for current and proposal notes.
-- Resolve stable Rust symbols to their current declarations and hash the
-  canonical verified scopes. A changed or missing digest is a required review,
-  not an automatic claim that prose is still correct. Do not use stored line
-  numbers or a self-referential HEAD SHA as semantic evidence.
-- Give investigations and archives an immutable evidence revision, capture
-  date, command, fixtures, toolchain/environment, and expected artifact or
-  result. They remain valid historical records when HEAD changes, but must not
-  look current.
-- Require `superseded_by` for superseded material, validate that lifecycle
-  graph for missing targets/cycles, and remove superseded pages from primary
-  navigation and search while preserving redirects and provenance.
-- Map changed code through review triggers and the reverse code-reference graph.
-  Require the note owner to refresh its scope digest or explicitly attest that
-  the change has no documentation impact. Protect the note and registry through
-  CODEOWNERS.
-- Render owner, lifecycle, review date, evidence/verified scope, and freshness
-  state. Keep the build revision distinct from the review/evidence revision.
-- Start with proposed defaults—warn current architecture at 60 days, block
-  publication at 90 days unless reviewed, and require proposal disposition at
-  180 days—then ratify or adjust them with the named owners before enforcement.
-  Do not age-fail frozen investigation/archive evidence; fail it only for
-  invalid provenance or misleading lifecycle presentation.
-- Split living engineering logs into a short canonical current contract and
-  dated experiment/incident records.
+- Assign the portal/toolchain and each product/runtime architecture area to a
+  resolving owner, protect those mappings through CODEOWNERS, and require owner
+  disposition when a review trigger or verified scope changes.
+- Ratify review service levels, then warn or block overdue current records while
+  leaving frozen investigation/archive evidence governed by provenance rather
+  than age.
+- Generate the reverse reference graph and require contextual inbound links,
+  not only a developer-index entry.
+- Give investigations complete immutable capture provenance and split long
+  living engineering logs into a short current contract plus dated records.
+- Keep the five product system notes connected to product workflows
+  and expand their verified scopes when architecture ownership moves, rather
+  than treating registration itself as permanent freshness.
+- Add one source-backed ecosystem map that composes the five product notes and
+  companion packages without duplicating their internal descriptions.
 
 *Complete when*
 
@@ -730,8 +766,8 @@ The current validation still has bounded blind spots:
 - local generated pages, fragments, source paths, containment, redirects, and
   search targets are checked, but raw Rustdoc trees and external URLs remain
   outside the deterministic link gate;
-- the semantic/no-JavaScript audit is deterministic but is not a standards HTML
-  validator or browser accessibility engine; and
+- the full-corpus semantic/no-JavaScript audit is deterministic but is not a
+  standards HTML validator or browser accessibility engine; and
 - spelling, keyboard behavior, viewport rendering, and visual regression are
   not yet checked.
 
@@ -764,15 +800,26 @@ The current validation still has bounded blind spots:
 - the job summary reports example modes, page counts, link counts, cache reuse,
   and step timings.
 
-=== P2. Accessibility, progressive enhancement, search, and feedback are unmeasured
+=== P2. Accessibility, progressive enhancement, and search are only partially measured
 
-The shell has good semantic foundations, but mobile manual navigation is moved
-off-screen and depends on JavaScript to open. Search is scoped separately to a
-single product or the developer area, indexes headings and API entries rather
-than full prose, uses unranked substring matching, and caps results. The portal
-has no federated search. There is also no direct “report a documentation issue”
-path, CODEOWNERS file, HTML validator, browser smoke test, accessibility test,
-canonical metadata, or sitemap.
+The shell has good semantic foundations, revision-pinned source/issue feedback,
+federated search, and deterministic no-JavaScript navigation checks. Search now
+indexes both body prose and headings from the rendered page rather than only
+the wrapper Typst, so imported manuals and included release sections are
+visible. Representative task-query fixtures exercise installation,
+integration, drawing, and version discovery. The semantic gate discovers every
+non-redirect page owned by the shared shell, rather than sampling a fixed route
+list, and rejects malformed headings, headerless data tables, broken internal
+ARIA references, and no-JavaScript navigation failures across the full corpus.
+
+Those are structural checks, not browser evidence. Search still lacks synonym
+coverage and Rustdoc federation, and its maintained scorer checks do not
+exercise the dialog, keyboard interaction, or actual layout in a browser.
+There is no standards HTML validator, browser/axe run, keyboard or viewport
+smoke suite, spelling or visual regression gate, CODEOWNERS file, canonical
+metadata, or sitemap. Typst's experimental HTML export can still ignore layout
+behavior inside third-party drawing components, so representative visual
+fixtures remain necessary even when compilation is clean.
 
 *Complete when*
 
@@ -819,6 +866,25 @@ Shared concepts have one maintained explanation, while contextual links make
 them visible from every relevant product.
 
 == Reference-quality design requirements
+
+=== Rust
+
+Keep source-owned Rust comments and curated catalog annotations authoritative,
+with complete Rustdoc as the exhaustive sidecar rather than the primary manual.
+The shared renderer now provides elided declarations, stable items/members,
+feature facts, source and exact Rustdoc links, supported-first ordering, and
+guide routes. Completeness must now move from top-level inventory to usefulness.
+
+A supported Rust item should have a substantive summary, readable declaration,
+documented public fields/methods and parameters, return/failure behavior where
+applicable, a meaningful checked example, and a task backlink. A bare
+`use package::Type;` block proves reachability, not usage. The current audit
+now finds all 384 direct non-parameter members documented across the curated
+GammaLoop, Linnet, Spenso, and Vakint surfaces, but no prose for GammaLoop's 34
+or Vakint's 10 catalog parameters and mostly import-only examples in several
+components. Publish those dimensions by component and fail supported-surface
+regressions without pretending exhaustive internal Rustdoc must meet the
+curated contract.
 
 === Python
 
@@ -888,13 +954,14 @@ light and dark modes at 375 px, 768 px, and desktop width.
   [`DOC-008`], [P1], [Register canonical examples and execute them by verification tier], [Every maintained example has one route, owner, expected result, and test command],
   [`DOC-009`], [P1], [Integrate the full corpus with lifecycle metadata, canonical Typst sources, and a generated link graph], [100% of meaningful sources have one Typst source and a canonical route; zero orphan current pages],
   [`DOC-010`], [P1], [Enforce developer-architecture freshness and verified code scopes], [Every current note is owned, recently reviewed, scope-clean, symbol-valid, and contextually linked; changed scopes block publication pending owner review],
-  [`DOC-011`], [P1], [Make release/version/tool claims generated and complete], [Manifest-to-release coverage is current for every component],
+  [`DOC-011`], [P1], [Make release/version/tool claims generated and complete and expose available immutable snapshots], [Manifest-to-release coverage is current for every component and readers can switch versions],
   [`DOC-012`], [P1], [Use ecosystem metadata for task navigation and bidirectional manual/reference links], [Task chooser and contextual cross-link fixtures pass],
   [`DOC-013`], [P1], [Add the PR quality gate and enforce the temporary docs-publisher/main-promotion flow], [While pull request 96 is open, a `docs` push validates and publishes once; after it closes or merges, only `main` can update `latest`],
   [`DOC-014`], [P1], [Complete link, source-path, containment, and redirect validation], [Zero internal failures, including Rustdoc; external report is scheduled],
   [`DOC-015`], [P2], [Add browser, HTML, accessibility, spelling, and no-JS checks], [Zero HTML errors and serious/critical axe findings on representative pages],
   [`DOC-016`], [P2], [Federate search and add edit/report feedback routes], [Task and symbol fixtures rank the correct page in the first five results],
   [`DOC-017`], [P2], [Add scientific citations and regression-backed conventions], [Each precision/sign/normalization-sensitive claim has an auditable anchor],
+  [`DOC-018`], [P1], [Define and enforce supported Rust item/member/parameter/example quality], [Per-component coverage reaches 100% for curated items while exhaustive internal Rustdoc remains separately available],
 )
 
 == Delivery sequence
@@ -911,8 +978,8 @@ parallel editable copies. DOC-009 then migrates the declared legacy inventory.
 
 === Phase 1 — productize reference and establish one content graph
 
-Complete DOC-004 through DOC-006, establish the inventory/schema portion of
-DOC-009, establish the developer lifecycle/scope schema and initial audit under
+Complete DOC-004 through DOC-006 and DOC-018, establish the inventory/schema
+portion of DOC-009, establish the developer lifecycle/scope schema and initial audit under
 DOC-010, and complete DOC-013. Prototype the shared reference design with one
 large GammaLoop Python class, one command family, and one settings group before
 mechanically applying it to all modules. Publish coverage and developer-scope
@@ -945,32 +1012,30 @@ network/licensed/full-browser health checks on a schedule. Publish the scorecard
 so degradation is visible without making every transient external failure block
 an author.
 
-== First vertical implementation slice
+== Next vertical implementation slice
 
-The first implementation pull requests should prove the model end to end:
+The completed slice established the registry, reference, source-format,
+freshness, and build foundations. The next slice should prove task completeness
+where the main product is still weakest:
 
-+ Use the canonical `docs/architecture/architecture-current.typ` source,
-   introduce the developer lifecycle/review schema, register stable code
-   scopes, and turn the corrected state-loading,
-   evaluator, event-weight, integration-workspace, and quantity claims into the
-   first scope-digest fixtures.
-+ Extend the CLI schema with action, arity, and exact usage; correct
-   `--clean-state`; and add compiled-parser parity fixtures.
-+ Build shared reference index/detail components and apply them to the
-   GammaLoop Python module, one command family, and one settings group.
-+ Replace raw Python docstring rendering with structured sections and add a
-   coverage report that separates runtime parity from documentation parity.
-+ Deepen one GammaLoop task from clean setup through a checked result, using a
-   canonical example and bidirectional links to every referenced command,
-   setting, and Python symbol.
-+ Migrate the legacy `docs/logging.md` content into a canonical Typst diagnostics
-   journey and use the
-   content graph to prove it is discoverable from the manual, CLI reference,
-   developer area, and search without duplicating its prose.
++ Add a bounded GammaLoop integration card whose runtime is suitable for a
+  provisioned check, and assert a stable result or tolerance instead of only
+  compiling its commands.
++ Extend the existing events and observables guide through an executed
+  integration that produces `observables_final.json` and HWU output; explain
+  raw statistics and merge ownership, and link every CLI setting plus
+  Rust/Python record it uses.
++ Register that journey as the canonical source, classify its fast and
+  licensed/heavy tiers, and publish the last verified revision when the heavy
+  tier cannot run on every pull request.
++ Add representative browser/axe and 375/768/desktop visual fixtures for the
+  GammaLoop Python and CLI reference, plus search queries for the new workflow.
++ Use the same acceptance shape—not copied prose—to complete one result-bearing
+  journey in Linnet, Spenso, Idenso, and Vakint.
 
-This slice exercises generated truth, visual design, substantive content,
-examples, and integration before the same structure is replicated across five
-products.
+This slice tests whether the improved structure actually carries a user from
+setup to an interpreted scientific result. More generated entries alone do not
+satisfy it.
 
 == Scorecard
 
@@ -982,7 +1047,11 @@ The quality job should publish these measures on every canonical build:
   table.header([*Measure*], [*Target*]),
   [Non-main revisions able to mutate `latest` outside the open pull request 96 exception], [0],
   [False generated CLI invocation syntaxes], [0],
-  [Public CLI commands, arguments, and settings with substantive descriptions], [100%],
+  [Registered public CLI commands, arguments, and settings with substantive descriptions], [100%],
+  [User-facing CLIs inventoried with generated parser parity, including Clinnet], [100%],
+  [Supported Rust items meeting the documentation contract], [100%],
+  [Supported Rust members and parameters with substantive prose], [100%],
+  [Supported Rust items with a meaningful checked example and task backlink], [100%],
   [Supported Python exports and public members meeting the documentation contract], [100%],
   [Generated `help(...)` placeholders counted as meaningful examples], [0],
   [Reference fixtures passing responsive light/dark visual checks], [100%],
@@ -1011,7 +1080,7 @@ percentile. The initial service objective is a warm p95 of at most 10 minutes
 and a cold p95 of at most 25 minutes, with publication/deployment time reported
 separately. A content-only edit should never run unrelated workspace tests.
 
-== Decisions required before implementation
+== Remaining maintainer decisions
 
 The publication source is no longer an open choice: `docs` is the temporary
 development publisher only while pull request 96 remains open, and `main`
@@ -1027,8 +1096,7 @@ Maintainers still need to record two ownership and execution choices:
 + Which scientific examples are hermetic pull-request checks, and which require
    licensed or scheduled infrastructure?
 
-Once those decisions are recorded, the work register can be split into small
-pull requests with one acceptance criterion per change. The reference prototype
-and corpus inventory can begin while named owners and expensive-example tiers
-are assigned; publication and product behavior changes still require their
-ordinary review.
+Implementation can continue in small acceptance-focused changes while those
+assignments are made, but ownership-dependent freshness enforcement and the
+scheduled scientific tier cannot be declared complete until accountable people
+and infrastructure are recorded.

@@ -118,8 +118,10 @@ impl Display for UVOrchestrator {
 )]
 #[serde(default, deny_unknown_fields)]
 pub struct CTIdentifier {
+    /// Signed PDG identifiers on the counterterm's external boundary.
     #[serde(skip_serializing_if = "BTreeSet::is_empty")]
     pub external_pdg_set: BTreeSet<isize>,
+    /// Optional internal PDG identifiers; omitting them makes the rule match any internal set.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub internal_pdg_set: Option<BTreeSet<isize>>,
 }
@@ -151,7 +153,9 @@ impl CTIdentifier {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CTRenormalizationRule {
+    /// Particle-content pattern that selects the counterterms to which this rule applies.
     pub ct_identifier: CTIdentifier,
+    /// Approximation that replaces the default prescription for matching counterterms.
     pub prescription: ApproximationType,
 }
 

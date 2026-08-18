@@ -5,6 +5,9 @@
 //! boundary.
 
 #[cfg(test)]
+mod example_markers;
+
+#[cfg(test)]
 mod catalog_examples {
     #![allow(dead_code, unused_imports, unused_variables)]
 

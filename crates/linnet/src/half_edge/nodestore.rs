@@ -25,14 +25,28 @@ pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
     type Base: BaseSubgraph;
     // where
     // Self: 'a;
+    /// Combines two stores using the implementation's index-space semantics.
+    ///
+    /// Callers must not assume embedded index-valued data is remapped unless the
+    /// concrete storage implementation documents that behavior.
     fn extend(self, other: Self) -> Self;
 
+    /// Maps each node's ID, neighbors, and borrowed data into a dense [`NodeVec`].
     fn new_nodevec<'a, V2>(
         &'a self,
         node_map: impl FnMut(NodeIndex, Self::NeighborsIter<'a>, &'a Self::NodeData) -> V2,
     ) -> NodeVec<V2>;
 
+    /// Appends a store using the implementation's index-space semantics.
+    ///
+    /// Callers must not assume embedded index-valued data is remapped unless the
+    /// concrete storage implementation documents that behavior.
     fn extend_mut(&mut self, other: Self);
+    /// Moves the selected half-edges into a new store and removes them from `self`.
+    ///
+    /// `split_node` maps data for nodes crossed by the selection boundary, while
+    /// `owned_node` maps data for nodes wholly inside the selection. Implementations may
+    /// compact both stores and thereby change hedge and node indices.
     fn extract<S: SubSetLike<Base = Self::Base>, V2>(
         &mut self,
         subgraph: &S,
@@ -40,8 +54,12 @@ pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
         owned_node: impl FnMut(Self::NodeData) -> V2,
     ) -> Self::OpStorage<V2>;
 
+    /// Moves complete nodes and their incident half-edges into a separate store.
+    ///
+    /// The returned subset records the selected half-edges.
     fn extract_nodes(&mut self, nodes: impl IntoIterator<Item = NodeIndex>) -> (Self::Base, Self);
 
+    /// Removes the selected half-edges and compacts the remaining node storage.
     fn delete<S: SubSetLike<Base = Self::Base>>(&mut self, subgraph: &S);
 
     // fn add_node(&mut self, node_data: Self::NodeData) -> NodeIndex;
@@ -52,37 +70,48 @@ pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
     fn identify_nodes(&mut self, nodes: &[NodeIndex], node_data_merge: Self::NodeData)
         -> NodeIndex;
 
+    /// Drops inactive nodes retained by identification operations and returns their data.
     fn forget_identification_history(&mut self) -> NodeVec<Self::NodeData>;
 
+    /// Copies the topology into a parent-pointer forest while mapping borrowed node data.
     fn to_forest<U, H>(
         &self,
         map_data: impl Fn(&Self::NodeData) -> U,
     ) -> Forest<U, ParentPointerStore<H>>;
 
+    /// Builds a store from node descriptions that partition `n_hedges` half-edges.
     fn build<I: IntoIterator<Item = HedgeNodeBuilder<Self::NodeData>>>(
         nodes: I,
         n_hedges: usize,
     ) -> Self;
 
+    /// Builds a store from a half-edge partition while converting each node's data.
     fn build_with_mapping<I: IntoIterator<Item = HedgeNodeBuilder<ND>>, ND>(
         nodes: I,
         n_hedges: usize,
         map_data: impl FnMut(ND) -> Self::NodeData,
     ) -> Self;
 
+    /// Appends an unpaired half-edge incident to `source`.
     fn add_dangling_edge(self, source: NodeIndex) -> Result<Self, HedgeGraphError>;
 
+    /// Builds nodes from source and sink neighbor sets, assigning default data to each node.
     fn random(sources: &[Self::Neighbors], sinks: &[Self::Neighbors]) -> Self
     where
         Self::NodeData: Default;
 
+    /// Consumes the store and yields each current node ID with its owned data.
     fn drain(self) -> impl Iterator<Item = (NodeIndex, Self::NodeData)>;
+    /// Iterates over current node IDs and borrowed node data.
     fn iter(&self) -> impl Iterator<Item = (NodeIndex, &Self::NodeData)>;
 
+    /// Ensures backend-maintained node mappings are ready and consistent.
     fn check_and_set_nodes(&mut self) -> Result<(), HedgeGraphError>;
 
+    /// Checks that every half-edge belongs to exactly one consistent node.
     fn check_nodes(&self) -> Result<(), HedgeGraphError>;
 
+    /// Maps borrowed node data while retaining topology and exposing the complete graph.
     fn map_data_ref_graph<'a, E, V2, H>(
         &'a self,
         graph: &'a HedgeGraph<E, Self::NodeData, H, Self>,
@@ -93,11 +122,13 @@ pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
         ) -> V2,
     ) -> Self::OpStorage<V2>;
 
+    /// Maps node data through mutable references while retaining topology.
     fn map_data_ref_mut_graph<'a, V2>(
         &'a mut self,
         node_map: impl FnMut(Self::NeighborsIter<'a>, &'a mut Self::NodeData) -> V2,
     ) -> Self::OpStorage<V2>;
 
+    /// Fallible counterpart of [`NodeStorageOps::map_data_ref_graph`].
     fn map_data_ref_graph_result<'a, E, V2, H, Er>(
         &'a self,
         graph: &'a HedgeGraph<E, Self::NodeData, H, Self>,
@@ -108,24 +139,29 @@ pub trait NodeStorageOps: NodeStorage + Swap<Hedge> + Swap<NodeIndex> {
         ) -> Result<V2, Er>,
     ) -> Result<Self::OpStorage<V2>, Er>;
 
+    /// Consumes the store and maps owned node data with access to the edge involution and node ID.
     fn map_data_graph<'a, V2>(
         self,
         involution: &'a Involution<EdgeIndex>,
         f: impl FnMut(&'a Involution<EdgeIndex>, NodeIndex, Self::NodeData) -> V2,
     ) -> Self::OpStorage<V2>;
 
+    /// Fallible counterpart of [`NodeStorageOps::map_data_graph`].
     fn map_data_graph_result<'a, V2, Err>(
         self,
         involution: &'a Involution<EdgeIndex>,
         f: impl FnMut(&'a Involution<EdgeIndex>, NodeIndex, Self::NodeData) -> Result<V2, Err>,
     ) -> Result<Self::OpStorage<V2>, Err>;
 
+    /// Iterates over the store's dense node-index range.
     fn iter_node_id(&self) -> impl Iterator<Item = NodeIndex> {
         (0..<Self as Swap<NodeIndex>>::len(self).0).map(NodeIndex)
     }
+    /// Iterates over each node's ID, neighbors, and borrowed data.
     fn iter_nodes(
         &self,
     ) -> impl Iterator<Item = (NodeIndex, Self::NeighborsIter<'_>, &Self::NodeData)>;
+    /// Iterates over each node's ID, neighbors, and mutably borrowed data.
     fn iter_nodes_mut(
         &mut self,
     ) -> impl Iterator<Item = (NodeIndex, Self::NeighborsIter<'_>, &mut Self::NodeData)>;

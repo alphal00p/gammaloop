@@ -2,6 +2,7 @@
 #import "content/overview.typ": overview
 #import "content/tutorial.typ": tutorial
 #import "content/process-generation.typ": process-generation
+#import "content/events.typ": events
 #import "content/diagnostics.typ": diagnostics
 #import "content/kurvst.typ": kurvst
 #import "content/api.typ": api
@@ -16,6 +17,7 @@
     #overview
     #tutorial
     #process-generation
+    #events
     #diagnostics
     #kurvst
     #api

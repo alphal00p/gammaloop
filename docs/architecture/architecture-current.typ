@@ -1,7 +1,8 @@
 = GammaLoop architecture
 <gammaloop-current-architecture>
 #quote(block: true)[
-#strong[Reviewed:] 2026-08-17 against `c9f4e32acd2c`
+#strong[Reviewed:] 2026-08-18 against the verified source scopes registered in
+`docs/developers.toml`.
 
 #strong[Lifecycle:] Current implementation architecture. The review
 checked the state, evaluator, event-processing, integration, and
@@ -88,6 +89,24 @@ Infrastructure
   - tab completion is driven from the active state, active command
     blocks, and clap argument metadata
 
+=== 1.2 Python session architecture
+<12-python-session-architecture>
+- The `_gammaloop` module exposes a stateful `GammaLoopAPI`. One instance
+  owns its `State`, `CLISettings`, `RunHistory`, default `RuntimeSettings`,
+  and `CliSessionState`.
+- Construction delegates startup to `StateLoadOption::load`, so Python and
+  CLI sessions share state-folder, settings, boot-card, and logging setup.
+- Command strings run through `CliSession`; structured sample evaluation
+  uses the shared `EvaluateSamples` command. Full integrations currently use
+  `GammaLoopAPI.run("integrate ...")` (or the CLI), because the Python module
+  does not expose a supported structured `integrate()` method.
+- `GammaLoopAPI` is a PyO3 `unsendable` class: each instance remains bound
+  to its Python thread, while native work invoked by it may still use
+  internal parallelism.
+- `read_only_state` blocks writes inside the state directory. It does not
+  make the session immutable: commands may still change in-memory state,
+  settings, caches, observables, and history.
+
 === 2. Application State and Command Model
 <2-application-state-and-command-model>
 - Central mutable app state: `crates/gammaloop-api/src/state.rs`
@@ -102,8 +121,15 @@ The command model is stateful by design: commands mutate a long-lived
 === 3. Domain Core (gammalooprs)
 <3-domain-core-gammalooprs>
 - Root module wiring: `crates/gammalooprs/src/lib.rs`.
+- Initialization and shared symbol registries:
+  `crates/gammalooprs/src/initialisation.rs`.
+- Diagram generation and filtering: `crates/gammalooprs/src/feyngen`.
 - Model and parameters: `crates/gammalooprs/src/model/mod.rs`.
 - Graph domain: `crates/gammalooprs/src/graph/mod.rs` and submodules.
+- Momentum routing and parameterization: `crates/gammalooprs/src/momentum`.
+- CFF construction, numerator processing, and subtraction:
+  `crates/gammalooprs/src/cff`, `crates/gammalooprs/src/numerator`, and
+  `crates/gammalooprs/src/subtraction`.
 - Process orchestration: `crates/gammalooprs/src/processes/mod.rs`,
   `crates/gammalooprs/src/processes/process.rs`.
 - Amplitude and cross-section pipelines:
@@ -135,7 +161,7 @@ counterterms; three-dimensional disconnected terms replay
 component-local operations from their common root so CFF structure is
 not multiplied as though it were scalar. The maintained sign,
 projection, marker, and backend-boundary invariants are documented in
-#link("uv-renormalization.typ")[`uv-renormalization.typ`];.
+#link("uv-renormalization.typ")[`uv-renormalization.typ`].
 
 == Lifecycle and Data Flow
 <lifecycle-and-data-flow>
@@ -154,10 +180,16 @@ projection, marker, and backend-boundary invariants are documented in
 + `generate` command builds `ProcessDefinition` (from syntax or graph
   import).
 + `State::generate_integrand(s)` creates a generation thread pool.
-+ `ProcessList::preprocess` delegates to amplitude/cross-section
-  preprocessors.
-+ `ProcessList::generate_integrands` builds `ProcessIntegrand` instances
-  from preprocessed graphs.
++ For generated processes, `feyngen::DiagramGenerator` constructs graphs
+  from model vertex rules, filters them, and performs topology- and optional
+  numerator-aware grouping. Graph import supplies that boundary directly.
++ `ProcessList::preprocess` delegates to the amplitude or cross-section
+  pipeline. Those graph-level stages generate CFF/cut surfaces,
+  loop-momentum bases and parametric integrand data, plus the configured
+  threshold- and UV-subtraction data.
++ `ProcessList::generate_integrands` packages the resulting graph
+  collections, runtime settings, and evaluators into `ProcessIntegrand`
+  instances.
 + Optional compile/export steps persist compiled evaluator artifacts and
   DOT/standalone outputs.
 + Each generated integrand now embeds its frozen f64 backend choice in
@@ -200,9 +232,9 @@ projection, marker, and backend-boundary invariants are documented in
   - runs selectors immediately on that candidate event
   - retains only accepted identity-rotation events when buffering is
     needed
-  - reports generated / accepted event counts and event-processing
-    timing Failed selector events zero the local contribution and do not
-    survive into the final retained result.
+  - reports generated / accepted event counts and event-processing timing
+  - selector failures zero the local contribution, so rejected events do
+    not survive into the final retained result
 + Stability selection still compares only the complex graph weight, but
   the retained branch also carries the final grouped event payload.
 + The final `EvaluationResult` contains:
@@ -485,7 +517,7 @@ Differential runtime configuration currently includes:
 This split is good: generation-time and evaluation-time concerns are
 separated and independently serializable.
 
-The maintained #link("../../../products/gammaloop/latest/manual/diagnostics/")[logging and
+The maintained #link("../../../products/gammaloop/latest/guides/diagnostics/")[logging and
 diagnostics guide] documents the user-facing startup precedence, filter language, tag
 vocabulary, and sink-routing contract implemented by these settings.
 

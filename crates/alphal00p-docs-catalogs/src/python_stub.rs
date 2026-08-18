@@ -41,13 +41,19 @@ pub(crate) fn python_declarations(source: &str) -> Result<Vec<PythonDeclaration>
         let (signature, signature_end) = python_signature(&lines, index);
         let (docs, member_start) = python_docstring(&lines, signature_end + 1, 0);
         let members = if kind == alphal00p_docs_schema::DocItemKind::PythonClass {
-            python_class_members(&lines, member_start, 0)
+            python_class_members(
+                &lines,
+                member_start,
+                0,
+                &docs,
+                signature.contains("enum.Enum"),
+            )
         } else {
             vec![]
         };
         declarations.push(PythonDeclaration {
             name,
-            signature,
+            signature: python_display_signature(&signature),
             docs,
             kind,
             line: index as u32 + 1,
@@ -73,9 +79,16 @@ pub(crate) fn python_declarations(source: &str) -> Result<Vec<PythonDeclaration>
     Ok(declarations)
 }
 
-fn python_class_members(lines: &[&str], start: usize, class_indent: usize) -> Vec<DocMember> {
+fn python_class_members(
+    lines: &[&str],
+    start: usize,
+    class_indent: usize,
+    class_docs: &str,
+    is_enum: bool,
+) -> Vec<DocMember> {
     let member_indent = class_indent + 4;
-    let mut members = vec![];
+    let variant_docs = python_named_docs(class_docs, "Variants", true);
+    let mut members: Vec<DocMember> = vec![];
     let mut decorators = vec![];
     let mut index = start;
     while index < lines.len() {
@@ -109,23 +122,57 @@ fn python_class_members(lines: &[&str], start: usize, class_indent: usize) -> Ve
             let name = declaration_name(trimmed, prefix);
             let (signature, signature_end) = python_signature(lines, index);
             let (docs, next) = python_docstring(lines, signature_end + 1, member_indent);
-            let mut member = DocMember::new(
-                &name,
-                python_callable_kind(&name, decorators.iter().map(String::as_str)),
-            );
-            member.signature = Some(signature.clone());
+            let kind = python_callable_kind(&name, decorators.iter().map(String::as_str));
+            let is_overload = decorators
+                .iter()
+                .any(|decorator| matches!(decorator.as_str(), "@overload" | "@typing.overload"));
+            let mut member = DocMember::new(&name, kind);
+            member.signature = Some(python_display_signature(&signature));
             if !docs.is_empty() {
                 member.docs = Some(DocText::new(DocFormat::PythonDocstring, &docs));
             }
             member.members = python_parameters(&signature, &docs);
-            members.push(member);
+            if is_overload {
+                member.kind = DocMemberKind::Overload;
+                if let Some(callable) = members
+                    .iter_mut()
+                    .rev()
+                    .find(|callable| callable.name == name && callable.kind == kind)
+                {
+                    callable.members.push(member);
+                } else {
+                    let mut callable = DocMember::new(name, kind);
+                    callable.members.push(member);
+                    members.push(callable);
+                }
+            } else if let Some(callable) = members.iter_mut().rev().find(|callable| {
+                callable.name == name
+                    && callable.kind == kind
+                    && callable
+                        .members
+                        .iter()
+                        .any(|member| member.kind == DocMemberKind::Overload)
+            }) {
+                callable.signature = member.signature;
+                callable.docs = member.docs;
+                callable.members.extend(member.members);
+            } else {
+                members.push(member);
+            }
             decorators.clear();
             index = next.max(signature_end + 1);
             continue;
         }
-        if let Some(mut field) = python_field(trimmed) {
-            let (docs, next) = python_docstring(lines, index + 1, member_indent);
+        let field_kind = if is_enum {
+            DocMemberKind::Variant
+        } else {
+            DocMemberKind::Field
+        };
+        if let Some(mut field) = python_field(trimmed, field_kind) {
+            let (docs, next) = python_docstring(lines, index + 1, class_indent);
             if !docs.is_empty() {
+                field.docs = Some(DocText::new(DocFormat::PythonDocstring, docs));
+            } else if let Some(docs) = variant_docs.get(&field.name) {
                 field.docs = Some(DocText::new(DocFormat::PythonDocstring, docs));
             }
             members.push(field);
@@ -165,20 +212,27 @@ fn python_callable_kind<'a>(
     }
 }
 
-fn python_field(line: &str) -> Option<DocMember> {
+fn python_field(line: &str, kind: DocMemberKind) -> Option<DocMember> {
     if line.starts_with(['#', '@']) || line.starts_with("r\"\"\"") || line.starts_with("\"\"\"") {
         return None;
     }
-    let (name, _) = split_top_level_once(line, ':')?;
+    let (name, _) = split_top_level_once(line, ':').or_else(|| {
+        (kind == DocMemberKind::Variant)
+            .then(|| split_top_level_once(line, '='))
+            .flatten()
+    })?;
     let name = name.trim();
     if !is_python_identifier(name) {
         return None;
     }
-    let mut member = DocMember::new(name, DocMemberKind::Field);
-    member.signature = Some(line.to_owned());
-    member.default = split_top_level_once(line, '=')
+    let mut member = DocMember::new(name, kind);
+    let default = split_top_level_once(line, '=')
         .map(|(_, default)| default.trim().to_owned())
         .filter(|default| !default.is_empty());
+    if kind != DocMemberKind::Variant || default.as_deref() != Some("...") {
+        member.signature = Some(line.to_owned());
+        member.default = default;
+    }
     Some(member)
 }
 
@@ -189,7 +243,7 @@ fn python_parameters(signature: &str, docs: &str) -> Vec<DocMember> {
     let Some(closing) = matching_delimiter(signature, opening, '(', ')') else {
         return vec![];
     };
-    let parameter_docs = python_parameter_docs(docs);
+    let parameter_docs = python_named_docs(docs, "Parameters", false);
     split_top_level(&signature[opening + 1..closing], ',')
         .into_iter()
         .filter_map(|parameter| {
@@ -201,7 +255,7 @@ fn python_parameters(signature: &str, docs: &str) -> Vec<DocMember> {
                 .map_or((parameter, None), |(value, default)| {
                     (value.trim(), Some(default.trim().to_owned()))
                 });
-            let (raw_name, _) = split_top_level_once(without_default, ':')
+            let (raw_name, annotation) = split_top_level_once(without_default, ':')
                 .map_or((without_default, ""), |(name, annotation)| {
                     (name.trim(), annotation.trim())
                 });
@@ -210,7 +264,8 @@ fn python_parameters(signature: &str, docs: &str) -> Vec<DocMember> {
                 return None;
             }
             let mut member = DocMember::new(name, DocMemberKind::Parameter);
-            member.signature = Some(parameter.to_owned());
+            member.signature =
+                (!annotation.is_empty()).then(|| python_display_signature(annotation));
             member.default = default;
             if let Some(docs) = parameter_docs.get(name) {
                 member.docs = Some(DocText::new(DocFormat::PythonDocstring, docs));
@@ -220,11 +275,19 @@ fn python_parameters(signature: &str, docs: &str) -> Vec<DocMember> {
         .collect()
 }
 
-fn python_parameter_docs(docs: &str) -> BTreeMap<String, String> {
+fn python_display_signature(signature: &str) -> String {
+    signature.replace("builtins.", "").replace("typing.", "")
+}
+
+fn python_named_docs(
+    docs: &str,
+    section: &str,
+    inline_description: bool,
+) -> BTreeMap<String, String> {
     let lines = docs.lines().map(str::trim).collect::<Vec<_>>();
     let Some(mut index) = lines
         .windows(2)
-        .position(|pair| pair[0] == "Parameters" && is_section_rule(pair[1]))
+        .position(|pair| pair[0] == section && is_section_rule(pair[1]))
         .map(|index| index + 2)
     else {
         return BTreeMap::new();
@@ -234,7 +297,7 @@ fn python_parameter_docs(docs: &str) -> BTreeMap<String, String> {
         if index + 1 < lines.len() && is_section_rule(lines[index + 1]) {
             break;
         }
-        let Some((names, _annotation)) = lines[index].split_once(" : ") else {
+        let Some((names, annotation)) = lines[index].split_once(" : ") else {
             index += 1;
             continue;
         };
@@ -248,7 +311,11 @@ fn python_parameter_docs(docs: &str) -> BTreeMap<String, String> {
             continue;
         }
         index += 1;
-        let mut description = vec![];
+        let mut description = inline_description
+            .then_some(annotation)
+            .filter(|description| !description.is_empty())
+            .into_iter()
+            .collect::<Vec<_>>();
         while index < lines.len() {
             if lines[index].contains(" : ")
                 || (index + 1 < lines.len() && is_section_rule(lines[index + 1]))
@@ -331,30 +398,82 @@ fn python_docstring(lines: &[&str], start: usize, parent_indent: usize) -> (Stri
     if index >= lines.len() || indentation(lines[index]) <= parent_indent {
         return (String::new(), start);
     }
+    let doc_indent = indentation(lines[index]);
     let trimmed = lines[index].trim();
     let Some((delimiter, body)) = triple_quoted_body(trimmed) else {
         return (String::new(), start);
     };
     if let Some(body) = body.strip_suffix(delimiter) {
-        return (body.trim().to_owned(), index + 1);
+        return (deduplicate_adjacent_paragraphs(body.trim()), index + 1);
     }
     let mut docs = vec![];
     if !body.is_empty() {
-        docs.push(body.trim());
+        docs.push(body.trim().to_owned());
     }
     index += 1;
     while index < lines.len() {
-        let trimmed = lines[index].trim();
-        if let Some(body) = trimmed.strip_suffix(delimiter) {
-            if !body.is_empty() {
-                docs.push(body.trim());
+        let line = strip_docstring_indent(lines[index], doc_indent);
+        if let Some(body) = line.trim_end().strip_suffix(delimiter) {
+            if !body.trim().is_empty() {
+                docs.push(body.trim_end().to_owned());
             }
-            return (docs.join("\n").trim().to_owned(), index + 1);
+            return (finish_docstring(docs), index + 1);
         }
-        docs.push(trimmed);
+        docs.push(line.to_owned());
         index += 1;
     }
-    (docs.join("\n").trim().to_owned(), index)
+    (finish_docstring(docs), index)
+}
+
+fn strip_docstring_indent(line: &str, indent: usize) -> &str {
+    if line.len() >= indent
+        && line.as_bytes()[..indent]
+            .iter()
+            .all(u8::is_ascii_whitespace)
+    {
+        &line[indent..]
+    } else {
+        line.trim_start()
+    }
+}
+
+fn finish_docstring(mut lines: Vec<String>) -> String {
+    while lines.first().is_some_and(|line| line.trim().is_empty()) {
+        lines.remove(0);
+    }
+    while lines.last().is_some_and(|line| line.trim().is_empty()) {
+        lines.pop();
+    }
+    deduplicate_adjacent_paragraphs(&lines.join("\n"))
+}
+
+fn deduplicate_adjacent_paragraphs(docs: &str) -> String {
+    let mut rendered = Vec::new();
+    let mut previous_prose = None::<String>;
+    let mut inside_fence = false;
+    for paragraph in docs.split("\n\n") {
+        let normalized = paragraph.trim();
+        if normalized.is_empty() {
+            continue;
+        }
+        let contains_fence = paragraph.lines().any(|line| line.trim().starts_with("```"));
+        let protected = inside_fence || contains_fence;
+        if !protected && previous_prose.as_deref() == Some(normalized) {
+            continue;
+        }
+        rendered.push(paragraph.trim_end());
+        previous_prose = (!protected).then(|| normalized.to_owned());
+        if paragraph
+            .lines()
+            .filter(|line| line.trim().starts_with("```"))
+            .count()
+            % 2
+            == 1
+        {
+            inside_fence = !inside_fence;
+        }
+    }
+    rendered.join("\n\n")
 }
 
 fn triple_quoted_body(line: &str) -> Option<(&'static str, &str)> {
@@ -561,6 +680,178 @@ class Engine:
     }
 
     #[test]
+    fn parses_enum_assignments_as_documented_variants() {
+        let stub = r#"
+class ExecutionMode(enum.Enum):
+    """
+    Execution modes.
+
+    Variants
+    --------
+    Single : Execute one contraction at a time
+    Scalar : Only contract scalar operations
+    All : Execute every possible contraction
+    """
+    Single = ...
+    Scalar = ...
+    All = 3
+
+class SymbolicParallelism(enum.Enum):
+    """Symbolic parallelism policy."""
+    Auto = ...
+    """Select with workload heuristics."""
+    Serial = ...
+    """Remain on the calling thread."""
+
+class LogLevel(enum.Enum):
+    Off = ...
+    """A level lower than all log levels."""
+    Error = ...
+    """The error log level."""
+"#;
+        let declarations = python_declarations(stub).unwrap();
+
+        let execution = &declarations[0].members;
+        assert_eq!(
+            execution
+                .iter()
+                .map(|member| (member.name.as_str(), member.kind))
+                .collect::<Vec<_>>(),
+            [
+                ("Single", DocMemberKind::Variant),
+                ("Scalar", DocMemberKind::Variant),
+                ("All", DocMemberKind::Variant),
+            ]
+        );
+        assert!(execution[0].signature.is_none());
+        assert!(execution[0].default.is_none());
+        assert_eq!(execution[2].default.as_deref(), Some("3"));
+        assert_eq!(
+            execution[2].docs.as_ref().unwrap().body,
+            "Execute every possible contraction"
+        );
+        assert_eq!(
+            declarations[1].members[0].docs.as_ref().unwrap().body,
+            "Select with workload heuristics."
+        );
+        assert_eq!(
+            declarations[2].members[0].docs.as_ref().unwrap().body,
+            "A level lower than all log levels."
+        );
+    }
+
+    #[test]
+    fn coalesces_python_overloads_under_one_callable() {
+        let stub = r#"
+class Engine:
+    @typing.overload
+    def run(self, value: int) -> int:
+        """
+        Run an integer.
+
+        Parameters
+        ----------
+        value : int
+            Integer input.
+        """
+    @overload
+    def run(self, value: str, strict: bool = False) -> str:
+        """Run a string."""
+"#;
+        let declarations = python_declarations(stub).unwrap();
+        let runs = declarations[0]
+            .members
+            .iter()
+            .filter(|member| member.name == "run")
+            .collect::<Vec<_>>();
+        assert_eq!(runs.len(), 1);
+        let run = runs[0];
+        assert_eq!(run.kind, DocMemberKind::Method);
+        assert!(run.signature.is_none());
+        assert_eq!(run.members.len(), 2);
+        assert!(
+            run.members
+                .iter()
+                .all(|member| member.kind == DocMemberKind::Overload)
+        );
+        assert_eq!(
+            run.members[0].signature.as_deref(),
+            Some("def run(self, value: int) -> int:")
+        );
+        assert_eq!(run.members[0].members[0].name, "value");
+        assert_eq!(
+            run.members[0].members[0].docs.as_ref().unwrap().body,
+            "Integer input."
+        );
+        assert_eq!(run.members[1].members[1].name, "strict");
+        assert_eq!(run.members[1].members[1].default.as_deref(), Some("False"));
+    }
+
+    #[test]
+    fn display_signatures_hide_stub_generator_qualification() {
+        let declarations = python_declarations(
+            "class Result:\n    pass\n\nclass Engine:\n    def run(self, values: typing.Sequence[builtins.float]) -> typing.Optional[Result]: ...\n",
+        )
+        .unwrap();
+        let run = &declarations[1].members[0];
+        assert_eq!(
+            run.signature.as_deref(),
+            Some("def run(self, values: Sequence[float]) -> Optional[Result]:")
+        );
+        assert_eq!(run.members[0].signature.as_deref(), Some("Sequence[float]"));
+    }
+
+    #[test]
+    fn exact_adjacent_prose_is_deduplicated_without_touching_distinct_or_code_blocks() {
+        let declarations = python_declarations(
+            r#"class Engine:
+    r"""
+    Reuse one compiled engine.
+
+    Reuse one compiled engine.
+
+    Reuse one compiled engine for each batch.
+
+    ```python
+    print("same")
+
+    print("same")
+    ```
+    """
+"#,
+        )
+        .unwrap();
+        assert_eq!(
+            declarations[0].docs,
+            "Reuse one compiled engine.\n\nReuse one compiled engine for each batch.\n\n```python\nprint(\"same\")\n\nprint(\"same\")\n```"
+        );
+    }
+
+    #[test]
+    fn preserves_indentation_in_numpy_style_example_blocks() {
+        let declarations = python_declarations(
+            r#"class Engine:
+    r"""
+    Run an engine.
+
+    Examples
+    --------
+    Iterate over grouped values::
+
+        for name, values in groups.items():
+            for value in values:
+                print(name, value)
+    """
+"#,
+        )
+        .unwrap();
+
+        assert!(declarations[0].docs.contains(
+            "Iterate over grouped values::\n\n    for name, values in groups.items():\n        for value in values:\n            print(name, value)"
+        ));
+    }
+
+    #[test]
     fn existing_snapshots_generate_deterministic_nested_catalogs() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
             .ancestors()
@@ -627,6 +918,20 @@ class Engine:
         assert!(linnet.members.iter().any(|member| {
             member.name == "from_string" && member.kind == DocMemberKind::AssociatedFunction
         }));
+        let getitem = linnet
+            .members
+            .iter()
+            .filter(|member| member.name == "__getitem__")
+            .collect::<Vec<_>>();
+        assert_eq!(getitem.len(), 1);
+        assert_eq!(
+            getitem[0]
+                .members
+                .iter()
+                .filter(|member| member.kind == DocMemberKind::Overload)
+                .count(),
+            3
+        );
 
         let spenso = &catalogs["spynso3"].root.scopes["exports"].items["Tensor"];
         let sparse = spenso
@@ -658,5 +963,30 @@ class Engine:
                 .ends_with("-> EvaluationResult:")
         );
         assert_eq!(evaluate.members[0].name, "point");
+
+        let log_level = &catalogs["gammaloop-python"].root.scopes["exports"].items["LogLevel"];
+        assert_eq!(
+            log_level
+                .members
+                .iter()
+                .filter(|member| member.kind == DocMemberKind::Variant)
+                .map(|member| member.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Off", "Error", "Warn", "Info", "Debug", "Trace"]
+        );
+        let execution = &catalogs["spynso3"].root.scopes["exports"].items["ExecutionMode"];
+        assert_eq!(
+            execution.members[0].docs.as_ref().unwrap().body,
+            "Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains"
+        );
+        let parallelism = &catalogs["spynso3"].root.scopes["exports"].items["SymbolicParallelism"];
+        assert_eq!(
+            parallelism
+                .members
+                .iter()
+                .map(|member| member.name.as_str())
+                .collect::<Vec<_>>(),
+            ["Auto", "Serial", "Parallel"]
+        );
     }
 }

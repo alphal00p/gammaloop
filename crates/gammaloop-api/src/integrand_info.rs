@@ -268,15 +268,25 @@ fn threshold_esurface_edge_ids(
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
 pub struct IntegrandInfo {
+    /// Numeric identifier of the process that owns the integrand.
     pub process_id: usize,
+    /// Persistent folder name of the owning process.
     pub process_name: String,
+    /// Canonical name of the resolved integrand.
     pub integrand_name: String,
+    /// Whether the integrand represents an amplitude or cross section.
     pub kind: IntegrandKind,
+    /// Compilation mode frozen into the generated integrand.
     pub generation_compilation: FrozenCompilationMode,
+    /// Floating-point evaluator backend currently active for the integrand.
     pub active_f64_backend: ActiveF64Backend,
+    /// Number of amplitude graphs or cross-section supergraphs.
     pub graph_count: usize,
+    /// Number of graph groups in the generated integrand.
     pub graph_group_count: usize,
+    /// Bincode size of the saved integrand record, excluding its compiled evaluator.
     pub record_size_bytes: usize,
+    /// Per-group graphs, orientations, loop-momentum bases, thresholds, and cuts.
     pub graph_groups: Vec<IntegrandGraphGroupInfo>,
 }
 

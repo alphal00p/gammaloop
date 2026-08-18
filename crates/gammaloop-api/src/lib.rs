@@ -300,6 +300,7 @@ pub struct CLISettings {
     /// Generation, logging, and parallelization settings shared by the CLI session.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub global: GlobalSettings,
+    /// Transient read-only controls and startup warnings excluded from serialized settings.
     #[serde(skip)]
     #[schemars(skip)]
     pub session: SessionSettings,
@@ -467,25 +468,42 @@ impl SmartSerde for CLISettings {}
 
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct StateLoadOption {
+    /// Remove the resolved state folder before loading so the session starts from a blank state.
     pub clean_state: bool,
+    /// Optional run card whose settings and commands are applied during boot.
     pub boot_commands_path: Option<PathBuf>,
+    /// State folder to load, defaulting to `./gammaloop_state` when omitted.
     pub state_folder: Option<PathBuf>,
+    /// Optional model file that replaces the saved model when loading an existing state.
     pub model_file: Option<PathBuf>,
+    /// Optional trace-log filename for the loaded session.
     pub trace_logs_filename: Option<String>,
+    /// Terminal log-level override for the loaded session.
     pub level: Option<LogLevel>,
+    /// File log-level override for the loaded session.
     pub logfile_level: Option<LogLevel>,
+    /// Prefix format used for emitted log records.
     pub logging_prefix: Option<LogFormat>,
+    /// Prevent writes inside the active state folder for the lifetime of the session.
     pub read_only_state: bool,
+    /// Optional TOML file whose global settings override the state or boot card.
     pub settings_global_path: Option<PathBuf>,
+    /// Optional TOML file supplying the session's default runtime settings.
     pub settings_runtime_defaults_path: Option<PathBuf>,
 }
 
 pub struct LoadedState {
+    /// In-memory model, processes, integrands, and generation metadata.
     pub state: State,
+    /// Persisted or boot-provided settings and replayable commands.
     pub run_history: RunHistory,
+    /// Effective state, global, and transient session settings after startup overrides.
     pub cli_settings: CLISettings,
+    /// Runtime settings used as defaults for commands that do not supply their own.
     pub default_runtime_settings: RuntimeSettings,
+    /// Transient command-block state retained between session operations.
     pub session_state: CliSessionState,
+    /// Load timing, serialized size, and graph count for an existing saved state.
     pub state_load_summary: Option<StateLoadSummary>,
 }
 

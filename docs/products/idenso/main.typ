@@ -5,6 +5,7 @@
 #import "content/form-symbolica-color-and-dirac.typ": form-color-dirac-content
 #import "content/api.typ": api
 #import "content/changelog.typ": changelog
+#import "content/idenso-releases.typ": idenso-releases
 
 #let manual = product-document(
   title: "Idenso",
@@ -18,6 +19,7 @@
     #form-color-dirac-content("manual")
     #api
     #changelog
+    #idenso-releases
   ],
 )
 

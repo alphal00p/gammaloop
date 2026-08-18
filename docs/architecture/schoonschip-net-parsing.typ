@@ -81,6 +81,7 @@ the contraction code in
 #table(
     columns: 2,
     align: (auto,auto,),
+    table.header([*Setting*], [*Behavior*]),
     [`mode`], [Selects `SinglePass` or a recursive fixed point.
     Recursive mode is either depth-first or breadth-first; the const
     parameters `RECURSE` and `DEPTH_FIRST` are chosen from this.],
@@ -104,6 +105,7 @@ the contraction code in
 #table(
     columns: 2,
     align: (auto,auto,),
+    table.header([*Step*], [*Behavior*]),
     [Scalar pre-pass], [The selected contraction strategy builds a
     `ProductContraction`, simplifies composite scalar tensors, and calls
     `product.contract_scalars` before, between, and after tensor-pair
@@ -193,6 +195,7 @@ Shorthand is represented once, then simplified by the network rules.
 #table(
     columns: 2,
     align: (auto,auto,),
+    table.header([*Example*], [*Result*]),
     [Metric into tensor], [`g(mu, nu) * F(a, nu, b)` contracts through
     the graph edge on `nu`. The metric\'s remaining slot `mu` is
     substituted into the tensor expression, yielding `F(a, mu, b)`. The
