@@ -16,6 +16,18 @@ than a detached copy of the graph.
   accept subgraph views even when the caller wants to operate on the full graph.
 ])
 
+== Choose a task
+
+- To construct and validate a graph with a boundary, follow the
+  #link("tutorial/")[first-graph tutorial] and the exact
+  #link("reference/rust/supported/linnet/#supported-hedgegraphbuilder")[`HedgeGraphBuilder`
+  reference].
+- To enumerate cycles, cuts, or connected regions, use the
+  #link("manual/algorithms/")[graph-algorithms manual] with the
+  #link("reference/rust/supported/linnet/#supported-hedgegraph")[`HedgeGraph` reference].
+- To lay out or render a graph, continue to the #link("manual/linnest/")[Linnest Typst manual];
+  layout coordinates are deliberately separate from graph identity.
+
 == A working model
 
 A Linnet workflow has four parts:
@@ -41,6 +53,7 @@ variants and conversion rules in your Linnet release.
 
 The Rust package can be added directly from crates.io:
 
+// docs-example: syntax
 ```toml
 [dependencies]
 linnet = "0.17"

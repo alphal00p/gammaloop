@@ -57,6 +57,31 @@ pub fn export() -> Result<GammaLoopReference> {
         settings.iter().map(|setting| setting.path.as_str()),
         "setting",
     )?;
+    if let Some(command) = commands
+        .iter()
+        .find(|command| !command.hidden && !command.generated_help && command.about.is_empty())
+    {
+        bail!("public command `{}` has no description", command.path);
+    }
+    if let Some((command, argument)) = commands.iter().find_map(|command| {
+        command
+            .arguments
+            .iter()
+            .find(|argument| !argument.hidden && argument.help.is_empty())
+            .map(|argument| (command, argument))
+    }) {
+        bail!(
+            "public argument `{}` on `{}` has no description",
+            argument.id,
+            command.path
+        );
+    }
+    if let Some(setting) = settings
+        .iter()
+        .find(|setting| setting.description.is_empty())
+    {
+        bail!("setting `{}` has no description", setting.path);
+    }
 
     Ok(GammaLoopReference {
         schema_version: GENERATED_REFERENCE_SCHEMA,
@@ -366,10 +391,25 @@ fn setting_reference(
     default: Option<&Value>,
     required: bool,
 ) -> SettingReference {
+    let description = match (schema_description(root, node), path) {
+        // Internally tagged enums synthesize their `type` properties in Schemars, so
+        // there is no Rust field on which a documentation comment can live.
+        (description, "runtime.kinematics.externals.type") if description.is_empty() => {
+            "Selects how external momenta and helicities are supplied; currently `constant`."
+                .to_owned()
+        }
+        (description, "runtime.subtraction.integrated_ct_settings.range.type")
+            if description.is_empty() =>
+        {
+            "Selects the integrated-counterterm radial domain: `infinite` with damping or `compact`."
+                .to_owned()
+        }
+        (description, _) => description,
+    };
     SettingReference {
         path: path.to_owned(),
         value_type: schema_type(root, node),
-        description: schema_description(root, node),
+        description,
         required,
         default: default
             .cloned()

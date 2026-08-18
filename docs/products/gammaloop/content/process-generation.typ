@@ -1,4 +1,4 @@
-#import "../../shared.typ": callout, boundary
+#import "../../shared.typ": callout, boundary, source-link
 
 #let process-generation = [
 = Process generation and state workflows
@@ -13,6 +13,7 @@ that state.
 The interactive command tree separates cross sections, amplitudes, and operations on processes
 already stored in the active state:
 
+// docs-example: syntax
 ```text
 generate xs INITIAL > FINAL ...
 generate amp INITIAL > FINAL ...
@@ -30,6 +31,7 @@ the flags supported by your installed version.
 Process specifications accept `to` or `>` between space-separated initial and final states.
 Braces express alternatives in a cross-section final state, while `{}` denotes an empty state:
 
+// docs-example: syntax
 ```text
 e+ e- > mu+ mu-
 e+ e- > { Z Z, a a, H H }
@@ -40,6 +42,7 @@ A slash vetoes particles and a vertical bar selects an allow-list. The words `ve
 are equivalent forms. Amplitude coupling constraints use the coupling name directly; powered
 constraints apply to the complete cross section:
 
+// docs-example: syntax
 ```text
 e+ e- > d d~ g / u c QED==2 QCD>=2 QCD<=4
 e+ e- > mu+ mu- | g ghG QED^2==2 QCD^2>=2
@@ -49,6 +52,7 @@ The bracketed perturbative block is intentionally distinct from ordinary flags. 
 amplitude loop count (or the sum across the two cut sides), `{{n}}` fixes the forward-graph loop
 count, and `QCD=n` or the shorthand `QCD` selects a relative perturbative order:
 
+// docs-example: syntax
 ```text
 e+ e- > Z [ {1} {{2}} QCD=2 QED=1 ]
 e+ e- > Z [ QCD ]
@@ -73,6 +77,46 @@ The generated graph's overall factor keeps separate contributions for automorphi
 fermion loops, external-fermion ordering, numerator-independent symmetry grouping, and
 numerator-dependent grouping. Persist the state and inspect that factor when auditing diagram
 normalization instead of replacing it with an assumed factorial.
+
+== A maintainable generation card
+
+The following reduced card uses the repository's scalar model and the same one-loop bubble
+command exercised by the maintained scalar-topology example. Save it as `manual-bubble.toml`
+and run `./gammaloop --clean-state manual-bubble.toml run generate -c "quit -o"` from the
+repository root.
+
+// docs-example: syntax
+```toml
+commands = []
+
+[cli_settings.state]
+folder = "./gammaloop_state/manual-bubble"
+name = "manual_bubble"
+
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model scalars-default.json",
+  "generate amp scalar_1 > scalar_1 [{1}] --allowed-vertex-interactions V_3_SCALAR_122 -p bubble -i scalar_bubble",
+  "generate",
+  "save state -o",
+]
+```
+
+The acceptance invariant is a persisted state in which `display processes` identifies process
+`bubble` and integrand `scalar_bubble`; replaying the card with a clean destination must produce
+the same named objects. The exact command and setting semantics are linked from the
+#link("reference/cli/?q=generate%20amp")[amplitude-generation reference],
+#link("reference/cli/?q=save%20state")[state-persistence reference], and
+#link("reference/cli/?q=cli.state.folder")[state-folder setting]. The full maintained source is
+the #source-link("examples/cli/scalar_topologies/bubble.toml", label: "scalar bubble run card").
+
+#callout("Interpret the first failing stage", [
+  An unknown particle or `V_3_SCALAR_122` error means the scalar model was not imported or no
+  longer exposes that interaction. A process with no retained diagram points to the process
+  specification or generation filters. A generated process that disappears after restart means
+  `save state -o` did not complete or the resumed `-s` path differs from `cli_settings.state.folder`.
+])
 
 == From generation to evaluation
 

@@ -53,6 +53,57 @@ For reproducible comparisons record:
 - FORM, pySecDec, MATAD, and FMFT versions where applicable;
 - parameter substitutions and any retained temporary-output directory.
 
+== Configure one analytic tensor reduction
+
+This program makes normalization, precision, and backend order explicit before reducing a
+rank-two one-loop numerator. It compiles without running external tools in the documentation
+harness; running it requires a supported FORM installation for the AlphaLoop path.
+
+// docs-example: compile
+```rust
+use vakint::{
+    EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings, vakint_parse,
+};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let settings = VakintSettings {
+        allow_unknown_integrals: false,
+        integral_normalization_factor: LoopNormalizationFactor::MSbar,
+        number_of_terms_in_epsilon_expansion: 2,
+        run_time_decimal_precision: 32,
+        evaluation_order: EvaluationOrder::alphaloop_only(),
+        ..VakintSettings::default()
+    };
+    let vakint = Vakint::new()?;
+    let input = vakint_parse!(
+        "(k(1,1)*k(1,2)+k(1,3)*p(1,3))*topo(prop(1,edge(1,1),k(1),muvsq,1))"
+    )?;
+    let canonical = vakint.to_canonical(&settings, input.as_view(), true)?;
+    let scalar = vakint.tensor_reduce(&settings, canonical.as_view())?;
+    let evaluated = vakint.evaluate_integral(&settings, scalar.as_view())?;
+
+    println!("{evaluated}");
+    Ok(())
+}
+```
+
+The result invariant is an MS-bar Laurent series in the dimensional regulator: the reduced
+expression no longer contains the original loop-momentum numerator, and only the first
+successful method in `alphaloop_only()` contributes. Inspect the exact
+#link("reference/rust/supported/vakint/#supported-vakintsettings")[`VakintSettings`],
+#link("reference/rust/supported/vakint/#supported-vakintexpression-tensor-reduce")[tensor
+reduction], and
+#link("reference/rust/supported/vakint/#supported-vakintexpression-evaluate-integral")[evaluation]
+references before changing normalization or backend order.
+
+#callout("Interpret failures at the owning stage", [
+  An engine-construction error means the topology library could not be initialized. A
+  canonicalization error means the propagators did not match a supported topology. A reduction
+  error points to the numerator, Lorentz rank, or FORM translation; retain the temporary directory
+  in that case. An evaluation error after successful reduction means settings validation, the
+  selected backend's capabilities, or the backend invocation failed.
+])
+
 #boundary("Python is an embedded community module", [
   `symbolica.community.vakint` is registered into a Symbolica installation; it is not a
   standalone PyPI package. Constructing its `Vakint` class validates the configured backends.

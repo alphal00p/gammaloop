@@ -25,7 +25,7 @@ reviewed_at = "2026-08-17"
 review_ref = "c9f4e32acd2c"
 products = ["gammaloop"]
 topics = ["state", "evaluation", "events", "integration", "persistence"]
-review_triggers = ["crates/gammaloop-api/src/**", "crates/gammalooprs/src/integrands/**", "crates/gammalooprs/src/observables/**", "crates/gammalooprs/src/integrate/**", "crates/gammalooprs/src/settings/**"]
+review_triggers = ["crates/gammaloop-api/src/**", "crates/gammaloop-api/python/**", "crates/gammalooprs/src/**"]
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/state.rs"
@@ -124,7 +124,7 @@ reviewed_at = "2026-08-17"
 review_ref = "c9f4e32acd2c"
 products = ["spenso", "idenso"]
 topics = ["parsing", "tensor-network"]
-review_triggers = ["crates/spenso/src/network/parsing/**"]
+review_triggers = ["crates/spenso/src/network/parsing/**", "crates/idenso/src/tensor/mod.rs"]
 
 [[section.note]]
 id = "schoonschip-network"
@@ -155,7 +155,7 @@ review_ref = "395610143576"
 implemented_by = "395610143576"
 products = ["gammaloop", "linnet"]
 topics = ["drawing", "typst"]
-review_triggers = ["crates/gammalooprs/src/**/drawing*", "crates/linnest/typst/**", "assets/embedded/drawing/**"]
+review_triggers = ["crates/gammaloop-api/src/commands/save.rs", "crates/gammaloop-api/src/templates.rs", "crates/gammalooprs/src/graph/parse/from_dot.rs", "crates/gammalooprs/src/model/mod.rs", "crates/linnest/typst/**", "assets/embedded/drawing/**"]
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
@@ -170,7 +170,7 @@ reviewed_at = "2026-08-18"
 review_ref = "6feaba98e48a2cedb4688d3d0cc9a214716a8677"
 products = ["gammaloop", "linnet"]
 topics = ["drawing", "dot", "typst"]
-review_triggers = ["crates/gammalooprs/src/model/mod.rs", "crates/linnest/typst/src/physics-edge-style.typ", "crates/linnest/typst/src/impl/physics-edge-style.typ", "assets/embedded/drawing/templates/"]
+review_triggers = ["crates/gammaloop-api/src/commands/save.rs", "crates/gammaloop-api/src/templates.rs", "crates/gammalooprs/src/graph/parse/from_dot.rs", "crates/gammalooprs/src/model/mod.rs", "crates/linnet/src/**", "crates/linnest/src/**", "crates/linnest/typst/src/**", "crates/kurvst/src/**", "crates/kurvst/typst/src/**", "crates/clinnet/src/**", "assets/embedded/drawing/templates/**"]
 
 [[section.note]]
 id = "spenso-symbolica-syntax-and-rewrites"
@@ -185,7 +185,7 @@ reviewed_at = "2026-08-18"
 review_ref = "6feaba98e48a2cedb4688d3d0cc9a214716a8677"
 products = ["spenso", "idenso"]
 topics = ["symbolica", "tensor syntax", "rewriting"]
-review_triggers = ["crates/spenso/src/network/parsing/", "crates/spenso/src/shadowing/", "crates/idenso/src/shorthands/", "crates/idenso/src/dirac/", "crates/idenso/src/color/"]
+review_triggers = ["crates/spenso/src/network/parsing/**", "crates/spenso/src/shadowing/**", "crates/idenso/src/lib.rs", "crates/idenso/src/epsilon.rs", "crates/idenso/src/shorthands/**", "crates/idenso/src/dirac/**", "crates/idenso/src/color/**"]
 
 [[section]]
 id = "proposals"
@@ -430,7 +430,7 @@ reviewed_at = "2026-08-17"
 review_ref = "c9f4e32acd2c"
 products = ["gammaloop"]
 topics = ["nix", "ci", "cache", "documentation"]
-review_triggers = ["flake.nix", "flake.lock", ".github/workflows/**"]
+review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/**", "crates/gammaloop-workspace-hack/**"]
 
 [[section]]
 id = "documentation"

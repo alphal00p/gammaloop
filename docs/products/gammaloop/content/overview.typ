@@ -15,10 +15,21 @@ and diagnostics meet in one stateful workflow.
   a second, independent execution model.
 ])
 
+== Choose a task
+
+- To create and resume a known state, follow the #link("tutorial/")[first-state tutorial].
+- To adapt a process specification or generation filters, use the
+  #link("manual/process-generation/")[process-generation manual] with the
+  #link("reference/cli/?q=gammaLoop%20generate")[generated `generate` reference].
+- To automate a loaded state or diagnose a long run, choose the
+  #link("manual/interfaces/")[Rust/Python interface guide] or
+  #link("manual/diagnostics/")[logging and diagnostics guide].
+
 == A stateful run
 
 A typical source checkout is built and exercised from the repository root:
 
+// docs-example: syntax
 ```sh
 just build-cli-release
 ./gammaloop ./examples/cli/gg_hhh/1L/gg_hhh_1L.toml
@@ -27,6 +38,7 @@ just build-cli-release
 The run card imports a model, generates the requested process, executes its command blocks,
 and records the resulting state. Resume that directory explicitly for subsequent work:
 
+// docs-example: syntax
 ```sh
 ./gammaloop -s ./examples/cli/gg_hhh/1L/state \
   run integrate_physical -c "quit -o"
@@ -44,6 +56,7 @@ toolchain, and Python 3.11 or newer when building bindings. FORM 4.2.1 or newer 
 for analytical integration of integrated UV counterterms. UFO model import also needs the
 Python `ufo-model-loader` package.
 
+// docs-example: syntax
 ```sh
 nix develop
 just build-cli

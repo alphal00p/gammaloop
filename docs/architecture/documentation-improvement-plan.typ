@@ -144,30 +144,75 @@ The first implementation slice is
 (2026-08-18). It delivers foundations and selected content improvements; it
 does not close the full acceptance criteria in this plan.
 
+The follow-up implementation is tracked in
+#link("https://github.com/alphal00p/gammaloop/pull/96")[pull request 96]. The
+table below describes that branch, not the older production site. It is kept
+deliberately explicit about acceptance debt: a generated inventory or a new
+page counts as progress, but not as completion when its browser, execution, or
+coverage gate is still absent.
+
 #table(
   columns: (1.5fr, 3fr, 3fr),
-  table.header([*Area*], [*Delivered in the first slice*], [*Still open*]),
+  table.header([*Area*], [*Implemented on the documentation PR*], [*Still open*]),
   [Python and CLI reference],
-  [Exact Clap actions, arity, aliases, conflicts, globals, and usage; supported-first Python hierarchy, stable anchors, structured docstrings, and a more compact responsive presentation],
-  [42 of 79 public CLI commands, 117 of 412 arguments, and 163 of 166 settings still lack explanatory prose; many Python members still lack useful documentation],
+  [Exact Clap actions, arity, aliases, conflicts, globals, and usage; compact family and symbol indexes; nested disclosures; stable deep links; responsive setting cards; structured Python docstrings; and a generation gate that now rejects empty descriptions for all 79 public commands, 412 public arguments, and 166 settings],
+  [The non-empty gate does not yet measure substantive prose or task backlinks. Python coverage remains uneven outside the GammaLoop vertical slice, and responsive/light/dark/accessibility browser fixtures are not yet enforced],
   [Manuals and examples],
-  [The full Linnest, Kurvst, and Idenso FORM/Symbolica material is routed; 35 catalog and tutorial examples execute or receive language-appropriate syntax checks],
-  [Only two tutorial examples execute end to end; task coverage, expected-output assertions, and several product workflows remain shallow],
+  [Every product overview now offers a three-way task chooser. The GammaLoop process-generation, Linnet algorithms, Spenso networks, Idenso algebra, and Vakint evaluation chapters now include realistic source/configuration examples, expected invariants, failure interpretation, and targeted next references. A structurally validated registry records one beginner and one real-value canonical journey per product with its source, route, prerequisites, expected invariant, verification tier, owner group, and test command],
+  [Only three authored examples currently execute; clean external beginner journeys, remaining repository/scientific examples, named individual ownership, and the scheduled licensed/heavy tier remain open],
   [Integrated corpus],
-  [Legacy current material is classified and routed, authored prose is Typst-only apart from exact `README.md` and `AGENTS.md` compatibility files, and companion package changelogs now have manual routes],
+  [Legacy current material is classified and routed, authored prose is Typst-only apart from exact `README.md` and `AGENTS.md` compatibility files, companion package changelogs now have manual routes, and the portal routes calculations, graphs, tensors, identities, and integrals to the appropriate product with accurate ecosystem roles],
   [Version-level headings included from companion changelogs are not yet individually indexed, and release coverage remains incomplete],
   [Developer architecture],
   [The reviewed current notes were corrected against implementation and now carry lifecycle, review, trigger, and optional verified-scope metadata],
-  [Named ownership, verified scopes for every current record, deterministic freshness reporting, and review automation remain incomplete],
+  [Named ownership, verified scopes for eight of the ten current records, trigger-aware owner review, and review automation remain incomplete],
   [Cross-run build reuse],
-  [The Pages derivation is split into a Cargo producer and documentation consumer. The cold PR run rebuilt the producer and completed the five-site step in 1,005 seconds; the full quality job took 21 minutes 13 seconds, then Hestia published 1,111 paths (2.0 GiB) in 25.1 seconds],
-  [A following Typst/TOML-only revision must demonstrate that the producer is restored or already present and record the practical warm timing],
+  [The Pages derivation is split into a Cargo producer and documentation consumer. The cold PR run rebuilt the producer and completed the five-site step in 1,005 seconds. A following docs-only run restored the producer, and its retry found the producer already present and completed the five-site step in 6 seconds],
+  [Collect at least five comparable canonical warm runs before enforcing the proposed percentile objective],
 )
 
 The cold-run evidence is
 #link("https://github.com/alphal00p/gammaloop/actions/runs/32131249528")[Documentation Pages run 32131249528].
 The quality summary classified the producer as `rebuilt`; this avoids treating
 a successful cold build as proof of cross-run reuse.
+
+The cross-run evidence is
+#link("https://github.com/alphal00p/gammaloop/actions/runs/32134216164")[Documentation Pages run 32134216164].
+Its first attempt restored the reusable producer; the retry classified it as
+`already-present` and measured the five-site consumer at 6 seconds. The two
+attempts are reported separately because queueing, downloading, and a first
+consumer build must not be disguised as compilation time.
+
+The public site is not a preview of this branch. At the review date its latest
+deployment was
+#link("https://github.com/alphal00p/gammaloop/actions/runs/32073830002")[run 32073830002]
+from revision `f46892d216f1`; the pull-request workflow correctly retained the
+newer complete preview as an artifact and skipped publication. The visible
+`latest` site changes only after the reviewed branch is merged to `main`.
+
+== Acceptance status at this revision
+
+#table(
+  columns: (auto, auto, 4fr),
+  table.header([*ID*], [*State*], [*Evidence or remaining boundary*]),
+  [`DOC-001`], [Partial], [Compiled usage semantics and representative parser checks exist; the exhaustive invocation matrix remains open],
+  [`DOC-002`], [Partial], [The misleading beginner promises were corrected, but five clean external runs and the scheduled tier are not complete],
+  [`DOC-003`], [Complete], [Clean single-product previews rewrite ecosystem links and pass local-link validation],
+  [`DOC-004`], [Partial], [Shared compact reference components are implemented; browser visual and accessibility fixtures remain open],
+  [`DOC-005`], [Partial], [GammaLoop's principal Python workflow is documented from implementation-owned docstrings; all-module member coverage remains open],
+  [`DOC-006`], [Partial], [Catalog generation rejects empty public CLI, argument, or settings prose; current non-empty coverage is 79/79, 412/412, and 166/166, but substantive-quality and task-backlink gates remain open],
+  [`DOC-007`], [Partial], [Five task choosers and five deeper subject chapters are present; checked beginner and real-value paths do not yet cover every headline capability],
+  [`DOC-008`], [Partial], [Ten canonical product journeys now have validated owner-group, route, tier, invariant, and command metadata; remaining maintained repository/scientific examples and scheduled verification are not yet registered],
+  [`DOC-009`], [Partial], [Canonical prose is Typst-only and the declared legacy corpus is routed; a generated zero-orphan content graph remains open],
+  [`DOC-010`], [Partial], [Lifecycle, review triggers, and selected digests are checked and changed selected scopes fail validation; named owners, scopes for eight current records, and trigger-aware owner review require maintainer assignment],
+  [`DOC-011`], [Partial], [Companion release routes exist, but component-to-release coverage is not complete],
+  [`DOC-012`], [Partial], [The portal offers five task-first product routes and each overview has task-to-guide/reference links; a registry-owned shared task model and complete reference backlinks remain open],
+  [`DOC-013`], [Complete], [Pull requests retain complete previews without publishing, while `main` and immutable tags own publication],
+  [`DOC-014`], [Partial], [Local links, fragments, containment, source paths, and search targets are checked; scheduled external checking remains open],
+  [`DOC-015`], [Partial], [A required deterministic audit checks semantics and no-JavaScript navigation on 19 representative generated pages; standards HTML validation, browser/axe, spelling, keyboard, viewport, and visual gates remain open],
+  [`DOC-016`], [Partial], [Search is federated across five products and developer notes with deterministic client scoring, and product/developer pages have pinned source and issue routes; top-five ranking execution and feedback/search on every portal and Rustdoc page remain open],
+  [`DOC-017`], [Partial], [The source-backed Idenso convention specification is deep; equivalent auditable anchors remain uneven across products],
+)
 
 == Developer architecture audit at this baseline
 

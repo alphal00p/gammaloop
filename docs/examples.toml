@@ -1,0 +1,145 @@
+schema = 1
+
+# This registry covers the ten canonical manual journeys. The example harness
+# still checks every fenced block; repository examples and scheduled scientific
+# cases must be added here as they are promoted to maintained user journeys.
+
+[[example]]
+id = "gammaloop-first-state"
+product = "gammaloop"
+task = "Create and resume a persisted GammaLoop state"
+audience = "beginner"
+source = "docs/products/gammaloop/content/tutorial.typ"
+route = "tutorial/"
+prerequisites = ["Repository checkout", "Nix development shell or the documented Rust/just toolchain"]
+expected = "The generated state contains the run manifest and can be loaded again explicitly."
+verification = "syntax"
+tier = "pull-request"
+owner = "GammaLoop maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "gammaloop-process-generation"
+product = "gammaloop"
+task = "Generate and inspect a filtered process"
+audience = "real-value"
+source = "docs/products/gammaloop/content/process-generation.typ"
+route = "manual/process-generation/"
+prerequisites = ["Built GammaLoop CLI", "A supported model and process card"]
+expected = "The process name, amplitude/cross-section mode, coupling orders, and filters agree before evaluation starts."
+verification = "syntax"
+tier = "pull-request"
+owner = "GammaLoop maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "linnet-first-graph"
+product = "linnet"
+task = "Construct a graph and inspect a subgraph-aware operation"
+audience = "beginner"
+source = "docs/products/linnet/content/tutorial.typ"
+route = "tutorial/"
+prerequisites = ["Rust toolchain", "Linnet workspace dependencies"]
+expected = "The graph preserves the typed node/half-edge boundary and the documented operation returns the asserted structure."
+verification = "run"
+tier = "pull-request"
+owner = "Linnet maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "linnet-separating-cuts"
+product = "linnet"
+task = "Enumerate cuts that separate two selected graph nodes"
+audience = "real-value"
+source = "docs/products/linnet/content/algorithms.typ"
+route = "manual/algorithms/"
+prerequisites = ["Rust toolchain", "Linnet with the documented graph features"]
+expected = "The graph invariant check passes and the square-with-diagonal example returns four separating partitions."
+verification = "run"
+tier = "pull-request"
+owner = "Linnet maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "spenso-first-contraction"
+product = "spenso"
+task = "Contract a compatible tensor pair"
+audience = "beginner"
+source = "docs/products/spenso/content/tutorial.typ"
+route = "tutorial/"
+prerequisites = ["Rust toolchain", "Spenso workspace dependencies"]
+expected = "Dual slots contract and the example produces the asserted scalar value."
+verification = "run"
+tier = "pull-request"
+owner = "Spenso maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "spenso-network-execution"
+product = "spenso"
+task = "Assemble and inspect an executable tensor network"
+audience = "real-value"
+source = "docs/products/spenso/content/networks.typ"
+route = "manual/networks/"
+prerequisites = ["Rust toolchain", "Spenso workspace dependencies", "Symbolica runtime"]
+expected = "Executing the weighted tensor sum preserves its rank-one structure and produces the component vector [11.0, 16.0]."
+verification = "compile"
+tier = "pull-request"
+owner = "Spenso maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "idenso-controlled-identity"
+product = "idenso"
+task = "Apply one representation-aware identity pass"
+audience = "beginner"
+source = "docs/products/idenso/content/tutorial.typ"
+route = "tutorial/"
+prerequisites = ["Rust toolchain", "Idenso reference-case features", "Symbolica runtime"]
+expected = "Representation initialization and the focused rewrite preserve the documented free-index structure."
+verification = "compile"
+tier = "pull-request"
+owner = "Idenso maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "idenso-dummy-namespaces"
+product = "idenso"
+task = "Protect independent dummy-index namespaces before multiplication"
+audience = "real-value"
+source = "docs/products/idenso/content/algebra.typ"
+route = "manual/algebra/"
+prerequisites = ["Python 3", "Symbolica with the Idenso and Spenso community modules"]
+expected = "Wrapping the two local dummy namespaces preserves exactly the two intended free indices."
+verification = "compile"
+tier = "pull-request"
+owner = "Idenso maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "vakint-first-match"
+product = "vakint"
+task = "Match and canonicalize a vacuum integral without external backends"
+audience = "beginner"
+source = "docs/products/vakint/content/tutorial.typ"
+route = "tutorial/"
+prerequisites = ["Repository checkout", "Rust toolchain or the documented Python environment"]
+expected = "The matching-only engine recognizes the topology and returns its canonical routing without invoking FORM or pySecDec."
+verification = "syntax"
+tier = "pull-request"
+owner = "Vakint maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "vakint-backend-policy"
+product = "vakint"
+task = "Choose an explicit tensor-reduction and evaluation policy"
+audience = "real-value"
+source = "docs/products/vakint/content/evaluation.typ"
+route = "manual/evaluation/"
+prerequisites = ["Rust toolchain", "Vakint workspace dependencies", "Configured external backend for full evaluation"]
+expected = "Matching, tensor reduction, and evaluation failures remain attributable to the documented owning stage and backend order."
+verification = "compile"
+tier = "pull-request"
+owner = "Vakint maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"

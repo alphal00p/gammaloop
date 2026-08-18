@@ -15,6 +15,18 @@ metric, epsilon, and color algebra.
   #product-link("spenso", label: "Spenso").
 ])
 
+== Choose a task
+
+- To initialize representations and verify one metric contraction, follow the
+  #link("tutorial/")[controlled identity tutorial] and the
+  #link("reference/python/idenso-community/?q=simplify_metrics")[Python function reference].
+- To isolate dummy-index namespaces or cook a large expression, use the
+  #link("manual/algebra/")[algebra manual] with the exact
+  #link("reference/rust/supported/idenso/#supported-indextooling")[`IndexTooling`] and
+  #link("reference/rust/supported/idenso/#supported-cookable")[`Cookable`] references.
+- To audit a sign or normalization in a Dirac/color pass, use the source-backed
+  #link("manual/form-color-dirac/")[FORM, Symbolica, and Spenso rule specification].
+
 == A controlled rewrite pipeline
 
 There is no universally correct “simplify everything” order. A robust workflow makes each

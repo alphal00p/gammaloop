@@ -39,6 +39,67 @@ network structure changes.
   requires validation or replanning.
 ])
 
+== Execute a small tensor/scalar network
+
+This self-contained network computes `2 a + 3 b` for two equally structured tensors. The dummy
+libraries make the execution boundary explicit: every tensor is already concrete and any
+unresolved function key is an error.
+
+// docs-example: compile
+```rust
+use spenso::{
+    network::{
+        ExecutionResult, Network, Sequential, SmallestDegree,
+        library::{DummyKey, DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
+        store::NetworkStore,
+    },
+    structure::{
+        OrderedStructure,
+        representation::{Euclidean, RepName},
+    },
+    tensors::data::DenseTensor,
+};
+
+fn main() {
+    type Tensor = DenseTensor<f64, OrderedStructure<Euclidean>>;
+    type Store = NetworkStore<Tensor, f64>;
+    type Net = Network<Store, DummyKey, DummyKey>;
+    type LibraryTensor = DummyLibraryTensor<Tensor>;
+
+    let structure = OrderedStructure::new(vec![Euclidean {}.new_slot(2, 1)]).structure;
+    let a = DenseTensor::from_data(vec![1.0, 2.0], structure.clone()).unwrap();
+    let b = DenseTensor::from_data(vec![3.0, 4.0], structure).unwrap();
+    let tensors = DummyLibrary::new();
+    let functions = ErroringLibrary::new();
+
+    let mut network =
+        Net::from_scalar(2.0) * Net::from_tensor(a) + Net::from_scalar(3.0) * Net::from_tensor(b);
+    network
+        .execute::<Sequential, SmallestDegree, LibraryTensor, _, _>(&tensors, &functions)
+        .unwrap();
+
+    let ExecutionResult::Val(result) = network.result_tensor::<LibraryTensor, _>(&tensors).unwrap()
+    else {
+        panic!("expected a concrete tensor result");
+    };
+    assert_eq!(result.data, vec![11.0, 16.0]);
+}
+```
+
+The output invariant is the component vector `[11.0, 16.0]`; the original rank-one structure
+must also remain attached to the result. The documentation harness compiles the complete program;
+run it to execute the assertion in a provisioned Symbolica environment. See the exact
+#link("reference/rust/supported/spenso/#supported-network")[`Network`],
+#link("reference/rust/supported/spenso/#supported-densetensor")[`DenseTensor`], and
+#link("reference/rust/supported/spenso/#supported-contract")[pairwise contraction] references.
+
+#callout("Interpret execution failures by layer", [
+  `from_data` errors are rank/dimension or storage-length mismatches. An unresolved function-key
+  error means the network contains a symbolic library node despite the concrete-only setup. A
+  different value with the same shape points to scalar placement or node arithmetic; a different
+  shape points to changed slots or unintended contraction, which requires replanning.
+])
+
 == Symbolica shadowing
 
 With `shadowing`, Spenso recognizes registered tensor functions inside Symbolica expressions

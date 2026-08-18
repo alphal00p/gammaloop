@@ -308,6 +308,7 @@ pub(crate) fn integrand_factory(settings: &RuntimeSettings) -> Integrand {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct UnitSurfaceSettings {
+    /// Number of independent three-momenta used to construct the unit-surface test dimension.
     pub n_3d_momenta: usize,
 }
 
@@ -462,6 +463,7 @@ impl HasIntegrand for UnitSurfaceIntegrand {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 // #[trait_decode(trait= GammaLoopContext)]
 pub struct UnitVolumeSettings {
+    /// Number of independent three-momenta used to construct the unit-volume test dimension.
     pub n_3d_momenta: usize,
 }
 

@@ -71,65 +71,83 @@ pub enum ContractionMode {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 pub struct EvaluatorSettings {
+    /// Perform symbolic tensor and scalar algebra before lowering to an evaluator.
     #[serde(default, skip_serializing_if = "is_false")]
     pub do_algebra: bool,
+    /// Re-optimize orientation expressions iteratively while building the evaluator.
     #[serde(
         default = "evaluator_default_iterative_orientation_optimization",
         skip_serializing_if = "is_true"
     )]
     pub iterative_orientation_optimization: bool,
+    /// Build one evaluator for the sum of all contributions instead of separate evaluators.
     #[serde(default, skip_serializing_if = "is_false")]
     pub summed: bool,
+    /// Represent a summed evaluator through a shared Symbolica function map.
     #[serde(default, skip_serializing_if = "is_false")]
     pub summed_function_map: bool,
+    /// Compile the lowered evaluator using the configured generation compilation backend.
     #[serde(default, skip_serializing_if = "is_false")]
     pub compile: bool,
+    /// Retain the intermediate Symbolica atom alongside the executable evaluator.
     #[serde(default, skip_serializing_if = "is_false")]
     pub store_atom: bool,
+    /// Apply function-map replacements before numerical lowering.
     #[serde(default, skip_serializing_if = "is_false")]
     pub do_fn_map_replacements: bool,
+    /// Translate compatible symbolic expressions directly into Spenso networks.
     #[serde(
         default = "evaluator_default_direct_translation",
         skip_serializing_if = "is_true"
     )]
     pub direct_translation: bool,
+    /// Number of Horner-scheme optimization passes applied to scalar expressions.
     #[serde(
         default = "evaluator_default_horner_iterations",
         skip_serializing_if = "is_usize::<1>"
     )]
     pub horner_iterations: usize,
+    /// Worker threads used while constructing one evaluator.
     #[serde(
         default = "evaluator_default_n_cores",
         skip_serializing_if = "is_usize::<1>"
     )]
     pub n_cores: usize,
+    /// Optional number of common-pair-elimination optimization passes.
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub cpe_iterations: Option<usize>,
+    /// Optimization stage at which evaluator construction aborts for diagnostic isolation.
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub abort_level: usize,
 
+    /// Maximum variable count for attempting a Horner-scheme optimization.
     #[serde(
         default = "evaluator_default_max_horner_scheme_variables",
         skip_serializing_if = "is_usize::<500>"
     )]
     pub max_horner_scheme_variables: usize,
 
+    /// Maximum cached candidate pairs during common-pair elimination.
     #[serde(
         default = "evaluator_default_max_common_pair_cache_entries",
         skip_serializing_if = "is_usize::<1000000>"
     )]
     pub max_common_pair_cache_entries: usize,
 
+    /// Maximum expression-tree distance considered during common-pair elimination.
     #[serde(
         default = "evaluator_default_max_common_pair_distance",
         skip_serializing_if = "is_usize::<1000>"
     )]
     pub max_common_pair_distance: usize,
+    /// Heuristic used to order tensor-network contractions.
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
     pub tensor_network_contraction_order: TensorNetworkContractionOrder,
+    /// Emit detailed evaluator-construction diagnostics.
     #[serde(default, skip_serializing_if = "is_false")]
     pub verbose: bool,
 
+    /// Spenso execution and contraction modes used by the lowered tensor network.
     #[serde(
         default = "evaluator_default_spenso_execution_mode",
         skip_serializing_if = "is_default_spenso_execution_mode"

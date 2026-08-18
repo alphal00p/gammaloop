@@ -34,9 +34,11 @@ pub struct Renormalize {
     )]
     pub process: Option<ProcessRef>,
 
+    /// Rewrite the result into the normalization and symbol conventions used by RQFT comparisons.
     #[arg(short = 'a', long = "align-to-rqft", default_value_t = false)]
     pub align_to_rqft: bool,
 
+    /// Preserve fully qualified Symbolica namespaces in printed expressions.
     #[arg(short = 'f', long = "print-namespaces", default_value_t = false)]
     pub print_namespaces: bool,
 

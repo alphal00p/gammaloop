@@ -15,6 +15,18 @@ network execution build on that separation.
   contraction error.
 ])
 
+== Choose a task
+
+- To verify slot duality with one numerical contraction, follow the
+  #link("tutorial/")[first-contraction tutorial] and the exact
+  #link("reference/rust/supported/spenso/#supported-contract")[`Contract` reference].
+- To assemble and execute several tensor/scalar nodes, use the
+  #link("manual/networks/")[tensor-network manual] with the
+  #link("reference/rust/supported/spenso/#supported-network")[`Network` reference].
+- To parse symbolic tensor functions or apply Dirac/color identities, review the
+  #link("manual/interfaces/")[feature and interface guide], then continue with
+  #product-link("idenso", label: "Idenso") for representation-aware rewrites.
+
 == From tensors to networks
 
 The core package supports three related levels of work:
@@ -29,6 +41,7 @@ from Symbolica expressions whose functions carry recognizable tensor structure. 
 mere string conversion: representation initialization, index variance, names, and the tensor
 library determine the inferred network.
 
+// docs-example: syntax
 ```toml
 [dependencies]
 spenso = "0.6"

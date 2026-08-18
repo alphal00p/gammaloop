@@ -31,25 +31,35 @@ use crate::{
 #[derive(Default)]
 pub struct GenerationSettings {
     // Generation Time settings
+    /// Symbolic simplification, contraction, optimization, and compilation controls for evaluators.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub evaluator: EvaluatorSettings,
+    /// Feynman-graph generation checks and diagnostics.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub feyngen: FeyGenSettings,
 
+    /// Optional causal-orientation pattern applied during generation.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientation_pattern: OrientationPattern,
+    /// Code-generation backend, compiler, and optimization flags.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub compile: GammaloopCompileOptions,
+    /// Controls construction of tropical subgraph power-counting tables.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub tropical_subgraph_table: TropicalSubgraphTableSettings,
+    /// Generation-time selection of local threshold counterterms.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub threshold_subtraction: ThresholdSubtractionSettings,
+    /// Gauge used when summing external vector-particle polarizations.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub vector_polarization_sum_gauge: VectorPolarizationSumGauge,
+    /// Ultraviolet counterterm generation, prescription, and Vakint backend settings.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub uv: UVgenerationSettings,
+    /// Explicit particle-name sets forced to define graph cuts.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub force_cuts: Vec<Vec<String>>,
+    /// Use explicitly supplied loop-momentum bases instead of the built-in basis heuristics.
     #[serde(skip_serializing_if = "is_false")]
     pub override_lmb_heuristics: bool,
 }
@@ -62,8 +72,10 @@ pub struct GenerationSettings {
 #[trait_decode(trait = GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
 pub struct ThresholdSubtractionSettings {
+    /// Generate local threshold counterterms for eligible E-surfaces.
     #[serde(skip_serializing_if = "is_true")]
     pub enable_thresholds: bool,
+    /// Test E-surface existence against the active model while generating counterterms.
     #[serde(skip_serializing_if = "is_false")]
     pub check_esurface_at_generation: bool,
     /// Dimensionless tolerance used to compare the energy-squared E-surface invariant margin
@@ -74,10 +86,13 @@ pub struct ThresholdSubtractionSettings {
     )]
     #[schemars(range(min = 0.0))]
     pub esurface_existence_threshold: f64,
+    /// Omit threshold counterterms whose E-surface coincides with a physical cut.
     #[serde(skip_serializing_if = "is_true")]
     pub skip_thresholds_that_are_cuts: bool,
+    /// Generate local threshold counterterms without their integrated counterparts.
     #[serde(skip_serializing_if = "is_false")]
     pub disable_integrated_ct: bool,
+    /// Simplify existence tests by assuming all external-state energies are positive.
     #[serde(skip_serializing_if = "is_true")]
     pub assume_positive_external_energies: bool,
 }
@@ -306,20 +321,26 @@ impl fmt::Display for FrozenCompilationMode {
 )]
 #[serde(default, deny_unknown_fields)]
 pub struct GammaloopCompileOptions {
+    /// Evaluator backend: Symbolica JIT, generated C++, or generated assembly.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub compilation_mode: CompilationMode,
 
+    /// Optimization level passed to the selected evaluator compiler.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub optimization_level: CompilationOptimizationLevel,
 
+    /// Permit algebraic floating-point transformations that ignore strict IEEE ordering.
     #[serde(skip_serializing_if = "is_true")]
     pub fast_math: bool,
 
+    /// Permit compiler math optimizations that may change exceptional-value behavior.
     #[serde(skip_serializing_if = "is_true")] // default true
     pub unsafe_math: bool,
 
+    /// External C++ compiler executable used by C++ and assembly modes.
     #[serde(skip_serializing_if = "is_default_external_compiler")] // default compiler
     pub compiler: String,
+    /// Additional command-line arguments passed verbatim to the external compiler.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub custom: Vec<String>,
 }
@@ -387,6 +408,7 @@ impl GammaloopCompileOptions {
 #[serde(default, deny_unknown_fields)]
 #[derive(Default)]
 pub struct FeyGenSettings {
+    /// Check that gamma-matrix simplification is closed under the generated rewrite sequence.
     #[serde(skip_serializing_if = "is_false")]
     pub gamma_simplification_closure_check: bool,
 }
@@ -398,10 +420,13 @@ pub struct FeyGenSettings {
 )]
 #[serde(default, deny_unknown_fields)]
 pub struct TropicalSubgraphTableSettings {
+    /// Abort generation instead of reporting and skipping a failed tropical table construction.
     #[serde(skip_serializing_if = "is_false")]
     pub panic_on_fail: bool,
+    /// Target superficial degree used when classifying tropical subgraphs.
     #[serde(skip_serializing_if = "is_float::<1>")] // default 1.0
     pub target_omega: f64,
+    /// Disable tropical subgraph table construction entirely.
     #[serde(skip_serializing_if = "is_false")]
     pub disable_tropical_generation: bool,
 }
@@ -421,6 +446,7 @@ impl Default for TropicalSubgraphTableSettings {
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(default, deny_unknown_fields)]
 pub struct OrientationPattern {
+    /// Symbolica pattern matched against serialized causal orientations.
     #[serde(
         default,
         skip_serializing_if = "IsDefault::is_default",
@@ -660,12 +686,16 @@ mod orientation_pattern_tests {
 )]
 #[serde(default, deny_unknown_fields)]
 pub struct Parallelisation {
+    /// Worker threads used by Feynman-graph generation.
     #[serde(skip_serializing_if = "is_usize::<1>")]
     pub feyngen: usize,
+    /// Worker threads used to construct symbolic graph evaluators.
     #[serde(skip_serializing_if = "is_usize::<1>")]
     pub generate: usize,
+    /// Worker threads used for evaluator compilation.
     #[serde(skip_serializing_if = "is_usize::<1>")]
     pub compile: usize,
+    /// Worker threads used by numerical integration.
     #[serde(skip_serializing_if = "is_usize::<1>")]
     pub integrate: usize,
 }

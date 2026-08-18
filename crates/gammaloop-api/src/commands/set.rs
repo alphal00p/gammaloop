@@ -49,22 +49,23 @@ impl FromStr for Set {
 pub enum Set {
     /// Set the base directory for gammaloop state and logs
     BaseDir {
+        /// Directory used to resolve relative state and log paths.
         #[arg(value_hint = clap::ValueHint::DirPath)]
         path: PathBuf,
     },
-    /// Set GLOBAL settings
+    /// Change global generation, logging, and parallelism settings.
     Global {
         #[command(subcommand)]
         input: SetArgs,
     },
 
-    /// Set DEFAULT RUNTIME settings
+    /// Change the runtime settings inherited by newly generated integrands.
     DefaultRuntime {
         #[command(subcommand)]
         input: SetArgs,
     },
 
-    /// Set Model parameters
+    /// Assign model parameters in the selected context or reset them to defaults.
     Model {
         #[command(flatten)]
         target: ProcessArgs,
@@ -77,7 +78,7 @@ pub enum Set {
         values: Vec<ModelSetValue>,
     },
 
-    /// Set settings for a PROCESS
+    /// Change runtime settings or named analysis objects for one process or integrand.
     Process {
         #[command(subcommand)]
         input: ProcessSetArgs,
@@ -437,19 +438,21 @@ impl Set {
 // Shared input forms for set commands
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub enum SetArgs {
-    /// Load from a settings file
+    /// Merge a TOML file into the current global or default-runtime settings.
     File {
+        /// TOML settings file merged into the current global or default-runtime settings.
         #[arg(value_hint = clap::ValueHint::FilePath)]
         file: PathBuf,
     },
 
     /// Load settings from TOML content passed as a CLI string
     String {
+        /// Inline TOML document merged into the current global or default-runtime settings.
         #[arg(value_name = "TOML")]
         string: String,
     },
 
-    /// Set one or more dotted key-paths
+    /// Merge one or more dotted `KEY=VALUE` assignments into the current settings.
     Kv {
         /// Any number of KEY=VALUE pairs
         #[arg(value_name = "KEY=VALUE", num_args = 1.., value_parser = KvPair::from_str)]
@@ -459,25 +462,27 @@ pub enum SetArgs {
     /// Sync process runtime settings from the current default runtime settings
     Defaults,
 
-    /// Use the stored settings file
+    /// Reload the corresponding settings from the active state's stored file.
     Stored,
 }
 
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub enum ProcessSetArgs {
-    /// Load from a settings file
+    /// Merge a TOML file into the selected process or integrand settings.
     File {
+        /// TOML settings file merged into the selected process or integrand settings.
         #[arg(value_hint = clap::ValueHint::FilePath)]
         file: PathBuf,
     },
 
     /// Load settings from TOML content passed as a CLI string
     String {
+        /// Inline TOML document merged into the selected process or integrand settings.
         #[arg(value_name = "TOML")]
         string: String,
     },
 
-    /// Set one or more dotted key-paths
+    /// Merge one or more dotted `KEY=VALUE` assignments into the selected settings.
     Kv {
         /// Any number of KEY=VALUE pairs
         #[arg(value_name = "KEY=VALUE", num_args = 1.., value_parser = KvPair::from_str)]
@@ -487,7 +492,7 @@ pub enum ProcessSetArgs {
     /// Sync process runtime settings from the current default runtime settings
     Defaults,
 
-    /// Use the stored settings file
+    /// Reload the selected process or integrand settings from its stored file.
     Stored,
 
     /// Add a named quantity/observable/selector
@@ -511,22 +516,33 @@ pub enum ProcessSetArgs {
 
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub enum ProcessAddTarget {
+    /// Add a named derived quantity to the selected process settings.
     Quantity {
+        /// Unique name used to reference the quantity from expressions and observables.
         name: String,
+        /// Registered quantity implementation to instantiate.
         #[arg(value_parser = parse_quantity_kind)]
         kind: String,
+        /// Initial quantity settings as dotted `KEY=VALUE` assignments.
         #[arg(value_name = "KEY=VALUE", num_args = 0.., value_parser = KvPair::from_str)]
         pairs: Vec<KvPair>,
     },
+    /// Add a named observable to the selected process settings.
     Observable {
+        /// Unique name used for the observable and its output files.
         name: String,
+        /// Initial observable settings as dotted `KEY=VALUE` assignments, including its type.
         #[arg(value_name = "KEY=VALUE", num_args = 0.., value_parser = KvPair::from_str)]
         pairs: Vec<KvPair>,
     },
+    /// Add a named event selector to the selected process settings.
     Selector {
+        /// Unique name used to identify the selector in diagnostics.
         name: String,
+        /// Registered selector implementation to instantiate.
         #[arg(value_parser = parse_selector_kind)]
         kind: String,
+        /// Initial selector settings as dotted `KEY=VALUE` assignments.
         #[arg(value_name = "KEY=VALUE", num_args = 0.., value_parser = KvPair::from_str)]
         pairs: Vec<KvPair>,
     },
@@ -534,18 +550,27 @@ pub enum ProcessAddTarget {
 
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub enum ProcessUpdateTarget {
+    /// Update fields of an existing named quantity.
     Quantity {
+        /// Name of the quantity to update.
         name: String,
+        /// One or more dotted quantity-setting assignments.
         #[arg(value_name = "KEY=VALUE", num_args = 1.., value_parser = KvPair::from_str)]
         pairs: Vec<KvPair>,
     },
+    /// Update fields of an existing named observable.
     Observable {
+        /// Name of the observable to update.
         name: String,
+        /// One or more dotted observable-setting assignments.
         #[arg(value_name = "KEY=VALUE", num_args = 1.., value_parser = KvPair::from_str)]
         pairs: Vec<KvPair>,
     },
+    /// Update fields of an existing named selector.
     Selector {
+        /// Name of the selector to update.
         name: String,
+        /// One or more dotted selector-setting assignments.
         #[arg(value_name = "KEY=VALUE", num_args = 1.., value_parser = KvPair::from_str)]
         pairs: Vec<KvPair>,
     },
@@ -553,9 +578,21 @@ pub enum ProcessUpdateTarget {
 
 #[derive(Subcommand, Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub enum ProcessRemoveTarget {
-    Quantity { name: String },
-    Observable { name: String },
-    Selector { name: String },
+    /// Remove a named quantity from the selected process settings.
+    Quantity {
+        /// Name of the quantity to remove.
+        name: String,
+    },
+    /// Remove a named observable from the selected process settings.
+    Observable {
+        /// Name of the observable to remove.
+        name: String,
+    },
+    /// Remove a named selector from the selected process settings.
+    Selector {
+        /// Name of the selector to remove.
+        name: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq)]

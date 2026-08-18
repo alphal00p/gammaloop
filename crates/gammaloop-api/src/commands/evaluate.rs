@@ -45,7 +45,7 @@ pub struct Evaluate {
     )]
     pub graphs_group_name: Option<String>,
 
-    /// The path to store results in
+    /// Write the canonical symbolic evaluation result to this TOML file
     #[arg(short = 'o', long, value_hint = clap::ValueHint::FilePath)]
     pub result_path: Option<PathBuf>,
 

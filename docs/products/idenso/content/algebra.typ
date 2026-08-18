@@ -20,6 +20,47 @@ Cooking is especially useful before expensive canonicalization, but it changes w
 matchers can see. Uncook before applying an identity whose pattern depends on the hidden tensor
 head or index structure.
 
+== Keep independent dummy namespaces independent
+
+Two factors may legitimately print the same local dummy name before they are multiplied. Wrap
+each factor with a distinct header first, while leaving its external indices untouched:
+
+// docs-example: compile
+```python
+import symbolica as sp
+from symbolica.community.idenso import initialize, list_dangling, wrap_dummies
+from symbolica.community.spenso import Representation, TensorName
+
+initialize()
+rep = Representation.euc(3)
+mu = rep("mu")
+nu = rep("nu")
+rho = rep("rho")
+g = TensorName.g()
+p = TensorName("p")
+q = TensorName("q")
+
+left = g(mu, nu) * p(mu)
+right = g(mu, rho) * q(mu)
+safe_product = wrap_dummies(left, sp.S("lhs")) * wrap_dummies(right, sp.S("rhs"))
+
+assert len(list_dangling(safe_product)) == 2
+```
+
+The stable invariant is two free indices, `nu` and `rho`; the two occurrences of local `mu`
+belong to separate contractions after wrapping. The generated
+#link("reference/python/idenso-community/?q=wrap_dummies")[`wrap_dummies` reference] records the
+Python signature, while the exact
+#link("reference/rust/supported/idenso/#supported-indextooling")[`IndexTooling` reference] covers
+the underlying Rust boundary.
+
+#callout("Interpret index failures before simplifying", [
+  More or fewer than two dangling indices means a name collided or a slot's representation or
+  duality differs from the intended one. An unchanged plain Symbolica function means it was not
+  constructed through Spenso tensor names/representations, or `initialize()` ran after parsing.
+  Correct those structural issues before metric, Dirac, or color simplification.
+])
+
 == Metric and epsilon operations
 
 Metric contraction raises, lowers, or identifies compatible Lorentz indices according to the

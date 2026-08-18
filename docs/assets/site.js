@@ -1,7 +1,10 @@
 (() => {
   const root = document.documentElement;
   const body = document.body;
+  root.classList.add("js");
   const docsRoot = body.dataset.docsRoot || "";
+  const searchIndex = body.dataset.searchIndex || `${docsRoot}search-index.json`;
+  const searchRoot = body.dataset.searchRoot || docsRoot;
   const menu = document.querySelector("[data-menu-toggle]");
   const sidebar = document.querySelector(".docs-sidebar");
   const backdrop = document.querySelector("[data-sidebar-backdrop]");
@@ -58,40 +61,69 @@
   });
 
   let indexPromise;
-  const getIndex = () => indexPromise ||= fetch(`${docsRoot}search-index.json`)
+  const getIndex = () => indexPromise ||= fetch(searchIndex)
     .then((response) => response.ok ? response.json() : [])
     .catch(() => []);
 
+  const normalizeSearch = (value) => String(value || "").normalize("NFKD").toLowerCase();
+  const searchScore = (entry, query, terms) => {
+    const title = normalizeSearch(entry.title);
+    const summary = normalizeSearch(entry.summary);
+    const kind = normalizeSearch(entry.kind);
+    const haystack = `${title} ${summary} ${kind}`;
+    if (!terms.every((term) => haystack.includes(term))) return null;
+
+    const words = title.split(/[^a-z0-9_.:-]+/).filter(Boolean);
+    let score = title === query ? 1200 : title.startsWith(query) ? 700 : title.includes(query) ? 420 : 0;
+    for (const term of terms) {
+      if (words.includes(term)) score += 150;
+      else if (title.includes(term)) score += 90;
+      if (kind.includes(term)) score += 35;
+      if (summary.includes(term)) score += 15;
+    }
+    if (/tutorial|manual|guide/.test(kind)) score += 35;
+    else if (/command|python-api|rust-api/.test(kind)) score += 20;
+    else if (/developer/.test(kind)) score += 15;
+    return score;
+  };
+
   const renderSearch = async (query) => {
     if (!searchResults) return;
-    const normalized = query.trim().toLowerCase();
+    const normalized = normalizeSearch(query.trim());
     searchResults.replaceChildren();
     if (!normalized) {
       const hint = document.createElement("li");
       hint.className = "search-empty";
-      hint.textContent = body.classList.contains("developer-body")
-        ? "Search architecture, proposals, and engineering investigations."
+      hint.textContent = body.dataset.searchIndex
+        ? "Search all five projects and the developer architecture notes."
         : "Search tutorials, manual headings, and API entries.";
       searchResults.append(hint);
       return;
     }
     const terms = normalized.split(/\s+/);
-    const matches = (await getIndex()).filter((entry) => {
-      const haystack = `${entry.title} ${entry.summary} ${entry.kind}`.toLowerCase();
-      return terms.every((term) => haystack.includes(term));
-    }).slice(0, 30);
+    const matches = (await getIndex())
+      .map((entry, index) => ({ entry, index, score: searchScore(entry, normalized, terms) }))
+      .filter((match) => match.score !== null)
+      .sort((left, right) => right.score - left.score ||
+        left.entry.title.length - right.entry.title.length ||
+        left.entry.title.localeCompare(right.entry.title) || left.index - right.index)
+      .slice(0, 30)
+      .map((match) => match.entry);
     for (const entry of matches) {
       const item = document.createElement("li");
       item.className = "search-result";
       const link = document.createElement("a");
-      link.href = `${docsRoot}${entry.href}`;
+      link.href = `${searchRoot}${entry.href}`;
       const title = document.createElement("span");
       title.className = "search-result-title";
       title.textContent = entry.title;
+      const kind = document.createElement("span");
+      kind.className = "search-result-kind";
+      kind.textContent = entry.kind;
       const summary = document.createElement("span");
       summary.className = "search-result-summary";
       summary.textContent = entry.summary || entry.kind;
-      link.append(title, summary);
+      link.append(title, kind, summary);
       item.append(link);
       searchResults.append(item);
     }
@@ -203,7 +235,8 @@
   });
 
   document.querySelectorAll("[data-reference-filter]").forEach((input) => {
-    const scope = input.closest("[data-reference-filter-root]")?.querySelector("[data-reference-filter-scope]") ||
+    const root = input.closest("[data-reference-filter-root]");
+    const scope = root?.querySelector("[data-reference-filter-scope]") ||
       document.querySelector("[data-reference-filter-scope]");
     if (!scope) return;
     const entries = [...scope.querySelectorAll("[data-reference-entry]")];
@@ -231,6 +264,17 @@
         group.hidden = !group.querySelector("[data-reference-entry]:not([hidden])");
       });
       if (terms.length) {
+        entries.filter((entry) => !entry.hidden).forEach((entry) => {
+          if (entry.matches("details")) entry.open = true;
+          let parent = entry.parentElement?.closest("details");
+          while (parent) {
+            parent.open = true;
+            parent = parent.parentElement?.closest("details");
+          }
+        });
+        groups.filter((group) => !group.hidden && group.matches("details")).forEach((group) => {
+          group.open = true;
+        });
         implementationGroups.forEach((group) => {
           group.open = Boolean(group.querySelector("[data-reference-entry]:not([hidden])"));
         });
@@ -246,6 +290,26 @@
       history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
       updateReference();
     });
+    root?.querySelector("[data-reference-expand]")?.addEventListener("click", () => {
+      scope.querySelectorAll("details:not([hidden])").forEach((details) => details.open = true);
+    });
+    root?.querySelector("[data-reference-collapse]")?.addEventListener("click", () => {
+      scope.querySelectorAll("details").forEach((details) => details.open = false);
+    });
     updateReference();
   });
+
+  const revealReferenceFragment = () => {
+    if (!location.hash) return;
+    const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+    if (!target) return;
+    if (target.matches("details")) target.open = true;
+    let parent = target.parentElement?.closest("details");
+    while (parent) {
+      parent.open = true;
+      parent = parent.parentElement?.closest("details");
+    }
+  };
+  addEventListener("hashchange", revealReferenceFragment);
+  revealReferenceFragment();
 })();

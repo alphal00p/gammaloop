@@ -21,9 +21,39 @@ struct Product {
     id: String,
     title: String,
     #[serde(default)]
+    pages: Vec<Page>,
+    #[serde(default)]
     rust_components: Vec<Component>,
     #[serde(default)]
     python_components: Vec<Component>,
+}
+
+#[derive(Debug, Deserialize)]
+struct Page {
+    source: PathBuf,
+    route: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct ExampleRegistry {
+    schema: u32,
+    example: Vec<RegisteredExample>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RegisteredExample {
+    id: String,
+    product: String,
+    task: String,
+    audience: String,
+    source: PathBuf,
+    route: String,
+    prerequisites: Vec<String>,
+    expected: String,
+    verification: String,
+    tier: String,
+    owner: String,
+    test_command: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -68,6 +98,14 @@ fn main() -> Result<()> {
             .wrap_err_with(|| format!("failed to read {}", registry_path.display()))?,
     )
     .wrap_err_with(|| format!("failed to parse {}", registry_path.display()))?;
+    let examples_path = workspace_root.join("docs/examples.toml");
+    println!("cargo:rerun-if-changed={}", examples_path.display());
+    let example_registry: ExampleRegistry = toml::from_str(
+        &fs::read_to_string(&examples_path)
+            .wrap_err_with(|| format!("failed to read {}", examples_path.display()))?,
+    )
+    .wrap_err_with(|| format!("failed to parse {}", examples_path.display()))?;
+    validate_example_registry(workspace_root, &registry, &example_registry)?;
 
     let output = PathBuf::from(env::var_os("OUT_DIR").context("missing OUT_DIR")?);
     let mut rust_source = String::new();
@@ -243,6 +281,91 @@ print(f"compiled {len(EXAMPLES)} Python documentation examples")
     fs::write(output.join("rust_catalog_examples.rs"), rust_source)?;
     fs::write(output.join("shell_catalog_examples.sh"), shell_source)?;
     fs::write(output.join("python_catalog_examples.py"), python_source)?;
+    Ok(())
+}
+
+fn validate_example_registry(
+    workspace_root: &Path,
+    products: &Registry,
+    registry: &ExampleRegistry,
+) -> Result<()> {
+    ensure!(registry.schema == 1, "unsupported example registry schema");
+    let mut ids = BTreeSet::new();
+    let mut coverage = BTreeSet::new();
+    for example in &registry.example {
+        ensure!(
+            ids.insert(&example.id),
+            "duplicate example id {}",
+            example.id
+        );
+        let product = products
+            .product
+            .iter()
+            .find(|product| product.id == example.product)
+            .wrap_err_with(|| format!("example {} has unknown product", example.id))?;
+        let page = product
+            .pages
+            .iter()
+            .find(|page| page.source == example.source)
+            .wrap_err_with(|| format!("example {} has an unregistered source", example.id))?;
+        ensure!(
+            page.route == example.route,
+            "example {} route does not match its registered page",
+            example.id
+        );
+        ensure!(
+            matches!(example.audience.as_str(), "beginner" | "real-value"),
+            "example {} has unsupported audience {}",
+            example.id,
+            example.audience
+        );
+        ensure!(
+            matches!(example.verification.as_str(), "run" | "compile" | "syntax"),
+            "example {} has unsupported verification mode {}",
+            example.id,
+            example.verification
+        );
+        ensure!(
+            matches!(example.tier.as_str(), "pull-request" | "scheduled"),
+            "example {} has unsupported verification tier {}",
+            example.id,
+            example.tier
+        );
+        ensure!(
+            !example.task.trim().is_empty()
+                && !example.expected.trim().is_empty()
+                && !example.owner.trim().is_empty()
+                && !example.test_command.trim().is_empty()
+                && !example.prerequisites.is_empty()
+                && example
+                    .prerequisites
+                    .iter()
+                    .all(|prerequisite| !prerequisite.trim().is_empty()),
+            "example {} has incomplete maintenance metadata",
+            example.id
+        );
+        let source = fs::read_to_string(workspace_root.join(&example.source))?;
+        ensure!(
+            source.contains(&format!("// docs-example: {}", example.verification)),
+            "example {} source has no {} verification block",
+            example.id,
+            example.verification
+        );
+        coverage.insert((example.product.as_str(), example.audience.as_str()));
+    }
+    let expected = products
+        .product
+        .iter()
+        .flat_map(|product| {
+            ["beginner", "real-value"]
+                .into_iter()
+                .map(move |audience| (product.id.as_str(), audience))
+        })
+        .collect::<BTreeSet<_>>();
+    ensure!(
+        coverage == expected,
+        "canonical examples must cover beginner and real-value journeys for every product"
+    );
     Ok(())
 }
 

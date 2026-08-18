@@ -129,7 +129,7 @@ pub struct Approach {
     )]
     pub orientation_id: Option<usize>,
 
-    /// Path to the JSON output file
+    /// Write sampled approach points and run metadata to this JSON file
     #[arg(long = "output-results", value_hint = clap::ValueHint::FilePath)]
     pub output_results: Option<PathBuf>,
 }

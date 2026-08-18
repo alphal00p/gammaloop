@@ -30,8 +30,10 @@ static BUILTIN_MODEL_RESTRICTIONS: OnceLock<BTreeMap<String, Vec<String>>> = Onc
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 /// Generate integrands
 pub struct ImportModel {
+    /// Built-in model name, JSON model path, or UFO directory to import.
     #[arg(value_hint = clap::ValueHint::AnyPath)]
     pub path: PathBuf,
+    /// Simplify imported model expressions before storing the active model.
     #[arg(short = 's', long,
           action = clap::ArgAction::Set,     // take an optional bool value
           default_value_t = true,

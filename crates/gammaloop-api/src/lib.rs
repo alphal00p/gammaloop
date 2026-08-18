@@ -288,12 +288,16 @@ enum CompletionShell {
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct CLISettings {
+    /// Serialize replayable commands as compact strings when their structured form permits it.
     #[serde(skip_serializing_if = "is_true")]
     pub try_strings: bool,
+    /// Permit generated artifacts to replace compatible files in the active state folder.
     #[serde(skip_serializing_if = "is_false")]
     pub override_state: bool,
+    /// Location and optional display name of the persistent GammaLoop state.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub state: StateSettings,
+    /// Generation, logging, and parallelization settings shared by the CLI session.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub global: GlobalSettings,
     #[serde(skip)]
@@ -304,7 +308,9 @@ pub struct CLISettings {
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, PartialEq, Eq)]
 #[serde(default, deny_unknown_fields)]
 pub struct StateSettings {
+    /// Folder containing persisted settings, models, processes, and run history.
     pub folder: PathBuf,
+    /// Optional human-readable state name stored with the serialized state.
     #[serde(
         default,
         skip_serializing_if = "skip_optional_nonempty_string",

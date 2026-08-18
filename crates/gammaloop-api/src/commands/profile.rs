@@ -26,9 +26,9 @@ use clap::{Args, Subcommand};
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Profile {
-    /// Ultraviolet profile analysis
+    /// Sample ultraviolet scaling rays and report the fitted large-momentum behavior.
     UltraViolet(#[command(flatten)] UltraVioletProfile),
-    /// Bulk profile analysis
+    /// Probe multiple infrared scaling limits and report their fitted behavior in one run.
     #[command(name = "bulk")]
     InfraRed(#[command(flatten)] InfraRedProfile),
 }
@@ -57,11 +57,11 @@ pub struct UltraVioletProfile {
     #[arg(long = "n-points", default_value_t = 20)]
     pub n_points: usize,
 
-    /// Minimum scaling factor
+    /// Starting exponent of the sampled ultraviolet scaling range
     #[arg(long = "min-scaling", default_value_t = 3.0)]
     pub min_scale_exponent: f64,
 
-    /// Maximum scaling factor
+    /// Ending exponent of the sampled ultraviolet scaling range
     #[arg(long = "max-scaling", default_value_t = 6.0)]
     pub max_scale_exponent: f64,
 
@@ -69,6 +69,7 @@ pub struct UltraVioletProfile {
     #[arg(long = "use_f128")]
     pub use_f128: bool,
 
+    /// Fit the symbolic ultraviolet scaling expression in addition to sampled numerical values.
     #[arg(long = "analyse_analytically")]
     pub analyse_analytically: bool,
 
@@ -128,11 +129,11 @@ pub struct InfraRedProfile {
     #[arg(long = "n-points", default_value_t = 20)]
     pub n_points: usize,
 
-    /// Minimum scaling factor
+    /// Starting exponent of the sampled bulk scaling range
     #[arg(long = "min-scaling", default_value_t = -2.0)]
     pub min_scale_exponent: f64,
 
-    /// Maximum scaling factor
+    /// Ending exponent of the sampled bulk scaling range
     #[arg(long = "max-scaling", default_value_t = -3.0)]
     pub max_scale_exponent: f64,
 

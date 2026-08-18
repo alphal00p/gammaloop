@@ -52,10 +52,13 @@ pub struct RuntimeModelSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct SubtractionSettings {
+    /// Configuration for local ultraviolet counterterms in the numerical integrand.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub local_ct_settings: LocalCounterTermSettings,
+    /// Configuration for analytically integrated counterterm contributions.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub integrated_ct_settings: IntegratedCounterTermSettings,
+    /// Strategy used to choose centers shared by overlapping threshold surfaces.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub overlap_settings: OverlapSettings,
     /// Dimensionless tolerance used to compare the energy-squared E-surface invariant margin
@@ -76,6 +79,7 @@ pub struct SubtractionSettings {
     )]
     #[schemars(range(min = 0.0))]
     pub radial_root_residual_tolerance: f64,
+    /// Disable local threshold subtraction while leaving the original integrand unchanged.
     #[serde(skip_serializing_if = "is_false")]
     pub disable_threshold_subtraction: bool,
 }
@@ -220,32 +224,46 @@ impl IntegralUnit {
 #[trait_decode(trait= GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
 pub struct GeneralSettings {
+    /// Evaluate through the loop-tree-duality representation where the selected integrand supports it.
     #[serde(skip_serializing_if = "is_false")]
     pub use_ltd: bool,
+    /// Evaluator backend used for generated integrands.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub evaluator_method: EvaluatorMethod,
+    /// Optional orientation pattern restricting which causal-flow orientations are evaluated.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientation_pat: OrientationPattern,
+    /// Load a previously compiled causal-flow function instead of rebuilding it for this run.
     #[serde(skip_serializing_if = "is_false")]
     pub load_compiled_cff: bool,
+    /// Cache reusable evaluation data between phase-space samples.
     #[serde(skip_serializing_if = "is_false")]
     pub enable_cache: bool,
+    /// Emit additional cache consistency diagnostics while evaluating samples.
     #[serde(skip_serializing_if = "is_false")]
     pub debug_cache: bool,
+    /// Ultraviolet reference mass used by local counterterms, in the model's energy units.
     #[serde(skip_serializing_if = "is_float::<1000>")]
     pub m_uv: f64,
+    /// Localization scale applied to ultraviolet counterterms, in the model's energy units.
     #[serde(skip_serializing_if = "is_float::<1000>")]
     pub renormalization_localization_scale: f64,
+    /// Renormalization scale used by running parameters and scale-dependent terms.
     #[serde(skip_serializing_if = "is_float::<1000>")]
     pub mu_r: f64,
+    /// Values assigned, in order, to extra symbolic parameters expected by the evaluator.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub additional_param_values: Vec<f64>,
+    /// Unit used to report integrated cross-sections; `auto` selects picobarns for scattering.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub integral_unit: IntegralUnit,
+    /// Omit the incoming-state flux factor from the returned integrand value.
     #[serde(skip_serializing_if = "is_false")]
     pub disable_flux_factor: bool,
+    /// Return generated events in addition to accumulating integration statistics.
     #[serde(skip_serializing_if = "is_false")]
     pub generate_events: bool,
+    /// Persist every configured additional weight on each generated event.
     #[serde(skip_serializing_if = "is_false")]
     pub store_additional_weights_in_event: bool,
 }
@@ -303,6 +321,7 @@ pub mod kinematic;
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct ObservablesOutputSettings {
+    /// Output formats written for configured observables; duplicates and `none` are ignored.
     #[serde(
         default = "default_observable_output_formats",
         skip_serializing_if = "is_default_observable_output_formats"
@@ -346,36 +365,52 @@ impl ObservablesOutputSettings {
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct IntegratorSettings {
+    /// Number of bins maintained along each continuous integration dimension.
     #[serde(skip_serializing_if = "is_usize::<64>")]
     pub n_bins: usize,
+    /// Optional per-iteration bin counts, overriding the fixed `n_bins` value as training proceeds.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub bin_number_evolution: Option<Vec<usize>>,
+    /// Minimum accumulated samples before an adaptive grid or discrete probability is updated.
     #[serde(skip_serializing_if = "is_usize::<1000>")]
     pub min_samples_for_update: usize,
+    /// Number of samples in the first Monte Carlo iteration.
     #[serde(skip_serializing_if = "is_usize::<100000>")]
     pub n_start: usize,
+    /// Samples added to each successive Monte Carlo iteration.
     #[serde(skip_serializing_if = "is_usize::<10000>")]
     pub n_increase: usize,
+    /// Hard upper bound on the total number of integrand evaluations.
     #[serde(skip_serializing_if = "is_usize::<10000000000>")]
     pub n_max: usize,
+    /// Stop once the estimated relative uncertainty reaches this value, if configured.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub target_relative_accuracy: Option<f64>,
+    /// Stop once the estimated absolute uncertainty reaches this value, if configured.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub target_absolute_accuracy: Option<f64>,
+    /// Complex component to integrate: real, imaginary, or both.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub integrated_phase: IntegratedPhase,
+    /// Update rate for learned probabilities over discrete sampling choices.
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub discrete_dim_learning_rate: f64,
+    /// Update rate for adaptive grids over continuous integration dimensions.
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub continuous_dim_learning_rate: f64,
+    /// Train adaptive distributions on iteration averages instead of individual sample weights.
     #[serde(skip_serializing_if = "is_false")]
     pub train_on_avg: bool,
+    /// Include maximum-weight diagnostics in integration progress and result data.
     #[serde(skip_serializing_if = "is_true")]
     pub show_max_wgt_info: bool,
+    /// Cap the ratio used when turning sampled weights into adaptive probabilities.
     #[serde(skip_serializing_if = "is_float::<30>")]
     pub max_prob_ratio: f64,
+    /// Seed for deterministic initialization of Monte Carlo random-number streams.
     #[serde(skip_serializing_if = "is_u64::<69>")]
     pub seed: u64,
+    /// File formats used when writing observable histograms and distributions.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub observables_output: ObservablesOutputSettings,
 }
@@ -790,16 +825,22 @@ mod tests {
 #[derive(Serialize, Deserialize, Debug, Clone, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct StabilitySettings {
+    /// Rotations applied when comparing an unstable sample with an equivalent phase-space point.
     #[serde(skip_serializing_if = "is_default_rotation_axis")]
     pub rotation_axis: Vec<RotationSetting>,
+    /// Ordered numerical-precision levels and tolerances used during stability escalation.
     #[serde(skip_serializing_if = "is_default_stability_levels")]
     pub levels: Vec<StabilityLevelSetting>,
+    /// Compare rotated results after normalizing by the result magnitude.
     #[serde(skip_serializing_if = "is_true")]
     pub check_on_norm: bool,
+    /// Escalate precision when a result is exactly zero at the current level.
     #[serde(skip_serializing_if = "is_true")]
     pub escalate_if_exact_zero: bool,
+    /// Escalate when the loop-momentum norm exceeds this factor; a negative value disables it.
     #[serde(skip_serializing_if = "is_float::<-1>")]
     pub loop_momenta_norm_escalation_factor: f64,
+    /// Optional diagnostics retained for rotated, escalated, and high-precision evaluations.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub recording: Option<StabilityRecordingSettings>,
 }
@@ -824,10 +865,13 @@ impl Default for StabilitySettings {
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct StabilityRecordingSettings {
+    /// Record the values obtained at rotated phase-space points.
     #[serde(skip_serializing_if = "is_false")]
     pub record_rotated_results: bool,
+    /// Record the result produced at every attempted numerical-precision level.
     #[serde(skip_serializing_if = "is_false")]
     pub record_all_stability_levels: bool,
+    /// Record evaluations escalated because of the loop-momentum norm threshold.
     #[serde(skip_serializing_if = "is_false")]
     pub record_loop_momenta_escalation: bool,
 }
@@ -1049,28 +1093,40 @@ pub enum SamplingSettings {
 )]
 #[serde(default, deny_unknown_fields)]
 pub struct SamplingSettingsParser {
+    /// Whether graph contributions are summed deterministically or sampled as a discrete axis.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub graphs: SumMode,
+    /// Optional graph-name allow-list for discrete graph sampling.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub graph_names: Vec<String>,
+    /// Whether causal orientations are summed deterministically or sampled as a discrete axis.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orientations: SumMode,
+    /// Enable multichannel sampling over loop-momentum bases.
     #[serde(skip_serializing_if = "is_false")]
     pub lmb_multichanneling: bool,
+    /// Whether loop-momentum-basis channels are summed or sampled discretely.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub lmb_channels: SumMode,
+    /// Exponent controlling the sharpness of multichannel weights.
     #[serde(skip_serializing_if = "is_float::<3>")]
     pub alpha: f64,
+    /// Rule used to construct the relative probability of each loop-momentum-basis channel.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub lmb_channel_weight: LmbChannelWeight,
+    /// Coordinate system used to parameterize loop momenta.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub coordinate_system: CoordinateSystem,
+    /// Mapping from the unit hypercube to unbounded radial coordinates.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub mapping: ParameterizationMapping,
+    /// Scale parameter of the selected radial mapping.
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub b: f64,
+    /// Power parameter of the selected radial mapping.
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub power: f64,
+    /// Explicit loop-momentum-basis identifiers keyed by graph name.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub lmb_basis_ids: BTreeMap<String, Vec<usize>>,
 }
@@ -1664,10 +1720,13 @@ impl SamplingSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct MultiChannelingSettings {
+    /// Exponent controlling the sharpness of loop-momentum-basis channel weights.
     #[serde(skip_serializing_if = "is_float::<3>")]
     pub alpha: f64,
+    /// Rule used to assign relative loop-momentum-basis channel weights.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub channel_weight: LmbChannelWeight,
+    /// Continuous loop-momentum parameterization used inside each channel.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub parameterization_settings: ParameterizationSettings,
 }
@@ -1689,8 +1748,10 @@ impl Default for MultiChannelingSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct GammaloopTropicalSamplingSettings {
+    /// Retry unstable tropical matrix operations at a higher numerical precision.
     #[serde(skip_serializing_if = "is_true")]
     pub upcast_on_failure: bool,
+    /// Optional condition threshold used to reject an unstable tropical sampling matrix.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub matrix_stability_test: Option<f64>,
 }
@@ -1744,10 +1805,13 @@ impl Default for DiscreteGraphSamplingType {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct DiscreteGraphSamplingSettings {
+    /// Optional graph-name allow-list; an empty list includes all generated graphs.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub graph_names: Vec<String>,
+    /// Sample graph orientations as an additional discrete integration coordinate.
     #[serde(skip_serializing_if = "is_false")]
     pub sample_orientations: bool,
+    /// Continuous and multichannel strategy used inside each selected graph.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub sampling_type: DiscreteGraphSamplingType,
 }
@@ -1759,6 +1823,7 @@ pub struct DiscreteGraphSamplingSettings {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct LocalCounterTermSettings {
+    /// Widths and override controls for ultraviolet-counterterm localization dampers.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub uv_localisation: UVLocalisationSettings,
 }
@@ -1770,12 +1835,16 @@ pub struct LocalCounterTermSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct UVLocalisationSettings {
+    /// Width of the transition region used by the ultraviolet sliver damper.
     #[serde(skip_serializing_if = "is_float::<10>")]
     pub sliver_width: f64,
+    /// Derive the localization width dynamically from the sampled ultraviolet configuration.
     #[serde(skip_serializing_if = "is_false")]
     pub dynamic_width: bool,
+    /// Width of the Gaussian ultraviolet localization factor.
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub gaussian_width: f64,
+    /// Replace ultraviolet localization dampers by one for diagnostic comparisons.
     #[serde(skip_serializing_if = "is_false")]
     pub force_uv_dampers_to_one: bool,
 }
@@ -1798,6 +1867,7 @@ impl Default for UVLocalisationSettings {
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct IntegratedCounterTermSettings {
+    /// Integration domain and damping function used for integrated counterterms.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub range: IntegratedCounterTermRange,
 }
@@ -1810,10 +1880,13 @@ pub struct IntegratedCounterTermSettings {
 #[serde(tag = "type")]
 #[serde(deny_unknown_fields)]
 pub enum IntegratedCounterTermRange {
+    /// Integrate over the full radial domain and regulate it with an H-function profile.
     #[serde(rename = "infinite")]
     Infinite {
+        /// Damping profile used to make the infinite-domain counterterm integral convergent.
         h_function_settings: HFunctionSettings,
     },
+    /// Integrate over the compact radial domain without an infinite-tail damping profile.
     #[serde(rename = "compact")]
     Compact {},
 }
@@ -1835,12 +1908,16 @@ impl Default for IntegratedCounterTermRange {
 #[serde(default)]
 pub struct OverlapSettings {
     //v
+    /// Explicit three-vector center used for every threshold overlap, when provided.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub force_global_center: Option<Vec<[f64; 3]>>,
+    /// Validate that the selected global center lies inside every required E-surface.
     #[serde(skip_serializing_if = "is_true")]
     pub check_global_center: bool,
+    /// Try the loop-momentum origin as the global center before solving for another point.
     #[serde(skip_serializing_if = "is_true")]
     pub try_origin: bool,
+    /// Try the origin independently for every available loop-momentum basis.
     #[serde(skip_serializing_if = "is_false")]
     pub try_origin_all_lmbs: bool,
 }
@@ -1877,12 +1954,16 @@ pub enum HFunction {
 #[serde(deny_unknown_fields)]
 #[serde(default)]
 pub struct HFunctionSettings {
+    /// Functional form of the counterterm damping profile.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub function: HFunction,
+    /// Characteristic width of the damping profile.
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub sigma: f64,
+    /// Apply the damping profile; disabling it leaves the corresponding factor equal to one.
     #[serde(skip_serializing_if = "is_true")]
     pub enabled_dampening: bool,
+    /// Optional polynomial power overriding the profile's built-in choice.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub power: Option<usize>,
 }

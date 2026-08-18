@@ -182,6 +182,7 @@
             nonCargoBuildSources
             repositoryDocumentationSources
             ./docs
+            ./scripts/check-docs-html.py
             ./scripts/render-docs-svg-assets.sh
             ./scripts/update-docs-pages.sh
             ./examples/cli/aa_aa/2L/graphs/GL00.dot
@@ -241,6 +242,7 @@
             ./tests
             ./examples/cli
             ./docs/api/python
+            ./docs/examples.toml
             ./docs/products
             ./crates/linnet-py/linnet_py.pyi
           ];
@@ -538,6 +540,7 @@
           "alphal00p-docs-examples" = [
             "crates/linnet-py/pyproject.toml"
             "docs/api/python"
+            "docs/examples.toml"
             "docs/products"
             "pyproject.toml"
           ];
@@ -3148,6 +3151,7 @@
                 --output "$docs_second" \
                 --rustdoc-target-root "$docs_rustdoc"
               diff --recursive --brief "$docs_first" "$docs_second"
+              python3 scripts/check-docs-html.py "$docs_first"
 
               cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- \
                 build \
@@ -3262,6 +3266,7 @@
                 docs_args+=(--snapshot-tag ${lib.escapeShellArg alphal00pDocsPagesSnapshotTag})
               ''}
               cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- "''${docs_args[@]}"
+              python3 scripts/check-docs-html.py "$out"
 
               test -s "$out/index.html"
               test -e "$out/.nojekyll"

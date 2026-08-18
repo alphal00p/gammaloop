@@ -15,6 +15,19 @@ a `topo(...)` structure built from propagators.
   task.
 ])
 
+== Choose a task
+
+- To recognize and canonicalize an integral without external tools, follow the
+  #link("tutorial/")[matching-only tutorial] and compare with the
+  #link("reference/topologies/")[generated topology table].
+- To tensor-reduce and evaluate with an explicit backend policy, use the
+  #link("manual/evaluation/")[evaluation manual] with the exact
+  #link("reference/rust/supported/vakint/#supported-evaluationorder")[`EvaluationOrder`]
+  reference.
+- To embed Vakint in Rust or `symbolica.community.vakint`, use the
+  #link("manual/interfaces/")[interface guide] and generated Rust/Python signatures before
+  selecting external tools.
+
 == Workflow
 
 A complete calculation proceeds through explicit stages:
@@ -51,6 +64,7 @@ Matching with an empty evaluation order needs neither FORM nor pySecDec. For bac
 check the configured executable paths first. Verbose logging and retained temporary files are
 useful when an external tool fails:
 
+// docs-example: syntax
 ```sh
 VAKINT_NO_CLEAN_TMP_DIR=T RUST_LOG=DEBUG cargo run
 ```

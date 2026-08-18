@@ -48,7 +48,7 @@ use crate::state::{GenerationResourceSummary, ProcessRef, State};
 // =================== CLI containers (kept close to your structure) ===================
 
 #[derive(Debug, Parser, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
-/// Generate integrands
+/// Generate cross-section or amplitude integrands from a process specification.
 pub struct Generate {
     /// Keep generated C++ source files after external compilation
     #[arg(long = "keep-sources", default_value_t = false, global = true)]
@@ -59,16 +59,16 @@ pub struct Generate {
 }
 
 #[derive(Debug, Subcommand, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
-/// Generate integrands
+/// Select cross-section, amplitude, or existing-process integrand generation.
 pub enum GenerateCmd {
-    /// Cross-section (forward-scattering) generation
+    /// Generate a cross-section integrand through the forward-scattering construction.
     Xs(SpecArgs),
 
-    /// Amplitude generation
+    /// Generate an amplitude integrand for the supplied process specification.
     #[command(alias = "amplitude")]
     Amp(SpecArgs),
 
-    /// Reuse an already generated process
+    /// Create another integrand from an existing process without regenerating its graphs.
     Existing(ProcessArgs),
 }
 
@@ -155,6 +155,7 @@ pub struct SpecArgs {
     // Number of threads
     //#[arg(short = 'n', long = "num-threads")]
     //pub num_threads: Option<u32>, deprectaed in favor of global parallelisation settings
+    /// Append the generated process instead of replacing the current process selection.
     #[arg(short = 'a', default_value_t = false)]
     pub append: bool,
 
@@ -171,6 +172,7 @@ pub struct SpecArgs {
     #[arg(long = "process-name", short = 'p')]
     pub process_name: Option<String>,
 
+    /// Name assigned to the generated integrand; defaults to the generated process name.
     #[arg(
         long = "integrand-name",
         short = 'i',
@@ -178,18 +180,21 @@ pub struct SpecArgs {
     )]
     pub integrand_name: Option<String>,
 
+    /// Stop after diagram generation without constructing an evaluable integrand.
     #[arg(long = "only-diagrams", short = 'o', default_value_t = false)]
     pub only_diagrams: bool,
 
-    /// Topology filters (`Option<bool>` enables smart defaults)
+    /// Include or exclude self-energy topologies; omission uses the generation-mode default.
     #[arg(long = "filter-selfenergies")]
     pub filter_selfenergies: Option<bool>,
+    /// Include or exclude snail topologies; omission uses the generation-mode default.
     #[arg(long = "filter-snails")]
     pub filter_snails: Option<bool>,
+    /// Include or exclude tadpole topologies; omission uses the generation-mode default.
     #[arg(long = "filter-tadpoles")]
     pub filter_tadpoles: Option<bool>,
 
-    /// Veto vertex interactions
+    /// Exclude graphs containing any listed vertex-interaction name
     #[arg(long = "veto-vertex-interactions", num_args = 0..)]
     pub veto_vertex_interactions: Option<Vec<String>>,
 
@@ -197,37 +202,44 @@ pub struct SpecArgs {
     #[arg(long = "allowed-vertex-interactions", num_args = 0..)]
     pub allowed_vertex_interactions: Option<Vec<String>>,
 
-    /// Cross-section tadpole filtering when sewing
+    /// Filter tadpoles formed while sewing amplitudes into a cross-section graph.
     #[arg(long = "filter-cross-section-tadpoles")]
     pub filter_cross_section_tadpoles: Option<bool>,
 
-    /// Tadpole veto details
+    /// Veto tadpoles attached to massive propagators.
     #[arg(long = "veto-tadpoles-attached-to-massive-lines")]
     pub veto_tadpoles_attached_to_massive_lines: Option<bool>,
+    /// Veto tadpoles attached to massless propagators.
     #[arg(long = "veto-tadpoles-attached-to-massless-lines")]
     pub veto_tadpoles_attached_to_massless_lines: Option<bool>,
+    /// Veto only tadpoles that are scaleless.
     #[arg(long = "veto-only-scaleless-tadpoles")]
     pub veto_only_scaleless_tadpoles: Option<bool>,
 
-    /// Snail veto details
+    /// Veto snail insertions attached to massive propagators.
     #[arg(long = "veto-snails-attached-to-massive-lines")]
     pub veto_snails_attached_to_massive_lines: Option<bool>,
+    /// Veto snail insertions attached to massless propagators.
     #[arg(long = "veto-snails-attached-to-massless-lines")]
     pub veto_snails_attached_to_massless_lines: Option<bool>,
+    /// Veto only snail insertions that are scaleless.
     #[arg(long = "veto-only-scaleless-snails")]
     pub veto_only_scaleless_snails: Option<bool>,
 
-    /// Self-energy veto details
+    /// Veto self-energy insertions on massive propagators.
     #[arg(long = "veto-self-energy-of-massive-lines")]
     pub veto_self_energy_of_massive_lines: Option<bool>,
+    /// Veto self-energy insertions on massless propagators.
     #[arg(long = "veto-self-energy-of-massless-lines")]
     pub veto_self_energy_of_massless_lines: Option<bool>,
+    /// Veto only self-energy insertions that are scaleless.
     #[arg(long = "veto-only-scaleless-self-energy")]
     pub veto_only_scaleless_self_energy: Option<bool>,
 
-    /// Extra filters / constraints
+    /// Maximum number of bridges allowed in a generated graph; negative values disable the bound.
     #[arg(long = "max-n-bridges", short = 'b', allow_negative_numbers = true)]
     pub max_n_bridges: Option<i32>,
+    /// Inclusive minimum and maximum number of factorized loop subtopologies.
     #[arg(
         long = "number-of-factorized-loop-subtopologies",
         short = 'f',
@@ -245,24 +257,26 @@ pub struct SpecArgs {
     )]
     pub number_of_fermion_loops: Option<Vec<i32>>,
 
-    /// Cut options (cross-section)
-    /// Range of cut blobs on either side of the cut
+    /// Inclusive minimum and maximum number of cut blobs on either side of a cross-section cut.
     #[arg(long = "n-cut-blobs", short = 'B', num_args = 2)]
     pub n_cut_blobs: Option<Vec<usize>>,
-    /// Range of cut spectators on either side of the cut
+    /// Inclusive minimum and maximum number of spectators crossing a cross-section cut.
     #[arg(long = "n-cut-spectators", short = 'S', num_args = 2)]
     pub n_cut_spectators: Option<Vec<usize>>,
 
-    /// Symmetrization (`Option<bool>` selects smart defaults based on the generation type)
+    /// Permit external fermion permutations when identifying equivalent amplitudes.
     #[arg(
         long = "allow-symmetrization-of-external-fermions-in-amplitudes",
         alias = "symferm"
     )]
     pub allow_symmetrization_of_external_fermions_in_amplitudes: Option<bool>,
+    /// Identify graphs related by permutations of identical initial-state particles.
     #[arg(long = "symmetrize-initial-states")]
     pub symmetrize_initial_states: Option<bool>,
+    /// Identify graphs related by permutations of identical final-state particles.
     #[arg(long = "symmetrize-final-states")]
     pub symmetrize_final_states: Option<bool>,
+    /// Identify cross-section graphs related by exchanging the left and right amplitudes.
     #[arg(long = "symmetrize-left-right-states")]
     pub symmetrize_left_right_states: Option<bool>,
 
@@ -270,17 +284,22 @@ pub struct SpecArgs {
     #[arg(long = "numerator-grouping", short = 'G', value_enum)]
     pub numerator_aware_isomorphism_grouping: Option<GroupingChoice>,
 
-    /// Grouping attributes
+    /// Deterministic random seed used for numerical numerator comparisons.
     #[arg(long = "numerical-samples-seed")]
     pub numerical_samples_seed: Option<u16>,
+    /// Number of phase-space samples used to decide whether two numerators are equivalent.
     #[arg(long = "number-of-samples-for-numerator-comparisons")]
     pub number_of_samples_for_numerator_comparisons: Option<usize>,
+    /// Distinguish mass parameters while ignoring other model-parameter labels during grouping.
     #[arg(long = "consider-internal-masses-only-in-numerator-isomorphisms")]
     pub consider_internal_masses_only_in_numerator_isomorphisms: Option<bool>,
+    /// Numerically substitute every parameter when comparing candidate numerator isomorphisms.
     #[arg(long = "fully-numerical-substitution-when-comparing-numerators")]
     pub fully_numerical_substitution_when_comparing_numerators: Option<bool>,
+    /// Compare canonicalized numerators in addition to graph topology when grouping.
     #[arg(long = "compare-canonized-numerator")]
     pub compare_canonized_numerator: Option<bool>,
+    /// Treat left- and right-side polarization factors symmetrically during numerator grouping.
     #[arg(long = "symmetric-left-right-polarizations")]
     pub symmetric_left_right_polarizations: Option<bool>,
 
@@ -292,11 +311,13 @@ pub struct SpecArgs {
     ///   --veto-graphs "GL_11 GL_15"
     #[arg(long = "loop-momentum-bases", value_name = "KEY=VALUE", num_args = 0.., value_parser = KvPair::from_str)]
     pub loop_momentum_bases: Option<Vec<KvPair>>,
+    /// Generate only graphs whose names appear in this allow-list.
     #[arg(long = "select-graphs", num_args = 0..)]
     pub select_graphs: Option<Vec<String>>,
+    /// Exclude graphs whose names appear in this deny-list.
     #[arg(long = "veto-graphs", num_args = 0..)]
     pub veto_graphs: Option<Vec<String>>,
-    /// Graph name prefix
+    /// Prefix assigned to generated graph names; defaults to `GL`
     #[arg(long = "graph-prefix", short = 'g')]
     pub graph_prefix: Option<String>,
 
@@ -324,10 +345,11 @@ pub struct SpecArgs {
     )]
     pub max_multiplicity_for_fast_cut_filter: usize,
 
-    /// Filter self-loop (explicit; default false)
+    /// Filter graph-theoretic self-loops explicitly; omission keeps them.
     #[arg(long = "filter-self-loop")]
     pub filter_self_loop: Option<bool>,
 
+    /// Filter edges that carry zero momentum flow in the selected routing.
     #[arg(long = "filter-zero-flow-edges")]
     pub filter_zero_flow_edges: Option<bool>,
 }
@@ -851,7 +873,7 @@ pub struct ProcessArgs {
     )]
     pub process: Option<ProcessRef>,
 
-    /// Optional human name
+    /// Optional human-readable integrand name used to disambiguate the process
     #[arg(
         long = "integrand-name",
         short = 'i',

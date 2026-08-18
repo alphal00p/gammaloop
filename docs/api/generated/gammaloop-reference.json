@@ -574,7 +574,7 @@
       "path": "gammaLoop display",
       "name": "display",
       "usage": "Usage: gammaLoop display <COMMAND>",
-      "about": "",
+      "about": "Inspect models, processes, integrands, settings, and named session data",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -615,7 +615,7 @@
       "path": "gammaLoop display model",
       "name": "model",
       "usage": "Usage: gammaLoop display model [OPTIONS]",
-      "about": "",
+      "about": "Show model particles, parameters, couplings, and vertices for the selected context",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -635,7 +635,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Include the model's coupling-order definitions and coupling values",
           "required": false,
           "positional": false,
           "index": null,
@@ -665,7 +665,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Include interaction vertices from the active model",
           "required": false,
           "positional": false,
           "index": null,
@@ -695,7 +695,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Include external and derived model parameters",
           "required": false,
           "positional": false,
           "index": null,
@@ -725,7 +725,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Include the model's particle definitions",
           "required": false,
           "positional": false,
           "index": null,
@@ -755,7 +755,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Include particles, parameters, couplings, and vertices in one report",
           "required": false,
           "positional": false,
           "index": null,
@@ -866,7 +866,7 @@
       "path": "gammaLoop display processes",
       "name": "processes",
       "usage": "Usage: gammaLoop display processes",
-      "about": "",
+      "about": "List processes currently stored in the active state",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -907,7 +907,7 @@
       "path": "gammaLoop display integrand",
       "name": "integrand",
       "usage": "Usage: gammaLoop display integrand [OPTIONS]",
-      "about": "",
+      "about": "Show generated integrands, graph groups, resources, and selected detail tables",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -1103,7 +1103,7 @@
       "path": "gammaLoop display quantities",
       "name": "quantities",
       "usage": "Usage: gammaLoop display quantities [OPTIONS] [NAME]",
-      "about": "",
+      "about": "List configured named quantities, or inspect one quantity in a selected process",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -1155,7 +1155,7 @@
           "value_names": [
             "INTEGRAND_NAME"
           ],
-          "help": "Optional human name",
+          "help": "Optional human-readable integrand name used to disambiguate the process",
           "required": false,
           "positional": false,
           "index": null,
@@ -1185,7 +1185,7 @@
           "value_names": [
             "NAME"
           ],
-          "help": "",
+          "help": "Named quantity, observable, or selector; omit it to list the selected category",
           "required": false,
           "positional": true,
           "index": 1,
@@ -1234,7 +1234,7 @@
       "path": "gammaLoop display observables",
       "name": "observables",
       "usage": "Usage: gammaLoop display observables [OPTIONS] [NAME]",
-      "about": "",
+      "about": "List configured observables, or inspect one observable in a selected process",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -1286,7 +1286,7 @@
           "value_names": [
             "INTEGRAND_NAME"
           ],
-          "help": "Optional human name",
+          "help": "Optional human-readable integrand name used to disambiguate the process",
           "required": false,
           "positional": false,
           "index": null,
@@ -1316,7 +1316,7 @@
           "value_names": [
             "NAME"
           ],
-          "help": "",
+          "help": "Named quantity, observable, or selector; omit it to list the selected category",
           "required": false,
           "positional": true,
           "index": 1,
@@ -1365,7 +1365,7 @@
       "path": "gammaLoop display selectors",
       "name": "selectors",
       "usage": "Usage: gammaLoop display selectors [OPTIONS] [NAME]",
-      "about": "",
+      "about": "List configured event selectors, or inspect one selector in a selected process",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -1417,7 +1417,7 @@
           "value_names": [
             "INTEGRAND_NAME"
           ],
-          "help": "Optional human name",
+          "help": "Optional human-readable integrand name used to disambiguate the process",
           "required": false,
           "positional": false,
           "index": null,
@@ -1447,7 +1447,7 @@
           "value_names": [
             "NAME"
           ],
-          "help": "",
+          "help": "Named quantity, observable, or selector; omit it to list the selected category",
           "required": false,
           "positional": true,
           "index": 1,
@@ -1496,7 +1496,7 @@
       "path": "gammaLoop display command_block",
       "name": "command_block",
       "usage": "Usage: gammaLoop display command_block [NAME]",
-      "about": "",
+      "about": "Show one stored command block, or list every block when no name is supplied",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -1518,7 +1518,7 @@
           "value_names": [
             "NAME"
           ],
-          "help": "",
+          "help": "Stored command-block name; omit it to list all available blocks",
           "required": false,
           "positional": true,
           "index": 1,
@@ -1567,7 +1567,7 @@
       "path": "gammaLoop display settings",
       "name": "settings",
       "usage": "Usage: gammaLoop display settings <COMMAND>",
-      "about": "",
+      "about": "Show effective global, default-runtime, or process-specific settings",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -1608,7 +1608,7 @@
       "path": "gammaLoop display settings global",
       "name": "global",
       "usage": "Usage: gammaLoop display settings global [PATH]",
-      "about": "",
+      "about": "Show effective global generation, logging, and parallelization settings",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -1679,7 +1679,7 @@
       "path": "gammaLoop display settings default-runtime",
       "name": "default-runtime",
       "usage": "Usage: gammaLoop display settings default-runtime [PATH]",
-      "about": "",
+      "about": "Show the default runtime settings inherited by newly generated integrands",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -1756,7 +1756,7 @@
       "path": "gammaLoop display settings process",
       "name": "process",
       "usage": "Usage: gammaLoop display settings process [OPTIONS] [PATH]",
-      "about": "",
+      "about": "Show effective settings for one generated process or integrand",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -1808,7 +1808,7 @@
           "value_names": [
             "INTEGRAND_NAME"
           ],
-          "help": "Optional human name",
+          "help": "Optional human-readable integrand name used to disambiguate the process",
           "required": false,
           "positional": false,
           "index": null,
@@ -1899,7 +1899,7 @@
       "path": "gammaLoop display settings help global",
       "name": "global",
       "usage": "Usage: gammaLoop display settings help global",
-      "about": "",
+      "about": "Show effective global generation, logging, and parallelization settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -1911,7 +1911,7 @@
       "path": "gammaLoop display settings help default-runtime",
       "name": "default-runtime",
       "usage": "Usage: gammaLoop display settings help default-runtime",
-      "about": "",
+      "about": "Show the default runtime settings inherited by newly generated integrands",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -1923,7 +1923,7 @@
       "path": "gammaLoop display settings help process",
       "name": "process",
       "usage": "Usage: gammaLoop display settings help process",
-      "about": "",
+      "about": "Show effective settings for one generated process or integrand",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -1959,7 +1959,7 @@
       "path": "gammaLoop display help model",
       "name": "model",
       "usage": "Usage: gammaLoop display help model",
-      "about": "",
+      "about": "Show model particles, parameters, couplings, and vertices for the selected context",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -1971,7 +1971,7 @@
       "path": "gammaLoop display help processes",
       "name": "processes",
       "usage": "Usage: gammaLoop display help processes",
-      "about": "",
+      "about": "List processes currently stored in the active state",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -1983,7 +1983,7 @@
       "path": "gammaLoop display help integrand",
       "name": "integrand",
       "usage": "Usage: gammaLoop display help integrand",
-      "about": "",
+      "about": "Show generated integrands, graph groups, resources, and selected detail tables",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -1995,7 +1995,7 @@
       "path": "gammaLoop display help quantities",
       "name": "quantities",
       "usage": "Usage: gammaLoop display help quantities",
-      "about": "",
+      "about": "List configured named quantities, or inspect one quantity in a selected process",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -2007,7 +2007,7 @@
       "path": "gammaLoop display help observables",
       "name": "observables",
       "usage": "Usage: gammaLoop display help observables",
-      "about": "",
+      "about": "List configured observables, or inspect one observable in a selected process",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -2019,7 +2019,7 @@
       "path": "gammaLoop display help selectors",
       "name": "selectors",
       "usage": "Usage: gammaLoop display help selectors",
-      "about": "",
+      "about": "List configured event selectors, or inspect one selector in a selected process",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -2031,7 +2031,7 @@
       "path": "gammaLoop display help command_block",
       "name": "command_block",
       "usage": "Usage: gammaLoop display help command_block",
-      "about": "",
+      "about": "Show one stored command block, or list every block when no name is supplied",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -2043,7 +2043,7 @@
       "path": "gammaLoop display help settings",
       "name": "settings",
       "usage": "Usage: gammaLoop display help settings [COMMAND]",
-      "about": "",
+      "about": "Show effective global, default-runtime, or process-specific settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -2055,7 +2055,7 @@
       "path": "gammaLoop display help settings global",
       "name": "global",
       "usage": "Usage: gammaLoop display help settings global",
-      "about": "",
+      "about": "Show effective global generation, logging, and parallelization settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -2067,7 +2067,7 @@
       "path": "gammaLoop display help settings default-runtime",
       "name": "default-runtime",
       "usage": "Usage: gammaLoop display help settings default-runtime",
-      "about": "",
+      "about": "Show the default runtime settings inherited by newly generated integrands",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -2079,7 +2079,7 @@
       "path": "gammaLoop display help settings process",
       "name": "process",
       "usage": "Usage: gammaLoop display help settings process",
-      "about": "",
+      "about": "Show effective settings for one generated process or integrand",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -2103,7 +2103,7 @@
       "path": "gammaLoop duplicate",
       "name": "duplicate",
       "usage": "Usage: gammaLoop duplicate <COMMAND>",
-      "about": "",
+      "about": "Copy generated data to a new process or integrand name",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -2144,7 +2144,7 @@
       "path": "gammaLoop duplicate integrand",
       "name": "integrand",
       "usage": "Usage: gammaLoop duplicate integrand [OPTIONS] --output_process_name <NAME> --output_integrand_name <NAME>",
-      "about": "",
+      "about": "Copy one generated integrand and its process context under new names",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -2317,7 +2317,7 @@
       "path": "gammaLoop duplicate help integrand",
       "name": "integrand",
       "usage": "Usage: gammaLoop duplicate help integrand",
-      "about": "",
+      "about": "Copy one generated integrand and its process context under new names",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -2341,7 +2341,7 @@
       "path": "gammaLoop set",
       "name": "set",
       "usage": "Usage: gammaLoop set <COMMAND>",
-      "about": "",
+      "about": "Change global, runtime, model, or process settings",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -2404,7 +2404,7 @@
           "value_names": [
             "PATH"
           ],
-          "help": "",
+          "help": "Directory used to resolve relative state and log paths",
           "required": true,
           "positional": true,
           "index": 1,
@@ -2453,7 +2453,7 @@
       "path": "gammaLoop set global",
       "name": "global",
       "usage": "Usage: gammaLoop set global <COMMAND>",
-      "about": "Set GLOBAL settings",
+      "about": "Change global generation, logging, and parallelism settings",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -2494,7 +2494,7 @@
       "path": "gammaLoop set global file",
       "name": "file",
       "usage": "Usage: gammaLoop set global file <FILE>",
-      "about": "Load from a settings file",
+      "about": "Merge a TOML file into the current global or default-runtime settings",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -2516,7 +2516,7 @@
           "value_names": [
             "FILE"
           ],
-          "help": "",
+          "help": "TOML settings file merged into the current global or default-runtime settings",
           "required": true,
           "positional": true,
           "index": 1,
@@ -2587,7 +2587,7 @@
           "value_names": [
             "TOML"
           ],
-          "help": "",
+          "help": "Inline TOML document merged into the current global or default-runtime settings",
           "required": true,
           "positional": true,
           "index": 1,
@@ -2636,7 +2636,7 @@
       "path": "gammaLoop set global kv",
       "name": "kv",
       "usage": "Usage: gammaLoop set global kv [KEY=VALUE]...",
-      "about": "Set one or more dotted key-paths",
+      "about": "Merge one or more dotted `KEY=VALUE` assignments into the current settings",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -2748,7 +2748,7 @@
       "path": "gammaLoop set global stored",
       "name": "stored",
       "usage": "Usage: gammaLoop set global stored",
-      "about": "Use the stored settings file",
+      "about": "Reload the corresponding settings from the active state's stored file",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -2801,7 +2801,7 @@
       "path": "gammaLoop set global help file",
       "name": "file",
       "usage": "Usage: gammaLoop set global help file",
-      "about": "Load from a settings file",
+      "about": "Merge a TOML file into the current global or default-runtime settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -2825,7 +2825,7 @@
       "path": "gammaLoop set global help kv",
       "name": "kv",
       "usage": "Usage: gammaLoop set global help kv",
-      "about": "Set one or more dotted key-paths",
+      "about": "Merge one or more dotted `KEY=VALUE` assignments into the current settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -2849,7 +2849,7 @@
       "path": "gammaLoop set global help stored",
       "name": "stored",
       "usage": "Usage: gammaLoop set global help stored",
-      "about": "Use the stored settings file",
+      "about": "Reload the corresponding settings from the active state's stored file",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -2873,7 +2873,7 @@
       "path": "gammaLoop set default-runtime",
       "name": "default-runtime",
       "usage": "Usage: gammaLoop set default-runtime <COMMAND>",
-      "about": "Set DEFAULT RUNTIME settings",
+      "about": "Change the runtime settings inherited by newly generated integrands",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -2914,7 +2914,7 @@
       "path": "gammaLoop set default-runtime file",
       "name": "file",
       "usage": "Usage: gammaLoop set default-runtime file <FILE>",
-      "about": "Load from a settings file",
+      "about": "Merge a TOML file into the current global or default-runtime settings",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -2936,7 +2936,7 @@
           "value_names": [
             "FILE"
           ],
-          "help": "",
+          "help": "TOML settings file merged into the current global or default-runtime settings",
           "required": true,
           "positional": true,
           "index": 1,
@@ -3007,7 +3007,7 @@
           "value_names": [
             "TOML"
           ],
-          "help": "",
+          "help": "Inline TOML document merged into the current global or default-runtime settings",
           "required": true,
           "positional": true,
           "index": 1,
@@ -3056,7 +3056,7 @@
       "path": "gammaLoop set default-runtime kv",
       "name": "kv",
       "usage": "Usage: gammaLoop set default-runtime kv [KEY=VALUE]...",
-      "about": "Set one or more dotted key-paths",
+      "about": "Merge one or more dotted `KEY=VALUE` assignments into the current settings",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -3168,7 +3168,7 @@
       "path": "gammaLoop set default-runtime stored",
       "name": "stored",
       "usage": "Usage: gammaLoop set default-runtime stored",
-      "about": "Use the stored settings file",
+      "about": "Reload the corresponding settings from the active state's stored file",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -3221,7 +3221,7 @@
       "path": "gammaLoop set default-runtime help file",
       "name": "file",
       "usage": "Usage: gammaLoop set default-runtime help file",
-      "about": "Load from a settings file",
+      "about": "Merge a TOML file into the current global or default-runtime settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -3245,7 +3245,7 @@
       "path": "gammaLoop set default-runtime help kv",
       "name": "kv",
       "usage": "Usage: gammaLoop set default-runtime help kv",
-      "about": "Set one or more dotted key-paths",
+      "about": "Merge one or more dotted `KEY=VALUE` assignments into the current settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -3269,7 +3269,7 @@
       "path": "gammaLoop set default-runtime help stored",
       "name": "stored",
       "usage": "Usage: gammaLoop set default-runtime help stored",
-      "about": "Use the stored settings file",
+      "about": "Reload the corresponding settings from the active state's stored file",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -3293,7 +3293,7 @@
       "path": "gammaLoop set model",
       "name": "model",
       "usage": "Usage: gammaLoop set model [OPTIONS] [defaults|PARAM=COMPLEX]...",
-      "about": "Set Model parameters",
+      "about": "Assign model parameters in the selected context or reset them to defaults",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -3345,7 +3345,7 @@
           "value_names": [
             "INTEGRAND_NAME"
           ],
-          "help": "Optional human name",
+          "help": "Optional human-readable integrand name used to disambiguate the process",
           "required": false,
           "positional": false,
           "index": null,
@@ -3424,7 +3424,7 @@
       "path": "gammaLoop set process",
       "name": "process",
       "usage": "Usage: gammaLoop set process [OPTIONS] <COMMAND>",
-      "about": "Set settings for a PROCESS",
+      "about": "Change runtime settings or named analysis objects for one process or integrand",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -3476,7 +3476,7 @@
           "value_names": [
             "INTEGRAND_NAME"
           ],
-          "help": "Optional human name",
+          "help": "Optional human-readable integrand name used to disambiguate the process",
           "required": false,
           "positional": false,
           "index": null,
@@ -3525,7 +3525,7 @@
       "path": "gammaLoop set process file",
       "name": "file",
       "usage": "Usage: gammaLoop set process file <FILE>",
-      "about": "Load from a settings file",
+      "about": "Merge a TOML file into the selected process or integrand settings",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -3547,7 +3547,7 @@
           "value_names": [
             "FILE"
           ],
-          "help": "",
+          "help": "TOML settings file merged into the selected process or integrand settings",
           "required": true,
           "positional": true,
           "index": 1,
@@ -3618,7 +3618,7 @@
           "value_names": [
             "TOML"
           ],
-          "help": "",
+          "help": "Inline TOML document merged into the selected process or integrand settings",
           "required": true,
           "positional": true,
           "index": 1,
@@ -3667,7 +3667,7 @@
       "path": "gammaLoop set process kv",
       "name": "kv",
       "usage": "Usage: gammaLoop set process kv [KEY=VALUE]...",
-      "about": "Set one or more dotted key-paths",
+      "about": "Merge one or more dotted `KEY=VALUE` assignments into the selected settings",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -3779,7 +3779,7 @@
       "path": "gammaLoop set process stored",
       "name": "stored",
       "usage": "Usage: gammaLoop set process stored",
-      "about": "Use the stored settings file",
+      "about": "Reload the selected process or integrand settings from its stored file",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -3861,7 +3861,7 @@
       "path": "gammaLoop set process add quantity",
       "name": "quantity",
       "usage": "Usage: gammaLoop set process add quantity <NAME> <KIND> [KEY=VALUE]...",
-      "about": "",
+      "about": "Add a named derived quantity to the selected process settings",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -3883,7 +3883,7 @@
           "value_names": [
             "NAME"
           ],
-          "help": "",
+          "help": "Unique name used to reference the quantity from expressions and observables",
           "required": true,
           "positional": true,
           "index": 1,
@@ -3913,7 +3913,7 @@
           "value_names": [
             "KIND"
           ],
-          "help": "",
+          "help": "Registered quantity implementation to instantiate",
           "required": true,
           "positional": true,
           "index": 2,
@@ -3943,7 +3943,7 @@
           "value_names": [
             "KEY=VALUE"
           ],
-          "help": "",
+          "help": "Initial quantity settings as dotted `KEY=VALUE` assignments",
           "required": false,
           "positional": true,
           "index": 3,
@@ -3992,7 +3992,7 @@
       "path": "gammaLoop set process add observable",
       "name": "observable",
       "usage": "Usage: gammaLoop set process add observable <NAME> [KEY=VALUE]...",
-      "about": "",
+      "about": "Add a named observable to the selected process settings",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -4014,7 +4014,7 @@
           "value_names": [
             "NAME"
           ],
-          "help": "",
+          "help": "Unique name used for the observable and its output files",
           "required": true,
           "positional": true,
           "index": 1,
@@ -4044,7 +4044,7 @@
           "value_names": [
             "KEY=VALUE"
           ],
-          "help": "",
+          "help": "Initial observable settings as dotted `KEY=VALUE` assignments, including its type",
           "required": false,
           "positional": true,
           "index": 2,
@@ -4093,7 +4093,7 @@
       "path": "gammaLoop set process add selector",
       "name": "selector",
       "usage": "Usage: gammaLoop set process add selector <NAME> <KIND> [KEY=VALUE]...",
-      "about": "",
+      "about": "Add a named event selector to the selected process settings",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -4115,7 +4115,7 @@
           "value_names": [
             "NAME"
           ],
-          "help": "",
+          "help": "Unique name used to identify the selector in diagnostics",
           "required": true,
           "positional": true,
           "index": 1,
@@ -4145,7 +4145,7 @@
           "value_names": [
             "KIND"
           ],
-          "help": "",
+          "help": "Registered selector implementation to instantiate",
           "required": true,
           "positional": true,
           "index": 2,
@@ -4175,7 +4175,7 @@
           "value_names": [
             "KEY=VALUE"
           ],
-          "help": "",
+          "help": "Initial selector settings as dotted `KEY=VALUE` assignments",
           "required": false,
           "positional": true,
           "index": 3,
@@ -4236,7 +4236,7 @@
       "path": "gammaLoop set process add help quantity",
       "name": "quantity",
       "usage": "Usage: gammaLoop set process add help quantity",
-      "about": "",
+      "about": "Add a named derived quantity to the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -4248,7 +4248,7 @@
       "path": "gammaLoop set process add help observable",
       "name": "observable",
       "usage": "Usage: gammaLoop set process add help observable",
-      "about": "",
+      "about": "Add a named observable to the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -4260,7 +4260,7 @@
       "path": "gammaLoop set process add help selector",
       "name": "selector",
       "usage": "Usage: gammaLoop set process add help selector",
-      "about": "",
+      "about": "Add a named event selector to the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -4325,7 +4325,7 @@
       "path": "gammaLoop set process update quantity",
       "name": "quantity",
       "usage": "Usage: gammaLoop set process update quantity <NAME> [KEY=VALUE]...",
-      "about": "",
+      "about": "Update fields of an existing named quantity",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -4347,7 +4347,7 @@
           "value_names": [
             "NAME"
           ],
-          "help": "",
+          "help": "Name of the quantity to update",
           "required": true,
           "positional": true,
           "index": 1,
@@ -4377,7 +4377,7 @@
           "value_names": [
             "KEY=VALUE"
           ],
-          "help": "",
+          "help": "One or more dotted quantity-setting assignments",
           "required": false,
           "positional": true,
           "index": 2,
@@ -4426,7 +4426,7 @@
       "path": "gammaLoop set process update observable",
       "name": "observable",
       "usage": "Usage: gammaLoop set process update observable <NAME> [KEY=VALUE]...",
-      "about": "",
+      "about": "Update fields of an existing named observable",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -4448,7 +4448,7 @@
           "value_names": [
             "NAME"
           ],
-          "help": "",
+          "help": "Name of the observable to update",
           "required": true,
           "positional": true,
           "index": 1,
@@ -4478,7 +4478,7 @@
           "value_names": [
             "KEY=VALUE"
           ],
-          "help": "",
+          "help": "One or more dotted observable-setting assignments",
           "required": false,
           "positional": true,
           "index": 2,
@@ -4527,7 +4527,7 @@
       "path": "gammaLoop set process update selector",
       "name": "selector",
       "usage": "Usage: gammaLoop set process update selector <NAME> [KEY=VALUE]...",
-      "about": "",
+      "about": "Update fields of an existing named selector",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -4549,7 +4549,7 @@
           "value_names": [
             "NAME"
           ],
-          "help": "",
+          "help": "Name of the selector to update",
           "required": true,
           "positional": true,
           "index": 1,
@@ -4579,7 +4579,7 @@
           "value_names": [
             "KEY=VALUE"
           ],
-          "help": "",
+          "help": "One or more dotted selector-setting assignments",
           "required": false,
           "positional": true,
           "index": 2,
@@ -4640,7 +4640,7 @@
       "path": "gammaLoop set process update help quantity",
       "name": "quantity",
       "usage": "Usage: gammaLoop set process update help quantity",
-      "about": "",
+      "about": "Update fields of an existing named quantity",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -4652,7 +4652,7 @@
       "path": "gammaLoop set process update help observable",
       "name": "observable",
       "usage": "Usage: gammaLoop set process update help observable",
-      "about": "",
+      "about": "Update fields of an existing named observable",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -4664,7 +4664,7 @@
       "path": "gammaLoop set process update help selector",
       "name": "selector",
       "usage": "Usage: gammaLoop set process update help selector",
-      "about": "",
+      "about": "Update fields of an existing named selector",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -4729,7 +4729,7 @@
       "path": "gammaLoop set process remove quantity",
       "name": "quantity",
       "usage": "Usage: gammaLoop set process remove quantity <NAME>",
-      "about": "",
+      "about": "Remove a named quantity from the selected process settings",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -4751,7 +4751,7 @@
           "value_names": [
             "NAME"
           ],
-          "help": "",
+          "help": "Name of the quantity to remove",
           "required": true,
           "positional": true,
           "index": 1,
@@ -4800,7 +4800,7 @@
       "path": "gammaLoop set process remove observable",
       "name": "observable",
       "usage": "Usage: gammaLoop set process remove observable <NAME>",
-      "about": "",
+      "about": "Remove a named observable from the selected process settings",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -4822,7 +4822,7 @@
           "value_names": [
             "NAME"
           ],
-          "help": "",
+          "help": "Name of the observable to remove",
           "required": true,
           "positional": true,
           "index": 1,
@@ -4871,7 +4871,7 @@
       "path": "gammaLoop set process remove selector",
       "name": "selector",
       "usage": "Usage: gammaLoop set process remove selector <NAME>",
-      "about": "",
+      "about": "Remove a named selector from the selected process settings",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -4893,7 +4893,7 @@
           "value_names": [
             "NAME"
           ],
-          "help": "",
+          "help": "Name of the selector to remove",
           "required": true,
           "positional": true,
           "index": 1,
@@ -4954,7 +4954,7 @@
       "path": "gammaLoop set process remove help quantity",
       "name": "quantity",
       "usage": "Usage: gammaLoop set process remove help quantity",
-      "about": "",
+      "about": "Remove a named quantity from the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -4966,7 +4966,7 @@
       "path": "gammaLoop set process remove help observable",
       "name": "observable",
       "usage": "Usage: gammaLoop set process remove help observable",
-      "about": "",
+      "about": "Remove a named observable from the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -4978,7 +4978,7 @@
       "path": "gammaLoop set process remove help selector",
       "name": "selector",
       "usage": "Usage: gammaLoop set process remove help selector",
-      "about": "",
+      "about": "Remove a named selector from the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5014,7 +5014,7 @@
       "path": "gammaLoop set process help file",
       "name": "file",
       "usage": "Usage: gammaLoop set process help file",
-      "about": "Load from a settings file",
+      "about": "Merge a TOML file into the selected process or integrand settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5038,7 +5038,7 @@
       "path": "gammaLoop set process help kv",
       "name": "kv",
       "usage": "Usage: gammaLoop set process help kv",
-      "about": "Set one or more dotted key-paths",
+      "about": "Merge one or more dotted `KEY=VALUE` assignments into the selected settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5062,7 +5062,7 @@
       "path": "gammaLoop set process help stored",
       "name": "stored",
       "usage": "Usage: gammaLoop set process help stored",
-      "about": "Use the stored settings file",
+      "about": "Reload the selected process or integrand settings from its stored file",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5086,7 +5086,7 @@
       "path": "gammaLoop set process help add quantity",
       "name": "quantity",
       "usage": "Usage: gammaLoop set process help add quantity",
-      "about": "",
+      "about": "Add a named derived quantity to the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5098,7 +5098,7 @@
       "path": "gammaLoop set process help add observable",
       "name": "observable",
       "usage": "Usage: gammaLoop set process help add observable",
-      "about": "",
+      "about": "Add a named observable to the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5110,7 +5110,7 @@
       "path": "gammaLoop set process help add selector",
       "name": "selector",
       "usage": "Usage: gammaLoop set process help add selector",
-      "about": "",
+      "about": "Add a named event selector to the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5134,7 +5134,7 @@
       "path": "gammaLoop set process help update quantity",
       "name": "quantity",
       "usage": "Usage: gammaLoop set process help update quantity",
-      "about": "",
+      "about": "Update fields of an existing named quantity",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5146,7 +5146,7 @@
       "path": "gammaLoop set process help update observable",
       "name": "observable",
       "usage": "Usage: gammaLoop set process help update observable",
-      "about": "",
+      "about": "Update fields of an existing named observable",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5158,7 +5158,7 @@
       "path": "gammaLoop set process help update selector",
       "name": "selector",
       "usage": "Usage: gammaLoop set process help update selector",
-      "about": "",
+      "about": "Update fields of an existing named selector",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5182,7 +5182,7 @@
       "path": "gammaLoop set process help remove quantity",
       "name": "quantity",
       "usage": "Usage: gammaLoop set process help remove quantity",
-      "about": "",
+      "about": "Remove a named quantity from the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5194,7 +5194,7 @@
       "path": "gammaLoop set process help remove observable",
       "name": "observable",
       "usage": "Usage: gammaLoop set process help remove observable",
-      "about": "",
+      "about": "Remove a named observable from the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5206,7 +5206,7 @@
       "path": "gammaLoop set process help remove selector",
       "name": "selector",
       "usage": "Usage: gammaLoop set process help remove selector",
-      "about": "",
+      "about": "Remove a named selector from the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5254,7 +5254,7 @@
       "path": "gammaLoop set help global",
       "name": "global",
       "usage": "Usage: gammaLoop set help global [COMMAND]",
-      "about": "Set GLOBAL settings",
+      "about": "Change global generation, logging, and parallelism settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5266,7 +5266,7 @@
       "path": "gammaLoop set help global file",
       "name": "file",
       "usage": "Usage: gammaLoop set help global file",
-      "about": "Load from a settings file",
+      "about": "Merge a TOML file into the current global or default-runtime settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5290,7 +5290,7 @@
       "path": "gammaLoop set help global kv",
       "name": "kv",
       "usage": "Usage: gammaLoop set help global kv",
-      "about": "Set one or more dotted key-paths",
+      "about": "Merge one or more dotted `KEY=VALUE` assignments into the current settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5314,7 +5314,7 @@
       "path": "gammaLoop set help global stored",
       "name": "stored",
       "usage": "Usage: gammaLoop set help global stored",
-      "about": "Use the stored settings file",
+      "about": "Reload the corresponding settings from the active state's stored file",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5326,7 +5326,7 @@
       "path": "gammaLoop set help default-runtime",
       "name": "default-runtime",
       "usage": "Usage: gammaLoop set help default-runtime [COMMAND]",
-      "about": "Set DEFAULT RUNTIME settings",
+      "about": "Change the runtime settings inherited by newly generated integrands",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5338,7 +5338,7 @@
       "path": "gammaLoop set help default-runtime file",
       "name": "file",
       "usage": "Usage: gammaLoop set help default-runtime file",
-      "about": "Load from a settings file",
+      "about": "Merge a TOML file into the current global or default-runtime settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5362,7 +5362,7 @@
       "path": "gammaLoop set help default-runtime kv",
       "name": "kv",
       "usage": "Usage: gammaLoop set help default-runtime kv",
-      "about": "Set one or more dotted key-paths",
+      "about": "Merge one or more dotted `KEY=VALUE` assignments into the current settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5386,7 +5386,7 @@
       "path": "gammaLoop set help default-runtime stored",
       "name": "stored",
       "usage": "Usage: gammaLoop set help default-runtime stored",
-      "about": "Use the stored settings file",
+      "about": "Reload the corresponding settings from the active state's stored file",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5398,7 +5398,7 @@
       "path": "gammaLoop set help model",
       "name": "model",
       "usage": "Usage: gammaLoop set help model",
-      "about": "Set Model parameters",
+      "about": "Assign model parameters in the selected context or reset them to defaults",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5410,7 +5410,7 @@
       "path": "gammaLoop set help process",
       "name": "process",
       "usage": "Usage: gammaLoop set help process [COMMAND]",
-      "about": "Set settings for a PROCESS",
+      "about": "Change runtime settings or named analysis objects for one process or integrand",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5422,7 +5422,7 @@
       "path": "gammaLoop set help process file",
       "name": "file",
       "usage": "Usage: gammaLoop set help process file",
-      "about": "Load from a settings file",
+      "about": "Merge a TOML file into the selected process or integrand settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5446,7 +5446,7 @@
       "path": "gammaLoop set help process kv",
       "name": "kv",
       "usage": "Usage: gammaLoop set help process kv",
-      "about": "Set one or more dotted key-paths",
+      "about": "Merge one or more dotted `KEY=VALUE` assignments into the selected settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5470,7 +5470,7 @@
       "path": "gammaLoop set help process stored",
       "name": "stored",
       "usage": "Usage: gammaLoop set help process stored",
-      "about": "Use the stored settings file",
+      "about": "Reload the selected process or integrand settings from its stored file",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5494,7 +5494,7 @@
       "path": "gammaLoop set help process add quantity",
       "name": "quantity",
       "usage": "Usage: gammaLoop set help process add quantity",
-      "about": "",
+      "about": "Add a named derived quantity to the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5506,7 +5506,7 @@
       "path": "gammaLoop set help process add observable",
       "name": "observable",
       "usage": "Usage: gammaLoop set help process add observable",
-      "about": "",
+      "about": "Add a named observable to the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5518,7 +5518,7 @@
       "path": "gammaLoop set help process add selector",
       "name": "selector",
       "usage": "Usage: gammaLoop set help process add selector",
-      "about": "",
+      "about": "Add a named event selector to the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5542,7 +5542,7 @@
       "path": "gammaLoop set help process update quantity",
       "name": "quantity",
       "usage": "Usage: gammaLoop set help process update quantity",
-      "about": "",
+      "about": "Update fields of an existing named quantity",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5554,7 +5554,7 @@
       "path": "gammaLoop set help process update observable",
       "name": "observable",
       "usage": "Usage: gammaLoop set help process update observable",
-      "about": "",
+      "about": "Update fields of an existing named observable",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5566,7 +5566,7 @@
       "path": "gammaLoop set help process update selector",
       "name": "selector",
       "usage": "Usage: gammaLoop set help process update selector",
-      "about": "",
+      "about": "Update fields of an existing named selector",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5590,7 +5590,7 @@
       "path": "gammaLoop set help process remove quantity",
       "name": "quantity",
       "usage": "Usage: gammaLoop set help process remove quantity",
-      "about": "",
+      "about": "Remove a named quantity from the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5602,7 +5602,7 @@
       "path": "gammaLoop set help process remove observable",
       "name": "observable",
       "usage": "Usage: gammaLoop set help process remove observable",
-      "about": "",
+      "about": "Remove a named observable from the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5614,7 +5614,7 @@
       "path": "gammaLoop set help process remove selector",
       "name": "selector",
       "usage": "Usage: gammaLoop set help process remove selector",
-      "about": "",
+      "about": "Remove a named selector from the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -5638,7 +5638,7 @@
       "path": "gammaLoop import",
       "name": "import",
       "usage": "Usage: gammaLoop import <COMMAND>",
-      "about": "",
+      "about": "Import models or previously generated graphs into the active state",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -5679,7 +5679,7 @@
       "path": "gammaLoop import model",
       "name": "model",
       "usage": "Usage: gammaLoop import model [OPTIONS] <PATH>",
-      "about": "Generate integrands",
+      "about": "Load a UFO model and make it the active model for subsequent generation",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -5701,7 +5701,7 @@
           "value_names": [
             "PATH"
           ],
-          "help": "",
+          "help": "Built-in model name, JSON model path, or UFO directory to import",
           "required": true,
           "positional": true,
           "index": 1,
@@ -5731,7 +5731,7 @@
           "value_names": [
             "SIMPLIFY_MODEL"
           ],
-          "help": "",
+          "help": "Simplify imported model expressions before storing the active model",
           "required": false,
           "positional": false,
           "index": null,
@@ -5785,7 +5785,7 @@
       "path": "gammaLoop import graphs",
       "name": "graphs",
       "usage": "Usage: gammaLoop import graphs [OPTIONS] <PATH>",
-      "about": "",
+      "about": "Load serialized graph data into a new or existing process",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -5807,7 +5807,7 @@
           "value_names": [
             "PATH"
           ],
-          "help": "",
+          "help": "Graph file to load, resolved against the active state root and current directory",
           "required": true,
           "positional": true,
           "index": 1,
@@ -5867,7 +5867,7 @@
           "value_names": [
             "INTEGRAND_NAME"
           ],
-          "help": "",
+          "help": "Name assigned to the imported integrand",
           "required": false,
           "positional": false,
           "index": null,
@@ -5895,7 +5895,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Replace an existing process or integrand with the same target name",
           "required": false,
           "positional": false,
           "index": null,
@@ -5927,7 +5927,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Append imported graphs to the selected target instead of replacing it",
           "required": false,
           "positional": false,
           "index": null,
@@ -5992,7 +5992,7 @@
       "path": "gammaLoop import help model",
       "name": "model",
       "usage": "Usage: gammaLoop import help model",
-      "about": "Generate integrands",
+      "about": "Load a UFO model and make it the active model for subsequent generation",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -6004,7 +6004,7 @@
       "path": "gammaLoop import help graphs",
       "name": "graphs",
       "usage": "Usage: gammaLoop import help graphs",
-      "about": "",
+      "about": "Load serialized graph data into a new or existing process",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -6028,7 +6028,7 @@
       "path": "gammaLoop save",
       "name": "save",
       "usage": "Usage: gammaLoop save <COMMAND>",
-      "about": "",
+      "about": "Export graph data, standalone evaluators, schemas, or the current state",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -6069,7 +6069,7 @@
       "path": "gammaLoop save dot",
       "name": "dot",
       "usage": "Usage: gammaLoop save dot [OPTIONS] [PATH]",
-      "about": "",
+      "about": "Export generated graphs as DOT files and drawing templates",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -6091,7 +6091,7 @@
           "value_names": [
             "PATH"
           ],
-          "help": "",
+          "help": "Destination directory; defaults to the active state folder",
           "required": false,
           "positional": true,
           "index": 1,
@@ -6119,7 +6119,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Combine diagrams in one DOT output instead of writing one file per graph",
           "required": false,
           "positional": false,
           "index": null,
@@ -6151,7 +6151,7 @@
           "value_names": [
             "WITH_UV"
           ],
-          "help": "",
+          "help": "Include ultraviolet counterterm graphs in the exported drawing data",
           "required": false,
           "positional": false,
           "index": null,
@@ -6184,7 +6184,7 @@
           "value_names": [
             "OUTPUT_FULL_NUMERATOR"
           ],
-          "help": "",
+          "help": "Export the full numerator expression rather than the compact display form",
           "required": false,
           "positional": false,
           "index": null,
@@ -6217,7 +6217,7 @@
           "value_names": [
             "DO_GAMMA_ALGEBRA"
           ],
-          "help": "",
+          "help": "Simplify gamma-matrix algebra before formatting graph numerators",
           "required": false,
           "positional": false,
           "index": null,
@@ -6250,7 +6250,7 @@
           "value_names": [
             "DO_COLOR_ALGEBRA"
           ],
-          "help": "",
+          "help": "Simplify color algebra before formatting graph numerators",
           "required": false,
           "positional": false,
           "index": null,
@@ -6283,7 +6283,7 @@
           "value_names": [
             "SPLIT_XS_BY_INITIAL_STATES"
           ],
-          "help": "",
+          "help": "Write separate cross-section drawings for distinct initial-state assignments",
           "required": false,
           "positional": false,
           "index": null,
@@ -6316,7 +6316,7 @@
           "value_names": [
             "INCLUDE_AUTOGENERATED_FIELDS"
           ],
-          "help": "",
+          "help": "Include fields generated internally rather than supplied by the source graph",
           "required": false,
           "positional": false,
           "index": null,
@@ -6368,7 +6368,7 @@
       "path": "gammaLoop save uv-forest",
       "name": "uv-forest",
       "usage": "Usage: gammaLoop save uv-forest [OPTIONS] [PATH]",
-      "about": "",
+      "about": "Export the ultraviolet forest for selected generated graphs",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -6390,7 +6390,7 @@
           "value_names": [
             "PATH"
           ],
-          "help": "",
+          "help": "Destination directory; defaults to the active state folder",
           "required": false,
           "positional": true,
           "index": 1,
@@ -6450,7 +6450,7 @@
           "value_names": [
             "INTEGRAND_NAME"
           ],
-          "help": "Optional human name",
+          "help": "Optional human-readable integrand name used to disambiguate the process",
           "required": false,
           "positional": false,
           "index": null,
@@ -6480,7 +6480,7 @@
           "value_names": [
             "GRAPH"
           ],
-          "help": "",
+          "help": "Master graph names to export; repeat the option to select multiple graphs",
           "required": false,
           "positional": false,
           "index": null,
@@ -6508,7 +6508,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Export computed counterterm expressions in addition to the forest structure",
           "required": false,
           "positional": false,
           "index": null,
@@ -6559,7 +6559,7 @@
       "path": "gammaLoop save standalone",
       "name": "standalone",
       "usage": "Usage: gammaLoop save standalone [OPTIONS] [PATH]",
-      "about": "",
+      "about": "Export an integrand as a standalone evaluator or serialized data file",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -6581,7 +6581,7 @@
           "value_names": [
             "PATH"
           ],
-          "help": "",
+          "help": "Destination path for the exported project or data file",
           "required": false,
           "positional": true,
           "index": 1,
@@ -6609,7 +6609,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Generate a standalone Python evaluator project",
           "required": false,
           "positional": false,
           "index": null,
@@ -6641,7 +6641,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Generate a standalone Rust evaluator project",
           "required": false,
           "positional": false,
           "index": null,
@@ -6673,7 +6673,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Serialize evaluator data in the compact binary format",
           "required": false,
           "positional": false,
           "index": null,
@@ -6705,7 +6705,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Serialize evaluator data as human-readable JSON",
           "required": false,
           "positional": false,
           "index": null,
@@ -6737,7 +6737,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Include quad-precision evaluator support in generated source projects",
           "required": false,
           "positional": false,
           "index": null,
@@ -6769,7 +6769,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Include arbitrary-precision evaluator support in generated source projects",
           "required": false,
           "positional": false,
           "index": null,
@@ -6822,7 +6822,7 @@
       "path": "gammaLoop save state",
       "name": "state",
       "usage": "Usage: gammaLoop save state [OPTIONS]",
-      "about": "",
+      "about": "Persist the active state, settings, and replayable run history",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -6905,7 +6905,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Exit without writing state data, even when state saving is otherwise enabled",
           "required": false,
           "positional": false,
           "index": null,
@@ -6970,7 +6970,7 @@
           "value_names": [
             "STRICT"
           ],
-          "help": "",
+          "help": "Treat state serialization warnings as errors and refuse a partial save",
           "required": false,
           "positional": false,
           "index": null,
@@ -7022,7 +7022,7 @@
       "path": "gammaLoop save schema",
       "name": "schema",
       "usage": "Usage: gammaLoop save schema",
-      "about": "regenerate the schema files",
+      "about": "Regenerate the JSON schema files for CLI and runtime configuration",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -7075,7 +7075,7 @@
       "path": "gammaLoop save help dot",
       "name": "dot",
       "usage": "Usage: gammaLoop save help dot",
-      "about": "",
+      "about": "Export generated graphs as DOT files and drawing templates",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -7087,7 +7087,7 @@
       "path": "gammaLoop save help uv-forest",
       "name": "uv-forest",
       "usage": "Usage: gammaLoop save help uv-forest",
-      "about": "",
+      "about": "Export the ultraviolet forest for selected generated graphs",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -7099,7 +7099,7 @@
       "path": "gammaLoop save help standalone",
       "name": "standalone",
       "usage": "Usage: gammaLoop save help standalone",
-      "about": "",
+      "about": "Export an integrand as a standalone evaluator or serialized data file",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -7111,7 +7111,7 @@
       "path": "gammaLoop save help state",
       "name": "state",
       "usage": "Usage: gammaLoop save help state",
-      "about": "",
+      "about": "Persist the active state, settings, and replayable run history",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -7123,7 +7123,7 @@
       "path": "gammaLoop save help schema",
       "name": "schema",
       "usage": "Usage: gammaLoop save help schema",
-      "about": "regenerate the schema files",
+      "about": "Regenerate the JSON schema files for CLI and runtime configuration",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -7147,7 +7147,7 @@
       "path": "gammaLoop run",
       "name": "run",
       "usage": "Usage: gammaLoop run [OPTIONS] [BLOCK_NAME]...",
-      "about": "",
+      "about": "Execute a stored command block or an inline command list",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -7199,7 +7199,7 @@
           "value_names": [
             "COMMANDS"
           ],
-          "help": "",
+          "help": "Semicolon-separated inline commands executed after the named blocks",
           "required": false,
           "positional": false,
           "index": null,
@@ -7248,7 +7248,7 @@
       "path": "gammaLoop start_commands_block",
       "name": "start_commands_block",
       "usage": "Usage: gammaLoop start_commands_block <COMMAND_BLOCK_NAME>",
-      "about": "",
+      "about": "Begin recording subsequent commands under a reusable block name",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -7270,7 +7270,7 @@
           "value_names": [
             "COMMAND_BLOCK_NAME"
           ],
-          "help": "",
+          "help": "Name under which the recorded command sequence will be stored",
           "required": true,
           "positional": true,
           "index": 1,
@@ -7319,7 +7319,7 @@
       "path": "gammaLoop finish_commands_block",
       "name": "finish_commands_block",
       "usage": "Usage: gammaLoop finish_commands_block",
-      "about": "",
+      "about": "Stop recording commands and store the active command block",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -7360,7 +7360,7 @@
       "path": "gammaLoop remove",
       "name": "remove",
       "usage": "Usage: gammaLoop remove <COMMAND>",
-      "about": "",
+      "about": "Remove generated processes from the active state",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -7401,7 +7401,7 @@
       "path": "gammaLoop remove processes",
       "name": "processes",
       "usage": "Usage: gammaLoop remove processes [OPTIONS]",
-      "about": "",
+      "about": "Remove one integrand, one process, or all processes selected by the supplied target",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -7514,7 +7514,7 @@
       "path": "gammaLoop remove help processes",
       "name": "processes",
       "usage": "Usage: gammaLoop remove help processes",
-      "about": "",
+      "about": "Remove one integrand, one process, or all processes selected by the supplied target",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -7538,7 +7538,7 @@
       "path": "gammaLoop integrate",
       "name": "integrate",
       "usage": "Usage: gammaLoop integrate [OPTIONS]",
-      "about": "",
+      "about": "Integrate one or more generated process integrands",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -8293,7 +8293,7 @@
       "path": "gammaLoop generate",
       "name": "generate",
       "usage": "Usage: gammaLoop generate [OPTIONS] [COMMAND]",
-      "about": "Generate integrands",
+      "about": "Generate cross-section or amplitude integrands from a process specification",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -8364,7 +8364,7 @@
       "path": "gammaLoop generate xs",
       "name": "xs",
       "usage": "Usage: gammaLoop generate xs [OPTIONS] [TOKENS]...",
-      "about": "Cross-section (forward-scattering) generation",
+      "about": "Generate a cross-section integrand through the forward-scattering construction",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -8414,7 +8414,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Append the generated process instead of replacing the current process selection",
           "required": false,
           "positional": false,
           "index": null,
@@ -8512,7 +8512,7 @@
           "value_names": [
             "INTEGRAND_NAME"
           ],
-          "help": "",
+          "help": "Name assigned to the generated integrand; defaults to the generated process name",
           "required": false,
           "positional": false,
           "index": null,
@@ -8540,7 +8540,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Stop after diagram generation without constructing an evaluable integrand",
           "required": false,
           "positional": false,
           "index": null,
@@ -8572,7 +8572,7 @@
           "value_names": [
             "FILTER_SELFENERGIES"
           ],
-          "help": "Topology filters (`Option<bool>` enables smart defaults)",
+          "help": "Include or exclude self-energy topologies; omission uses the generation-mode default",
           "required": false,
           "positional": false,
           "index": null,
@@ -8605,7 +8605,7 @@
           "value_names": [
             "FILTER_SNAILS"
           ],
-          "help": "",
+          "help": "Include or exclude snail topologies; omission uses the generation-mode default",
           "required": false,
           "positional": false,
           "index": null,
@@ -8638,7 +8638,7 @@
           "value_names": [
             "FILTER_TADPOLES"
           ],
-          "help": "",
+          "help": "Include or exclude tadpole topologies; omission uses the generation-mode default",
           "required": false,
           "positional": false,
           "index": null,
@@ -8671,7 +8671,7 @@
           "value_names": [
             "VETO_VERTEX_INTERACTIONS"
           ],
-          "help": "Veto vertex interactions",
+          "help": "Exclude graphs containing any listed vertex-interaction name",
           "required": false,
           "positional": false,
           "index": null,
@@ -8731,7 +8731,7 @@
           "value_names": [
             "FILTER_CROSS_SECTION_TADPOLES"
           ],
-          "help": "Cross-section tadpole filtering when sewing",
+          "help": "Filter tadpoles formed while sewing amplitudes into a cross-section graph",
           "required": false,
           "positional": false,
           "index": null,
@@ -8764,7 +8764,7 @@
           "value_names": [
             "VETO_TADPOLES_ATTACHED_TO_MASSIVE_LINES"
           ],
-          "help": "Tadpole veto details",
+          "help": "Veto tadpoles attached to massive propagators",
           "required": false,
           "positional": false,
           "index": null,
@@ -8797,7 +8797,7 @@
           "value_names": [
             "VETO_TADPOLES_ATTACHED_TO_MASSLESS_LINES"
           ],
-          "help": "",
+          "help": "Veto tadpoles attached to massless propagators",
           "required": false,
           "positional": false,
           "index": null,
@@ -8830,7 +8830,7 @@
           "value_names": [
             "VETO_ONLY_SCALELESS_TADPOLES"
           ],
-          "help": "",
+          "help": "Veto only tadpoles that are scaleless",
           "required": false,
           "positional": false,
           "index": null,
@@ -8863,7 +8863,7 @@
           "value_names": [
             "VETO_SNAILS_ATTACHED_TO_MASSIVE_LINES"
           ],
-          "help": "Snail veto details",
+          "help": "Veto snail insertions attached to massive propagators",
           "required": false,
           "positional": false,
           "index": null,
@@ -8896,7 +8896,7 @@
           "value_names": [
             "VETO_SNAILS_ATTACHED_TO_MASSLESS_LINES"
           ],
-          "help": "",
+          "help": "Veto snail insertions attached to massless propagators",
           "required": false,
           "positional": false,
           "index": null,
@@ -8929,7 +8929,7 @@
           "value_names": [
             "VETO_ONLY_SCALELESS_SNAILS"
           ],
-          "help": "",
+          "help": "Veto only snail insertions that are scaleless",
           "required": false,
           "positional": false,
           "index": null,
@@ -8962,7 +8962,7 @@
           "value_names": [
             "VETO_SELF_ENERGY_OF_MASSIVE_LINES"
           ],
-          "help": "Self-energy veto details",
+          "help": "Veto self-energy insertions on massive propagators",
           "required": false,
           "positional": false,
           "index": null,
@@ -8995,7 +8995,7 @@
           "value_names": [
             "VETO_SELF_ENERGY_OF_MASSLESS_LINES"
           ],
-          "help": "",
+          "help": "Veto self-energy insertions on massless propagators",
           "required": false,
           "positional": false,
           "index": null,
@@ -9028,7 +9028,7 @@
           "value_names": [
             "VETO_ONLY_SCALELESS_SELF_ENERGY"
           ],
-          "help": "",
+          "help": "Veto only self-energy insertions that are scaleless",
           "required": false,
           "positional": false,
           "index": null,
@@ -9061,7 +9061,7 @@
           "value_names": [
             "MAX_N_BRIDGES"
           ],
-          "help": "Extra filters / constraints",
+          "help": "Maximum number of bridges allowed in a generated graph; negative values disable the bound",
           "required": false,
           "positional": false,
           "index": null,
@@ -9097,7 +9097,7 @@
           "value_names": [
             "NUMBER_OF_FACTORIZED_LOOP_SUBTOPOLOGIES"
           ],
-          "help": "",
+          "help": "Inclusive minimum and maximum number of factorized loop subtopologies",
           "required": false,
           "positional": false,
           "index": null,
@@ -9157,7 +9157,7 @@
           "value_names": [
             "N_CUT_BLOBS"
           ],
-          "help": "Cut options (cross-section) Range of cut blobs on either side of the cut",
+          "help": "Inclusive minimum and maximum number of cut blobs on either side of a cross-section cut",
           "required": false,
           "positional": false,
           "index": null,
@@ -9187,7 +9187,7 @@
           "value_names": [
             "N_CUT_SPECTATORS"
           ],
-          "help": "Range of cut spectators on either side of the cut",
+          "help": "Inclusive minimum and maximum number of spectators crossing a cross-section cut",
           "required": false,
           "positional": false,
           "index": null,
@@ -9223,7 +9223,7 @@
           "value_names": [
             "ALLOW_SYMMETRIZATION_OF_EXTERNAL_FERMIONS_IN_AMPLITUDES"
           ],
-          "help": "Symmetrization (`Option<bool>` selects smart defaults based on the generation type)",
+          "help": "Permit external fermion permutations when identifying equivalent amplitudes",
           "required": false,
           "positional": false,
           "index": null,
@@ -9256,7 +9256,7 @@
           "value_names": [
             "SYMMETRIZE_INITIAL_STATES"
           ],
-          "help": "",
+          "help": "Identify graphs related by permutations of identical initial-state particles",
           "required": false,
           "positional": false,
           "index": null,
@@ -9289,7 +9289,7 @@
           "value_names": [
             "SYMMETRIZE_FINAL_STATES"
           ],
-          "help": "",
+          "help": "Identify graphs related by permutations of identical final-state particles",
           "required": false,
           "positional": false,
           "index": null,
@@ -9322,7 +9322,7 @@
           "value_names": [
             "SYMMETRIZE_LEFT_RIGHT_STATES"
           ],
-          "help": "",
+          "help": "Identify cross-section graphs related by exchanging the left and right amplitudes",
           "required": false,
           "positional": false,
           "index": null,
@@ -9390,7 +9390,7 @@
           "value_names": [
             "NUMERICAL_SAMPLES_SEED"
           ],
-          "help": "Grouping attributes",
+          "help": "Deterministic random seed used for numerical numerator comparisons",
           "required": false,
           "positional": false,
           "index": null,
@@ -9420,7 +9420,7 @@
           "value_names": [
             "NUMBER_OF_SAMPLES_FOR_NUMERATOR_COMPARISONS"
           ],
-          "help": "",
+          "help": "Number of phase-space samples used to decide whether two numerators are equivalent",
           "required": false,
           "positional": false,
           "index": null,
@@ -9450,7 +9450,7 @@
           "value_names": [
             "CONSIDER_INTERNAL_MASSES_ONLY_IN_NUMERATOR_ISOMORPHISMS"
           ],
-          "help": "",
+          "help": "Distinguish mass parameters while ignoring other model-parameter labels during grouping",
           "required": false,
           "positional": false,
           "index": null,
@@ -9483,7 +9483,7 @@
           "value_names": [
             "FULLY_NUMERICAL_SUBSTITUTION_WHEN_COMPARING_NUMERATORS"
           ],
-          "help": "",
+          "help": "Numerically substitute every parameter when comparing candidate numerator isomorphisms",
           "required": false,
           "positional": false,
           "index": null,
@@ -9516,7 +9516,7 @@
           "value_names": [
             "COMPARE_CANONIZED_NUMERATOR"
           ],
-          "help": "",
+          "help": "Compare canonicalized numerators in addition to graph topology when grouping",
           "required": false,
           "positional": false,
           "index": null,
@@ -9549,7 +9549,7 @@
           "value_names": [
             "SYMMETRIC_LEFT_RIGHT_POLARIZATIONS"
           ],
-          "help": "",
+          "help": "Treat left- and right-side polarization factors symmetrically during numerator grouping",
           "required": false,
           "positional": false,
           "index": null,
@@ -9612,7 +9612,7 @@
           "value_names": [
             "SELECT_GRAPHS"
           ],
-          "help": "",
+          "help": "Generate only graphs whose names appear in this allow-list",
           "required": false,
           "positional": false,
           "index": null,
@@ -9642,7 +9642,7 @@
           "value_names": [
             "VETO_GRAPHS"
           ],
-          "help": "",
+          "help": "Exclude graphs whose names appear in this deny-list",
           "required": false,
           "positional": false,
           "index": null,
@@ -9672,7 +9672,7 @@
           "value_names": [
             "GRAPH_PREFIX"
           ],
-          "help": "Graph name prefix",
+          "help": "Prefix assigned to generated graph names; defaults to `GL`",
           "required": false,
           "positional": false,
           "index": null,
@@ -9794,7 +9794,7 @@
           "value_names": [
             "FILTER_SELF_LOOP"
           ],
-          "help": "Filter self-loop (explicit; default false)",
+          "help": "Filter graph-theoretic self-loops explicitly; omission keeps them",
           "required": false,
           "positional": false,
           "index": null,
@@ -9827,7 +9827,7 @@
           "value_names": [
             "FILTER_ZERO_FLOW_EDGES"
           ],
-          "help": "",
+          "help": "Filter edges that carry zero momentum flow in the selected routing",
           "required": false,
           "positional": false,
           "index": null,
@@ -9909,7 +9909,7 @@
       "path": "gammaLoop generate amp",
       "name": "amp",
       "usage": "Usage: gammaLoop generate amp [OPTIONS] [TOKENS]...",
-      "about": "Amplitude generation",
+      "about": "Generate an amplitude integrand for the supplied process specification",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -9965,7 +9965,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Append the generated process instead of replacing the current process selection",
           "required": false,
           "positional": false,
           "index": null,
@@ -10063,7 +10063,7 @@
           "value_names": [
             "INTEGRAND_NAME"
           ],
-          "help": "",
+          "help": "Name assigned to the generated integrand; defaults to the generated process name",
           "required": false,
           "positional": false,
           "index": null,
@@ -10091,7 +10091,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Stop after diagram generation without constructing an evaluable integrand",
           "required": false,
           "positional": false,
           "index": null,
@@ -10123,7 +10123,7 @@
           "value_names": [
             "FILTER_SELFENERGIES"
           ],
-          "help": "Topology filters (`Option<bool>` enables smart defaults)",
+          "help": "Include or exclude self-energy topologies; omission uses the generation-mode default",
           "required": false,
           "positional": false,
           "index": null,
@@ -10156,7 +10156,7 @@
           "value_names": [
             "FILTER_SNAILS"
           ],
-          "help": "",
+          "help": "Include or exclude snail topologies; omission uses the generation-mode default",
           "required": false,
           "positional": false,
           "index": null,
@@ -10189,7 +10189,7 @@
           "value_names": [
             "FILTER_TADPOLES"
           ],
-          "help": "",
+          "help": "Include or exclude tadpole topologies; omission uses the generation-mode default",
           "required": false,
           "positional": false,
           "index": null,
@@ -10222,7 +10222,7 @@
           "value_names": [
             "VETO_VERTEX_INTERACTIONS"
           ],
-          "help": "Veto vertex interactions",
+          "help": "Exclude graphs containing any listed vertex-interaction name",
           "required": false,
           "positional": false,
           "index": null,
@@ -10282,7 +10282,7 @@
           "value_names": [
             "FILTER_CROSS_SECTION_TADPOLES"
           ],
-          "help": "Cross-section tadpole filtering when sewing",
+          "help": "Filter tadpoles formed while sewing amplitudes into a cross-section graph",
           "required": false,
           "positional": false,
           "index": null,
@@ -10315,7 +10315,7 @@
           "value_names": [
             "VETO_TADPOLES_ATTACHED_TO_MASSIVE_LINES"
           ],
-          "help": "Tadpole veto details",
+          "help": "Veto tadpoles attached to massive propagators",
           "required": false,
           "positional": false,
           "index": null,
@@ -10348,7 +10348,7 @@
           "value_names": [
             "VETO_TADPOLES_ATTACHED_TO_MASSLESS_LINES"
           ],
-          "help": "",
+          "help": "Veto tadpoles attached to massless propagators",
           "required": false,
           "positional": false,
           "index": null,
@@ -10381,7 +10381,7 @@
           "value_names": [
             "VETO_ONLY_SCALELESS_TADPOLES"
           ],
-          "help": "",
+          "help": "Veto only tadpoles that are scaleless",
           "required": false,
           "positional": false,
           "index": null,
@@ -10414,7 +10414,7 @@
           "value_names": [
             "VETO_SNAILS_ATTACHED_TO_MASSIVE_LINES"
           ],
-          "help": "Snail veto details",
+          "help": "Veto snail insertions attached to massive propagators",
           "required": false,
           "positional": false,
           "index": null,
@@ -10447,7 +10447,7 @@
           "value_names": [
             "VETO_SNAILS_ATTACHED_TO_MASSLESS_LINES"
           ],
-          "help": "",
+          "help": "Veto snail insertions attached to massless propagators",
           "required": false,
           "positional": false,
           "index": null,
@@ -10480,7 +10480,7 @@
           "value_names": [
             "VETO_ONLY_SCALELESS_SNAILS"
           ],
-          "help": "",
+          "help": "Veto only snail insertions that are scaleless",
           "required": false,
           "positional": false,
           "index": null,
@@ -10513,7 +10513,7 @@
           "value_names": [
             "VETO_SELF_ENERGY_OF_MASSIVE_LINES"
           ],
-          "help": "Self-energy veto details",
+          "help": "Veto self-energy insertions on massive propagators",
           "required": false,
           "positional": false,
           "index": null,
@@ -10546,7 +10546,7 @@
           "value_names": [
             "VETO_SELF_ENERGY_OF_MASSLESS_LINES"
           ],
-          "help": "",
+          "help": "Veto self-energy insertions on massless propagators",
           "required": false,
           "positional": false,
           "index": null,
@@ -10579,7 +10579,7 @@
           "value_names": [
             "VETO_ONLY_SCALELESS_SELF_ENERGY"
           ],
-          "help": "",
+          "help": "Veto only self-energy insertions that are scaleless",
           "required": false,
           "positional": false,
           "index": null,
@@ -10612,7 +10612,7 @@
           "value_names": [
             "MAX_N_BRIDGES"
           ],
-          "help": "Extra filters / constraints",
+          "help": "Maximum number of bridges allowed in a generated graph; negative values disable the bound",
           "required": false,
           "positional": false,
           "index": null,
@@ -10648,7 +10648,7 @@
           "value_names": [
             "NUMBER_OF_FACTORIZED_LOOP_SUBTOPOLOGIES"
           ],
-          "help": "",
+          "help": "Inclusive minimum and maximum number of factorized loop subtopologies",
           "required": false,
           "positional": false,
           "index": null,
@@ -10708,7 +10708,7 @@
           "value_names": [
             "N_CUT_BLOBS"
           ],
-          "help": "Cut options (cross-section) Range of cut blobs on either side of the cut",
+          "help": "Inclusive minimum and maximum number of cut blobs on either side of a cross-section cut",
           "required": false,
           "positional": false,
           "index": null,
@@ -10738,7 +10738,7 @@
           "value_names": [
             "N_CUT_SPECTATORS"
           ],
-          "help": "Range of cut spectators on either side of the cut",
+          "help": "Inclusive minimum and maximum number of spectators crossing a cross-section cut",
           "required": false,
           "positional": false,
           "index": null,
@@ -10774,7 +10774,7 @@
           "value_names": [
             "ALLOW_SYMMETRIZATION_OF_EXTERNAL_FERMIONS_IN_AMPLITUDES"
           ],
-          "help": "Symmetrization (`Option<bool>` selects smart defaults based on the generation type)",
+          "help": "Permit external fermion permutations when identifying equivalent amplitudes",
           "required": false,
           "positional": false,
           "index": null,
@@ -10807,7 +10807,7 @@
           "value_names": [
             "SYMMETRIZE_INITIAL_STATES"
           ],
-          "help": "",
+          "help": "Identify graphs related by permutations of identical initial-state particles",
           "required": false,
           "positional": false,
           "index": null,
@@ -10840,7 +10840,7 @@
           "value_names": [
             "SYMMETRIZE_FINAL_STATES"
           ],
-          "help": "",
+          "help": "Identify graphs related by permutations of identical final-state particles",
           "required": false,
           "positional": false,
           "index": null,
@@ -10873,7 +10873,7 @@
           "value_names": [
             "SYMMETRIZE_LEFT_RIGHT_STATES"
           ],
-          "help": "",
+          "help": "Identify cross-section graphs related by exchanging the left and right amplitudes",
           "required": false,
           "positional": false,
           "index": null,
@@ -10941,7 +10941,7 @@
           "value_names": [
             "NUMERICAL_SAMPLES_SEED"
           ],
-          "help": "Grouping attributes",
+          "help": "Deterministic random seed used for numerical numerator comparisons",
           "required": false,
           "positional": false,
           "index": null,
@@ -10971,7 +10971,7 @@
           "value_names": [
             "NUMBER_OF_SAMPLES_FOR_NUMERATOR_COMPARISONS"
           ],
-          "help": "",
+          "help": "Number of phase-space samples used to decide whether two numerators are equivalent",
           "required": false,
           "positional": false,
           "index": null,
@@ -11001,7 +11001,7 @@
           "value_names": [
             "CONSIDER_INTERNAL_MASSES_ONLY_IN_NUMERATOR_ISOMORPHISMS"
           ],
-          "help": "",
+          "help": "Distinguish mass parameters while ignoring other model-parameter labels during grouping",
           "required": false,
           "positional": false,
           "index": null,
@@ -11034,7 +11034,7 @@
           "value_names": [
             "FULLY_NUMERICAL_SUBSTITUTION_WHEN_COMPARING_NUMERATORS"
           ],
-          "help": "",
+          "help": "Numerically substitute every parameter when comparing candidate numerator isomorphisms",
           "required": false,
           "positional": false,
           "index": null,
@@ -11067,7 +11067,7 @@
           "value_names": [
             "COMPARE_CANONIZED_NUMERATOR"
           ],
-          "help": "",
+          "help": "Compare canonicalized numerators in addition to graph topology when grouping",
           "required": false,
           "positional": false,
           "index": null,
@@ -11100,7 +11100,7 @@
           "value_names": [
             "SYMMETRIC_LEFT_RIGHT_POLARIZATIONS"
           ],
-          "help": "",
+          "help": "Treat left- and right-side polarization factors symmetrically during numerator grouping",
           "required": false,
           "positional": false,
           "index": null,
@@ -11163,7 +11163,7 @@
           "value_names": [
             "SELECT_GRAPHS"
           ],
-          "help": "",
+          "help": "Generate only graphs whose names appear in this allow-list",
           "required": false,
           "positional": false,
           "index": null,
@@ -11193,7 +11193,7 @@
           "value_names": [
             "VETO_GRAPHS"
           ],
-          "help": "",
+          "help": "Exclude graphs whose names appear in this deny-list",
           "required": false,
           "positional": false,
           "index": null,
@@ -11223,7 +11223,7 @@
           "value_names": [
             "GRAPH_PREFIX"
           ],
-          "help": "Graph name prefix",
+          "help": "Prefix assigned to generated graph names; defaults to `GL`",
           "required": false,
           "positional": false,
           "index": null,
@@ -11345,7 +11345,7 @@
           "value_names": [
             "FILTER_SELF_LOOP"
           ],
-          "help": "Filter self-loop (explicit; default false)",
+          "help": "Filter graph-theoretic self-loops explicitly; omission keeps them",
           "required": false,
           "positional": false,
           "index": null,
@@ -11378,7 +11378,7 @@
           "value_names": [
             "FILTER_ZERO_FLOW_EDGES"
           ],
-          "help": "",
+          "help": "Filter edges that carry zero momentum flow in the selected routing",
           "required": false,
           "positional": false,
           "index": null,
@@ -11460,7 +11460,7 @@
       "path": "gammaLoop generate existing",
       "name": "existing",
       "usage": "Usage: gammaLoop generate existing [OPTIONS]",
-      "about": "Reuse an already generated process",
+      "about": "Create another integrand from an existing process without regenerating its graphs",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -11512,7 +11512,7 @@
           "value_names": [
             "INTEGRAND_NAME"
           ],
-          "help": "Optional human name",
+          "help": "Optional human-readable integrand name used to disambiguate the process",
           "required": false,
           "positional": false,
           "index": null,
@@ -11603,7 +11603,7 @@
       "path": "gammaLoop generate help xs",
       "name": "xs",
       "usage": "Usage: gammaLoop generate help xs",
-      "about": "Cross-section (forward-scattering) generation",
+      "about": "Generate a cross-section integrand through the forward-scattering construction",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -11615,7 +11615,7 @@
       "path": "gammaLoop generate help amp",
       "name": "amp",
       "usage": "Usage: gammaLoop generate help amp",
-      "about": "Amplitude generation",
+      "about": "Generate an amplitude integrand for the supplied process specification",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -11627,7 +11627,7 @@
       "path": "gammaLoop generate help existing",
       "name": "existing",
       "usage": "Usage: gammaLoop generate help existing",
-      "about": "Reuse an already generated process",
+      "about": "Create another integrand from an existing process without regenerating its graphs",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -11651,7 +11651,7 @@
       "path": "gammaLoop select",
       "name": "select",
       "usage": "Usage: gammaLoop select [OPTIONS]",
-      "about": "",
+      "about": "Select graph groups and write the selection to a new process or integrand",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -12508,7 +12508,7 @@
       "path": "gammaLoop quit",
       "name": "quit",
       "usage": "Usage: gammaLoop quit [OPTIONS]",
-      "about": "Quit gammaloop",
+      "about": "End the interactive GammaLoop session without executing further commands",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -12591,7 +12591,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Exit without writing state data, even when state saving is otherwise enabled",
           "required": false,
           "positional": false,
           "index": null,
@@ -12656,7 +12656,7 @@
           "value_names": [
             "STRICT"
           ],
-          "help": "",
+          "help": "Treat state serialization warnings as errors and refuse a partial save",
           "required": false,
           "positional": false,
           "index": null,
@@ -12708,7 +12708,7 @@
       "path": "gammaLoop inspect",
       "name": "inspect",
       "usage": "Usage: gammaLoop inspect [OPTIONS]",
-      "about": "Inspect a single phase‑space point / momentum configuration",
+      "about": "Inspect integrand contributions at one phase-space point or momentum configuration",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -12996,7 +12996,7 @@
       "path": "gammaLoop approach",
       "name": "approach",
       "usage": "Usage: gammaLoop approach [OPTIONS] --n-points <N>",
-      "about": "Approach a phase-space point along one or more axes",
+      "about": "Sample an integrand while approaching a phase-space point along selected scaling axes",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -13451,7 +13451,7 @@
           "value_names": [
             "OUTPUT_RESULTS"
           ],
-          "help": "Path to the JSON output file",
+          "help": "Write sampled approach points and run metadata to this JSON file",
           "required": false,
           "positional": false,
           "index": null,
@@ -13500,7 +13500,7 @@
       "path": "gammaLoop evaluate",
       "name": "evaluate",
       "usage": "Usage: gammaLoop evaluate [OPTIONS]",
-      "about": "",
+      "about": "Evaluate a vacuum amplitude analytically or numerically with Vakint",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -13582,7 +13582,7 @@
           "value_names": [
             "RESULT_PATH"
           ],
-          "help": "The path to store results in",
+          "help": "Write the canonical symbolic evaluation result to this TOML file",
           "required": false,
           "positional": false,
           "index": null,
@@ -13691,7 +13691,7 @@
       "path": "gammaLoop renormalize",
       "name": "renormalize",
       "usage": "Usage: gammaLoop renormalize [OPTIONS]",
-      "about": "",
+      "about": "Compute and export ultraviolet renormalization contributions for an amplitude",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -13741,7 +13741,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Rewrite the result into the normalization and symbol conventions used by RQFT comparisons",
           "required": false,
           "positional": false,
           "index": null,
@@ -13771,7 +13771,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Preserve fully qualified Symbolica namespaces in printed expressions",
           "required": false,
           "positional": false,
           "index": null,
@@ -13882,7 +13882,7 @@
       "path": "gammaLoop bench",
       "name": "bench",
       "usage": "Usage: gammaLoop bench --samples <SAMPLES> --process <PROCESS> --integrand-name <NAME> --n-cores <N_CORES>",
-      "about": "Benchmark raw integrand evaluation speed",
+      "about": "Measure raw integrand evaluation throughput over random samples and selected worker counts",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -14043,7 +14043,7 @@
       "path": "gammaLoop profile",
       "name": "profile",
       "usage": "Usage: gammaLoop profile <COMMAND>",
-      "about": "",
+      "about": "Profile ultraviolet or infrared scaling limits of a generated integrand",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -14084,7 +14084,7 @@
       "path": "gammaLoop profile ultra-violet",
       "name": "ultra-violet",
       "usage": "Usage: gammaLoop profile ultra-violet [OPTIONS]",
-      "about": "Ultraviolet profile analysis",
+      "about": "Sample ultraviolet scaling rays and report the fitted large-momentum behavior",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -14198,7 +14198,7 @@
           "value_names": [
             "MIN_SCALE_EXPONENT"
           ],
-          "help": "Minimum scaling factor",
+          "help": "Starting exponent of the sampled ultraviolet scaling range",
           "required": false,
           "positional": false,
           "index": null,
@@ -14230,7 +14230,7 @@
           "value_names": [
             "MAX_SCALE_EXPONENT"
           ],
-          "help": "Maximum scaling factor",
+          "help": "Ending exponent of the sampled ultraviolet scaling range",
           "required": false,
           "positional": false,
           "index": null,
@@ -14290,7 +14290,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "",
+          "help": "Fit the symbolic ultraviolet scaling expression in addition to sampled numerical values",
           "required": false,
           "positional": false,
           "index": null,
@@ -14491,7 +14491,7 @@
       "path": "gammaLoop profile bulk",
       "name": "bulk",
       "usage": "Usage: gammaLoop profile bulk [OPTIONS]",
-      "about": "Bulk profile analysis",
+      "about": "Probe multiple infrared scaling limits and report their fitted behavior in one run",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -14605,7 +14605,7 @@
           "value_names": [
             "MIN_SCALE_EXPONENT"
           ],
-          "help": "Minimum scaling factor",
+          "help": "Starting exponent of the sampled bulk scaling range",
           "required": false,
           "positional": false,
           "index": null,
@@ -14637,7 +14637,7 @@
           "value_names": [
             "MAX_SCALE_EXPONENT"
           ],
-          "help": "Maximum scaling factor",
+          "help": "Ending exponent of the sampled bulk scaling range",
           "required": false,
           "positional": false,
           "index": null,
@@ -14850,7 +14850,7 @@
       "path": "gammaLoop profile help ultra-violet",
       "name": "ultra-violet",
       "usage": "Usage: gammaLoop profile help ultra-violet",
-      "about": "Ultraviolet profile analysis",
+      "about": "Sample ultraviolet scaling rays and report the fitted large-momentum behavior",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -14862,7 +14862,7 @@
       "path": "gammaLoop profile help bulk",
       "name": "bulk",
       "usage": "Usage: gammaLoop profile help bulk",
-      "about": "Bulk profile analysis",
+      "about": "Probe multiple infrared scaling limits and report their fitted behavior in one run",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -14886,7 +14886,7 @@
       "path": "gammaLoop batch",
       "name": "batch",
       "usage": "Usage: gammaLoop batch --name <NAME> <PROCESS_FILE> <BATCH_INPUT_FILE> <NAME>",
-      "about": "HPC batch evaluation branch",
+      "about": "Evaluate a process-definition file against an HPC batch input and write named results",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -14908,7 +14908,7 @@
           "value_names": [
             "PROCESS_FILE"
           ],
-          "help": "",
+          "help": "Process-definition file used to construct the batch evaluator",
           "required": true,
           "positional": true,
           "index": 1,
@@ -14938,7 +14938,7 @@
           "value_names": [
             "BATCH_INPUT_FILE"
           ],
-          "help": "",
+          "help": "Batch input file containing the evaluation points or jobs to execute",
           "required": true,
           "positional": true,
           "index": 2,
@@ -14968,7 +14968,7 @@
           "value_names": [
             "NAME"
           ],
-          "help": "",
+          "help": "Logical batch name used in generated output metadata",
           "required": true,
           "positional": false,
           "index": null,
@@ -14998,7 +14998,7 @@
           "value_names": [
             "NAME"
           ],
-          "help": "",
+          "help": "Base name assigned to the batch result output",
           "required": true,
           "positional": true,
           "index": 3,
@@ -15047,7 +15047,7 @@
       "path": "gammaLoop !",
       "name": "!",
       "usage": "Usage: gammaLoop ! [CMD]...",
-      "about": "",
+      "about": "Run an operating-system shell command from the interactive GammaLoop session",
       "hidden": false,
       "generated_help": false,
       "short_flag": null,
@@ -15069,7 +15069,7 @@
           "value_names": [
             "CMD"
           ],
-          "help": "",
+          "help": "Command and arguments passed to the user's login shell",
           "required": false,
           "positional": true,
           "index": 1,
@@ -15130,7 +15130,7 @@
       "path": "gammaLoop help display",
       "name": "display",
       "usage": "Usage: gammaLoop help display [COMMAND]",
-      "about": "",
+      "about": "Inspect models, processes, integrands, settings, and named session data",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15142,7 +15142,7 @@
       "path": "gammaLoop help display model",
       "name": "model",
       "usage": "Usage: gammaLoop help display model",
-      "about": "",
+      "about": "Show model particles, parameters, couplings, and vertices for the selected context",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15154,7 +15154,7 @@
       "path": "gammaLoop help display processes",
       "name": "processes",
       "usage": "Usage: gammaLoop help display processes",
-      "about": "",
+      "about": "List processes currently stored in the active state",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15166,7 +15166,7 @@
       "path": "gammaLoop help display integrand",
       "name": "integrand",
       "usage": "Usage: gammaLoop help display integrand",
-      "about": "",
+      "about": "Show generated integrands, graph groups, resources, and selected detail tables",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15178,7 +15178,7 @@
       "path": "gammaLoop help display quantities",
       "name": "quantities",
       "usage": "Usage: gammaLoop help display quantities",
-      "about": "",
+      "about": "List configured named quantities, or inspect one quantity in a selected process",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15190,7 +15190,7 @@
       "path": "gammaLoop help display observables",
       "name": "observables",
       "usage": "Usage: gammaLoop help display observables",
-      "about": "",
+      "about": "List configured observables, or inspect one observable in a selected process",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15202,7 +15202,7 @@
       "path": "gammaLoop help display selectors",
       "name": "selectors",
       "usage": "Usage: gammaLoop help display selectors",
-      "about": "",
+      "about": "List configured event selectors, or inspect one selector in a selected process",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15214,7 +15214,7 @@
       "path": "gammaLoop help display command_block",
       "name": "command_block",
       "usage": "Usage: gammaLoop help display command_block",
-      "about": "",
+      "about": "Show one stored command block, or list every block when no name is supplied",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15226,7 +15226,7 @@
       "path": "gammaLoop help display settings",
       "name": "settings",
       "usage": "Usage: gammaLoop help display settings [COMMAND]",
-      "about": "",
+      "about": "Show effective global, default-runtime, or process-specific settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15238,7 +15238,7 @@
       "path": "gammaLoop help display settings global",
       "name": "global",
       "usage": "Usage: gammaLoop help display settings global",
-      "about": "",
+      "about": "Show effective global generation, logging, and parallelization settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15250,7 +15250,7 @@
       "path": "gammaLoop help display settings default-runtime",
       "name": "default-runtime",
       "usage": "Usage: gammaLoop help display settings default-runtime",
-      "about": "",
+      "about": "Show the default runtime settings inherited by newly generated integrands",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15262,7 +15262,7 @@
       "path": "gammaLoop help display settings process",
       "name": "process",
       "usage": "Usage: gammaLoop help display settings process",
-      "about": "",
+      "about": "Show effective settings for one generated process or integrand",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15274,7 +15274,7 @@
       "path": "gammaLoop help duplicate",
       "name": "duplicate",
       "usage": "Usage: gammaLoop help duplicate [COMMAND]",
-      "about": "",
+      "about": "Copy generated data to a new process or integrand name",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15286,7 +15286,7 @@
       "path": "gammaLoop help duplicate integrand",
       "name": "integrand",
       "usage": "Usage: gammaLoop help duplicate integrand",
-      "about": "",
+      "about": "Copy one generated integrand and its process context under new names",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15298,7 +15298,7 @@
       "path": "gammaLoop help set",
       "name": "set",
       "usage": "Usage: gammaLoop help set [COMMAND]",
-      "about": "",
+      "about": "Change global, runtime, model, or process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15322,7 +15322,7 @@
       "path": "gammaLoop help set global",
       "name": "global",
       "usage": "Usage: gammaLoop help set global [COMMAND]",
-      "about": "Set GLOBAL settings",
+      "about": "Change global generation, logging, and parallelism settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15334,7 +15334,7 @@
       "path": "gammaLoop help set global file",
       "name": "file",
       "usage": "Usage: gammaLoop help set global file",
-      "about": "Load from a settings file",
+      "about": "Merge a TOML file into the current global or default-runtime settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15358,7 +15358,7 @@
       "path": "gammaLoop help set global kv",
       "name": "kv",
       "usage": "Usage: gammaLoop help set global kv",
-      "about": "Set one or more dotted key-paths",
+      "about": "Merge one or more dotted `KEY=VALUE` assignments into the current settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15382,7 +15382,7 @@
       "path": "gammaLoop help set global stored",
       "name": "stored",
       "usage": "Usage: gammaLoop help set global stored",
-      "about": "Use the stored settings file",
+      "about": "Reload the corresponding settings from the active state's stored file",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15394,7 +15394,7 @@
       "path": "gammaLoop help set default-runtime",
       "name": "default-runtime",
       "usage": "Usage: gammaLoop help set default-runtime [COMMAND]",
-      "about": "Set DEFAULT RUNTIME settings",
+      "about": "Change the runtime settings inherited by newly generated integrands",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15406,7 +15406,7 @@
       "path": "gammaLoop help set default-runtime file",
       "name": "file",
       "usage": "Usage: gammaLoop help set default-runtime file",
-      "about": "Load from a settings file",
+      "about": "Merge a TOML file into the current global or default-runtime settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15430,7 +15430,7 @@
       "path": "gammaLoop help set default-runtime kv",
       "name": "kv",
       "usage": "Usage: gammaLoop help set default-runtime kv",
-      "about": "Set one or more dotted key-paths",
+      "about": "Merge one or more dotted `KEY=VALUE` assignments into the current settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15454,7 +15454,7 @@
       "path": "gammaLoop help set default-runtime stored",
       "name": "stored",
       "usage": "Usage: gammaLoop help set default-runtime stored",
-      "about": "Use the stored settings file",
+      "about": "Reload the corresponding settings from the active state's stored file",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15466,7 +15466,7 @@
       "path": "gammaLoop help set model",
       "name": "model",
       "usage": "Usage: gammaLoop help set model",
-      "about": "Set Model parameters",
+      "about": "Assign model parameters in the selected context or reset them to defaults",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15478,7 +15478,7 @@
       "path": "gammaLoop help set process",
       "name": "process",
       "usage": "Usage: gammaLoop help set process [COMMAND]",
-      "about": "Set settings for a PROCESS",
+      "about": "Change runtime settings or named analysis objects for one process or integrand",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15490,7 +15490,7 @@
       "path": "gammaLoop help set process file",
       "name": "file",
       "usage": "Usage: gammaLoop help set process file",
-      "about": "Load from a settings file",
+      "about": "Merge a TOML file into the selected process or integrand settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15514,7 +15514,7 @@
       "path": "gammaLoop help set process kv",
       "name": "kv",
       "usage": "Usage: gammaLoop help set process kv",
-      "about": "Set one or more dotted key-paths",
+      "about": "Merge one or more dotted `KEY=VALUE` assignments into the selected settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15538,7 +15538,7 @@
       "path": "gammaLoop help set process stored",
       "name": "stored",
       "usage": "Usage: gammaLoop help set process stored",
-      "about": "Use the stored settings file",
+      "about": "Reload the selected process or integrand settings from its stored file",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15562,7 +15562,7 @@
       "path": "gammaLoop help set process add quantity",
       "name": "quantity",
       "usage": "Usage: gammaLoop help set process add quantity",
-      "about": "",
+      "about": "Add a named derived quantity to the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15574,7 +15574,7 @@
       "path": "gammaLoop help set process add observable",
       "name": "observable",
       "usage": "Usage: gammaLoop help set process add observable",
-      "about": "",
+      "about": "Add a named observable to the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15586,7 +15586,7 @@
       "path": "gammaLoop help set process add selector",
       "name": "selector",
       "usage": "Usage: gammaLoop help set process add selector",
-      "about": "",
+      "about": "Add a named event selector to the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15610,7 +15610,7 @@
       "path": "gammaLoop help set process update quantity",
       "name": "quantity",
       "usage": "Usage: gammaLoop help set process update quantity",
-      "about": "",
+      "about": "Update fields of an existing named quantity",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15622,7 +15622,7 @@
       "path": "gammaLoop help set process update observable",
       "name": "observable",
       "usage": "Usage: gammaLoop help set process update observable",
-      "about": "",
+      "about": "Update fields of an existing named observable",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15634,7 +15634,7 @@
       "path": "gammaLoop help set process update selector",
       "name": "selector",
       "usage": "Usage: gammaLoop help set process update selector",
-      "about": "",
+      "about": "Update fields of an existing named selector",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15658,7 +15658,7 @@
       "path": "gammaLoop help set process remove quantity",
       "name": "quantity",
       "usage": "Usage: gammaLoop help set process remove quantity",
-      "about": "",
+      "about": "Remove a named quantity from the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15670,7 +15670,7 @@
       "path": "gammaLoop help set process remove observable",
       "name": "observable",
       "usage": "Usage: gammaLoop help set process remove observable",
-      "about": "",
+      "about": "Remove a named observable from the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15682,7 +15682,7 @@
       "path": "gammaLoop help set process remove selector",
       "name": "selector",
       "usage": "Usage: gammaLoop help set process remove selector",
-      "about": "",
+      "about": "Remove a named selector from the selected process settings",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15694,7 +15694,7 @@
       "path": "gammaLoop help import",
       "name": "import",
       "usage": "Usage: gammaLoop help import [COMMAND]",
-      "about": "",
+      "about": "Import models or previously generated graphs into the active state",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15706,7 +15706,7 @@
       "path": "gammaLoop help import model",
       "name": "model",
       "usage": "Usage: gammaLoop help import model",
-      "about": "Generate integrands",
+      "about": "Load a UFO model and make it the active model for subsequent generation",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15718,7 +15718,7 @@
       "path": "gammaLoop help import graphs",
       "name": "graphs",
       "usage": "Usage: gammaLoop help import graphs",
-      "about": "",
+      "about": "Load serialized graph data into a new or existing process",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15730,7 +15730,7 @@
       "path": "gammaLoop help save",
       "name": "save",
       "usage": "Usage: gammaLoop help save [COMMAND]",
-      "about": "",
+      "about": "Export graph data, standalone evaluators, schemas, or the current state",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15742,7 +15742,7 @@
       "path": "gammaLoop help save dot",
       "name": "dot",
       "usage": "Usage: gammaLoop help save dot",
-      "about": "",
+      "about": "Export generated graphs as DOT files and drawing templates",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15754,7 +15754,7 @@
       "path": "gammaLoop help save uv-forest",
       "name": "uv-forest",
       "usage": "Usage: gammaLoop help save uv-forest",
-      "about": "",
+      "about": "Export the ultraviolet forest for selected generated graphs",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15766,7 +15766,7 @@
       "path": "gammaLoop help save standalone",
       "name": "standalone",
       "usage": "Usage: gammaLoop help save standalone",
-      "about": "",
+      "about": "Export an integrand as a standalone evaluator or serialized data file",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15778,7 +15778,7 @@
       "path": "gammaLoop help save state",
       "name": "state",
       "usage": "Usage: gammaLoop help save state",
-      "about": "",
+      "about": "Persist the active state, settings, and replayable run history",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15790,7 +15790,7 @@
       "path": "gammaLoop help save schema",
       "name": "schema",
       "usage": "Usage: gammaLoop help save schema",
-      "about": "regenerate the schema files",
+      "about": "Regenerate the JSON schema files for CLI and runtime configuration",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15802,7 +15802,7 @@
       "path": "gammaLoop help run",
       "name": "run",
       "usage": "Usage: gammaLoop help run",
-      "about": "",
+      "about": "Execute a stored command block or an inline command list",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15814,7 +15814,7 @@
       "path": "gammaLoop help start_commands_block",
       "name": "start_commands_block",
       "usage": "Usage: gammaLoop help start_commands_block",
-      "about": "",
+      "about": "Begin recording subsequent commands under a reusable block name",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15826,7 +15826,7 @@
       "path": "gammaLoop help finish_commands_block",
       "name": "finish_commands_block",
       "usage": "Usage: gammaLoop help finish_commands_block",
-      "about": "",
+      "about": "Stop recording commands and store the active command block",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15838,7 +15838,7 @@
       "path": "gammaLoop help remove",
       "name": "remove",
       "usage": "Usage: gammaLoop help remove [COMMAND]",
-      "about": "",
+      "about": "Remove generated processes from the active state",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15850,7 +15850,7 @@
       "path": "gammaLoop help remove processes",
       "name": "processes",
       "usage": "Usage: gammaLoop help remove processes",
-      "about": "",
+      "about": "Remove one integrand, one process, or all processes selected by the supplied target",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15862,7 +15862,7 @@
       "path": "gammaLoop help integrate",
       "name": "integrate",
       "usage": "Usage: gammaLoop help integrate",
-      "about": "",
+      "about": "Integrate one or more generated process integrands",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15874,7 +15874,7 @@
       "path": "gammaLoop help generate",
       "name": "generate",
       "usage": "Usage: gammaLoop help generate [COMMAND]",
-      "about": "Generate integrands",
+      "about": "Generate cross-section or amplitude integrands from a process specification",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15886,7 +15886,7 @@
       "path": "gammaLoop help generate xs",
       "name": "xs",
       "usage": "Usage: gammaLoop help generate xs",
-      "about": "Cross-section (forward-scattering) generation",
+      "about": "Generate a cross-section integrand through the forward-scattering construction",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15898,7 +15898,7 @@
       "path": "gammaLoop help generate amp",
       "name": "amp",
       "usage": "Usage: gammaLoop help generate amp",
-      "about": "Amplitude generation",
+      "about": "Generate an amplitude integrand for the supplied process specification",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15910,7 +15910,7 @@
       "path": "gammaLoop help generate existing",
       "name": "existing",
       "usage": "Usage: gammaLoop help generate existing",
-      "about": "Reuse an already generated process",
+      "about": "Create another integrand from an existing process without regenerating its graphs",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15922,7 +15922,7 @@
       "path": "gammaLoop help select",
       "name": "select",
       "usage": "Usage: gammaLoop help select",
-      "about": "",
+      "about": "Select graph groups and write the selection to a new process or integrand",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15934,7 +15934,7 @@
       "path": "gammaLoop help quit",
       "name": "quit",
       "usage": "Usage: gammaLoop help quit",
-      "about": "Quit gammaloop",
+      "about": "End the interactive GammaLoop session without executing further commands",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15946,7 +15946,7 @@
       "path": "gammaLoop help inspect",
       "name": "inspect",
       "usage": "Usage: gammaLoop help inspect",
-      "about": "Inspect a single phase‑space point / momentum configuration",
+      "about": "Inspect integrand contributions at one phase-space point or momentum configuration",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15958,7 +15958,7 @@
       "path": "gammaLoop help approach",
       "name": "approach",
       "usage": "Usage: gammaLoop help approach",
-      "about": "Approach a phase-space point along one or more axes",
+      "about": "Sample an integrand while approaching a phase-space point along selected scaling axes",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15970,7 +15970,7 @@
       "path": "gammaLoop help evaluate",
       "name": "evaluate",
       "usage": "Usage: gammaLoop help evaluate",
-      "about": "",
+      "about": "Evaluate a vacuum amplitude analytically or numerically with Vakint",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15982,7 +15982,7 @@
       "path": "gammaLoop help renormalize",
       "name": "renormalize",
       "usage": "Usage: gammaLoop help renormalize",
-      "about": "",
+      "about": "Compute and export ultraviolet renormalization contributions for an amplitude",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -15994,7 +15994,7 @@
       "path": "gammaLoop help bench",
       "name": "bench",
       "usage": "Usage: gammaLoop help bench",
-      "about": "Benchmark raw integrand evaluation speed",
+      "about": "Measure raw integrand evaluation throughput over random samples and selected worker counts",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -16006,7 +16006,7 @@
       "path": "gammaLoop help profile",
       "name": "profile",
       "usage": "Usage: gammaLoop help profile [COMMAND]",
-      "about": "",
+      "about": "Profile ultraviolet or infrared scaling limits of a generated integrand",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -16018,7 +16018,7 @@
       "path": "gammaLoop help profile ultra-violet",
       "name": "ultra-violet",
       "usage": "Usage: gammaLoop help profile ultra-violet",
-      "about": "Ultraviolet profile analysis",
+      "about": "Sample ultraviolet scaling rays and report the fitted large-momentum behavior",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -16030,7 +16030,7 @@
       "path": "gammaLoop help profile bulk",
       "name": "bulk",
       "usage": "Usage: gammaLoop help profile bulk",
-      "about": "Bulk profile analysis",
+      "about": "Probe multiple infrared scaling limits and report their fitted behavior in one run",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -16042,7 +16042,7 @@
       "path": "gammaLoop help batch",
       "name": "batch",
       "usage": "Usage: gammaLoop help batch",
-      "about": "HPC batch evaluation branch",
+      "about": "Evaluate a process-definition file against an HPC batch input and write named results",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -16054,7 +16054,7 @@
       "path": "gammaLoop help !",
       "name": "!",
       "usage": "Usage: gammaLoop help !",
-      "about": "",
+      "about": "Run an operating-system shell command from the interactive GammaLoop session",
       "hidden": false,
       "generated_help": true,
       "short_flag": null,
@@ -16079,7 +16079,7 @@
     {
       "path": "cli.global.display_directive",
       "value_type": "string",
-      "description": "",
+      "description": "Tracing filter applied to terminal output shown by the interactive session.",
       "required": false,
       "default": "info",
       "possible_values": []
@@ -16087,7 +16087,7 @@
     {
       "path": "cli.global.generation.compile.compilation_mode",
       "value_type": "string",
-      "description": "",
+      "description": "Evaluator backend: Symbolica JIT, generated C++, or generated assembly.",
       "required": false,
       "default": "symjit",
       "possible_values": [
@@ -16099,7 +16099,7 @@
     {
       "path": "cli.global.generation.compile.compiler",
       "value_type": "string",
-      "description": "",
+      "description": "External C++ compiler executable used by C++ and assembly modes.",
       "required": false,
       "default": "g++",
       "possible_values": []
@@ -16107,7 +16107,7 @@
     {
       "path": "cli.global.generation.compile.custom",
       "value_type": "array",
-      "description": "",
+      "description": "Additional command-line arguments passed verbatim to the external compiler.",
       "required": false,
       "default": [],
       "possible_values": []
@@ -16115,7 +16115,7 @@
     {
       "path": "cli.global.generation.compile.fast_math",
       "value_type": "boolean",
-      "description": "",
+      "description": "Permit algebraic floating-point transformations that ignore strict IEEE ordering.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16123,7 +16123,7 @@
     {
       "path": "cli.global.generation.compile.optimization_level",
       "value_type": "string",
-      "description": "",
+      "description": "Optimization level passed to the selected evaluator compiler.",
       "required": false,
       "default": "O2",
       "possible_values": [
@@ -16136,7 +16136,7 @@
     {
       "path": "cli.global.generation.compile.unsafe_math",
       "value_type": "boolean",
-      "description": "",
+      "description": "Permit compiler math optimizations that may change exceptional-value behavior.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16144,7 +16144,7 @@
     {
       "path": "cli.global.generation.evaluator.abort_level",
       "value_type": "integer",
-      "description": "",
+      "description": "Optimization stage at which evaluator construction aborts for diagnostic isolation.",
       "required": false,
       "default": 0,
       "possible_values": []
@@ -16152,7 +16152,7 @@
     {
       "path": "cli.global.generation.evaluator.compile",
       "value_type": "boolean",
-      "description": "",
+      "description": "Compile the lowered evaluator using the configured generation compilation backend.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16160,7 +16160,7 @@
     {
       "path": "cli.global.generation.evaluator.cpe_iterations",
       "value_type": "integer | null",
-      "description": "",
+      "description": "Optional number of common-pair-elimination optimization passes.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -16168,7 +16168,7 @@
     {
       "path": "cli.global.generation.evaluator.direct_translation",
       "value_type": "boolean",
-      "description": "",
+      "description": "Translate compatible symbolic expressions directly into Spenso networks.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16176,7 +16176,7 @@
     {
       "path": "cli.global.generation.evaluator.do_algebra",
       "value_type": "boolean",
-      "description": "",
+      "description": "Perform symbolic tensor and scalar algebra before lowering to an evaluator.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16184,7 +16184,7 @@
     {
       "path": "cli.global.generation.evaluator.do_fn_map_replacements",
       "value_type": "boolean",
-      "description": "",
+      "description": "Apply function-map replacements before numerical lowering.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16192,7 +16192,7 @@
     {
       "path": "cli.global.generation.evaluator.horner_iterations",
       "value_type": "integer",
-      "description": "",
+      "description": "Number of Horner-scheme optimization passes applied to scalar expressions.",
       "required": false,
       "default": 1,
       "possible_values": []
@@ -16200,7 +16200,7 @@
     {
       "path": "cli.global.generation.evaluator.iterative_orientation_optimization",
       "value_type": "boolean",
-      "description": "",
+      "description": "Re-optimize orientation expressions iteratively while building the evaluator.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16208,7 +16208,7 @@
     {
       "path": "cli.global.generation.evaluator.max_common_pair_cache_entries",
       "value_type": "integer",
-      "description": "",
+      "description": "Maximum cached candidate pairs during common-pair elimination.",
       "required": false,
       "default": 1000000,
       "possible_values": []
@@ -16216,7 +16216,7 @@
     {
       "path": "cli.global.generation.evaluator.max_common_pair_distance",
       "value_type": "integer",
-      "description": "",
+      "description": "Maximum expression-tree distance considered during common-pair elimination.",
       "required": false,
       "default": 1000,
       "possible_values": []
@@ -16224,7 +16224,7 @@
     {
       "path": "cli.global.generation.evaluator.max_horner_scheme_variables",
       "value_type": "integer",
-      "description": "",
+      "description": "Maximum variable count for attempting a Horner-scheme optimization.",
       "required": false,
       "default": 500,
       "possible_values": []
@@ -16232,7 +16232,7 @@
     {
       "path": "cli.global.generation.evaluator.n_cores",
       "value_type": "integer",
-      "description": "",
+      "description": "Worker threads used while constructing one evaluator.",
       "required": false,
       "default": 1,
       "possible_values": []
@@ -16240,7 +16240,7 @@
     {
       "path": "cli.global.generation.evaluator.spenso_execution_mode",
       "value_type": "array",
-      "description": "",
+      "description": "Spenso execution and contraction modes used by the lowered tensor network.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -16248,7 +16248,7 @@
     {
       "path": "cli.global.generation.evaluator.store_atom",
       "value_type": "boolean",
-      "description": "",
+      "description": "Retain the intermediate Symbolica atom alongside the executable evaluator.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16256,7 +16256,7 @@
     {
       "path": "cli.global.generation.evaluator.summed",
       "value_type": "boolean",
-      "description": "",
+      "description": "Build one evaluator for the sum of all contributions instead of separate evaluators.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16264,7 +16264,7 @@
     {
       "path": "cli.global.generation.evaluator.summed_function_map",
       "value_type": "boolean",
-      "description": "",
+      "description": "Represent a summed evaluator through a shared Symbolica function map.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16272,7 +16272,7 @@
     {
       "path": "cli.global.generation.evaluator.tensor_network_contraction_order",
       "value_type": "string",
-      "description": "",
+      "description": "Heuristic used to order tensor-network contractions.",
       "required": false,
       "default": "sparse_atom_aware",
       "possible_values": [
@@ -16285,7 +16285,7 @@
     {
       "path": "cli.global.generation.evaluator.verbose",
       "value_type": "boolean",
-      "description": "",
+      "description": "Emit detailed evaluator-construction diagnostics.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16293,7 +16293,7 @@
     {
       "path": "cli.global.generation.feyngen.gamma_simplification_closure_check",
       "value_type": "boolean",
-      "description": "",
+      "description": "Check that gamma-matrix simplification is closed under the generated rewrite sequence.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16301,7 +16301,7 @@
     {
       "path": "cli.global.generation.force_cuts",
       "value_type": "array",
-      "description": "",
+      "description": "Explicit particle-name sets forced to define graph cuts.",
       "required": false,
       "default": [],
       "possible_values": []
@@ -16309,7 +16309,7 @@
     {
       "path": "cli.global.generation.orientation_pattern.pat",
       "value_type": "null | string",
-      "description": "",
+      "description": "Symbolica pattern matched against serialized causal orientations.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -16317,7 +16317,7 @@
     {
       "path": "cli.global.generation.override_lmb_heuristics",
       "value_type": "boolean",
-      "description": "",
+      "description": "Use explicitly supplied loop-momentum bases instead of the built-in basis heuristics.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16325,7 +16325,7 @@
     {
       "path": "cli.global.generation.threshold_subtraction.assume_positive_external_energies",
       "value_type": "boolean",
-      "description": "",
+      "description": "Simplify existence tests by assuming all external-state energies are positive.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16333,7 +16333,7 @@
     {
       "path": "cli.global.generation.threshold_subtraction.check_esurface_at_generation",
       "value_type": "boolean",
-      "description": "",
+      "description": "Test E-surface existence against the active model while generating counterterms.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16341,7 +16341,7 @@
     {
       "path": "cli.global.generation.threshold_subtraction.disable_integrated_ct",
       "value_type": "boolean",
-      "description": "",
+      "description": "Generate local threshold counterterms without their integrated counterparts.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16349,7 +16349,7 @@
     {
       "path": "cli.global.generation.threshold_subtraction.enable_thresholds",
       "value_type": "boolean",
-      "description": "",
+      "description": "Generate local threshold counterterms for eligible E-surfaces.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16365,7 +16365,7 @@
     {
       "path": "cli.global.generation.threshold_subtraction.skip_thresholds_that_are_cuts",
       "value_type": "boolean",
-      "description": "",
+      "description": "Omit threshold counterterms whose E-surface coincides with a physical cut.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16373,7 +16373,7 @@
     {
       "path": "cli.global.generation.tropical_subgraph_table.disable_tropical_generation",
       "value_type": "boolean",
-      "description": "",
+      "description": "Disable tropical subgraph table construction entirely.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16381,7 +16381,7 @@
     {
       "path": "cli.global.generation.tropical_subgraph_table.panic_on_fail",
       "value_type": "boolean",
-      "description": "",
+      "description": "Abort generation instead of reporting and skipping a failed tropical table construction.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16389,7 +16389,7 @@
     {
       "path": "cli.global.generation.tropical_subgraph_table.target_omega",
       "value_type": "number",
-      "description": "",
+      "description": "Target superficial degree used when classifying tropical subgraphs.",
       "required": false,
       "default": 1.0,
       "possible_values": []
@@ -16397,7 +16397,7 @@
     {
       "path": "cli.global.generation.uv.add_marker",
       "value_type": "boolean",
-      "description": "",
+      "description": "Insert explicit marker functions around generated ultraviolet counterterms.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16405,7 +16405,7 @@
     {
       "path": "cli.global.generation.uv.final_integrand",
       "value_type": "string",
-      "description": "",
+      "description": "Dimensional representation used for the final locally subtracted integrand.",
       "required": false,
       "default": "ThreeD",
       "possible_values": [
@@ -16416,7 +16416,7 @@
     {
       "path": "cli.global.generation.uv.generate_integrated",
       "value_type": "boolean",
-      "description": "",
+      "description": "Generate analytically integrated ultraviolet counterterms.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16424,7 +16424,7 @@
     {
       "path": "cli.global.generation.uv.inner_products",
       "value_type": "boolean",
-      "description": "",
+      "description": "Rewrite Lorentz contractions into scalar inner products during ultraviolet processing.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16432,7 +16432,7 @@
     {
       "path": "cli.global.generation.uv.keep_marker",
       "value_type": "boolean",
-      "description": "",
+      "description": "Preserve ultraviolet marker functions after counterterm orchestration.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16440,7 +16440,7 @@
     {
       "path": "cli.global.generation.uv.orchestrator",
       "value_type": "string",
-      "description": "",
+      "description": "Algorithm used to enumerate and combine nested ultraviolet counterterms.",
       "required": false,
       "default": "hedge_poset",
       "possible_values": [
@@ -16452,7 +16452,7 @@
     {
       "path": "cli.global.generation.uv.renormalization_prescription.log_divergent",
       "value_type": "string",
-      "description": "",
+      "description": "Approximation applied to logarithmically divergent ultraviolet counterterms.",
       "required": false,
       "default": "MUV",
       "possible_values": [
@@ -16467,7 +16467,7 @@
     {
       "path": "cli.global.generation.uv.renormalization_prescription.massive_power_divergent",
       "value_type": "string",
-      "description": "",
+      "description": "Approximation applied to power-divergent counterterms with massive external structure.",
       "required": false,
       "default": "MUV",
       "possible_values": [
@@ -16482,7 +16482,7 @@
     {
       "path": "cli.global.generation.uv.renormalization_prescription.massless_power_divergent",
       "value_type": "string",
-      "description": "",
+      "description": "Approximation applied to power-divergent counterterms with massless external structure.",
       "required": false,
       "default": "MUV",
       "possible_values": [
@@ -16497,7 +16497,7 @@
     {
       "path": "cli.global.generation.uv.renormalization_prescription.overrides",
       "value_type": "array",
-      "description": "",
+      "description": "Counterterm-specific prescription rules evaluated before the divergence-class defaults.",
       "required": false,
       "default": [],
       "possible_values": []
@@ -16505,7 +16505,7 @@
     {
       "path": "cli.global.generation.uv.softct",
       "value_type": "boolean",
-      "description": "",
+      "description": "Generate soft ultraviolet counterterms where required by the selected prescription.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16513,7 +16513,7 @@
     {
       "path": "cli.global.generation.uv.subtract_uv",
       "value_type": "boolean",
-      "description": "",
+      "description": "Subtract generated ultraviolet counterterms from the final integrand.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16521,7 +16521,7 @@
     {
       "path": "cli.global.generation.uv.vakint.additional_normalization",
       "value_type": "string",
-      "description": "",
+      "description": "Extra symbolic normalization factor multiplied into every Vakint result.",
       "required": false,
       "default": "-1",
       "possible_values": []
@@ -16529,7 +16529,7 @@
     {
       "path": "cli.global.generation.uv.vakint.alphaloop.susbstitute_masters",
       "value_type": "boolean",
-      "description": "",
+      "description": "Substitute AlphaLoop master integrals by their registered expressions.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16537,7 +16537,7 @@
     {
       "path": "cli.global.generation.uv.vakint.clean_tmp_dir",
       "value_type": "boolean",
-      "description": "",
+      "description": "Remove Vakint's temporary backend directory after a successful evaluation.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16545,7 +16545,7 @@
     {
       "path": "cli.global.generation.uv.vakint.evaluation_methods",
       "value_type": "array",
-      "description": "",
+      "description": "Ordered Vakint evaluation backends tried for each matched vacuum integral.",
       "required": false,
       "default": [
         "alphaloop",
@@ -16557,7 +16557,7 @@
     {
       "path": "cli.global.generation.uv.vakint.fmft.expand_masters",
       "value_type": "boolean",
-      "description": "",
+      "description": "Expand FMFT master-integral abbreviations before returning the result.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16565,7 +16565,7 @@
     {
       "path": "cli.global.generation.uv.vakint.fmft.susbstitute_masters",
       "value_type": "boolean",
-      "description": "",
+      "description": "Substitute FMFT master integrals by their known analytic expressions.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16573,7 +16573,7 @@
     {
       "path": "cli.global.generation.uv.vakint.form_exe_path",
       "value_type": "string",
-      "description": "",
+      "description": "FORM executable used by analytic Vakint evaluation backends.",
       "required": false,
       "default": "form",
       "possible_values": []
@@ -16581,7 +16581,7 @@
     {
       "path": "cli.global.generation.uv.vakint.matad.direct_numerical_substition",
       "value_type": "boolean",
-      "description": "",
+      "description": "Numerically substitute constants directly in the MATAD result.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16589,7 +16589,7 @@
     {
       "path": "cli.global.generation.uv.vakint.matad.expand_masters",
       "value_type": "boolean",
-      "description": "",
+      "description": "Expand MATAD master-integral abbreviations before returning the result.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16597,7 +16597,7 @@
     {
       "path": "cli.global.generation.uv.vakint.matad.substitute_hpls",
       "value_type": "boolean",
-      "description": "",
+      "description": "Substitute harmonic polylogarithms produced by MATAD where formulas are available.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16605,7 +16605,7 @@
     {
       "path": "cli.global.generation.uv.vakint.matad.susbstitute_masters",
       "value_type": "boolean",
-      "description": "",
+      "description": "Substitute MATAD master integrals by their known analytic expressions.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16613,7 +16613,7 @@
     {
       "path": "cli.global.generation.uv.vakint.normalization",
       "value_type": "string",
-      "description": "",
+      "description": "Named normalization convention applied to matched vacuum integrals.",
       "required": false,
       "default": "MSbar",
       "possible_values": []
@@ -16621,7 +16621,7 @@
     {
       "path": "cli.global.generation.uv.vakint.pysecdec.max_n_evals",
       "value_type": "integer",
-      "description": "",
+      "description": "Maximum pySecDec sample count before the numerical integration stops.",
       "required": false,
       "default": 1000000000000,
       "possible_values": []
@@ -16629,7 +16629,7 @@
     {
       "path": "cli.global.generation.uv.vakint.pysecdec.min_n_evals",
       "value_type": "integer",
-      "description": "",
+      "description": "Minimum pySecDec sample count before a precision-based stop is accepted.",
       "required": false,
       "default": 10000,
       "possible_values": []
@@ -16637,7 +16637,7 @@
     {
       "path": "cli.global.generation.uv.vakint.pysecdec.quiet",
       "value_type": "boolean",
-      "description": "",
+      "description": "Suppress pySecDec progress output while Vakint evaluates an integral.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16645,7 +16645,7 @@
     {
       "path": "cli.global.generation.uv.vakint.pysecdec.relative_precision",
       "value_type": "number",
-      "description": "",
+      "description": "Requested relative precision for the pySecDec numerical integration.",
       "required": false,
       "default": 1e-7,
       "possible_values": []
@@ -16653,7 +16653,7 @@
     {
       "path": "cli.global.generation.uv.vakint.pysecdec.reuse_existing_output",
       "value_type": "string | null",
-      "description": "",
+      "description": "Existing pySecDec output directory to reuse instead of regenerating integration code.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -16661,7 +16661,7 @@
     {
       "path": "cli.global.generation.uv.vakint.python_exe_path",
       "value_type": "string",
-      "description": "",
+      "description": "Python interpreter used to invoke pySecDec.",
       "required": false,
       "default": "python3",
       "possible_values": []
@@ -16669,7 +16669,7 @@
     {
       "path": "cli.global.generation.uv.vakint.run_time_decimal_precision",
       "value_type": "integer",
-      "description": "",
+      "description": "Decimal precision used when substituting backend results at run time.",
       "required": false,
       "default": 100,
       "possible_values": []
@@ -16677,7 +16677,7 @@
     {
       "path": "cli.global.generation.uv.vakint.temporary_directory",
       "value_type": "string | null",
-      "description": "",
+      "description": "Parent directory for temporary Vakint backend files; the system default is used when absent.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -16685,7 +16685,7 @@
     {
       "path": "cli.global.generation.vector_polarization_sum_gauge",
       "value_type": "string",
-      "description": "",
+      "description": "Gauge used when summing external vector-particle polarizations.",
       "required": false,
       "default": "LightLikeAxial",
       "possible_values": [
@@ -16696,7 +16696,7 @@
     {
       "path": "cli.global.log_style.full_line_source",
       "value_type": "boolean",
-      "description": "",
+      "description": "Include the complete source file path and line number for each event.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16704,7 +16704,7 @@
     {
       "path": "cli.global.log_style.include_fields",
       "value_type": "boolean",
-      "description": "",
+      "description": "Render structured tracing fields in addition to the formatted event message.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16712,7 +16712,7 @@
     {
       "path": "cli.global.log_style.log_format",
       "value_type": "string",
-      "description": "",
+      "description": "Amount of timestamp, target, level, and source context included in each log line.",
       "required": false,
       "default": "Long",
       "possible_values": [
@@ -16726,7 +16726,7 @@
     {
       "path": "cli.global.log_style.short_timestamp",
       "value_type": "boolean",
-      "description": "",
+      "description": "Use compact timestamps instead of full date-and-time values.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16734,7 +16734,7 @@
     {
       "path": "cli.global.logfile_directive",
       "value_type": "string",
-      "description": "",
+      "description": "Tracing filter applied to the optional log-file sink; `off` disables that sink.",
       "required": false,
       "default": "off",
       "possible_values": []
@@ -16742,7 +16742,7 @@
     {
       "path": "cli.global.n_cores.compile",
       "value_type": "integer",
-      "description": "",
+      "description": "Worker threads used for evaluator compilation.",
       "required": false,
       "default": 1,
       "possible_values": []
@@ -16750,7 +16750,7 @@
     {
       "path": "cli.global.n_cores.feyngen",
       "value_type": "integer",
-      "description": "",
+      "description": "Worker threads used by Feynman-graph generation.",
       "required": false,
       "default": 1,
       "possible_values": []
@@ -16758,7 +16758,7 @@
     {
       "path": "cli.global.n_cores.generate",
       "value_type": "integer",
-      "description": "",
+      "description": "Worker threads used to construct symbolic graph evaluators.",
       "required": false,
       "default": 1,
       "possible_values": []
@@ -16766,7 +16766,7 @@
     {
       "path": "cli.global.n_cores.integrate",
       "value_type": "integer",
-      "description": "",
+      "description": "Worker threads used by numerical integration.",
       "required": false,
       "default": 1,
       "possible_values": []
@@ -16774,7 +16774,7 @@
     {
       "path": "cli.override_state",
       "value_type": "boolean",
-      "description": "",
+      "description": "Permit generated artifacts to replace compatible files in the active state folder.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16782,7 +16782,7 @@
     {
       "path": "cli.state.folder",
       "value_type": "string",
-      "description": "",
+      "description": "Folder containing persisted settings, models, processes, and run history.",
       "required": false,
       "default": "./gammaloop_state",
       "possible_values": []
@@ -16790,7 +16790,7 @@
     {
       "path": "cli.state.name",
       "value_type": "string | null",
-      "description": "",
+      "description": "Optional human-readable state name stored with the serialized state.",
       "required": false,
       "default": "",
       "possible_values": []
@@ -16798,7 +16798,7 @@
     {
       "path": "cli.try_strings",
       "value_type": "boolean",
-      "description": "",
+      "description": "Serialize replayable commands as compact strings when their structured form permits it.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16806,7 +16806,7 @@
     {
       "path": "runtime.general.additional_param_values",
       "value_type": "array",
-      "description": "",
+      "description": "Values assigned, in order, to extra symbolic parameters expected by the evaluator.",
       "required": false,
       "default": [],
       "possible_values": []
@@ -16814,7 +16814,7 @@
     {
       "path": "runtime.general.debug_cache",
       "value_type": "boolean",
-      "description": "",
+      "description": "Emit additional cache consistency diagnostics while evaluating samples.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16822,7 +16822,7 @@
     {
       "path": "runtime.general.disable_flux_factor",
       "value_type": "boolean",
-      "description": "",
+      "description": "Omit the incoming-state flux factor from the returned integrand value.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16830,7 +16830,7 @@
     {
       "path": "runtime.general.enable_cache",
       "value_type": "boolean",
-      "description": "",
+      "description": "Cache reusable evaluation data between phase-space samples.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16838,7 +16838,7 @@
     {
       "path": "runtime.general.evaluator_method",
       "value_type": "string",
-      "description": "",
+      "description": "Evaluator backend used for generated integrands.",
       "required": false,
       "default": "SingleParametric",
       "possible_values": [
@@ -16851,7 +16851,7 @@
     {
       "path": "runtime.general.generate_events",
       "value_type": "boolean",
-      "description": "",
+      "description": "Return generated events in addition to accumulating integration statistics.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16859,7 +16859,7 @@
     {
       "path": "runtime.general.integral_unit",
       "value_type": "string",
-      "description": "",
+      "description": "Unit used to report integrated cross-sections; `auto` selects picobarns for scattering.",
       "required": false,
       "default": "auto",
       "possible_values": [
@@ -16874,7 +16874,7 @@
     {
       "path": "runtime.general.load_compiled_cff",
       "value_type": "boolean",
-      "description": "",
+      "description": "Load a previously compiled causal-flow function instead of rebuilding it for this run.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16882,7 +16882,7 @@
     {
       "path": "runtime.general.m_uv",
       "value_type": "number",
-      "description": "",
+      "description": "Ultraviolet reference mass used by local counterterms, in the model's energy units.",
       "required": false,
       "default": 1000.0,
       "possible_values": []
@@ -16890,7 +16890,7 @@
     {
       "path": "runtime.general.mu_r",
       "value_type": "number",
-      "description": "",
+      "description": "Renormalization scale used by running parameters and scale-dependent terms.",
       "required": false,
       "default": 1000.0,
       "possible_values": []
@@ -16898,7 +16898,7 @@
     {
       "path": "runtime.general.orientation_pat.pat",
       "value_type": "null | string",
-      "description": "",
+      "description": "Symbolica pattern matched against serialized causal orientations.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -16906,7 +16906,7 @@
     {
       "path": "runtime.general.renormalization_localization_scale",
       "value_type": "number",
-      "description": "",
+      "description": "Localization scale applied to ultraviolet counterterms, in the model's energy units.",
       "required": false,
       "default": 1000.0,
       "possible_values": []
@@ -16914,7 +16914,7 @@
     {
       "path": "runtime.general.store_additional_weights_in_event",
       "value_type": "boolean",
-      "description": "",
+      "description": "Persist every configured additional weight on each generated event.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16922,7 +16922,7 @@
     {
       "path": "runtime.general.use_ltd",
       "value_type": "boolean",
-      "description": "",
+      "description": "Evaluate through the loop-tree-duality representation where the selected integrand supports it.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -16930,7 +16930,7 @@
     {
       "path": "runtime.h_function.enabled_dampening",
       "value_type": "boolean",
-      "description": "",
+      "description": "Apply the damping profile; disabling it leaves the corresponding factor equal to one.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -16938,7 +16938,7 @@
     {
       "path": "runtime.h_function.function",
       "value_type": "string",
-      "description": "",
+      "description": "Functional form of the counterterm damping profile.",
       "required": false,
       "default": "poly_exponential",
       "possible_values": [
@@ -16951,7 +16951,7 @@
     {
       "path": "runtime.h_function.power",
       "value_type": "integer | null",
-      "description": "",
+      "description": "Optional polynomial power overriding the profile's built-in choice.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -16959,7 +16959,7 @@
     {
       "path": "runtime.h_function.sigma",
       "value_type": "number",
-      "description": "",
+      "description": "Characteristic width of the damping profile.",
       "required": false,
       "default": 1.0,
       "possible_values": []
@@ -16967,7 +16967,7 @@
     {
       "path": "runtime.integrand.n_3d_momenta",
       "value_type": "integer",
-      "description": "",
+      "description": "Number of independent three-momenta used to construct the unit-surface test dimension.",
       "required": true,
       "default": null,
       "possible_values": []
@@ -16975,7 +16975,7 @@
     {
       "path": "runtime.integrator.bin_number_evolution",
       "value_type": "array | null",
-      "description": "",
+      "description": "Optional per-iteration bin counts, overriding the fixed `n_bins` value as training proceeds.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -16983,7 +16983,7 @@
     {
       "path": "runtime.integrator.continuous_dim_learning_rate",
       "value_type": "number",
-      "description": "",
+      "description": "Update rate for adaptive grids over continuous integration dimensions.",
       "required": false,
       "default": 1.0,
       "possible_values": []
@@ -16991,7 +16991,7 @@
     {
       "path": "runtime.integrator.discrete_dim_learning_rate",
       "value_type": "number",
-      "description": "",
+      "description": "Update rate for learned probabilities over discrete sampling choices.",
       "required": false,
       "default": 1.0,
       "possible_values": []
@@ -16999,7 +16999,7 @@
     {
       "path": "runtime.integrator.integrated_phase",
       "value_type": "string",
-      "description": "",
+      "description": "Complex component to integrate: real, imaginary, or both.",
       "required": false,
       "default": "real",
       "possible_values": [
@@ -17011,7 +17011,7 @@
     {
       "path": "runtime.integrator.max_prob_ratio",
       "value_type": "number",
-      "description": "",
+      "description": "Cap the ratio used when turning sampled weights into adaptive probabilities.",
       "required": false,
       "default": 30.0,
       "possible_values": []
@@ -17019,7 +17019,7 @@
     {
       "path": "runtime.integrator.min_samples_for_update",
       "value_type": "integer",
-      "description": "",
+      "description": "Minimum accumulated samples before an adaptive grid or discrete probability is updated.",
       "required": false,
       "default": 1000,
       "possible_values": []
@@ -17027,7 +17027,7 @@
     {
       "path": "runtime.integrator.n_bins",
       "value_type": "integer",
-      "description": "",
+      "description": "Number of bins maintained along each continuous integration dimension.",
       "required": false,
       "default": 64,
       "possible_values": []
@@ -17035,7 +17035,7 @@
     {
       "path": "runtime.integrator.n_increase",
       "value_type": "integer",
-      "description": "",
+      "description": "Samples added to each successive Monte Carlo iteration.",
       "required": false,
       "default": 10000,
       "possible_values": []
@@ -17043,7 +17043,7 @@
     {
       "path": "runtime.integrator.n_max",
       "value_type": "integer",
-      "description": "",
+      "description": "Hard upper bound on the total number of integrand evaluations.",
       "required": false,
       "default": 10000000000,
       "possible_values": []
@@ -17051,7 +17051,7 @@
     {
       "path": "runtime.integrator.n_start",
       "value_type": "integer",
-      "description": "",
+      "description": "Number of samples in the first Monte Carlo iteration.",
       "required": false,
       "default": 100000,
       "possible_values": []
@@ -17059,7 +17059,7 @@
     {
       "path": "runtime.integrator.observables_output.format",
       "value_type": "array",
-      "description": "",
+      "description": "Output formats written for configured observables; duplicates and `none` are ignored.",
       "required": false,
       "default": [
         "json"
@@ -17069,7 +17069,7 @@
     {
       "path": "runtime.integrator.seed",
       "value_type": "integer",
-      "description": "",
+      "description": "Seed for deterministic initialization of Monte Carlo random-number streams.",
       "required": false,
       "default": 69,
       "possible_values": []
@@ -17077,7 +17077,7 @@
     {
       "path": "runtime.integrator.show_max_wgt_info",
       "value_type": "boolean",
-      "description": "",
+      "description": "Include maximum-weight diagnostics in integration progress and result data.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -17085,7 +17085,7 @@
     {
       "path": "runtime.integrator.target_absolute_accuracy",
       "value_type": "number | null",
-      "description": "",
+      "description": "Stop once the estimated absolute uncertainty reaches this value, if configured.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -17093,7 +17093,7 @@
     {
       "path": "runtime.integrator.target_relative_accuracy",
       "value_type": "number | null",
-      "description": "",
+      "description": "Stop once the estimated relative uncertainty reaches this value, if configured.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -17101,7 +17101,7 @@
     {
       "path": "runtime.integrator.train_on_avg",
       "value_type": "boolean",
-      "description": "",
+      "description": "Train adaptive distributions on iteration averages instead of individual sample weights.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -17109,7 +17109,7 @@
     {
       "path": "runtime.kinematics.e_cm",
       "value_type": "number",
-      "description": "",
+      "description": "Center-of-mass energy used to normalize and construct external momenta.",
       "required": false,
       "default": 64.0,
       "possible_values": []
@@ -17117,7 +17117,7 @@
     {
       "path": "runtime.kinematics.externals.data.helicities",
       "value_type": "array",
-      "description": "",
+      "description": "Helicity assigned to each external particle in process order.",
       "required": true,
       "default": [],
       "possible_values": []
@@ -17125,7 +17125,7 @@
     {
       "path": "runtime.kinematics.externals.data.improvement_settings.large_deformation_check",
       "value_type": "null | number",
-      "description": "",
+      "description": "Maximum dimensionless deformation before the improved point is rejected.",
       "required": false,
       "default": 1e-12,
       "possible_values": []
@@ -17133,7 +17133,7 @@
     {
       "path": "runtime.kinematics.externals.data.improvement_settings.mode",
       "value_type": "string",
-      "description": "",
+      "description": "On-shell improvement algorithm, or `none` to preserve the supplied momenta.",
       "required": false,
       "default": "none",
       "possible_values": [
@@ -17145,7 +17145,7 @@
     {
       "path": "runtime.kinematics.externals.data.improvement_settings.only_warn_on_large_deformation",
       "value_type": "boolean",
-      "description": "",
+      "description": "Warn instead of failing when an improvement exceeds the deformation threshold.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -17153,7 +17153,7 @@
     {
       "path": "runtime.kinematics.externals.data.momenta",
       "value_type": "array",
-      "description": "",
+      "description": "External four-momenta; exactly one entry may be marked dependent.",
       "required": true,
       "default": [],
       "possible_values": []
@@ -17161,7 +17161,7 @@
     {
       "path": "runtime.kinematics.externals.type",
       "value_type": "string",
-      "description": "",
+      "description": "Selects how external momenta and helicities are supplied; currently `constant`.",
       "required": true,
       "default": "constant",
       "possible_values": [
@@ -17171,7 +17171,7 @@
     {
       "path": "runtime.model",
       "value_type": "object",
-      "description": "",
+      "description": "Per-integrand overrides for external model parameters.",
       "required": false,
       "default": {},
       "possible_values": []
@@ -17179,7 +17179,7 @@
     {
       "path": "runtime.observables",
       "value_type": "object",
-      "description": "",
+      "description": "Named histograms and other observable accumulators.",
       "required": false,
       "default": {},
       "possible_values": []
@@ -17187,7 +17187,7 @@
     {
       "path": "runtime.quantities",
       "value_type": "object",
-      "description": "",
+      "description": "Named derived quantities available to selectors and observables.",
       "required": false,
       "default": {},
       "possible_values": []
@@ -17195,7 +17195,7 @@
     {
       "path": "runtime.sampling.alpha",
       "value_type": "number",
-      "description": "",
+      "description": "Exponent controlling the sharpness of multichannel weights.",
       "required": false,
       "default": 3.0,
       "possible_values": []
@@ -17203,7 +17203,7 @@
     {
       "path": "runtime.sampling.b",
       "value_type": "number",
-      "description": "",
+      "description": "Scale parameter of the selected radial mapping.",
       "required": false,
       "default": 1.0,
       "possible_values": []
@@ -17211,7 +17211,7 @@
     {
       "path": "runtime.sampling.coordinate_system",
       "value_type": "string",
-      "description": "",
+      "description": "Coordinate system used to parameterize loop momenta.",
       "required": false,
       "default": "spherical",
       "possible_values": [
@@ -17229,7 +17229,7 @@
     {
       "path": "runtime.sampling.graph_names",
       "value_type": "array",
-      "description": "",
+      "description": "Optional graph-name allow-list for discrete graph sampling.",
       "required": false,
       "default": [],
       "possible_values": []
@@ -17237,7 +17237,7 @@
     {
       "path": "runtime.sampling.graphs",
       "value_type": "string",
-      "description": "",
+      "description": "Whether graph contributions are summed deterministically or sampled as a discrete axis.",
       "required": false,
       "default": "summed",
       "possible_values": [
@@ -17248,7 +17248,7 @@
     {
       "path": "runtime.sampling.lmb_basis_ids",
       "value_type": "object",
-      "description": "",
+      "description": "Explicit loop-momentum-basis identifiers keyed by graph name.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -17256,7 +17256,7 @@
     {
       "path": "runtime.sampling.lmb_channel_weight",
       "value_type": "string",
-      "description": "",
+      "description": "Rule used to construct the relative probability of each loop-momentum-basis channel.",
       "required": false,
       "default": "ose",
       "possible_values": [
@@ -17267,7 +17267,7 @@
     {
       "path": "runtime.sampling.lmb_channels",
       "value_type": "string",
-      "description": "",
+      "description": "Whether loop-momentum-basis channels are summed or sampled discretely.",
       "required": false,
       "default": "summed",
       "possible_values": [
@@ -17278,7 +17278,7 @@
     {
       "path": "runtime.sampling.lmb_multichanneling",
       "value_type": "boolean",
-      "description": "",
+      "description": "Enable multichannel sampling over loop-momentum bases.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -17286,7 +17286,7 @@
     {
       "path": "runtime.sampling.mapping",
       "value_type": "string",
-      "description": "",
+      "description": "Mapping from the unit hypercube to unbounded radial coordinates.",
       "required": false,
       "default": "linear",
       "possible_values": [
@@ -17298,7 +17298,7 @@
     {
       "path": "runtime.sampling.orientations",
       "value_type": "string",
-      "description": "",
+      "description": "Whether causal orientations are summed deterministically or sampled as a discrete axis.",
       "required": false,
       "default": "summed",
       "possible_values": [
@@ -17309,7 +17309,7 @@
     {
       "path": "runtime.sampling.power",
       "value_type": "number",
-      "description": "",
+      "description": "Power parameter of the selected radial mapping.",
       "required": false,
       "default": 1.0,
       "possible_values": []
@@ -17317,7 +17317,7 @@
     {
       "path": "runtime.selectors",
       "value_type": "object",
-      "description": "",
+      "description": "Named event-selection predicates applied before observable accumulation.",
       "required": false,
       "default": {},
       "possible_values": []
@@ -17325,7 +17325,7 @@
     {
       "path": "runtime.stability.check_on_norm",
       "value_type": "boolean",
-      "description": "",
+      "description": "Compare rotated results after normalizing by the result magnitude.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -17333,7 +17333,7 @@
     {
       "path": "runtime.stability.escalate_if_exact_zero",
       "value_type": "boolean",
-      "description": "",
+      "description": "Escalate precision when a result is exactly zero at the current level.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -17341,7 +17341,7 @@
     {
       "path": "runtime.stability.levels",
       "value_type": "array",
-      "description": "",
+      "description": "Ordered numerical-precision levels and tolerances used during stability escalation.",
       "required": false,
       "default": [
         {
@@ -17368,7 +17368,7 @@
     {
       "path": "runtime.stability.loop_momenta_norm_escalation_factor",
       "value_type": "number",
-      "description": "",
+      "description": "Escalate when the loop-momentum norm exceeds this factor; a negative value disables it.",
       "required": false,
       "default": -1.0,
       "possible_values": []
@@ -17376,7 +17376,7 @@
     {
       "path": "runtime.stability.recording.record_all_stability_levels",
       "value_type": "boolean",
-      "description": "",
+      "description": "Record the result produced at every attempted numerical-precision level.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -17384,7 +17384,7 @@
     {
       "path": "runtime.stability.recording.record_loop_momenta_escalation",
       "value_type": "boolean",
-      "description": "",
+      "description": "Record evaluations escalated because of the loop-momentum norm threshold.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -17392,7 +17392,7 @@
     {
       "path": "runtime.stability.recording.record_rotated_results",
       "value_type": "boolean",
-      "description": "",
+      "description": "Record the values obtained at rotated phase-space points.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -17400,7 +17400,7 @@
     {
       "path": "runtime.stability.rotation_axis",
       "value_type": "array",
-      "description": "",
+      "description": "Rotations applied when comparing an unstable sample with an equivalent phase-space point.",
       "required": false,
       "default": [
         {
@@ -17415,7 +17415,7 @@
     {
       "path": "runtime.subtraction.disable_threshold_subtraction",
       "value_type": "boolean",
-      "description": "",
+      "description": "Disable local threshold subtraction while leaving the original integrand unchanged.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -17431,7 +17431,7 @@
     {
       "path": "runtime.subtraction.integrated_ct_settings.range.h_function_settings.enabled_dampening",
       "value_type": "boolean",
-      "description": "",
+      "description": "Apply the damping profile; disabling it leaves the corresponding factor equal to one.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -17439,7 +17439,7 @@
     {
       "path": "runtime.subtraction.integrated_ct_settings.range.h_function_settings.function",
       "value_type": "string",
-      "description": "",
+      "description": "Functional form of the counterterm damping profile.",
       "required": false,
       "default": "poly_exponential",
       "possible_values": [
@@ -17452,7 +17452,7 @@
     {
       "path": "runtime.subtraction.integrated_ct_settings.range.h_function_settings.power",
       "value_type": "integer | null",
-      "description": "",
+      "description": "Optional polynomial power overriding the profile's built-in choice.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -17460,7 +17460,7 @@
     {
       "path": "runtime.subtraction.integrated_ct_settings.range.h_function_settings.sigma",
       "value_type": "number",
-      "description": "",
+      "description": "Characteristic width of the damping profile.",
       "required": false,
       "default": 1.0,
       "possible_values": []
@@ -17468,7 +17468,7 @@
     {
       "path": "runtime.subtraction.integrated_ct_settings.range.type",
       "value_type": "string",
-      "description": "",
+      "description": "Selects the integrated-counterterm radial domain: `infinite` with damping or `compact`.",
       "required": true,
       "default": "infinite",
       "possible_values": [
@@ -17478,7 +17478,7 @@
     {
       "path": "runtime.subtraction.local_ct_settings.uv_localisation.dynamic_width",
       "value_type": "boolean",
-      "description": "",
+      "description": "Derive the localization width dynamically from the sampled ultraviolet configuration.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -17486,7 +17486,7 @@
     {
       "path": "runtime.subtraction.local_ct_settings.uv_localisation.force_uv_dampers_to_one",
       "value_type": "boolean",
-      "description": "",
+      "description": "Replace ultraviolet localization dampers by one for diagnostic comparisons.",
       "required": false,
       "default": false,
       "possible_values": []
@@ -17494,7 +17494,7 @@
     {
       "path": "runtime.subtraction.local_ct_settings.uv_localisation.gaussian_width",
       "value_type": "number",
-      "description": "",
+      "description": "Width of the Gaussian ultraviolet localization factor.",
       "required": false,
       "default": 1.0,
       "possible_values": []
@@ -17502,7 +17502,7 @@
     {
       "path": "runtime.subtraction.local_ct_settings.uv_localisation.sliver_width",
       "value_type": "number",
-      "description": "",
+      "description": "Width of the transition region used by the ultraviolet sliver damper.",
       "required": false,
       "default": 10.0,
       "possible_values": []
@@ -17510,7 +17510,7 @@
     {
       "path": "runtime.subtraction.overlap_settings.check_global_center",
       "value_type": "boolean",
-      "description": "",
+      "description": "Validate that the selected global center lies inside every required E-surface.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -17518,7 +17518,7 @@
     {
       "path": "runtime.subtraction.overlap_settings.force_global_center",
       "value_type": "array | null",
-      "description": "",
+      "description": "Explicit three-vector center used for every threshold overlap, when provided.",
       "required": false,
       "default": null,
       "possible_values": []
@@ -17526,7 +17526,7 @@
     {
       "path": "runtime.subtraction.overlap_settings.try_origin",
       "value_type": "boolean",
-      "description": "",
+      "description": "Try the loop-momentum origin as the global center before solving for another point.",
       "required": false,
       "default": true,
       "possible_values": []
@@ -17534,7 +17534,7 @@
     {
       "path": "runtime.subtraction.overlap_settings.try_origin_all_lmbs",
       "value_type": "boolean",
-      "description": "",
+      "description": "Try the origin independently for every available loop-momentum basis.",
       "required": false,
       "default": false,
       "possible_values": []

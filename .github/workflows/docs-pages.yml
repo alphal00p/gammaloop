@@ -57,6 +57,7 @@ on:
       - 'justfile'
       - 'pyproject.toml'
       - 'scripts/render-docs-svg-assets.sh'
+      - 'scripts/check-docs-html.py'
       - 'scripts/update-docs-pages.sh'
       - 'scripts/update-publications.py'
       - 'tests/resources/graphs/**'
@@ -294,6 +295,9 @@ jobs:
           example_run=$({ grep -rho '// docs-example: run' docs/products --include='*.typ' || true; } | wc -l)
           example_compile=$({ grep -rho '// docs-example: compile' docs/products --include='*.typ' || true; } | wc -l)
           example_syntax=$({ grep -rho '// docs-example: syntax' docs/products --include='*.typ' || true; } | wc -l)
+          canonical_examples=$(grep -c '^\[\[example\]\]' docs/examples.toml)
+          pull_request_examples=$(grep -c '^tier = "pull-request"' docs/examples.toml)
+          scheduled_examples=$({ grep -c '^tier = "scheduled"' docs/examples.toml || true; })
           python_supported=0
           python_supported_incomplete=0
           python_members=0
@@ -338,6 +342,8 @@ jobs:
             echo "| Python members missing documentation | $python_members_missing_docs / $python_members |"
             echo "| Introspection scaffolds (not meaningful examples) | $python_help_placeholders |"
             echo "| Manual example modes | $example_run run · $example_compile compile · $example_syntax syntax |"
+            echo "| Canonical example journeys | $canonical_examples |"
+            echo "| Canonical verification tiers | $pull_request_examples pull request · $scheduled_examples scheduled |"
             echo "| Reusable Cargo producer | $CARGO_PRODUCER |"
             echo "| Five-site build | ${SECONDS_ELAPSED}s |"
           } >> "$GITHUB_STEP_SUMMARY"

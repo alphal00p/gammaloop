@@ -20,9 +20,12 @@ use eyre::{eyre, Context};
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub enum Import {
+    /// Load a UFO model and make it the active model for subsequent generation.
     Model(ImportModel),
+    /// Load serialized graph data into a new or existing process.
     Graphs {
         // #[arg(short = 'p')]
+        /// Graph file to load, resolved against the active state root and current directory.
         #[arg(value_hint = clap::ValueHint::FilePath)]
         path: PathBuf,
 
@@ -35,12 +38,15 @@ pub enum Import {
         )]
         process: Option<ProcessRef>,
 
+        /// Name assigned to the imported integrand.
         #[arg(short = 'i', completion_disable_special_value())]
         integrand_name: Option<String>,
 
+        /// Replace an existing process or integrand with the same target name.
         #[arg(short = 'o', default_value_t = false, conflicts_with = "append")]
         overwrite: bool,
 
+        /// Append imported graphs to the selected target instead of replacing it.
         #[arg(short = 'a', default_value_t = false, conflicts_with = "overwrite")]
         append: bool,
     },

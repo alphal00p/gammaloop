@@ -45,12 +45,16 @@ pub enum LogFormat {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, JsonSchema, PartialEq, Default)]
 #[serde(default, deny_unknown_fields)]
 pub struct LogStyle {
+    /// Amount of timestamp, target, level, and source context included in each log line.
     #[serde(skip_serializing_if = "crate::utils::serde_utils::IsDefault::is_default")]
     pub log_format: LogFormat,
+    /// Use compact timestamps instead of full date-and-time values.
     #[serde(skip_serializing_if = "crate::utils::serde_utils::is_false")]
     pub short_timestamp: bool,
+    /// Include the complete source file path and line number for each event.
     #[serde(skip_serializing_if = "crate::utils::serde_utils::is_false")]
     pub full_line_source: bool,
+    /// Render structured tracing fields in addition to the formatted event message.
     #[serde(skip_serializing_if = "crate::utils::serde_utils::is_false")]
     pub include_fields: bool,
 }

@@ -38,6 +38,52 @@ tensor-network interpretation depends on orientation.
   is not required by the caller.
 ])
 
+== Enumerate separating cuts
+
+This complete example builds a square with a diagonal and asks for every cut separating opposite
+nodes. It is the smallest graph that makes the distinction between a path and a cut family
+visible without external data or drawing support.
+
+// docs-example: run
+```rust
+use linnet::half_edge::{HedgeGraph, builder::HedgeGraphBuilder};
+
+fn main() {
+    let mut builder = HedgeGraphBuilder::new();
+    let a = builder.add_node(());
+    let b = builder.add_node(());
+    let c = builder.add_node(());
+    let d = builder.add_node(());
+
+    builder.add_edge(a, b, (), true);
+    builder.add_edge(b, c, (), true);
+    builder.add_edge(c, d, (), true);
+    builder.add_edge(d, a, (), true);
+    builder.add_edge(b, d, (), true);
+
+    let graph: HedgeGraph<(), (), ()> = builder.build();
+    graph.check().expect("the half-edge involution is valid");
+    let cuts = graph.all_cuts_from_ids(&[a], &[c]);
+
+    assert_eq!(cuts.len(), 4);
+    println!("separating cuts: {}", cuts.len());
+}
+```
+
+The expected invariant is four distinct left/cut/right partitions separating `a` from `c`.
+Changing the diagonal changes that count, while changing only node or edge payloads does not.
+The generated #link("reference/rust/supported/linnet/#supported-hedgegraph")[`HedgeGraph`
+reference] and
+#link("reference/rust/supported/linnet/#supported-hedgegraphbuilder")[builder reference] give the
+exact supported type boundaries.
+
+#callout("Interpret a cut mismatch structurally", [
+  A failed `graph.check()` indicates a storage or involution invariant and must be resolved before
+  enumeration. Zero cuts usually means the endpoint sets overlap or are disconnected from the
+  selected region. An unexpected nonzero count means the constructed edges or endpoint sets do
+  not describe the graph you intended; inspect those before adding post-enumeration filters.
+])
+
 == Mutation boundaries
 
 Extraction copies a selected region, excision separates a graph along its boundary, sewing

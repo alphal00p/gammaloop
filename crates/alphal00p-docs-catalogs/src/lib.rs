@@ -534,7 +534,7 @@ fn python_scope(request: &CatalogRequest, workspace_root: &Path, stub: &Path) ->
         item.signature = Some(declaration.signature);
         item.members = declaration.members;
         item.examples.push(DocExample::new(
-            "Inspect the registered export",
+            "Introspection scaffold (not a task example)",
             "python",
             format!(
                 "from {} import {}\nhelp({})",
