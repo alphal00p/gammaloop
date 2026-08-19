@@ -10,20 +10,23 @@
 //!
 //! Momentum map: loop `K(0,·)` -> `oneloop::k`; externals `P(0/1/2,·)` -> `oneloop::q1/q2/q3`.
 
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::{function, symbol};
 
 use crate::family::{Integral, IntegralFamily, Kinematics, Propagator};
 use crate::symbols::S;
 
-/// A gammaloop momentum tensor `H(id, mink(4, idx_))`
-fn known_momentum(head: &str, id: i64, oneloop_sym: Atom) -> (Atom, Atom) {
+#[derive(Clone, Copy)]
+pub struct GammaloopHeads {
+    pub loop_mom: Symbol,
+    pub external_mom: Symbol,
+    pub index: Symbol,
+}
+
+/// A gammaloop momentum tensor `head(id, index(4, idx_))`
+fn known_momentum(head: Symbol, id: i64, oneloop_sym: Atom, index: Symbol) -> (Atom, Atom) {
     let idx = Atom::var(symbol!("idx_"));
-    let tensor = function!(
-        symbol!(head),
-        Atom::num(id),
-        function!(symbol!("mink"), Atom::num(4), idx)
-    );
+    let tensor = function!(head, Atom::num(id), function!(index, Atom::num(4), idx));
     (tensor, oneloop_sym)
 }
 
@@ -31,20 +34,20 @@ fn known_momentum(head: &str, id: i64, oneloop_sym: Atom) -> (Atom, Atom) {
 ///
 /// TODO: only externals up to `q3` (≤4-point) are mapped; generalize to build `q{j+1}` dynamically
 /// so pentagons and beyond (`P(3,·)`, …) are handled too.
-fn known_momenta() -> Vec<(Atom, Atom)> {
+fn known_momenta(heads: &GammaloopHeads) -> Vec<(Atom, Atom)> {
     vec![
-        known_momentum("K", 0, Atom::var(S.k)),
-        known_momentum("P", 0, Atom::var(S.q1)),
-        known_momentum("P", 1, Atom::var(S.q2)),
-        known_momentum("P", 2, Atom::var(S.q3)),
+        known_momentum(heads.loop_mom, 0, Atom::var(S.k), heads.index),
+        known_momentum(heads.external_mom, 0, Atom::var(S.q1), heads.index),
+        known_momentum(heads.external_mom, 1, Atom::var(S.q2), heads.index),
+        known_momentum(heads.external_mom, 2, Atom::var(S.q3), heads.index),
     ]
 }
 
 /// Rewrite the shared-index momentum contractions of a gammaloop scalar numerator into oneloop
 /// `dot(...)` form. Self-contractions `a·a` (which Symbolica stores as squares) and contractions
 /// `a·b` between two distinct momenta (shared-index products) both become `dot(...)`.
-pub fn numerator_to_dot_form(num: &Atom) -> Atom {
-    let moms = known_momenta();
+pub fn numerator_to_dot_form(num: &Atom, heads: &GammaloopHeads) -> Atom {
+    let moms = known_momenta(heads);
     let mut out = num.clone();
     // Self-contractions `a·a` appear as squares `mom(mink(4,i))^2` (the shared index makes the
     // two factors identical, so Symbolica collects them into a power).
@@ -68,16 +71,16 @@ pub fn numerator_to_dot_form(num: &Atom) -> Atom {
 }
 
 /// The external-momentum offset of a propagator, extracted from its gammaloop `lmb_rep`
-pub fn external_offset_from_lmb_rep(lmb_rep: &Atom) -> Atom {
+pub fn external_offset_from_lmb_rep(lmb_rep: &Atom, heads: &GammaloopHeads) -> Atom {
     // A single wildcard that swallows the whole `mink(4, idx)` argument.
     let any_index = Atom::var(symbol!("midx_"));
     let mut offset = lmb_rep.clone();
     for l in 0..MAX_MOMENTUM_ID {
-        let loop_mom = function!(symbol!("K"), Atom::num(l), any_index.clone());
+        let loop_mom = function!(heads.loop_mom, Atom::num(l), any_index.clone());
         offset = offset.replace(loop_mom.to_pattern()).with(Atom::Zero);
     }
     for j in 0..MAX_MOMENTUM_ID {
-        let external = function!(symbol!("P"), Atom::num(j), any_index.clone());
+        let external = function!(heads.external_mom, Atom::num(j), any_index.clone());
         let q = Atom::var(symbol!(format!("oneloop::q{}", j + 1)));
         offset = offset.replace(external.to_pattern()).with(q);
     }
@@ -91,7 +94,6 @@ pub struct GammaloopEdge {
     pub lmb_rep: Atom,
     pub mass_sq: Atom,
 }
-
 
 fn square_external_momentum(momentum: &Atom) -> Atom {
     let qs = [Atom::var(S.q1), Atom::var(S.q2), Atom::var(S.q3)];
@@ -114,7 +116,7 @@ fn square_external_momentum(momentum: &Atom) -> Atom {
     out
 }
 
-/// The `C(n,2)` pairwise invariants `(r_i - r_j)^2` 
+/// The `C(n,2)` pairwise invariants `(r_i - r_j)^2`
 fn invariants_from_offsets(offsets: &[Atom]) -> Vec<Atom> {
     let mut invariants = Vec::new();
     for i in 0..offsets.len() {
@@ -127,11 +129,15 @@ fn invariants_from_offsets(offsets: &[Atom]) -> Vec<Atom> {
 
 /// Assemble a reducer [`IntegralFamily`] from a gammaloop one-loop numerator and its internal edges.
 /// The numerator is translated to dot form; each edge contributes a massive propagator; and the
-/// external kinematics are the pairwise invariants of the edges' external offsets. 
-pub fn family_from_gammaloop(numerator: &Atom, edges: &[GammaloopEdge]) -> IntegralFamily {
+/// external kinematics are the pairwise invariants of the edges' external offsets.
+pub fn family_from_gammaloop(
+    numerator: &Atom,
+    edges: &[GammaloopEdge],
+    heads: &GammaloopHeads,
+) -> IntegralFamily {
     let offsets: Vec<Atom> = edges
         .iter()
-        .map(|e| external_offset_from_lmb_rep(&e.lmb_rep))
+        .map(|e| external_offset_from_lmb_rep(&e.lmb_rep, heads))
         .collect();
     let n = edges.len();
     IntegralFamily {
@@ -150,7 +156,7 @@ pub fn family_from_gammaloop(numerator: &Atom, edges: &[GammaloopEdge]) -> Integ
             propagator_exponents: vec![1; n],
             isp_exponents: vec![],
         }],
-        numerator: numerator_to_dot_form(numerator),
+        numerator: numerator_to_dot_form(numerator, heads),
     }
 }
 
@@ -162,13 +168,23 @@ mod tests {
         function!(symbol!("mink"), Atom::num(4), Atom::num(idx))
     }
 
+    /// Standalone gammaloop heads for tests (self-consistent with the `K`/`P`/`mink` inputs built
+    /// above; the real glue passes gammalooprs's `GS.loop_mom`/`GS.external_mom`/`spenso::mink`).
+    fn heads() -> GammaloopHeads {
+        GammaloopHeads {
+            loop_mom: symbol!("K"),
+            external_mom: symbol!("P"),
+            index: symbol!("mink"),
+        }
+    }
+
     #[test]
     fn contracts_loop_external_product_into_dot() {
         crate::ensure_symbolica_license();
 
         let input = &function!(symbol!("K"), Atom::num(0), mink4(5))
             * &function!(symbol!("P"), Atom::num(0), mink4(5));
-        let got = numerator_to_dot_form(&input);
+        let got = numerator_to_dot_form(&input, &heads());
         let want = function!(S.dot, Atom::var(S.k), Atom::var(S.q1));
         assert_eq!(got, want);
     }
@@ -179,7 +195,7 @@ mod tests {
 
         let kmom = function!(symbol!("K"), Atom::num(0), mink4(2));
         let input = &kmom * &kmom;
-        let got = numerator_to_dot_form(&input);
+        let got = numerator_to_dot_form(&input, &heads());
         let want = function!(S.dot, Atom::var(S.k), Atom::var(S.k));
         assert_eq!(got, want);
     }
@@ -192,7 +208,7 @@ mod tests {
         let p0 = |i: i64| function!(symbol!("P"), Atom::num(0), mink4(i));
         let p1 = |i: i64| function!(symbol!("P"), Atom::num(1), mink4(i));
         let input = Atom::num(2) * &k(1) * &p0(1) * &k(2) * &k(2) - &p0(3) * &p1(3);
-        let got = numerator_to_dot_form(&input);
+        let got = numerator_to_dot_form(&input, &heads());
         let kk = function!(S.dot, Atom::var(S.k), Atom::var(S.k));
         let kq1 = function!(S.dot, Atom::var(S.k), Atom::var(S.q1));
         let q1q2 = function!(S.dot, Atom::var(S.q1), Atom::var(S.q2));
@@ -205,8 +221,8 @@ mod tests {
         crate::ensure_symbolica_license();
         let k = function!(symbol!("K"), Atom::num(0), mink4(9));
         let p0 = function!(symbol!("P"), Atom::num(0), mink4(9));
-        assert_eq!(external_offset_from_lmb_rep(&k), Atom::Zero);
-        let offset = external_offset_from_lmb_rep(&(&k - &p0));
+        assert_eq!(external_offset_from_lmb_rep(&k, &heads()), Atom::Zero);
+        let offset = external_offset_from_lmb_rep(&(&k - &p0), &heads());
         assert_eq!(offset, Atom::num(-1) * Atom::var(S.q1));
     }
 
@@ -238,7 +254,7 @@ mod tests {
                 mass_sq: Atom::Zero,
             },
         ];
-        let fam = family_from_gammaloop(&Atom::num(1), &edges);
+        let fam = family_from_gammaloop(&Atom::num(1), &edges, &heads());
         let r = crate::reduce::reduce(&fam);
         assert!(
             r.terms
@@ -266,7 +282,7 @@ mod tests {
                 mass_sq: Atom::Zero,
             },
         ];
-        let fam = family_from_gammaloop(&numerator, &edges);
+        let fam = family_from_gammaloop(&numerator, &edges, &heads());
         assert_eq!(
             fam.numerator,
             function!(S.dot, Atom::var(S.k), Atom::var(S.q1))
