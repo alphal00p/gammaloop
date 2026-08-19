@@ -1152,21 +1152,20 @@ fn den_symbol(i: usize) -> Symbol {
 
 // Reduce a tadpole numerator
 fn tadpole_numerator(numerator: &Atom, a1: i32, m_sq: &Atom) -> Vec<(Atom, MasterIntegral)> {
-    let stripped = numerator
-        .replace(dot_ll().to_pattern())
-        .with(Atom::var(symbol!("oneloop::tad_ll")));
-    let has_k = stripped
-        .replace(Atom::var(S.k).to_pattern())
-        .with(Atom::Zero)
-        != stripped;
-    assert!(
-        !has_k,
-        "tadpole numerator must be a polynomial in dot(k,k) (no external momenta at one line)"
-    );
-    let z = Atom::Zero;
+    // A tadpole's loop momentum carries no external offset, so every external
+    // contraction dot(k, q_i) is an irreducible scalar product.
+    let n_ext = 3;
+    let sym_gram: GramFn = Box::new(|a: usize, b: usize| -> Atom {
+        let (i, j) = if a <= b { (a, b) } else { (b, a) };
+        function!(
+            S.dot,
+            Atom::var(symbol!(format!("oneloop::q{}", i + 1))),
+            Atom::var(symbol!(format!("oneloop::q{}", j + 1)))
+        )
+    });
     reduce_num(
-        &tadpole_topo(a1, m_sq, base_gram_box(&z, &z, &z, &z, &z, &z), 0),
-        &numerator_to_monos(numerator, 0),
+        &tadpole_topo(a1, m_sq, sym_gram, n_ext),
+        &numerator_to_monos(numerator, n_ext),
     )
 }
 
@@ -1805,7 +1804,7 @@ fn ngon_topo(
 
 #[cfg(test)]
 mod tests {
-    use super::reduce;
+    use super::{dot_lq, reduce};
     use crate::family::{Integral, IntegralFamily, Kinematics, Propagator};
     use crate::masters::MasterIntegral;
     use crate::symbols::S;
@@ -2118,6 +2117,33 @@ mod tests {
         let r = reduce(&family(vec![Atom::Zero], vec![], vec![2]));
         assert_eq!(r.terms.len(), 1);
         assert_eq!(r.terms[0].0, Atom::Zero);
+    }
+
+    #[test]
+    fn tadpole_rank2_external_numerator_symmetric_averages() {
+        // ∫ (k·q1)²/(k²-m²) = (q1²/d) ∫ k²/(k²-m²) — the symmetric (transverse)
+        // average keeps the external invariant dot(q1,q1) symbolic.
+        crate::ensure_symbolica_license();
+        let msq = Atom::var(symbol!("oneloop::msq"));
+        let mut fam = family(vec![msq.clone()], vec![], vec![1]);
+        fam.numerator = &dot_lq(0) * &dot_lq(0); // dot(k, q1)^2
+        let r = reduce(&fam);
+        assert_eq!(r.terms.len(), 1, "expected one A0 term, got {:?}", r.terms);
+        let (coeff, master) = &r.terms[0];
+        match master {
+            MasterIntegral::Tadpole { m_sq } => assert_eq!(*m_sq, msq),
+            other => panic!("expected a tadpole master, got {other:?}"),
+        }
+        assert_ne!(
+            *coeff,
+            Atom::Zero,
+            "rank-2 tadpole coefficient must be non-zero"
+        );
+        let s = coeff.to_string();
+        assert!(
+            s.contains("q1") && s.contains('d'),
+            "coefficient should carry the symbolic dot(q1,q1) and 1/d: {s}"
+        );
     }
 
     #[test]
