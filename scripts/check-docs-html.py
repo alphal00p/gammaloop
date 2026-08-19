@@ -50,6 +50,8 @@ class DocumentAudit(HTMLParser):
         self.skip_link = False
         self.sidebar_count = 0
         self.sidebar_links = 0
+        self.menu_toggles: list[dict[str, str]] = []
+        self.sidebar_backdrops: list[dict[str, str]] = []
         self.primary_navigation_links = 0
         self.title = ""
 
@@ -131,6 +133,10 @@ class DocumentAudit(HTMLParser):
             self.sidebar_links += 1
         elif tag == "a" and in_primary_navigation and href:
             self.primary_navigation_links += 1
+        if tag == "button" and "data-menu-toggle" in attributes:
+            self.menu_toggles.append(attributes)
+        elif tag == "button" and "data-sidebar-backdrop" in attributes:
+            self.sidebar_backdrops.append(attributes)
         if tag == "a" and "skip-link" in classes and href == "#main-content":
             self.skip_link = True
 
@@ -225,6 +231,24 @@ class DocumentAudit(HTMLParser):
                 self.errors.append(
                     "the documentation sidebar has no ordinary links for no-JS navigation"
                 )
+            if len(self.menu_toggles) != 1:
+                self.errors.append(
+                    f"expected one mobile navigation toggle, found {len(self.menu_toggles)}"
+                )
+            else:
+                menu = self.menu_toggles[0]
+                if menu.get("aria-controls") != "docs-sidebar":
+                    self.errors.append(
+                        "the mobile navigation toggle must control #docs-sidebar"
+                    )
+                if menu.get("aria-expanded", "").lower() != "false":
+                    self.errors.append(
+                        "the mobile navigation toggle must be collapsed in static HTML"
+                    )
+            if len(self.sidebar_backdrops) != 1:
+                self.errors.append(
+                    f"expected one mobile navigation backdrop, found {len(self.sidebar_backdrops)}"
+                )
         elif self.primary_navigation_links < 3:
             self.errors.append("the portal primary navigation has fewer than three ordinary links")
         return self.errors
@@ -256,8 +280,29 @@ def generated_shell_pages(root: Path) -> list[tuple[str, Path, bool]]:
     return pages
 
 
+def css_media_body(stylesheet: str, max_width: str) -> str | None:
+    """Return a max-width media body without depending on a CSS parser."""
+
+    marker = re.search(
+        rf"@media\s*\(\s*max-width\s*:\s*{re.escape(max_width)}\s*\)\s*\{{",
+        stylesheet,
+    )
+    if marker is None:
+        return None
+    opening_brace = marker.end() - 1
+    depth = 0
+    for index in range(opening_brace, len(stylesheet)):
+        if stylesheet[index] == "{":
+            depth += 1
+        elif stylesheet[index] == "}":
+            depth -= 1
+            if depth == 0:
+                return stylesheet[opening_brace + 1 : index]
+    return None
+
+
 def progressive_navigation_errors(root: Path) -> list[str]:
-    """Confirm that off-canvas mobile navigation is an enhancement, not the default."""
+    """Check progressive mobile navigation, drawer focus, and compact references."""
 
     assets = {name: root / "assets" / name for name in ("site.css", "site.js")}
     missing = [path for path in assets.values() if not path.is_file()]
@@ -265,7 +310,12 @@ def progressive_navigation_errors(root: Path) -> list[str]:
         return [f"missing navigation asset {path.relative_to(root)}" for path in missing]
     css = assets["site.css"].read_text(encoding="utf-8")
     script = assets["site.js"].read_text(encoding="utf-8")
-    css_rules = {
+    errors: list[str] = []
+    mobile_css = css_media_body(css, "52rem")
+    if mobile_css is None:
+        errors.append("site.css has no complete max-width: 52rem navigation rules")
+        mobile_css = ""
+    mobile_rules = {
         "the no-JS mobile sidebar is not in normal flow": (
             r"\.docs-sidebar\s*\{[^}]*position:\s*static"
         ),
@@ -280,10 +330,134 @@ def progressive_navigation_errors(root: Path) -> list[str]:
             r"\.js\s+body\.sidebar-open\s+\.docs-sidebar\s*\{[^}]*"
             r"transform:\s*translateX\(0\)"
         ),
+        "the enhanced mobile navigation has no backdrop": (
+            r"\.js\s+body\.sidebar-open\s+\.sidebar-backdrop\s*\{[^}]*"
+            r"display:\s*block"
+        ),
     }
-    errors = [message for message, pattern in css_rules.items() if not re.search(pattern, css)]
+    errors.extend(
+        message
+        for message, pattern in mobile_rules.items()
+        if not re.search(pattern, mobile_css)
+    )
+    base_rules = {
+        "the no-JS mobile menu button is not hidden": (
+            r"(?:^|\n)\s*\.menu-button\s*\{[^}]*display:\s*none"
+        ),
+        "the no-JS mobile backdrop is not hidden": (
+            r"(?:^|\n)\s*\.sidebar-backdrop\s*\{[^}]*display:\s*none"
+        ),
+        "long documentation headings do not wrap": (
+            r"(?:^|\n)\s*\.docs-article\s+h1\s*,[^{}]*\{[^}]*"
+            r"overflow-wrap:\s*anywhere"
+        ),
+        "wide reference tables have no contained horizontal scroll": (
+            r"(?:^|\n)\s*\.reference-table-wrap\s*\{[^}]*overflow-x:\s*auto"
+        ),
+    }
+    errors.extend(
+        message for message, pattern in base_rules.items() if not re.search(pattern, css)
+    )
+
     if not re.search(r"\.classList\.add\([\"']js[\"']\)", script):
         errors.append("site.js does not add the progressive-enhancement marker")
+
+    background_name = None
+    background_selectors = {
+        ".docs-main",
+        ".docs-toc",
+        ".site-brand",
+        ".site-header-tools",
+        ".skip-link",
+    }
+    selector_declaration = re.compile(
+        r"\bconst\s+(?P<name>[A-Za-z_$][\w$]*)\s*=\s*"
+        r"document\.querySelectorAll\(\s*(?P<quote>[\"'])"
+        r"(?P<selectors>.*?)(?P=quote)\s*\)",
+        re.DOTALL,
+    )
+    for declaration in selector_declaration.finditer(script):
+        selectors = {
+            selector.strip() for selector in declaration.group("selectors").split(",")
+        }
+        if background_selectors <= selectors:
+            background_name = declaration.group("name")
+            break
+    if background_name is None:
+        errors.append("site.js does not identify every drawer background region")
+    elif not re.search(
+        rf"\b{re.escape(background_name)}\.forEach\([^;]*"
+        r"toggleAttribute\(\s*[\"']inert[\"']\s*,\s*open\s*\)",
+        script,
+    ):
+        errors.append("site.js does not make the drawer background inert while open")
+
+    script_rules = {
+        "the mobile navigation backdrop remains in the tab order": (
+            r"\bbackdrop[^;\n]*\.tabIndex\s*=\s*-1"
+        ),
+        "opening the mobile drawer does not focus its current navigation": (
+            r"if\s*\(\s*open\s*&&\s*focusNavigation\s*\)\s*\{.*?"
+            r"sidebar[^;]*querySelector\([^;]*aria-current.*?\.focus\(\)"
+        ),
+        "Escape does not close the mobile drawer and restore toggle focus": (
+            r"event\.key\s*===\s*[\"']Escape[\"'].*?sidebar-open.*?"
+            r"closeMenu\(\)\s*;\s*menu\??\.focus\(\)"
+        ),
+        "clicking the mobile backdrop does not restore toggle focus": (
+            r"backdrop\??\.addEventListener\(\s*[\"']click[\"'].*?"
+            r"closeMenu\(\)\s*;\s*menu\??\.focus\(\)"
+        ),
+        "Tab does not wrap from the mobile drawer end to its beginning": (
+            r"event\.key\s*===\s*[\"']Tab[\"'].*?sidebar-open.*?"
+            r"document\.activeElement\s*===\s*last.*?event\.preventDefault\(\).*?"
+            r"first\??\.focus\(\)"
+        ),
+        "Shift+Tab does not wrap from the mobile drawer beginning to its end": (
+            r"event\.key\s*===\s*[\"']Tab[\"'].*?sidebar-open.*?event\.shiftKey.*?"
+            r"document\.activeElement\s*===\s*first.*?event\.preventDefault\(\).*?"
+            r"last\??\.focus\(\)"
+        ),
+    }
+    errors.extend(
+        message
+        for message, pattern in script_rules.items()
+        if not re.search(pattern, script, re.DOTALL)
+    )
+
+    compact_css = css_media_body(css, "34rem")
+    if compact_css is None:
+        errors.append("site.css has no complete max-width: 34rem compact layout rules")
+        compact_css = ""
+    compact_rules = {
+        "the compact documentation header does not reduce its spacing": (
+            r"(?:^|\n)\s*\.site-header\s*\{[^}]*gap:\s*[^;}]+;[^}]*"
+            r"padding-inline:\s*[^;}]+"
+        ),
+        "the compact documentation header does not constrain project selection": (
+            r"(?:^|\n)\s*\.product-select\s*\{[^}]*max-width:\s*[^;}]+"
+        ),
+        "compact reference indexes do not use one readable column": (
+            r"(?:^|\n)\s*\.reference-jump-groups\s*\{[^}]*"
+            r"grid-template-columns:\s*1fr"
+        ),
+    }
+    errors.extend(
+        message
+        for message, pattern in compact_rules.items()
+        if not re.search(pattern, compact_css, re.DOTALL)
+    )
+    if re.search(
+        r"\.site-header\s+\.header-search-label\s*\{[^}]*"
+        r"(?:display:\s*none|position:\s*absolute[^}]*overflow:\s*hidden)",
+        compact_css,
+    ):
+        errors.append("the compact documentation header hides every visible search label")
+    if re.search(
+        r"\.api-parameter-table\s+thead\s*\{[^}]*display:\s*none",
+        compact_css,
+    ):
+        errors.append("the compact parameter table removes its semantic headers")
     return errors
 
 

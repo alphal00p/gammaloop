@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const GENERATED_REFERENCE_SCHEMA: u32 = 2;
+pub const GENERATED_REFERENCE_SCHEMA: u32 = 3;
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct GeneratedSource {
@@ -92,7 +92,11 @@ pub struct CliArgument {
     pub value_delimiter: Option<char>,
     pub value_terminator: Option<String>,
     pub conflicts_with: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub requires: Vec<String>,
     pub defaults: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub default_missing_values: Vec<String>,
     pub possible_values: Vec<String>,
 }
 

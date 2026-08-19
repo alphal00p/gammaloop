@@ -28,6 +28,7 @@ use tracing::info;
 
 use crate::{
     commands::evaluate_samples::{build_havana_sample, build_momentum_input},
+    commands::CliArgumentMetadataExt,
     completion::CompletionArgExt,
     state::{ProcessRef, State},
     CLISettings,
@@ -124,7 +125,7 @@ pub struct Approach {
     #[arg(
         long = "orientation-id",
         value_name = "ORIENTATION_ID",
-        requires = "graph_id",
+        cli_requires("graph_id"),
         conflicts_with = "discrete_dim"
     )]
     pub orientation_id: Option<usize>,

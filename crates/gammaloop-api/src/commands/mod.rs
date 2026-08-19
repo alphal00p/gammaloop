@@ -1,6 +1,6 @@
 use std::{ops::ControlFlow, path::PathBuf, str::FromStr};
 
-use clap::Subcommand;
+use clap::{builder::ArgExt, Arg, Subcommand};
 use color_eyre::Report;
 use gammalooprs::settings::RuntimeSettings;
 use save::SaveState;
@@ -49,6 +49,41 @@ pub use renormalize::Renormalize;
 pub mod profile;
 pub use profile::Profile;
 pub(crate) mod process_settings;
+
+/// Export metadata for Clap settings without public introspection APIs.
+#[doc(hidden)]
+#[derive(Clone, Debug, Default)]
+pub struct CliArgumentMetadata {
+    pub requires: Vec<&'static str>,
+    pub default_missing_values: Vec<&'static str>,
+}
+
+impl ArgExt for CliArgumentMetadata {}
+
+pub(crate) trait CliArgumentMetadataExt {
+    fn cli_requires(self, id: &'static str) -> Self;
+    fn cli_default_missing_value(self, value: &'static str) -> Self;
+}
+
+impl CliArgumentMetadataExt for Arg {
+    fn cli_requires(self, id: &'static str) -> Self {
+        let mut metadata = self
+            .get::<CliArgumentMetadata>()
+            .cloned()
+            .unwrap_or_default();
+        metadata.requires.push(id);
+        self.requires(id).add(metadata)
+    }
+
+    fn cli_default_missing_value(self, value: &'static str) -> Self {
+        let mut metadata = self
+            .get::<CliArgumentMetadata>()
+            .cloned()
+            .unwrap_or_default();
+        metadata.default_missing_values.push(value);
+        self.default_missing_value(value).add(metadata)
+    }
+}
 
 #[derive(Debug, Clone, Default)]
 pub enum CommandOutput {

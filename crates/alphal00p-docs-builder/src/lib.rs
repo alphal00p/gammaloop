@@ -2714,7 +2714,7 @@ impl SiteBuilder {
         };
         let favicon = favicon_links(&format!("{docs_root}assets/"));
         let html = format!(
-            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\">{favicon}<title>{} · {}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\"><script defer src=\"{}assets/site.js\"></script></head><body data-docs-root=\"{}\" data-search-index=\"{}search-index.json\" data-search-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"site-header\"><button class=\"header-button menu-button\" type=\"button\" data-menu-toggle aria-label=\"Open navigation\" aria-controls=\"docs-sidebar\" aria-expanded=\"false\">☰</button><a class=\"site-brand\" href=\"{}\"><span class=\"site-brand-mark\">α</span><span class=\"site-brand-name\">αLoop docs</span></a><div class=\"site-header-tools\"><select class=\"product-select\" data-product-select aria-label=\"Select project\">{}</select><button class=\"header-button\" type=\"button\" data-search-open>Search <span class=\"header-button-label\">⌘K</span></button><button class=\"header-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\">◐</button></div></header><div class=\"docs-shell\">{sidebar}<main class=\"docs-main\" id=\"main-content\"><nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"{}\">{}</a> / {} / {}</nav><article class=\"docs-article\">{body}</article>{page_navigation}{feedback}<footer class=\"page-footer\">{} · <a href=\"{}manual.pdf\">Complete PDF manual</a> · documented revision <code>{}</code></footer></main>{toc_markup}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search all projects and developer notes\" aria-label=\"Search all documentation\"><button class=\"header-button\" value=\"close\">Close</button></form><ul class=\"search-results\" data-search-results aria-live=\"polite\"></ul></dialog></body></html>",
+            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\">{favicon}<title>{} · {}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\"><script defer src=\"{}assets/site.js\"></script></head><body data-docs-root=\"{}\" data-search-index=\"{}search-index.json\" data-search-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"site-header\"><button class=\"header-button menu-button\" type=\"button\" data-menu-toggle aria-label=\"Open navigation\" aria-controls=\"docs-sidebar\" aria-expanded=\"false\">☰</button><a class=\"site-brand\" href=\"{}\"><span class=\"site-brand-mark\">α</span><span class=\"site-brand-name\">αLoop docs</span></a><div class=\"site-header-tools\"><select class=\"product-select\" data-product-select aria-label=\"Select project\">{}</select><button class=\"header-button\" type=\"button\" data-search-open><span class=\"header-search-label\">Search</span> <span class=\"header-button-label\">⌘K</span></button><button class=\"header-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\">◐</button></div></header><div class=\"docs-shell\">{sidebar}<main class=\"docs-main\" id=\"main-content\"><nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"{}\">{}</a> / {} / {}</nav><article class=\"docs-article\">{body}</article>{page_navigation}{feedback}<footer class=\"page-footer\">{} · <a href=\"{}manual.pdf\">Complete PDF manual</a> · documented revision <code>{}</code></footer></main>{toc_markup}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search all projects and developer notes\" aria-label=\"Search all documentation\"><button class=\"header-button\" value=\"close\">Close</button></form><ul class=\"search-results\" data-search-results aria-live=\"polite\"></ul></dialog></body></html>",
             escape_html(&format!("{} — {}", product.tagline, page.title)),
             escape_html(&product.title),
             escape_html(&page.title),
@@ -2815,6 +2815,108 @@ impl SiteBuilder {
                     },
                 )
             });
+        let cli_navigation = if !current.route.starts_with("reference/cli/") {
+            String::new()
+        } else if current.route.starts_with("reference/cli/settings/") {
+            let current_namespace = current
+                .title
+                .strip_suffix(" settings")
+                .filter(|namespace| *namespace != "Settings namespaces");
+            let namespace_links = generated_pages
+                .iter()
+                .filter(|page| {
+                    if !page.route.starts_with("reference/cli/settings/")
+                        || page.route == "reference/cli/settings/"
+                    {
+                        return false;
+                    }
+                    let Some(namespace) = page.title.strip_suffix(" settings") else {
+                        return false;
+                    };
+                    let depth = namespace.matches('.').count();
+                    depth == 0
+                        || current_namespace.is_some_and(|current| {
+                            namespace == current
+                                || current.starts_with(&format!("{namespace}."))
+                                || namespace.rsplit_once('.').is_some_and(|(parent, _)| {
+                                    current == parent || current.starts_with(&format!("{parent}."))
+                                })
+                        })
+                })
+                .map(|page| {
+                    let namespace = page.title.strip_suffix(" settings").unwrap_or(&page.title);
+                    let depth = namespace.matches('.').count().min(4);
+                    let ancestor = current_namespace
+                        .is_some_and(|current| current.starts_with(&format!("{namespace}.")));
+                    format!(
+                        "<a class=\"sidebar-link sidebar-context-link{}\" data-depth=\"{depth}\" href=\"{}{}\" aria-label=\"{} settings namespace\"{}><code>{}</code></a>",
+                        if ancestor { " is-ancestor" } else { "" },
+                        escape_html(docs_root),
+                        escape_html(&page.route),
+                        escape_html(namespace),
+                        if page.route == current.route {
+                            " aria-current=\"page\""
+                        } else {
+                            ""
+                        },
+                        escape_html(namespace.rsplit('.').next().unwrap_or(namespace)),
+                    )
+                })
+                .collect::<String>();
+            format!(
+                "<nav class=\"sidebar-group sidebar-context-group\" aria-label=\"GammaLoop settings namespaces\"><p class=\"sidebar-group-title\">Settings namespaces</p><a class=\"sidebar-link\" href=\"{}reference/cli/\">All commands</a><a class=\"sidebar-link\" href=\"{}reference/cli/settings/\"{}>All namespaces</a>{namespace_links}</nav>",
+                escape_html(docs_root),
+                escape_html(docs_root),
+                if current.route == "reference/cli/settings/" {
+                    " aria-current=\"page\""
+                } else {
+                    ""
+                },
+            )
+        } else {
+            let current_command = current
+                .route
+                .starts_with("reference/cli/commands/")
+                .then_some(current.title.as_str());
+            let command_links = generated_pages
+                .iter()
+                .filter(|page| page.route.starts_with("reference/cli/commands/"))
+                .filter(|page| {
+                    let depth = page.title.split_whitespace().count().saturating_sub(1);
+                    depth <= 1
+                        || current_command.is_some_and(|current| {
+                            page.title == current
+                                || current.starts_with(&format!("{} ", page.title))
+                                || page.title.rsplit_once(' ').is_some_and(|(parent, _)| {
+                                    current == parent || current.starts_with(&format!("{parent} "))
+                                })
+                        })
+                })
+                .map(|page| {
+                    let depth = page.title.split_whitespace().count().saturating_sub(1).min(4);
+                    let ancestor = current_command
+                        .is_some_and(|current| current.starts_with(&format!("{} ", page.title)));
+                    format!(
+                        "<a class=\"sidebar-link sidebar-context-link{}\" data-depth=\"{depth}\" href=\"{}{}\" aria-label=\"{} command\"{}><code>{}</code></a>",
+                        if ancestor { " is-ancestor" } else { "" },
+                        escape_html(docs_root),
+                        escape_html(&page.route),
+                        escape_html(&page.title),
+                        if page.route == current.route {
+                            " aria-current=\"page\""
+                        } else {
+                            ""
+                        },
+                        escape_html(page.title.rsplit(' ').next().unwrap_or(&page.title)),
+                    )
+                })
+                .collect::<String>();
+            format!(
+                "<nav class=\"sidebar-group sidebar-context-group\" aria-label=\"GammaLoop command tree\"><p class=\"sidebar-group-title\">Command tree</p><a class=\"sidebar-link\" href=\"{}reference/cli/\">All commands</a><a class=\"sidebar-link\" href=\"{}reference/cli/settings/\">Settings namespaces</a>{command_links}</nav>",
+                escape_html(docs_root),
+                escape_html(docs_root),
+            )
+        };
         let mut navigation = String::new();
         for group in group_order {
             let links = groups
@@ -2855,6 +2957,7 @@ impl SiteBuilder {
             ));
             if group == "Reference" {
                 navigation.push_str(&python_navigation);
+                navigation.push_str(&cli_navigation);
             }
         }
         if scope == BuildScope::FullSite && metadata.channel == BuildChannel::Latest {
@@ -3141,16 +3244,16 @@ impl SiteBuilder {
                                 .join(" ");
                             SearchEntry {
                                 title: command.path.clone(),
-                                summary: command.about,
+                                summary: compact_help_summary(&command.about),
                                 href: cli_command_route(&command.path),
                                 kind: "command".to_owned(),
-                                text,
+                                text: format!("{} {text}", command.about),
                             }
                         }),
                 );
                 entries.extend(reference.settings.into_iter().map(|setting| SearchEntry {
                     title: setting.path.clone(),
-                    summary: setting.description,
+                    summary: compact_help_summary(&setting.description),
                     href: format!(
                         "{}#{}",
                         cli_setting_namespace_route(cli_setting_namespace(&setting.path)),
@@ -3158,7 +3261,8 @@ impl SiteBuilder {
                     ),
                     kind: "setting".to_owned(),
                     text: format!(
-                        "{} {} {}",
+                        "{} {} {} {}",
+                        setting.description,
                         setting.value_type,
                         setting.possible_values.join(" "),
                         setting
@@ -5353,6 +5457,158 @@ fn render_signature_code(signature: &str, links: &BTreeMap<String, String>) -> S
     link_python_symbols(&escape_html(signature), links)
 }
 
+fn python_human_callable_signature(signature: &str) -> String {
+    let signature = signature.trim().trim_end_matches(':').trim_end();
+    let (prefix, callable) = signature
+        .strip_prefix("async def ")
+        .map_or(("", signature), |signature| ("async ", signature));
+    let callable = callable.strip_prefix("def ").unwrap_or(callable);
+    let Some(opening) = callable.find('(') else {
+        return format!("{prefix}{callable}");
+    };
+    let Some(closing) = matching_python_parenthesis(callable, opening) else {
+        return format!("{prefix}{callable}");
+    };
+    let parameters = callable[opening + 1..closing].trim();
+    let parameters = ["self", "cls"].into_iter().find_map(|receiver| {
+        (parameters == receiver).then_some("").or_else(|| {
+            parameters
+                .strip_prefix(&format!("{receiver},"))
+                .map(str::trim_start)
+        })
+    });
+    format!(
+        "{prefix}{}({}){}",
+        &callable[..opening],
+        parameters.unwrap_or(&callable[opening + 1..closing]),
+        &callable[closing + 1..],
+    )
+}
+
+fn matching_python_parenthesis(signature: &str, opening: usize) -> Option<usize> {
+    let mut depth = 0_u32;
+    let mut quote = None;
+    let mut escaped = false;
+    for (offset, character) in signature[opening..].char_indices() {
+        if let Some(active_quote) = quote {
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == active_quote {
+                quote = None;
+            }
+            continue;
+        }
+        if matches!(character, '\'' | '"') {
+            quote = Some(character);
+        } else if character == '(' {
+            depth += 1;
+        } else if character == ')' {
+            depth -= 1;
+            if depth == 0 {
+                return Some(opening + offset);
+            }
+        }
+    }
+    None
+}
+
+fn python_constructor(item: &DocItem) -> Option<&DocMember> {
+    (item.kind == alphal00p_docs_schema::DocItemKind::PythonClass)
+        .then(|| {
+            item.members.iter().find(|member| {
+                member.name == "__new__" && member.kind == DocMemberKind::AssociatedFunction
+            })
+        })
+        .flatten()
+}
+
+fn python_member_callable_signature(member: &DocMember) -> Option<&str> {
+    member.signature.as_deref().or_else(|| {
+        member
+            .members
+            .iter()
+            .filter(|member| member.kind == DocMemberKind::Overload)
+            .find_map(|member| member.signature.as_deref())
+    })
+}
+
+fn python_item_display_signature(item: &DocItem) -> Option<String> {
+    if item.kind != alphal00p_docs_schema::DocItemKind::PythonClass {
+        return item
+            .signature
+            .as_deref()
+            .map(python_human_callable_signature);
+    }
+    let Some(signature) = python_constructor(item).and_then(python_member_callable_signature)
+    else {
+        return Some(format!("{}()", item.name));
+    };
+    let signature = python_human_callable_signature(signature);
+    let opening = signature.find('(')?;
+    let closing = matching_python_parenthesis(&signature, opening)?;
+    Some(format!("{}{}", item.name, &signature[opening..=closing]))
+}
+
+fn python_property_display_signature(member: &DocMember) -> String {
+    let annotation = match member.kind {
+        DocMemberKind::Getter => member.signature.as_deref().and_then(|signature| {
+            let signature = python_human_callable_signature(signature);
+            let closing = matching_python_parenthesis(&signature, signature.find('(')?)?;
+            signature[closing + 1..]
+                .trim()
+                .strip_prefix("->")
+                .map(str::trim)
+                .filter(|annotation| !annotation.is_empty())
+                .map(str::to_owned)
+        }),
+        DocMemberKind::Setter => member
+            .members
+            .iter()
+            .find(|member| member.kind == DocMemberKind::Parameter)
+            .and_then(|member| member.signature.clone()),
+        _ => None,
+    };
+    annotation.map_or_else(
+        || member.name.clone(),
+        |annotation| format!("{}: {annotation}", member.name),
+    )
+}
+
+fn python_member_display_signature(member: &DocMember) -> Option<String> {
+    match member.kind {
+        DocMemberKind::Getter | DocMemberKind::Setter => {
+            Some(python_property_display_signature(member))
+        }
+        DocMemberKind::Method | DocMemberKind::AssociatedFunction | DocMemberKind::Overload => {
+            member
+                .signature
+                .as_deref()
+                .map(python_human_callable_signature)
+        }
+        _ => member.signature.clone(),
+    }
+}
+
+fn python_associated_function_label(member: &DocMember) -> &'static str {
+    let Some(signature) = python_member_callable_signature(member) else {
+        return "Class or static method";
+    };
+    let Some(opening) = signature.find('(') else {
+        return "Class or static method";
+    };
+    let Some(closing) = matching_python_parenthesis(signature, opening) else {
+        return "Class or static method";
+    };
+    let parameters = signature[opening + 1..closing].trim_start();
+    if parameters == "cls" || parameters.starts_with("cls,") {
+        "Class method"
+    } else {
+        "Static method"
+    }
+}
+
 fn render_python_catalog_for_module(
     catalog: &DocCatalog,
     module: &str,
@@ -5393,7 +5649,9 @@ fn render_python_catalog_for_module(
             .iter()
             .enumerate()
             .filter(|(index, (member, _))| {
-                member.kind != DocMemberKind::Overload && !paired_setters.contains(index)
+                member.kind != DocMemberKind::Overload
+                    && member.name != "__new__"
+                    && !paired_setters.contains(index)
             })
             .count();
         let member_meta = if member_count == 0 {
@@ -5473,6 +5731,97 @@ fn append_python_legacy_member_links(
 
 type ReferenceSibling<'a> = Option<(&'a str, &'a str)>;
 
+fn render_python_member_index(members: &[DocMember], parent_anchor: &str) -> String {
+    let anchored = anchored_api_members(members, parent_anchor);
+    let (property_setters, paired_setters) = paired_property_setters(&anchored);
+    let mut attributes = Vec::new();
+    let mut methods = Vec::new();
+    let mut class_methods = Vec::new();
+    let mut types = Vec::new();
+    let mut values = Vec::new();
+    for (index, (member, anchor)) in anchored.iter().enumerate() {
+        if member.name == "__new__"
+            || member.kind == DocMemberKind::Overload
+            || paired_setters.contains(&index)
+        {
+            continue;
+        }
+        let setter = property_setters
+            .get(&index)
+            .map(|setter| &anchored[*setter].0);
+        let entry = (member, anchor, setter);
+        match member.kind {
+            DocMemberKind::Getter | DocMemberKind::Setter | DocMemberKind::Field => {
+                attributes.push(entry)
+            }
+            DocMemberKind::Method => methods.push(entry),
+            DocMemberKind::AssociatedFunction => class_methods.push(entry),
+            DocMemberKind::AssociatedType => types.push(entry),
+            DocMemberKind::Variant | DocMemberKind::AssociatedConst => values.push(entry),
+            DocMemberKind::Parameter | DocMemberKind::Overload => {}
+        }
+    }
+    let groups = [
+        ("Attributes", attributes),
+        ("Methods", methods),
+        ("Class and static methods", class_methods),
+        ("Types", types),
+        ("Values", values),
+    ];
+    if groups.iter().all(|(_, members)| members.is_empty()) {
+        return String::new();
+    }
+    let mut body = "<nav class=\"reference-jump-nav\" aria-labelledby=\"member-overview-title\"><h2 id=\"member-overview-title\">Member overview</h2><div class=\"reference-jump-groups\">".to_owned();
+    for (title, members) in groups {
+        if members.is_empty() {
+            continue;
+        }
+        body.push_str(&format!(
+            "<section class=\"reference-jump-group\"><h3>{title}</h3><ul class=\"reference-jump-list\">"
+        ));
+        for (member, anchor, setter) in members {
+            let label = match member.kind {
+                DocMemberKind::Getter if setter.is_some() => "read/write",
+                DocMemberKind::Getter => "read-only",
+                DocMemberKind::AssociatedFunction => python_associated_function_label(member),
+                DocMemberKind::AssociatedType => "type",
+                DocMemberKind::AssociatedConst => "constant",
+                DocMemberKind::Variant => "value",
+                DocMemberKind::Field => "attribute",
+                DocMemberKind::Method => "method",
+                _ => "member",
+            };
+            let summary = member
+                .docs
+                .as_ref()
+                .map(|docs| compact_help_summary(&docs.body))
+                .filter(|summary| !summary.is_empty())
+                .or_else(|| {
+                    setter
+                        .and_then(|setter| setter.docs.as_ref())
+                        .map(|docs| compact_help_summary(&docs.body))
+                        .filter(|summary| !summary.is_empty())
+                })
+                .map(|summary| {
+                    format!(
+                        "<span class=\"reference-jump-summary\">{}</span>",
+                        escape_html(&summary),
+                    )
+                })
+                .unwrap_or_default();
+            body.push_str(&format!(
+                "<li><a href=\"#{}\"><span><code>{}</code>{summary}</span><small>{}</small></a></li>",
+                escape_html(anchor),
+                escape_html(&member.name),
+                escape_html(label),
+            ));
+        }
+        body.push_str("</ul></section>");
+    }
+    body.push_str("</div></nav>");
+    body
+}
+
 fn render_python_item_page(
     catalog: &DocCatalog,
     module: &str,
@@ -5485,6 +5834,12 @@ fn render_python_item_page(
     let (path, item) = symbol;
     let (previous, next) = siblings;
     let anchor = api_item_anchor(path, item);
+    let anchored_members = anchored_api_members(&item.members, &anchor);
+    let constructor = python_constructor(item).and_then(|_| {
+        anchored_members.iter().find(|(member, _)| {
+            member.name == "__new__" && member.kind == DocMemberKind::AssociatedFunction
+        })
+    });
     let current_route = &routes[&anchor];
     let mut item_links = python_item_links(catalog, routes);
     item_links.retain(|_, route| route != current_route);
@@ -5516,11 +5871,11 @@ fn render_python_item_page(
             escape_html(summary)
         ));
     }
-    if let Some(signature) = &item.signature {
+    if let Some(signature) = python_item_display_signature(item) {
         body.push_str(&format!(
             "<div class=\"reference-copy-row\"><pre class=\"api-signature\" id=\"{}-signature\"><code>{}</code></pre><button type=\"button\" data-copy-target=\"{}-signature\">Copy signature</button></div>",
             escape_html(&anchor),
-            render_signature_code(signature, &item_links),
+            render_signature_code(&signature, &item_links),
             escape_html(&anchor),
         ));
     }
@@ -5552,10 +5907,32 @@ fn render_python_item_page(
     if let Some(docs) = &item.docs {
         body.push_str(&render_doc_text(docs, 2));
     } else if item.summary.is_none() {
-        body.push_str("<p class=\"reference-missing\">Full description missing from the generated catalog.</p>");
+        body.push_str(
+            "<p class=\"reference-missing\">No description is available for this export.</p>",
+        );
+    }
+    body.push_str(&render_python_member_index(&item.members, &anchor));
+    if let Some((constructor, constructor_anchor)) = constructor {
+        body.push_str(&format!(
+            "<section class=\"api-constructor\" id=\"{}\"><header class=\"reference-detail-heading\"><h2>Constructor</h2><a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to the constructor\">#</a></header>",
+            escape_html(constructor_anchor),
+            escape_html(constructor_anchor),
+        ));
+        if let Some(docs) = &constructor.docs {
+            body.push_str(&render_doc_text_omitting_parameters(
+                docs,
+                3,
+                constructor
+                    .members
+                    .iter()
+                    .any(|member| member.kind == DocMemberKind::Parameter),
+            ));
+        }
+        render_member_parameters(&constructor.members, 2, &item_links, &mut body);
+        body.push_str("</section>");
     }
     if !item.params.is_empty() {
-        body.push_str("<h2>Parameters</h2><div class=\"reference-table-wrap\"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>");
+        body.push_str("<h2>Parameters</h2><div class=\"reference-table-wrap\"><table class=\"api-parameter-table\"><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>");
         for parameter in &item.params {
             let default = match parameter.default.as_deref() {
                 Some("...") => "runtime default",
@@ -5567,7 +5944,7 @@ fn render_python_item_page(
                 .as_ref()
                 .map(|docs| render_doc_text(docs, 3))
                 .unwrap_or_else(|| {
-                    "<span class=\"reference-missing\">Description missing</span>".to_owned()
+                    "<span aria-label=\"No description available\">—</span>".to_owned()
                 });
             body.push_str(&format!(
                 "<tr><td><code>{}</code>{}</td><td><code>{}</code></td><td><code>{}</code></td><td>{}</td></tr>",
@@ -5599,9 +5976,9 @@ fn render_python_item_page(
     if item
         .members
         .iter()
-        .any(|member| member.kind != DocMemberKind::Parameter)
+        .any(|member| member.kind != DocMemberKind::Parameter && member.name != "__new__")
     {
-        body.push_str("<h2>Members</h2><div class=\"api-member-list\">");
+        body.push_str("<h2>Member details</h2><div class=\"api-member-list\">");
         render_api_members_flat(&item.members, &anchor, 2, &item_links, &mut body);
         body.push_str("</div>");
     }
@@ -5648,12 +6025,14 @@ fn render_api_members_flat(
     item_links: &BTreeMap<String, String>,
     body: &mut String,
 ) {
-    let member_kind_label = |kind| match kind {
+    let member_kind_label = |member: &DocMember| match member.kind {
         alphal00p_docs_schema::DocMemberKind::Parameter => "Parameter",
         alphal00p_docs_schema::DocMemberKind::Overload => "Overload",
         alphal00p_docs_schema::DocMemberKind::Field => "Field",
         alphal00p_docs_schema::DocMemberKind::Variant => "Variant",
-        alphal00p_docs_schema::DocMemberKind::AssociatedFunction => "Class or static method",
+        alphal00p_docs_schema::DocMemberKind::AssociatedFunction => {
+            python_associated_function_label(member)
+        }
         alphal00p_docs_schema::DocMemberKind::AssociatedType => "Associated type",
         alphal00p_docs_schema::DocMemberKind::AssociatedConst => "Associated constant",
         alphal00p_docs_schema::DocMemberKind::Method => "Method",
@@ -5664,7 +6043,10 @@ fn render_api_members_flat(
     let anchored = anchored_api_members(members, parent_anchor);
     let (property_setters, paired_setters) = paired_property_setters(&anchored);
     for (index, (member, anchor)) in anchored.iter().enumerate() {
-        if member.kind == DocMemberKind::Overload || paired_setters.contains(&index) {
+        if member.kind == DocMemberKind::Overload
+            || member.name == "__new__"
+            || paired_setters.contains(&index)
+        {
             continue;
         }
         let setter = property_setters
@@ -5674,7 +6056,7 @@ fn render_api_members_flat(
         let kind = if setter.is_some() {
             "Property · read/write"
         } else {
-            member_kind_label(member.kind)
+            member_kind_label(member)
         };
         if let Some((_, setter_anchor)) = setter {
             body.push_str(&format!(
@@ -5688,19 +6070,19 @@ fn render_api_members_flat(
             escape_html(&member.name),
         ));
         body.push_str(&format!(
-            "<a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to {}\">Permanent link</a>{}",
+            "<a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to {}\">#</a>{}",
             escape_html(anchor),
             escape_html(&member.name),
             setter.map_or_else(String::new, |(_, setter_anchor)| format!(
-                "<a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to the {} setter\">Setter fragment</a>",
+                "<a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to the {} setter\"># setter</a>",
                 escape_html(setter_anchor),
                 escape_html(&member.name),
             )),
         ));
-        if let Some(signature) = &member.signature {
+        if let Some(signature) = python_member_display_signature(member) {
             body.push_str(&format!(
                 "<pre class=\"api-member-signature\"><code>{}</code></pre>",
-                render_signature_code(signature, item_links),
+                render_signature_code(&signature, item_links),
             ));
         }
         if let Some(docs) = &member.docs {
@@ -5717,7 +6099,9 @@ fn render_api_members_flat(
             .iter()
             .any(|member| member.kind == DocMemberKind::Overload)
         {
-            body.push_str("<p class=\"reference-missing\">Member description missing from the generated catalog.</p>");
+            body.push_str(
+                "<p class=\"reference-missing\">No description is available for this member.</p>",
+            );
         }
         if let Some(default) = &member.default {
             body.push_str(&format!(
@@ -5737,10 +6121,10 @@ fn render_api_members_flat(
             body.push_str(&format!(
                 "<section class=\"api-property-setter\"><h{setter_heading}>Setter</h{setter_heading}>"
             ));
-            if let Some(signature) = &setter.signature {
+            if let Some(signature) = python_member_display_signature(setter) {
                 body.push_str(&format!(
                     "<pre class=\"api-member-signature api-property-setter-signature\"><code>{}</code></pre>",
-                    render_signature_code(signature, item_links),
+                    render_signature_code(&signature, item_links),
                 ));
             }
             if let Some(docs) = &setter.docs {
@@ -5797,17 +6181,17 @@ fn render_api_overloads(
     ));
     for (index, (overload, anchor)) in overloads.iter().enumerate() {
         body.push_str(&format!(
-            "<article class=\"api-overload\" id=\"{}\"><h{overload_heading}>Overload {}</h{overload_heading}><a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to overload {} of {}\">Permanent link</a>",
+            "<article class=\"api-overload\" id=\"{}\"><h{overload_heading}>Overload {} <a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to overload {} of {}\">#</a></h{overload_heading}>",
             escape_html(anchor),
             index + 1,
             escape_html(anchor),
             index + 1,
             escape_html(parent_anchor),
         ));
-        if let Some(signature) = &overload.signature {
+        if let Some(signature) = python_member_display_signature(overload) {
             body.push_str(&format!(
                 "<pre class=\"api-member-signature api-overload-signature\"><code>{}</code></pre>",
-                render_signature_code(signature, item_links),
+                render_signature_code(&signature, item_links),
             ));
         }
         if let Some(docs) = &overload.docs {
@@ -5820,7 +6204,7 @@ fn render_api_overloads(
                     .any(|member| member.kind == DocMemberKind::Parameter),
             ));
         } else {
-            body.push_str("<p class=\"reference-missing\">Overload description missing from the generated catalog.</p>");
+            body.push_str("<p class=\"reference-missing\">No additional description is available for this overload.</p>");
         }
         render_member_parameters(&overload.members, overload_heading, item_links, body);
         body.push_str("</article>");
@@ -5879,7 +6263,7 @@ fn render_member_parameters(
     if parameters.is_empty() {
         return;
     }
-    let heading = (level + 1).clamp(4, 6);
+    let heading = (level + 1).clamp(3, 6);
     body.push_str(&format!(
         "<h{heading}>Parameters</h{heading}><div class=\"reference-table-wrap\"><table class=\"api-parameter-table\"><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>"
     ));
@@ -6444,10 +6828,18 @@ fn append_catalog_search_at(
             } else {
                 format!("{component_name} · {}", item.title)
             },
-            summary: item.summary.clone().unwrap_or_default(),
+            summary: compact_help_summary(item.summary.as_deref().unwrap_or_default()),
             href: href.clone(),
             kind: kind.to_owned(),
-            text: String::new(),
+            text: [
+                item.summary.as_deref(),
+                item.docs.as_ref().map(|docs| docs.body.as_str()),
+                item.signature.as_deref(),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" "),
         });
         if catalog.component.language == ApiLanguage::Python {
             append_member_search(
@@ -6495,7 +6887,9 @@ fn append_member_search(
         let setter = property_setters
             .get(&index)
             .map(|setter| &anchored[*setter]);
-        let title = if member.kind == DocMemberKind::Overload {
+        let title = if member.name == "__new__" {
+            format!("{parent} constructor")
+        } else if member.kind == DocMemberKind::Overload {
             overload_index += 1;
             format!("{parent} · overload {overload_index}")
         } else {
@@ -6506,39 +6900,43 @@ fn append_member_search(
         } else {
             format!("{}#{member_anchor}", href.split('#').next().unwrap_or(href))
         };
-        let mut summary = member
-            .docs
-            .as_ref()
-            .map(|docs| docs.body.split_whitespace().collect::<Vec<_>>().join(" "))
-            .filter(|docs| !docs.is_empty())
-            .or_else(|| member.signature.clone())
-            .unwrap_or_default();
-        if summary.is_empty()
-            && let Some((setter, _)) = setter
-        {
-            summary = setter
-                .docs
-                .as_ref()
-                .map(|docs| docs.body.split_whitespace().collect::<Vec<_>>().join(" "))
-                .filter(|docs| !docs.is_empty())
-                .or_else(|| setter.signature.clone())
-                .unwrap_or_default();
-        }
-        if summary.is_empty() {
-            summary = member
-                .members
-                .iter()
-                .filter(|member| member.kind == DocMemberKind::Overload)
-                .filter_map(|member| member.signature.as_deref())
-                .collect::<Vec<_>>()
-                .join(" | ");
-        }
+        let setter = setter.map(|(setter, _)| *setter);
+        let overload_signatures = member
+            .members
+            .iter()
+            .filter(|member| member.kind == DocMemberKind::Overload)
+            .filter_map(|member| member.signature.as_deref())
+            .collect::<Vec<_>>()
+            .join(" | ");
+        let summary = [
+            member.docs.as_ref().map(|docs| docs.body.as_str()),
+            setter.and_then(|setter| setter.docs.as_ref().map(|docs| docs.body.as_str())),
+            member.signature.as_deref(),
+            setter.and_then(|setter| setter.signature.as_deref()),
+            (!overload_signatures.is_empty()).then_some(overload_signatures.as_str()),
+        ]
+        .into_iter()
+        .flatten()
+        .map(compact_help_summary)
+        .find(|summary| !summary.is_empty())
+        .unwrap_or_default();
+        let text = [
+            member.docs.as_ref().map(|docs| docs.body.as_str()),
+            setter.and_then(|setter| setter.docs.as_ref().map(|docs| docs.body.as_str())),
+            member.signature.as_deref(),
+            setter.and_then(|setter| setter.signature.as_deref()),
+            (!overload_signatures.is_empty()).then_some(overload_signatures.as_str()),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" ");
         entries.push(SearchEntry {
             title: format!("{component}.{title}"),
             summary,
             href: member_href.clone(),
             kind: kind.to_owned(),
-            text: String::new(),
+            text,
         });
         append_member_search(
             component,
@@ -6549,7 +6947,10 @@ fn append_member_search(
             &member.members,
             entries,
         );
-        if let Some((setter, setter_anchor)) = setter {
+        if let Some((setter, setter_anchor)) = property_setters
+            .get(&index)
+            .map(|setter| &anchored[*setter])
+        {
             let setter_href = format!("{}#{setter_anchor}", href.split('#').next().unwrap_or(href));
             append_member_search(
                 component,
@@ -7207,16 +7608,37 @@ fn reference_page(product: &str, title: &str, body: &str) -> String {
 }
 
 fn compact_help_summary(help: &str) -> String {
-    help.lines()
+    const MAX_CHARACTERS: usize = 220;
+    let summary = help
+        .lines()
         .map(str::trim)
         .find(|line| !line.is_empty())
         .map(|line| {
-            line.trim_start_matches('#')
+            line.split(" # ")
+                .next()
+                .unwrap_or(line)
+                .trim_start_matches('#')
                 .trim()
                 .trim_start_matches("- ")
-                .to_owned()
+                .replace('`', "")
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
         })
-        .unwrap_or_default()
+        .unwrap_or_default();
+    let Some(cut) = summary
+        .char_indices()
+        .nth(MAX_CHARACTERS)
+        .map(|(index, _)| index)
+    else {
+        return summary;
+    };
+    let prefix = &summary[..cut];
+    let boundary = prefix.rfind(char::is_whitespace).unwrap_or(cut);
+    format!(
+        "{}…",
+        prefix[..boundary].trim_end_matches(['.', ',', ':', ';'])
+    )
 }
 
 fn render_cli_help(help: &str) -> String {
@@ -7432,6 +7854,98 @@ fn render_cli_argument_names(argument: &CliArgument) -> String {
     names.join(", ")
 }
 
+fn render_cli_argument_references(command: &CliCommand, ids: &[String]) -> String {
+    ids.iter()
+        .map(|id| {
+            let Some(argument) = command.arguments.iter().find(|argument| argument.id == *id)
+            else {
+                return format!("<code>{}</code>", escape_html(id));
+            };
+            let label = format!(
+                "<code>{}</code>",
+                escape_html(&render_cli_argument_names(argument))
+            );
+            if argument.hidden {
+                label
+            } else {
+                let anchor =
+                    generated_anchor("argument", &format!("{}::{}", command.path, argument.id));
+                format!("<a href=\"#{}\">{label}</a>", escape_html(&anchor))
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn render_cli_argument_index(command: &CliCommand) -> String {
+    let groups = [
+        (
+            "Positional arguments",
+            command
+                .arguments
+                .iter()
+                .filter(|argument| !argument.hidden && argument.positional)
+                .collect::<Vec<_>>(),
+        ),
+        (
+            "Options",
+            command
+                .arguments
+                .iter()
+                .filter(|argument| !argument.hidden && !argument.positional && !argument.inherited)
+                .collect::<Vec<_>>(),
+        ),
+        (
+            "Inherited and global options",
+            command
+                .arguments
+                .iter()
+                .filter(|argument| !argument.hidden && argument.inherited)
+                .collect::<Vec<_>>(),
+        ),
+    ];
+    if groups.iter().all(|(_, arguments)| arguments.is_empty()) {
+        return String::new();
+    }
+    let mut body = "<nav class=\"reference-jump-nav\" aria-labelledby=\"argument-overview-title\"><h2 id=\"argument-overview-title\">Arguments and options</h2><div class=\"reference-jump-groups\">".to_owned();
+    for (title, arguments) in groups {
+        if arguments.is_empty() {
+            continue;
+        }
+        body.push_str(&format!(
+            "<section class=\"reference-jump-group\"><h3>{title}</h3><ul class=\"reference-jump-list\">"
+        ));
+        for argument in arguments {
+            let anchor =
+                generated_anchor("argument", &format!("{}::{}", command.path, argument.id));
+            let summary = compact_help_summary(&argument.help);
+            body.push_str(&format!(
+                "<li><a href=\"#{}\"><span><code>{}</code>{}</span><small>{}</small></a></li>",
+                escape_html(&anchor),
+                escape_html(&render_cli_argument_names(argument)),
+                if summary.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "<span class=\"reference-jump-summary\">{}</span>",
+                        escape_html(&summary),
+                    )
+                },
+                if argument.required {
+                    "required"
+                } else if argument.inherited {
+                    "inherited"
+                } else {
+                    "optional"
+                },
+            ));
+        }
+        body.push_str("</ul></section>");
+    }
+    body.push_str("</div></nav>");
+    body
+}
+
 fn render_cli_arguments<'a>(
     command: &CliCommand,
     title: &str,
@@ -7511,6 +8025,17 @@ fn render_cli_arguments<'a>(
                 escape_html(&argument.defaults.join(", ")),
             ));
         }
+        if !argument.default_missing_values.is_empty() {
+            facts.push_str(&format!(
+                "<div><dt>Default when value omitted</dt><dd>{}</dd></div>",
+                argument
+                    .default_missing_values
+                    .iter()
+                    .map(|value| format!("<code>{}</code>", escape_html(value)))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            ));
+        }
         if !argument.possible_values.is_empty() {
             facts.push_str(&format!(
                 "<div><dt>Values</dt><dd>{}</dd></div>",
@@ -7522,15 +8047,16 @@ fn render_cli_arguments<'a>(
                     .join(", "),
             ));
         }
+        if !argument.requires.is_empty() {
+            facts.push_str(&format!(
+                "<div><dt>Requires</dt><dd>{}</dd></div>",
+                render_cli_argument_references(command, &argument.requires),
+            ));
+        }
         if !argument.conflicts_with.is_empty() {
             facts.push_str(&format!(
                 "<div><dt>Conflicts with</dt><dd>{}</dd></div>",
-                argument
-                    .conflicts_with
-                    .iter()
-                    .map(|value| format!("<code>{}</code>", escape_html(value)))
-                    .collect::<Vec<_>>()
-                    .join(", "),
+                render_cli_argument_references(command, &argument.conflicts_with),
             ));
         }
         body.push_str(&format!(
@@ -7540,7 +8066,7 @@ fn render_cli_arguments<'a>(
             escape_html(&anchor),
             escape_html(&names),
             if argument.help.trim().is_empty() {
-                "<p class=\"reference-missing\">Description missing at the parser boundary.</p>".to_owned()
+                "<p class=\"reference-missing\">No description is available for this argument.</p>".to_owned()
             } else {
                 render_cli_help(&argument.help)
             },
@@ -7593,7 +8119,7 @@ fn render_cli_command_page(
     );
     if command.about.trim().is_empty() {
         body.push_str(
-            "<p class=\"reference-missing\">Description missing at the parser boundary.</p>",
+            "<p class=\"reference-missing\">No description is available for this command.</p>",
         );
     } else {
         body.push_str(&format!(
@@ -7602,7 +8128,7 @@ fn render_cli_command_page(
         ));
     }
     body.push_str(&format!(
-        "<h2>Synopsis</h2><div class=\"reference-copy-row\"><pre class=\"api-signature\" id=\"{}-usage\"><code>{}</code></pre><button type=\"button\" data-copy-target=\"{}-usage\">Copy command</button></div>",
+        "<h2>Synopsis</h2><div class=\"reference-copy-row\"><pre class=\"api-signature\" id=\"{}-usage\"><code>{}</code></pre><button type=\"button\" data-copy-target=\"{}-usage\">Copy usage</button></div>",
         escape_html(&command_anchor),
         escape_html(&command.usage),
         escape_html(&command_anchor),
@@ -7627,30 +8153,6 @@ fn render_cli_command_page(
                 .join(", "),
         ));
     }
-    body.push_str(&render_cli_arguments(
-        command,
-        "Positional arguments",
-        command
-            .arguments
-            .iter()
-            .filter(|argument| !argument.hidden && argument.positional),
-    ));
-    body.push_str(&render_cli_arguments(
-        command,
-        "Options",
-        command
-            .arguments
-            .iter()
-            .filter(|argument| !argument.hidden && !argument.positional && !argument.inherited),
-    ));
-    body.push_str(&render_cli_arguments(
-        command,
-        "Inherited and global options",
-        command
-            .arguments
-            .iter()
-            .filter(|argument| !argument.hidden && argument.inherited),
-    ));
     let prefix = format!("{} ", command.path);
     let direct_children = visible_cli_commands(reference)
         .into_iter()
@@ -7682,6 +8184,31 @@ fn render_cli_command_page(
         }
         body.push_str("</nav></section>");
     }
+    body.push_str(&render_cli_argument_index(command));
+    body.push_str(&render_cli_arguments(
+        command,
+        "Positional arguments",
+        command
+            .arguments
+            .iter()
+            .filter(|argument| !argument.hidden && argument.positional),
+    ));
+    body.push_str(&render_cli_arguments(
+        command,
+        "Options",
+        command
+            .arguments
+            .iter()
+            .filter(|argument| !argument.hidden && !argument.positional && !argument.inherited),
+    ));
+    body.push_str(&render_cli_arguments(
+        command,
+        "Inherited and global options",
+        command
+            .arguments
+            .iter()
+            .filter(|argument| !argument.hidden && argument.inherited),
+    ));
     reference_page(product, &command.path, &body)
 }
 
@@ -7715,26 +8242,37 @@ fn render_cli_settings_index(product: &str, reference: &GammaLoopReference) -> S
 }
 
 fn render_cli_setting(setting: &SettingReference, body: &mut String) {
-    let default = setting
-        .default
-        .as_ref()
-        .map(Value::to_string)
-        .unwrap_or_else(|| "no serialized default".to_owned());
+    let default = setting.default.as_ref().map_or_else(
+        || "<span>Not set</span>".to_owned(),
+        |value| match value {
+            Value::Array(_) | Value::Object(_) => format!(
+                "<details><summary>Show structured value</summary><pre><code>{}</code></pre></details>",
+                escape_html(&serde_json::to_string_pretty(value).unwrap_or_else(|_| value.to_string())),
+            ),
+            _ => format!("<code>{}</code>", escape_html(&value.to_string())),
+        },
+    );
     let anchor = generated_anchor("setting", &setting.path);
+    let name = setting
+        .path
+        .rsplit('.')
+        .next()
+        .unwrap_or(setting.path.as_str());
     body.push_str(&format!(
-        "<section class=\"reference-setting reference-setting-flat\" id=\"{}\"><header><h3><code>{}</code></h3><a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to {}\">#</a></header><div class=\"reference-description\">{}</div><dl class=\"reference-facts\"><div><dt>Type</dt><dd><code>{}</code></dd></div><div><dt>Required</dt><dd>{}</dd></div><div><dt>Default</dt><dd><code>{}</code></dd></div><div><dt>Allowed values</dt><dd>{}</dd></div></dl></section>",
+        "<section class=\"reference-setting reference-setting-flat\" id=\"{}\"><header><h3><code>{}</code></h3><a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to {}\">#</a></header><p class=\"reference-setting-path\">{}</p><div class=\"reference-description\">{}</div><dl class=\"reference-facts\"><div><dt>Type</dt><dd><code>{}</code></dd></div><div><dt>Required</dt><dd>{}</dd></div><div class=\"reference-default\"><dt>Default</dt><dd>{}</dd></div><div><dt>Allowed values</dt><dd>{}</dd></div></dl></section>",
+        escape_html(&anchor),
+        escape_html(name),
         escape_html(&anchor),
         escape_html(&setting.path),
-        escape_html(&anchor),
         escape_html(&setting.path),
         if setting.description.trim().is_empty() {
-            "<p class=\"reference-missing\">Description missing in the settings schema.</p>".to_owned()
+            "<p class=\"reference-missing\">No description is available for this setting.</p>".to_owned()
         } else {
             render_cli_help(&setting.description)
         },
         escape_html(&setting.value_type),
         if setting.required { "yes" } else { "no" },
-        escape_html(&default),
+        default,
         if setting.possible_values.is_empty() {
             "Any value accepted by the declared type".to_owned()
         } else {
@@ -7789,7 +8327,33 @@ fn render_cli_settings_namespace_page(
     if settings.is_empty() {
         body.push_str("<p>This namespace owns child namespaces but no settings directly.</p>");
     } else {
-        body.push_str("<h2>Settings</h2><div class=\"reference-setting-list\">");
+        body.push_str("<nav class=\"reference-jump-nav\" aria-labelledby=\"setting-overview-title\"><h2 id=\"setting-overview-title\">Settings in this namespace</h2><div class=\"reference-jump-groups\"><section class=\"reference-jump-group\"><h3>Setting</h3><ul class=\"reference-jump-list\">");
+        for setting in &settings {
+            let anchor = generated_anchor("setting", &setting.path);
+            let name = setting
+                .path
+                .rsplit('.')
+                .next()
+                .unwrap_or(setting.path.as_str());
+            let summary = compact_help_summary(&setting.description);
+            body.push_str(&format!(
+                "<li><a href=\"#{}\"><span><code>{}</code>{}</span><small>{}</small></a></li>",
+                escape_html(&anchor),
+                escape_html(name),
+                if summary.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        "<span class=\"reference-jump-summary\">{}</span>",
+                        escape_html(&summary),
+                    )
+                },
+                escape_html(&setting.value_type),
+            ));
+        }
+        body.push_str(
+            "</ul></section></div></nav><h2>Settings</h2><div class=\"reference-setting-list\">",
+        );
         for setting in settings {
             render_cli_setting(setting, &mut body);
         }
@@ -8455,6 +9019,8 @@ mod tests {
         )));
         assert!(command_page.contains("--clean-state"));
         assert!(command_page.contains("sets true; no value"));
+        assert!(command_page.contains("Copy usage"));
+        assert!(!command_page.contains("Copy command"));
         assert!(!command_page.contains("--clean-state &lt;"));
         assert!(!command_page.contains("<details"));
         assert!(!command_page.contains("data-reference-entry"));
@@ -8472,6 +9038,12 @@ mod tests {
         assert_eq!(
             compact_help_summary(help),
             "Quote-free process specification."
+        );
+        assert_eq!(
+            compact_help_summary(
+                "Wrap indices with a header. # Arguments - `header`: wrapper # Returns Expression"
+            ),
+            "Wrap indices with a header."
         );
         let rendered = render_cli_help(help);
         assert!(rendered.contains("<p>Quote-free process specification.</p>"));
@@ -8501,8 +9073,16 @@ mod tests {
         );
 
         let inspect = page("gammaLoop inspect");
+        let graph_id_anchor = generated_anchor("argument", "gammaLoop inspect::graph_id");
+        let discrete_dim_anchor = generated_anchor("argument", "gammaLoop inspect::discrete_dim");
         assert!(inspect.contains("href=\"guides/events-and-observables/\""));
         assert!(inspect.contains("<div><dt>Value names</dt><dd><code>POINT</code></dd></div>"));
+        assert!(inspect.contains(&format!(
+            "<div><dt>Requires</dt><dd><a href=\"#{graph_id_anchor}\"><code>--graph-id</code></a></dd></div>"
+        )));
+        assert!(inspect.contains(&format!(
+            "<div><dt>Conflicts with</dt><dd><a href=\"#{discrete_dim_anchor}\"><code>-d, --discrete-dim</code></a></dd></div>"
+        )));
         assert_eq!(
             inspect
                 .matches("<div><dt>Value delimiter</dt><dd><code>,</code></dd></div>")
@@ -8515,6 +9095,13 @@ mod tests {
         assert!(generate.contains("<div><dt>Scope</dt><dd>global</dd></div>"));
         let generate_xs = page("gammaLoop generate xs");
         assert!(generate_xs.contains("<div><dt>Scope</dt><dd>inherited global</dd></div>"));
+
+        let save_dot = page("gammaLoop save dot");
+        assert!(
+            save_dot.contains(
+                "<div><dt>Default when value omitted</dt><dd><code>true</code></dd></div>"
+            )
+        );
     }
 
     #[test]
@@ -9676,6 +10263,24 @@ mod tests {
     }
 
     #[test]
+    fn python_callable_signatures_use_call_syntax_without_bound_receivers() {
+        assert_eq!(
+            python_human_callable_signature(
+                "def run(self, values: tuple[int, int] = (1, 2)) -> str:"
+            ),
+            "run(values: tuple[int, int] = (1, 2)) -> str"
+        );
+        assert_eq!(
+            python_human_callable_signature("async def load(cls, path: str) -> Engine:"),
+            "async load(path: str) -> Engine"
+        );
+        assert_eq!(
+            python_human_callable_signature("def version() -> str:"),
+            "version() -> str"
+        );
+    }
+
+    #[test]
     fn python_symbol_pages_and_search_use_canonical_routes() {
         use alphal00p_docs_schema::{
             DocComponent, DocExample, DocMemberKind, DocProduct, DocText, SCHEMA_VERSION,
@@ -9707,6 +10312,18 @@ mod tests {
         ));
         item.signature = Some("class Engine:".to_owned());
         item.required_features = vec!["binding".to_owned(), "accelerated".to_owned()];
+        let mut constructor = DocMember::new("__new__", DocMemberKind::AssociatedFunction);
+        constructor.signature = Some("def __new__(cls, state: str = None) -> Engine:".to_owned());
+        constructor.docs = Some(DocText::new(
+            DocFormat::PythonDocstring,
+            "Create an engine.\n\nParameters\n----------\nstate : str, optional\n    Initial state.",
+        ));
+        let mut state = DocMember::new("state", DocMemberKind::Parameter);
+        state.signature = Some("str".to_owned());
+        state.default = Some("None".to_owned());
+        state.docs = Some(DocText::new(DocFormat::PythonDocstring, "Initial state."));
+        constructor.members.push(state);
+        item.members.push(constructor);
         let mut method = DocMember::new("run", DocMemberKind::Method);
         let mut integer_overload = DocMember::new("run", DocMemberKind::Overload);
         integer_overload.signature = Some("def run(self, value: int) -> LateSupported:".to_owned());
@@ -9739,6 +10356,12 @@ mod tests {
         let mut read_only = DocMember::new("status", DocMemberKind::Getter);
         read_only.signature = Some("def status(self) -> str:".to_owned());
         item.members.push(read_only);
+        let mut from_value = DocMember::new("from_value", DocMemberKind::AssociatedFunction);
+        from_value.signature = Some("def from_value(cls, value: int) -> Engine:".to_owned());
+        item.members.push(from_value);
+        let mut version = DocMember::new("version", DocMemberKind::AssociatedFunction);
+        version.signature = Some("def version() -> str:".to_owned());
+        item.members.push(version);
         root.define_item(item).unwrap();
         let mut curated = DocScope::new("curated", "Curated helpers");
         let mut later_supported = DocItem::new(
@@ -9824,7 +10447,7 @@ mod tests {
         assert!(!module_page.contains("full descriptions"));
         assert_eq!(module_page.matches("class=\"api-symbol-card\"").count(), 2);
         assert_eq!(module_page.matches("class=\"api-symbol-meta\"").count(), 1);
-        assert!(module_page.contains(">3 members</span>"));
+        assert!(module_page.contains(">5 members</span>"));
         assert!(!module_page.contains("0 members"));
         assert!(module_page.contains(&format!("href=\"{engine_route}\"")));
         assert!(module_page.contains(&format!("href=\"{late_route}\"")));
@@ -9843,7 +10466,8 @@ mod tests {
             "id=\"engine-run-method\" href=\"{engine_route}#engine-run-method\" data-reference-redirect tabindex=\"-1\" aria-hidden=\"true\""
         )));
 
-        assert!(engine_page.contains("class Engine:"));
+        assert!(engine_page.contains("Engine(state: str = None)"));
+        assert!(!engine_page.contains("class Engine:"));
         assert!(engine_page.contains(
             "<strong>Additional source-build feature:</strong> This binding is generated when <code>accelerated</code> is enabled."
         ));
@@ -9861,9 +10485,20 @@ mod tests {
         );
         assert!(!engine_page.contains("<details"));
         assert!(engine_page.contains(">Method</span>"));
+        assert!(engine_page.contains(">Class method</span>"));
+        assert!(engine_page.contains(">Static method</span>"));
+        assert!(!engine_page.contains(">Class or static method</span>"));
         assert!(engine_page.contains(">Property · read/write</span>"));
         assert!(engine_page.contains(">Property · read-only</span>"));
-        assert!(engine_page.contains("def run(self, value: int)"));
+        assert!(engine_page.contains("run(value: int)"));
+        assert!(engine_page.contains("from_value(value: int)"));
+        assert!(engine_page.contains("version() -&gt; str"));
+        assert!(!engine_page.contains("def run(self"));
+        assert!(!engine_page.contains("from_value(cls"));
+        assert!(engine_page.contains("global_data: str"));
+        assert!(engine_page.contains("status: str"));
+        assert!(!engine_page.contains("def global_data"));
+        assert!(!engine_page.contains("def status"));
         assert!(engine_page.contains(&format!(
             "<p class=\"api-doc-type\"><code><a href=\"{late_route}\">LateSupported</a></code></p>"
         )));
@@ -9906,7 +10541,10 @@ mod tests {
             )
         );
         assert!(engine_page.contains("api-property-setter-signature"));
-        assert!(engine_page.contains("def global_data(self, value: str)"));
+        assert!(engine_page.contains("<h2>Constructor</h2>"));
+        assert!(engine_page.contains("id=\"engine-new-associatedfunction\""));
+        assert!(!engine_page.contains("<code>__new__</code>"));
+        assert_eq!(engine_page.matches("Initial state.").count(), 1);
         assert!(late_page.contains("<h2>Example usage</h2>"));
         assert!(late_page.contains("LateSupported()"));
 
@@ -9923,6 +10561,9 @@ mod tests {
                 .iter()
                 .any(|entry| { entry.href == format!("{engine_route}#engine-run-method") })
         );
+        assert!(entries.iter().any(|entry| {
+            entry.href == format!("{engine_route}#engine-new-associatedfunction")
+        }));
         assert!(
             entries.iter().any(|entry| {
                 entry.href == format!("{engine_route}#engine-run-method-overload")

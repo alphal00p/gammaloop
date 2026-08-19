@@ -30,6 +30,7 @@ use crate::{
         observable_kind, quantity_kind, selector_kind, serialize_runtime_named_settings,
         summarize_observable, summarize_quantity, summarize_selector, NamedProcessSettingKind,
     },
+    commands::CliArgumentMetadataExt,
     completion::CompletionArgExt,
     integrand_info::{
         IntegrandCutThresholdInfo, IntegrandEsurfaceClassification, IntegrandGraphGroupInfo,
@@ -65,7 +66,7 @@ pub enum Display {
             short = 'p',
             long = "process",
             value_name = "PROCESS",
-            requires = "integrand_name",
+            cli_requires("integrand_name"),
             completion_process_selector(crate::completion::SelectorKind::Any)
         )]
         process: Option<ProcessRef>,
@@ -74,7 +75,7 @@ pub enum Display {
             short = 'i',
             long = "integrand-name",
             value_name = "NAME",
-            requires = "process",
+            cli_requires("process"),
             completion_integrand_selector(crate::completion::SelectorKind::Any)
         )]
         integrand_name: Option<String>,
@@ -97,7 +98,7 @@ pub enum Display {
             short = 'i',
             long = "integrand-name",
             value_name = "NAME",
-            requires = "process",
+            cli_requires("process"),
             completion_integrand_selector(crate::completion::SelectorKind::Any)
         )]
         integrand_name: Option<String>,
@@ -107,7 +108,7 @@ pub enum Display {
             long = "graph",
             value_name = "MASTER_GRAPH",
             num_args = 1..,
-            requires = "integrand_name",
+            cli_requires("integrand_name"),
             completion_selected_master_graph()
         )]
         graphs: Vec<String>,
@@ -116,7 +117,7 @@ pub enum Display {
             long = "category",
             value_name = "CATEGORY",
             num_args = 1..,
-            requires = "integrand_name",
+            cli_requires("integrand_name"),
             completion_selected_integrand_category()
         )]
         categories: Vec<IntegrandDisplayCategory>,
@@ -124,7 +125,7 @@ pub enum Display {
         #[arg(
             long = "hide-non-existing-thresholds",
             default_value_t = false,
-            requires = "integrand_name"
+            cli_requires("integrand_name")
         )]
         #[serde(default)]
         hide_non_existing_thresholds: bool,

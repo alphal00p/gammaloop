@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use crate::{
+    commands::CliArgumentMetadataExt,
     completion::CompletionArgExt,
     state::{ProcessRef, State},
     CLISettings,
@@ -96,7 +97,7 @@ pub struct UltraVioletProfile {
         num_args = 1..,
         value_delimiter = ',',
         allow_negative_numbers = true,
-        requires = "uv_ray_directions"
+        cli_requires("uv_ray_directions")
     )]
     pub uv_ray_norms: Vec<f64>,
 

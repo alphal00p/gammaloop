@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use clap::{Arg, ArgAction, Command, CommandFactory};
 use eyre::{Result, bail, ensure};
-use gammaloop_api::{CLISettings, OneShot};
+use gammaloop_api::{CLISettings, OneShot, commands::CliArgumentMetadata};
 use gammalooprs::{settings::RuntimeSettings, utils::serde_utils::ShowDefaultsGuard};
 use schemars::schema_for;
 use serde::Serialize;
@@ -186,6 +186,7 @@ fn collect_commands(
 }
 
 fn argument_metadata(command: &Command, argument: &Arg, inherited: bool) -> Result<CliArgument> {
+    let documentation = argument.get::<CliArgumentMetadata>();
     let action = match argument.get_action() {
         ArgAction::Set => CliArgumentAction::Set,
         ArgAction::Append => CliArgumentAction::Append,
@@ -314,10 +315,20 @@ fn argument_metadata(command: &Command, argument: &Arg, inherited: bool) -> Resu
         value_delimiter: argument.get_value_delimiter(),
         value_terminator: argument.get_value_terminator().map(ToString::to_string),
         conflicts_with: conflicts_with.into_iter().collect(),
+        requires: documentation
+            .into_iter()
+            .flat_map(|metadata| metadata.requires.iter().copied())
+            .map(str::to_owned)
+            .collect(),
         defaults: argument
             .get_default_values()
             .iter()
             .map(|value| value.to_string_lossy().into_owned())
+            .collect(),
+        default_missing_values: documentation
+            .into_iter()
+            .flat_map(|metadata| metadata.default_missing_values.iter().copied())
+            .map(str::to_owned)
             .collect(),
         possible_values: argument
             .get_possible_values()
@@ -874,6 +885,7 @@ mod tests {
         assert!(state_folder.takes_values);
         assert!(state_folder.value_required);
         assert!(!state_folder.positional);
+        assert!(state_folder.default_missing_values.is_empty());
         assert_parses(&["gammaLoop", "--state-folder", "/tmp/docs-parity-state"]);
 
         assert!(boot_card.positional);
@@ -885,6 +897,7 @@ mod tests {
         assert_eq!((with_uv.arity.min, with_uv.arity.max), (0, Some(1)));
         assert!(with_uv.takes_values);
         assert!(!with_uv.value_required);
+        assert_eq!(with_uv.default_missing_values, ["true"]);
         assert_parses(&["gammaLoop", "save", "dot", "--with-uv"]);
         assert_parses(&["gammaLoop", "save", "dot", "--with-uv=false"]);
 
@@ -927,6 +940,7 @@ mod tests {
         let no_save_state = argument(&reference, "gammaLoop", "no_save_state");
         let keep_sources = argument(&reference, "gammaLoop generate", "keep_sources");
         let inherited_keep_sources = argument(&reference, "gammaLoop generate amp", "keep_sources");
+        let orientation_id = argument(&reference, "gammaLoop inspect", "orientation_id");
 
         assert!(python.conflicts_with.iter().any(|id| id == "rust"));
         assert!(
@@ -939,6 +953,7 @@ mod tests {
         assert!(!keep_sources.inherited);
         assert!(inherited_keep_sources.global);
         assert!(inherited_keep_sources.inherited);
+        assert_eq!(orientation_id.requires, ["graph_id"]);
 
         assert_parses(&["gammaLoop", "save", "standalone", "--python"]);
         let conflict = OneShot::command()
@@ -949,6 +964,18 @@ mod tests {
             .try_get_matches_from(["gammaLoop", "--no-save-state", "--override-state"])
             .unwrap_err();
         assert_eq!(group_conflict.kind(), ErrorKind::ArgumentConflict);
+        let missing_graph = OneShot::command()
+            .try_get_matches_from(["gammaLoop", "inspect", "--orientation-id", "0"])
+            .unwrap_err();
+        assert_eq!(missing_graph.kind(), ErrorKind::MissingRequiredArgument);
+        assert_parses(&[
+            "gammaLoop",
+            "inspect",
+            "--graph-id",
+            "1",
+            "--orientation-id",
+            "0",
+        ]);
         assert_parses(&["gammaLoop", "generate", "amp", "token", "--keep-sources"]);
     }
 
