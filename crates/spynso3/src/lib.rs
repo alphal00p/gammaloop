@@ -57,7 +57,7 @@ use pyo3_stub_gen::{PyStubType, TypeInfo, define_stub_info_gatherer, derive::*, 
 use pyo3_stub_gen::derive::{gen_stub_pyclass_enum, gen_stub_pyfunction};
 
 pub mod broadcast;
-pub mod composition;
+mod composition;
 pub mod display;
 pub mod expression;
 pub mod library;
@@ -143,7 +143,6 @@ pub(crate) fn initialize_spenso(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<SymbolicParallelism>()?;
     m.add_class::<SpensoExpressionEvaluator>()?;
     m.add_class::<SpensoCompiledExpressionEvaluator>()?;
-    m.add_class::<library::TensorNamespace>()?;
     m.add_function(wrap_pyfunction!(set_symbolica_rayon_enabled, m)?)?;
     display::register(m)?;
     expression::register(m)?;
@@ -154,13 +153,16 @@ pub(crate) fn initialize_spenso(m: &Bound<'_, PyModule>) -> PyResult<()> {
     SpensorLibrary::init(m)?;
     SpensorFunctionLibrary::init(m)?;
     SpensoBroadcastFunction::init(m)?;
-    m.add("initialize", m.getattr("initialize_module")?)?;
     let exports = m
         .dict()
         .keys()
         .iter()
         .filter_map(|key| key.extract::<String>().ok())
-        .filter(|name| name != "initialize_module" && (name == "_" || !name.starts_with('_')))
+        .filter(|name| {
+            name != "initialize"
+                && name != "initialize_module"
+                && (name == "_" || !name.starts_with('_'))
+        })
         .collect::<Vec<_>>();
     m.add("__all__", exports)?;
     Ok(())

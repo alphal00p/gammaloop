@@ -76,7 +76,7 @@ and what to use when matching it in a replacement rule.
 | --- | --- | --- | --- | --- |
 | `f(args...)` with no representation-tagged syntax | pure scalar Symbolica expression | `function!(f, args...)` | no Spenso tensor tag | ordinary Symbolica pattern |
 | `pure_scalar(expr)` | force `expr` to parse as a scalar | `pure_scalar!(expr)` | `SPENSO_TAG.pure_scalar` symbol | `function!(T.pure_scalar, W_.x_)` |
-| `rep(dim)` | stripped representation, for compact notation or traces | `mink!(D)`, `bis!(D)`, `cof!(NC)`, `coad!(NA)` | representation head tagged `representation` | `rep_!(N; W_.d_)` |
+| `rep(dim)` | stripped representation, for compact notation or traces | `mink!(D)`, `bis!(D)`, `cof!(NC)`, `coad!(dA)` | representation head tagged `representation` | `rep_!(N; W_.d_)` |
 | `rep(dim, i)` | indexed representation slot | `mink!(D, mu)`, `bis!(D, i)`, `cof!(NC, i)`, `slot!(rep, i)` | representation head tagged `representation`; maybe `self_dual` or `dualizable` | `rep_!(N; W_.d_, W_.i_)`, `self_dual_!(N; ...)`, `dualizable_!(N; ...)` |
 | `dind(rep(dim, i))` | dual slot | `dind!(cof!(NC, i))` or `slot.dual().to_atom()` | `dind` dual wrapper plus representation tags | `dualizable_dual_!(N; W_.d_, W_.i_)` |
 | `aind(slot...)` | bundle of structural slots inside one argument | `aind!(slots...)` | `AIND_SYMBOLS.aind` symbol | `function!(AIND_SYMBOLS.aind, W_.x___)` |

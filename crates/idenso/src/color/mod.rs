@@ -51,11 +51,9 @@ pub struct ColorSymbols {
     pub fundamental_rep: Symbol,
     /// Symbol backing the color adjoint representation function.
     pub adjoint_rep: Symbol,
-    /// The adjoint representation dimension symbol, i.e. NA = Nc^2 - 1.
-    pub na: Symbol,
     /// The adjoint Casimir symbol, i.e. CA = Nc
     pub ca: Symbol,
-    /// The fundamental Casimir symbol. T^a_ij T^a_jk = CF delta_ik -> CF = TR (na/nc)
+    /// The fundamental Casimir symbol. T^a_ij T^a_jk = CF delta_ik -> CF = T_F d_A/d_F.
     pub cf: Symbol,
     /// The generator symbol
     pub t: Symbol,
@@ -533,7 +531,6 @@ pub static CS, CS_INNER: ColorSymbols = || {
         adjoint_rep: representation_symbol(ColorAdjoint {}.to_symbolic(std::iter::empty::<Atom>())),
         adj_: symbol!("adj_"),
         nc_: symbol!("nc_"),
-        na: symbol!("NA";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
         tr: symbol!("spenso::TR";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(1,2).to_multi_prec_float(prec).into()))),
         nc: symbol!("spenso::Nc";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
     }
@@ -585,28 +582,31 @@ impl ColorSimplifySettings {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ColorCasimirSettings {
-    /// Rewrite the fundamental dimension `Nc` using `CA = Nc`.
-    pub rewrite_nc: bool,
-    /// Rewrite the adjoint dimension `NA` using `NA = Nc^2 - 1 = 2 CA CF`.
-    pub rewrite_na: bool,
-    /// Substitute the common fundamental normalization `TR = 1/2`.
-    pub substitute_tr: bool,
+    /// Rewrite the explicit fundamental dimension using `d_F = C_A`.
+    pub rewrite_fundamental_dimension: bool,
+    /// Substitute the common fundamental normalization `T_F = 1/2`.
+    pub substitute_fundamental_index: bool,
 }
 
 impl Default for ColorCasimirSettings {
     fn default() -> Self {
         Self {
-            rewrite_nc: true,
-            rewrite_na: true,
-            substitute_tr: false,
+            rewrite_fundamental_dimension: true,
+            substitute_fundamental_index: false,
         }
     }
 }
 
 impl ColorCasimirSettings {
-    /// Also apply the standard fundamental trace normalization `TR = 1/2`.
-    pub fn with_trace_normalization(mut self) -> Self {
-        self.substitute_tr = true;
+    /// Keep `d_F` explicit instead of applying the SU(N) relation `d_F = C_A`.
+    pub fn without_fundamental_dimension_rewrite(mut self) -> Self {
+        self.rewrite_fundamental_dimension = false;
+        self
+    }
+
+    /// Apply the standard fundamental index normalization `T_F = 1/2`.
+    pub fn with_fundamental_index_normalization(mut self) -> Self {
+        self.substitute_fundamental_index = true;
         self
     }
 }
@@ -632,11 +632,16 @@ pub trait ColorSimplifier {
     /// Simplifies color structures with explicit chain/trace settings.
     fn simplify_color_with(&self, settings: ColorSimplifySettings) -> Atom;
 
-    /// Rewrites `Nc`/`NA` scalar factors into the `CA`, `CF` Casimir basis.
-    fn to_color_casimir(&self) -> Atom;
+    /// Rewrites the explicit representation dimensions into a Casimir basis.
+    fn to_color_casimir(&self, fundamental_rep: AtomView<'_>, adjoint_rep: AtomView<'_>) -> Atom;
 
-    /// Rewrites color scalar factors with explicit control over normalization choices.
-    fn to_color_casimir_with(&self, settings: ColorCasimirSettings) -> Atom;
+    /// Rewrites explicit dimensions with control over SU(N) normalization choices.
+    fn to_color_casimir_with(
+        &self,
+        fundamental_rep: AtomView<'_>,
+        adjoint_rep: AtomView<'_>,
+        settings: ColorCasimirSettings,
+    ) -> Atom;
 
     /// Rewrites supported `cof(N)` invariant factors into explicit dimension formulas.
     fn to_cof_dimension_invariants(&self) -> Atom;
@@ -662,12 +667,26 @@ impl ColorSimplifier for Atom {
         self.as_view().simplify_color_with(settings)
     }
 
-    fn to_color_casimir(&self) -> Atom {
-        self.to_color_casimir_with(ColorCasimirSettings::default())
+    fn to_color_casimir(&self, fundamental_rep: AtomView<'_>, adjoint_rep: AtomView<'_>) -> Atom {
+        self.to_color_casimir_with(
+            fundamental_rep,
+            adjoint_rep,
+            ColorCasimirSettings::default(),
+        )
     }
 
-    fn to_color_casimir_with(&self, settings: ColorCasimirSettings) -> Atom {
-        casimir::color_casimir_basis_impl(self.as_atom_view(), settings)
+    fn to_color_casimir_with(
+        &self,
+        fundamental_rep: AtomView<'_>,
+        adjoint_rep: AtomView<'_>,
+        settings: ColorCasimirSettings,
+    ) -> Atom {
+        casimir::color_casimir_basis_impl(
+            self.as_atom_view(),
+            fundamental_rep,
+            adjoint_rep,
+            settings,
+        )
     }
 
     fn to_cof_dimension_invariants(&self) -> Atom {
@@ -722,12 +741,26 @@ impl ColorSimplifier for AtomView<'_> {
         ])
     }
 
-    fn to_color_casimir(&self) -> Atom {
-        self.to_color_casimir_with(ColorCasimirSettings::default())
+    fn to_color_casimir(&self, fundamental_rep: AtomView<'_>, adjoint_rep: AtomView<'_>) -> Atom {
+        self.to_color_casimir_with(
+            fundamental_rep,
+            adjoint_rep,
+            ColorCasimirSettings::default(),
+        )
     }
 
-    fn to_color_casimir_with(&self, settings: ColorCasimirSettings) -> Atom {
-        casimir::color_casimir_basis_impl(self.as_atom_view(), settings)
+    fn to_color_casimir_with(
+        &self,
+        fundamental_rep: AtomView<'_>,
+        adjoint_rep: AtomView<'_>,
+        settings: ColorCasimirSettings,
+    ) -> Atom {
+        casimir::color_casimir_basis_impl(
+            self.as_atom_view(),
+            fundamental_rep,
+            adjoint_rep,
+            settings,
+        )
     }
 
     fn to_cof_dimension_invariants(&self) -> Atom {

@@ -72,8 +72,6 @@ pub enum TensorCompositionError {
     UnequalExplicitIndices { left: usize, right: usize },
     #[error("tensor multiplication is ambiguous; compatible port pairs are {0:?}")]
     Ambiguous(Vec<PortPair>),
-    #[error("no compatible tensor ports were found")]
-    NoCompatiblePorts,
     #[error("the selected tensor does not have an unambiguous two-ended channel")]
     NoMatrixChannel,
     #[error("a two-ended channel requires distinct ports, got ({input}, {output})")]

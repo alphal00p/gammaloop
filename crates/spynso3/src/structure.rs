@@ -1,17 +1,14 @@
-use std::ops::Deref;
-
 use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
-use itertools::Itertools;
 
 #[cfg(not(feature = "python_stubgen"))]
 use pyo3_stub_gen_derive::remove_gen_stub;
 
 use pyo3::{
     PyTypeInfo,
-    exceptions::{self, PyIndexError, PyRuntimeError, PyTypeError, PyValueError},
+    exceptions::{self, PyTypeError, PyValueError},
     prelude::*,
     pybacked::PyBackedStr,
-    types::{PyAny, PyDict, PyList, PyTuple},
+    types::{PyAny, PyTuple},
 };
 
 #[cfg(feature = "python_stubgen")]
@@ -22,19 +19,13 @@ use pyo3_stub_gen::{
 };
 use spenso::structure::slot::DualSlotTo;
 use spenso::{
-    network::{
-        library::symbolic::{ETS, ExplicitKey},
-        parsing::ShadowedStructure,
-        tags::SPENSO_TAG,
-    },
+    network::{library::symbolic::ETS, parsing::ShadowedStructure, tags::SPENSO_TAG},
     structure::{
-        HasName, IndexLess, PermutedStructure, TensorStructure, ToSymbolic,
+        PermutedStructure, TensorStructure,
         abstract_index::AbstractIndex,
         dimension::Dimension,
         partial::{PartialIndex, PartialStructure, PartialStructureExt},
-        representation::{
-            Euclidean, ExtendibleReps, LibraryRep, Minkowski, RepName, Representation,
-        },
+        representation::{Euclidean, LibraryRep, Minkowski, RepName, Representation},
         slot::{IsAbstractSlot, Slot},
     },
 };
@@ -48,11 +39,9 @@ use symbolica::{
 
 use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
 
-use thiserror::Error;
-
 use idenso::{color::CS, dirac::AGS, representations::Bispinor};
 
-use super::{SliceOrIntOrExpanded, expression::TensorExpression};
+use super::expression::{TensorExpression, validate_color_structure_ports};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{PyStubType, derive::*, impl_stub_type};
@@ -472,6 +461,11 @@ impl SpensoName {
                 ports.len()
             )));
         }
+        validate_color_structure_ports(
+            self.name,
+            args.len(),
+            &ports.iter().map(|port| port.rep()).collect::<Vec<_>>(),
+        )?;
 
         let atom = FunctionBuilder::new(self.name)
             .add_args(&scalar_args)
@@ -628,544 +622,6 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ArithmeticStructure {
     }
 }
 
-/// Internal representation-only structure retained for concrete tensor and library adapters.
-///
-/// Symbolic Python construction goes directly through `TensorName` and returns a
-/// `TensorExpression`; this type is deliberately not registered in the public module.
-#[pyclass(
-    from_py_object,
-    name = "TensorStructure",
-    module = "symbolica.community.spenso"
-)]
-#[derive(Clone)]
-pub(crate) struct SpensoStructure {
-    pub(crate) structure: PermutedStructure<ExplicitKey<AbstractIndex>>,
-}
-
-impl Deref for SpensoStructure {
-    type Target = ExplicitKey<AbstractIndex>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.structure.structure
-    }
-}
-
-/// Private adapter retained for representation-list based concrete tensor construction.
-#[allow(dead_code)]
-pub(crate) struct ConvertibleToIndexLess(pub SpensoStructure);
-
-impl From<ExplicitKey<AbstractIndex>> for SpensoStructure {
-    fn from(value: ExplicitKey<AbstractIndex>) -> Self {
-        SpensoStructure {
-            structure: PermutedStructure::identity(value),
-        }
-    }
-}
-
-impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToIndexLess {
-    type Error = PyErr;
-
-    fn extract(structure: pyo3::Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
-        if let Ok(structure) = structure.extract::<SpensoStructure>() {
-            Ok(ConvertibleToIndexLess(structure))
-        } else if let Ok(s) = structure.extract::<Vec<SpensoRepresentation>>() {
-            Ok(ConvertibleToIndexLess(SpensoStructure {
-                structure: PermutedStructure::<IndexLess>::from_iter(
-                    s.into_iter().map(|s| s.representation),
-                )
-                .map_structure(Into::into),
-            }))
-        } else if let Ok(s) = structure.extract::<Vec<usize>>() {
-            Ok(ConvertibleToIndexLess(SpensoStructure {
-                structure: PermutedStructure::<IndexLess>::from_iter(
-                    s.into_iter().map(|s| ExtendibleReps::EUCLIDEAN.new_rep(s)),
-                )
-                .map_structure(Into::into),
-            }))
-        } else {
-            Err(PyTypeError::new_err(
-                "internal tensor structure must be built from representations or dimensions",
-            ))
-        }
-    }
-}
-
-#[cfg(feature = "python_stubgen")]
-impl PyStubType for ConvertibleToIndexLess {
-    fn type_output() -> pyo3_stub_gen::TypeInfo {
-        <Vec<SpensoRepresentation>>::type_output() | <Vec<usize>>::type_output()
-    }
-}
-#[derive(Error, Debug)]
-pub enum SpensoError {
-    #[error("Must have a name to register")]
-    NoName,
-}
-
-#[pymethods]
-impl SpensoStructure {
-    #[new]
-    /// Create tensor structure from representations and optional arguments.
-    ///
-    /// # Parameters:
-    /// - *reps_and_additional_args: Mixed arguments (Representation objects and Expressions for additional arguments)
-    /// - name: Optional tensor name to assign to the structure
-    ///
-    /// # Examples:
-    /// ```python
-    /// from symbolica import S
-    /// from symbolica.community.spenso import TensorStructure, Representation, TensorName
-    ///
-    /// # Create from representations
-    /// rep = Representation.euc(3)
-    /// structure = TensorStructure(rep, rep)  # 3x3 tensor
-    ///
-    /// # With additional arguments
-    /// x = S('x')
-    /// structure_with_args = TensorStructure(rep, rep, x)
-    ///
-    /// # With name
-    /// T = TensorName("T")
-    /// named_structure = TensorStructure(rep, rep, name=T)
-    /// ```
-    #[pyo3(signature =(*reps_and_additional_args,name=None))]
-    pub fn from_list(
-        reps_and_additional_args: &Bound<'_, PyTuple>,
-        name: Option<ConvertibleToSpensoName>,
-    ) -> PyResult<Self> {
-        let mut args = Vec::new();
-        let mut actual_slots = Vec::new();
-        for a in reps_and_additional_args {
-            if let Ok(s) = a.extract::<SpensoRepresentation>() {
-                actual_slots.push(s.representation);
-            } else if let Ok(arg) = a.extract::<ConvertibleToExpression>() {
-                args.push(arg.to_expression().expr);
-            } else {
-                return Err(exceptions::PyTypeError::new_err(
-                    "Only slots and expressions can be used",
-                ));
-            }
-        }
-
-        let args = if args.is_empty() { None } else { Some(args) };
-
-        let mut a: PermutedStructure<ExplicitKey<AbstractIndex>> =
-            PermutedStructure::<IndexLess>::from_iter(actual_slots).map_structure(Into::into);
-        if let Some(name) = name {
-            a.structure.set_name(name.0.name);
-        };
-        a.structure.additional_args = args;
-
-        Ok(SpensoStructure { structure: a })
-    }
-
-    fn set_name(&mut self, name: ConvertibleToSpensoName) {
-        self.structure.structure.set_name(name.0.name);
-    }
-
-    fn get_name(&self) -> Option<SpensoName> {
-        self.structure
-            .structure
-            .name()
-            .map(|a| SpensoName { name: a })
-    }
-
-    /// Return the declared ports in their logical construction order.
-    #[getter]
-    fn interface(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
-        let canonical = self.external_reps_iter().collect::<Vec<_>>();
-        let logical = self.structure.rep_permutation.apply_slice_inv(&canonical);
-        let ports = logical
-            .into_iter()
-            .map(|representation| Py::new(py, SpensoRepresentation { representation }))
-            .collect::<PyResult<Vec<_>>>()?;
-        Ok(PyTuple::new(py, ports)?.unbind())
-    }
-
-    fn __repr__(&self) -> String {
-        format!(
-            "{}",
-            self.to_symbolic(Some(self.structure.rep_permutation.clone()))
-                .unwrap()
-        )
-    }
-
-    fn __str__(&self) -> String {
-        let slot = self
-            .external_reps()
-            .into_iter()
-            .map(|r| r.to_symbolic([]))
-            .join(",");
-
-        match (self.name(), self.args()) {
-            (Some(name), Some(args)) => {
-                let args = args.iter().join(",");
-                format!("{}({})[{}]", name, args, slot)
-            }
-            (Some(name), None) => {
-                format!("{}[{}]", name, slot)
-            }
-            (None, Some(args)) => {
-                let args = args.iter().join(",");
-                format!("({})[{}]", args, slot)
-            }
-            (None, None) => {
-                format!("[{}]", slot)
-            }
-        }
-    }
-
-    fn __len__(&self) -> usize {
-        self.size().unwrap()
-    }
-
-    fn __getitem__(&self, item: SliceOrIntOrExpanded) -> PyResult<Py<PyAny>> {
-        match item {
-            SliceOrIntOrExpanded::Int(i) => {
-                let out: Vec<_> = self
-                    .expanded_index(i.into())
-                    .map_err(|s| PyIndexError::new_err(s.to_string()))?
-                    .into();
-
-                Ok(Python::attach(|py| out.into_pyobject(py).map(|a| a.unbind()))?.into_any())
-            }
-            SliceOrIntOrExpanded::Expanded(idxs) => {
-                let out: usize = self
-                    .flat_index(&idxs)
-                    .map_err(|s| PyIndexError::new_err(s.to_string()))?
-                    .into();
-
-                Ok(Python::attach(|py| out.into_pyobject(py).map(|a| a.unbind()))?.into_any())
-            }
-            SliceOrIntOrExpanded::Slice(s) => {
-                let r = s.indices(self.size().unwrap() as isize)?;
-
-                let start = if r.start < 0 {
-                    (r.slicelength as isize + r.start) as usize
-                } else {
-                    r.start as usize
-                };
-
-                let end = if r.stop < 0 {
-                    (r.slicelength as isize + r.stop) as usize
-                } else {
-                    r.stop as usize
-                };
-
-                let (range, step) = if r.step < 0 {
-                    (end..start, -r.step as usize)
-                } else {
-                    (start..end, r.step as usize)
-                };
-
-                let slice: Result<Vec<Vec<usize>>, _> = range
-                    .step_by(step)
-                    .map(|i| self.expanded_index(i.into()).map(Vec::<usize>::from))
-                    .collect();
-
-                match slice {
-                    Ok(slice) => {
-                        Ok(
-                            Python::attach(|py| slice.into_pyobject(py).map(|a| a.unbind()))?
-                                .into_any(),
-                        )
-                    }
-                    Err(e) => Err(PyIndexError::new_err(e.to_string())),
-                }
-            }
-        }
-    }
-
-    /// Address every declared port and return a structured expression.
-    ///
-    /// This has the same tensor-aware semantics as `index`; `symbolic` remains
-    /// the explicit escape hatch for constructing a base Symbolica Expression.
-    #[pyo3(signature = (*indices, cook_indices=false))]
-    fn __call__(
-        &self,
-        py: Python<'_>,
-        indices: &Bound<'_, PyTuple>,
-        cook_indices: bool,
-    ) -> PyResult<Py<TensorExpression>> {
-        self.index(py, indices, cook_indices)
-    }
-
-    /// Create a symbolic expression representing this tensor structure.
-    ///
-    /// Builds a symbolic tensor expression with the specified indices. Arguments can be
-    /// separated using a semicolon (';') to distinguish between additional arguments
-    /// and tensor indices.
-    ///
-    /// # Parameters:
-    /// - *args: Positional arguments (int, str, Symbol, Expression for indices, ';' for separator)
-    /// - extra_args: Optional list of additional non-tensorial arguments
-    ///
-    /// # Examples:
-    /// ```python
-    /// import symbolica as sp
-    /// from symbolica.community.spenso import TensorStructure, Representation, TensorName
-    ///
-    /// rep = Representation.euc(3)
-    /// T = TensorName("T")
-    /// structure = TensorStructure([rep, rep], name=T)
-    ///
-    /// # Basic usage
-    /// expr = structure.symbolic('mu', 'nu')  # T(mu, nu)
-    ///
-    /// # With additional arguments
-    /// x = sp.S('x')
-    /// expr = structure.symbolic(x, ';', 'mu', 'nu')  # T(x; mu, nu)
-    ///
-    /// # Using extra_args parameter
-    /// expr = structure.symbolic('mu', 'nu', extra_args=[x])  # T(x; mu, nu)
-    /// ```
-    #[pyo3(signature = (*args, extra_args=None))]
-    fn symbolic(
-        &self,
-        args: &Bound<'_, PyTuple>,
-        extra_args: Option<&Bound<'_, PyList>>,
-    ) -> PyResult<PythonExpression> {
-        // Use helper to parse arguments
-        let (final_additional_args, potential_indices) =
-            self.parse_args_for_indexing(args, extra_args)?;
-
-        // --- Generate Symbolic Expression ---
-        let name = self.name().ok_or_else(|| {
-            PyRuntimeError::new_err("Cannot create symbolic atom: structure has no name")
-        })?;
-
-        let index_atoms: Vec<Atom> = potential_indices
-            .iter()
-            .map(|item| {
-                match item {
-                    // potential_indices now only contains Aind or Atom
-                    ConvertibleToAbstractIndex::Aind(idx) => (*idx).into(),
-                    ConvertibleToAbstractIndex::Atom(expr) => expr.expr.clone(),
-                    ConvertibleToAbstractIndex::Separator => unreachable!(), // Helper ensures this
-                }
-            })
-            .collect();
-
-        if self.order() != index_atoms.len() {
-            return Err(PyValueError::new_err(format!(
-                "Number of index atoms {} does not match structure order {}",
-                index_atoms.len(),
-                self.order()
-            )));
-        }
-
-        let slots_atoms = self
-            .external_reps_iter()
-            .zip(index_atoms)
-            .map(|(rep, ind_atom)| rep.to_symbolic([ind_atom]))
-            .collect::<Vec<_>>();
-
-        let value_builder = FunctionBuilder::new(name);
-        let final_expr = value_builder
-            .add_args(&final_additional_args)
-            .add_args(&slots_atoms)
-            .finish();
-
-        Ok(PythonExpression::from(final_expr))
-    }
-
-    /// Address every declared port in logical order.
-    ///
-    /// `AUTO`/`_` leaves its local port unresolved; all other arguments become
-    /// explicit abstract indices. Scalar arguments belong to the structure and
-    /// are not accepted here.
-    #[pyo3(signature = (*indices, cook_indices=false))]
-    fn index(
-        &self,
-        py: Python<'_>,
-        indices: &Bound<'_, PyTuple>,
-        cook_indices: bool,
-    ) -> PyResult<Py<TensorExpression>> {
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("cook_indices", cook_indices)?;
-        let result = TensorExpression::from_structure(py, self)?
-            .bind(py)
-            .call_method("index", indices, Some(&kwargs))?;
-        Ok(result.cast_into::<TensorExpression>()?.unbind())
-    }
-
-    fn __add__(&self, py: Python<'_>, rhs: &Bound<'_, PyAny>) -> PyResult<Py<TensorExpression>> {
-        let result = TensorExpression::from_structure(py, self)?
-            .bind(py)
-            .call_method1("__add__", (rhs,))?;
-        Ok(result.cast_into::<TensorExpression>()?.unbind())
-    }
-
-    fn __radd__(&self, py: Python<'_>, lhs: &Bound<'_, PyAny>) -> PyResult<Py<TensorExpression>> {
-        let result = TensorExpression::from_structure(py, self)?
-            .bind(py)
-            .call_method1("__radd__", (lhs,))?;
-        Ok(result.cast_into::<TensorExpression>()?.unbind())
-    }
-
-    fn __sub__(&self, py: Python<'_>, rhs: &Bound<'_, PyAny>) -> PyResult<Py<TensorExpression>> {
-        let result = TensorExpression::from_structure(py, self)?
-            .bind(py)
-            .call_method1("__sub__", (rhs,))?;
-        Ok(result.cast_into::<TensorExpression>()?.unbind())
-    }
-
-    fn __rsub__(&self, py: Python<'_>, lhs: &Bound<'_, PyAny>) -> PyResult<Py<TensorExpression>> {
-        let result = TensorExpression::from_structure(py, self)?
-            .bind(py)
-            .call_method1("__rsub__", (lhs,))?;
-        Ok(result.cast_into::<TensorExpression>()?.unbind())
-    }
-
-    fn __mul__(&self, py: Python<'_>, rhs: &Bound<'_, PyAny>) -> PyResult<Py<TensorExpression>> {
-        let result = TensorExpression::from_structure(py, self)?
-            .bind(py)
-            .call_method1("__mul__", (rhs,))?;
-        Ok(result.cast_into::<TensorExpression>()?.unbind())
-    }
-
-    fn __rmul__(&self, py: Python<'_>, lhs: &Bound<'_, PyAny>) -> PyResult<Py<TensorExpression>> {
-        let result = TensorExpression::from_structure(py, self)?
-            .bind(py)
-            .call_method1("__rmul__", (lhs,))?;
-        Ok(result.cast_into::<TensorExpression>()?.unbind())
-    }
-
-    fn __neg__(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
-        let result = TensorExpression::from_structure(py, self)?
-            .bind(py)
-            .call_method0("__neg__")?;
-        Ok(result.cast_into::<TensorExpression>()?.unbind())
-    }
-
-    fn __truediv__(
-        &self,
-        py: Python<'_>,
-        rhs: &Bound<'_, PyAny>,
-    ) -> PyResult<Py<TensorExpression>> {
-        let result = TensorExpression::from_structure(py, self)?
-            .bind(py)
-            .call_method1("__truediv__", (rhs,))?;
-        Ok(result.cast_into::<TensorExpression>()?.unbind())
-    }
-
-    fn __rtruediv__(
-        &self,
-        py: Python<'_>,
-        lhs: &Bound<'_, PyAny>,
-    ) -> PyResult<Py<TensorExpression>> {
-        let result = TensorExpression::from_structure(py, self)?
-            .bind(py)
-            .call_method1("__rtruediv__", (lhs,))?;
-        Ok(result.cast_into::<TensorExpression>()?.unbind())
-    }
-
-    fn outer(&self, py: Python<'_>, rhs: &Bound<'_, PyAny>) -> PyResult<Py<TensorExpression>> {
-        let result = TensorExpression::from_structure(py, self)?
-            .bind(py)
-            .call_method1("outer", (rhs,))?;
-        Ok(result.cast_into::<TensorExpression>()?.unbind())
-    }
-
-    #[pyo3(signature = (rhs, *, left, right))]
-    fn contract(
-        &self,
-        py: Python<'_>,
-        rhs: &Bound<'_, PyAny>,
-        left: usize,
-        right: usize,
-    ) -> PyResult<Py<TensorExpression>> {
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("left", left)?;
-        kwargs.set_item("right", right)?;
-        let result = TensorExpression::from_structure(py, self)?
-            .bind(py)
-            .call_method("contract", (rhs,), Some(&kwargs))?;
-        Ok(result.cast_into::<TensorExpression>()?.unbind())
-    }
-
-    #[pyo3(signature = (rhs, *, left, right))]
-    fn compose(
-        &self,
-        py: Python<'_>,
-        rhs: &Bound<'_, PyAny>,
-        left: (usize, usize),
-        right: (usize, usize),
-    ) -> PyResult<Py<TensorExpression>> {
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("left", left)?;
-        kwargs.set_item("right", right)?;
-        let result = TensorExpression::from_structure(py, self)?
-            .bind(py)
-            .call_method("compose", (rhs,), Some(&kwargs))?;
-        Ok(result.cast_into::<TensorExpression>()?.unbind())
-    }
-
-    #[pyo3(signature = (*, channel = None))]
-    fn trace(
-        &self,
-        py: Python<'_>,
-        channel: Option<(usize, usize)>,
-    ) -> PyResult<Py<TensorExpression>> {
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("channel", channel)?;
-        let result = TensorExpression::from_structure(py, self)?
-            .bind(py)
-            .call_method("trace", (), Some(&kwargs))?;
-        Ok(result.cast_into::<TensorExpression>()?.unbind())
-    }
-}
-
-impl SpensoStructure {
-    fn parse_args_for_indexing(
-        &self,
-        args: &Bound<'_, PyTuple>,
-        extra_args_opt: Option<&Bound<'_, PyList>>,
-    ) -> PyResult<(Vec<Atom>, Vec<ConvertibleToAbstractIndex>)> {
-        let mut pre_separator_args: Vec<ConvertibleToAbstractIndex> = Vec::new();
-        let mut post_separator_args: Vec<ConvertibleToAbstractIndex> = Vec::new();
-        let mut separator_found = false;
-
-        for arg_bound in args.iter() {
-            let convertible = arg_bound.extract::<ConvertibleToAbstractIndex>()?;
-
-            match convertible {
-                ConvertibleToAbstractIndex::Separator => {
-                    if separator_found {
-                        return Err(exceptions::PyValueError::new_err(
-                            "Separator token ';' used more than once.",
-                        ));
-                    }
-
-                    separator_found = true;
-                    pre_separator_args.append(&mut post_separator_args);
-                }
-                item => {
-                    post_separator_args.push(item);
-                }
-            }
-        }
-
-        let mut final_additional_args = self.args().unwrap_or_default();
-        for item in pre_separator_args {
-            match item {
-                ConvertibleToAbstractIndex::Aind(idx) => final_additional_args.push(idx.into()),
-                ConvertibleToAbstractIndex::Atom(expr) => {
-                    final_additional_args.push(expr.expr.clone())
-                }
-                ConvertibleToAbstractIndex::Separator => unreachable!(),
-            }
-        }
-        if let Some(extra_args_list) = extra_args_opt {
-            for item_bound in extra_args_list.iter() {
-                let expr = item_bound.extract::<PythonExpression>()?;
-                final_additional_args.push(expr.expr);
-            }
-        }
-
-        Ok((final_additional_args, post_separator_args))
-    }
-}
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
@@ -1302,6 +758,45 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToDimension {
 #[cfg(feature = "python_stubgen")]
 impl_stub_type!(ConvertibleToDimension = usize | PythonExpression | PyBackedStr);
 
+struct ConvertibleToInvariantDegree(Atom);
+
+impl ConvertibleToInvariantDegree {
+    fn quadratic() -> Self {
+        Self(Atom::num(2))
+    }
+}
+
+impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToInvariantDegree {
+    type Error = PyErr;
+
+    fn extract(value: pyo3::Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
+        value
+            .extract::<ConvertibleToExpression>()
+            .map(|degree| Self(degree.to_expression().expr))
+    }
+}
+
+impl<'py> IntoPyObject<'py> for ConvertibleToInvariantDegree {
+    type Target = PythonExpression;
+    type Output = Bound<'py, PythonExpression>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> Result<Self::Output, Self::Error> {
+        PythonExpression::from(self.0).into_pyobject(py)
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+impl PyStubType for ConvertibleToInvariantDegree {
+    fn type_input() -> pyo3_stub_gen::TypeInfo {
+        ConvertibleToExpression::type_input()
+    }
+
+    fn type_output() -> pyo3_stub_gen::TypeInfo {
+        PythonExpression::type_output()
+    }
+}
+
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
@@ -1351,6 +846,48 @@ impl SpensoRepresentation {
         Self {
             representation: self.representation.dual(),
         }
+    }
+
+    /// Return the dimension carried by this representation.
+    #[getter]
+    fn dimension(&self) -> PythonExpression {
+        self.representation.dim.to_symbolic().into()
+    }
+
+    /// Build the degree-k Casimir eigenvalue for this representation.
+    #[pyo3(
+        signature = (degree = ConvertibleToInvariantDegree::quadratic()),
+        text_signature = "($self, degree=2)"
+    )]
+    fn casimir(&self, degree: ConvertibleToInvariantDegree) -> PythonExpression {
+        CS.cas(degree.0, self.representation.to_symbolic([])).into()
+    }
+
+    /// Build the degree-k Dynkin index for this representation.
+    #[pyo3(
+        signature = (degree = ConvertibleToInvariantDegree::quadratic()),
+        text_signature = "($self, degree=2)"
+    )]
+    fn dynkin_index(&self, degree: ConvertibleToInvariantDegree) -> PythonExpression {
+        CS.idx(degree.0, self.representation.to_symbolic([])).into()
+    }
+
+    /// Build a degree-k Gram invariant with another representation.
+    ///
+    /// If `other` is omitted, both sides use this representation.
+    #[pyo3(signature = (degree, other = None))]
+    fn gram(
+        &self,
+        degree: ConvertibleToInvariantDegree,
+        other: Option<&SpensoRepresentation>,
+    ) -> PythonExpression {
+        let other = other.unwrap_or(self);
+        CS.gram(
+            degree.0,
+            self.representation.to_symbolic([]),
+            other.representation.to_symbolic([]),
+        )
+        .into()
     }
 
     /// Create a slot or symbolic expression from this representation.
@@ -1771,6 +1308,7 @@ pyo3_stub_gen::define_stub_info_gatherer!(stub_info);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use spenso::structure::representation::ExtendibleReps;
 
     #[test]
     fn tensor_name_builds_scalar_and_mixed_structured_expressions() {
@@ -1843,6 +1381,91 @@ mod tests {
                 name: spenso::vector_symbol!("python_vector_name_construction"),
             };
             assert!(vector.__call__(py, &PyTuple::empty(py)).is_err());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn representation_builds_scalar_invariants_from_its_metadata() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation_type = py.get_type::<SpensoRepresentation>();
+            let fundamental = representation_type.call_method1("cof", (3,))?;
+            let adjoint = representation_type.call_method1("coad", (8,))?;
+            let euclidean = representation_type.call_method1("euc", (4,))?;
+
+            let fundamental_representation = fundamental
+                .extract::<SpensoRepresentation>()?
+                .representation;
+            let adjoint_representation = adjoint.extract::<SpensoRepresentation>()?.representation;
+            let euclidean_representation =
+                euclidean.extract::<SpensoRepresentation>()?.representation;
+
+            let inspect_signature = py.import("inspect")?.getattr("signature")?;
+            for (method, expected) in [
+                ("casimir", "(degree=2)"),
+                ("dynkin_index", "(degree=2)"),
+                ("gram", "(degree, other=None)"),
+            ] {
+                let signature = inspect_signature
+                    .call1((fundamental.getattr(method)?,))?
+                    .str()?
+                    .to_str()?
+                    .to_owned();
+                assert_eq!(signature, expected);
+            }
+
+            let dimension = fundamental
+                .getattr("dimension")?
+                .extract::<PythonExpression>()?;
+            assert_eq!(dimension.expr, Atom::num(3));
+
+            let casimir = fundamental.call_method0("casimir")?;
+            assert!(!casimir.is_instance_of::<TensorExpression>());
+            assert_eq!(
+                casimir.extract::<PythonExpression>()?.expr,
+                CS.cas(Atom::num(2), fundamental_representation.to_symbolic([]))
+            );
+
+            let degree = Atom::var(symbol!("python_color_invariant_degree"));
+            let dynkin_index = fundamental
+                .call_method1("dynkin_index", (PythonExpression::from(degree.clone()),))?;
+            assert!(!dynkin_index.is_instance_of::<TensorExpression>());
+            assert_eq!(
+                dynkin_index.extract::<PythonExpression>()?.expr,
+                CS.idx(degree.clone(), fundamental_representation.to_symbolic([]))
+            );
+
+            let self_gram = fundamental.call_method1("gram", (3,))?;
+            assert!(!self_gram.is_instance_of::<TensorExpression>());
+            assert_eq!(
+                self_gram.extract::<PythonExpression>()?.expr,
+                CS.gram(
+                    Atom::num(3),
+                    fundamental_representation.to_symbolic([]),
+                    fundamental_representation.to_symbolic([]),
+                )
+            );
+
+            let mixed_gram = fundamental
+                .call_method1("gram", (PythonExpression::from(degree.clone()), &adjoint))?;
+            assert_eq!(
+                mixed_gram.extract::<PythonExpression>()?.expr,
+                CS.gram(
+                    degree,
+                    fundamental_representation.to_symbolic([]),
+                    adjoint_representation.to_symbolic([]),
+                )
+            );
+
+            assert_eq!(
+                euclidean
+                    .call_method0("casimir")?
+                    .extract::<PythonExpression>()?
+                    .expr,
+                CS.cas(Atom::num(2), euclidean_representation.to_symbolic([]))
+            );
             Ok(())
         })
         .unwrap();

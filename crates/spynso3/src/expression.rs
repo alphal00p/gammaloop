@@ -1,6 +1,15 @@
 use std::collections::{HashMap, HashSet};
 
-use idenso::{Cookable, shorthands::metric::PermuteWithMetric};
+use idenso::{
+    Cookable,
+    color::CS,
+    python::{
+        PyColorCasimirSettings, PyColorSimplifySettings, PyCookSettings, PyGammaSimplifySettings,
+        PySchoonschipSettings, RegisteredRepresentation,
+    },
+    representations::ColorAdjoint,
+    shorthands::metric::PermuteWithMetric,
+};
 use pyo3::{
     exceptions::{PyIndexError, PyOverflowError, PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
@@ -15,13 +24,13 @@ use pyo3_stub_gen::{
 };
 use spenso::{
     network::{
-        library::symbolic::ETS,
+        library::symbolic::{ETS, ExplicitKey},
         parsing::{AtomStructureExt, StrictTensorFilter, StructureInferenceMode},
         tags::SPENSO_TAG,
     },
     shadowing,
     structure::{
-        HasName, OrderedStructure, StructureError, TensorStructure, ToSymbolic,
+        HasName, OrderedStructure, PermutedStructure, StructureError, TensorStructure, ToSymbolic,
         abstract_index::AbstractIndex,
         partial::{PartialIndex, PartialStructure, PartialStructureExt},
         representation::{LibraryRep, RepName, Representation},
@@ -42,7 +51,7 @@ use crate::{
     network::{ConvertibleToSpensoNet, SpensoNet},
     structure::{
         ArithmeticStructure, ConvertibleToAbstractIndex, ConvertibleToSpensoName, SpensoIndices,
-        SpensoName, SpensoRepresentation, SpensoSlot, SpensoStructure,
+        SpensoName, SpensoRepresentation, SpensoSlot,
     },
 };
 
@@ -213,15 +222,15 @@ impl TensorExpression {
 
     pub(crate) fn from_structure(
         py: Python<'_>,
-        structure: &SpensoStructure,
+        structure: &PermutedStructure<ExplicitKey<AbstractIndex>>,
     ) -> PyResult<Py<Self>> {
         let value = value_to_structured_atom(structure)?;
         Self::from_atom_interface_descriptor(
             py,
             value.atom,
             value.interface,
-            structure.structure.structure.name(),
-            structure.structure.structure.args().unwrap_or_default(),
+            structure.structure.name(),
+            structure.structure.args().unwrap_or_default(),
         )
     }
 }
@@ -230,6 +239,61 @@ impl ModuleInit for TensorExpression {}
 
 fn exact_interface(left: &PartialStructure, right: &PartialStructure) -> bool {
     left.logical_slots() == right.logical_slots()
+}
+
+pub(crate) fn validate_color_structure_ports(
+    symbol: Symbol,
+    argument_count: usize,
+    ports: &[Representation<LibraryRep>],
+) -> PyResult<()> {
+    if symbol != CS.f {
+        return Ok(());
+    }
+    if argument_count != 3 || ports.len() != 3 {
+        return Err(PyValueError::new_err(
+            "color structure constant f requires exactly three typed adjoint ports",
+        ));
+    }
+    let adjoint: LibraryRep = ColorAdjoint {}.into();
+    if ports.iter().any(|port| port.rep != adjoint)
+        || ports.iter().skip(1).any(|port| port.dim != ports[0].dim)
+    {
+        return Err(PyValueError::new_err(
+            "color structure constant f requires three adjoint ports with the same explicit dimension",
+        ));
+    }
+    Ok(())
+}
+
+fn from_idenso_atom(
+    self_: &PyRef<'_, TensorExpression>,
+    py: Python<'_>,
+    atom: Atom,
+) -> PyResult<Py<TensorExpression>> {
+    let interface = if atom.as_view().is_zero() {
+        self_.interface.clone()
+    } else if has_structured_syntax(atom.as_view()) {
+        reinfer_structured(atom.clone())?.interface
+    } else if self_.interface.structure.is_scalar() {
+        PartialStructure::from_logical_slots(std::iter::empty())
+    } else {
+        return Err(PyValueError::new_err(
+            "Idenso transformation removed the tensor syntax of a non-scalar expression",
+        ));
+    };
+    TensorExpression::from_atom_interface_descriptor(
+        py,
+        atom,
+        interface,
+        self_.name,
+        self_.name_args.clone(),
+    )
+}
+
+fn idenso_input(self_: &PyRef<'_, TensorExpression>) -> PythonExpression {
+    PythonExpression {
+        expr: self_.as_super().expr.clone(),
+    }
 }
 
 pub(crate) enum TensorOperand {
@@ -269,31 +333,26 @@ impl TensorOperand {
         if let Ok(value) = value.extract::<PyRef<'_, TensorExpression>>() {
             return Ok(Self::Structured(TensorExpression::structured(&value)));
         }
-        if let Ok(value) = value.extract::<SpensoStructure>() {
-            return Ok(Self::Structured(value_to_structured_atom(&value)?));
-        }
         if let Ok(value) = value.extract::<ConvertibleToExpression>() {
             return Ok(Self::Scalar(value.to_expression().expr));
         }
         Err(PyTypeError::new_err(
-            "expected a tensor construction object or an expression",
+            "expected a TensorExpression or Symbolica expression",
         ))
     }
 }
 
-fn value_to_structured_atom(value: &SpensoStructure) -> PyResult<StructuredAtom> {
-    let structure = &value.structure.structure;
+fn value_to_structured_atom(
+    value: &PermutedStructure<ExplicitKey<AbstractIndex>>,
+) -> PyResult<StructuredAtom> {
+    let structure = &value.structure;
     let name = structure
         .global_name
         .ok_or_else(|| PyRuntimeError::new_err("tensor structure has no name"))?;
     let args = structure.additional_args.as_deref().unwrap_or_default();
     let atom = structure.structure.to_symbolic_with(name, args, None);
-    let canonical = value
-        .structure
-        .structure
-        .external_reps_iter()
-        .collect::<Vec<_>>();
-    let logical = value.structure.rep_permutation.apply_slice_inv(&canonical);
+    let canonical = value.structure.external_reps_iter().collect::<Vec<_>>();
+    let logical = value.rep_permutation.apply_slice_inv(&canonical);
     let interface = PartialStructure::from_logical_slots(
         logical
             .into_iter()
@@ -454,6 +513,23 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
                         "broadcast function `{symbol}` requires exactly one argument"
                     ));
                     return;
+                }
+                if symbol == CS.f {
+                    let ports = arguments
+                        .iter()
+                        .filter_map(|argument| {
+                            Slot::<LibraryRep, AbstractIndex>::try_from(*argument)
+                                .map(|slot| slot.rep())
+                                .or_else(|_| Representation::<LibraryRep>::try_from(*argument))
+                                .ok()
+                        })
+                        .collect::<Vec<_>>();
+                    if let Err(error) =
+                        validate_color_structure_ports(symbol, arguments.len(), &ports)
+                    {
+                        syntax_error = Some(error.to_string());
+                        return;
+                    }
                 }
                 if !symbol.has_tag(&SPENSO_TAG.tensor) {
                     return;
@@ -1202,6 +1278,305 @@ impl TensorExpression {
         )
     }
 
+    /// Apply Idenso's gamma-algebra simplifier and re-infer the tensor interface.
+    #[pyo3(signature = (settings = None))]
+    fn simplify_gamma(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        settings: Option<&PyGammaSimplifySettings>,
+    ) -> PyResult<Py<Self>> {
+        let result = idenso::python::simplify_gamma(&idenso_input(&self_), settings);
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn collect_gamma_chains(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::collect_gamma_chains(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn simplify_gamma0(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::simplify_gamma0(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn simplify_gamma_conjugate(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::simplify_gamma_conjugate(&idenso_input(&self_))?;
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn simplify_epsilon(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::simplify_epsilon(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn simplify_metrics(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::simplify_metrics(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    #[pyo3(signature = (settings = None))]
+    fn simplify_color(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        settings: Option<&PyColorSimplifySettings>,
+    ) -> PyResult<Py<Self>> {
+        let result = idenso::python::simplify_color(&idenso_input(&self_), settings);
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn collect_color(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::collect_color(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn collect_color_constants(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::collect_color_constants(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    #[pyo3(signature = (*, fundamental, adjoint, settings = None))]
+    fn to_color_casimir(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        fundamental: &SpensoRepresentation,
+        adjoint: &SpensoRepresentation,
+        settings: Option<&PyColorCasimirSettings>,
+    ) -> PyResult<Py<Self>> {
+        let result = idenso::python::to_color_casimir(
+            &idenso_input(&self_),
+            RegisteredRepresentation(fundamental.representation),
+            RegisteredRepresentation(adjoint.representation),
+            settings,
+        );
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn to_cof_dimension_invariants(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::to_cof_dimension_invariants(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn wrap_color(self_: PyRef<'_, Self>, py: Python<'_>, symbol: Symbol) -> PyResult<Py<Self>> {
+        let result = idenso::python::wrap_color(&idenso_input(&self_), symbol);
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn expand_mink(self_: PyRef<'_, Self>) -> Vec<idenso::python::PythonTerm> {
+        idenso::python::expand_mink(&idenso_input(&self_))
+    }
+
+    fn expand_bis(self_: PyRef<'_, Self>) -> Vec<idenso::python::PythonTerm> {
+        idenso::python::expand_bis(&idenso_input(&self_))
+    }
+
+    fn expand_mink_bis(self_: PyRef<'_, Self>) -> Vec<idenso::python::PythonTerm> {
+        idenso::python::expand_mink_bis(&idenso_input(&self_))
+    }
+
+    fn expand_metrics(self_: PyRef<'_, Self>) -> Vec<idenso::python::PythonTerm> {
+        idenso::python::expand_metrics(&idenso_input(&self_))
+    }
+
+    fn expand_color(self_: PyRef<'_, Self>) -> Vec<idenso::python::PythonTerm> {
+        idenso::python::expand_color(&idenso_input(&self_))
+    }
+
+    fn expand_in_patterns(
+        self_: PyRef<'_, Self>,
+        patterns: Vec<PythonExpression>,
+    ) -> Vec<idenso::python::PythonTerm> {
+        idenso::python::expand_in_patterns(&idenso_input(&self_), patterns)
+    }
+
+    fn wrap_indices(self_: PyRef<'_, Self>, py: Python<'_>, header: Symbol) -> PyResult<Py<Self>> {
+        let result = idenso::python::wrap_indices(&idenso_input(&self_), header);
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    #[pyo3(signature = (settings = None))]
+    fn cook_indices(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        settings: Option<&PyCookSettings>,
+    ) -> PyResult<Py<Self>> {
+        let result = idenso::python::cook_indices(&idenso_input(&self_), settings)?;
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    #[pyo3(signature = (settings = None))]
+    fn cook_function(
+        self_: PyRef<'_, Self>,
+        settings: Option<&PyCookSettings>,
+    ) -> PyResult<PythonExpression> {
+        idenso::python::cook_function(&idenso_input(&self_), settings)
+    }
+
+    fn wrap_dummies(self_: PyRef<'_, Self>, py: Python<'_>, header: Symbol) -> PyResult<Py<Self>> {
+        let result = idenso::python::wrap_dummies(&idenso_input(&self_), header);
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn list_dangling(self_: PyRef<'_, Self>) -> Vec<PythonExpression> {
+        idenso::python::list_dangling(&idenso_input(&self_))
+    }
+
+    fn canonize(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::canonize(&idenso_input(&self_))?;
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn alias_subtensors(
+        self_: PyRef<'_, Self>,
+        tensor_name: &str,
+    ) -> (PythonExpression, Vec<(PythonExpression, PythonExpression)>) {
+        idenso::python::alias_subtensors(&idenso_input(&self_), tensor_name)
+    }
+
+    fn spenso_conjugate(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::spenso_conjugate(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn conjugate_transpose(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        representation: &SpensoRepresentation,
+    ) -> PyResult<Py<Self>> {
+        let result = idenso::python::conjugate_transpose(
+            &idenso_input(&self_),
+            RegisteredRepresentation(representation.representation),
+        );
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn dirac_adjoint(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::dirac_adjoint(&idenso_input(&self_))?;
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    /// Encode this expression using Idenso's reversible cooking format.
+    #[pyo3(signature = (settings = None))]
+    fn cook(
+        self_: PyRef<'_, Self>,
+        settings: Option<&PyCookSettings>,
+    ) -> PyResult<PythonExpression> {
+        idenso::python::cook(&idenso_input(&self_), settings)
+    }
+
+    #[pyo3(signature = (settings = None))]
+    fn uncook(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        settings: Option<&PyCookSettings>,
+    ) -> PyResult<Py<Self>> {
+        let result = idenso::python::uncook(&idenso_input(&self_), settings);
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    #[pyo3(signature = (settings = None))]
+    fn schoonschip(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        settings: Option<&PySchoonschipSettings>,
+    ) -> PyResult<Py<Self>> {
+        let result = idenso::python::schoonschip(&idenso_input(&self_), settings);
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    #[pyo3(signature = (settings = None, *, expand_contracted_sums = false))]
+    fn schoonschip_net(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        settings: Option<&PySchoonschipSettings>,
+        expand_contracted_sums: bool,
+    ) -> PyResult<Py<Self>> {
+        let result = idenso::python::schoonschip_net(
+            &idenso_input(&self_),
+            settings,
+            expand_contracted_sums,
+        );
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn to_dots(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::to_dots(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn normalize_dots(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::normalize_dots(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn expand_dots(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::expand_dots(&idenso_input(&self_))?;
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn metric_shorthand_to_dot(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::metric_shorthand_to_dot(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn undo_all(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::undo_all(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn undo_schoonschip(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::undo_schoonschip(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn undo_dots(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::undo_dots(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn undo_chain(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::undo_chain(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn undo_trace(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::undo_trace(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn collect_chains(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        representation: &SpensoRepresentation,
+    ) -> PyResult<Py<Self>> {
+        let result = idenso::python::collect_chains(
+            &idenso_input(&self_),
+            RegisteredRepresentation(representation.representation),
+        );
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn chainify(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        representation: &SpensoRepresentation,
+    ) -> PyResult<Py<Self>> {
+        let result = idenso::python::chainify(
+            &idenso_input(&self_),
+            RegisteredRepresentation(representation.representation),
+        );
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn normalize_chains(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::normalize_chains(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
+    fn undo_single_length(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<Self>> {
+        let result = idenso::python::undo_single_length(&idenso_input(&self_));
+        from_idenso_atom(&self_, py, result.expr)
+    }
+
     /// Materialize unresolved ports and parse this expression as a tensor network.
     #[pyo3(signature = (library = None))]
     fn to_network(
@@ -1661,13 +2036,10 @@ pub fn as_tensor(py: Python<'_>, expression: &Bound<'_, PyAny>) -> PyResult<Py<T
             expression.name_args.clone(),
         );
     }
-    if let Ok(structure) = expression.extract::<SpensoStructure>() {
-        return TensorExpression::from_structure(py, &structure);
-    }
     let expression = expression
         .extract::<ConvertibleToExpression>()
         .map_err(|_| {
-            PyTypeError::new_err("as_tensor() expects an Expression or tensor construction object")
+            PyTypeError::new_err("as_tensor() expects an Expression or TensorExpression")
         })?;
     let atom = expression.to_expression().expr;
     let (name, name_args) = inferred_descriptor(atom.as_view());

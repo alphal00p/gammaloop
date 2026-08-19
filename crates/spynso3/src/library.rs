@@ -10,7 +10,7 @@ use pyo3::{
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{
     PyStubType,
-    derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods},
+    derive::{gen_stub_pyclass, gen_stub_pymethods},
 };
 
 use spenso::algebra::complex::Complex;
@@ -40,8 +40,6 @@ use crate::{
     Spensor, broadcast::SpensoBroadcastFunction, expression::TensorExpression,
     structure::SpensoName,
 };
-
-use super::structure::SpensoStructure;
 
 use super::ModuleInit;
 
@@ -300,13 +298,6 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToLibraryReference {
                 .map(LibraryReference::Exact)
                 .map(Self);
         }
-        if let Ok(structure) = value.extract::<SpensoStructure>() {
-            let expression = TensorExpression::from_structure(value.py(), &structure)?;
-            let expression = expression.bind(value.py()).borrow();
-            return ExactLibraryReference::from_expression(&expression)
-                .map(LibraryReference::Exact)
-                .map(Self);
-        }
         value
             .extract::<ConvertibleToSymbol>()?
             .symbol()
@@ -513,12 +504,7 @@ impl SpensorLibrary {
                         interface.clone(),
                     );
                 }
-                TensorExpression::from_structure(
-                    py,
-                    &SpensoStructure {
-                        structure: PermutedStructure::identity(key),
-                    },
-                )
+                TensorExpression::from_structure(py, &PermutedStructure::identity(key))
             }
         }
     }
@@ -572,22 +558,6 @@ impl SpensorLibrary {
             references: HashMap::new(),
         }
     }
-}
-
-/// Enumeration for different tensor namespaces in physics.
-///
-/// Provides categorization for different types of tensor operations and structures
-/// commonly used in theoretical physics calculations.
-///
-/// # Variants:
-/// - Weyl: Tensors related to Weyl spinors and chiral representations
-/// - Algebra: Tensors related to algebraic structures and Lie algebras
-#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
-#[pyclass(from_py_object, eq, eq_int, module = "symbolica.community.spenso")]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum TensorNamespace {
-    Weyl,
-    Algebra,
 }
 
 #[cfg(test)]
