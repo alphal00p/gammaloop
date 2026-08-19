@@ -1723,6 +1723,7 @@ dependencies = [
  "linnet",
  "momtrop",
  "nu-ansi-term",
+ "oneloop",
  "paste",
  "pathfinding",
  "pyo3",

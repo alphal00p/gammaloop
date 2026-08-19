@@ -56,6 +56,70 @@ impl Graph {
                 );
             }
 
+            {
+                use crate::graph::lmb::LMBext;
+                use idenso::dirac::GammaSimplifier;
+                use idenso::shorthands::metric::MetricSimplifier;
+                use symbolica::symbol;
+                let file = || symbolica::printer::PrintOptions::file();
+
+                let scalar = num
+                    .collect_gamma_chains()
+                    .simplify_gamma()
+                    .expand()
+                    .simplify_metrics();
+                let reps = self.integrand_replacement(
+                    &self.full_filter(),
+                    &self.loop_momentum_basis,
+                    &[W_.a___],
+                );
+                let num_lmb = scalar
+                    .replace_multiple(&reps)
+                    .expand()
+                    .simplify_metrics()
+                    .expand();
+
+                let mut edges = Vec::new();
+                for (_, i, _) in self.iter_edges() {
+                    let loop_expr =
+                        self.loop_momentum_basis
+                            .loop_atom(i, GS.loop_mom, &[W_.a___], false);
+                    if loop_expr.is_zero() {
+                        continue; // external / tree edge, not a loop propagator
+                    }
+                    let ext_expr =
+                        self.loop_momentum_basis
+                            .ext_atom(i, GS.external_mom, &[W_.a___], false);
+                    let mass = self[i].particle.mass_atom();
+                    edges.push(oneloop::bridge::GammaloopEdge {
+                        lmb_rep: loop_expr + ext_expr,
+                        mass_sq: &mass * &mass,
+                    });
+                }
+
+                let heads = oneloop::bridge::GammaloopHeads {
+                    loop_mom: GS.loop_mom,
+                    external_mom: GS.external_mom,
+                    index: symbol!("spenso::mink"),
+                    metric: symbol!("spenso::g"),
+                };
+                let family = oneloop::bridge::family_from_gammaloop(&num_lmb, &edges, &heads);
+                let reduction = oneloop::reduce::reduce(&family);
+
+                eprintln!("REDUCE_DBG_RESULT_BEGIN");
+                eprintln!("num_lmb = {}", num_lmb.printer(file()));
+                eprintln!("family.numerator = {}", family.numerator.printer(file()));
+                eprintln!(
+                    "n_props={} n_invariants={}",
+                    family.propagators.len(),
+                    family.kinematics.invariants.len()
+                );
+                for (c, m) in &reduction.terms {
+                    eprintln!("TERM coeff=({}) master={:?}", c.printer(file()), m);
+                }
+                eprintln!("REDUCE_DBG_RESULT_END");
+            }
+
             dotgraph.global_data.statements.insert(
                 "full_num".into(),
                 num.printer(SpensoPrintSettings::typst().typst_symbolica())

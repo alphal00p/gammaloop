@@ -21,6 +21,22 @@ pub struct GammaloopHeads {
     pub loop_mom: Symbol,
     pub external_mom: Symbol,
     pub index: Symbol,
+    pub metric: Symbol,
+}
+
+fn bare_momentum(head: Symbol, id: i64, oneloop_sym: Atom, index: Symbol) -> (Atom, Atom) {
+    let tensor = function!(head, Atom::num(id), function!(index, Atom::num(4)));
+    (tensor, oneloop_sym)
+}
+
+/// The loop/external momenta in bare form
+fn bare_momenta(heads: &GammaloopHeads) -> Vec<(Atom, Atom)> {
+    vec![
+        bare_momentum(heads.loop_mom, 0, Atom::var(S.k), heads.index),
+        bare_momentum(heads.external_mom, 0, Atom::var(S.q1), heads.index),
+        bare_momentum(heads.external_mom, 1, Atom::var(S.q2), heads.index),
+        bare_momentum(heads.external_mom, 2, Atom::var(S.q3), heads.index),
+    ]
 }
 
 /// A gammaloop momentum tensor `head(id, index(4, idx_))`
@@ -65,6 +81,15 @@ pub fn numerator_to_dot_form(num: &Atom, heads: &GammaloopHeads) -> Atom {
             let contraction = tensor_i * tensor_j;
             let dot = function!(S.dot, sym_i.clone(), sym_j.clone());
             out = out.replace(contraction.to_pattern()).with(dot);
+        }
+    }
+    // Metric-dot form `g(a, b)` produced by `simplify_metrics` (both self `a·a` and distinct `a·b`).
+    let bare = bare_momenta(heads);
+    for (tensor_i, sym_i) in &bare {
+        for (tensor_j, sym_j) in &bare {
+            let g = function!(heads.metric, tensor_i.clone(), tensor_j.clone());
+            let dot = function!(S.dot, sym_i.clone(), sym_j.clone());
+            out = out.replace(g.to_pattern()).with(dot);
         }
     }
     out
@@ -175,7 +200,30 @@ mod tests {
             loop_mom: symbol!("K"),
             external_mom: symbol!("P"),
             index: symbol!("mink"),
+            metric: symbol!("g"),
         }
+    }
+
+    #[test]
+    fn contracts_metric_dot_form_into_dot() {
+        crate::ensure_symbolica_license();
+        // `simplify_metrics` can leave a scalar product as `g(a, b)` (bare momenta): map it too.
+        let bare = |head: &str, id: i64| {
+            function!(
+                symbol!(head),
+                Atom::num(id),
+                function!(symbol!("mink"), Atom::num(4))
+            )
+        };
+        let g = |a: Atom, b: Atom| function!(symbol!("g"), a, b);
+        // g(K,K) = k·k ; g(K,P) = k·q1
+        let input =
+            &g(bare("K", 0), bare("K", 0)) + &(Atom::num(2) * g(bare("K", 0), bare("P", 0)));
+        let got = numerator_to_dot_form(&input, &heads());
+        let kk = function!(S.dot, Atom::var(S.k), Atom::var(S.k));
+        let kq1 = function!(S.dot, Atom::var(S.k), Atom::var(S.q1));
+        let want = (&kk + &(Atom::num(2) * &kq1)).expand();
+        assert_eq!(got.expand(), want);
     }
 
     #[test]
