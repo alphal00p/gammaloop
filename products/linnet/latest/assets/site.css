@@ -189,7 +189,11 @@ button, select { color: inherit; }
   transition: background-color 200ms ease, color 200ms ease;
 }
 .sidebar-link:hover, .sidebar-link:focus-visible { background: var(--nav-hover); color: var(--ink-strong); }
+.sidebar-link[aria-current="location"] { background: var(--accent-soft); color: var(--ink-strong); }
 .sidebar-link[aria-current="page"] { background: var(--accent); color: #211526; font-weight: 600; }
+.sidebar-python-group .sidebar-group-title { overflow-wrap: anywhere; font-family: var(--font-mono); letter-spacing: normal; text-transform: none; }
+.sidebar-python-symbol { overflow-wrap: anywhere; font-size: 0.82rem; }
+.sidebar-python-symbol code { font-family: var(--font-mono); }
 .sidebar-meta { margin-top: 1.5rem; color: var(--ink-muted); font-size: 0.78rem; }
 .sidebar-meta code { font-size: inherit; }
 .sidebar-developer-group { background: var(--accent-soft); margin-inline: -0.35rem; padding: 0.75rem 0.35rem 0.25rem; border: 1px solid var(--hairline); }

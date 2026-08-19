@@ -27,7 +27,12 @@
     menu?.setAttribute("aria-expanded", String(open));
     menu?.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
     if (open && focusNavigation) {
-      requestAnimationFrame(() => sidebar?.querySelector("[aria-current], a")?.focus());
+      requestAnimationFrame(() => {
+        const target = sidebar?.querySelector('[aria-current="page"]')
+          || sidebar?.querySelector("[aria-current]")
+          || sidebar?.querySelector("a");
+        target?.focus();
+      });
     }
   };
   const closeMenu = () => setMenuOpen(false);
@@ -39,6 +44,15 @@
     menu?.focus();
   });
   document.querySelectorAll(".docs-sidebar a").forEach((link) => link.addEventListener("click", closeMenu));
+  const currentSidebarLink = sidebar?.querySelector('[aria-current="page"]');
+  requestAnimationFrame(() => {
+    if (!sidebar || !currentSidebarLink) return;
+    const linkTop = currentSidebarLink.offsetTop;
+    const linkBottom = linkTop + currentSidebarLink.offsetHeight;
+    if (linkTop < sidebar.scrollTop || linkBottom > sidebar.scrollTop + sidebar.clientHeight) {
+      sidebar.scrollTop = Math.max(0, linkTop - sidebar.clientHeight / 2);
+    }
+  });
 
   const storedTheme = localStorage.getItem("alphal00p-docs-theme");
   const preferredTheme = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
