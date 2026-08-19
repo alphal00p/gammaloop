@@ -13,9 +13,10 @@
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::{function, symbol};
 
+use crate::family::{Integral, IntegralFamily, Kinematics, Propagator};
 use crate::symbols::S;
 
-/// A gammaloop momentum tensor `H(id, mink(4, idx_))` 
+/// A gammaloop momentum tensor `H(id, mink(4, idx_))`
 fn known_momentum(head: &str, id: i64, oneloop_sym: Atom) -> (Atom, Atom) {
     let idx = Atom::var(symbol!("idx_"));
     let tensor = function!(
@@ -86,6 +87,73 @@ pub fn external_offset_from_lmb_rep(lmb_rep: &Atom) -> Atom {
 /// How many loop/external momentum ids the bridge recognizes (0..N).
 const MAX_MOMENTUM_ID: i64 = 8;
 
+pub struct GammaloopEdge {
+    pub lmb_rep: Atom,
+    pub mass_sq: Atom,
+}
+
+
+fn square_external_momentum(momentum: &Atom) -> Atom {
+    let qs = [Atom::var(S.q1), Atom::var(S.q2), Atom::var(S.q3)];
+    let mut out = (momentum * momentum).expand();
+    // `q_a^2 -> dot(q_a, q_a)` (squares) then `q_a*q_b -> dot(q_a, q_b)`
+    for qa in &qs {
+        out = out
+            .replace((qa * qa).to_pattern())
+            .with(function!(S.dot, qa.clone(), qa.clone()));
+    }
+    for a in 0..qs.len() {
+        for b in (a + 1)..qs.len() {
+            out = out.replace((&qs[a] * &qs[b]).to_pattern()).with(function!(
+                S.dot,
+                qs[a].clone(),
+                qs[b].clone()
+            ));
+        }
+    }
+    out
+}
+
+/// The `C(n,2)` pairwise invariants `(r_i - r_j)^2` 
+fn invariants_from_offsets(offsets: &[Atom]) -> Vec<Atom> {
+    let mut invariants = Vec::new();
+    for i in 0..offsets.len() {
+        for j in (i + 1)..offsets.len() {
+            invariants.push(square_external_momentum(&(&offsets[i] - &offsets[j])));
+        }
+    }
+    invariants
+}
+
+/// Assemble a reducer [`IntegralFamily`] from a gammaloop one-loop numerator and its internal edges.
+/// The numerator is translated to dot form; each edge contributes a massive propagator; and the
+/// external kinematics are the pairwise invariants of the edges' external offsets. 
+pub fn family_from_gammaloop(numerator: &Atom, edges: &[GammaloopEdge]) -> IntegralFamily {
+    let offsets: Vec<Atom> = edges
+        .iter()
+        .map(|e| external_offset_from_lmb_rep(&e.lmb_rep))
+        .collect();
+    let n = edges.len();
+    IntegralFamily {
+        propagators: edges
+            .iter()
+            .map(|e| Propagator {
+                momentum: Atom::Zero,
+                mass_sq: e.mass_sq.clone(),
+            })
+            .collect(),
+        isps: vec![],
+        kinematics: Kinematics {
+            invariants: invariants_from_offsets(&offsets),
+        },
+        targets: vec![Integral {
+            propagator_exponents: vec![1; n],
+            isp_exponents: vec![],
+        }],
+        numerator: numerator_to_dot_form(numerator),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -97,7 +165,7 @@ mod tests {
     #[test]
     fn contracts_loop_external_product_into_dot() {
         crate::ensure_symbolica_license();
-        // gammaloop's `K(0,mink(4,5)) * P(0,mink(4,5))` is the scalar product k·q1.
+
         let input = &function!(symbol!("K"), Atom::num(0), mink4(5))
             * &function!(symbol!("P"), Atom::num(0), mink4(5));
         let got = numerator_to_dot_form(&input);
@@ -108,7 +176,7 @@ mod tests {
     #[test]
     fn contracts_loop_self_square_into_dot_kk() {
         crate::ensure_symbolica_license();
-        // gammaloop's `K(0,mink(4,2))^2` is the scalar product k·k.
+
         let kmom = function!(symbol!("K"), Atom::num(0), mink4(2));
         let input = &kmom * &kmom;
         let got = numerator_to_dot_form(&input);
@@ -119,7 +187,7 @@ mod tests {
     #[test]
     fn contracts_mixed_rank2_numerator() {
         crate::ensure_symbolica_license();
-        // 2*(k·q1)*(k·k) - (q1·q2), written in gammaloop shared-index form.
+
         let k = |i: i64| function!(symbol!("K"), Atom::num(0), mink4(i));
         let p0 = |i: i64| function!(symbol!("P"), Atom::num(0), mink4(i));
         let p1 = |i: i64| function!(symbol!("P"), Atom::num(1), mink4(i));
@@ -137,9 +205,80 @@ mod tests {
         crate::ensure_symbolica_license();
         let k = function!(symbol!("K"), Atom::num(0), mink4(9));
         let p0 = function!(symbol!("P"), Atom::num(0), mink4(9));
-        // A bubble's two internal edges (the real lmb_reps `K(0,·)` and `-P(0,·)+K(0,·)`):
         assert_eq!(external_offset_from_lmb_rep(&k), Atom::Zero);
         let offset = external_offset_from_lmb_rep(&(&k - &p0));
         assert_eq!(offset, Atom::num(-1) * Atom::var(S.q1));
+    }
+
+    #[test]
+    fn bubble_invariants_from_offsets() {
+        crate::ensure_symbolica_license();
+
+        let offsets = vec![Atom::Zero, Atom::num(-1) * Atom::var(S.q1)];
+        let got = invariants_from_offsets(&offsets);
+        assert_eq!(
+            got,
+            vec![function!(S.dot, Atom::var(S.q1), Atom::var(S.q1))]
+        );
+    }
+
+    #[test]
+    fn scalar_massless_bubble_reduces_to_b0() {
+        crate::ensure_symbolica_license();
+
+        let k = function!(symbol!("K"), Atom::num(0), mink4(0));
+        let p0 = function!(symbol!("P"), Atom::num(0), mink4(0));
+        let edges = vec![
+            GammaloopEdge {
+                lmb_rep: k.clone(),
+                mass_sq: Atom::Zero,
+            },
+            GammaloopEdge {
+                lmb_rep: &k - &p0,
+                mass_sq: Atom::Zero,
+            },
+        ];
+        let fam = family_from_gammaloop(&Atom::num(1), &edges);
+        let r = crate::reduce::reduce(&fam);
+        assert!(
+            r.terms
+                .iter()
+                .any(|(_, m)| matches!(m, crate::masters::MasterIntegral::Bubble { .. })),
+            "expected a B0 master, got {:?}",
+            r.terms.iter().map(|(_, m)| m).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn rank1_bubble_numerator_reduces_through_the_bridge() {
+        crate::ensure_symbolica_license();
+
+        let k = |i: i64| function!(symbol!("K"), Atom::num(0), mink4(i));
+        let p0 = |i: i64| function!(symbol!("P"), Atom::num(0), mink4(i));
+        let numerator = &k(1) * &p0(1);
+        let edges = vec![
+            GammaloopEdge {
+                lmb_rep: k(0),
+                mass_sq: Atom::Zero,
+            },
+            GammaloopEdge {
+                lmb_rep: &k(0) - &p0(0),
+                mass_sq: Atom::Zero,
+            },
+        ];
+        let fam = family_from_gammaloop(&numerator, &edges);
+        assert_eq!(
+            fam.numerator,
+            function!(S.dot, Atom::var(S.k), Atom::var(S.q1))
+        );
+        let r = crate::reduce::reduce(&fam);
+        assert!(!r.terms.is_empty());
+        assert!(
+            r.terms
+                .iter()
+                .any(|(_, m)| matches!(m, crate::masters::MasterIntegral::Bubble { .. })),
+            "expected a B0 master, got {:?}",
+            r.terms.iter().map(|(_, m)| m).collect::<Vec<_>>()
+        );
     }
 }
