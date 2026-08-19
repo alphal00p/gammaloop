@@ -135,8 +135,9 @@ Grounded in the current test suite (`reduce.rs`) and the benchmark record:
 - **Scalar** numerators for any propagator count `N` (`N=1..N`).
 - **Rank-1** numerators (linear in one `dot(k, q_i)` or `dot(k,k)`) — tested on
   bubble, triangle, box, pentagon, hexagon, heptagon.
-- **Rank-2** numerators (products of two dots) — tested on triangle and box, and
-  exercised up through hexagon/heptagon in the reduction tests.
+- **Rank-2** numerators (degree-2 in the loop dots, e.g. `(k·q₁)²` or `dot(k,k)`)
+  — tested on triangle and box, and exercised up through hexagon/heptagon in the
+  reduction tests.
 - **Raised propagator powers** combined with numerators (e.g. dotted box with
   exponents `[2,1,1,1]`, dotted triangle `[2,2,2]`, dotted bubble `[3,1]`).
 - **On-shell massless external legs** via the `reg_delta` regularization wrapper

@@ -29,7 +29,7 @@ reduce_graph_numerator  (crates/gammalooprs/src/reduce_bridge.rs)
 oneloop::reduce::reduce  →  Σ coeff × master
   │  emitted as dot attributes reduced_num / reduce_status
   ▼
-FastAPI parses the .dot, returns { raw, warnings, reason }
+FastAPI parses the .dot, returns { raw, format, warnings, reason }
   ▼
 Frontend sanitizes for Typst, renders  Σ (coeff) B_0(...) + …
 ```

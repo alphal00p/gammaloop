@@ -28,9 +28,11 @@ associated Gram/Cayley structure collapses and `det(Y) → 0`. The recursions th
 try to divide by that vanishing determinant. This is the classic
 **inverse-Gram-determinant / exceptional-kinematics** problem.
 
-Concretely, on the massless on-shell triangle `C0(0,0,s;0,0,0)` the Cayley
-`Y = [[0,s01,s02],[s01,0,s12],[s02,s12,0]]` with lex invariants `[s01,s02,s12] =
-[0,0,100]` has a zero row (the two on-shell legs) and `det(Y)=0` — degenerate.
+Concretely, on the massless on-shell triangle `C0(0,0,s;0,0,0)` the modified
+Cayley (`Y_ij = m_i² + m_j² − s_ij`, here all masses 0) is
+`Y = [[0,−s01,−s02],[−s01,0,−s12],[−s02,−s12,0]]` with lex invariants
+`[s01,s02,s12] = [0,0,100]`; it has a zero row (the two on-shell legs) and
+`det(Y)=0` — degenerate.
 The same mechanism strikes *pinched sub-topologies*: on-shell massless external
 legs make a pinched sub-bubble's external leg the null on-shell leg, so its `1×1`
 sub-Gram is `q² = 0` (singular Gram), or a pinched bubble `B0(0;m,m)` has a
@@ -99,10 +101,12 @@ algebraically in the sum `Σ cᵢ Mᵢ`. Symbolica's exact rational arithmetic k
 cancellation perfectly clean — there is no numerical instability to fight, so the
 `delta → 0` limit is taken symbolically for free.
 
-As of 2026-08-02, `reduce()` is a thin wrapper implementing exactly this (see
-[the overview](01-overview.md) and [the reduction algorithm](02-reduction.md)):
-if any `kinematics.invariants` entry `is_zero()`, it regularizes with `reg_delta`,
-reduces, and takes the limit. **Blast radius: zero core changes.** No modification
+`reduce()` implements exactly this (see [the overview](01-overview.md) and
+[the reduction algorithm](02-reduction.md)): if any `kinematics.invariants` entry
+`is_zero()` it delegates to `reduce_regularized`, a thin wrapper that regularizes
+the vanishing invariants with `reg_delta`, calls the unchanged core reducer, and
+takes the `delta → 0` limit; otherwise generic kinematics take the fast path
+unchanged. **Blast radius: zero core changes.** No modification
 to `reduce_core`, `reduce_cayley`, `gram_solve`, or `degenerate_coeffs`. Degeneracy
 is detected by a pre-check (`is_zero`) rather than `catch_unwind`, because a caught
 `reduce()` panic poisons Symbolica's global state — so one must not catch a
