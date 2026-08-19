@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "sources": [
     {
       "kind": "clap-command-factory",
@@ -799,6 +799,9 @@
           "value_delimiter": null,
           "value_terminator": null,
           "conflicts_with": [],
+          "requires": [
+            "integrand_name"
+          ],
           "defaults": [],
           "possible_values": []
         },
@@ -829,6 +832,9 @@
           "value_delimiter": null,
           "value_terminator": null,
           "conflicts_with": [],
+          "requires": [
+            "process"
+          ],
           "defaults": [],
           "possible_values": []
         },
@@ -971,6 +977,9 @@
           "value_delimiter": null,
           "value_terminator": null,
           "conflicts_with": [],
+          "requires": [
+            "process"
+          ],
           "defaults": [],
           "possible_values": []
         },
@@ -1001,6 +1010,9 @@
           "value_delimiter": null,
           "value_terminator": null,
           "conflicts_with": [],
+          "requires": [
+            "integrand_name"
+          ],
           "defaults": [],
           "possible_values": []
         },
@@ -1031,6 +1043,9 @@
           "value_delimiter": null,
           "value_terminator": null,
           "conflicts_with": [],
+          "requires": [
+            "integrand_name"
+          ],
           "defaults": [],
           "possible_values": [
             "generation",
@@ -1064,6 +1079,9 @@
           "value_delimiter": null,
           "value_terminator": null,
           "conflicts_with": [],
+          "requires": [
+            "integrand_name"
+          ],
           "defaults": [
             "false"
           ],
@@ -6164,6 +6182,9 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
+          "default_missing_values": [
+            "true"
+          ],
           "possible_values": [
             "true",
             "false"
@@ -6197,6 +6218,9 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
+          "default_missing_values": [
+            "true"
+          ],
           "possible_values": [
             "true",
             "false"
@@ -6230,6 +6254,9 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
+          "default_missing_values": [
+            "true"
+          ],
           "possible_values": [
             "true",
             "false"
@@ -6263,6 +6290,9 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
+          "default_missing_values": [
+            "true"
+          ],
           "possible_values": [
             "true",
             "false"
@@ -6296,6 +6326,9 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
+          "default_missing_values": [
+            "true"
+          ],
           "possible_values": [
             "true",
             "false"
@@ -6329,6 +6362,9 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
+          "default_missing_values": [
+            "true"
+          ],
           "possible_values": [
             "true",
             "false"
@@ -6887,6 +6923,9 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
+          "default_missing_values": [
+            "true"
+          ],
           "possible_values": [
             "true",
             "false"
@@ -6950,6 +6989,9 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
+          "default_missing_values": [
+            "true"
+          ],
           "possible_values": [
             "true",
             "false"
@@ -6983,6 +7025,9 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
+          "default_missing_values": [
+            "true"
+          ],
           "possible_values": [
             "true",
             "false"
@@ -12573,6 +12618,9 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
+          "default_missing_values": [
+            "true"
+          ],
           "possible_values": [
             "true",
             "false"
@@ -12636,6 +12684,9 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
+          "default_missing_values": [
+            "true"
+          ],
           "possible_values": [
             "true",
             "false"
@@ -12669,6 +12720,9 @@
           "value_terminator": null,
           "conflicts_with": [],
           "defaults": [],
+          "default_missing_values": [
+            "true"
+          ],
           "possible_values": [
             "true",
             "false"
@@ -12958,6 +13012,9 @@
           "value_terminator": null,
           "conflicts_with": [
             "discrete_dim"
+          ],
+          "requires": [
+            "graph_id"
           ],
           "defaults": [],
           "possible_values": []
@@ -13432,6 +13489,9 @@
           "value_terminator": null,
           "conflicts_with": [
             "discrete_dim"
+          ],
+          "requires": [
+            "graph_id"
           ],
           "defaults": [],
           "possible_values": []
@@ -14424,6 +14484,9 @@
           "value_delimiter": ",",
           "value_terminator": null,
           "conflicts_with": [],
+          "requires": [
+            "uv_ray_directions"
+          ],
           "defaults": [],
           "possible_values": []
         },

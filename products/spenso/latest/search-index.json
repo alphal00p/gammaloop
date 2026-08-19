@@ -488,85 +488,99 @@
     "title": "spenso · Tensor structure",
     "summary": "Describes ordered slots, dimensions, representations, and contraction compatibility independently of data.",
     "href": "reference/rust/spenso/structure/trait.TensorStructure.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Describes ordered slots, dimensions, representations, and contraction compatibility independently of data. Describes ordered slots, dimensions, representations, and contraction compatibility independently of data. pub trait TensorStructure {}"
   },
   {
     "title": "spenso · Dense tensor",
     "summary": "Stores every tensor component in structure-defined flat order.",
     "href": "reference/rust/spenso/tensors/data/dense/struct.DenseTensor.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Stores every tensor component in structure-defined flat order. Stores every tensor component in structure-defined flat order. pub struct DenseTensor < T, S = OrderedStructure > {}"
   },
   {
     "title": "spenso · Sparse tensor",
     "summary": "Stores only explicit tensor components keyed by flat index.",
     "href": "reference/rust/spenso/tensors/data/sparse/struct.SparseTensor.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Stores only explicit tensor components keyed by flat index. Sparse data tensor, generic on storage type `T`, and structure type `I`.\n\nStores data in a hashmap of usize, using ahash's hashmap.\nThe usize key is the flattened index of the corresponding position in the dense tensor pub struct SparseTensor < T, I = OrderedStructure > {}"
   },
   {
     "title": "spenso · Pairwise contraction",
     "summary": "Defines pairwise tensor contraction with an explicit settings type and output.",
     "href": "reference/rust/spenso/contraction/trait.Contract.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Defines pairwise tensor contraction with an explicit settings type and output. Defines pairwise tensor contraction with an explicit settings type and output. pub trait Contract < T = Self, Settings = () > {}"
   },
   {
     "title": "spenso · Tensor network",
     "summary": "Binds symbolic tensor expressions to libraries and an executable contraction graph.",
     "href": "reference/rust/spenso/network/struct.Network.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Binds symbolic tensor expressions to libraries and an executable contraction graph. Binds symbolic tensor expressions to libraries and an executable contraction graph. pub struct Network < S, LibKey, FunKey, Aind = AbstractIndex > {}"
   },
   {
     "title": "spenso · Network contraction strategy",
     "summary": "Defines how a ready network operation is contracted and whether product subgraphs can be rewritten incrementally.",
     "href": "reference/rust/spenso/network/contract/trait.ContractionStrategy.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Defines how a ready network operation is contracted and whether product subgraphs can be rewritten incrementally. Defines how a ready network operation is contracted and whether product subgraphs can be rewritten incrementally. pub trait ContractionStrategy < E, L, K, FK, Aind > : Sized {}"
   },
   {
     "title": "spenso · Network execution strategy",
     "summary": "Defines how an executor repeatedly applies a selected contraction strategy until the strategy's stopping condition is reached.",
     "href": "reference/rust/spenso/network/trait.ExecutionStrategy.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Defines how an executor repeatedly applies a selected contraction strategy until the strategy's stopping condition is reached. Defines how an executor repeatedly applies a selected contraction strategy until the strategy's stopping condition is reached. pub trait ExecutionStrategy < E, FL, L, K, FK, Aind > where E : ExecuteOp <\nFL, L, K, FK, Aind > , {}"
   },
   {
     "title": "spenso · Network execution mode",
     "summary": "Enumerates sequential, parallel, borrowed-reference, and extracting execution modes.",
     "href": "reference/rust/spenso/network/enum.ExecutionMode.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Enumerates sequential, parallel, borrowed-reference, and extracting execution modes. Enumerates sequential, parallel, borrowed-reference, and extracting execution modes. pub enum ExecutionMode {}"
   },
   {
     "title": "spenso · Network execution result",
     "summary": "Represents a completed network as the multiplicative identity, the additive identity, or a concrete value.",
     "href": "reference/rust/spenso/network/enum.ExecutionResult.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Represents a completed network as the multiplicative identity, the additive identity, or a concrete value. Represents a completed network as the multiplicative identity, the additive identity, or a concrete value. pub enum ExecutionResult < T > {}"
   },
   {
     "title": "spenso · Tensor-network error",
     "summary": "Classifies invalid topology, contraction, library, structure, I/O, and result-shape failures during network processing.",
     "href": "reference/rust/spenso/network/enum.TensorNetworkError.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Classifies invalid topology, contraction, library, structure, I/O, and result-shape failures during network processing. Classifies invalid topology, contraction, library, structure, I/O, and result-shape failures during network processing. pub enum TensorNetworkError < K : Display, FK : Display > {}"
   },
   {
     "title": "spenso · Network parsing settings",
     "summary": "Controls scalar precontraction, depth limits, shorthand expansion and inference, scalar-leaf handling, and tensor-head recognition.",
     "href": "reference/rust/spenso/network/parsing/struct.ParseSettings.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Controls scalar precontraction, depth limits, shorthand expansion and inference, scalar-leaf handling, and tensor-head recognition. Controls scalar precontraction, depth limits, shorthand expansion and inference, scalar-leaf handling, and tensor-head recognition. pub struct ParseSettings {}"
   },
   {
     "title": "spenso · Symbolic network parsing",
     "summary": "Converts Symbolica atoms and atom views into parametric tensor networks under explicit parsing settings.",
     "href": "reference/rust/spenso/network/parsing/trait.NetworkParse.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Converts Symbolica atoms and atom views into parametric tensor networks under explicit parsing settings. Converts Symbolica atoms and atom views into parametric tensor networks under explicit parsing settings. pub trait NetworkParse {}"
   },
   {
     "title": "spenso · Symbolic parallelism policy",
     "summary": "Chooses automatic license-aware, serial, or forced-parallel Rayon behavior for operations over Symbolica atoms.",
     "href": "reference/rust/spenso/symbolic_parallelism/enum.SymbolicParallelism.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Chooses automatic license-aware, serial, or forced-parallel Rayon behavior for operations over Symbolica atoms. Policy used to configure Rayon for operations that manipulate Symbolica atoms. pub enum SymbolicParallelism {}"
   },
   {
     "title": "spenso · Parametric tensor",
     "summary": "Stores tensor components as parameter-dependent symbolic coefficients.",
     "href": "reference/rust/spenso/tensors/parametric/struct.ParamTensor.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Stores tensor components as parameter-dependent symbolic coefficients. Stores tensor components as parameter-dependent symbolic coefficients. pub struct ParamTensor < S = OrderedStructure > {}"
   },
   {
     "title": "spenso-macros Rustdoc",
@@ -579,7 +593,8 @@
     "title": "spenso-macros · SimpleRepresentation derive",
     "summary": "Derives representation naming and duality boilerplate from the representation helper attribute.",
     "href": "reference/rust/spenso_macros/derive.SimpleRepresentation.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Derives representation naming and duality boilerplate from the representation helper attribute. Derives representation naming and duality boilerplate from the representation helper attribute. #[derive(SimpleRepresentation)]\nfn derive_simple_representation(input : TokenStream) -> TokenStream"
   },
   {
     "title": "spenso-hep-lib Rustdoc",
@@ -591,19 +606,22 @@
     "title": "spenso-hep-lib · HEP tensor library",
     "summary": "Constructs the standard high-energy-physics tensor library for a chosen scalar data type.",
     "href": "reference/rust/spenso_hep_lib/fn.hep_lib.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Constructs the standard high-energy-physics tensor library for a chosen scalar data type. Constructs the standard high-energy-physics tensor library for a chosen scalar data type. fn hep_lib < Aind : AbsInd, T : TensorLibraryData + Clone + Default >\n(one : T, zero : T,) -> TensorLibrary < MixedTensor < T, ExplicitKey < Aind >\n> , Aind >"
   },
   {
     "title": "spenso-hep-lib · Dirac gamma data",
     "summary": "Creates sparse Dirac-basis gamma-matrix data for the supplied tensor structure.",
     "href": "reference/rust/spenso_hep_lib/fn.gamma_data_dirac.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Creates sparse Dirac-basis gamma-matrix data for the supplied tensor structure. Creates sparse Dirac-basis gamma-matrix data for the supplied tensor structure. fn gamma_data_dirac < T, N > (structure : N, one : T, zero : T) ->\nSparseTensor < Complex < T > , N > where T : Clone + Neg < Output = T > , N :\nTensorStructure,"
   },
   {
     "title": "spenso-hep-lib · SU(3) generator data",
     "summary": "Creates the standard sparse SU(3) fundamental-generator tensor.",
     "href": "reference/rust/spenso_hep_lib/fn.su3_generator_data.html",
-    "kind": "rust-api"
+    "kind": "rust-api",
+    "text": "Creates the standard sparse SU(3) fundamental-generator tensor. Fundamental SU(3) generators in the normalization `Tr(T^a T^b)=1/2 delta^{ab}`.\n\nThe index order follows `CS.t_strct`: adjoint, fundamental, anti-fundamental. fn su3_generator_data < N > (structure : N) -> SparseTensor < Complex < f64 >\n, N > where N : TensorStructure,"
   },
   {
     "title": "symbolica.community.spenso Python API",
@@ -615,918 +633,1071 @@
     "title": "symbolica.community.spenso.CompiledTensorEvaluator",
     "summary": "A compiled and optimized evaluator for maximum performance tensor evaluation.",
     "href": "reference/python/spynso3/CompiledTensorEvaluator/",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "A compiled and optimized evaluator for maximum performance tensor evaluation. A compiled and optimized evaluator for maximum performance tensor evaluation.\n\nThis class wraps a compiled C++ shared library for extremely fast numerical\nevaluation of tensor expressions. It only supports complex-valued evaluation\nas this is the most general case.\n\nA compiled and optimized evaluator for maximum performance tensor evaluation.\n\nThis class wraps a compiled C++ shared library for extremely fast numerical\nevaluation of tensor expressions. It only supports complex-valued evaluation\nas this is the most general case.\n\nCreate instances using the `TensorEvaluator.compile()` method.\n\nExamples\n--------\n>>> compiled = evaluator.compile(\"eval_func\", \"code.cpp\", \"lib\")\n>>> results = compiled.evaluate_complex(large_input_batch) class CompiledTensorEvaluator:"
   },
   {
     "title": "symbolica.community.spenso.CompiledTensorEvaluator.evaluate_complex",
-    "summary": "Evaluate the tensor expression for multiple complex-valued parameter inputs. Uses the compiled C++ code for maximum performance evaluation with complex numbers. Parameters ---------- inputs : list of list of complex List of parameter value lists, where each inner list contains complex values for all parameters in the same order as specified when creating the original evaluator Returns ------- list of Tensor List of evaluated tensors, one for each input parameter set Examples -------- >>> complex_inputs = [ ... [1.0+2.0j, 3.0+0.0j], ... [0.0+1.0j, 2.0+1.0j] ... ] >>> results = compiled_evaluator.evaluate_complex(complex_inputs)",
+    "summary": "Evaluate the tensor expression for multiple complex-valued parameter inputs.",
     "href": "reference/python/spynso3/CompiledTensorEvaluator/#exports-compiledtensorevaluator-evaluate-complex-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Evaluate the tensor expression for multiple complex-valued parameter inputs.\n\nUses the compiled C++ code for maximum performance evaluation with complex numbers.\n\nParameters\n----------\ninputs : list of list of complex\n    List of parameter value lists, where each inner list contains\n    complex values for all parameters in the same order as specified\n    when creating the original evaluator\n\nReturns\n-------\nlist of Tensor\n    List of evaluated tensors, one for each input parameter set\n\nExamples\n--------\n>>> complex_inputs = [\n...     [1.0+2.0j, 3.0+0.0j],\n...     [0.0+1.0j, 2.0+1.0j]\n... ]\n>>> results = compiled_evaluator.evaluate_complex(complex_inputs) def evaluate_complex(self, inputs: Sequence[Sequence[complex]]) -> list[Tensor]:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor",
     "summary": "A library tensor class optimized for use in tensor libraries and networks.",
     "href": "reference/python/spynso3/LibraryTensor/",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "A library tensor class optimized for use in tensor libraries and networks. A library tensor class optimized for use in tensor libraries and networks.\n\nLibrary tensors are similar to regular tensors but use explicit keys for efficient\nlookup and storage in tensor libraries. They can be either dense or sparse and\nstore data as floats, complex numbers, or symbolic expressions.\n\nLibraryTensors are designed for:\n- Registration in TensorLibrary instances\n- Use in tensor networks where structure reuse is important\n- Efficient symbolic manipulation and pattern matching\n\nExamples\n--------\n>>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation\n>>> rep = Representation.euc(3)\n>>> structure = TensorStructure(rep, rep, name=\"T\")\n>>> data = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]\n>>> tensor = LibraryTensor.dense(structure, data)\n>>> sparse_tensor = LibraryTensor.sparse(structure, float) class LibraryTensor:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.structure",
     "summary": "def structure(self) -> TensorStructure:",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-structure-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def structure(self) -> TensorStructure:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.sparse",
-    "summary": "Create a new sparse empty library tensor with the given structure and data type. Creates a sparse tensor that initially contains no non-zero elements. Elements can be set individually using indexing operations. Parameters ---------- structure : TensorStructure, list of Representations, or list of int The tensor structure defining shape and index properties type_info : type The data type - either `float` or `Expression` class Returns ------- LibraryTensor A new sparse library tensor with all elements initially zero Examples -------- >>> import symbolica as sp >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation >>> rep = Representation.euc(3) >>> structure = TensorStructure(rep, rep) >>> sparse_float = LibraryTensor.sparse(structure, float) >>> sparse_sym = LibraryTensor.sparse(structure, sp.Expression) >>> sparse_float[0, 0] = 1.0 >>> sparse_float[1, 1] = 2.0",
+    "summary": "Create a new sparse empty library tensor with the given structure and data type.",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-sparse-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a new sparse empty library tensor with the given structure and data type.\n\nCreates a sparse tensor that initially contains no non-zero elements.\nElements can be set individually using indexing operations.\n\nParameters\n----------\nstructure : TensorStructure, list of Representations, or list of int\n    The tensor structure defining shape and index properties\ntype_info : type\n    The data type - either `float` or `Expression` class\n\nReturns\n-------\nLibraryTensor\n    A new sparse library tensor with all elements initially zero\n\nExamples\n--------\n>>> import symbolica as sp\n>>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation\n>>> rep = Representation.euc(3)\n>>> structure = TensorStructure(rep, rep)\n>>> sparse_float = LibraryTensor.sparse(structure, float)\n>>> sparse_sym = LibraryTensor.sparse(structure, sp.Expression)\n>>> sparse_float[0, 0] = 1.0\n>>> sparse_float[1, 1] = 2.0 def sparse(structure: TensorStructure | list[Representation] | list[int], type_info: type) -> LibraryTensor:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.dense",
-    "summary": "Create a new dense library tensor with the given structure and data. Dense tensors store all elements explicitly in row-major order. The structure defines the tensor's shape and indexing properties. Parameters ---------- structure : TensorStructure, list of Representations, or list of int The tensor structure defining shape and index properties data : list of float, complex, or Expression The tensor data in row-major order Returns ------- LibraryTensor A new dense library tensor with the specified data Examples -------- >>> from symbolica import S >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation >>> rep = Representation.euc(2) >>> sigma = S(\"sigma\") >>> structure = TensorStructure(rep, rep, name=sigma) >>> data = [0.0, 1.0, 1.0, 0.0] >>> tensor = LibraryTensor.dense(structure, data) >>> x, y = S(\"x\", \"y\") >>> sym_data = [x, y, -y, x] >>> sym_tensor = LibraryTensor.dense(structure, sym_data)",
+    "summary": "Create a new dense library tensor with the given structure and data.",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-dense-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a new dense library tensor with the given structure and data.\n\nDense tensors store all elements explicitly in row-major order. The structure\ndefines the tensor's shape and indexing properties.\n\nParameters\n----------\nstructure : TensorStructure, list of Representations, or list of int\n    The tensor structure defining shape and index properties\ndata : list of float, complex, or Expression\n    The tensor data in row-major order\n\nReturns\n-------\nLibraryTensor\n    A new dense library tensor with the specified data\n\nExamples\n--------\n>>> from symbolica import S\n>>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation\n>>> rep = Representation.euc(2)\n>>> sigma = S(\"sigma\")\n>>> structure = TensorStructure(rep, rep, name=sigma)\n>>> data = [0.0, 1.0, 1.0, 0.0]\n>>> tensor = LibraryTensor.dense(structure, data)\n>>> x, y = S(\"x\", \"y\")\n>>> sym_data = [x, y, -y, x]\n>>> sym_tensor = LibraryTensor.dense(structure, sym_data) def dense(structure: TensorStructure | list[Representation] | list[int], data: Sequence[Expression] | Sequence[float] | Sequence[complex]) -> LibraryTensor:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.one",
-    "summary": "Create a scalar library tensor with value 1.0. Returns ------- LibraryTensor A scalar library tensor containing the value 1.0 Examples -------- >>> from symbolica.community.spenso import LibraryTensor >>> one = LibraryTensor.one()",
+    "summary": "Create a scalar library tensor with value 1.0.",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-one-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a scalar library tensor with value 1.0.\n\nReturns\n-------\nLibraryTensor\n    A scalar library tensor containing the value 1.0\n\nExamples\n--------\n>>> from symbolica.community.spenso import LibraryTensor\n>>> one = LibraryTensor.one() def one() -> LibraryTensor:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.zero",
-    "summary": "Create a scalar library tensor with value 0.0. Returns ------- LibraryTensor A scalar library tensor containing the value 0.0 Examples -------- >>> from symbolica.community.spenso import LibraryTensor >>> zero = LibraryTensor.zero()",
+    "summary": "Create a scalar library tensor with value 0.0.",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-zero-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a scalar library tensor with value 0.0.\n\nReturns\n-------\nLibraryTensor\n    A scalar library tensor containing the value 0.0\n\nExamples\n--------\n>>> from symbolica.community.spenso import LibraryTensor\n>>> zero = LibraryTensor.zero() def zero() -> LibraryTensor:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.to_dense",
-    "summary": "Convert this library tensor to dense storage format. Converts sparse tensors to dense format in-place. Dense tensors are unchanged. This allocates memory for all tensor elements. # Examples: ```python from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation rep = Representation.cof(2) structure = TensorStructure([rep, rep]) tensor = LibraryTensor.sparse(structure, float) tensor[0, 0] = 1.0 tensor.to_dense() # Now stores all 4 elements explicitly ```",
+    "summary": "Convert this library tensor to dense storage format.",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-to-dense-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Convert this library tensor to dense storage format.\n\nConverts sparse tensors to dense format in-place. Dense tensors are unchanged.\nThis allocates memory for all tensor elements.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import LibraryTensor, TensorStructure, Representation\n\nrep = Representation.cof(2)\nstructure = TensorStructure([rep, rep])\ntensor = LibraryTensor.sparse(structure, float)\ntensor[0, 0] = 1.0\ntensor.to_dense()  # Now stores all 4 elements explicitly\n``` def to_dense(self) -> None:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.to_sparse",
-    "summary": "Convert this library tensor to sparse storage format. Converts dense tensors to sparse format in-place, only storing non-zero elements. This can save memory for tensors with many zero elements. # Examples: ```python from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation rep = Representation.euc(2) structure = TensorStructure(rep, rep) data = [1.0, 0.0, 0.0, 2.0] tensor = LibraryTensor.dense(structure, data) tensor.to_sparse() # Now only stores 2 non-zero elements ```",
+    "summary": "Convert this library tensor to sparse storage format.",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-to-sparse-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Convert this library tensor to sparse storage format.\n\nConverts dense tensors to sparse format in-place, only storing non-zero elements.\nThis can save memory for tensors with many zero elements.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import LibraryTensor, TensorStructure, Representation\n\nrep = Representation.euc(2)\nstructure = TensorStructure(rep, rep)\ndata = [1.0, 0.0, 0.0, 2.0]\ntensor = LibraryTensor.dense(structure, data)\ntensor.to_sparse()  # Now only stores 2 non-zero elements\n``` def to_sparse(self) -> None:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.__repr__",
     "summary": "def __repr__(self) -> str:",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-repr-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __repr__(self) -> str:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.__str__",
     "summary": "def __str__(self) -> str:",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-str-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __str__(self) -> str:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.__len__",
     "summary": "def __len__(self) -> int:",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-len-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __len__(self) -> int:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.__getitem__",
     "summary": "def __getitem__(self, item: slice | int | list[int]) -> Any: | def __getitem__(self, item: slice) -> list[Expression | complex | float]: | def __getitem__(self, item: Sequence[int] | int) -> Expression | complex | float:",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-getitem-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __getitem__(self, item: slice | int | list[int]) -> Any: | def __getitem__(self, item: slice) -> list[Expression | complex | float]: | def __getitem__(self, item: Sequence[int] | int) -> Expression | complex | float:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.__getitem__ · overload 1",
     "summary": "def __getitem__(self, item: slice | int | list[int]) -> Any:",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-getitem-method-overload",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __getitem__(self, item: slice | int | list[int]) -> Any:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.__getitem__ · overload 2",
-    "summary": "Get library tensor elements at the specified range of indices. Parameters ---------- item : slice Slice object defining the range of indices Returns ------- list of float, complex, or Expression The tensor elements at the specified range",
+    "summary": "Get library tensor elements at the specified range of indices.",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-getitem-method-overload-2",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Get library tensor elements at the specified range of indices.\n\nParameters\n----------\nitem : slice\n    Slice object defining the range of indices\n\nReturns\n-------\nlist of float, complex, or Expression\n    The tensor elements at the specified range def __getitem__(self, item: slice) -> list[Expression | complex | float]:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.__getitem__ · overload 3",
-    "summary": "Get library tensor element at the specified index or indices. Parameters ---------- item : int or list of int Index specification (int for flat index, list of int for coordinates) Returns ------- float, complex, or Expression The tensor element at the specified index",
+    "summary": "Get library tensor element at the specified index or indices.",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-getitem-method-overload-3",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Get library tensor element at the specified index or indices.\n\nParameters\n----------\nitem : int or list of int\n    Index specification (int for flat index, list of int for coordinates)\n\nReturns\n-------\nfloat, complex, or Expression\n    The tensor element at the specified index def __getitem__(self, item: Sequence[int] | int) -> Expression | complex | float:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.__setitem__",
     "summary": "def __setitem__(self, item: Any, value: Any) -> None: | def __setitem__(self, item: Sequence[int] | int, value: Expression | complex | float) -> None:",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-setitem-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __setitem__(self, item: Any, value: Any) -> None: | def __setitem__(self, item: Sequence[int] | int, value: Expression | complex | float) -> None:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.__setitem__ · overload 1",
-    "summary": "Set library tensor element(s) at the specified index or indices. Parameters ---------- item : int or list of int Index specification (int for flat index, list of int for coordinates) value : float, complex, or Expression The value to set Examples -------- >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation >>> rep = Representation.euc(2) >>> structure = TensorStructure(rep, rep) >>> tensor = LibraryTensor.sparse(structure, float) >>> tensor[0] = 1.0 >>> tensor[1, 1] = 2.0",
+    "summary": "Set library tensor element(s) at the specified index or indices.",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-setitem-method-overload",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Set library tensor element(s) at the specified index or indices.\n\nParameters\n----------\nitem : int or list of int\n    Index specification (int for flat index, list of int for coordinates)\nvalue : float, complex, or Expression\n    The value to set\n\nExamples\n--------\n>>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation\n>>> rep = Representation.euc(2)\n>>> structure = TensorStructure(rep, rep)\n>>> tensor = LibraryTensor.sparse(structure, float)\n>>> tensor[0] = 1.0\n>>> tensor[1, 1] = 2.0 def __setitem__(self, item: Any, value: Any) -> None:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.__setitem__ · overload 2",
-    "summary": "Set library tensor element(s) at the specified index or indices. Parameters ---------- item : int or list of int Index specification (int for flat index, list of int for coordinates) value : float, complex, or Expression The value to set Examples -------- >>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation >>> rep = Representation.euc(2) >>> structure = TensorStructure(rep, rep) >>> tensor = LibraryTensor.sparse(structure, float) >>> tensor[0] = 1.0 >>> tensor[1, 1] = 2.0",
+    "summary": "Set library tensor element(s) at the specified index or indices.",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-setitem-method-overload-2",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Set library tensor element(s) at the specified index or indices.\n\nParameters\n----------\nitem : int or list of int\n    Index specification (int for flat index, list of int for coordinates)\nvalue : float, complex, or Expression\n    The value to set\n\nExamples\n--------\n>>> from symbolica.community.spenso import LibraryTensor, TensorStructure, Representation\n>>> rep = Representation.euc(2)\n>>> structure = TensorStructure(rep, rep)\n>>> tensor = LibraryTensor.sparse(structure, float)\n>>> tensor[0] = 1.0\n>>> tensor[1, 1] = 2.0 def __setitem__(self, item: Sequence[int] | int, value: Expression | complex | float) -> None:"
   },
   {
     "title": "symbolica.community.spenso.LibraryTensor.scalar",
-    "summary": "Extract the scalar value from a rank-0 (scalar) library tensor. Returns ------- Expression The scalar expression contained in this tensor Raises ------ RuntimeError If the tensor is not a scalar Examples -------- >>> from symbolica.community.spenso import LibraryTensor >>> scalar_tensor = LibraryTensor.one() >>> value = scalar_tensor.scalar()",
+    "summary": "Extract the scalar value from a rank-0 (scalar) library tensor.",
     "href": "reference/python/spynso3/LibraryTensor/#exports-librarytensor-scalar-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Extract the scalar value from a rank-0 (scalar) library tensor.\n\nReturns\n-------\nExpression\n    The scalar expression contained in this tensor\n\nRaises\n------\nRuntimeError\n    If the tensor is not a scalar\n\nExamples\n--------\n>>> from symbolica.community.spenso import LibraryTensor\n>>> scalar_tensor = LibraryTensor.one()\n>>> value = scalar_tensor.scalar() def scalar(self) -> Expression:"
   },
   {
     "title": "symbolica.community.spenso.Representation",
     "summary": "A representation in the sense of group representation theory for tensor indices.",
     "href": "reference/python/spynso3/Representation/",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "A representation in the sense of group representation theory for tensor indices. A representation in the sense of group representation theory for tensor indices.\n\nRepresentations define the transformation properties of tensor indices under group operations.\nThey specify the dimension and duality structure, determining which indices can contract.\n\nKey concepts:\n- **Self-dual**: Indices can contract with other indices of the same representation\n- **Dualizable**: Indices can only contract with their dual representation\n- **Dimension**: Size of the representation space\n\nPredefined representations are available as class methods:\n- `Representation.euc(d)`: Euclidean space (self-dual)\n- `Representation.mink(d)`: Minkowski space (self-dual)\n- `Representation.bis(d)`: Bispinor (self-dual)\n- `Representation.cof(d)`: Color fundamental (dualizable)\n- `Representation.coad(d)`: Color adjoint (self-dual)\n- `Representation.cos(d)`: Color sextet (dualizable)\n\n# Examples:\n```python\nfrom symbolica.community.spenso import Representation\n\n# Standard representations\neuclidean = Representation.euc(4)      # 4D Euclidean\nlorentz = Representation.mink(4)       # 4D Minkowski\ncolor = Representation.cof(3)          # SU(3) fundamental\nadjoint = Representation.coad(8)       # SU(3) adjoint\n\n# Custom representation\ncustom = Representation(\"MyRep\", 5, is_self_dual=True)\n\n# Create slots with indices\nmu_slot = euclidean('mu')              # Euclidean index μ\na_slot = color('a')                    # Color index a\n\n# Generate metric tensors\nmetric = euclidean.g('mu', 'nu')       # g_μν\n``` class Representation:"
   },
   {
     "title": "symbolica.community.spenso.Representation.__call__",
     "summary": "def __call__(self, aind: int | Expression | str) -> Slot: | def __call__(self, aind: Expression) -> Expression | Slot:",
     "href": "reference/python/spynso3/Representation/#exports-representation-call-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __call__(self, aind: int | Expression | str) -> Slot: | def __call__(self, aind: Expression) -> Expression | Slot:"
   },
   {
     "title": "symbolica.community.spenso.Representation.__call__ · overload 1",
-    "summary": "Create a slot from this representation, by specifying an index. Parameters ---------- aind : int, str, or Symbol The index specification Returns ------- Slot A new Slot object with the specified index Examples -------- >>> from symbolica.community.spenso import Representation >>> import symbolica as sp >>> rep = Representation.euc(3) >>> slot1 = rep('mu') >>> slot2 = rep(1) >>> slot3 = rep(sp.S('nu'))",
+    "summary": "Create a slot from this representation, by specifying an index.",
     "href": "reference/python/spynso3/Representation/#exports-representation-call-method-overload",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a slot from this representation, by specifying an index.\n\nParameters\n----------\naind : int, str, or Symbol\n    The index specification\n\nReturns\n-------\nSlot\n    A new Slot object with the specified index\n\nExamples\n--------\n>>> from symbolica.community.spenso import Representation\n>>> import symbolica as sp\n>>> rep = Representation.euc(3)\n>>> slot1 = rep('mu')\n>>> slot2 = rep(1)\n>>> slot3 = rep(sp.S('nu')) def __call__(self, aind: int | Expression | str) -> Slot:"
   },
   {
     "title": "symbolica.community.spenso.Representation.__call__ · overload 2",
-    "summary": "Create a slot or symbolic expression from this representation. Parameters ---------- aind : Expression The index specification (Expression creates symbolic representation) Returns ------- Expression A symbolic expression representing this representation Examples -------- >>> from symbolica.community.spenso import Representation >>> import symbolica as sp >>> rep = Representation.euc(3) >>> expr = rep(sp.E(\"cos(x)\"))",
+    "summary": "Create a slot or symbolic expression from this representation.",
     "href": "reference/python/spynso3/Representation/#exports-representation-call-method-overload-2",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a slot or symbolic expression from this representation.\n\nParameters\n----------\naind : Expression\n    The index specification (Expression creates symbolic representation)\n\nReturns\n-------\nExpression\n    A symbolic expression representing this representation\n\nExamples\n--------\n>>> from symbolica.community.spenso import Representation\n>>> import symbolica as sp\n>>> rep = Representation.euc(3)\n>>> expr = rep(sp.E(\"cos(x)\")) def __call__(self, aind: Expression) -> Expression | Slot:"
   },
   {
-    "title": "symbolica.community.spenso.Representation.__new__",
-    "summary": "Create and register a new representation with specified properties. # Parameters: - name: String name for the representation - dimension: Size of the representation (int or symbolic) - is_self_dual: If True, creates self-dual representation; if False, creates dualizable pair # Examples: ```python from symbolica.community.spenso import Representation import symbolica as sp # Self-dual representation (indices contract with themselves) euclidean = Representation(\"Euclidean\", 4, is_self_dual=True) # Dualizable representation (needs dual partner for contraction) vector_up = Representation(\"VectorUp\", 4, is_self_dual=False) # Symbolic dimension n = sp.S('n') general = Representation(\"General\", n, is_self_dual=True) ```",
+    "title": "symbolica.community.spenso.Representation constructor",
+    "summary": "Create and register a new representation with specified properties.",
     "href": "reference/python/spynso3/Representation/#exports-representation-new-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create and register a new representation with specified properties.\n\n# Parameters:\n- name: String name for the representation\n- dimension: Size of the representation (int or symbolic)\n- is_self_dual: If True, creates self-dual representation; if False, creates dualizable pair\n\n# Examples:\n```python\nfrom symbolica.community.spenso import Representation\nimport symbolica as sp\n\n# Self-dual representation (indices contract with themselves)\neuclidean = Representation(\"Euclidean\", 4, is_self_dual=True)\n\n# Dualizable representation (needs dual partner for contraction)\nvector_up = Representation(\"VectorUp\", 4, is_self_dual=False)\n\n# Symbolic dimension\nn = sp.S('n')\ngeneral = Representation(\"General\", n, is_self_dual=True)\n``` def __new__(cls, name: str, dimension: int | Expression | str, is_self_dual: bool = True) -> Representation:"
   },
   {
     "title": "symbolica.community.spenso.Representation.dual",
     "summary": "def dual(self) -> Representation:",
     "href": "reference/python/spynso3/Representation/#exports-representation-dual-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def dual(self) -> Representation:"
   },
   {
     "title": "symbolica.community.spenso.Representation.g",
-    "summary": "Create a metric tensor for this representation. # Parameters: - i: First index - j: Second index # Examples: ```python rep = Representation.mink(4) metric = rep.g('mu', 'nu') # Minkowski metric g_μν ```",
+    "summary": "Create a metric tensor for this representation.",
     "href": "reference/python/spynso3/Representation/#exports-representation-g-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a metric tensor for this representation.\n\n# Parameters:\n- i: First index\n- j: Second index\n\n# Examples:\n```python\nrep = Representation.mink(4)\nmetric = rep.g('mu', 'nu')  # Minkowski metric g_μν\n``` def g(self, i: int | Expression | str, j: int | Expression | str) -> TensorIndices:"
   },
   {
     "title": "symbolica.community.spenso.Representation.flat",
-    "summary": "Create a musical isomorphism tensor for this representation. # Parameters: - i: First index - j: Second index # Examples: ```python rep = Representation.mink(4) flat = rep.flat('mu', 'nu') # Flat isomorphism ♭_μν ```",
+    "summary": "Create a musical isomorphism tensor for this representation.",
     "href": "reference/python/spynso3/Representation/#exports-representation-flat-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a musical isomorphism tensor for this representation.\n\n# Parameters:\n- i: First index\n- j: Second index\n\n# Examples:\n```python\nrep = Representation.mink(4)\nflat = rep.flat('mu', 'nu')  # Flat isomorphism ♭_μν\n``` def flat(self, i: int | Expression | str, j: int | Expression | str) -> TensorIndices:"
   },
   {
     "title": "symbolica.community.spenso.Representation.id",
-    "summary": "Create an identity tensor for this representation. # Parameters: - i: First index - j: Second index # Examples: ```python rep = Representation.cof(3) identity = rep.id('a', 'b') # Color identity δ_ab ```",
+    "summary": "Create an identity tensor for this representation.",
     "href": "reference/python/spynso3/Representation/#exports-representation-id-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create an identity tensor for this representation.\n\n# Parameters:\n- i: First index\n- j: Second index\n\n# Examples:\n```python\nrep = Representation.cof(3)\nidentity = rep.id('a', 'b')  # Color identity δ_ab\n``` def id(self, i: int | Expression | str, j: int | Expression | str) -> TensorIndices:"
   },
   {
     "title": "symbolica.community.spenso.Representation.__repr__",
     "summary": "def __repr__(self) -> str:",
     "href": "reference/python/spynso3/Representation/#exports-representation-repr-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __repr__(self) -> str:"
   },
   {
     "title": "symbolica.community.spenso.Representation.__str__",
     "summary": "def __str__(self) -> str:",
     "href": "reference/python/spynso3/Representation/#exports-representation-str-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __str__(self) -> str:"
   },
   {
     "title": "symbolica.community.spenso.Representation.to_expression",
     "summary": "Convert the representation to a symbolic expression.",
     "href": "reference/python/spynso3/Representation/#exports-representation-to-expression-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Convert the representation to a symbolic expression. def to_expression(self) -> Expression:"
   },
   {
     "title": "symbolica.community.spenso.Representation.bis",
-    "summary": "Create a bispinor representation. # Parameters: - dimension: The dimension of the bispinor space",
+    "summary": "Create a bispinor representation.",
     "href": "reference/python/spynso3/Representation/#exports-representation-bis-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a bispinor representation.\n\n# Parameters:\n- dimension: The dimension of the bispinor space def bis(dimension: int | Expression | str) -> Representation:"
   },
   {
     "title": "symbolica.community.spenso.Representation.euc",
-    "summary": "Create a Euclidean space representation. # Parameters: - dimension: The dimension of the Euclidean space",
+    "summary": "Create a Euclidean space representation.",
     "href": "reference/python/spynso3/Representation/#exports-representation-euc-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a Euclidean space representation.\n\n# Parameters:\n- dimension: The dimension of the Euclidean space def euc(dimension: int | Expression | str) -> Representation:"
   },
   {
     "title": "symbolica.community.spenso.Representation.mink",
-    "summary": "Create a Minkowski space representation. # Parameters: - dimension: The dimension of the Minkowski space",
+    "summary": "Create a Minkowski space representation.",
     "href": "reference/python/spynso3/Representation/#exports-representation-mink-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a Minkowski space representation.\n\n# Parameters:\n- dimension: The dimension of the Minkowski space def mink(dimension: int | Expression | str) -> Representation:"
   },
   {
     "title": "symbolica.community.spenso.Representation.cof",
-    "summary": "Create a color fundamental representation. # Parameters: - dimension: The dimension of the color group (e.g., 3 for SU(3))",
+    "summary": "Create a color fundamental representation.",
     "href": "reference/python/spynso3/Representation/#exports-representation-cof-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a color fundamental representation.\n\n# Parameters:\n- dimension: The dimension of the color group (e.g., 3 for SU(3)) def cof(dimension: int | Expression | str) -> Representation:"
   },
   {
     "title": "symbolica.community.spenso.Representation.coad",
-    "summary": "Create a color adjoint representation. # Parameters: - dimension: The dimension of the adjoint representation (e.g., 8 for SU(3))",
+    "summary": "Create a color adjoint representation.",
     "href": "reference/python/spynso3/Representation/#exports-representation-coad-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a color adjoint representation.\n\n# Parameters:\n- dimension: The dimension of the adjoint representation (e.g., 8 for SU(3)) def coad(dimension: int | Expression | str) -> Representation:"
   },
   {
     "title": "symbolica.community.spenso.Representation.cos",
-    "summary": "Create a color sextet representation. # Parameters: - dimension: The dimension of the sextet representation (e.g., 6 for SU(3))",
+    "summary": "Create a color sextet representation.",
     "href": "reference/python/spynso3/Representation/#exports-representation-cos-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a color sextet representation.\n\n# Parameters:\n- dimension: The dimension of the sextet representation (e.g., 6 for SU(3)) def cos(dimension: int | Expression | str) -> Representation:"
   },
   {
     "title": "symbolica.community.spenso.Slot",
     "summary": "A tensor index slot combining a representation with an abstract index.",
     "href": "reference/python/spynso3/Slot/",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "A tensor index slot combining a representation with an abstract index. A tensor index slot combining a representation with an abstract index.\n\nSlots are the building blocks for tensor structures, pairing a representation\n(which defines transformation properties) with an abstract index identifier.\nSlots with matching representations and indices can be contracted.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import Slot, Representation\nimport symbolica as sp\n\n# Create representation and slots\nrep = Representation.euc(3)\nslot1 = rep('mu')           # Slot with string index\nslot2 = rep(1)              # Slot with integer index\nslot3 = rep(sp.S('nu'))     # Slot with symbolic index\n\n# Create custom slot\ncustom_slot = Slot(\"MyRep\", 4, 'alpha', dual=False)\n\n# Use in tensor structures\nfrom symbolica.community.spenso import TensorIndices\ntensor_structure = TensorIndices(slot1, slot2)\n``` class Slot:"
   },
   {
     "title": "symbolica.community.spenso.Slot.__repr__",
     "summary": "def __repr__(self) -> str:",
     "href": "reference/python/spynso3/Slot/#exports-slot-repr-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __repr__(self) -> str:"
   },
   {
     "title": "symbolica.community.spenso.Slot.__str__",
     "summary": "def __str__(self) -> str:",
     "href": "reference/python/spynso3/Slot/#exports-slot-str-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __str__(self) -> str:"
   },
   {
     "title": "symbolica.community.spenso.Slot.dual",
     "summary": "def dual(self) -> Slot:",
     "href": "reference/python/spynso3/Slot/#exports-slot-dual-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def dual(self) -> Slot:"
   },
   {
-    "title": "symbolica.community.spenso.Slot.__new__",
-    "summary": "Create a new slot with a custom representation and index. # Parameters: - name: String name for the representation - dimension: Size of the representation space - aind: The abstract index (int, str, or Symbol) - dual: If True, creates dualizable representation; if False, self-dual # Examples: ```python from symbolica.community.spenso import Slot import symbolica as sp # Self-dual slot euclidean_slot = Slot(\"Euclidean\", 4, 'mu', dual=False) # Dualizable slot vector_slot = Slot(\"Vector\", 4, 'nu', dual=True) # With symbolic index sym_index = sp.S('alpha') symbolic_slot = Slot(\"Custom\", 3, sym_index, dual=False) ```",
+    "title": "symbolica.community.spenso.Slot constructor",
+    "summary": "Create a new slot with a custom representation and index.",
     "href": "reference/python/spynso3/Slot/#exports-slot-new-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a new slot with a custom representation and index.\n\n# Parameters:\n- name: String name for the representation\n- dimension: Size of the representation space\n- aind: The abstract index (int, str, or Symbol)\n- dual: If True, creates dualizable representation; if False, self-dual\n\n# Examples:\n```python\nfrom symbolica.community.spenso import Slot\nimport symbolica as sp\n\n# Self-dual slot\neuclidean_slot = Slot(\"Euclidean\", 4, 'mu', dual=False)\n\n# Dualizable slot\nvector_slot = Slot(\"Vector\", 4, 'nu', dual=True)\n\n# With symbolic index\nsym_index = sp.S('alpha')\nsymbolic_slot = Slot(\"Custom\", 3, sym_index, dual=False)\n``` def __new__(cls, name: str, dimension: int, aind: int | Expression | str, dual: bool = False) -> Slot:"
   },
   {
     "title": "symbolica.community.spenso.Slot.to_expression",
-    "summary": "Convert the slot to a symbolic expression. # Examples: ```python rep = Representation.euc(3) slot = rep('mu') expr = slot.to_expression() # Symbolic representation of the slot ```",
+    "summary": "Convert the slot to a symbolic expression.",
     "href": "reference/python/spynso3/Slot/#exports-slot-to-expression-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Convert the slot to a symbolic expression.\n\n# Examples:\n```python\nrep = Representation.euc(3)\nslot = rep('mu')\nexpr = slot.to_expression()  # Symbolic representation of the slot\n``` def to_expression(self) -> Expression:"
   },
   {
     "title": "symbolica.community.spenso.Tensor",
     "summary": "A tensor class that can be either dense or sparse with flexible data types.",
     "href": "reference/python/spynso3/Tensor/",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "A tensor class that can be either dense or sparse with flexible data types. A tensor class that can be either dense or sparse with flexible data types.\n\nThe tensor can store data as floats, complex numbers, or symbolic expressions.\nTensors have an associated structure that defines their shape and index properties.\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation\n>>> structure = TensorIndices(Representation.euc(4)(1))\n>>> data = [1.0, 2.0, 3.0, 4.0]\n>>> tensor = Tensor.dense(structure, data)\n>>> sparse_tensor = Tensor.sparse(structure, float) class Tensor:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.structure",
     "summary": "def structure(self) -> TensorIndices:",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-structure-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def structure(self) -> TensorIndices:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.sparse",
-    "summary": "Create a new sparse empty tensor with the given structure and data type. Parameters ---------- structure : TensorIndices or list of Slots The tensor structure defining shape and index properties type_info : type The data type - either `float` or `Expression` class Returns ------- Tensor A new sparse tensor with all elements initially zero Examples -------- >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R >>> structure = TensorIndices(R.euc(3)(1), R.euc(3)(2)) >>> sparse_float = Tensor.sparse(structure, float) >>> sparse_sym = Tensor.sparse(structure, symbolica.Expression)",
+    "summary": "Create a new sparse empty tensor with the given structure and data type.",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-sparse-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a new sparse empty tensor with the given structure and data type.\n\nParameters\n----------\nstructure : TensorIndices or list of Slots\n    The tensor structure defining shape and index properties\ntype_info : type\n    The data type - either `float` or `Expression` class\n\nReturns\n-------\nTensor\n    A new sparse tensor with all elements initially zero\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> structure = TensorIndices(R.euc(3)(1), R.euc(3)(2))\n>>> sparse_float = Tensor.sparse(structure, float)\n>>> sparse_sym = Tensor.sparse(structure, symbolica.Expression) def sparse(structure: TensorIndices | list[Slot], type_info: type) -> Tensor:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.dense",
-    "summary": "Create a new dense tensor with the given structure and data. Parameters ---------- structure : TensorIndices or list of Slots The tensor structure defining shape and index properties data : list of float, complex, or Expression The tensor data in row-major order Returns ------- Tensor A new dense tensor with the specified data Examples -------- >>> from symbolica import S >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R >>> structure = TensorIndices(R.euc(2)(1), R.euc(2)(2)) >>> data = [1.0, 2.0, 3.0, 4.0] >>> tensor = Tensor.dense(structure, data) >>> x, y = S(\"x\", \"y\") >>> sym_data = [x, y, x * y, x + y] >>> sym_tensor = Tensor.dense(structure, sym_data)",
+    "summary": "Create a new dense tensor with the given structure and data.",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-dense-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a new dense tensor with the given structure and data.\n\nParameters\n----------\nstructure : TensorIndices or list of Slots\n    The tensor structure defining shape and index properties\ndata : list of float, complex, or Expression\n    The tensor data in row-major order\n\nReturns\n-------\nTensor\n    A new dense tensor with the specified data\n\nExamples\n--------\n>>> from symbolica import S\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> structure = TensorIndices(R.euc(2)(1), R.euc(2)(2))\n>>> data = [1.0, 2.0, 3.0, 4.0]\n>>> tensor = Tensor.dense(structure, data)\n>>> x, y = S(\"x\", \"y\")\n>>> sym_data = [x, y, x * y, x + y]\n>>> sym_tensor = Tensor.dense(structure, sym_data) def dense(structure: TensorIndices | list[Slot], data: Sequence[Expression] | Sequence[float] | Sequence[complex]) -> Tensor:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.one",
-    "summary": "Create a scalar tensor with value 1.0. Returns ------- Tensor A scalar tensor containing the value 1.0 Examples -------- >>> from symbolica.community.spenso import Tensor >>> one = Tensor.one()",
+    "summary": "Create a scalar tensor with value 1.0.",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-one-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a scalar tensor with value 1.0.\n\nReturns\n-------\nTensor\n    A scalar tensor containing the value 1.0\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor\n>>> one = Tensor.one() def one() -> Tensor:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.zero",
-    "summary": "Create a scalar tensor with value 0.0. Returns ------- Tensor A scalar tensor containing the value 0.0 Examples -------- >>> from symbolica.community.spenso import Tensor >>> zero = Tensor.zero()",
+    "summary": "Create a scalar tensor with value 0.0.",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-zero-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a scalar tensor with value 0.0.\n\nReturns\n-------\nTensor\n    A scalar tensor containing the value 0.0\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor\n>>> zero = Tensor.zero() def zero() -> Tensor:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.to_dense",
-    "summary": "Convert this tensor to dense storage format. Converts sparse tensors to dense format in-place. Dense tensors are unchanged. This allocates memory for all tensor elements. Examples -------- >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R >>> structure = TensorIndices(R.euc(4)(2)) >>> tensor = Tensor.sparse(structure, float) >>> tensor[0] = 1.0 >>> tensor.to_dense()",
+    "summary": "Convert this tensor to dense storage format.",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-to-dense-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Convert this tensor to dense storage format.\n\nConverts sparse tensors to dense format in-place. Dense tensors are unchanged.\nThis allocates memory for all tensor elements.\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> structure = TensorIndices(R.euc(4)(2))\n>>> tensor = Tensor.sparse(structure, float)\n>>> tensor[0] = 1.0\n>>> tensor.to_dense() def to_dense(self) -> None:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.to_sparse",
-    "summary": "Convert this tensor to sparse storage format. Converts dense tensors to sparse format in-place, only storing non-zero elements. This can save memory for tensors with many zero elements. Examples -------- >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R >>> structure = TensorIndices(R.euc(2)(2), R.euc(2)(1)) >>> data = [1.0, 0.0, 0.0, 2.0] >>> tensor = Tensor.dense(structure, data) >>> tensor.to_sparse()",
+    "summary": "Convert this tensor to sparse storage format.",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-to-sparse-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Convert this tensor to sparse storage format.\n\nConverts dense tensors to sparse format in-place, only storing non-zero elements.\nThis can save memory for tensors with many zero elements.\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> structure = TensorIndices(R.euc(2)(2), R.euc(2)(1))\n>>> data = [1.0, 0.0, 0.0, 2.0]\n>>> tensor = Tensor.dense(structure, data)\n>>> tensor.to_sparse() def to_sparse(self) -> None:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.__repr__",
     "summary": "def __repr__(self) -> str:",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-repr-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __repr__(self) -> str:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.__str__",
     "summary": "def __str__(self) -> str:",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-str-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __str__(self) -> str:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.__len__",
     "summary": "def __len__(self) -> int:",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-len-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __len__(self) -> int:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.__getitem__",
     "summary": "def __getitem__(self, item: slice | int | list[int]) -> Any: | def __getitem__(self, item: slice) -> list[Expression | complex | float]: | def __getitem__(self, item: Sequence[int] | int) -> Expression | complex | float:",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-getitem-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __getitem__(self, item: slice | int | list[int]) -> Any: | def __getitem__(self, item: slice) -> list[Expression | complex | float]: | def __getitem__(self, item: Sequence[int] | int) -> Expression | complex | float:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.__getitem__ · overload 1",
     "summary": "def __getitem__(self, item: slice | int | list[int]) -> Any:",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-getitem-method-overload",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __getitem__(self, item: slice | int | list[int]) -> Any:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.__getitem__ · overload 2",
-    "summary": "Get tensor elements at the specified range of indices. Parameters ---------- item : slice Slice object defining the range of indices Returns ------- list of float, complex, or Expression The tensor elements at the specified range",
+    "summary": "Get tensor elements at the specified range of indices.",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-getitem-method-overload-2",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Get tensor elements at the specified range of indices.\n\nParameters\n----------\nitem : slice\n    Slice object defining the range of indices\n\nReturns\n-------\nlist of float, complex, or Expression\n    The tensor elements at the specified range def __getitem__(self, item: slice) -> list[Expression | complex | float]:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.__getitem__ · overload 3",
-    "summary": "Get tensor element at the specified index or indices. Parameters ---------- item : int or list of int Index specification (int for flat index, list of int for coordinates) Returns ------- float, complex, or Expression The tensor element at the specified index",
+    "summary": "Get tensor element at the specified index or indices.",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-getitem-method-overload-3",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Get tensor element at the specified index or indices.\n\nParameters\n----------\nitem : int or list of int\n    Index specification (int for flat index, list of int for coordinates)\n\nReturns\n-------\nfloat, complex, or Expression\n    The tensor element at the specified index def __getitem__(self, item: Sequence[int] | int) -> Expression | complex | float:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.__setitem__",
     "summary": "def __setitem__(self, item: Any, value: Any) -> None: | def __setitem__(self, item: int | Sequence[int], value: Expression | complex | float) -> None:",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-setitem-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __setitem__(self, item: Any, value: Any) -> None: | def __setitem__(self, item: int | Sequence[int], value: Expression | complex | float) -> None:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.__setitem__ · overload 1",
-    "summary": "Set tensor element(s) at the specified index or indices. Parameters ---------- item : int or list of int Index specification (int for flat index, list of int for coordinates) value : float, complex, or Expression The value to set Examples -------- >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R >>> structure = TensorIndices(R.euc(2)(2), R.euc(2)(1)) >>> tensor = Tensor.sparse(structure, float) >>> tensor[0] = 4.0 >>> tensor[1, 1] = 1.0",
+    "summary": "Set tensor element(s) at the specified index or indices.",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-setitem-method-overload",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Set tensor element(s) at the specified index or indices.\n\nParameters\n----------\nitem : int or list of int\n    Index specification (int for flat index, list of int for coordinates)\nvalue : float, complex, or Expression\n    The value to set\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> structure = TensorIndices(R.euc(2)(2), R.euc(2)(1))\n>>> tensor = Tensor.sparse(structure, float)\n>>> tensor[0] = 4.0\n>>> tensor[1, 1] = 1.0 def __setitem__(self, item: Any, value: Any) -> None:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.__setitem__ · overload 2",
-    "summary": "Set tensor element at the specified index. Parameters ---------- item : int or list of int Index specification (int for flat index, list of int for coordinates) value : float, complex, or Expression The value to set Examples -------- >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation >>> rep = Representation.euc(2) >>> structure = TensorIndices(rep(1), rep(2)) >>> tensor = Tensor.sparse(structure, float) >>> tensor[0] = 1.0 >>> tensor[1, 1] = 2.0",
+    "summary": "Set tensor element at the specified index.",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-setitem-method-overload-2",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Set tensor element at the specified index.\n\nParameters\n----------\nitem : int or list of int\n    Index specification (int for flat index, list of int for coordinates)\nvalue : float, complex, or Expression\n    The value to set\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation\n>>> rep = Representation.euc(2)\n>>> structure = TensorIndices(rep(1), rep(2))\n>>> tensor = Tensor.sparse(structure, float)\n>>> tensor[0] = 1.0\n>>> tensor[1, 1] = 2.0 def __setitem__(self, item: int | Sequence[int], value: Expression | complex | float) -> None:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.evaluator",
-    "summary": "Create an optimized evaluator for symbolic tensor expressions. Compiles the symbolic expressions in this tensor into an optimized evaluation tree that can efficiently compute numerical values for different parameter inputs. Parameters ---------- constants : dict Dict mapping symbolic expressions to their constant numerical values funs : dict Dict mapping function signatures to their symbolic definitions params : list of Expression List of symbolic parameters that will be varied during evaluation iterations : int, optional Number of optimization iterations for Horner scheme (default: 100) n_cores : int, optional Number of CPU cores to use for optimization (default: 4) verbose : bool, optional Whether to print optimization progress (default: False) Returns ------- TensorEvaluator An optimized evaluator for efficient numerical evaluation Examples -------- >>> from symbolica import S >>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R >>> x, y = S(\"x\", \"y\") >>> structure = TensorIndices(R.euc(2)(1)) >>> tensor = Tensor.dense(structure, [x * y, x + y]) >>> evaluator = tensor.evaluator(constants={}, funs={}, params=[x, y], iterations=50) >>> results = evaluator.evaluate_complex([[1.0, 2.0], [3.0, 4.0]])",
+    "summary": "Create an optimized evaluator for symbolic tensor expressions.",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-evaluator-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create an optimized evaluator for symbolic tensor expressions.\n\nCompiles the symbolic expressions in this tensor into an optimized evaluation tree\nthat can efficiently compute numerical values for different parameter inputs.\n\nParameters\n----------\nconstants : dict\n    Dict mapping symbolic expressions to their constant numerical values\nfuns : dict\n    Dict mapping function signatures to their symbolic definitions\nparams : list of Expression\n    List of symbolic parameters that will be varied during evaluation\niterations : int, optional\n    Number of optimization iterations for Horner scheme (default: 100)\nn_cores : int, optional\n    Number of CPU cores to use for optimization (default: 4)\nverbose : bool, optional\n    Whether to print optimization progress (default: False)\n\nReturns\n-------\nTensorEvaluator\n    An optimized evaluator for efficient numerical evaluation\n\nExamples\n--------\n>>> from symbolica import S\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> x, y = S(\"x\", \"y\")\n>>> structure = TensorIndices(R.euc(2)(1))\n>>> tensor = Tensor.dense(structure, [x * y, x + y])\n>>> evaluator = tensor.evaluator(constants={}, funs={}, params=[x, y], iterations=50)\n>>> results = evaluator.evaluate_complex([[1.0, 2.0], [3.0, 4.0]]) def evaluator(self, constants: Mapping[Expression, Expression], funs: Mapping[tuple[Expression, str, Sequence[Expression]], Expression], params: Sequence[Expression], iterations: int = 100, n_cores: int = 4, verbose: bool = False) -> TensorEvaluator:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.scalar",
-    "summary": "Extract the scalar value from a rank-0 (scalar) tensor. Returns ------- Expression The scalar expression contained in this tensor Raises ------ RuntimeError If the tensor is not a scalar Examples -------- >>> from symbolica.community.spenso import Tensor >>> scalar_tensor = Tensor.one() >>> value = scalar_tensor.scalar()",
+    "summary": "Extract the scalar value from a rank-0 (scalar) tensor.",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-scalar-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Extract the scalar value from a rank-0 (scalar) tensor.\n\nReturns\n-------\nExpression\n    The scalar expression contained in this tensor\n\nRaises\n------\nRuntimeError\n    If the tensor is not a scalar\n\nExamples\n--------\n>>> from symbolica.community.spenso import Tensor\n>>> scalar_tensor = Tensor.one()\n>>> value = scalar_tensor.scalar() def scalar(self) -> Expression:"
   },
   {
     "title": "symbolica.community.spenso.Tensor.__iter__",
     "summary": "Iterator",
     "href": "reference/python/spynso3/Tensor/#exports-tensor-iter-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Iterator def __iter__(self) -> Iterator[Any]:"
   },
   {
     "title": "symbolica.community.spenso.TensorEvaluator",
     "summary": "An optimized evaluator for symbolic tensor expressions.",
     "href": "reference/python/spynso3/TensorEvaluator/",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "An optimized evaluator for symbolic tensor expressions. An optimized evaluator for symbolic tensor expressions.\n\nThis class provides efficient numerical evaluation of symbolic tensor expressions\nafter optimization. It supports both real and complex-valued evaluations.\n\nCreate instances using the `Tensor.evaluator()` method rather than directly.\n\nExamples\n--------\n>>> evaluator = my_tensor.evaluator(constants={}, funs={}, params=[x, y])\n>>> results = evaluator.evaluate([[1.0, 2.0], [3.0, 4.0]]) class TensorEvaluator:"
   },
   {
     "title": "symbolica.community.spenso.TensorEvaluator.evaluate",
-    "summary": "Evaluate the tensor expression for multiple real-valued parameter inputs. Parameters ---------- inputs : list of list of float List of parameter value lists, where each inner list contains numerical values for all parameters in the same order as specified when creating the evaluator Returns ------- list of Tensor List of evaluated tensors, one for each input parameter set Raises ------ ValueError If the evaluator contains complex coefficients Examples -------- >>> results = evaluator.evaluate([[1.0, 2.0], [3.0, 4.0]])",
+    "summary": "Evaluate the tensor expression for multiple real-valued parameter inputs.",
     "href": "reference/python/spynso3/TensorEvaluator/#exports-tensorevaluator-evaluate-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Evaluate the tensor expression for multiple real-valued parameter inputs.\n\nParameters\n----------\ninputs : list of list of float\n    List of parameter value lists, where each inner list contains\n    numerical values for all parameters in the same order as specified\n    when creating the evaluator\n\nReturns\n-------\nlist of Tensor\n    List of evaluated tensors, one for each input parameter set\n\nRaises\n------\nValueError\n    If the evaluator contains complex coefficients\n\nExamples\n--------\n>>> results = evaluator.evaluate([[1.0, 2.0], [3.0, 4.0]]) def evaluate(self, inputs: Sequence[Sequence[float]]) -> list[Tensor]:"
   },
   {
     "title": "symbolica.community.spenso.TensorEvaluator.evaluate_complex",
     "summary": "Evaluate the expression for multiple inputs and return the results.",
     "href": "reference/python/spynso3/TensorEvaluator/#exports-tensorevaluator-evaluate-complex-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Evaluate the expression for multiple inputs and return the results. def evaluate_complex(self, inputs: Sequence[Sequence[complex]]) -> list[Tensor]:"
   },
   {
     "title": "symbolica.community.spenso.TensorEvaluator.compile",
-    "summary": "Compile the evaluator to a shared library using C++ for maximum performance. Generates optimized C++ code with optional inline assembly and compiles it into a shared library that can be loaded for extremely fast evaluation. Parameters ---------- function_name : str Name for the generated C++ function filename : str Path for the generated C++ source file library_name : str Name for the compiled shared library inline_asm : str, optional Type of inline assembly optimization (\"default\", \"x64\", \"aarch64\", \"none\") optimization_level : int, optional Compiler optimization level 0-3 (default: 3) compiler_path : str, optional Path to specific C++ compiler (default: system default) custom_header : str, optional Additional C++ header code to include Returns ------- CompiledTensorEvaluator A compiled evaluator for maximum performance evaluation Examples -------- >>> compiled = evaluator.compile( ... function_name=\"fast_eval\", ... filename=\"tensor_eval.cpp\", ... library_name=\"tensor_lib\", ... optimization_level=3, ... ) >>> results = compiled.evaluate_complex([[1.0, 2.0], [3.0, 4.0]])",
+    "summary": "Compile the evaluator to a shared library using C++ for maximum performance.",
     "href": "reference/python/spynso3/TensorEvaluator/#exports-tensorevaluator-compile-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Compile the evaluator to a shared library using C++ for maximum performance.\n\nGenerates optimized C++ code with optional inline assembly and compiles it\ninto a shared library that can be loaded for extremely fast evaluation.\n\nParameters\n----------\nfunction_name : str\n    Name for the generated C++ function\nfilename : str\n    Path for the generated C++ source file\nlibrary_name : str\n    Name for the compiled shared library\ninline_asm : str, optional\n    Type of inline assembly optimization (\"default\", \"x64\", \"aarch64\", \"none\")\noptimization_level : int, optional\n    Compiler optimization level 0-3 (default: 3)\ncompiler_path : str, optional\n    Path to specific C++ compiler (default: system default)\ncustom_header : str, optional\n    Additional C++ header code to include\n\nReturns\n-------\nCompiledTensorEvaluator\n    A compiled evaluator for maximum performance evaluation\n\nExamples\n--------\n>>> compiled = evaluator.compile(\n...     function_name=\"fast_eval\",\n...     filename=\"tensor_eval.cpp\",\n...     library_name=\"tensor_lib\",\n...     optimization_level=3,\n... )\n>>> results = compiled.evaluate_complex([[1.0, 2.0], [3.0, 4.0]]) def compile(self, function_name: str, filename: str, library_name: str, inline_asm: str = 'default', optimization_level: int = 3, compiler_path: Optional[str] = None, custom_header: Optional[str] = None) -> CompiledTensorEvaluator:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices",
     "summary": "A tensor structure with abstract indices for symbolic tensor operations.",
     "href": "reference/python/spynso3/TensorIndices/",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "A tensor structure with abstract indices for symbolic tensor operations. A tensor structure with abstract indices for symbolic tensor operations.\n\nTensorIndices represents the index structure of tensors with named abstract indices\nthat can be contracted, manipulated symbolically, and converted to expressions.\nIt maintains both the representation structure and index assignments.\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorIndices, Representation, TensorName\n>>> rep = Representation.euc(3)\n>>> mu = rep('mu')\n>>> nu = rep('nu')\n>>> indices = TensorIndices(mu, nu)\n>>> T = TensorName(\"T\")\n>>> named_indices = T(mu, nu)\n>>> expr = named_indices.to_expression() class TensorIndices:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices.set_name",
-    "summary": "Set the tensor name for this structure. Parameters ---------- name : TensorName The tensor name to assign Examples -------- >>> from symbolica.community.spenso import TensorIndices, TensorName, Representation >>> rep = Representation.euc(3) >>> structure = TensorIndices(rep('mu'), rep('nu')) >>> T = TensorName(\"T\") >>> structure.set_name(T)",
+    "summary": "Set the tensor name for this structure.",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-set-name-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Set the tensor name for this structure.\n\nParameters\n----------\nname : TensorName\n    The tensor name to assign\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorIndices, TensorName, Representation\n>>> rep = Representation.euc(3)\n>>> structure = TensorIndices(rep('mu'), rep('nu'))\n>>> T = TensorName(\"T\")\n>>> structure.set_name(T) def set_name(self, name: TensorName | str | Expression) -> None:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices.get_name",
-    "summary": "Get the tensor name of this structure. Returns ------- TensorName or None The tensor name if set, None otherwise Examples -------- >>> name = structure.get_name()",
+    "summary": "Get the tensor name of this structure.",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-get-name-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Get the tensor name of this structure.\n\nReturns\n-------\nTensorName or None\n    The tensor name if set, None otherwise\n\nExamples\n--------\n>>> name = structure.get_name() def get_name(self) -> Optional[TensorName]:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices.__repr__",
     "summary": "def __repr__(self) -> str:",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-repr-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __repr__(self) -> str:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices.__str__",
     "summary": "def __str__(self) -> str:",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-str-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __str__(self) -> str:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices.to_expression",
-    "summary": "Convert the tensor indices to a symbolic expression. Creates a symbolic representation of the tensor with its indices that can be used in algebraic manipulations and pattern matching. Returns ------- Expression A symbolic Expression representing this indexed tensor Raises ------ RuntimeError If the tensor structure has no name Examples -------- >>> from symbolica.community.spenso import TensorName, Representation >>> T = TensorName(\"T\") >>> rep = Representation.euc(3) >>> mu = rep('mu') >>> nu = rep('nu') >>> indices = T(mu, nu) >>> expr = indices.to_expression()",
+    "summary": "Convert the tensor indices to a symbolic expression.",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-to-expression-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Convert the tensor indices to a symbolic expression.\n\nCreates a symbolic representation of the tensor with its indices that can be\nused in algebraic manipulations and pattern matching.\n\nReturns\n-------\nExpression\n    A symbolic Expression representing this indexed tensor\n\nRaises\n------\nRuntimeError\n    If the tensor structure has no name\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorName, Representation\n>>> T = TensorName(\"T\")\n>>> rep = Representation.euc(3)\n>>> mu = rep('mu')\n>>> nu = rep('nu')\n>>> indices = T(mu, nu)\n>>> expr = indices.to_expression() def to_expression(self) -> Expression:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices.__len__",
     "summary": "def __len__(self) -> int:",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-len-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __len__(self) -> int:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices.__add__",
-    "summary": "Add this expression to `other`, returning the result.",
+    "summary": "Add this expression to other, returning the result.",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-add-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Add this expression to `other`, returning the result. def __add__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression) -> Expression:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices.__radd__",
-    "summary": "Add this expression to `other`, returning the result.",
+    "summary": "Add this expression to other, returning the result.",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-radd-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Add this expression to `other`, returning the result. def __radd__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression) -> Expression:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices.__sub__",
-    "summary": "Subtract `other` from this expression, returning the result.",
+    "summary": "Subtract other from this expression, returning the result.",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-sub-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Subtract `other` from this expression, returning the result. def __sub__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression) -> Expression:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices.__rsub__",
-    "summary": "Subtract this expression from `other`, returning the result.",
+    "summary": "Subtract this expression from other, returning the result.",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-rsub-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Subtract this expression from `other`, returning the result. def __rsub__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression) -> Expression:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices.__mul__",
-    "summary": "Add this expression to `other`, returning the result.",
+    "summary": "Add this expression to other, returning the result.",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-mul-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Add this expression to `other`, returning the result. def __mul__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression) -> Expression:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices.__rmul__",
-    "summary": "Add this expression to `other`, returning the result.",
+    "summary": "Add this expression to other, returning the result.",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-rmul-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Add this expression to `other`, returning the result. def __rmul__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression) -> Expression:"
   },
   {
-    "title": "symbolica.community.spenso.TensorIndices.__new__",
-    "summary": "Create tensor structure from slots and optional arguments. Parameters ---------- *additional_args : Slot or Expression Mixed arguments (Slot objects and Expressions for additional arguments) name : TensorName, optional Optional tensor name to assign to the structure Returns ------- TensorIndices A new TensorIndices object Examples -------- >>> from symbolica import S >>> from symbolica.community.spenso import TensorIndices, Representation, TensorName >>> rep = Representation.euc(3) >>> mu = rep('mu') >>> nu = rep('nu') >>> structure = TensorIndices(mu, nu) >>> x = S('x') >>> structure_with_args = TensorIndices(mu, nu, x) >>> T = TensorName(\"T\") >>> named_structure = TensorIndices(mu, nu, name=T)",
+    "title": "symbolica.community.spenso.TensorIndices constructor",
+    "summary": "Create tensor structure from slots and optional arguments.",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-new-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create tensor structure from slots and optional arguments.\n\nParameters\n----------\n*additional_args : Slot or Expression\n    Mixed arguments (Slot objects and Expressions for additional arguments)\nname : TensorName, optional\n    Optional tensor name to assign to the structure\n\nReturns\n-------\nTensorIndices\n    A new TensorIndices object\n\nExamples\n--------\n>>> from symbolica import S\n>>> from symbolica.community.spenso import TensorIndices, Representation, TensorName\n>>> rep = Representation.euc(3)\n>>> mu = rep('mu')\n>>> nu = rep('nu')\n>>> structure = TensorIndices(mu, nu)\n>>> x = S('x')\n>>> structure_with_args = TensorIndices(mu, nu, x)\n>>> T = TensorName(\"T\")\n>>> named_structure = TensorIndices(mu, nu, name=T) def __new__(cls, *slots: TensorIndices | list[Slot], name: TensorName | str | Expression | None = None) -> TensorIndices:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices.__getitem__",
     "summary": "def __getitem__(self, item: slice) -> list[Expression | complex | float]: | def __getitem__(self, item: Sequence[int]) -> Expression | complex | float: | def __getitem__(self, item: int) -> Expression | complex | float:",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-getitem-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __getitem__(self, item: slice) -> list[Expression | complex | float]: | def __getitem__(self, item: Sequence[int]) -> Expression | complex | float: | def __getitem__(self, item: int) -> Expression | complex | float:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices.__getitem__ · overload 1",
-    "summary": "Get expanded indices at the specified range of flattened indices. Parameters ---------- item : slice Slice object defining the range of indices Returns ------- list of list of int List of expanded indices",
+    "summary": "Get expanded indices at the specified range of flattened indices.",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-getitem-method-overload",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Get expanded indices at the specified range of flattened indices.\n\nParameters\n----------\nitem : slice\n    Slice object defining the range of indices\n\nReturns\n-------\nlist of list of int\n    List of expanded indices def __getitem__(self, item: slice) -> list[Expression | complex | float]:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices.__getitem__ · overload 2",
-    "summary": "Get flattened index associated to this expanded index. Parameters ---------- item : list of int Multi-dimensional index coordinates Returns ------- int The flat index",
+    "summary": "Get flattened index associated to this expanded index.",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-getitem-method-overload-2",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Get flattened index associated to this expanded index.\n\nParameters\n----------\nitem : list of int\n    Multi-dimensional index coordinates\n\nReturns\n-------\nint\n    The flat index def __getitem__(self, item: Sequence[int]) -> Expression | complex | float:"
   },
   {
     "title": "symbolica.community.spenso.TensorIndices.__getitem__ · overload 3",
-    "summary": "Get expanded index associated to this flat index. Parameters ---------- item : int Flat index into the tensor Returns ------- list of int Multi-dimensional index coordinates",
+    "summary": "Get expanded index associated to this flat index.",
     "href": "reference/python/spynso3/TensorIndices/#exports-tensorindices-getitem-method-overload-3",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Get expanded index associated to this flat index.\n\nParameters\n----------\nitem : int\n    Flat index into the tensor\n\nReturns\n-------\nlist of int\n    Multi-dimensional index coordinates def __getitem__(self, item: int) -> Expression | complex | float:"
   },
   {
     "title": "symbolica.community.spenso.TensorLibrary",
     "summary": "A library for registering and managing tensor templates and structures.",
     "href": "reference/python/spynso3/TensorLibrary/",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "A library for registering and managing tensor templates and structures. A library for registering and managing tensor templates and structures.\n\nThe TensorLibrary provides a centralized registry for tensor definitions that can be\nreused across tensor networks and expressions. It manages tensor structures with their\nassociated names and can resolve symbolic references to registered tensors.\n\n```python\nimport symbolica\nfrom symbolica.community.spenso import TensorLibrary, LibraryTensor, TensorStructure, Representation\n\nlib = TensorLibrary()\nrep = Representation.euc(3)\nname = symbolica.S(\"my_tensor\")\nstructure = TensorStructure(rep, rep, name=name)\ntensor = LibraryTensor.dense(structure, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0])\nlib.register(tensor)\ntensor_ref = lib[name]\n``` class TensorLibrary:"
   },
   {
-    "title": "symbolica.community.spenso.TensorLibrary.__new__",
-    "summary": "Create a new empty tensor library. Initializes an empty library ready for registering tensor structures. The library automatically manages internal tensor IDs. Returns ------- TensorLibrary A new empty tensor library Examples -------- >>> from symbolica.community.spenso import TensorLibrary >>> lib = TensorLibrary()",
+    "title": "symbolica.community.spenso.TensorLibrary constructor",
+    "summary": "Create a new empty tensor library.",
     "href": "reference/python/spynso3/TensorLibrary/#exports-tensorlibrary-new-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a new empty tensor library.\n\nInitializes an empty library ready for registering tensor structures.\nThe library automatically manages internal tensor IDs.\n\nReturns\n-------\nTensorLibrary\n    A new empty tensor library\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorLibrary\n>>> lib = TensorLibrary() def __new__(cls) -> TensorLibrary:"
   },
   {
     "title": "symbolica.community.spenso.TensorLibrary.construct",
-    "summary": "Create a new empty tensor library (static method). Initializes an empty library ready for registering tensor structures. The library automatically manages internal tensor IDs. Returns ------- TensorLibrary A new empty tensor library Examples -------- >>> from symbolica.community.spenso import TensorLibrary >>> lib = TensorLibrary.construct()",
+    "summary": "Create a new empty tensor library (static method).",
     "href": "reference/python/spynso3/TensorLibrary/#exports-tensorlibrary-construct-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a new empty tensor library (static method).\n\nInitializes an empty library ready for registering tensor structures.\nThe library automatically manages internal tensor IDs.\n\nReturns\n-------\nTensorLibrary\n    A new empty tensor library\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorLibrary\n>>> lib = TensorLibrary.construct() def construct() -> TensorLibrary:"
   },
   {
     "title": "symbolica.community.spenso.TensorLibrary.register",
-    "summary": "Register a tensor in the library. Adds a tensor template to the library that can be referenced by name in tensor networks and symbolic expressions. The tensor must have a name set in its structure. Parameters ---------- tensor : LibraryTensor or Tensor The tensor to register - can be a LibraryTensor or regular Tensor Examples -------- >>> import symbolica >>> from symbolica.community.spenso import TensorLibrary, LibraryTensor, TensorStructure, Representation >>> lib = TensorLibrary() >>> rep = Representation.euc(3) >>> name = symbolica.S(\"my_tensor\") >>> structure = TensorStructure(rep, rep, name=name) >>> tensor = LibraryTensor.dense(structure, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0]) >>> lib.register(tensor) >>> tensor_ref = lib[name]",
+    "summary": "Register a tensor in the library.",
     "href": "reference/python/spynso3/TensorLibrary/#exports-tensorlibrary-register-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Register a tensor in the library.\n\nAdds a tensor template to the library that can be referenced by name\nin tensor networks and symbolic expressions. The tensor must have a name\nset in its structure.\n\nParameters\n----------\ntensor : LibraryTensor or Tensor\n    The tensor to register - can be a LibraryTensor or regular Tensor\n\nExamples\n--------\n>>> import symbolica\n>>> from symbolica.community.spenso import TensorLibrary, LibraryTensor, TensorStructure, Representation\n>>> lib = TensorLibrary()\n>>> rep = Representation.euc(3)\n>>> name = symbolica.S(\"my_tensor\")\n>>> structure = TensorStructure(rep, rep, name=name)\n>>> tensor = LibraryTensor.dense(structure, [1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0])\n>>> lib.register(tensor)\n>>> tensor_ref = lib[name] def register(self, tensor: Tensor | LibraryTensor) -> None:"
   },
   {
     "title": "symbolica.community.spenso.TensorLibrary.__getitem__",
-    "summary": "Retrieve a registered tensor structure by name. Looks up a previously registered tensor by its name and returns a reference structure that can be used to create new tensor instances. Parameters ---------- key : str or Expression The tensor name - can be a string or symbolic expression Returns ------- TensorStructure A TensorStructure representing the registered tensor template Raises ------ RuntimeError If the tensor name is not found in the library Examples -------- >>> structure = lib[\"T\"]",
+    "summary": "Retrieve a registered tensor structure by name.",
     "href": "reference/python/spynso3/TensorLibrary/#exports-tensorlibrary-getitem-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Retrieve a registered tensor structure by name.\n\nLooks up a previously registered tensor by its name and returns\na reference structure that can be used to create new tensor instances.\n\nParameters\n----------\nkey : str or Expression\n    The tensor name - can be a string or symbolic expression\n\nReturns\n-------\nTensorStructure\n    A TensorStructure representing the registered tensor template\n\nRaises\n------\nRuntimeError\n    If the tensor name is not found in the library\n\nExamples\n--------\n>>> structure = lib[\"T\"] def __getitem__(self, key: Expression | int | str | float | complex | str) -> TensorStructure:"
   },
   {
     "title": "symbolica.community.spenso.TensorLibrary.hep_lib",
-    "summary": "Create a library pre-loaded with High Energy Physics tensor definitions. Returns a library containing standard HEP tensors such as gamma matrices, color generators, metric tensors, and other commonly used structures in particle physics calculations. They are floating point tensors with f64 precision. Returns ------- TensorLibrary A TensorLibrary pre-populated with HEP tensor definitions Examples -------- >>> import symbolica >>> from symbolica.community.spenso import TensorLibrary, TensorName >>> hep_lib = TensorLibrary.hep_lib() >>> gamma_structure = hep_lib[symbolica.S(\"spenso::gamma\")]",
+    "summary": "Create a library pre-loaded with High Energy Physics tensor definitions.",
     "href": "reference/python/spynso3/TensorLibrary/#exports-tensorlibrary-hep-lib-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a library pre-loaded with High Energy Physics tensor definitions.\n\nReturns a library containing standard HEP tensors such as gamma matrices,\ncolor generators, metric tensors, and other commonly used structures in\nparticle physics calculations. They are floating point tensors with f64 precision.\n\nReturns\n-------\nTensorLibrary\n    A TensorLibrary pre-populated with HEP tensor definitions\n\nExamples\n--------\n>>> import symbolica\n>>> from symbolica.community.spenso import TensorLibrary, TensorName\n>>> hep_lib = TensorLibrary.hep_lib()\n>>> gamma_structure = hep_lib[symbolica.S(\"spenso::gamma\")] def hep_lib() -> TensorLibrary:"
   },
   {
     "title": "symbolica.community.spenso.TensorLibrary.hep_lib_atom",
-    "summary": "Create a library pre-loaded with High Energy Physics tensor definitions. Returns a library containing standard HEP tensors such as gamma matrices, color generators, metric tensors, and other commonly used structures in particle physics calculations. They are tensors with atom numeric entries. Returns ------- TensorLibrary A TensorLibrary pre-populated with HEP tensor definitions Examples -------- >>> import symbolica >>> from symbolica.community.spenso import TensorLibrary, TensorName >>> hep_lib = TensorLibrary.hep_lib_atom() >>> gamma_structure = hep_lib[symbolica.S(\"spenso::gamma\")]",
+    "summary": "Create a library pre-loaded with High Energy Physics tensor definitions.",
     "href": "reference/python/spynso3/TensorLibrary/#exports-tensorlibrary-hep-lib-atom-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a library pre-loaded with High Energy Physics tensor definitions.\n\nReturns a library containing standard HEP tensors such as gamma matrices,\ncolor generators, metric tensors, and other commonly used structures in\nparticle physics calculations. They are tensors with atom numeric entries.\n\nReturns\n-------\nTensorLibrary\n    A TensorLibrary pre-populated with HEP tensor definitions\n\nExamples\n--------\n>>> import symbolica\n>>> from symbolica.community.spenso import TensorLibrary, TensorName\n>>> hep_lib = TensorLibrary.hep_lib_atom()\n>>> gamma_structure = hep_lib[symbolica.S(\"spenso::gamma\")] def hep_lib_atom() -> TensorLibrary:"
   },
   {
     "title": "symbolica.community.spenso.TensorName",
     "summary": "A symbolic name for tensor functions and structures.",
     "href": "reference/python/spynso3/TensorName/",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "A symbolic name for tensor functions and structures. A symbolic name for tensor functions and structures.\n\nTensorName represents named tensor functions that can be called with indices and arguments\nto create tensor structures. Names can have various mathematical properties like symmetry,\nantisymmetry, and custom normalization or printing behavior.\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorName, Slot, Representation\n>>> T = TensorName(\"T\")\n>>> symmetric_T = TensorName(\"S\", is_symmetric=True)\n>>> antisymmetric_T = TensorName(\"A\", is_antisymmetric=True)\n>>> rep = Representation.cof(3)\n>>> mu = rep('mu')\n>>> nu = rep('nu')\n>>> tensor_structure = T(mu, nu) class TensorName:"
   },
   {
-    "title": "symbolica.community.spenso.TensorName.__new__",
-    "summary": "Create a new tensor name with optional mathematical properties. Parameters ---------- name : str The string name for the tensor function is_symmetric : bool, optional If True, tensor is symmetric under index permutation is_antisymmetric : bool, optional If True, tensor is antisymmetric under index permutation is_cyclesymmetric : bool, optional If True, tensor is symmetric under cyclic permutations is_linear : bool, optional If True, tensor is linear in its arguments custom_normalization : Transformer, optional Custom normalization function (advanced) Returns ------- TensorName A new TensorName with the specified properties Examples -------- >>> from symbolica.community.spenso import TensorName >>> T = TensorName(\"T\") >>> g = TensorName(\"g\", is_symmetric=True) >>> F = TensorName(\"F\", is_antisymmetric=True) >>> D = TensorName(\"D\", is_linear=True)",
+    "title": "symbolica.community.spenso.TensorName constructor",
+    "summary": "Create a new tensor name with optional mathematical properties.",
     "href": "reference/python/spynso3/TensorName/#exports-tensorname-new-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a new tensor name with optional mathematical properties.\n\nParameters\n----------\nname : str\n    The string name for the tensor function\nis_symmetric : bool, optional\n    If True, tensor is symmetric under index permutation\nis_antisymmetric : bool, optional\n    If True, tensor is antisymmetric under index permutation\nis_cyclesymmetric : bool, optional\n    If True, tensor is symmetric under cyclic permutations\nis_linear : bool, optional\n    If True, tensor is linear in its arguments\ncustom_normalization : Transformer, optional\n    Custom normalization function (advanced)\n\nReturns\n-------\nTensorName\n    A new TensorName with the specified properties\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorName\n>>> T = TensorName(\"T\")\n>>> g = TensorName(\"g\", is_symmetric=True)\n>>> F = TensorName(\"F\", is_antisymmetric=True)\n>>> D = TensorName(\"D\", is_linear=True) def __new__(cls, name: str, is_symmetric: Optional[bool] = None, is_antisymmetric: Optional[bool] = None, is_cyclesymmetric: Optional[bool] = None, is_linear: Optional[bool] = None, custom_normalization: Optional[Transformer] = None) -> TensorName:"
   },
   {
     "title": "symbolica.community.spenso.TensorName.__repr__",
     "summary": "def __repr__(self) -> str:",
     "href": "reference/python/spynso3/TensorName/#exports-tensorname-repr-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __repr__(self) -> str:"
   },
   {
     "title": "symbolica.community.spenso.TensorName.__str__",
     "summary": "def __str__(self) -> str:",
     "href": "reference/python/spynso3/TensorName/#exports-tensorname-str-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __str__(self) -> str:"
   },
   {
     "title": "symbolica.community.spenso.TensorName.to_expression",
-    "summary": "Convert the tensor name to a symbolic expression. Returns ------- Expression A symbolic Expression representing this tensor name Examples -------- >>> T = TensorName(\"T\") >>> expr = T.to_expression()",
+    "summary": "Convert the tensor name to a symbolic expression.",
     "href": "reference/python/spynso3/TensorName/#exports-tensorname-to-expression-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Convert the tensor name to a symbolic expression.\n\nReturns\n-------\nExpression\n    A symbolic Expression representing this tensor name\n\nExamples\n--------\n>>> T = TensorName(\"T\")\n>>> expr = T.to_expression() def to_expression(self) -> Expression:"
   },
   {
     "title": "symbolica.community.spenso.TensorName.g",
     "summary": "Predefined metric tensor name.",
     "href": "reference/python/spynso3/TensorName/#exports-tensorname-g-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Predefined metric tensor name. def g() -> TensorName:"
   },
   {
     "title": "symbolica.community.spenso.TensorName.flat",
     "summary": "Predefined musical isomorphism tensor name. This enables dualizing self dual indices.",
     "href": "reference/python/spynso3/TensorName/#exports-tensorname-flat-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Predefined musical isomorphism tensor name. This enables dualizing self dual indices. def flat() -> TensorName:"
   },
   {
     "title": "symbolica.community.spenso.TensorName.gamma",
     "summary": "Predefined gamma matrix name.",
     "href": "reference/python/spynso3/TensorName/#exports-tensorname-gamma-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Predefined gamma matrix name. def gamma() -> TensorName:"
   },
   {
     "title": "symbolica.community.spenso.TensorName.gamma5",
     "summary": "Predefined gamma5 matrix name.",
     "href": "reference/python/spynso3/TensorName/#exports-tensorname-gamma5-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Predefined gamma5 matrix name. def gamma5() -> TensorName:"
   },
   {
     "title": "symbolica.community.spenso.TensorName.projm",
     "summary": "Predefined left chiral projector name.",
     "href": "reference/python/spynso3/TensorName/#exports-tensorname-projm-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Predefined left chiral projector name. def projm() -> TensorName:"
   },
   {
     "title": "symbolica.community.spenso.TensorName.projp",
     "summary": "Predefined right chiral projector name.",
     "href": "reference/python/spynso3/TensorName/#exports-tensorname-projp-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Predefined right chiral projector name. def projp() -> TensorName:"
   },
   {
     "title": "symbolica.community.spenso.TensorName.sigma",
     "summary": "Predefined sigma matrix name.",
     "href": "reference/python/spynso3/TensorName/#exports-tensorname-sigma-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Predefined sigma matrix name. def sigma() -> TensorName:"
   },
   {
     "title": "symbolica.community.spenso.TensorName.f",
     "summary": "Predefined color structure constant name.",
     "href": "reference/python/spynso3/TensorName/#exports-tensorname-f-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Predefined color structure constant name. def f() -> TensorName:"
   },
   {
     "title": "symbolica.community.spenso.TensorName.t",
     "summary": "Predefined color generator name.",
     "href": "reference/python/spynso3/TensorName/#exports-tensorname-t-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Predefined color generator name. def t() -> TensorName:"
   },
   {
     "title": "symbolica.community.spenso.TensorName.__call__",
     "summary": "def __call__(self, *args: Slot | Expression | int | str | float | complex) -> TensorIndices: | def __call__(self, *args: Representation | Expression) -> TensorStructure:",
     "href": "reference/python/spynso3/TensorName/#exports-tensorname-call-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __call__(self, *args: Slot | Expression | int | str | float | complex) -> TensorIndices: | def __call__(self, *args: Representation | Expression) -> TensorStructure:"
   },
   {
     "title": "symbolica.community.spenso.TensorName.__call__ · overload 1",
-    "summary": "Call the tensor name with arguments to create tensor structures. Accepts a mix of slots and symbolic expressions (for additional arguments). Parameters ---------- *args : Slot or Expression Slot objects and Expressions for additional arguments Returns ------- TensorIndices A new TensorIndices object Examples -------- >>> from symbolica.community.spenso import TensorName, Slot, Representation >>> import symbolica as sp >>> T = TensorName(\"T\") >>> rep = Representation.euc(3) >>> mu = rep(\"mu\") >>> nu = rep(\"nu\") >>> indexed_tensor = T(mu, nu)",
+    "summary": "Call the tensor name with arguments to create tensor structures.",
     "href": "reference/python/spynso3/TensorName/#exports-tensorname-call-method-overload",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Call the tensor name with arguments to create tensor structures.\n\nAccepts a mix of slots and symbolic expressions (for additional arguments).\n\nParameters\n----------\n*args : Slot or Expression\n    Slot objects and Expressions for additional arguments\n\nReturns\n-------\nTensorIndices\n    A new TensorIndices object\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorName, Slot, Representation\n>>> import symbolica as sp\n>>> T = TensorName(\"T\")\n>>> rep = Representation.euc(3)\n>>> mu = rep(\"mu\")\n>>> nu = rep(\"nu\")\n>>> indexed_tensor = T(mu, nu) def __call__(self, *args: Slot | Expression | int | str | float | complex) -> TensorIndices:"
   },
   {
     "title": "symbolica.community.spenso.TensorName.__call__ · overload 2",
-    "summary": "Call the tensor name with arguments to create a TensorStructure. Accepts a mix of representations and symbolic expressions (for additional arguments). Parameters ---------- *args : Representation or Expression Representation objects and Expressions for additional arguments Returns ------- TensorStructure A new TensorStructure object Examples -------- >>> from symbolica.community.spenso import TensorName, Slot, Representation >>> import symbolica as sp >>> T = TensorName(\"T\") >>> rep = Representation.euc(3) >>> structure_tensor = T(rep, rep)",
+    "summary": "Call the tensor name with arguments to create a TensorStructure.",
     "href": "reference/python/spynso3/TensorName/#exports-tensorname-call-method-overload-2",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Call the tensor name with arguments to create a TensorStructure.\n\nAccepts a mix of representations and symbolic expressions (for additional arguments).\n\nParameters\n----------\n*args : Representation or Expression\n    Representation objects and Expressions for additional arguments\n\nReturns\n-------\nTensorStructure\n    A new TensorStructure object\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorName, Slot, Representation\n>>> import symbolica as sp\n>>> T = TensorName(\"T\")\n>>> rep = Representation.euc(3)\n>>> structure_tensor = T(rep, rep) def __call__(self, *args: Representation | Expression) -> TensorStructure:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork",
     "summary": "A tensor network representing computational graphs of tensor operations.",
     "href": "reference/python/spynso3/TensorNetwork/",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "A tensor network representing computational graphs of tensor operations. A tensor network representing computational graphs of tensor operations.\n\nA tensor network is a graph-based representation of tensor computations where\nnodes represent tensors and operations, edges represent tensor contractions and\ndata flow, and the network can be optimized and executed to compute results.\n\nTensor networks are particularly useful for symbolic manipulation of complex\ntensor expressions, optimization of tensor contraction orders, efficient\nevaluation of large tensor computations, and physics calculations involving\nmany-body systems.\n\nExamples\n--------\n>>> import symbolica as sp\n>>> from symbolica.community.spenso import TensorNetwork, Tensor, TensorIndices\n>>> x = sp.symbol('x')\n>>> expr = x * sp.symbol('T')(sp.symbol('mu'), sp.symbol('nu'))\n>>> network = TensorNetwork(expr)\n>>> network.execute()\n>>> result = network.result_tensor() class TensorNetwork:"
   },
   {
-    "title": "symbolica.community.spenso.TensorNetwork.__new__",
-    "summary": "Create a tensor network by parsing an arithmetic expression. Parses symbolic expressions containing tensor operations and converts them into an optimizable computational graph representation. Parameters ---------- expr : ArithmeticStructure The arithmetic expression or tensor structure to parse library : TensorLibrary, optional Optional tensor library for resolving named tensor references Returns ------- TensorNetwork A new TensorNetwork representing the parsed expression",
+    "title": "symbolica.community.spenso.TensorNetwork constructor",
+    "summary": "Create a tensor network by parsing an arithmetic expression.",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-new-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a tensor network by parsing an arithmetic expression.\n\nParses symbolic expressions containing tensor operations and converts them\ninto an optimizable computational graph representation.\n\nParameters\n----------\nexpr : ArithmeticStructure\n    The arithmetic expression or tensor structure to parse\nlibrary : TensorLibrary, optional\n    Optional tensor library for resolving named tensor references\n\nReturns\n-------\nTensorNetwork\n    A new TensorNetwork representing the parsed expression def __new__(cls, expr: Expression | int | str | float | complex | TensorIndices | Expression, library: Optional[TensorLibrary] = None) -> TensorNetwork:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork.one",
-    "summary": "Create a tensor network representing the scalar value 1. Returns ------- TensorNetwork A TensorNetwork containing only the scalar 1 Examples -------- >>> from symbolica.community.spenso import TensorNetwork >>> one_net = TensorNetwork.one() >>> result = one_net.result_scalar()",
+    "summary": "Create a tensor network representing the scalar value 1.",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-one-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a tensor network representing the scalar value 1.\n\nReturns\n-------\nTensorNetwork\n    A TensorNetwork containing only the scalar 1\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorNetwork\n>>> one_net = TensorNetwork.one()\n>>> result = one_net.result_scalar() def one() -> TensorNetwork:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork.bracket",
     "summary": "def bracket() -> Expression:",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-bracket-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def bracket() -> Expression:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork.broadcast",
     "summary": "def broadcast(str: str) -> Expression:",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-broadcast-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def broadcast(str: str) -> Expression:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork.zero",
-    "summary": "Create a tensor network representing the scalar value 0. Returns ------- TensorNetwork A TensorNetwork containing only the scalar 0 Examples -------- >>> from symbolica.community.spenso import TensorNetwork >>> zero_net = TensorNetwork.zero() >>> result = zero_net.result_scalar()",
+    "summary": "Create a tensor network representing the scalar value 0.",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-zero-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a tensor network representing the scalar value 0.\n\nReturns\n-------\nTensorNetwork\n    A TensorNetwork containing only the scalar 0\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorNetwork\n>>> zero_net = TensorNetwork.zero()\n>>> result = zero_net.result_scalar() def zero() -> TensorNetwork:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork.replace",
-    "summary": "Replace patterns in the tensor network using symbolic pattern matching. Applies pattern-based transformations to the network structure, allowing for symbolic simplifications, substitutions, and algebraic manipulations. Parameters ---------- pattern : Expression The symbolic pattern to match against rhs : Expression The replacement expression or pattern non_greedy_wildcards : list of Expression, optional List of wildcard symbols to match non-greedily level_range : tuple of int, optional Tuple specifying depth range for pattern matching level_is_tree_depth : bool, optional Whether level refers to tree depth or expression depth allow_new_wildcards_on_rhs : bool, optional Allow new wildcards in replacement pattern rhs_cache_size : int, optional Size of cache for replacement pattern compilation repeat : bool, optional Whether to repeatedly apply the replacement until no more matches Returns ------- TensorNetwork A new TensorNetwork with the replacements applied",
+    "summary": "Replace patterns in the tensor network using symbolic pattern matching.",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-replace-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Replace patterns in the tensor network using symbolic pattern matching.\n\nApplies pattern-based transformations to the network structure, allowing for\nsymbolic simplifications, substitutions, and algebraic manipulations.\n\nParameters\n----------\npattern : Expression\n    The symbolic pattern to match against\nrhs : Expression\n    The replacement expression or pattern\nnon_greedy_wildcards : list of Expression, optional\n    List of wildcard symbols to match non-greedily\nlevel_range : tuple of int, optional\n    Tuple specifying depth range for pattern matching\nlevel_is_tree_depth : bool, optional\n    Whether level refers to tree depth or expression depth\nallow_new_wildcards_on_rhs : bool, optional\n    Allow new wildcards in replacement pattern\nrhs_cache_size : int, optional\n    Size of cache for replacement pattern compilation\nrepeat : bool, optional\n    Whether to repeatedly apply the replacement until no more matches\n\nReturns\n-------\nTensorNetwork\n    A new TensorNetwork with the replacements applied def replace(self, pattern: Expression | int | str | float | complex, rhs: Expression | int | str | float | complex | HeldExpression | Callable[[dict[Expression, Expression]], Expression] | int | float | complex | decimal.Decimal, _cond: Optional[PatternRestriction | Condition] = None, non_greedy_wildcards: Optional[Sequence[Expression]] = None, level_range: Optional[tuple[int, Optional[int]]] = None, level_is_tree_depth: Optional[bool] = None, allow_new_wildcards_on_rhs: Optional[bool] = None, rhs_cache_size: Optional[int] = None, repeat: Optional[bool] = None) -> TensorNetwork:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork.evaluate",
-    "summary": "Evaluate symbolic expressions in the network with numerical values. Substitutes symbolic constants and functions with numerical values, converting symbolic parts of the network to concrete numerical tensors. Parameters ---------- constants : dict Dict mapping symbolic expressions to their numerical values functions : dict Dict mapping function symbols to Python callable objects Returns ------- TensorNetwork A new TensorNetwork with symbolic expressions evaluated",
+    "summary": "Evaluate symbolic expressions in the network with numerical values.",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-evaluate-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Evaluate symbolic expressions in the network with numerical values.\n\nSubstitutes symbolic constants and functions with numerical values,\nconverting symbolic parts of the network to concrete numerical tensors.\n\nParameters\n----------\nconstants : dict\n    Dict mapping symbolic expressions to their numerical values\nfunctions : dict\n    Dict mapping function symbols to Python callable objects\n\nReturns\n-------\nTensorNetwork\n    A new TensorNetwork with symbolic expressions evaluated def evaluate(self, constants: Mapping[Expression, float], functions: Mapping[Expression, Any]) -> TensorNetwork:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork.execute",
-    "summary": "Execute the tensor network to perform tensor contractions and simplifications. Processes the computational graph by executing tensor operations such as contractions, additions, and multiplications. The execution can be controlled by mode and step limits. Parameters ---------- library : TensorLibrary, optional Optional tensor library for resolving tensor operations function_library : None, optional Reserved for an internally supplied function library n_steps : int, optional Maximum number of execution steps (None for complete execution) mode : ExecutionMode, optional Execution strategy. ExecutionMode.Single selects one smallest-degree rewrite per step; use n_steps to bound how many steps run. Examples -------- >>> from symbolica.community.spenso import TensorNetwork, ExecutionMode, TensorLibrary >>> network = TensorNetwork(some_expression) >>> network.execute() >>> network.execute(n_steps=5) >>> network.execute(mode=ExecutionMode.Scalar) >>> lib = TensorLibrary.hep_lib() >>> network.execute(library=lib)",
+    "summary": "Execute the tensor network to perform tensor contractions and simplifications.",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-execute-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Execute the tensor network to perform tensor contractions and simplifications.\n\nProcesses the computational graph by executing tensor operations such as\ncontractions, additions, and multiplications. The execution can be controlled\nby mode and step limits.\n\nParameters\n----------\nlibrary : TensorLibrary, optional\n    Optional tensor library for resolving tensor operations\nfunction_library : None, optional\n    Reserved for an internally supplied function library\nn_steps : int, optional\n    Maximum number of execution steps (None for complete execution)\nmode : ExecutionMode, optional\n    Execution strategy. ExecutionMode.Single selects one smallest-degree rewrite per\n    step; use n_steps to bound how many steps run.\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorNetwork, ExecutionMode, TensorLibrary\n>>> network = TensorNetwork(some_expression)\n>>> network.execute()\n>>> network.execute(n_steps=5)\n>>> network.execute(mode=ExecutionMode.Scalar)\n>>> lib = TensorLibrary.hep_lib()\n>>> network.execute(library=lib) def execute(self, library: Optional[TensorLibrary] = None, function_library: None = None, n_steps: Optional[int] = None, mode: ExecutionMode = ExecutionMode.All) -> None:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork.result_tensor",
-    "summary": "Extract the final tensor result from the executed network. After network execution, retrieves the computed tensor result. The network should be executed before calling this method. Parameters ---------- library : TensorLibrary, optional Optional tensor library for resolving tensor structures Returns ------- Tensor The computed tensor result Raises ------ RuntimeError If the network execution resulted in an error Examples -------- >>> from symbolica.community.spenso import TensorNetwork, TensorLibrary >>> network = TensorNetwork(tensor_expression) >>> network.execute() >>> result = network.result_tensor() >>> lib = TensorLibrary.hep_lib() >>> result_with_lib = network.result_tensor(library=lib)",
+    "summary": "Extract the final tensor result from the executed network.",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-result-tensor-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Extract the final tensor result from the executed network.\n\nAfter network execution, retrieves the computed tensor result. The network\nshould be executed before calling this method.\n\nParameters\n----------\nlibrary : TensorLibrary, optional\n    Optional tensor library for resolving tensor structures\n\nReturns\n-------\nTensor\n    The computed tensor result\n\nRaises\n------\nRuntimeError\n    If the network execution resulted in an error\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorNetwork, TensorLibrary\n>>> network = TensorNetwork(tensor_expression)\n>>> network.execute()\n>>> result = network.result_tensor()\n>>> lib = TensorLibrary.hep_lib()\n>>> result_with_lib = network.result_tensor(library=lib) def result_tensor(self, library: Optional[TensorLibrary] = None) -> Tensor:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork.result_scalar",
-    "summary": "Extract the final scalar result from the executed network. For networks that evaluate to scalar expressions, retrieves the computed scalar value. The network should be executed before calling this method. Returns ------- Expression The computed scalar expression Raises ------ RuntimeError If the network execution resulted in an error Examples -------- >>> from symbolica.community.spenso import TensorNetwork >>> network = TensorNetwork(scalar_expression) >>> network.execute() >>> scalar_result = network.result_scalar()",
+    "summary": "Extract the final scalar result from the executed network.",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-result-scalar-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Extract the final scalar result from the executed network.\n\nFor networks that evaluate to scalar expressions, retrieves the computed\nscalar value. The network should be executed before calling this method.\n\nReturns\n-------\nExpression\n    The computed scalar expression\n\nRaises\n------\nRuntimeError\n    If the network execution resulted in an error\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorNetwork\n>>> network = TensorNetwork(scalar_expression)\n>>> network.execute()\n>>> scalar_result = network.result_scalar() def result_scalar(self) -> Expression:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork.__str__",
-    "summary": "Return a string representation of the network structure. Generates a DOT format representation of the computational graph that can be visualized using graphviz or similar tools.",
+    "summary": "Return a string representation of the network structure.",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-str-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Return a string representation of the network structure.\n\nGenerates a DOT format representation of the computational graph that can be\nvisualized using graphviz or similar tools. def __str__(self) -> str:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork.__add__",
-    "summary": "Add two tensor networks element-wise. Parameters ---------- rhs : TensorNetwork The tensor network to add (right-hand side) Returns ------- TensorNetwork A new TensorNetwork representing the sum Examples -------- >>> net1 = TensorNetwork(expr1) >>> net2 = TensorNetwork(expr2) >>> sum_net = net1 + net2",
+    "summary": "Add two tensor networks element-wise.",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-add-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Add two tensor networks element-wise.\n\nParameters\n----------\nrhs : TensorNetwork\n    The tensor network to add (right-hand side)\n\nReturns\n-------\nTensorNetwork\n    A new TensorNetwork representing the sum\n\nExamples\n--------\n>>> net1 = TensorNetwork(expr1)\n>>> net2 = TensorNetwork(expr2)\n>>> sum_net = net1 + net2 def __add__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork.__radd__",
     "summary": "Add two tensor networks element-wise (right-hand addition).",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-radd-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Add two tensor networks element-wise (right-hand addition). def __radd__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork.__sub__",
-    "summary": "Subtract one tensor network from another element-wise. Parameters ---------- rhs : TensorNetwork The tensor network to subtract (right-hand side) Returns ------- TensorNetwork A new TensorNetwork representing the difference Examples -------- >>> net1 = TensorNetwork(expr1) >>> net2 = TensorNetwork(expr2) >>> diff_net = net1 - net2",
+    "summary": "Subtract one tensor network from another element-wise.",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-sub-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Subtract one tensor network from another element-wise.\n\nParameters\n----------\nrhs : TensorNetwork\n    The tensor network to subtract (right-hand side)\n\nReturns\n-------\nTensorNetwork\n    A new TensorNetwork representing the difference\n\nExamples\n--------\n>>> net1 = TensorNetwork(expr1)\n>>> net2 = TensorNetwork(expr2)\n>>> diff_net = net1 - net2 def __sub__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork.__rsub__",
     "summary": "Subtract one tensor network from another (right-hand subtraction).",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-rsub-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Subtract one tensor network from another (right-hand subtraction). def __rsub__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork.__mul__",
-    "summary": "Multiply two tensor networks. Parameters ---------- rhs : TensorNetwork The tensor network to multiply with (right-hand side) Returns ------- TensorNetwork A new TensorNetwork representing the product Examples -------- >>> net1 = TensorNetwork(expr1) >>> net2 = TensorNetwork(expr2) >>> product_net = net1 * net2",
+    "summary": "Multiply two tensor networks.",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-mul-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Multiply two tensor networks.\n\nParameters\n----------\nrhs : TensorNetwork\n    The tensor network to multiply with (right-hand side)\n\nReturns\n-------\nTensorNetwork\n    A new TensorNetwork representing the product\n\nExamples\n--------\n>>> net1 = TensorNetwork(expr1)\n>>> net2 = TensorNetwork(expr2)\n>>> product_net = net1 * net2 def __mul__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:"
   },
   {
     "title": "symbolica.community.spenso.TensorNetwork.__rmul__",
     "summary": "Multiply two tensor networks (right-hand multiplication).",
     "href": "reference/python/spynso3/TensorNetwork/#exports-tensornetwork-rmul-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Multiply two tensor networks (right-hand multiplication). def __rmul__(self, rhs: Expression | int | str | float | complex | TensorIndices | Expression | TensorNetwork | Tensor) -> TensorNetwork:"
   },
   {
     "title": "symbolica.community.spenso.TensorStructure",
     "summary": "A tensor structure without abstract indices, defined purely by representations.",
     "href": "reference/python/spynso3/TensorStructure/",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "A tensor structure without abstract indices, defined purely by representations. A tensor structure without abstract indices, defined purely by representations.\n\nTensorStructure represents the shape and representation structure of tensors\nwithout specific index assignments. It's used for defining tensor templates\nin libraries and for creating indexless tensor computations.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import TensorStructure, Representation, TensorName\n\n# Create from representations\nrep = Representation.euc(3)\nstructure = TensorStructure(rep, rep)  # 3x3 matrix structure\n\n# With name for library registration\nT = TensorName(\"T\")\nnamed_structure = TensorStructure(rep, rep, name=T)\n\n# Use to create indexed tensor\nindices = structure.index('mu', 'nu')  # Assign specific indices\n\n# Create symbolic expression\nexpr = structure.symbolic('a', 'b')  # T(a, b)\n``` class TensorStructure:"
   },
   {
     "title": "symbolica.community.spenso.TensorStructure.set_name",
     "summary": "def set_name(self, name: TensorName | str | Expression) -> None:",
     "href": "reference/python/spynso3/TensorStructure/#exports-tensorstructure-set-name-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def set_name(self, name: TensorName | str | Expression) -> None:"
   },
   {
     "title": "symbolica.community.spenso.TensorStructure.get_name",
     "summary": "def get_name(self) -> Optional[TensorName]:",
     "href": "reference/python/spynso3/TensorStructure/#exports-tensorstructure-get-name-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def get_name(self) -> Optional[TensorName]:"
   },
   {
     "title": "symbolica.community.spenso.TensorStructure.__repr__",
     "summary": "def __repr__(self) -> str:",
     "href": "reference/python/spynso3/TensorStructure/#exports-tensorstructure-repr-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __repr__(self) -> str:"
   },
   {
     "title": "symbolica.community.spenso.TensorStructure.__str__",
     "summary": "def __str__(self) -> str:",
     "href": "reference/python/spynso3/TensorStructure/#exports-tensorstructure-str-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __str__(self) -> str:"
   },
   {
     "title": "symbolica.community.spenso.TensorStructure.__len__",
     "summary": "def __len__(self) -> int:",
     "href": "reference/python/spynso3/TensorStructure/#exports-tensorstructure-len-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __len__(self) -> int:"
   },
   {
-    "title": "symbolica.community.spenso.TensorStructure.__new__",
-    "summary": "Construct a new TensorStructure with the given representations. Parameters ---------- *reps_and_additional_args : Representation or Expression Mixed arguments (Representation objects and Expressions for additional arguments) name : TensorName, optional Optional tensor name to assign to the structure Returns ------- TensorStructure A new TensorStructure object Examples -------- >>> from symbolica import S >>> from symbolica.community.spenso import TensorStructure, Representation, TensorName >>> rep = Representation.euc(3) >>> structure = TensorStructure(rep, rep) >>> x = S('x') >>> structure_with_args = TensorStructure(rep, rep, x) >>> T = TensorName(\"T\") >>> named_structure = TensorStructure(rep, rep, name=T)",
+    "title": "symbolica.community.spenso.TensorStructure constructor",
+    "summary": "Construct a new TensorStructure with the given representations.",
     "href": "reference/python/spynso3/TensorStructure/#exports-tensorstructure-new-associatedfunction",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Construct a new TensorStructure with the given representations.\n\nParameters\n----------\n*reps_and_additional_args : Representation or Expression\n    Mixed arguments (Representation objects and Expressions for additional arguments)\nname : TensorName, optional\n    Optional tensor name to assign to the structure\n\nReturns\n-------\nTensorStructure\n    A new TensorStructure object\n\nExamples\n--------\n>>> from symbolica import S\n>>> from symbolica.community.spenso import TensorStructure, Representation, TensorName\n>>> rep = Representation.euc(3)\n>>> structure = TensorStructure(rep, rep)\n>>> x = S('x')\n>>> structure_with_args = TensorStructure(rep, rep, x)\n>>> T = TensorName(\"T\")\n>>> named_structure = TensorStructure(rep, rep, name=T) def __new__(cls, *reps_and_additional_args: TensorIndices | list[Slot], name: TensorName | str | Expression | None = None) -> TensorStructure:"
   },
   {
     "title": "symbolica.community.spenso.TensorStructure.__getitem__",
     "summary": "def __getitem__(self, item: slice) -> list[Expression | complex | float]: | def __getitem__(self, item: Sequence[int]) -> Expression | complex | float: | def __getitem__(self, item: int) -> Expression | complex | float:",
     "href": "reference/python/spynso3/TensorStructure/#exports-tensorstructure-getitem-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "def __getitem__(self, item: slice) -> list[Expression | complex | float]: | def __getitem__(self, item: Sequence[int]) -> Expression | complex | float: | def __getitem__(self, item: int) -> Expression | complex | float:"
   },
   {
     "title": "symbolica.community.spenso.TensorStructure.__getitem__ · overload 1",
-    "summary": "Get expanded indices at the specified range of flattened indices. Parameters ---------- item : slice Slice object defining the range of indices Returns ------- list of list of int List of expanded indices",
+    "summary": "Get expanded indices at the specified range of flattened indices.",
     "href": "reference/python/spynso3/TensorStructure/#exports-tensorstructure-getitem-method-overload",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Get expanded indices at the specified range of flattened indices.\n\nParameters\n----------\nitem : slice\n    Slice object defining the range of indices\n\nReturns\n-------\nlist of list of int\n    List of expanded indices def __getitem__(self, item: slice) -> list[Expression | complex | float]:"
   },
   {
     "title": "symbolica.community.spenso.TensorStructure.__getitem__ · overload 2",
-    "summary": "Get flattened index associated to this expanded index. Parameters ---------- item : list of int Multi-dimensional index coordinates Returns ------- int The flat index",
+    "summary": "Get flattened index associated to this expanded index.",
     "href": "reference/python/spynso3/TensorStructure/#exports-tensorstructure-getitem-method-overload-2",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Get flattened index associated to this expanded index.\n\nParameters\n----------\nitem : list of int\n    Multi-dimensional index coordinates\n\nReturns\n-------\nint\n    The flat index def __getitem__(self, item: Sequence[int]) -> Expression | complex | float:"
   },
   {
     "title": "symbolica.community.spenso.TensorStructure.__getitem__ · overload 3",
-    "summary": "Get expanded index associated to this flat index. Parameters ---------- item : int Flat index into the tensor Returns ------- list of int Multi-dimensional index coordinates",
+    "summary": "Get expanded index associated to this flat index.",
     "href": "reference/python/spynso3/TensorStructure/#exports-tensorstructure-getitem-method-overload-3",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Get expanded index associated to this flat index.\n\nParameters\n----------\nitem : int\n    Flat index into the tensor\n\nReturns\n-------\nlist of int\n    Multi-dimensional index coordinates def __getitem__(self, item: int) -> Expression | complex | float:"
   },
   {
     "title": "symbolica.community.spenso.TensorStructure.__call__",
-    "summary": "Convenience method for creating symbolic expressions. This is a shorthand for calling `symbolic(*args, extra_args=extra_args)`. Creates a symbolic Expression representing this tensor structure. Parameters ---------- *args : int, str, Symbol, or Expression Positional arguments (indices and additional args) extra_args : list of Expression, optional Optional list of additional non-tensorial arguments Returns ------- Expression A symbolic Expression representing the tensor Examples -------- >>> structure = TensorStructure(rep, rep, name=\"T\") >>> expr = structure('mu', 'nu')",
+    "summary": "Convenience method for creating symbolic expressions.",
     "href": "reference/python/spynso3/TensorStructure/#exports-tensorstructure-call-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Convenience method for creating symbolic expressions.\n\nThis is a shorthand for calling `symbolic(*args, extra_args=extra_args)`.\nCreates a symbolic Expression representing this tensor structure.\n\nParameters\n----------\n*args : int, str, Symbol, or Expression\n    Positional arguments (indices and additional args)\nextra_args : list of Expression, optional\n    Optional list of additional non-tensorial arguments\n\nReturns\n-------\nExpression\n    A symbolic Expression representing the tensor\n\nExamples\n--------\n>>> structure = TensorStructure(rep, rep, name=\"T\")\n>>> expr = structure('mu', 'nu') def __call__(self, *args: int | Expression | str, extra_args: Sequence[Expression | int | str | float | complex] | None = None) -> Expression:"
   },
   {
     "title": "symbolica.community.spenso.TensorStructure.symbolic",
-    "summary": "Create a symbolic expression representing this tensor structure. Builds a symbolic tensor expression with the specified indices. Arguments can be separated using a semicolon (';') to distinguish between additional arguments and tensor indices. Parameters ---------- *args : int, str, Symbol, Expression, or ';' Positional arguments (int, str, Symbol, Expression for indices, ';' for separator) extra_args : list of Expression, optional Optional list of additional non-tensorial arguments Returns ------- Expression A symbolic Expression representing the tensor with indices Examples -------- >>> import symbolica as sp >>> from symbolica.community.spenso import TensorStructure, Representation, TensorName >>> rep = Representation.euc(3) >>> T = TensorName(\"T\") >>> structure = TensorStructure([rep, rep], name=T) >>> expr = structure.symbolic('mu', 'nu') >>> x = sp.S('x') >>> expr = structure.symbolic(x, ';', 'mu', 'nu') >>> expr = structure.symbolic('mu', 'nu', extra_args=[x])",
+    "summary": "Create a symbolic expression representing this tensor structure.",
     "href": "reference/python/spynso3/TensorStructure/#exports-tensorstructure-symbolic-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create a symbolic expression representing this tensor structure.\n\nBuilds a symbolic tensor expression with the specified indices. Arguments can be\nseparated using a semicolon (';') to distinguish between additional arguments\nand tensor indices.\n\nParameters\n----------\n*args : int, str, Symbol, Expression, or ';'\n    Positional arguments (int, str, Symbol, Expression for indices, ';' for separator)\nextra_args : list of Expression, optional\n    Optional list of additional non-tensorial arguments\n\nReturns\n-------\nExpression\n    A symbolic Expression representing the tensor with indices\n\nExamples\n--------\n>>> import symbolica as sp\n>>> from symbolica.community.spenso import TensorStructure, Representation, TensorName\n>>> rep = Representation.euc(3)\n>>> T = TensorName(\"T\")\n>>> structure = TensorStructure([rep, rep], name=T)\n>>> expr = structure.symbolic('mu', 'nu')\n>>> x = sp.S('x')\n>>> expr = structure.symbolic(x, ';', 'mu', 'nu')\n>>> expr = structure.symbolic('mu', 'nu', extra_args=[x]) def symbolic(self, *args: int | Expression | str, extra_args: Sequence[Expression | int | str | float | complex] | None = None) -> Expression:"
   },
   {
     "title": "symbolica.community.spenso.TensorStructure.index",
-    "summary": "Create an indexed tensor (TensorIndices) from this structure. Converts this structure template into a concrete indexed tensor by assigning specific abstract indices to each representation slot. Parameters ---------- *args : int, str, Symbol, Expression, or ';' Positional arguments (indices and ';' separator between additional args and indices) extra_args : list of Expression, optional Optional list of additional non-tensorial arguments cook_indices : bool, optional If True, attempt to convert expressions to valid indices Returns ------- TensorIndices A TensorIndices object with concrete index assignments Examples -------- >>> import symbolica as sp >>> from symbolica.community.spenso import TensorStructure, Representation, TensorName >>> rep = Representation.cof(3) >>> T = TensorName(\"T\") >>> structure = TensorStructure([rep, rep], name=T) >>> indices = structure.index('mu', 'nu') >>> x = sp.S('x') >>> indices = structure.index(x, ';', 'mu', 'nu')",
+    "summary": "Create an indexed tensor (TensorIndices) from this structure.",
     "href": "reference/python/spynso3/TensorStructure/#exports-tensorstructure-index-method",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Create an indexed tensor (TensorIndices) from this structure.\n\nConverts this structure template into a concrete indexed tensor by assigning\nspecific abstract indices to each representation slot.\n\nParameters\n----------\n*args : int, str, Symbol, Expression, or ';'\n    Positional arguments (indices and ';' separator between additional args and indices)\nextra_args : list of Expression, optional\n    Optional list of additional non-tensorial arguments\ncook_indices : bool, optional\n    If True, attempt to convert expressions to valid indices\n\nReturns\n-------\nTensorIndices\n    A TensorIndices object with concrete index assignments\n\nExamples\n--------\n>>> import symbolica as sp\n>>> from symbolica.community.spenso import TensorStructure, Representation, TensorName\n>>> rep = Representation.cof(3)\n>>> T = TensorName(\"T\")\n>>> structure = TensorStructure([rep, rep], name=T)\n>>> indices = structure.index('mu', 'nu')\n>>> x = sp.S('x')\n>>> indices = structure.index(x, ';', 'mu', 'nu') def index(self, *args: int | Expression | str, extra_args: Sequence[Expression] | None = None, cook_indices: bool = False) -> TensorIndices:"
   },
   {
     "title": "symbolica.community.spenso.ExecutionMode",
     "summary": "Execution modes for tensor network evaluation.",
     "href": "reference/python/spynso3/ExecutionMode/",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Execution modes for tensor network evaluation. Execution modes for tensor network evaluation.\n\nControls how the tensor network execution engine processes the computational graph.\n\nVariants\n--------\nSingle : Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains\nScalar : Only contract scalar operations, leaving tensor structure intact\nAll : Execute all possible contractions for complete evaluation class ExecutionMode(enum.Enum):"
   },
   {
     "title": "symbolica.community.spenso.ExecutionMode.Single",
-    "summary": "Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains",
+    "summary": "Select one smallest-degree rewrite per step; without n_steps, continue until no work remains",
     "href": "reference/python/spynso3/ExecutionMode/#exports-executionmode-single-variant",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains"
   },
   {
     "title": "symbolica.community.spenso.ExecutionMode.Scalar",
     "summary": "Only contract scalar operations, leaving tensor structure intact",
     "href": "reference/python/spynso3/ExecutionMode/#exports-executionmode-scalar-variant",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Only contract scalar operations, leaving tensor structure intact"
   },
   {
     "title": "symbolica.community.spenso.ExecutionMode.All",
     "summary": "Execute all possible contractions for complete evaluation",
     "href": "reference/python/spynso3/ExecutionMode/#exports-executionmode-all-variant",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Execute all possible contractions for complete evaluation"
   },
   {
     "title": "symbolica.community.spenso.SymbolicParallelism",
     "summary": "Policy for Rayon operations that manipulate Symbolica expressions.",
     "href": "reference/python/spynso3/SymbolicParallelism/",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Policy for Rayon operations that manipulate Symbolica expressions. Policy for Rayon operations that manipulate Symbolica expressions. class SymbolicParallelism(enum.Enum):"
   },
   {
     "title": "symbolica.community.spenso.SymbolicParallelism.Auto",
     "summary": "Permit Rayon when licensed and use workload heuristics where available.",
     "href": "reference/python/spynso3/SymbolicParallelism/#exports-symbolicparallelism-auto-variant",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Permit Rayon when licensed and use workload heuristics where available."
   },
   {
     "title": "symbolica.community.spenso.SymbolicParallelism.Serial",
     "summary": "Keep symbolic operations on the calling thread.",
     "href": "reference/python/spynso3/SymbolicParallelism/#exports-symbolicparallelism-serial-variant",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Keep symbolic operations on the calling thread."
   },
   {
     "title": "symbolica.community.spenso.SymbolicParallelism.Parallel",
-    "summary": "Force Rayon without `Auto`'s Symbolica license safety check.",
+    "summary": "Force Rayon without Auto's Symbolica license safety check.",
     "href": "reference/python/spynso3/SymbolicParallelism/#exports-symbolicparallelism-parallel-variant",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Force Rayon without `Auto`'s Symbolica license safety check."
   },
   {
     "title": "symbolica.community.spenso.set_symbolica_rayon_enabled",
     "summary": "Configure whether Spenso may use Rayon for Symbolica operations.",
     "href": "reference/python/spynso3/set_symbolica_rayon_enabled/",
-    "kind": "python-api"
+    "kind": "python-api",
+    "text": "Configure whether Spenso may use Rayon for Symbolica operations. Configure whether Spenso may use Rayon for Symbolica operations.\n\n`Auto` checks the Symbolica license once during this call. When licensed,\noperations may use Rayon and apply workload heuristics where available;\nwhen unlicensed, symbolic operations remain serial. The returned boolean\nreports whether the resolved policy permits Rayon, not whether every\noperation will use it. def set_symbolica_rayon_enabled(policy: SymbolicParallelism) -> bool:"
   }
 ]

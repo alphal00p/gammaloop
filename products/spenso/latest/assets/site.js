@@ -16,6 +16,7 @@
   const productSelect = document.querySelector("[data-product-select]");
   const themeColor = document.querySelector('meta[name="theme-color"]');
   const mobileNavigation = matchMedia("(max-width: 52rem)");
+  const drawerBackground = document.querySelectorAll(".docs-main, .docs-toc, .site-brand, .site-header-tools, .skip-link");
 
   const setMenuOpen = (requestedOpen, focusNavigation = false) => {
     const open = requestedOpen && mobileNavigation.matches;
@@ -26,6 +27,8 @@
     else sidebar?.removeAttribute("aria-hidden");
     menu?.setAttribute("aria-expanded", String(open));
     menu?.setAttribute("aria-label", open ? "Close navigation" : "Open navigation");
+    drawerBackground.forEach((element) => element.toggleAttribute("inert", open));
+    if (backdrop) backdrop.tabIndex = -1;
     if (open && focusNavigation) {
       requestAnimationFrame(() => {
         const target = sidebar?.querySelector('[aria-current="page"]')
@@ -157,6 +160,7 @@
 
   const openSearch = () => {
     if (!searchDialog || !searchInput || !searchResults) return false;
+    closeMenu();
     searchDialog.showModal();
     searchInput.focus();
     renderSearch(searchInput.value);
@@ -171,6 +175,22 @@
     if (event.key === "Escape" && body.classList.contains("sidebar-open")) {
       closeMenu();
       menu?.focus();
+      return;
+    }
+    if (event.key === "Tab" && body.classList.contains("sidebar-open")) {
+      const drawerFocus = [menu, ...(sidebar?.querySelectorAll('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])') || [])].filter(Boolean);
+      const first = drawerFocus[0];
+      const last = drawerFocus.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last?.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first?.focus();
+      } else if (!drawerFocus.includes(document.activeElement)) {
+        event.preventDefault();
+        first?.focus();
+      }
       return;
     }
     const shortcut = (event.key === "/" && !/input|textarea/i.test(document.activeElement?.tagName)) ||
