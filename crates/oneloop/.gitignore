@@ -1,5 +1,10 @@
-# Validation / oracle / benchmark code is local-only
-/benchmarks/
+# Python bytecode from the benchmark harnesses (benchmarks/python/)
+__pycache__/
+*.pyc
 
-# Local-only benchmark / stress harness
-/examples/
+# Build output / local scratch
+/target/
+
+# Raw internal development log — kept local (contains personal paths); the
+# curated docs/CHANGELOG.md is the shareable milestone history.
+/docs/dev-log.md

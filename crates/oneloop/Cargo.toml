@@ -12,3 +12,38 @@ thiserror = { workspace = true }
 # Test-only
 [dev-dependencies]
 gammalooprs = { workspace = true }
+
+# Benchmark / validation harnesses — not part of the library. Sources live under
+# benchmarks/rust/; run with e.g. `cargo run -p oneloop --example golden_master`.
+# See benchmarks/README.md and docs/06-benchmarks.md.
+[[example]]
+name = "bench"
+path = "benchmarks/rust/bench.rs"
+
+[[example]]
+name = "golden_master"
+path = "benchmarks/rust/golden_master.rs"
+
+[[example]]
+name = "emit_reductions"
+path = "benchmarks/rust/emit_reductions.rs"
+
+[[example]]
+name = "time_reduce"
+path = "benchmarks/rust/time_reduce.rs"
+
+[[example]]
+name = "frontier_map"
+path = "benchmarks/rust/frontier_map.rs"
+
+[[example]]
+name = "massless_legs"
+path = "benchmarks/rust/massless_legs.rs"
+
+[[example]]
+name = "symbolic_delta"
+path = "benchmarks/rust/symbolic_delta.rs"
+
+[[example]]
+name = "reduce_regularized_draft"
+path = "benchmarks/rust/reduce_regularized_draft.rs"
