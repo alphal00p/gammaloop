@@ -680,7 +680,7 @@ kind = "Contributor documentation policy"
 status = "Current guide"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-18"
+reviewed_at = "2026-08-19"
 review_ref = "6feaba98e48a2cedb4688d3d0cc9a214716a8677"
 products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
 topics = ["documentation", "architecture", "governance"]
@@ -690,7 +690,7 @@ review_triggers = ["docs/developers.toml", "crates/alphal00p-docs-builder/src/li
 path = "crates/alphal00p-docs-builder/src/lib.rs"
 symbol = "alphal00p_docs_builder::SiteBuilder::check"
 anchor = "pub fn check(&self) -> Result<()> {"
-digest = "23462bb4149114ea306a6588344532dd284c7fc6"
+digest = "d75a0a59536f3cbc5f387c6199df7bdade26fa94"
 
 [[section.note]]
 id = "documentation-improvement-plan"
@@ -701,7 +701,7 @@ kind = "Documentation strategy"
 status = "In progress"
 lifecycle = "proposal"
 owner = "unassigned"
-reviewed_at = "2026-08-18"
+reviewed_at = "2026-08-19"
 review_ref = "6feaba98e48a2cedb4688d3d0cc9a214716a8677"
 products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
 topics = ["documentation", "quality"]

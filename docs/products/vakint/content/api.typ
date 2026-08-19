@@ -35,9 +35,10 @@ engine.validate_settings(&settings)?;
 `vakint_parse!` and the related helpers parse Symbolica expressions in Vakint's namespace. Handle
 parse failures before passing a user-supplied expression to matching or evaluation.
 
-The #link("reference/rust/")[curated Rust API] presents the supported entry points before the
-full Rustdoc, while the generated #link("reference/topologies/")[topology reference] records the
-runtime topology library and supported external-tool versions for this release.
+The #link("reference/rust/")[Rust orientation] identifies the compiled crates, versions, and
+feature matrix and links directly to native Rustdoc. The generated
+#link("reference/topologies/")[topology reference] records the runtime topology library and
+supported external-tool versions for this release.
 
 == Python community module
 

@@ -3,7 +3,7 @@
 #quote(block: true)[
   *Status:* In progress
 
-  *Review date:* 2026-08-18
+  *Review date:* 2026-08-19
 
   *Reviewed baseline:* `c9f4e32acd2c`
 
@@ -16,9 +16,10 @@
 
 The documentation delivery system is substantially stronger than the content
 programme built on top of it. It has a typed product registry, deterministic
-generation, immutable release snapshots, generated Rust and Python references,
-compiled examples, local-link validation, search, and a shared responsive
-shell. Those are valuable foundations and should be retained.
+generation, immutable release snapshots, revision-specific native Rustdoc,
+generated Python references, compiled examples, local-link validation, search,
+and a shared responsive shell. Those are valuable foundations and should be
+retained.
 
 The principal weakness is usefulness at the user boundary. The generated
 Python and CLI inventories are valuable correctness artifacts, but generation
@@ -51,9 +52,11 @@ The improvement work should preserve these properties:
 - `docs/products/registry.toml` gives five products one explicit content and
   component model. The builder rejects missing sources, invalid routes, and an
   incomplete minimum manual shape.
-- Rust catalogs and Python stubs are generated from implementation-owned
-  metadata and compared with checked-in snapshots. GammaLoop has deep runtime
-  signature/default parity, and Linnet has a real import-surface check.
+- Internal Rust support catalogs and Python stubs are generated from
+  implementation-owned metadata. The Rust catalogs guard a deliberately named
+  support boundary without becoming a second API browser; GammaLoop has deep
+  Python runtime signature/default parity, and Linnet has a real import-surface
+  check.
 - Authored Rust examples compile, shell examples are parsed, Python examples
   compile, data blocks are parsed, and selected side-effect-free catalog Rust
   examples execute.
@@ -156,8 +159,8 @@ coverage gate is still absent.
 #table(
   columns: (1.5fr, 3fr, 3fr),
   table.header([*Area*], [*Implemented on the documentation PR*], [*Still open*]),
-  [Python and CLI reference],
-  [Exact Clap actions, arity, aliases, conflicts, globals, and usage; compact family and symbol indexes; stable deep links; responsive setting cards; structured Python docstrings; normalized signatures; documented enum variants; coalesced overloads; composite settings types/defaults; non-recursive parameter tables; linked internal types; concise Rust declarations with item-level Rustdoc/source links; and no inline raw-stub dump. GammaLoop's curated surface expands materially in both Rust and Python],
+  [Python, CLI, and Rust reference boundary],
+  [Exact Clap actions, arity, aliases, conflicts, globals, and usage; a flat command index with 79 manpage-style command routes; 45 hierarchical settings-namespace routes; Python module indexes with one flat page per supported class or function; stable item/member/legacy links; structured Python docstrings; normalized signatures; documented enum variants; coalesced overloads; composite settings types/defaults; linked internal Python types; and no inline raw-stub dump. Rust instead uses concise crate/version/feature orientation pages that lead directly to native, revision-specific Rustdoc; source-backed Rust catalogs remain internal drift checks],
   [The non-empty gate does not yet measure substantive prose or task backlinks. Linnet Python member and parameter prose remains uneven; GammaLoop's 12 implementation-detail exports remain deliberately de-ranked, including eleven currently unreachable integration-result records; and responsive/light/dark/accessibility browser fixtures are not yet enforced],
   [Manuals and examples],
   [Every product overview now offers a task chooser. The hierarchy is consistently Start here, Tutorial, Guides, Reference, and Version history. GammaLoop state/integration workflows, Linnet algorithms and the Clinnet rendering/cache guide, Spenso Rust and Python networks, Idenso algebra, and Vakint evaluation include realistic source/configuration examples, expected invariants, failure interpretation, and exact reference links. The Vakint tutorial now follows the checked-out API rather than an incompatible published-source example],
@@ -221,8 +224,8 @@ are derived from `docs/products/registry.toml`, `docs/examples.toml`, and
   [39 authored product routes now use one visible hierarchy: 5 Start pages, 5 Tutorials, 11 Guides, 6 authored Reference pages, and 12 Version history pages. Product and task navigation no longer mixes guides, interfaces, and releases under a generic Manual label, while all 23 moved `manual/*` routes remain as non-navigated redirects. The builder also rejects a PDF chapter set or order that differs from the HTML page registry],
   [Depth is still unbalanced: GammaLoop has 8 authored routes, Linnet 9, Spenso 10, Idenso 7, and Vakint 5. A shared installation/compatibility matrix and a maintained three-task map per product are absent],
   [Reference generation],
-  [Rust signatures are elided declarations instead of full trait/type bodies; Python signatures drop `typing.`/`builtins.` noise; parameters render as tables; enum assignments become documented variants; overloads share one callable card with individually addressable signatures; composite settings expose element types, real defaults, allowed values, and nested fields; structured doc sections, stable fragments, source/Rustdoc permalinks, supported-first ordering, and guide links are shared across products. Authored task links now target exact reference fragments instead of JavaScript-only search queries],
-  [Direct-member prose is now complete for the curated GammaLoop, Linnet, Spenso, and Vakint Rust surfaces, and for GammaLoop's 191 supported reachable Python members. Parameters, meaningful task examples, and backlinks remain uneven: GammaLoop Rust still lacks all 34 parameter descriptions; Vakint lacks all 10; and many usage blocks only import an item. Vakint's 27-row topology inventory exposes only name, loop count, and slot count—not the match expression, mass/propagator pattern, backend applicability, or epsilon-depth limits needed to compare an unrecognized integral. Clinnet is not in the generated CLI inventory. Linnest and Kurvst now expose their generated Tidy module APIs in HTML, but compact symbol indexes and browser-level presentation checks remain absent. Exhaustive Rustdoc remains implementation-oriented, and visual/browser regression coverage is not enforced],
+  [Python signatures drop `typing.`/`builtins.` noise; module indexes link one page per supported class/function; parameters render as tables; members and overloads use flat stable sections; adjacent and cross-symbol links replace nested disclosure cards. GammaLoop commands use one flat manpage each, while settings follow all inferred schema namespaces with parent/child navigation. Rust no longer duplicates declarations and members in a custom browser: each product has a concise orientation page, and authored tasks link to exact pages in the native Rustdoc built for that revision],
+  [GammaLoop's 191 supported reachable Python members have prose, but parameters, meaningful task examples, and backlinks remain uneven across Python modules. Vakint's 27-row topology inventory exposes only name, loop count, and slot count—not the match expression, mass/propagator pattern, backend applicability, or epsilon-depth limits needed to compare an unrecognized integral. Clinnet is not in the generated CLI inventory. Linnest and Kurvst now expose their generated Tidy module APIs in HTML, but compact symbol indexes and browser-level presentation checks remain absent. Rustdoc federation and visual/browser regression coverage are not enforced],
   [Search and inclusion],
   [Product search is built from rendered HTML body prose and headings, so content imported or included by Typst—most visibly Linnest, Kurvst, and companion version histories—is searchable. Representative task-query fixtures cover installation, integration, drawing, and version lookups; the portal federates all products and developer notes; and five registry-backed citation entries plus per-product `Cite` links expose the software citation hub],
   [Synonym coverage, Rustdoc federation, browser-level search behavior, a generated orphan-content report, and product-to-method/publication mappings beyond the software citation remain open],
@@ -239,7 +242,7 @@ are derived from `docs/products/registry.toml`, `docs/examples.toml`, and
   [All 14 current notes require resolving anchors and reviewed digests; their registered scopes were rechecked, high-level system architecture is now included for all five products, and the rendered lifecycle/evidence boundary distinguishes current guidance from 17 proposal, investigation, superseded, or archived records],
   [Every one of the 31 records still has placeholder ownership; nine historical/investigation records lack immutable evidence revisions. Review expiry, CODEOWNERS integration, contextual product links, and automatic changed-trigger review remain open],
   [Semantic quality],
-  [The deterministic HTML gate discovers and checks every non-redirect page owned by the shared portal/manual shell. The current full build contains 105 such pages; invalid multiple-page-heading structures and nine headerless data tables in current architecture notes were corrected],
+  [The deterministic HTML gate discovers and checks every non-redirect page owned by the shared portal/manual shell. The redesigned full build contains 305 such pages, including generated symbol, command, and namespace routes; invalid multiple-page-heading structures and nine headerless data tables in current architecture notes were corrected],
   [Standards HTML validation, axe/browser execution, keyboard/viewport/visual regression, spelling, and scheduled external-link health remain open],
 )
 
@@ -255,7 +258,7 @@ release notes are not counted as complete history.
   [`DOC-001`], [Partial], [Compiled usage semantics and representative parser checks exist; the exhaustive invocation matrix remains open],
   [`DOC-002`], [Partial], [The misleading beginner promises were corrected, but five clean external runs and the scheduled tier are not complete],
   [`DOC-003`], [Complete], [Clean single-product previews rewrite ecosystem links and pass local-link validation],
-  [`DOC-004`], [Partial], [Shared compact reference components are implemented; browser visual and accessibility fixtures remain open],
+  [`DOC-004`], [Partial], [Python and CLI now use interface-native indexes and flat detail pages rather than nested disclosure boxes; the 305-page deterministic semantic/no-JS audit passes, while browser visual and axe fixtures remain open],
   [`DOC-005`], [Partial], [GammaLoop's curated Python surface expands from 4 to 28 of 40 exports, all 191 supported reachable members and 96 of 103 supported parameter rows have source-owned documentation, and Spynso3's 14 top-level exports are promoted; implementation-detail prose, generated setter parameters, and task coverage remain open],
   [`DOC-006`], [Partial], [Catalog generation rejects empty public CLI, argument, or settings prose; current non-empty coverage is 79/79, 412/412, and 181/181, including nested array and tagged-union settings, but substantive-quality and task-backlink gates remain open],
   [`DOC-007`], [Partial], [Five task choosers, a normalized Guides hierarchy, deeper subject chapters, and a new Spenso Python workflow are present; checked beginner and real-value paths do not yet cover every headline capability],
@@ -266,10 +269,10 @@ release notes are not counted as complete history.
   [`DOC-012`], [Partial], [The portal offers five task-first product routes and each overview has task-to-guide/reference links; a registry-owned shared task model and complete reference backlinks remain open],
   [`DOC-013`], [Partial], [Ordinary pull requests retain complete previews, and the temporary `docs` publisher is gated on pull request 96's exact open head revision; branch protection does not yet enforce an always-created path-routed documentation check],
   [`DOC-014`], [Partial], [Local links, fragments, containment, source paths, and search targets are checked; scheduled external checking remains open],
-  [`DOC-015`], [Partial], [A required deterministic audit discovers all generated shell pages and checks their headings, table headers, control labels, landmarks, internal ARIA references, and no-JavaScript navigation; the current full build covers 105 pages. Standards HTML validation, browser/axe, spelling, keyboard, viewport, and visual gates remain open],
+  [`DOC-015`], [Partial], [A required deterministic audit discovers all generated shell pages and checks their headings, table headers, control labels, landmarks, internal ARIA references, and no-JavaScript navigation; the current full build covers 305 pages. Standards HTML validation, browser/axe, spelling, keyboard, viewport, and visual gates remain open],
   [`DOC-016`], [Partial], [Search is federated across five products, developer notes, and registry-backed software citations; it indexes rendered body prose and imported/included headings and has representative task-query ranking fixtures. Product pages link their exact citation fragment, while product/developer pages have pinned source and issue routes. Synonyms, Rustdoc federation, and browser-level search checks remain open],
   [`DOC-017`], [Partial], [The source-backed Idenso convention specification is deep; equivalent auditable anchors remain uneven across products],
-  [`DOC-018`], [Partial], [Rust catalogs now render concise declarations with exact source/Rustdoc links; GammaLoop's supported top-level surface expands from 8 to 50 items and now includes import, generation, and integration lifecycle boundaries. The curated GammaLoop, Linnet, Spenso, and Vakint surfaces document all 384 direct members, while parameter, meaningful-example, and task-backlink completeness remains low and un-gated],
+  [`DOC-018`], [Partial], [Native Rustdoc is the canonical version-specific API browser. Concise product orientation pages identify crates, versions, features, support expectations, and authored workflow guides; task pages link directly to exact Rustdoc items. Source-backed support catalogs remain internal coverage and drift checks, and the former custom `reference/rust/supported/*` browser routes are compatibility redirects rather than navigation or search targets. Redirect-fragment and Rustdoc-federation coverage remain to be enforced],
 )
 
 == Developer architecture audit at this baseline
@@ -400,13 +403,15 @@ only four, all of its rendered members lacked prose, and Linnet and Spenso also
 had large undocumented member counts. Inventory parity was not documentation
 parity.
 
-This branch fixes the shared rendering defects: supported items come first;
+This branch fixes the Python rendering defects: supported items come first;
 signatures and kind labels are normalized; docstrings become Parameters,
 Returns, Raises, Notes, and Examples; parameters use tables instead of nested
-disclosures; internal types and exact source/Rustdoc items are linked; and the
-downloadable stub no longer occupies the human page. GammaLoop now curates 28
-of 40 exports and documents all 191 supported reachable members and 96 of 103
-supported parameter rows; Spynso3 promotes all 14 top-level exports.
+disclosures; each supported class/function owns a flat page with stable member
+anchors and adjacent-symbol navigation; internal types and exact source items
+are linked; and the downloadable stub no longer occupies the human page.
+GammaLoop now curates 28 of 40 exports and documents all 191 supported
+reachable members and 96 of 103 supported parameter rows; Spynso3 promotes all
+14 top-level exports.
 Implementation-detail prose, generated setter parameters, task examples, and
 backlinks remain uneven, so the quality finding remains open even though the
 visual pathology is corrected.
@@ -417,24 +422,26 @@ The rendered artifact makes the remaining editorial debt measurable:
   columns: (1.1fr, 2.8fr, 2.8fr),
   table.header([*Surface*], [*Missing substantive prose*], [*Missing task evidence*]),
   [GammaLoop Python], [All 191 supported reachable members are documented; 7 of 103 supported parameter rows are generated setter values without distinct prose. Across the deliberately separated implementation-detail exports, 65 of 71 members and the only parameter lack descriptions], [Only 13 genuine Examples sections; automatic `help(...)` placeholders are no longer rendered as examples],
-  [GammaLoop Rust], [All 178 direct members across 50 curated items are documented; all 34 parameter rows still lack descriptions], [20 of 50 supported-item usage blocks are import-only],
   [Linnet Python], [56 of 180 members and all 133 parameter rows lack descriptions], [No genuine Examples section; automatic introspection placeholders are no longer added],
-  [Linnet Rust], [All 82 direct members across 15 curated items are documented; macro-generated typed indexes are still absent from the source descriptor], [14 of 15 usage blocks are import-only],
-  [Spenso Rust], [All 106 direct members across 14 curated core items are documented; the HEP catalog selects only 3 items from roughly 25 public functions, types, and statics], [11 of 14 core and all 3 HEP usage blocks are import-only; all 6 selected HEP parameters are undescribed],
-  [Vakint], [All 18 curated Rust members are documented, but all 10 Rust parameter rows lack descriptions; Python is comparatively strong at 20 of 20 members and 41 of 42 parameters documented], [5 of 10 Rust usage blocks are import-only],
+  [Vakint Python], [All 20 public members are documented; 41 of 42 parameter rows have prose], [Task examples do not yet cover the complete backend and result-interpretation lifecycle],
 )
 
 These are usefulness measures, not a demand to promote every implementation
-detail. The supported inventory should be deliberate, and every promoted item
-should satisfy the stronger prose/example contract.
+detail. Python's supported inventory should be deliberate, and every promoted
+item should satisfy the stronger prose/example contract. Rust support catalogs
+retain source-backed entry-point and drift checks internally, but their former
+member and parameter counts are no longer public-renderer acceptance targets;
+native Rustdoc owns exhaustive API presentation.
 
 At baseline the CLI/settings page put 285 command-tree nodes, 412 arguments,
 and 166 settings on one flat route, with false value syntax and extensive empty
 prose. The current renderer preserves compiled action/arity semantics, separates
-public commands from help-tree internals, groups command families and setting
-paths, adds filtering and stable fragments, and rejects empty public
-descriptions. It still needs a substantive-quality/backlink contract and
-browser evidence that the densest pages remain usable at narrow widths.
+public commands from help-tree internals, gives all 79 public commands a flat
+manpage-style route, organizes 181 current settings into 45 schema-derived
+namespace routes, adds filtering and stable legacy relocation links, and
+rejects empty public descriptions. It still needs a substantive-quality/backlink
+contract and browser evidence that the densest pages remain usable at narrow
+widths.
 
 The imported Linnest and Kurvst manuals exposed a different but equally visible
 reference gap at baseline: their prose rendered in HTML, while each generated
@@ -453,7 +460,8 @@ presentation in a browser rather than merely proving compilation.
   render normalized readable signatures while retaining the exact signature
   and downloadable stub.
 - Put the curated supported surface first. Collapse, separate, and de-rank
-  implementation details unless users need them.
+  implementation details unless users need them; when they are not part of the
+  compatibility surface, keep them out of public symbol routes and search.
 - Define a completeness contract for supported exports and public members:
   substantive summary, signature, parameters/defaults, return behavior,
   raises/failure modes where applicable, provenance, and a guide or meaningful
@@ -469,7 +477,7 @@ presentation in a browser rather than merely proving compilation.
   conflicts, environment/config precedence, and copyable examples.
 - Require substantive descriptions for public commands, arguments, and
   settings; generated placeholders and empty cells do not count.
-- Link each primary command family and settings group to the manual tasks that
+- Link each primary command page and settings namespace to the manual tasks that
   use it, and link those guides back to exact reference anchors.
 
 *Required change — presentation*
@@ -493,8 +501,8 @@ presentation in a browser rather than merely proving compilation.
   substantive descriptions;
 - no raw docstring markup, schema debug label, or internal-only feature name is
   exposed as primary user documentation;
-- each module and primary command family links to meaningful, tested examples
-  for its principal tasks;
+- each module and primary command family or namespace links to meaningful,
+  tested examples for its principal tasks;
 - Linnest and Kurvst symbols have stable direct links and focused search entries;
   and
 - representative pages have no viewport-level horizontal scroll at 375 px and
@@ -763,8 +771,8 @@ and the temporary `docs` path uses that same result as its publication input.
 
 The current validation still has bounded blind spots:
 
-- local generated pages, fragments, source paths, containment, redirects, and
-  search targets are checked, but raw Rustdoc trees and external URLs remain
+- local generated pages, fragments, source paths, containment, redirects,
+  search targets, and included Rustdoc trees are checked; external URLs remain
   outside the deterministic link gate;
 - the full-corpus semantic/no-JavaScript audit is deterministic but is not a
   standards HTML validator or browser accessibility engine; and
@@ -846,45 +854,55 @@ The target is one content graph presented through five user-facing views:
    result.
 + *How-to and explanation:* task recipes and scientific/software concepts,
    linked rather than duplicated across products.
-+ *Reference:* generated, version-specific Rust, Python, CLI, settings, and
-   topology facts.
++ *Reference:* concise Rust orientation plus native version-specific Rustdoc,
+   and generated Python, CLI, settings, and topology facts.
 + *Developer record:* implemented architecture with verified code scopes and
    review triggers, plus proposals, investigations, and archives with explicit
    lifecycle and evidence provenance.
 
 Compatibility READMEs should orient contributors and link to the rendered
-material, not act as second user manuals. Generated reference is a first-class product
-surface paired with task documentation; generation is a sourcing mechanism,
-not an exemption from editorial or visual quality. Dated evidence should be
-preserved, but never presented as the current contract without an explicit
+material, not act as second user manuals. Generated Python, CLI, settings, and
+topology reference is a first-class product surface paired with task
+documentation; generation is a sourcing mechanism, not an exemption from
+editorial or visual quality. Rustdoc remains native, while authored orientation
+and task pages explain support boundaries and workflows. Dated evidence should
+be preserved, but never presented as the current contract without an explicit
 current summary.
 
-The views must be bidirectionally connected. A manual task links to the exact
-symbols, commands, settings, concepts, and canonical examples it uses. A
-reference item links back to the guides and examples that give it purpose.
-Shared concepts have one maintained explanation, while contextual links make
-them visible from every relevant product.
+The views must be connected. A manual task links to the exact symbols,
+commands, settings, concepts, and canonical examples it uses. Generated
+Python/CLI items link back to the guides and examples that give them purpose;
+Rust orientation pages connect authored workflows to exact Rustdoc items
+without wrapping Rustdoc in a second member browser. Shared concepts have one
+maintained explanation, while contextual links make them visible from every
+relevant product.
 
 == Reference-quality design requirements
 
 === Rust
 
-Keep source-owned Rust comments and curated catalog annotations authoritative,
-with complete Rustdoc as the exhaustive sidecar rather than the primary manual.
-The shared renderer now provides elided declarations, stable items/members,
-feature facts, source and exact Rustdoc links, supported-first ordering, and
-guide routes. Completeness must now move from top-level inventory to usefulness.
+Use native Rustdoc as the canonical exhaustive API browser for the exact
+revision and feature matrix being documented. Do not reproduce its signatures,
+members, implementations, trait relationships, or search in a custom public
+renderer. Each product's `reference/rust/` route should instead be a concise
+orientation page that identifies crate roles, versions, enabled features,
+support/stability expectations, and the authored workflow guide, then links
+directly to each native crate root.
 
-A supported Rust item should have a substantive summary, readable declaration,
-documented public fields/methods and parameters, return/failure behavior where
-applicable, a meaningful checked example, and a task backlink. A bare
-`use package::Type;` block proves reachability, not usage. The current audit
-now finds all 384 direct non-parameter members documented across the curated
-GammaLoop, Linnet, Spenso, and Vakint surfaces, but no prose for GammaLoop's 34
-or Vakint's 10 catalog parameters and mostly import-only examples in several
-components. Publish those dimensions by component and fail supported-surface
-regressions without pretending exhaustive internal Rustdoc must meet the
-curated contract.
+Authored tutorials and guides should link exact Rustdoc item or method URLs when
+they name an API. Public items not selected by a maintained workflow are not an
+implicit compatibility promise merely because Rustdoc exposes them. Existing
+`reference/rust/supported/*` URLs remain non-indexed compatibility redirects;
+they must not appear in navigation, search, the PDF, or canonical route lists.
+
+Keep source-owned comments and curated catalog annotations as internal checks
+where they detect a deliberate support boundary, missing source provenance, or
+drift in key entry points. They should not create a second public member browser
+or force maintainers to duplicate parameter and example prose that belongs in
+Rustdoc and task documentation. Complete when every configured Rust crate has a
+validated orientation link and native crate index, authored deep links resolve,
+legacy redirects have a safe fallback, and federated search points to Rustdoc
+rather than retired catalog fragments.
 
 === Python
 
@@ -895,16 +913,17 @@ do not create a second handwritten signature catalog.
 
 The renderer should provide:
 
-- a module index followed by stable class/function and member routes or indexed
-  sections;
+- a filterable module index followed by one stable page per supported public
+  class or function, with stable member fragments on the owning symbol page;
 - fully qualified names, human-readable kinds, normalized and exact
   signatures, source provenance, availability, and version information;
 - semantic Parameters, Attributes, Returns, Raises, Notes, and Examples
   sections rather than escaped raw docstring layout;
-- a curated supported surface in primary navigation, with implementation
-  details separated, collapsed, and de-ranked in search;
+- a curated supported surface in primary navigation, with implementation-only
+  exports retained as drift evidence but omitted from public symbol pages and
+  search;
 - local symbol filtering, breadcrumbs, a useful table of contents, copyable
-  signatures/examples, and responsive tables; and
+  signatures/examples, adjacent-symbol navigation, and responsive tables; and
 - guide/example backlinks for the principal tasks of every module.
 
 Completeness reporting must distinguish inventory parity from documentation
@@ -919,24 +938,26 @@ preserve command hierarchy, exact usage, action, arity, aliases,
 global/inherited options, conflicts, defaults, allowed values, configuration
 precedence, and source provenance.
 
-The top-level page should explain command families and configuration groups,
-not print the full database. Focused detail routes or sections should show
-copyable invocations, expected effects, persistence behavior, related settings,
-failure modes, and links to task guides. A filter should search command paths,
-aliases, arguments, and setting paths without adding hundreds of entries to the
-page table of contents.
+The top-level page should be a filterable command index, not print the full
+database. Every public command should have a flat manpage-style route with its
+synopsis, positional arguments, local options, inherited/global options, and
+parent/direct-child links. Settings should use a separate namespace index plus
+one page per actual schema namespace, with parent/child navigation and only the
+settings directly owned there. Legacy fragments should lead to these canonical
+routes without adding hundreds of entries to a page table of contents.
 
 === Shared visual contract
 
 All generated reference uses the same shell, tokens, navigation behaviors,
 feedback routes, and accessibility targets as the manuals. Reference-specific
 components should be designed for dense technical data without becoming a wall
-of equally weighted cards: compact indexes, progressive disclosure, readable
+of equally weighted cards: compact indexes, flat semantic sections, readable
 line wrapping, responsive field layouts, clear status badges, and restrained
-use of borders and pills.
+use of borders and pills. Disclosures are reserved for genuinely secondary
+content, not the primary class, member, command, or settings hierarchy.
 
 Visual regression fixtures should cover a module index, a large Python class,
-a function with rich docstrings, a command family, and a settings group in
+a function with rich docstrings, a command manpage, and a settings namespace in
 light and dark modes at 375 px, 768 px, and desktop width.
 
 == Prioritized work register
@@ -961,7 +982,7 @@ light and dark modes at 375 px, 768 px, and desktop width.
   [`DOC-015`], [P2], [Add browser, HTML, accessibility, spelling, and no-JS checks], [Zero HTML errors and serious/critical axe findings on representative pages],
   [`DOC-016`], [P2], [Federate search and add edit/report feedback routes], [Task and symbol fixtures rank the correct page in the first five results],
   [`DOC-017`], [P2], [Add scientific citations and regression-backed conventions], [Each precision/sign/normalization-sensitive claim has an auditable anchor],
-  [`DOC-018`], [P1], [Define and enforce supported Rust item/member/parameter/example quality], [Per-component coverage reaches 100% for curated items while exhaustive internal Rustdoc remains separately available],
+  [`DOC-018`], [P1], [Make native Rustdoc canonical and keep the custom Rust layer orientational], [Every configured crate has a version/feature-aware orientation link and validated Rustdoc root; authored deep links target Rustdoc; internal support audits pass; retired browser URLs redirect outside navigation, search, and PDF output],
 )
 
 == Delivery sequence
@@ -980,11 +1001,12 @@ parallel editable copies. DOC-009 then migrates the declared legacy inventory.
 
 Complete DOC-004 through DOC-006 and DOC-018, establish the inventory/schema
 portion of DOC-009, establish the developer lifecycle/scope schema and initial audit under
-DOC-010, and complete DOC-013. Prototype the shared reference design with one
-large GammaLoop Python class, one command family, and one settings group before
-mechanically applying it to all modules. Publish coverage and developer-scope
-reports as warnings, fill the source-owned documentation gaps, then promote the
-substantive coverage and freshness thresholds to required checks.
+DOC-010, and complete DOC-013. The shared reference design is now applied to
+all supported Python symbols, GammaLoop commands, and settings namespaces;
+finish this phase with representative browser fixtures rather than another
+mechanical renderer expansion. Publish coverage and developer-scope reports as
+warnings, fill the source-owned documentation gaps, then promote the substantive
+coverage and freshness thresholds to required checks.
 
 === Phase 2 — make the five product journeys valuable
 
@@ -1049,9 +1071,9 @@ The quality job should publish these measures on every canonical build:
   [False generated CLI invocation syntaxes], [0],
   [Registered public CLI commands, arguments, and settings with substantive descriptions], [100%],
   [User-facing CLIs inventoried with generated parser parity, including Clinnet], [100%],
-  [Supported Rust items meeting the documentation contract], [100%],
-  [Supported Rust members and parameters with substantive prose], [100%],
-  [Supported Rust items with a meaningful checked example and task backlink], [100%],
+  [Configured Rust crates with a validated native Rustdoc root and orientation entry], [100%],
+  [Authored Rust API links targeting canonical Rustdoc rather than the retired browser], [100%],
+  [Retired Rust browser URLs present in navigation, search, or PDF output], [0],
   [Supported Python exports and public members meeting the documentation contract], [100%],
   [Generated `help(...)` placeholders counted as meaningful examples], [0],
   [Reference fixtures passing responsive light/dark visual checks], [100%],

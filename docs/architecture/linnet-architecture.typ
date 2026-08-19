@@ -137,7 +137,7 @@ cycle, ordering, and DOT representations. The default boundary is exercised with
 For supported usage, start with the
 #link("../../../products/linnet/latest/tutorial/")[first-graph tutorial], continue with the
 #link("../../../products/linnet/latest/guides/algorithms/")[algorithms guide], and use the
-#link("../../../products/linnet/latest/reference/rust/supported/linnet/")[curated Rust reference]
+#link("../../../products/linnet/latest/reference/rust/linnet/")[native Linnet Rustdoc]
 for exact public signatures. The
 #link("../../../products/linnet/latest/guides/clinnet/")[Clinnet guide] and
 #link("../../../products/linnet/latest/guides/linnest/")[Linnest guide] document the downstream

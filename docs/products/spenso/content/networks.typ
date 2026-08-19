@@ -89,9 +89,9 @@ fn main() {
 The output invariant is the component vector `[11.0, 16.0]`; the original rank-one structure
 must also remain attached to the result. The documentation harness compiles the complete program;
 run it to execute the assertion in a provisioned Symbolica environment. See the exact
-#link("reference/rust/supported/spenso/#supported-network")[`Network`],
-#link("reference/rust/supported/spenso/#supported-densetensor")[`DenseTensor`], and
-#link("reference/rust/supported/spenso/#supported-contract")[pairwise contraction] references.
+#link("reference/rust/spenso/network/struct.Network.html")[`Network`],
+#link("reference/rust/spenso/tensors/data/dense/struct.DenseTensor.html")[`DenseTensor`], and
+#link("reference/rust/spenso/contraction/trait.Contract.html")[pairwise contraction] Rustdoc.
 
 #callout("Interpret execution failures by layer", [
   `from_data` errors are rank/dimension or storage-length mismatches. An unresolved function-key

@@ -14,9 +14,9 @@ The `linnet` package is organized into these principal areas:
 - `permutation`, `tree`, and `union_find` provide supporting algorithms and stores.
 
 The generic graph types separate edge, vertex, and half-edge payloads from the node-storage
-implementation. Start with the #link("reference/rust/")[curated Rust API], then follow its
-Rustdoc links for complete generic bounds and method signatures; choose a concrete storage type
-according to the workflow and mutation behavior you need.
+implementation. Start with the #link("reference/rust/")[Rust orientation], then use the
+revision-specific Rustdoc for complete generic bounds, implementations, and method signatures;
+choose a concrete storage type according to the workflow and mutation behavior you need.
 
 Cargo features enable optional capabilities:
 

@@ -243,7 +243,8 @@ fn python_parameters(signature: &str, docs: &str) -> Vec<DocMember> {
     let Some(closing) = matching_delimiter(signature, opening, '(', ')') else {
         return vec![];
     };
-    let parameter_docs = python_named_docs(docs, "Parameters", false);
+    let mut parameter_docs = python_named_docs(docs, "Parameters", false);
+    parameter_docs.extend(python_named_docs(docs, "Arguments", false));
     split_top_level(&signature[opening + 1..closing], ',')
         .into_iter()
         .filter_map(|parameter| {
@@ -285,40 +286,65 @@ fn python_named_docs(
     inline_description: bool,
 ) -> BTreeMap<String, String> {
     let lines = docs.lines().map(str::trim).collect::<Vec<_>>();
-    let Some(mut index) = lines
+    let numpy_start = lines
         .windows(2)
         .position(|pair| pair[0] == section && is_section_rule(pair[1]))
-        .map(|index| index + 2)
+        .map(|index| index + 2);
+    let markdown_start = lines
+        .iter()
+        .position(|line| {
+            line.starts_with('#')
+                && line.trim_start_matches('#').trim().trim_end_matches(':') == section
+        })
+        .map(|index| index + 1);
+    let Some((mut index, markdown)) = numpy_start
+        .map(|index| (index, false))
+        .or_else(|| markdown_start.map(|index| (index, true)))
     else {
         return BTreeMap::new();
     };
     let mut result = BTreeMap::new();
     while index < lines.len() {
-        if index + 1 < lines.len() && is_section_rule(lines[index + 1]) {
+        if markdown && lines[index].starts_with('#')
+            || !markdown && index + 1 < lines.len() && is_section_rule(lines[index + 1])
+        {
             break;
         }
-        let Some((names, annotation)) = lines[index].split_once(" : ") else {
+        let entry = if markdown {
+            lines[index]
+                .strip_prefix("- ")
+                .and_then(|line| line.split_once(':'))
+                .and_then(|(name, description)| {
+                    let name = name.trim();
+                    is_python_identifier(name).then(|| (vec![name], description.trim()))
+                })
+        } else {
+            lines[index]
+                .split_once(" : ")
+                .and_then(|(names, annotation)| {
+                    let names = names
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|name| is_python_identifier(name))
+                        .collect::<Vec<_>>();
+                    (!names.is_empty())
+                        .then_some((names, if inline_description { annotation } else { "" }))
+                })
+        };
+        let Some((names, initial_description)) = entry else {
             index += 1;
             continue;
         };
-        let names = names
-            .split(',')
-            .map(str::trim)
-            .filter(|name| is_python_identifier(name))
-            .collect::<Vec<_>>();
-        if names.is_empty() {
-            index += 1;
-            continue;
-        }
         index += 1;
-        let mut description = inline_description
-            .then_some(annotation)
-            .filter(|description| !description.is_empty())
+        let mut description = (!initial_description.is_empty())
+            .then_some(initial_description)
             .into_iter()
             .collect::<Vec<_>>();
         while index < lines.len() {
-            if lines[index].contains(" : ")
-                || (index + 1 < lines.len() && is_section_rule(lines[index + 1]))
+            if markdown && (lines[index].starts_with("- ") || lines[index].starts_with('#'))
+                || !markdown
+                    && (lines[index].contains(" : ")
+                        || index + 1 < lines.len() && is_section_rule(lines[index + 1]))
             {
                 break;
             }
@@ -677,6 +703,61 @@ class Engine:
             "Input path."
         );
         assert_eq!(members[3].members[1].default.as_deref(), Some("\"r\""));
+    }
+
+    #[test]
+    fn parses_markdown_parameter_and_argument_descriptions() {
+        let stub = r#"
+class Representation:
+    def __new__(cls, name: str, dimension: int | Expression | str, is_self_dual: bool = True) -> Representation:
+        r"""
+        Create and register a new representation.
+
+        # Parameters:
+        - name: String name for the representation
+        - dimension: Size of the representation
+          as an integer or symbolic expression.
+        - is_self_dual: If True, creates self-dual representation; if False, creates dualizable pair
+
+        # Examples:
+        ```python
+        Representation("Euclidean", 4, is_self_dual=True)
+        ```
+        """
+
+    def rename(self, value):
+        """
+        Return a renamed representation.
+
+        # Arguments:
+        - value: New representation name.
+          This parameter deliberately has no annotation.
+        """
+"#;
+        let declarations = python_declarations(stub).unwrap();
+        let constructor = &declarations[0].members[0];
+        assert_eq!(constructor.name, "__new__");
+        assert_eq!(constructor.members[1].name, "dimension");
+        assert_eq!(
+            constructor.members[1].docs.as_ref().unwrap().body,
+            "Size of the representation as an integer or symbolic expression."
+        );
+        let self_dual = &constructor.members[2];
+        assert_eq!(self_dual.name, "is_self_dual");
+        assert_eq!(self_dual.signature.as_deref(), Some("bool"));
+        assert_eq!(self_dual.default.as_deref(), Some("True"));
+        assert_eq!(
+            self_dual.docs.as_ref().unwrap().body,
+            "If True, creates self-dual representation; if False, creates dualizable pair"
+        );
+
+        let value = &declarations[0].members[1].members[0];
+        assert_eq!(value.name, "value");
+        assert!(value.signature.is_none());
+        assert_eq!(
+            value.docs.as_ref().unwrap().body,
+            "New representation name. This parameter deliberately has no annotation."
+        );
     }
 
     #[test]

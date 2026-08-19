@@ -32,39 +32,39 @@ loaded.cli_session().execute_command(command)?;
 
 Some Rust types are public so that GammaLoop's packages can work together, but are not intended
 as stable integration points. Prefer the state-loading and structured-operation APIs described
-here; start with the #link("reference/rust/")[curated Rust API] and use its Rustdoc links when
-you need lower-level types or trait implementations.
+here; use the #link("reference/rust/")[Rust orientation] to choose a crate, then use that
+revision's Rustdoc for exact signatures, trait implementations, and lower-level types.
 
 === Rust reference map
 
-The curated reference now separates the supported workflow from the much larger compiled
-surface. Follow these paths instead of beginning in an arbitrary internal module:
+This authored map separates the supported workflow from the much larger compiled surface.
+Follow these exact Rustdoc paths instead of beginning in an arbitrary internal module:
 
 - *Load and command a state:* begin with
-  #link("reference/rust/supported/gammaloop-api/#supported-stateloadoption")[`StateLoadOption`],
+  #link("reference/rust/gammaloop_api/struct.StateLoadOption.html")[`StateLoadOption`],
   retain the returned
-  #link("reference/rust/supported/gammaloop-api/#supported-loadedstate")[`LoadedState`], and
+  #link("reference/rust/gammaloop_api/struct.LoadedState.html")[`LoadedState`], and
   execute parsed
-  #link("reference/rust/supported/gammaloop-api/#supported-commandhistory")[`CommandHistory`]
+  #link("reference/rust/gammaloop_api/state/struct.CommandHistory.html")[`CommandHistory`]
   values through
-  #link("reference/rust/supported/gammaloop-api/#supported-clisession")[`CliSession`].
+  #link("reference/rust/gammaloop_api/session/struct.CliSession.html")[`CliSession`].
 - *Replay and inspect:* use
-  #link("reference/rust/supported/gammaloop-api/#supported-runhistory")[`RunHistory`] for run
+  #link("reference/rust/gammaloop_api/state/struct.RunHistory.html")[`RunHistory`] for run
   cards and
-  #link("reference/rust/supported/gammaloop-api/#supported-integrandinfo")[`IntegrandInfo`] for
+  #link("reference/rust/gammaloop_api/integrand_info/struct.IntegrandInfo.html")[`IntegrandInfo`] for
   structured graph-group, orientation, loop-basis, cut, and threshold metadata.
 - *Evaluate samples:* construct
-  #link("reference/rust/supported/gammaloop-api/#supported-evaluatesamples")[`EvaluateSamples`]
+  #link("reference/rust/gammaloop_api/commands/evaluate_samples/struct.EvaluateSamples.html")[`EvaluateSamples`]
   for the ordinary `f64` boundary. Use
-  #link("reference/rust/supported/gammaloop-api/#supported-evaluatesamplesprecise")[`EvaluateSamplesPrecise`]
+  #link("reference/rust/gammaloop_api/commands/evaluate_samples/struct.EvaluateSamplesPrecise.html")[`EvaluateSamplesPrecise`]
   only when the caller must retain the active `f64`, `f128`, or arbitrary-precision result type.
-- *Work below the facade:* the `gammalooprs` catalog documents the
-  #link("reference/rust/supported/gammalooprs/#supported-hasintegrand")[integrand contract],
-  #link("reference/rust/supported/gammalooprs/#supported-runtimesettings")[runtime settings],
+- *Work below the facade:* the `gammalooprs` Rustdoc includes the
+  #link("reference/rust/gammalooprs/integrands/trait.HasIntegrand.html")[integrand contract],
+  #link("reference/rust/gammalooprs/settings/struct.RuntimeSettings.html")[runtime settings],
   precision-specific result records, and the mergeable
-  #link("reference/rust/supported/gammalooprs/#supported-histogramsnapshot")[histogram snapshot]
-  boundary. Treat the exhaustive Rustdoc beyond this catalog as implementation-facing unless a
-  manual names the type explicitly.
+  #link("reference/rust/gammalooprs/observables/struct.HistogramSnapshot.html")[histogram snapshot]
+  boundary. Treat public items not named by a maintained workflow as implementation-facing
+  unless their crate documents a stronger compatibility promise.
 
 == Python packaging
 
@@ -76,8 +76,8 @@ surface. Follow these paths instead of beginning in an arbitrary internal module
 ])
 
 The main Python entry point is
-#link("reference/python/gammaloop-python/#exports-gammaloopapi")[`GammaLoopAPI`]. Its
-#link("reference/python/gammaloop-python/#exports-gammaloopapi-new-associatedfunction")[constructor]
+#link("reference/python/gammaloop-python/GammaLoopAPI/")[`GammaLoopAPI`]. Its
+#link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-new-associatedfunction")[constructor]
 loads or creates one stateful session:
 
 // docs-example: compile
@@ -100,28 +100,28 @@ The generated module reference covers every registered public export, but the ob
 connected workflows rather than forty unrelated entry points:
 
 - *Session lifecycle:* construct
-  #link("reference/python/gammaloop-python/#exports-gammaloopapi")[`GammaLoopAPI`], then use
-  #link("reference/python/gammaloop-python/#exports-gammaloopapi-run-method")[`run`], the history
+  #link("reference/python/gammaloop-python/GammaLoopAPI/")[`GammaLoopAPI`], then use
+  #link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-run-method")[`run`], the history
   getters, and
-  #link("reference/python/gammaloop-python/#exports-settingsvalue")[`SettingsValue`] to automate
+  #link("reference/python/gammaloop-python/SettingsValue/")[`SettingsValue`] to automate
   the same state and commands as the CLI.
 - *Point evaluation:* `evaluate_sample` returns
-  #link("reference/python/gammaloop-python/#exports-evaluationresult")[`EvaluationResult`], whose
+  #link("reference/python/gammaloop-python/EvaluationResult/")[`EvaluationResult`], whose
   `sample` is a
-  #link("reference/python/gammaloop-python/#exports-sampleevaluationresult")[`SampleEvaluationResult`].
+  #link("reference/python/gammaloop-python/SampleEvaluationResult/")[`SampleEvaluationResult`].
   `evaluate_samples` returns
-  #link("reference/python/gammaloop-python/#exports-batchevaluationresult")[`BatchEvaluationResult`]
+  #link("reference/python/gammaloop-python/BatchEvaluationResult/")[`BatchEvaluationResult`]
   with the same sample records and one batch-level observable snapshot.
 - *Generated-integrand structure:* start at
-  #link("reference/python/gammaloop-python/#exports-integrandinfo")[`IntegrandInfo`], then follow its
+  #link("reference/python/gammaloop-python/IntegrandInfo/")[`IntegrandInfo`], then follow its
   graph groups into graph, orientation, loop-momentum-basis, cut, and threshold records. These
   objects describe compiled structure; they do not mutate it.
 - *Events and observables:* evaluation records lead to
-  #link("reference/python/gammaloop-python/#exports-eventgroup")[`EventGroup`] and
-  #link("reference/python/gammaloop-python/#exports-event")[`Event`]. For caller-owned aggregation,
-  #link("reference/python/gammaloop-python/#exports-histogramaccumulator")[`HistogramAccumulator`]
+  #link("reference/python/gammaloop-python/EventGroup/")[`EventGroup`] and
+  #link("reference/python/gammaloop-python/Event/")[`Event`]. For caller-owned aggregation,
+  #link("reference/python/gammaloop-python/HistogramAccumulator/")[`HistogramAccumulator`]
   produces immutable
-  #link("reference/python/gammaloop-python/#exports-histogramsnapshot")[`HistogramSnapshot`]
+  #link("reference/python/gammaloop-python/HistogramSnapshot/")[`HistogramSnapshot`]
   records with raw statistics that remain mergeable and reconstructible.
 
 #boundary("Full integrations still use the command interface", [
@@ -143,9 +143,9 @@ connected workflows rather than forty unrelated entry points:
 The following workflow assumes that `./state` contains a generated integrand. Evaluation points
 are integrand-specific: their length must match the selected integrand and any discrete dimensions.
 Use the generated reference for the exact
-#link("reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-sample-method")[single-sample]
+#link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-evaluate-sample-method")[single-sample]
 and
-#link("reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-samples-method")[batch]
+#link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-evaluate-samples-method")[batch]
 contracts.
 
 // docs-example: compile
@@ -177,29 +177,29 @@ def evaluate_one(point: Sequence[float]) -> complex:
   backend and license, an existing generated state, and a point with the correct dimension.
 ])
 
-The #link("reference/python/gammaloop-python/#exports-gammaloopapi-run-method")[`run` method]
+The #link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-run-method")[`run` method]
 uses the same command language as the CLI and can change the in-memory state, settings, and run
 history. `read_only_state=True` protects files inside the active state directory; it does not make
 the Python object immutable or automatically persist the session. Inspect the live session through
-#link("reference/python/gammaloop-python/#exports-gammaloopapi-get-run-history-method")[`get_run_history`],
-#link("reference/python/gammaloop-python/#exports-gammaloopapi-get-global-settings-method")[`get_global_settings`],
+#link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-get-run-history-method")[`get_run_history`],
+#link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-get-global-settings-method")[`get_global_settings`],
 and
-#link("reference/python/gammaloop-python/#exports-gammaloopapi-get-active-command-blocks-method")[`get_active_command_blocks`].
+#link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-get-active-command-blocks-method")[`get_active_command_blocks`].
 
 For structured inspection,
-#link("reference/python/gammaloop-python/#exports-gammaloopapi-get-integrand-info-method")[`get_integrand_info`]
+#link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-get-integrand-info-method")[`get_integrand_info`]
 describes the selected backend and graph structure, while
-#link("reference/python/gammaloop-python/#exports-gammaloopapi-get-integrand-settings-method")[`get_integrand_settings`]
+#link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-get-integrand-settings-method")[`get_integrand_settings`]
 and
-#link("reference/python/gammaloop-python/#exports-gammaloopapi-get-default-runtime-settings-method")[`get_default_runtime_settings`]
+#link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-get-default-runtime-settings-method")[`get_default_runtime_settings`]
 return detached, read-only `SettingsValue` snapshots. Use `get(path)`, attribute access, indexing,
 or `to_dict()` to read them; modifying derived Python values does not update the live session.
 
 == Sample evaluation and precision
 
-#link("reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-sample-method")[`evaluate_sample`]
+#link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-evaluate-sample-method")[`evaluate_sample`]
 returns one sample result and the observable bundle for that one-sample batch.
-#link("reference/python/gammaloop-python/#exports-gammaloopapi-evaluate-samples-method")[`evaluate_samples`]
+#link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-evaluate-samples-method")[`evaluate_samples`]
 accepts a two-dimensional NumPy array and returns per-sample results plus a batch-global observable
 bundle. Per-sample weights, discrete coordinates, graph names, and orientations must have the same
 row count as the input batch when provided. Graph and orientation selection applies only to
@@ -218,11 +218,11 @@ selectors, and merged histogram snapshots, follow the
 == Symbolic conversion helpers
 
 The supported module-level helpers are
-#link("reference/python/gammaloop-python/#exports-atom-to-canonical-string")[`atom_to_canonical_string`]
+#link("reference/python/gammaloop-python/atom_to_canonical_string/")[`atom_to_canonical_string`]
 for parsing and canonicalizing a Symbolica expression,
-#link("reference/python/gammaloop-python/#exports-evaluate-graph-overall-factor")[`evaluate_graph_overall_factor`]
+#link("reference/python/gammaloop-python/evaluate_graph_overall_factor/")[`evaluate_graph_overall_factor`]
 for evaluating a graph's symbolic prefactor, and
-#link("reference/python/gammaloop-python/#exports-to-dots")[`to_dots`] for rewriting tensor
+#link("reference/python/gammaloop-python/to_dots/")[`to_dots`] for rewriting tensor
 contractions into Idenso dot-product notation. Their generated entries document accepted strings,
 return values, failure modes, and task-oriented examples.
 

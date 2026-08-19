@@ -17,6 +17,136 @@ canonical_directory() {
     (cd "$1" && pwd -P)
 }
 
+require_generated_reference_surface() {
+    local bundle=$1
+    local product=$2
+    python3 - "$bundle" "$product" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+bundle = Path(sys.argv[1])
+product = sys.argv[2]
+
+
+def reject(message):
+    print(f"update-docs-pages: incomplete product bundle: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def load_json(path):
+    try:
+        return json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        reject(f"cannot read {path}: {error}")
+
+
+def pages_below(route):
+    root = bundle / route
+    return {
+        f"{path.parent.relative_to(bundle).as_posix()}/"
+        for path in root.rglob("index.html")
+    } if root.is_dir() else set()
+
+
+def require_search_coverage(label, pages, expected_count, kind):
+    if len(pages) != expected_count:
+        reject(f"{label} has {len(pages)} pages, expected {expected_count}")
+    indexed = {entry.get("href") for entry in search if entry.get("kind") == kind}
+    if missing := pages - indexed:
+        reject(f"{label} pages are absent from {kind} search: {sorted(missing)}")
+
+
+def supported_symbols(scope):
+    return sum(item.get("supported") is True for item in scope.get("items", {}).values()) + sum(
+        supported_symbols(child) for child in scope.get("scopes", {}).values()
+    )
+
+
+search = load_json(bundle / "search-index.json")
+if not isinstance(search, list):
+    reject(f"{bundle / 'search-index.json'} is not an entry list")
+
+catalogs = [load_json(path) for path in sorted((bundle / "catalogs").glob("*.json"))]
+
+rust_catalogs = [
+    catalog for catalog in catalogs if catalog.get("component", {}).get("language") == "rust"
+]
+if not rust_catalogs:
+    reject(f"{bundle / 'catalogs'} has no Rust catalog")
+for catalog in rust_catalogs:
+    package = catalog["component"]["package"]
+    crate_roots = [
+        entry.get("href")
+        for entry in search
+        if entry.get("kind") == "rust-api"
+        and entry.get("title") == f"{package} Rustdoc"
+    ]
+    if len(crate_roots) != 1:
+        reject(f"{package} has {len(crate_roots)} crate-root search entries, expected 1")
+    crate_root = crate_roots[0]
+    route_parts = Path(crate_root).parts if isinstance(crate_root, str) else ()
+    if (
+        not isinstance(crate_root, str)
+        or not crate_root.startswith("reference/rust/")
+        or not crate_root.endswith("/")
+        or len(route_parts) != 3
+        or ".." in route_parts
+    ):
+        reject(f"{package} has invalid crate-root route: {crate_root!r}")
+    crate_root_page = bundle / crate_root / "index.html"
+    if not crate_root_page.is_file():
+        reject(f"{crate_root_page} is missing")
+
+python_catalogs = [
+    catalog for catalog in catalogs if catalog.get("component", {}).get("language") == "python"
+]
+if not python_catalogs:
+    reject(f"{bundle / 'catalogs'} has no Python catalog")
+
+supported_python = 0
+for catalog in python_catalogs:
+    component = catalog["component"]["id"]
+    module_route = f"reference/python/{component}/"
+    pages = pages_below(module_route)
+    if module_route not in pages:
+        reject(f"{bundle / module_route / 'index.html'} is missing")
+    symbol_count = supported_symbols(catalog["root"])
+    supported_python += symbol_count
+    require_search_coverage(
+        f"{component} Python symbols", pages - {module_route}, symbol_count, "python-api"
+    )
+if not supported_python:
+    reject(f"{bundle / 'reference/python'} has no Python symbol page")
+
+if product != "gammaloop":
+    raise SystemExit(0)
+
+reference = load_json(bundle / "reference/generated/gammaloop-reference.json")
+public_commands = sum(
+    not command.get("hidden") and not command.get("generated_help")
+    for command in reference["commands"]
+)
+require_search_coverage(
+    "public CLI commands", pages_below("reference/cli/commands"), public_commands, "command"
+)
+
+setting_paths = [setting["path"] for setting in reference["settings"]]
+setting_titles = [entry.get("title") for entry in search if entry.get("kind") == "setting"]
+if len(setting_titles) != len(setting_paths) or set(setting_titles) != set(setting_paths):
+    reject("setting search titles do not match the generated settings schema")
+
+namespaces = set()
+for path in setting_paths:
+    parts = path.split(".")
+    namespaces.update(".".join(parts[:end]) for end in range(1, len(parts)))
+namespace_pages = pages_below("reference/cli/settings") - {"reference/cli/settings/"}
+require_search_coverage(
+    "settings namespaces", namespace_pages, len(namespaces), "settings namespace"
+)
+PY
+}
+
 require_bundle() {
     local bundle=$1
     local product=$2
@@ -45,15 +175,12 @@ require_bundle() {
     do
         [ -f "$bundle/$required" ] || fail "incomplete product bundle: $bundle/$required is missing"
     done
-    find "$bundle/reference/python" -mindepth 2 -maxdepth 2 -name index.html -print -quit |
-        grep -q . || fail "incomplete product bundle: $bundle has no structured Python component page"
-    find "$bundle/reference/rust/supported" -mindepth 2 -maxdepth 2 -name index.html -print -quit |
-        grep -q . || fail "incomplete product bundle: $bundle has no structured Rust component page"
-
     case "$product" in
         gammaloop)
             [ -f "$bundle/reference/cli/index.html" ] ||
                 fail "incomplete product bundle: $bundle has no generated CLI reference"
+            [ -f "$bundle/reference/cli/settings/index.html" ] ||
+                fail "incomplete product bundle: $bundle has no settings namespace index"
             [ -f "$bundle/reference/generated/gammaloop-reference.json" ] ||
                 fail "incomplete product bundle: $bundle has no machine-readable CLI catalogue"
             ;;
@@ -64,6 +191,7 @@ require_bundle() {
                 fail "incomplete product bundle: $bundle has no machine-readable topology catalogue"
             ;;
     esac
+    require_generated_reference_surface "$bundle" "$product"
 }
 
 [ "$#" -ge 3 ] && [ "$#" -le 4 ] || usage

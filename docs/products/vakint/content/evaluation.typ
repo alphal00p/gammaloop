@@ -112,11 +112,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 The result invariant is an MS-bar Laurent series in the dimensional regulator: the reduced
 expression no longer contains the original loop-momentum numerator, and only the first
 successful method in `alphaloop_only()` contributes. Inspect the exact
-#link("reference/rust/supported/vakint/#supported-vakintsettings")[`VakintSettings`],
-#link("reference/rust/supported/vakint/#supported-vakintexpression-tensor-reduce")[tensor
+#link("reference/rust/vakint/struct.VakintSettings.html")[`VakintSettings`],
+#link("reference/rust/vakint/struct.VakintExpression.html#method.tensor_reduce")[tensor
 reduction], and
-#link("reference/rust/supported/vakint/#supported-vakintexpression-evaluate-integral")[evaluation]
-references before changing normalization or backend order.
+#link("reference/rust/vakint/struct.VakintExpression.html#method.evaluate_integral")[evaluation]
+Rustdoc before changing normalization or backend order.
 
 == Numerical substitution and result interpretation
 

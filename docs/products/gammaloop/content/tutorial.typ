@@ -46,7 +46,7 @@ block and persist the result on exit:
 
 #callout([`--clean-state` removes the resolved state first], [
   Use it only for this first, reproducible run. Omit it when resuming work you want to keep.
-  Its generated #link("reference/cli/#argument-gammaloop-clean-state-349074e9fab4dbbb")[argument reference] records the exact
+  Its generated #link("reference/cli/commands/gammaloop/#argument-gammaloop-clean-state-349074e9fab4dbbb")[argument reference] records the exact
   valueless-flag semantics.
   The example card resolves its state to `examples/cli/gg_hhh/1L/state` and requests ten
   worker cores; make a private copy of the card before changing either value.
@@ -100,8 +100,8 @@ settings.
 ])
 
 The exact fields and selectors are kept current in the generated
-#link("reference/cli/#command-gammaloop-display-integrand-7515b87f5a3f8b18")[integrand display] and
-#link("reference/cli/#command-gammaloop-display-settings-process-66a6624acc30949a")[process-settings] references.
+#link("reference/cli/commands/gammaloop/display/integrand/#command-gammaloop-display-integrand-7515b87f5a3f8b18")[integrand display] and
+#link("reference/cli/commands/gammaloop/display/settings/process/#command-gammaloop-display-settings-process-66a6624acc30949a")[process-settings] references.
 
 == Troubleshooting and next steps
 
@@ -113,7 +113,7 @@ The exact fields and selectors are kept current in the generated
   state folder instead of transplanting only its `processes/` directory.
 - Use `./gammaloop help generate` to inspect the flags supported by your installed version,
   then continue with the #link("guides/process-generation/")[process-generation guide] and the
-  #link("reference/cli/#command-gammaloop-generate-9dcc9f488fe75777")[generate-command reference].
+  #link("reference/cli/commands/gammaloop/generate/#command-gammaloop-generate-9dcc9f488fe75777")[generate-command reference].
 
 #boundary("Example run card", [
   See the complete

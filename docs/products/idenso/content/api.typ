@@ -16,10 +16,10 @@ rewrite families:
 - `representations::initialize` installs the standard representation and tensor symbols.
 
 Representation helper macros such as `bis!`, `cof!`, and `coad!` construct the symbolic forms
-expected by Spenso and Idenso. The #link("reference/rust/")[curated Rust API] gives their
-accepted forms, return types, feature gates, and source locations. APIs behind `bincode`,
-`reference-cases`, `python`, and `python_stubgen` are available only when the matching Cargo
-feature is enabled.
+expected by Spenso and Idenso. The #link("reference/rust/")[Rust orientation] leads to the
+revision-specific Rustdoc for their accepted forms, return types, feature gates, and source
+locations. APIs behind `bincode`, `reference-cases`, `python`, and `python_stubgen` are available
+only when the matching Cargo feature is enabled.
 
 == Python community module
 

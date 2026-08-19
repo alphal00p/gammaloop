@@ -53,13 +53,15 @@ publishing automatically when it is closed or merged. After merge, `main` is
 the sole source for `latest`. Recognized release tags publish immutable
 snapshots.
 
-## Generated reference
+## Generated and native reference
 
-The human-facing Rust, Python, CLI/settings, and Vakint topology references are
-rendered from versioned, source-backed catalogs. Checked `.pyi` files, JSON
-catalogs, and exhaustive Rustdoc are provenance or tooling artifacts, not
-substitutes for manuals. Improve source docstrings and catalog metadata rather
-than maintaining handwritten signature copies.
+The human-facing Python, CLI/settings, and Vakint topology references are
+rendered from versioned, source-backed catalogs. Rust uses the native Rustdoc
+generated for the documented revision and feature matrix; its short orientation
+page maps product crates to those native pages. Internal Rust support catalogs
+remain coverage and drift checks, not a second public API browser. Improve
+source comments, Python docstrings, and catalog metadata rather than maintaining
+handwritten signature copies.
 
 Canonical product routes have this shape:
 
@@ -71,15 +73,19 @@ products/<product>/<channel>/
   reference/interfaces/index.html
   reference/index.html
   reference/python/<component>/index.html
-  reference/rust/supported/<component>/index.html
+  reference/python/<component>/<public-symbol>/index.html
+  reference/rust/index.html
   reference/rust/<crate>/...
   version-history/index.html
   version-history/<component>/index.html
   manual.pdf
 ```
 
-GammaLoop additionally publishes `reference/cli/`; Vakint publishes
-`reference/topologies/`. Authored task-oriented material belongs under
-`guides/`, generated API material under `reference/`, and release notes under
-`version-history/`. Contributor architecture is published under `developers/`
-in a complete build.
+GammaLoop additionally publishes a command index at `reference/cli/`, one page
+per command below `reference/cli/commands/`, and hierarchical settings pages
+below `reference/cli/settings/`. Vakint publishes `reference/topologies/`.
+Authored task-oriented material belongs under
+`guides/`, generated and native API material under `reference/`, and release
+notes under `version-history/`. Older `reference/rust/supported/*` URLs are
+compatibility redirects and are not canonical routes or navigation entries.
+Contributor architecture is published under `developers/` in a complete build.

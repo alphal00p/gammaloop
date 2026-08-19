@@ -106,9 +106,9 @@ commands = [
 The acceptance invariant is a persisted state in which `display processes` identifies process
 `bubble` and integrand `scalar_bubble`; replaying the card with a clean destination must produce
 the same named objects. The exact command and setting semantics are linked from the
-#link("reference/cli/#command-gammaloop-generate-amp-23b125bb12cb4529")[amplitude-generation reference],
-#link("reference/cli/#command-gammaloop-save-state-6caa72db99ca51d0")[state-persistence reference], and
-#link("reference/cli/#setting-cli-state-folder-ea5760beb855f86c")[state-folder setting]. The full maintained source is
+#link("reference/cli/commands/gammaloop/generate/amp/#command-gammaloop-generate-amp-23b125bb12cb4529")[amplitude-generation reference],
+#link("reference/cli/commands/gammaloop/save/state/#command-gammaloop-save-state-6caa72db99ca51d0")[state-persistence reference], and
+#link("reference/cli/settings/cli/state/#setting-cli-state-folder-ea5760beb855f86c")[state-folder setting]. The full maintained source is
 the #source-link("examples/cli/scalar_topologies/bubble.toml", label: "scalar bubble run card").
 
 #callout("Interpret the first failing stage", [
@@ -155,7 +155,7 @@ Targets annotate result deltas; they do not replace `integrator.target_relative_
 The maintained
 #source-link("examples/cli/scalar_topologies/bubble.toml", label: "scalar bubble run card")
 contains the complete settings and both below- and above-threshold target sets. The generated
-#link("reference/cli/#command-gammaloop-integrate-eac2ec37911d2fab")[integration reference] is authoritative for
+#link("reference/cli/commands/gammaloop/integrate/#command-gammaloop-integrate-eac2ec37911d2fab")[integration reference] is authoritative for
 selectors, renderers, batching controls, and allowed values.
 
 == Resume or replace an integration workspace

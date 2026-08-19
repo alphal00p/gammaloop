@@ -220,7 +220,7 @@ the #link("../../../products/idenso/latest/guides/algebra/")[algebra and index-h
 and consult the
 #link("../../../products/idenso/latest/reference/form-color-dirac/")[source-backed rule
 specification]. Exact public signatures are in the
-#link("../../../products/idenso/latest/reference/rust/supported/idenso/")[curated Rust reference]
+#link("../../../products/idenso/latest/reference/rust/idenso/")[native Idenso Rustdoc]
 and the
 #link("../../../products/idenso/latest/reference/python/idenso-community/")[Python community
 module reference].

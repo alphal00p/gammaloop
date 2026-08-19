@@ -41,9 +41,9 @@ fact than the version of an unrelated local Rust checkout.
 - `TensorEvaluator` substitutes repeated numerical parameter batches into a symbolic tensor;
   its compiled counterpart owns the generated native evaluator.
 
-The generated #link("reference/python/spynso3/#exports-representation")[`Representation`],
-#link("reference/python/spynso3/#exports-tensor")[`Tensor`], and
-#link("reference/python/spynso3/#exports-tensornetwork")[`TensorNetwork`] entries are the exact
+The generated #link("reference/python/spynso3/Representation/")[`Representation`],
+#link("reference/python/spynso3/Tensor/")[`Tensor`], and
+#link("reference/python/spynso3/TensorNetwork/")[`TensorNetwork`] entries are the exact
 versioned contracts. Do not infer index compatibility from two equal dimensions: names,
 representations, and duality remain part of the value.
 
@@ -72,8 +72,8 @@ assert matrix[1, 1] == 1.0
 `Tensor.dense` requires row-major data whose length is the product of the structure dimensions.
 `Tensor.sparse` instead needs the element type and starts empty. `to_dense()` and `to_sparse()`
 mutate the storage representation; they do not change slots or re-index the tensor. See the
-#link("reference/python/spynso3/#exports-tensor-dense-associatedfunction")[dense constructor] and
-#link("reference/python/spynso3/#exports-tensor-to-sparse-method")[conversion contract].
+#link("reference/python/spynso3/Tensor/#exports-tensor-dense-associatedfunction")[dense constructor] and
+#link("reference/python/spynso3/Tensor/#exports-tensor-to-sparse-method")[conversion contract].
 
 #callout("Diagnose structure before storage", [
   A constructor failure usually means the data length and dimensions disagree. An unexpected
@@ -116,9 +116,9 @@ continues while work remains unless it is bounded; use `n_steps=1` to inspect ex
 `Scalar` processes scalar work while retaining tensor structure, and `All` attempts the complete
 available execution. A successful `execute()` does not make `result_scalar()` appropriate for a tensor result; choose
 `result_tensor()` or `result_scalar()` according to the remaining structure. Exact behavior is
-linked from #link("reference/python/spynso3/#exports-tensornetwork-execute-method")[`execute`],
-#link("reference/python/spynso3/#exports-tensornetwork-result-tensor-method")[`result_tensor`],
-and #link("reference/python/spynso3/#exports-executionmode")[`ExecutionMode`].
+linked from #link("reference/python/spynso3/TensorNetwork/#exports-tensornetwork-execute-method")[`execute`],
+#link("reference/python/spynso3/TensorNetwork/#exports-tensornetwork-result-tensor-method")[`result_tensor`],
+and #link("reference/python/spynso3/ExecutionMode/")[`ExecutionMode`].
 
 #callout("Interpret a network failure by ownership", [
   A missing-library error means a symbolic tensor name has no registered data. A result-kind
@@ -141,8 +141,8 @@ forces Rayon without that safety choice. Configure the policy before benchmarkin
 threading-policy change can be mistaken for an algorithmic improvement.
 
 For exact parameters and defaults, use the
-#link("reference/python/spynso3/#exports-tensor-evaluator-method")[evaluator reference] and
-#link("reference/python/spynso3/#set-symbolica-rayon-enabled")[symbolic parallelism reference].
+#link("reference/python/spynso3/Tensor/#exports-tensor-evaluator-method")[evaluator reference] and
+#link("reference/python/spynso3/set_symbolica_rayon_enabled/")[symbolic parallelism reference].
 The implementation starts in
 #source-link("crates/spynso3/src/lib.rs", label: "the Spenso Python adapter").
 ]

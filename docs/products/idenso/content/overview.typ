@@ -19,11 +19,11 @@ metric, epsilon, and color algebra.
 
 - To initialize representations and verify one metric contraction, follow the
   #link("tutorial/")[controlled identity tutorial] and the
-  #link("reference/python/idenso-community/#simplify-metrics")[Python function reference].
+  #link("reference/python/idenso-community/simplify_metrics/")[Python function reference].
 - To isolate dummy-index namespaces or cook a large expression, use the
   #link("guides/algebra/")[algebra guide] with the exact
-  #link("reference/rust/supported/idenso/#supported-indextooling")[`IndexTooling`] and
-  #link("reference/rust/supported/idenso/#supported-cookable")[`Cookable`] references.
+  #link("reference/rust/idenso/trait.IndexTooling.html")[`IndexTooling`] and
+  #link("reference/rust/idenso/cook/trait.Cookable.html")[`Cookable`] Rustdoc.
 - To audit a sign or normalization in a Dirac/color pass, use the source-backed
   #link("reference/form-color-dirac/")[FORM, Symbolica, and Spenso rule specification].
 
@@ -56,8 +56,8 @@ serialized physics result unless the associated mapping and settings are retaine
 
 Idenso is consumed by #product-link("gammaloop", label: "GammaLoop") and its tensor conventions
 are shared with #product-link("spenso", label: "Spenso"). Continue to the
-#link("reference/interfaces/")[interface guide] and generated Rust/Python references for
-supported functions, signatures, and feature gates.
+#link("reference/interfaces/")[interface guide], native Rustdoc, and generated Python reference
+for supported functions, signatures, and feature gates.
 
 Contributors changing representation syntax, symbolic-network parsing, index ownership, or
 rewrite order should also read the source-audited

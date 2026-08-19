@@ -398,7 +398,7 @@ class Representation:
         >>> rep = Representation.euc(3)
         >>> expr = rep(sp.E("cos(x)"))
         """
-    def __new__(cls, name: builtins.str, dimension: builtins.int | Expression | str, is_self_dual: builtins.bool = ...) -> Representation:
+    def __new__(cls, name: builtins.str, dimension: builtins.int | Expression | str, is_self_dual: builtins.bool = True) -> Representation:
         r"""
         Create and register a new representation with specified properties.
 
@@ -552,7 +552,7 @@ class Slot:
     def __repr__(self) -> builtins.str: ...
     def __str__(self) -> builtins.str: ...
     def dual(self) -> Slot: ...
-    def __new__(cls, name: builtins.str, dimension: builtins.int, aind: builtins.int | Expression | str, dual: builtins.bool = ...) -> Slot:
+    def __new__(cls, name: builtins.str, dimension: builtins.int, aind: builtins.int | Expression | str, dual: builtins.bool = False) -> Slot:
         r"""
         Create a new slot with a custom representation and index.
 
@@ -799,7 +799,7 @@ class Tensor:
         >>> tensor[0] = 1.0
         >>> tensor[1, 1] = 2.0
         """
-    def evaluator(self, constants: typing.Mapping[Expression, Expression], funs: typing.Mapping[tuple[Expression, builtins.str, typing.Sequence[Expression]], Expression], params: typing.Sequence[Expression], iterations: builtins.int = ..., n_cores: builtins.int = ..., verbose: builtins.bool = ...) -> TensorEvaluator:
+    def evaluator(self, constants: typing.Mapping[Expression, Expression], funs: typing.Mapping[tuple[Expression, builtins.str, typing.Sequence[Expression]], Expression], params: typing.Sequence[Expression], iterations: builtins.int = 100, n_cores: builtins.int = 4, verbose: builtins.bool = False) -> TensorEvaluator:
         r"""
         Create an optimized evaluator for symbolic tensor expressions.
 
@@ -909,7 +909,7 @@ class TensorEvaluator:
         r"""
         Evaluate the expression for multiple inputs and return the results.
         """
-    def compile(self, function_name: builtins.str, filename: builtins.str, library_name: builtins.str, inline_asm: builtins.str = ..., optimization_level: builtins.int = ..., compiler_path: typing.Optional[builtins.str] = None, custom_header: typing.Optional[builtins.str] = None) -> CompiledTensorEvaluator:
+    def compile(self, function_name: builtins.str, filename: builtins.str, library_name: builtins.str, inline_asm: builtins.str = 'default', optimization_level: builtins.int = 3, compiler_path: typing.Optional[builtins.str] = None, custom_header: typing.Optional[builtins.str] = None) -> CompiledTensorEvaluator:
         r"""
         Compile the evaluator to a shared library using C++ for maximum performance.
 
@@ -1576,7 +1576,7 @@ class TensorNetwork:
         TensorNetwork
             A new TensorNetwork with symbolic expressions evaluated
         """
-    def execute(self, library: typing.Optional[TensorLibrary] = None, function_library: None = None, n_steps: typing.Optional[builtins.int] = None, mode: ExecutionMode = ...) -> None:
+    def execute(self, library: typing.Optional[TensorLibrary] = None, function_library: None = None, n_steps: typing.Optional[builtins.int] = None, mode: ExecutionMode = ExecutionMode.All) -> None:
         r"""
         Execute the tensor network to perform tensor contractions and simplifications.
 

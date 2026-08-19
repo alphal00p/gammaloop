@@ -17,8 +17,8 @@ use alphal00p_docs_schema::{
     ApiLanguage, DocCatalog, DocFormat, DocItem, DocMember, DocMemberKind, DocScope,
     SCHEMA_VERSION,
     generated::{
-        CliAliasKind, CliArgumentAction, GENERATED_REFERENCE_SCHEMA, GammaLoopReference,
-        VakintReference,
+        CliAliasKind, CliArgument, CliArgumentAction, CliCommand, GENERATED_REFERENCE_SCHEMA,
+        GammaLoopReference, SettingReference, VakintReference,
     },
 };
 use chrono::{NaiveDate, Utc};
@@ -487,6 +487,14 @@ fn supplemental_reference(product: &str) -> Option<(&'static str, &'static str)>
     }
 }
 
+fn python_display_module(component: &ComponentConfig) -> &str {
+    component
+        .module
+        .as_deref()
+        .filter(|module| !module.contains("._"))
+        .unwrap_or(&component.package)
+}
+
 fn product_site_pages(product: &ProductConfig) -> Vec<SitePage> {
     let mut groups = BTreeMap::<String, Vec<SitePage>>::new();
     let mut group_order = Vec::new();
@@ -514,7 +522,7 @@ fn product_site_pages(product: &ProductConfig) -> Vec<SitePage> {
         "Reference",
     ));
     reference.extend(product.python_components.iter().map(|component| {
-        let module = component.module.as_deref().unwrap_or(&component.package);
+        let module = python_display_module(component);
         SitePage::new(
             format!("reference/python/{}/", component.id),
             format!("{module} Python API"),
@@ -522,13 +530,6 @@ fn product_site_pages(product: &ProductConfig) -> Vec<SitePage> {
         )
     }));
     reference.push(SitePage::new("reference/rust/", "Rust API", "Reference"));
-    reference.extend(product.rust_components.iter().map(|component| {
-        SitePage::new(
-            format!("reference/rust/supported/{}/", component.id),
-            format!("{} supported Rust API", component.package),
-            "Reference",
-        )
-    }));
     if let Some((route, title)) = supplemental_reference(&product.id) {
         reference.push(SitePage::new(route, title, "Reference"));
     }
@@ -1641,23 +1642,29 @@ impl SiteBuilder {
             ),
         )?;
         self.write_component_catalogs(product, &site)?;
-        self.write_generated_reference(product, &site)?;
+        let mut generated_pages = self.write_generated_reference(product, &site)?;
 
         if options.include_typst {
             self.render_typst(product, &metadata, &site, options.dependency_output)?;
         } else {
             self.write_fallback_page(product, &metadata, &site)?;
         }
-        self.write_python_reference(product, &metadata, &site)?;
+        generated_pages.extend(self.write_python_reference(product, &metadata, &site)?);
         if options.include_rustdoc {
             self.build_rustdoc(product, &site, options.rustdoc_target_root)?;
         } else {
             self.write_rustdoc_placeholder(product, &site)?;
         }
-        self.write_rust_reference(product, &metadata, &site)?;
+        self.write_rust_reference_with_availability(product, &site, options.include_rustdoc)?;
         self.write_reference_hub(product, &site)?;
-        self.decorate_site_pages(product, &metadata, &site, options.scope)?;
-        self.write_search_index(product, &site)?;
+        self.decorate_site_pages_with_generated(
+            product,
+            &metadata,
+            &site,
+            options.scope,
+            &generated_pages,
+        )?;
+        self.write_search_index(product, &site, options.include_rustdoc)?;
 
         if options.channel == BuildChannel::Snapshot && destination.exists() {
             ensure!(
@@ -1860,8 +1867,13 @@ impl SiteBuilder {
         Ok((gamma, vakint))
     }
 
-    fn write_generated_reference(&self, product: &ProductConfig, site: &Path) -> Result<()> {
+    fn write_generated_reference(
+        &self,
+        product: &ProductConfig,
+        site: &Path,
+    ) -> Result<Vec<SitePage>> {
         let destination = site.join("reference/generated");
+        let mut pages = Vec::new();
         match product.id.as_str() {
             "gammaloop" => {
                 let (reference, _) = self.generated_references()?;
@@ -1878,8 +1890,13 @@ impl SiteBuilder {
                 fs::create_dir_all(&first_class)?;
                 fs::write(
                     first_class.join("index.html"),
-                    render_gammaloop_generated_reference(&product.title, &reference),
+                    render_gammaloop_reference_index(&product.title, &reference),
                 )?;
+                pages.extend(write_gammaloop_reference_pages(
+                    &product.title,
+                    &reference,
+                    site,
+                )?);
             }
             "vakint" => {
                 let (_, reference) = self.generated_references()?;
@@ -1905,7 +1922,7 @@ impl SiteBuilder {
             }
             _ => {}
         }
-        Ok(())
+        Ok(pages)
     }
 
     fn component_catalog(
@@ -2006,14 +2023,10 @@ impl SiteBuilder {
         site: &Path,
     ) -> Result<String> {
         let mut rendered = String::from(
-            "= API reference <supported-api-catalog>\n\
-             The packages available in this version are listed below. Follow an item link for its complete language reference.\n",
+            "= Python API reference <supported-api-catalog>\n\
+             The supported Python packages available in this version are listed below. The HTML manual provides a separate page for every public class and function; this printable edition keeps a compact inventory. Rust APIs use canonical Rustdoc in the HTML manual.\n",
         );
-        for component in product
-            .rust_components
-            .iter()
-            .chain(&product.python_components)
-        {
+        for component in &product.python_components {
             // Everything beyond this boundary consumes the neutral catalog
             // artifact. In particular, no PyO3 inventory is ever linked into
             // the renderer process: each isolated exporter has already emitted
@@ -2022,7 +2035,13 @@ impl SiteBuilder {
             let catalog = serde_json::from_slice::<DocCatalog>(&fs::read(&path)?)
                 .wrap_err_with(|| format!("failed to merge {}", path.display()))?;
             rendered.push_str(&format!("\n== #raw(\"{}\")\n", typst_string(&component.id)));
-            append_scope_typst(&catalog, &catalog.root, &metadata.git_commit, &mut rendered);
+            append_scope_typst(
+                &catalog,
+                &catalog.root,
+                &mut Vec::new(),
+                &metadata.git_commit,
+                &mut rendered,
+            );
         }
         Ok(rendered)
     }
@@ -2214,10 +2233,11 @@ impl SiteBuilder {
         product: &ProductConfig,
         metadata: &SnapshotMetadata<'_>,
         site: &Path,
-    ) -> Result<()> {
+    ) -> Result<Vec<SitePage>> {
         let destination = site.join("reference/python");
         fs::create_dir_all(&destination)?;
         let mut cards = String::new();
+        let mut pages = Vec::new();
         for component in &product.python_components {
             let stub = self.python_stub_source(component);
             let stub_name = format!("{}.pyi", component.id);
@@ -2234,8 +2254,14 @@ impl SiteBuilder {
             let catalog = serde_json::from_slice::<DocCatalog>(&fs::read(&catalog_path)?)
                 .wrap_err_with(|| format!("failed to parse {}", catalog_path.display()))?;
             catalog.validate()?;
-            let export_count = count_catalog_items(&catalog.root);
-            let module = component.module.as_deref().unwrap_or(&component.package);
+            let module = python_display_module(component);
+            let routes = python_item_routes(&catalog);
+            ensure!(
+                routes.values().collect::<BTreeSet<_>>().len() == routes.len(),
+                "duplicate Python reference route for {}",
+                component.id
+            );
+            let export_count = routes.len();
             cards.push_str(&format!(
                 "<article class=\"api-component-card\"><h2><a href=\"reference/python/{}/\"><code>{}</code></a></h2><p>{} documented exports · version {}</p><p>{}</p></article>",
                 escape_html(&component.id),
@@ -2253,9 +2279,59 @@ impl SiteBuilder {
                 reference_page(
                     &product.title,
                     &format!("{} Python API", module),
-                    &render_python_catalog(&catalog, &stub_name, &metadata.git_commit),
+                    &render_python_catalog_for_module(
+                        &catalog,
+                        module,
+                        &stub_name,
+                        &metadata.git_commit,
+                    ),
                 ),
             )?;
+            let supported_items = catalog_surface_items(&catalog.root, true);
+            for (index, (path, item)) in supported_items.iter().enumerate() {
+                let anchor = api_item_anchor(path, item);
+                let route = routes
+                    .get(&anchor)
+                    .with_context(|| format!("missing Python route for {anchor}"))?;
+                let item_page = site.join(route);
+                fs::create_dir_all(&item_page)?;
+                fs::write(
+                    item_page.join("index.html"),
+                    reference_page(
+                        &product.title,
+                        &format!("{}.{}", module, item.name),
+                        &render_python_item_page(
+                            &catalog,
+                            module,
+                            (path, item),
+                            &stub_name,
+                            &metadata.git_commit,
+                            &routes,
+                            (
+                                index.checked_sub(1).and_then(|previous| {
+                                    supported_items.get(previous).map(|(path, item)| {
+                                        (
+                                            item.name.as_str(),
+                                            routes[&api_item_anchor(path, item)].as_str(),
+                                        )
+                                    })
+                                }),
+                                supported_items.get(index + 1).map(|(path, item)| {
+                                    (
+                                        item.name.as_str(),
+                                        routes[&api_item_anchor(path, item)].as_str(),
+                                    )
+                                }),
+                            ),
+                        ),
+                    ),
+                )?;
+                pages.push(SitePage::new(
+                    route.clone(),
+                    format!("{}.{}", module, item.name),
+                    "Python API",
+                ));
+            }
         }
         fs::write(
             destination.join("index.html"),
@@ -2267,14 +2343,14 @@ impl SiteBuilder {
                 ),
             ),
         )?;
-        Ok(())
+        Ok(pages)
     }
 
-    fn write_rust_reference(
+    fn write_rust_reference_with_availability(
         &self,
         product: &ProductConfig,
-        metadata: &SnapshotMetadata<'_>,
         site: &Path,
+        rustdoc_available: bool,
     ) -> Result<()> {
         let destination = site.join("reference/rust");
         let supported = destination.join("supported");
@@ -2285,51 +2361,46 @@ impl SiteBuilder {
             let catalog = serde_json::from_slice::<DocCatalog>(&fs::read(&catalog_path)?)
                 .wrap_err_with(|| format!("failed to parse {}", catalog_path.display()))?;
             catalog.validate()?;
-            let count = count_catalog_items(&catalog.root);
             let crate_name = component.package.replace('-', "_");
+            let features = if component.features.is_empty() {
+                "no optional features".to_owned()
+            } else {
+                component
+                    .features
+                    .iter()
+                    .map(|feature| format!("<code>{}</code>", escape_html(feature)))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            let rustdoc_link = if rustdoc_available {
+                format!(
+                    "<a class=\"portal-text-link\" href=\"reference/rust/{crate_name}/\">Open canonical Rustdoc <span aria-hidden=\"true\">→</span></a>"
+                )
+            } else {
+                "<p class=\"reference-missing\">Rustdoc was skipped for this preview build.</p>"
+                    .to_owned()
+            };
             cards.push_str(&format!(
-                "<article class=\"api-component-card\"><h2><a href=\"reference/rust/supported/{}/\"><code>{}</code></a></h2><p>{count} curated entries · version {}</p><p>{}</p><a href=\"reference/rust/{crate_name}/\">Full Rustdoc</a></article>",
-                escape_html(&component.id),
+                "<article class=\"api-component-card rustdoc-card\"><h2><code>{}</code></h2><p>Version {} · {}</p><p>{}</p><p><strong>Documented features:</strong> {features}</p>{rustdoc_link}</article>",
                 escape_html(&component.package),
                 escape_html(&self.component_version(component)?),
+                escape_html(&component.kind),
                 escape_html(&catalog.root.summary.clone().unwrap_or_else(|| {
-                    format!("Supported Rust surface for {}.", component.id)
+                    format!("Rust API documentation for {}.", component.id)
                 })),
             ));
-            let mut body = format!(
-                "<p><code>{}</code> · {count} curated entries · version {}</p><p><a href=\"reference/rust/{crate_name}/\">Open the complete generated Rustdoc</a>. The source-backed catalog below highlights the supported public surface with signatures, feature gates, examples, and source links.</p>",
-                escape_html(&component.package),
-                escape_html(&catalog.component.version),
-            );
-            body.push_str("<nav class=\"reference-guide-links\" aria-label=\"Related Rust guides\"><a href=\"tutorial/\">Start with the tutorial</a><a href=\"reference/interfaces/\">Rust interface guide</a><a href=\"reference/rust/\">All Rust crates</a></nav>");
-            let filter_id = format!("{}-symbol-filter", slug(&catalog.component.id));
-            body.push_str(&render_reference_filter_start(
-                &filter_id,
-                "Filter supported Rust symbols and members",
-                "Try a type, trait, function, method, or field",
-            ));
-            body.push_str(&render_api_symbol_index(
-                &catalog_surface_items(&catalog.root, true),
-                "Rust",
-            ));
-            let mut path = Vec::new();
-            render_api_scope(
-                &catalog,
-                &catalog.root,
-                &mut path,
-                &metadata.git_commit,
-                2,
-                &mut body,
-            );
-            body.push_str("</div></div>");
             let component_page = supported.join(&component.id);
             fs::create_dir_all(&component_page)?;
             fs::write(
                 component_page.join("index.html"),
-                reference_page(
+                generated_reference_redirect(
                     &product.title,
-                    &format!("{} supported Rust API", component.package),
-                    &body,
+                    &if rustdoc_available {
+                        format!("../../{crate_name}/")
+                    } else {
+                        "../../".to_owned()
+                    },
+                    &format!("{} Rustdoc", component.package),
                 ),
             )?;
         }
@@ -2339,7 +2410,7 @@ impl SiteBuilder {
                 &product.title,
                 "Rust API",
                 &format!(
-                    "<p>Browse curated, source-backed API catalogs first; use the complete Rustdoc sidecars for implementation-level detail.</p><nav class=\"reference-guide-links\" aria-label=\"Related Rust documentation\"><a href=\"reference/interfaces/\">Rust interface guide</a></nav><div class=\"api-component-grid\">{cards}</div>"
+                    "<p>Rustdoc is the canonical Rust API reference. It already provides the familiar crate hierarchy, exact signatures, trait implementations, feature-gated items, source links, and native symbol search without translating those structures into a second UI.</p><p>Use the authored interface guide for product-level boundaries and choose a crate below when you need item-level detail. Presence in Rustdoc describes the compiled public surface; it is not by itself a compatibility promise. The structured catalogs remain build artifacts for coverage and consistency checks, not a competing public reference.</p><nav class=\"reference-guide-links\" aria-label=\"Related Rust documentation\"><a href=\"reference/interfaces/\">Understand the Rust interfaces</a><a href=\"tutorial/\">Start from a product workflow</a></nav><div class=\"api-component-grid\">{cards}</div>"
                 ),
             ),
         )?;
@@ -2361,7 +2432,7 @@ impl SiteBuilder {
             })
             .unwrap_or_default();
         cards.push_str(&format!(
-            "<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Curated + exhaustive</p><h2><a href=\"reference/rust/\">Rust API</a></h2><p>{} source-backed components with complete Rustdoc sidecars.</p></article><article class=\"reference-hub-card\"><p class=\"portal-kicker\">Generated signatures</p><h2><a href=\"reference/python/\">Python API</a></h2><p>{} modules rendered from checked runtime inventories; stubs remain downloadable for type checkers.</p></article>",
+            "<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Canonical Rustdoc</p><h2><a href=\"reference/rust/\">Rust API</a></h2><p>{} crates in their native Rust documentation interface, with authored guidance for choosing the right boundary.</p></article><article class=\"reference-hub-card\"><p class=\"portal-kicker\">Python-native reference</p><h2><a href=\"reference/python/\">Python API</a></h2><p>{} modules with one flat page per supported class or function; stubs remain downloadable for type checkers.</p></article>",
             product.rust_components.len(),
             product.python_components.len(),
         ));
@@ -2379,7 +2450,7 @@ impl SiteBuilder {
                 &product.title,
                 "Reference",
                 &format!(
-                    "<p>Generated catalogs make the supported interfaces searchable without asking raw source files or Rustdoc to serve as the manual.</p><div class=\"reference-hub-grid\">{cards}</div>"
+                    "<p>Choose the reference shaped for the interface you use: native Rustdoc for crates, class and function pages for Python, and manpage-style command pages for the CLI. Authored guides connect those exact interfaces to complete workflows.</p><div class=\"reference-hub-grid\">{cards}</div>"
                 ),
             ),
         )?;
@@ -2453,12 +2524,13 @@ impl SiteBuilder {
         Ok(())
     }
 
-    fn decorate_site_pages(
+    fn decorate_site_pages_with_generated(
         &self,
         product: &ProductConfig,
         metadata: &SnapshotMetadata<'_>,
         site: &Path,
         scope: BuildScope,
+        generated_pages: &[SitePage],
     ) -> Result<()> {
         let mut pages = product_site_pages(product);
         pages.retain(|page| site.join(&page.route).join("index.html").is_file());
@@ -2475,7 +2547,7 @@ impl SiteBuilder {
                         .and_then(|previous| pages.get(previous)),
                     pages.get(index + 1),
                 ),
-                scope,
+                (scope, generated_pages),
             )?;
             if let Some(authored) = product
                 .pages
@@ -2493,6 +2565,18 @@ impl SiteBuilder {
                 }
             }
         }
+        for page in generated_pages {
+            if site.join(&page.route).join("index.html").is_file() {
+                self.decorate_html_page(
+                    product,
+                    metadata,
+                    site,
+                    page,
+                    (None, None),
+                    (scope, generated_pages),
+                )?;
+            }
+        }
         Ok(())
     }
 
@@ -2503,9 +2587,10 @@ impl SiteBuilder {
         site: &Path,
         page: &SitePage,
         siblings: (Option<&SitePage>, Option<&SitePage>),
-        scope: BuildScope,
+        context: (BuildScope, &[SitePage]),
     ) -> Result<()> {
         let (previous, next) = siblings;
+        let (scope, generated_pages) = context;
         let path = site.join(&page.route).join("index.html");
         let source = fs::read_to_string(&path)?;
         let mut body = extract_html_body(&source)?.to_owned();
@@ -2521,9 +2606,10 @@ impl SiteBuilder {
             body = self.rewrite_product_preview_links(&body, metadata, page)?;
         }
         let (body, headings) = inject_heading_ids(&body)?;
+        let dense_reference = matches!(page.group.as_str(), "Python API" | "CLI reference");
         let toc = headings
             .iter()
-            .filter(|heading| matches!(heading.level, 2 | 3))
+            .filter(|heading| heading.level == 2 || heading.level == 3 && !dense_reference)
             .map(|heading| {
                 format!(
                     "<a class=\"toc-link\" data-level=\"{}\" href=\"#{}\">{}</a>",
@@ -2533,7 +2619,8 @@ impl SiteBuilder {
                 )
             })
             .collect::<String>();
-        let sidebar = self.site_sidebar(product, metadata, page, &docs_root, scope);
+        let sidebar =
+            self.site_sidebar(product, metadata, page, &docs_root, scope, generated_pages);
         let product_options = self.product_options(product, metadata, &docs_root, scope);
         let page_navigation = render_page_navigation(previous, next, &docs_root);
         let product_root = if docs_root.is_empty() {
@@ -2570,20 +2657,20 @@ impl SiteBuilder {
                 product
                     .python_components
                     .iter()
-                    .find(|component| page.route == format!("reference/python/{}/", component.id))
+                    .find(|component| {
+                        page.route
+                            .starts_with(&format!("reference/python/{}/", component.id))
+                    })
                     .map(|component| PathBuf::from(format!("docs/api/python/{}.pyi", component.id)))
             })
-            .or_else(|| {
-                product
-                    .rust_components
-                    .iter()
-                    .find(|component| {
-                        page.route == format!("reference/rust/supported/{}/", component.id)
-                    })
-                    .map(|component| component.version_source.clone())
-            })
             .unwrap_or_else(|| match (product.id.as_str(), page.route.as_str()) {
-                ("gammaloop", "reference/cli/") => {
+                ("gammaloop", route) if route.starts_with("reference/cli/settings/runtime/") => {
+                    PathBuf::from("crates/gammalooprs/src/settings/mod.rs")
+                }
+                ("gammaloop", route) if route.starts_with("reference/cli/settings/") => {
+                    PathBuf::from("crates/gammaloop-api/src/lib.rs")
+                }
+                ("gammaloop", route) if route.starts_with("reference/cli/") => {
                     PathBuf::from("crates/gammaloop-api/src/commands/mod.rs")
                 }
                 ("vakint", "reference/topologies/") => {
@@ -2602,9 +2689,20 @@ impl SiteBuilder {
             &documented_route,
             &metadata.git_commit,
         );
+        let source_label = if product.python_components.iter().any(|component| {
+            page.route
+                .starts_with(&format!("reference/python/{}/", component.id))
+        }) {
+            "View generated type stub at this revision"
+        } else if product.id == "gammaloop" && page.route.starts_with("reference/cli/") {
+            "View parser or schema source at this revision"
+        } else {
+            "View page source at this revision"
+        };
         let feedback = format!(
-            "<nav class=\"page-feedback\" aria-label=\"Documentation feedback\"><a href=\"{}\">View page source at this revision <span aria-hidden=\"true\">↗</span></a><a href=\"{}\">Report a documentation issue <span aria-hidden=\"true\">↗</span></a></nav>",
+            "<nav class=\"page-feedback\" aria-label=\"Documentation feedback\"><a href=\"{}\">{} <span aria-hidden=\"true\">↗</span></a><a href=\"{}\">Report a documentation issue <span aria-hidden=\"true\">↗</span></a></nav>",
             escape_html(&source_url),
+            escape_html(source_label),
             escape_html(&issue_url),
         );
         let toc_markup = if toc.is_empty() {
@@ -2646,6 +2744,7 @@ impl SiteBuilder {
         current: &SitePage,
         docs_root: &str,
         scope: BuildScope,
+        generated_pages: &[SitePage],
     ) -> String {
         let mut groups = BTreeMap::<String, Vec<(String, String)>>::new();
         let mut group_order = Vec::new();
@@ -2669,6 +2768,53 @@ impl SiteBuilder {
             reference.push((route.to_owned(), title.to_owned()));
         }
 
+        let python_navigation = product
+            .python_components
+            .iter()
+            .find_map(|component| {
+                let module_route = format!("reference/python/{}/", component.id);
+                current
+                    .route
+                    .starts_with(&module_route)
+                    .then_some((component, module_route))
+            })
+            .map_or_else(String::new, |(component, module_route)| {
+                let module_symbols = generated_pages
+                    .iter()
+                    .filter(|page| {
+                        page.group == "Python API" && page.route.starts_with(&module_route)
+                    })
+                    .map(|page| {
+                        let label = page.route[module_route.len()..]
+                            .trim_end_matches('/')
+                            .replace('/', ".");
+                        format!(
+                            "<a class=\"sidebar-link sidebar-python-symbol\" href=\"{}{}\"{}><code>{}</code></a>",
+                            escape_html(docs_root),
+                            escape_html(&page.route),
+                            if page.route == current.route {
+                                " aria-current=\"page\""
+                            } else {
+                                ""
+                            },
+                            escape_html(&label),
+                        )
+                    })
+                    .collect::<String>();
+                let module = python_display_module(component);
+                format!(
+                    "<nav class=\"sidebar-group sidebar-python-group\" aria-label=\"{} Python symbols\"><p class=\"sidebar-group-title\">{} symbols</p><a class=\"sidebar-link\" href=\"{}{}\"{}>Module overview</a>{module_symbols}</nav>",
+                    escape_html(module),
+                    escape_html(module),
+                    escape_html(docs_root),
+                    escape_html(&module_route),
+                    if current.route == module_route {
+                        " aria-current=\"page\""
+                    } else {
+                        ""
+                    },
+                )
+            });
         let mut navigation = String::new();
         for group in group_order {
             let links = groups
@@ -2688,12 +2834,14 @@ impl SiteBuilder {
                     format!(
                         "<a class=\"sidebar-link\" href=\"{}\"{}>{}</a>",
                         escape_html(&href),
-                        if route == &current.route
-                            || (matches!(route.as_str(), "reference/python/" | "reference/rust/")
-                                && current.route.starts_with(route)
-                                && current.route != "reference/")
-                        {
+                        if route == &current.route {
                             " aria-current=\"page\""
+                        } else if matches!(
+                            route.as_str(),
+                            "reference/python/" | "reference/rust/" | "reference/cli/"
+                        ) && current.route.starts_with(route)
+                        {
+                            " aria-current=\"location\""
                         } else {
                             ""
                         },
@@ -2705,6 +2853,9 @@ impl SiteBuilder {
                 "<section class=\"sidebar-group\"><p class=\"sidebar-group-title\">{}</p>{links}</section>",
                 escape_html(&group)
             ));
+            if group == "Reference" {
+                navigation.push_str(&python_navigation);
+            }
         }
         if scope == BuildScope::FullSite && metadata.channel == BuildChannel::Latest {
             let portal = format!("{docs_root}../../../");
@@ -2858,7 +3009,12 @@ impl SiteBuilder {
             .into_owned())
     }
 
-    fn write_search_index(&self, product: &ProductConfig, site: &Path) -> Result<()> {
+    fn write_search_index(
+        &self,
+        product: &ProductConfig,
+        site: &Path,
+        include_rustdoc: bool,
+    ) -> Result<()> {
         let mut entries = vec![SearchEntry {
             title: product.title.clone(),
             summary: product.tagline.clone(),
@@ -2895,44 +3051,129 @@ impl SiteBuilder {
                 append_rendered_page_search(product, page, &page_href, &html, &mut entries)?;
             }
         }
-        for component in product
+        for (language, component) in product
             .rust_components
             .iter()
-            .chain(&product.python_components)
+            .map(|component| (ApiLanguage::Rust, component))
+            .chain(
+                product
+                    .python_components
+                    .iter()
+                    .map(|component| (ApiLanguage::Python, component)),
+            )
         {
+            if language == ApiLanguage::Rust && !include_rustdoc {
+                continue;
+            }
+            let display_name = python_display_module(component);
+            match language {
+                ApiLanguage::Rust => entries.push(SearchEntry {
+                    title: format!("{} Rustdoc", component.package),
+                    summary: format!(
+                        "{} crate · version {}",
+                        component.kind,
+                        self.component_version(component)?
+                    ),
+                    href: format!("reference/rust/{}/", component.package.replace('-', "_")),
+                    kind: "rust-api".to_owned(),
+                    text: component.features.join(" "),
+                }),
+                ApiLanguage::Python => entries.push(SearchEntry {
+                    title: format!("{display_name} Python API"),
+                    summary: format!(
+                        "Supported Python module · version {}",
+                        self.component_version(component)?
+                    ),
+                    href: format!("reference/python/{}/", component.id),
+                    kind: "python-api".to_owned(),
+                    text: String::new(),
+                }),
+                _ => {}
+            }
             let path = site.join("catalogs").join(format!("{}.json", component.id));
             let catalog = serde_json::from_slice::<DocCatalog>(&fs::read(&path)?)
                 .wrap_err_with(|| format!("failed to parse {}", path.display()))?;
-            append_catalog_search(&catalog, &catalog.root, &mut entries);
+            let catalog_display_name = if language == ApiLanguage::Python {
+                display_name
+            } else {
+                &catalog.component.id
+            };
+            append_catalog_search_with_component_name(
+                &catalog,
+                &catalog.root,
+                catalog_display_name,
+                &mut entries,
+            );
         }
         match product.id.as_str() {
             "gammaloop" => {
                 let (reference, _) = self.generated_references()?;
+                let namespaces = cli_setting_namespaces(&reference);
                 entries.extend(
                     reference
                         .commands
                         .into_iter()
                         .filter(|command| !command.hidden && !command.generated_help)
-                        .map(|command| SearchEntry {
-                            title: command.path.clone(),
-                            summary: command.about,
-                            href: format!(
-                                "reference/cli/#{}",
-                                generated_anchor("command", &command.path)
-                            ),
-                            kind: "command".to_owned(),
-                            text: String::new(),
+                        .map(|command| {
+                            let text = command
+                                .arguments
+                                .iter()
+                                .filter(|argument| !argument.hidden)
+                                .map(|argument| {
+                                    format!(
+                                        "{} {} {} {}",
+                                        argument.id,
+                                        argument
+                                            .long
+                                            .as_ref()
+                                            .map(|name| format!("--{name}"))
+                                            .unwrap_or_default(),
+                                        argument
+                                            .short
+                                            .map(|name| format!("-{name}"))
+                                            .unwrap_or_default(),
+                                        argument.help,
+                                    )
+                                })
+                                .chain(command.aliases.iter().map(|alias| alias.name.clone()))
+                                .chain(std::iter::once(command.usage.clone()))
+                                .collect::<Vec<_>>()
+                                .join(" ");
+                            SearchEntry {
+                                title: command.path.clone(),
+                                summary: command.about,
+                                href: cli_command_route(&command.path),
+                                kind: "command".to_owned(),
+                                text,
+                            }
                         }),
                 );
                 entries.extend(reference.settings.into_iter().map(|setting| SearchEntry {
                     title: setting.path.clone(),
                     summary: setting.description,
                     href: format!(
-                        "reference/cli/#{}",
+                        "{}#{}",
+                        cli_setting_namespace_route(cli_setting_namespace(&setting.path)),
                         generated_anchor("setting", &setting.path)
                     ),
                     kind: "setting".to_owned(),
-                    text: String::new(),
+                    text: format!(
+                        "{} {} {}",
+                        setting.value_type,
+                        setting.possible_values.join(" "),
+                        setting
+                            .default
+                            .as_ref()
+                            .map(Value::to_string)
+                            .unwrap_or_default(),
+                    ),
+                }));
+                entries.extend(namespaces.into_iter().map(|namespace| SearchEntry {
+                    title: format!("{namespace} settings"),
+                    summary: "GammaLoop settings namespace".to_owned(),
+                    href: cli_setting_namespace_route(&namespace),
+                    kind: "settings namespace".to_owned(),
+                    text: namespace,
                 }));
             }
             "vakint" => {
@@ -4884,6 +5125,9 @@ fn render_page_navigation(
     next: Option<&SitePage>,
     docs_root: &str,
 ) -> String {
+    if previous.is_none() && next.is_none() {
+        return String::new();
+    }
     let previous = previous.map_or_else(
         || "<span></span>".to_owned(),
         |page| {
@@ -4909,15 +5153,6 @@ fn render_page_navigation(
     format!(
         "<nav class=\"page-nav\" aria-label=\"Documentation pagination\">{previous}{next}</nav>"
     )
-}
-
-fn count_catalog_items(scope: &DocScope) -> usize {
-    scope.items.len()
-        + scope
-            .scopes
-            .values()
-            .map(count_catalog_items)
-            .sum::<usize>()
 }
 
 fn count_catalog_surface_items(scope: &DocScope, supported: bool) -> usize {
@@ -4959,6 +5194,49 @@ fn catalog_surface_items(scope: &DocScope, supported: bool) -> Vec<(Vec<String>,
     items
 }
 
+fn python_item_routes(catalog: &DocCatalog) -> BTreeMap<String, String> {
+    let items = catalog_surface_items(&catalog.root, true);
+    items
+        .into_iter()
+        .map(|(path, item)| {
+            let anchor = api_item_anchor(&path, item);
+            let mut segments = path
+                .iter()
+                .filter(|segment| segment.as_str() != "exports")
+                .cloned()
+                .collect::<Vec<_>>();
+            segments.push(item.name.clone());
+            (
+                anchor,
+                format!(
+                    "reference/python/{}/{}/",
+                    catalog.component.id,
+                    segments.join("/")
+                ),
+            )
+        })
+        .collect()
+}
+
+fn python_item_links(
+    catalog: &DocCatalog,
+    routes: &BTreeMap<String, String>,
+) -> BTreeMap<String, String> {
+    let mut candidates = BTreeMap::<String, Vec<String>>::new();
+    for (path, item) in catalog_surface_items(&catalog.root, true) {
+        candidates
+            .entry(item.name.clone())
+            .or_default()
+            .push(routes[&api_item_anchor(&path, item)].clone());
+    }
+    candidates
+        .into_iter()
+        .filter_map(|(name, routes)| {
+            (routes.len() == 1).then(|| (name, routes.into_iter().next().unwrap()))
+        })
+        .collect()
+}
+
 fn api_item_kind_label(kind: alphal00p_docs_schema::DocItemKind) -> &'static str {
     match kind {
         alphal00p_docs_schema::DocItemKind::Function
@@ -4976,170 +5254,120 @@ fn api_item_kind_label(kind: alphal00p_docs_schema::DocItemKind) -> &'static str
     }
 }
 
-fn render_api_symbol_index(entries: &[(Vec<String>, &DocItem)], language: &str) -> String {
-    if entries.is_empty() {
-        return String::new();
-    }
-    let mut rendered = format!(
-        "<nav class=\"api-symbol-index reference-index\" aria-label=\"Supported {language} symbols\"><h2>Supported symbols</h2><p>Use this compact index for scanning; the disclosures below contain signatures, parameters, examples, members, and source links.</p><div>"
-    );
-    for (path, item) in entries {
-        let anchor = api_item_anchor(path, item);
-        let kind = api_item_kind_label(item.kind);
-        let search = format!("{} {} {}", item.name, item.title, kind);
-        rendered.push_str(&format!(
-            "<a href=\"#{}\" data-reference-index-entry data-reference-search=\"{}\"><code>{}</code><span>{}</span></a>",
-            escape_html(&anchor),
-            escape_html(&search),
-            escape_html(&item.name),
-            kind,
-        ));
-    }
-    rendered.push_str("</div></nav>");
-    rendered
-}
-
-fn render_reference_filter_start(id: &str, label: &str, placeholder: &str) -> String {
-    format!(
-        "<div data-reference-filter-root><div class=\"reference-tools\"><label for=\"{}\">{}</label><input id=\"{}\" type=\"search\" data-reference-filter placeholder=\"{}\"><output data-reference-filter-count aria-live=\"polite\"></output><div class=\"reference-disclosure-actions\"><button type=\"button\" data-reference-expand>Expand all</button><button type=\"button\" data-reference-collapse>Collapse all</button></div></div><div data-reference-filter-scope>",
-        escape_html(id),
-        escape_html(label),
-        escape_html(id),
-        escape_html(placeholder),
-    )
-}
-
-fn catalog_item_links(catalog: &DocCatalog) -> BTreeMap<String, String> {
-    fn collect(
-        scope: &DocScope,
-        path: &mut Vec<String>,
-        candidates: &mut BTreeMap<String, Vec<String>>,
-    ) {
-        for item in scope.items.values() {
-            candidates
-                .entry(item.name.clone())
-                .or_default()
-                .push(api_item_anchor(path, item));
-        }
-        for child in scope.scopes.values() {
-            path.push(child.id.clone());
-            collect(child, path, candidates);
-            path.pop();
-        }
+fn link_python_symbols(html: &str, links: &BTreeMap<String, String>) -> String {
+    if links.is_empty() {
+        return html.to_owned();
     }
 
-    let mut candidates = BTreeMap::new();
-    collect(&catalog.root, &mut Vec::new(), &mut candidates);
-    candidates
-        .into_iter()
-        .filter_map(|(name, anchors)| {
-            (anchors.len() == 1).then(|| (name, anchors.into_iter().next().unwrap()))
-        })
-        .collect()
-}
-
-fn render_signature_code(
-    signature: &str,
-    links: &BTreeMap<String, String>,
-    current_anchor: &str,
-) -> String {
     let mut rendered = String::new();
-    let mut characters = signature.char_indices().peekable();
-    while let Some((start, character)) = characters.next() {
-        let mut end = start + character.len_utf8();
-        if character == '_' || character.is_ascii_alphabetic() {
-            while let Some((index, character)) = characters.peek().copied() {
-                if character != '_' && !character.is_ascii_alphanumeric() {
-                    break;
-                }
-                characters.next();
-                end = index + character.len_utf8();
+    let mut cursor = 0;
+    let mut anchor_depth = 0_u32;
+    let mut pre_depth = 0_u32;
+    while cursor < html.len() {
+        if html[cursor..].starts_with('<') {
+            let Some(offset) = html[cursor..].find('>') else {
+                rendered.push_str(&html[cursor..]);
+                break;
+            };
+            let end = cursor + offset + 1;
+            let tag = &html[cursor..end];
+            if tag == "</a>" {
+                anchor_depth = anchor_depth.saturating_sub(1);
+            } else if tag.starts_with("<a ") || tag == "<a>" {
+                anchor_depth += 1;
+            } else if tag == "</pre>" {
+                pre_depth = pre_depth.saturating_sub(1);
+            } else if tag.starts_with("<pre ") || tag == "<pre>" {
+                pre_depth += 1;
             }
-            let identifier = &signature[start..end];
-            if let Some(anchor) = links
-                .get(identifier)
-                .filter(|anchor| anchor.as_str() != current_anchor)
+            rendered.push_str(tag);
+            cursor = end;
+            continue;
+        }
+        if html[cursor..].starts_with('&')
+            && let Some(offset) = html[cursor..].find(';')
+        {
+            let end = cursor + offset + 1;
+            rendered.push_str(&html[cursor..end]);
+            cursor = end;
+            continue;
+        }
+        if anchor_depth == 0 && pre_depth == 0 {
+            let token_end = html[cursor..]
+                .char_indices()
+                .find(|(_, character)| character.is_whitespace() || *character == '<')
+                .map_or(html.len(), |(offset, _)| cursor + offset);
+            let token = &html[cursor..token_end];
+            let uri_scheme = token.split_once(':').is_some_and(|(scheme, _)| {
+                scheme
+                    .chars()
+                    .next()
+                    .is_some_and(|character| character.is_ascii_alphabetic())
+                    && scheme.chars().all(|character| {
+                        character.is_ascii_alphanumeric() || matches!(character, '+' | '-' | '.')
+                    })
+            });
+            if uri_scheme
+                || token
+                    .get(..4)
+                    .is_some_and(|prefix| prefix.eq_ignore_ascii_case("www."))
+                || token.contains('/')
             {
+                rendered.push_str(token);
+                cursor = token_end;
+                continue;
+            }
+        }
+
+        let character = html[cursor..].chars().next().expect("valid HTML cursor");
+        if anchor_depth == 0
+            && pre_depth == 0
+            && (character == '_' || character.is_ascii_alphabetic())
+        {
+            let end = html[cursor..]
+                .char_indices()
+                .take_while(|(_, character)| *character == '_' || character.is_ascii_alphanumeric())
+                .last()
+                .map_or(cursor + character.len_utf8(), |(offset, character)| {
+                    cursor + offset + character.len_utf8()
+                });
+            let identifier = &html[cursor..end];
+            if let Some(target) = links.get(identifier) {
                 rendered.push_str(&format!(
-                    "<a href=\"#{}\">{}</a>",
-                    escape_html(anchor),
-                    escape_html(identifier),
+                    "<a href=\"{}\">{identifier}</a>",
+                    escape_html(target),
                 ));
             } else {
-                rendered.push_str(&escape_html(identifier));
+                rendered.push_str(identifier);
             }
-        } else {
-            rendered.push_str(&escape_html(&signature[start..end]));
+            cursor = end;
+            continue;
         }
+        rendered.push(character);
+        cursor += character.len_utf8();
     }
     rendered
 }
 
-fn render_python_catalog(catalog: &DocCatalog, stub_name: &str, git_commit: &str) -> String {
-    let mut supported = vec![];
-    let mut implementation_count = 0;
-    let mut documented_supported = 0;
-    let mut member_count = 0;
-    let mut documented_members = 0;
-    let mut scopes = vec![(&catalog.root, Vec::<String>::new())];
-    while let Some((scope, path)) = scopes.pop() {
-        for item in scope.items.values() {
-            if item.supported {
-                supported.push((path.clone(), item));
-                documented_supported += usize::from(
-                    item.docs
-                        .as_ref()
-                        .is_some_and(|docs| !docs.body.trim().is_empty()),
-                );
-            } else {
-                implementation_count += 1;
-            }
-            let mut members = item.members.iter().collect::<Vec<_>>();
-            while let Some(member) = members.pop() {
-                if !matches!(
-                    member.kind,
-                    DocMemberKind::Parameter | DocMemberKind::Overload
-                ) {
-                    member_count += 1;
-                    documented_members += usize::from(
-                        member
-                            .docs
-                            .as_ref()
-                            .is_some_and(|docs| !docs.body.trim().is_empty())
-                            || member.members.iter().any(|member| {
-                                member.kind == DocMemberKind::Overload
-                                    && member
-                                        .docs
-                                        .as_ref()
-                                        .is_some_and(|docs| !docs.body.trim().is_empty())
-                            }),
-                    );
-                }
-                members.extend(&member.members);
-            }
-        }
-        for child in scope.scopes.values().rev() {
-            let mut child_path = path.clone();
-            child_path.push(child.id.clone());
-            scopes.push((child, child_path));
-        }
-    }
+fn render_signature_code(signature: &str, links: &BTreeMap<String, String>) -> String {
+    link_python_symbols(&escape_html(signature), links)
+}
+
+fn render_python_catalog_for_module(
+    catalog: &DocCatalog,
+    module: &str,
+    stub_name: &str,
+    git_commit: &str,
+) -> String {
+    let supported = catalog_surface_items(&catalog.root, true);
+    let implementation_count = count_catalog_surface_items(&catalog.root, false);
+    let routes = python_item_routes(catalog);
+    let item_links = python_item_links(catalog, &routes);
     let mut body = format!(
-        "<p><code>{}</code> · version {}</p><p>This catalog separates the intentionally supported Python surface from names that happen to be reachable through the extension module. Expand one symbol at a time; every stable fragment remains linkable.</p><section class=\"reference-coverage\" aria-labelledby=\"python-coverage-title\"><h2 id=\"python-coverage-title\">Documentation coverage</h2><p>These counts report what this generated version actually contains. A reachable implementation detail is not a compatibility promise.</p><div class=\"reference-coverage-grid\"><article><strong>{}</strong><span>supported exports</span><progress value=\"{}\" max=\"{}\">{} of {}</progress><small>{} with full descriptions</small></article><article><strong>{}</strong><span>reachable members</span><progress value=\"{}\" max=\"{}\">{} of {}</progress><small>{} with descriptions; methods, properties, fields, and variants are counted</small></article><article><strong>{}</strong><span>implementation details</span><small>listed separately; compatibility is not promised</small></article></div></section>",
-        escape_html(&catalog.component.package),
+        "<p><code>{}</code> · version {}</p><p>Choose a public class or function below. Each symbol has its own page with a conventional signature-first layout, flat member sections, stable links, and source-backed details.</p><section class=\"reference-coverage\" aria-labelledby=\"python-inventory-title\"><h2 id=\"python-inventory-title\">API inventory</h2><p>The generated inventory distinguishes the supported module API from names that are merely reachable through the extension.</p><div class=\"reference-coverage-grid\"><article><strong>{}</strong><span>supported exports</span><small>one page per supported class or function</small></article><article><strong>{}</strong><span>implementation-detail exports</span><small>checked for drift but intentionally omitted from the public reference</small></article></div></section>",
+        escape_html(module),
         escape_html(&catalog.component.version),
         supported.len(),
-        documented_supported,
-        supported.len(),
-        documented_supported,
-        supported.len(),
-        documented_supported,
-        member_count,
-        documented_members,
-        member_count.max(1),
-        documented_members,
-        member_count,
-        documented_members,
         implementation_count,
     );
     if let Some(summary) = &catalog.root.summary {
@@ -5150,251 +5378,270 @@ fn render_python_catalog(catalog: &DocCatalog, stub_name: &str, git_commit: &str
     }
     body.push_str("<nav class=\"reference-guide-links\" aria-label=\"Related Python guides\"><a href=\"tutorial/\">Start with the tutorial</a><a href=\"reference/interfaces/\">Python interface guide</a><a href=\"reference/python/\">All Python modules</a></nav>");
     let filter_id = format!("{}-symbol-filter", slug(&catalog.component.id));
-    body.push_str(&render_reference_filter_start(
-        &filter_id,
-        "Filter supported symbols and implementation details",
-        "Try a class, function, method, or property",
-    ));
-    body.push_str(&render_api_symbol_index(&supported, "Python"));
-    let mut scope_path = Vec::new();
-    render_api_scope(
-        catalog,
-        &catalog.root,
-        &mut scope_path,
-        git_commit,
-        2,
-        &mut body,
-    );
-    body.push_str("</div></div>");
     body.push_str(&format!(
-        "<aside class=\"stub-source\" aria-label=\"Type-checker stub\"><strong>Type-checker stub source</strong><p><a href=\"reference/python/{}\" download>Download <code>{}</code></a> or <a href=\"https://github.com/alphal00p/gammaloop/blob/{}/docs/api/python/{}\">view its generated source</a>. The structured reference above is the human-facing documentation.</p></aside>",
+        "<div data-reference-filter-root><div class=\"reference-tools\"><label for=\"{}\">Filter public classes and functions</label><input id=\"{}\" type=\"search\" data-reference-filter placeholder=\"Try a class or function name\"><output data-reference-filter-count aria-live=\"polite\"></output></div><div class=\"api-symbol-list\" data-reference-filter-scope>",
+        escape_html(&filter_id),
+        escape_html(&filter_id),
+    ));
+    for (path, item) in &supported {
+        let anchor = api_item_anchor(path, item);
+        let route = &routes[&anchor];
+        let kind = api_item_kind_label(item.kind);
+        let anchored_members = anchored_api_members(&item.members, &anchor);
+        let (_, paired_setters) = paired_property_setters(&anchored_members);
+        let member_count = anchored_members
+            .iter()
+            .enumerate()
+            .filter(|(index, (member, _))| {
+                member.kind != DocMemberKind::Overload && !paired_setters.contains(index)
+            })
+            .count();
+        let member_meta = if member_count == 0 {
+            String::new()
+        } else {
+            format!(
+                "<span class=\"api-symbol-meta\">{member_count} member{}</span>",
+                if member_count == 1 { "" } else { "s" },
+            )
+        };
+        let summary = item.summary.clone().or_else(|| {
+            item.docs.as_ref().and_then(|docs| {
+                docs.body
+                    .lines()
+                    .map(str::trim)
+                    .find(|line| !line.is_empty())
+                    .map(str::to_owned)
+            })
+        });
+        body.push_str(&format!(
+            "<a class=\"legacy-reference-anchor\" id=\"{}\" href=\"{}\" data-reference-redirect tabindex=\"-1\" aria-hidden=\"true\"></a>",
+            escape_html(&anchor),
+            escape_html(route),
+        ));
+        append_python_legacy_member_links(&item.members, &anchor, route, &mut body);
+        body.push_str(&format!(
+            "<article class=\"api-symbol-card\" data-reference-entry data-reference-search=\"{}\"><div><span class=\"api-kind\">{kind}</span><strong class=\"api-symbol-name\"><a href=\"{}\"><code>{}</code></a></strong>{}</div>{member_meta}</article>",
+            escape_html(&format!("{} {} {}", item.name, item.title, kind)),
+            escape_html(route),
+            escape_html(&item.name),
+            summary
+                .map(|summary| format!("<p>{}</p>", escape_html(&summary)))
+                .unwrap_or_default(),
+        ));
+    }
+    body.push_str("</div></div>");
+    let source_build_provenance = if catalog.component.features.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<p><strong>Source-build provenance:</strong> this catalog was generated with {}. These are binding build inputs, not Python call arguments.</p>",
+            catalog
+                .component
+                .features
+                .iter()
+                .map(|feature| format!("<code>{}</code>", escape_html(feature)))
+                .collect::<Vec<_>>()
+                .join(", "),
+        )
+    };
+    body.push_str(&format!(
+        "<aside class=\"stub-source\" aria-label=\"Type-checker stub\"><strong>Type-checker stub source</strong><p><a href=\"reference/python/{}\" download>Download <code>{}</code></a> or <a href=\"https://github.com/alphal00p/gammaloop/blob/{}/docs/api/python/{}\">view its generated source</a>. The structured reference above is the human-facing documentation.</p>{source_build_provenance}</aside>",
         escape_html(stub_name),
         escape_html(stub_name),
         escape_html(git_commit),
         escape_html(stub_name),
     ));
-    body
+    link_python_symbols(&body, &item_links)
 }
 
-fn render_api_scope(
-    catalog: &DocCatalog,
-    scope: &DocScope,
-    path: &mut Vec<String>,
-    git_commit: &str,
-    level: usize,
+fn append_python_legacy_member_links(
+    members: &[DocMember],
+    parent_anchor: &str,
+    route: &str,
     body: &mut String,
 ) {
-    let item_links = catalog_item_links(catalog);
-    for supported in [true, false] {
-        let item_count = count_catalog_surface_items(scope, supported);
-        if item_count == 0 {
-            continue;
-        }
-        if supported {
-            body.push_str("<div class=\"api-supported-group\" data-reference-group>");
-        } else {
-            body.push_str(&format!(
-                "<details class=\"api-implementation-group\" data-reference-group data-reference-implementation><summary><strong>Implementation-detail exports</strong> · {item_count} reachable symbol{}</summary><p>These names are visible to Python, but are outside the curated compatibility surface. Prefer the supported API above.</p>",
-                if item_count == 1 { "" } else { "s" },
-            ));
-        }
-        render_api_scope_surface(
-            catalog,
-            scope,
-            path,
-            git_commit,
-            level,
-            supported,
-            &item_links,
-            body,
-        );
-        body.push_str(if supported { "</div>" } else { "</details>" });
+    for (member, anchor) in anchored_api_members(members, parent_anchor) {
+        body.push_str(&format!(
+            "<a class=\"legacy-reference-anchor\" id=\"{}\" href=\"{}#{}\" data-reference-redirect tabindex=\"-1\" aria-hidden=\"true\"></a>",
+            escape_html(&anchor),
+            escape_html(route),
+            escape_html(&anchor),
+        ));
+        append_python_legacy_member_links(&member.members, &anchor, route, body);
     }
 }
 
-fn render_api_scope_surface(
+type ReferenceSibling<'a> = Option<(&'a str, &'a str)>;
+
+fn render_python_item_page(
     catalog: &DocCatalog,
-    scope: &DocScope,
-    path: &mut Vec<String>,
+    module: &str,
+    symbol: (&[String], &DocItem),
+    stub_name: &str,
     git_commit: &str,
-    level: usize,
-    supported: bool,
-    item_links: &BTreeMap<String, String>,
-    body: &mut String,
-) {
-    for item in scope
-        .items
-        .values()
-        .filter(|item| item.supported == supported)
-    {
-        let anchor = api_item_anchor(path, item);
-        let item_heading = level.clamp(2, 6);
-        let section_heading = (item_heading + 1).clamp(3, 6);
-        let kind = api_item_kind_label(item.kind);
-        let mut search = format!(
-            "{} {} {} {}",
-            item.name,
-            item.title,
-            kind,
-            item.signature.as_deref().unwrap_or_default(),
-        );
-        let mut members = item.members.iter().collect::<Vec<_>>();
-        while let Some(member) = members.pop() {
-            search.push(' ');
-            search.push_str(&member.name);
-            members.extend(&member.members);
-        }
+    routes: &BTreeMap<String, String>,
+    siblings: (ReferenceSibling<'_>, ReferenceSibling<'_>),
+) -> String {
+    let (path, item) = symbol;
+    let (previous, next) = siblings;
+    let anchor = api_item_anchor(path, item);
+    let current_route = &routes[&anchor];
+    let mut item_links = python_item_links(catalog, routes);
+    item_links.retain(|_, route| route != current_route);
+    let kind = api_item_kind_label(item.kind);
+    let module_route = format!("reference/python/{}/", catalog.component.id);
+    let (workflow_route, workflow_title) = match catalog.product.id.as_str() {
+        "gammaloop" => (
+            "guides/events-and-observables/",
+            "Events and observables workflow",
+        ),
+        "linnet" => ("guides/algorithms/", "Graph algorithms workflow"),
+        "spenso" => ("guides/python/", "Python tensor workflow"),
+        "idenso" => ("guides/algebra/", "Algebra and rewrites workflow"),
+        "vakint" => ("guides/evaluation/", "Matching and evaluation workflow"),
+        _ => ("tutorial/", "Product tutorial"),
+    };
+    let mut body = format!(
+        "<span id=\"{}\" aria-hidden=\"true\"></span><p class=\"reference-context\"><a href=\"{}\"><code>{}</code></a> <span aria-hidden=\"true\">/</span> {kind}</p><nav class=\"reference-guide-links\" aria-label=\"Python reference navigation\"><a href=\"{}\">All module symbols</a><a href=\"reference/interfaces/\">Python interface guide</a><a href=\"{}\">{}</a></nav>",
+        escape_html(&anchor),
+        escape_html(&module_route),
+        escape_html(module),
+        escape_html(&module_route),
+        escape_html(workflow_route),
+        escape_html(workflow_title),
+    );
+    if let Some(summary) = item.summary.as_ref().filter(|_| item.docs.is_none()) {
         body.push_str(&format!(
-                "<details class=\"api-item\" data-api-surface=\"{}\" id=\"{}\" data-reference-entry data-reference-search=\"{}\"><summary class=\"api-item-heading\"><h{item_heading}><code>{}</code></h{item_heading}><span class=\"api-kind\">{kind}</span>{}{}</summary><div class=\"api-item-body\">",
-                if supported {
-                    "supported"
-                } else {
-                    "implementation"
-                },
-                escape_html(&anchor),
-                escape_html(&search),
-                escape_html(&item.name),
-                if supported {
-                    ""
-                } else {
-                    "<span class=\"api-kind\">Compatibility not promised</span>"
-                },
-                item.summary
-                    .as_ref()
-                    .filter(|_| item.docs.is_none())
-                    .map(|summary| format!("<span class=\"reference-card-summary\">{}</span>", escape_html(summary)))
-                    .unwrap_or_default(),
+            "<p class=\"reference-lede\">{}</p>",
+            escape_html(summary)
         ));
+    }
+    if let Some(signature) = &item.signature {
         body.push_str(&format!(
-            "<nav class=\"api-entry-links\" aria-label=\"Links for {}\"><a href=\"#{}\">Permanent link</a>{}</nav>",
-            escape_html(&item.name),
+            "<div class=\"reference-copy-row\"><pre class=\"api-signature\" id=\"{}-signature\"><code>{}</code></pre><button type=\"button\" data-copy-target=\"{}-signature\">Copy signature</button></div>",
             escape_html(&anchor),
-            if catalog.component.language == ApiLanguage::Rust {
-                format!(
-                    "<a href=\"{}\">{}</a>",
-                    escape_html(&rustdoc_href(catalog, item)),
-                    rustdoc_link_label(item.kind),
-                )
+            render_signature_code(signature, &item_links),
+            escape_html(&anchor),
+        ));
+    }
+    let additional_features = item
+        .required_features
+        .iter()
+        .filter(|feature| !catalog.component.features.contains(*feature))
+        .collect::<Vec<_>>();
+    if !additional_features.is_empty() {
+        body.push_str(&format!(
+            "<p class=\"api-feature-requirement\"><strong>Additional source-build feature{}:</strong> This binding is generated when {} {} enabled.</p>",
+            if additional_features.len() == 1 {
+                ""
             } else {
-                String::new()
+                "s"
+            },
+            additional_features
+                .iter()
+                .map(|feature| format!("<code>{}</code>", escape_html(feature)))
+                .collect::<Vec<_>>()
+                .join(", "),
+            if additional_features.len() == 1 {
+                "is"
+            } else {
+                "are"
             },
         ));
-        if let Some(docs) = &item.docs {
-            body.push_str(&render_doc_text(docs, section_heading));
-        } else if item.summary.is_none() {
-            body.push_str("<p class=\"reference-missing\">Full description missing from the generated catalog.</p>");
-        }
-        if let Some(signature) = &item.signature {
-            body.push_str(&format!(
-                "<pre class=\"api-signature\"><code>{}</code></pre>",
-                render_signature_code(signature, item_links, &anchor),
-            ));
-        }
-        if catalog.component.language == ApiLanguage::Rust && !item.required_features.is_empty() {
-            body.push_str("<p><strong>Requires:</strong> ");
-            for feature in &item.required_features {
-                body.push_str(&format!(
-                    "<span class=\"api-feature\">{}</span>",
-                    escape_html(feature)
-                ));
-            }
-            body.push_str("</p>");
-        }
-        if !item.params.is_empty() {
-            body.push_str(&format!("<h{section_heading}>Parameters</h{section_heading}><div class=\"reference-table-wrap\"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>"));
-            for parameter in &item.params {
-                let docs = parameter
-                    .docs
-                    .as_ref()
-                    .map(|docs| render_doc_text(docs, (section_heading + 1).clamp(4, 6)))
-                    .unwrap_or_else(|| {
-                        "<span class=\"reference-missing\">Description missing</span>".to_owned()
-                    });
-                body.push_str(&format!(
-                        "<tr><td><code>{}</code>{}</td><td><code>{}</code></td><td><code>{}</code></td><td>{}</td></tr>",
-                        escape_html(&parameter.name),
-                        if parameter.required { " <span class=\"api-kind\">required</span>" } else { "" },
-                        render_signature_code(
-                            parameter.ty.as_deref().unwrap_or("—"),
-                            item_links,
-                            &anchor,
-                        ),
-                        escape_html(parameter.default.as_deref().unwrap_or("—")),
-                        docs,
-                    ));
-            }
-            body.push_str("</tbody></table></div>");
-        }
-        if let Some(returns) = &item.returns {
-            body.push_str(&format!("<h{section_heading}>Returns</h{section_heading}>"));
-            body.push_str(&render_doc_text(returns, (section_heading + 1).clamp(4, 6)));
-        }
-        for example in &item.examples {
-            body.push_str(&format!(
-                "<h{section_heading}>{}</h{section_heading}><pre><code data-lang=\"{}\">{}</code></pre>",
-                escape_html(&example.title),
-                escape_html(&example.language),
-                escape_html(&example.code)
-            ));
-        }
-        render_api_members(&item.members, &anchor, item_heading, item_links, body);
-        if let Some(source) = &item.source {
-            body.push_str(&format!(
-                    "<p class=\"api-source-link\"><a href=\"https://github.com/alphal00p/gammaloop/blob/{}/{}#L{}\">View {} source: <code>{}:{}</code></a></p>",
-                    escape_html(git_commit),
-                    escape_html(&source.file),
-                    source.line,
-                    if catalog.component.language == ApiLanguage::Python {
-                        "generated signature"
-                    } else {
-                        "implementation"
-                    },
-                    escape_html(&source.file),
-                    source.line,
-                ));
-        }
-        body.push_str("</div></details>");
     }
-    for child in scope.scopes.values() {
-        path.push(child.id.clone());
-        let mut child_body = String::new();
-        render_api_scope_surface(
-            catalog,
-            child,
-            path,
-            git_commit,
-            level + 1,
-            supported,
-            item_links,
-            &mut child_body,
-        );
-        if !child_body.is_empty() {
-            body.push_str("<section class=\"api-scope\" data-reference-group>");
-        }
-        if !child_body.is_empty() && child.id != "supported" {
-            let heading = level.clamp(2, 6);
-            body.push_str(&format!(
-                "<h{heading}>{}</h{heading}>",
-                escape_html(&child.title)
-            ));
-            if supported {
-                if let Some(summary) = &child.summary {
-                    body.push_str(&format!("<p>{}</p>", escape_html(summary)));
-                }
-                if let Some(docs) = &child.docs {
-                    body.push_str(&render_doc_text(docs, (level + 1).clamp(3, 6)));
-                }
-            }
-        }
-        body.push_str(&child_body);
-        if !child_body.is_empty() {
-            body.push_str("</section>");
-        }
-        path.pop();
+    if let Some(docs) = &item.docs {
+        body.push_str(&render_doc_text(docs, 2));
+    } else if item.summary.is_none() {
+        body.push_str("<p class=\"reference-missing\">Full description missing from the generated catalog.</p>");
     }
+    if !item.params.is_empty() {
+        body.push_str("<h2>Parameters</h2><div class=\"reference-table-wrap\"><table><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>");
+        for parameter in &item.params {
+            let default = match parameter.default.as_deref() {
+                Some("...") => "runtime default",
+                Some(default) => default,
+                None => "—",
+            };
+            let docs = parameter
+                .docs
+                .as_ref()
+                .map(|docs| render_doc_text(docs, 3))
+                .unwrap_or_else(|| {
+                    "<span class=\"reference-missing\">Description missing</span>".to_owned()
+                });
+            body.push_str(&format!(
+                "<tr><td><code>{}</code>{}</td><td><code>{}</code></td><td><code>{}</code></td><td>{}</td></tr>",
+                escape_html(&parameter.name),
+                if parameter.required {
+                    " <span class=\"api-kind\">required</span>"
+                } else {
+                    ""
+                },
+                render_signature_code(parameter.ty.as_deref().unwrap_or("—"), &item_links),
+                escape_html(default),
+                docs,
+            ));
+        }
+        body.push_str("</tbody></table></div>");
+    }
+    if let Some(returns) = &item.returns {
+        body.push_str("<h2>Returns</h2>");
+        body.push_str(&render_doc_text(returns, 3));
+    }
+    for example in &item.examples {
+        body.push_str(&format!(
+            "<h2>{}</h2><pre><code data-lang=\"{}\">{}</code></pre>",
+            escape_html(&example.title),
+            escape_html(&example.language),
+            escape_html(&example.code),
+        ));
+    }
+    if item
+        .members
+        .iter()
+        .any(|member| member.kind != DocMemberKind::Parameter)
+    {
+        body.push_str("<h2>Members</h2><div class=\"api-member-list\">");
+        render_api_members_flat(&item.members, &anchor, 2, &item_links, &mut body);
+        body.push_str("</div>");
+    }
+    if let Some(source) = &item.source {
+        body.push_str(&format!(
+            "<p class=\"api-source-link\"><a href=\"https://github.com/alphal00p/gammaloop/blob/{}/{}#L{}\">View generated signature source: <code>{}:{}</code></a></p>",
+            escape_html(git_commit),
+            escape_html(&source.file),
+            source.line,
+            escape_html(&source.file),
+            source.line,
+        ));
+    }
+    body.push_str(&format!(
+        "<aside class=\"stub-source\" aria-label=\"Type-checker stub\"><strong>Type-checker stub</strong><p><a href=\"reference/python/{}\" download>Download <code>{}</code></a>. The module index links every supported public symbol.</p></aside>",
+        escape_html(stub_name),
+        escape_html(stub_name),
+    ));
+    if previous.is_some() || next.is_some() {
+        body.push_str("<nav class=\"api-symbol-siblings\" aria-label=\"Adjacent Python symbols\">");
+        if let Some((name, route)) = previous {
+            body.push_str(&format!(
+                "<a href=\"{}\"><span>Previous symbol</span><code>{}</code></a>",
+                escape_html(route),
+                escape_html(name),
+            ));
+        }
+        if let Some((name, route)) = next {
+            body.push_str(&format!(
+                "<a href=\"{}\"><span>Next symbol</span><code>{}</code></a>",
+                escape_html(route),
+                escape_html(name),
+            ));
+        }
+        body.push_str("</nav>");
+    }
+    link_python_symbols(&body, &item_links)
 }
 
-fn render_api_members(
+fn render_api_members_flat(
     members: &[DocMember],
     parent_anchor: &str,
     level: usize,
@@ -5429,45 +5676,6 @@ fn render_api_members(
         } else {
             member_kind_label(member.kind)
         };
-        let mut search = format!(
-            "{} {} {} {}",
-            member.name,
-            kind,
-            member.signature.as_deref().unwrap_or_default(),
-            member
-                .docs
-                .as_ref()
-                .and_then(|docs| docs.body.lines().next())
-                .unwrap_or_default(),
-        );
-        if let Some((setter, _)) = setter {
-            search.push(' ');
-            search.push_str(setter.signature.as_deref().unwrap_or_default());
-            search.push(' ');
-            search.push_str(
-                setter
-                    .docs
-                    .as_ref()
-                    .and_then(|docs| docs.body.lines().next())
-                    .unwrap_or_default(),
-            );
-        }
-        for overload in member
-            .members
-            .iter()
-            .filter(|member| member.kind == DocMemberKind::Overload)
-        {
-            search.push(' ');
-            search.push_str(overload.signature.as_deref().unwrap_or_default());
-            search.push(' ');
-            search.push_str(
-                overload
-                    .docs
-                    .as_ref()
-                    .and_then(|docs| docs.body.lines().next())
-                    .unwrap_or_default(),
-            );
-        }
         if let Some((_, setter_anchor)) = setter {
             body.push_str(&format!(
                 "<div class=\"api-member-anchor-alias\" id=\"{}\">",
@@ -5475,23 +5683,24 @@ fn render_api_members(
             ));
         }
         body.push_str(&format!(
-            "<details class=\"api-member\" id=\"{}\" data-reference-entry data-reference-search=\"{}\"><summary class=\"api-member-heading\"><h{heading}><code>{}</code></h{heading}><span class=\"api-kind\">{kind}</span></summary><div class=\"api-member-body\">",
-            escape_html(&anchor),
-            escape_html(&search),
+            "<section class=\"api-member api-member-flat\" id=\"{}\"><header class=\"api-member-heading\"><h{heading}><code>{}</code></h{heading}><span class=\"api-kind\">{kind}</span></header><div class=\"api-member-body\">",
+            escape_html(anchor),
             escape_html(&member.name),
         ));
         body.push_str(&format!(
-            "<a class=\"reference-permalink\" href=\"#{}\">Permanent link</a>{}",
-            escape_html(&anchor),
+            "<a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to {}\">Permanent link</a>{}",
+            escape_html(anchor),
+            escape_html(&member.name),
             setter.map_or_else(String::new, |(_, setter_anchor)| format!(
-                "<a class=\"reference-permalink\" href=\"#{}\">Setter fragment</a>",
+                "<a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to the {} setter\">Setter fragment</a>",
                 escape_html(setter_anchor),
+                escape_html(&member.name),
             )),
         ));
         if let Some(signature) = &member.signature {
             body.push_str(&format!(
                 "<pre class=\"api-member-signature\"><code>{}</code></pre>",
-                render_signature_code(signature, item_links, &anchor),
+                render_signature_code(signature, item_links),
             ));
         }
         if let Some(docs) = &member.docs {
@@ -5521,8 +5730,8 @@ fn render_api_members(
                 escape_html(default)
             ));
         }
-        render_member_parameters(&member.members, &anchor, heading, item_links, body);
-        render_api_members(&member.members, &anchor, heading, item_links, body);
+        render_member_parameters(&member.members, heading, item_links, body);
+        render_api_members_flat(&member.members, anchor, heading, item_links, body);
         if let Some((setter, setter_anchor)) = setter {
             let setter_heading = (heading + 1).clamp(4, 6);
             body.push_str(&format!(
@@ -5531,7 +5740,7 @@ fn render_api_members(
             if let Some(signature) = &setter.signature {
                 body.push_str(&format!(
                     "<pre class=\"api-member-signature api-property-setter-signature\"><code>{}</code></pre>",
-                    render_signature_code(signature, item_links, setter_anchor),
+                    render_signature_code(signature, item_links),
                 ));
             }
             if let Some(docs) = &setter.docs {
@@ -5550,14 +5759,8 @@ fn render_api_members(
                     escape_html(default)
                 ));
             }
-            render_member_parameters(
-                &setter.members,
-                setter_anchor,
-                setter_heading,
-                item_links,
-                body,
-            );
-            render_api_members(
+            render_member_parameters(&setter.members, setter_heading, item_links, body);
+            render_api_members_flat(
                 &setter.members,
                 setter_anchor,
                 setter_heading,
@@ -5566,7 +5769,7 @@ fn render_api_members(
             );
             body.push_str("</section>");
         }
-        body.push_str("</div></details>");
+        body.push_str("</div></section>");
         if setter.is_some() {
             body.push_str("</div>");
         }
@@ -5587,33 +5790,24 @@ fn render_api_overloads(
     if overloads.is_empty() {
         return;
     }
-    let heading = (level + 1).clamp(4, 6);
-    let overload_heading = (heading + 1).clamp(5, 6);
+    let heading = (level + 1).clamp(3, 6);
+    let overload_heading = (heading + 1).clamp(4, 6);
     body.push_str(&format!(
         "<section class=\"api-overloads\"><h{heading}>Overloads</h{heading}>"
     ));
     for (index, (overload, anchor)) in overloads.iter().enumerate() {
-        let search = format!(
-            "overload {} {} {}",
-            index + 1,
-            overload.signature.as_deref().unwrap_or_default(),
-            overload
-                .docs
-                .as_ref()
-                .and_then(|docs| docs.body.lines().next())
-                .unwrap_or_default(),
-        );
         body.push_str(&format!(
-            "<article class=\"api-overload\" id=\"{}\" data-reference-entry data-reference-search=\"{}\"><h{overload_heading}>Overload {}</h{overload_heading}><a class=\"reference-permalink\" href=\"#{}\">Permanent link</a>",
+            "<article class=\"api-overload\" id=\"{}\"><h{overload_heading}>Overload {}</h{overload_heading}><a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to overload {} of {}\">Permanent link</a>",
             escape_html(anchor),
-            escape_html(&search),
             index + 1,
             escape_html(anchor),
+            index + 1,
+            escape_html(parent_anchor),
         ));
         if let Some(signature) = &overload.signature {
             body.push_str(&format!(
                 "<pre class=\"api-member-signature api-overload-signature\"><code>{}</code></pre>",
-                render_signature_code(signature, item_links, anchor),
+                render_signature_code(signature, item_links),
             ));
         }
         if let Some(docs) = &overload.docs {
@@ -5628,13 +5822,7 @@ fn render_api_overloads(
         } else {
             body.push_str("<p class=\"reference-missing\">Overload description missing from the generated catalog.</p>");
         }
-        render_member_parameters(
-            &overload.members,
-            anchor,
-            overload_heading,
-            item_links,
-            body,
-        );
+        render_member_parameters(&overload.members, overload_heading, item_links, body);
         body.push_str("</article>");
     }
     body.push_str("</section>");
@@ -5680,7 +5868,6 @@ fn paired_property_setters(
 
 fn render_member_parameters(
     members: &[DocMember],
-    parent_anchor: &str,
     level: usize,
     item_links: &BTreeMap<String, String>,
     body: &mut String,
@@ -5697,6 +5884,11 @@ fn render_member_parameters(
         "<h{heading}>Parameters</h{heading}><div class=\"reference-table-wrap\"><table class=\"api-parameter-table\"><thead><tr><th>Name</th><th>Type</th><th>Default</th><th>Description</th></tr></thead><tbody>"
     ));
     for parameter in parameters {
+        let default = match parameter.default.as_deref() {
+            Some("...") => "runtime default",
+            Some(default) => default,
+            None => "—",
+        };
         let docs = parameter
             .docs
             .as_ref()
@@ -5705,12 +5897,8 @@ fn render_member_parameters(
         body.push_str(&format!(
             "<tr><td><code>{}</code></td><td><code>{}</code></td><td><code>{}</code></td><td>{}</td></tr>",
             escape_html(&parameter.name),
-            render_signature_code(
-                parameter.signature.as_deref().unwrap_or("—"),
-                item_links,
-                parent_anchor,
-            ),
-            escape_html(parameter.default.as_deref().unwrap_or("—")),
+            render_signature_code(parameter.signature.as_deref().unwrap_or("—"), item_links),
+            escape_html(default),
             docs,
         ));
     }
@@ -5991,6 +6179,7 @@ fn render_doc_text_omitting_parameters(
     let mut sections = vec![];
     let mut start = 0;
     let mut title = None;
+    let mut numpy_section = false;
     let mut index = 0;
     while index < lines.len() {
         let raw_heading = lines[index].trim();
@@ -6025,9 +6214,10 @@ fn render_doc_text_omitting_parameters(
         let labeled_heading = raw_heading.ends_with(':') && common_heading;
         if numpy_heading || markdown_heading || labeled_heading {
             if start < index {
-                sections.push((title.take(), &lines[start..index]));
+                sections.push((title.take(), &lines[start..index], numpy_section));
             }
             title = Some(heading);
+            numpy_section = numpy_heading;
             let consumed = if numpy_heading { 2 } else { 1 };
             start = index + consumed;
             index += consumed;
@@ -6036,13 +6226,13 @@ fn render_doc_text_omitting_parameters(
         }
     }
     if start < lines.len() {
-        sections.push((title, &lines[start..]));
+        sections.push((title, &lines[start..], numpy_section));
     } else if let Some(title) = title {
-        sections.push((Some(title), &lines[lines.len()..]));
+        sections.push((Some(title), &lines[lines.len()..], numpy_section));
     }
 
     let mut rendered = String::from("<div class=\"api-docstring\">");
-    for (title, content) in sections {
+    for (title, content, numpy_section) in sections {
         let Some(title) = title else {
             rendered.push_str(&render_paragraphs(content));
             continue;
@@ -6111,6 +6301,11 @@ fn render_doc_text_omitting_parameters(
                 }
             }
             "returns" | "yields" => {
+                if !numpy_section {
+                    rendered.push_str(&render_paragraphs(content));
+                    rendered.push_str("</section>");
+                    continue;
+                }
                 let content = content
                     .iter()
                     .map(|line| line.trim())
@@ -6210,37 +6405,33 @@ fn next_api_member_anchor(
     }
 }
 
-fn append_catalog_search(catalog: &DocCatalog, scope: &DocScope, entries: &mut Vec<SearchEntry>) {
+fn append_catalog_search_with_component_name(
+    catalog: &DocCatalog,
+    scope: &DocScope,
+    component_name: &str,
+    entries: &mut Vec<SearchEntry>,
+) {
     let mut path = Vec::new();
-    append_catalog_search_at(catalog, scope, &mut path, entries);
+    append_catalog_search_at(catalog, scope, component_name, &mut path, entries);
 }
 
 fn append_catalog_search_at(
     catalog: &DocCatalog,
     scope: &DocScope,
+    component_name: &str,
     path: &mut Vec<String>,
     entries: &mut Vec<SearchEntry>,
 ) {
     for item in scope.items.values() {
-        if catalog.component.language == ApiLanguage::Python && !item.supported {
+        if !item.supported {
             continue;
         }
         let (href, kind, member_anchor) = match catalog.component.language {
-            ApiLanguage::Rust => {
-                let anchor = api_item_anchor(path, item);
-                (
-                    format!(
-                        "reference/rust/supported/{}/#{anchor}",
-                        catalog.component.id
-                    ),
-                    "rust-api",
-                    Some(anchor),
-                )
-            }
+            ApiLanguage::Rust => (rustdoc_href(catalog, item), "rust-api", None),
             ApiLanguage::Python => {
                 let anchor = api_item_anchor(path, item);
                 (
-                    format!("reference/python/{}/#{anchor}", catalog.component.id),
+                    python_item_routes(catalog)[&anchor].clone(),
                     "python-api",
                     Some(anchor),
                 )
@@ -6248,25 +6439,31 @@ fn append_catalog_search_at(
             _ => continue,
         };
         entries.push(SearchEntry {
-            title: format!("{} · {}", catalog.component.id, item.title),
+            title: if catalog.component.language == ApiLanguage::Python {
+                format!("{component_name}.{}", item.name)
+            } else {
+                format!("{component_name} · {}", item.title)
+            },
             summary: item.summary.clone().unwrap_or_default(),
             href: href.clone(),
             kind: kind.to_owned(),
             text: String::new(),
         });
-        append_member_search(
-            &catalog.component.id,
-            &item.title,
-            &href,
-            kind,
-            member_anchor.as_deref(),
-            &item.members,
-            entries,
-        );
+        if catalog.component.language == ApiLanguage::Python {
+            append_member_search(
+                component_name,
+                &item.name,
+                &href,
+                kind,
+                member_anchor.as_deref(),
+                &item.members,
+                entries,
+            );
+        }
     }
     for child in scope.scopes.values() {
         path.push(child.id.clone());
-        append_catalog_search_at(catalog, child, path, entries);
+        append_catalog_search_at(catalog, child, component_name, path, entries);
         path.pop();
     }
 }
@@ -6337,7 +6534,7 @@ fn append_member_search(
                 .join(" | ");
         }
         entries.push(SearchEntry {
-            title: format!("{component} · {title}"),
+            title: format!("{component}.{title}"),
             summary,
             href: member_href.clone(),
             kind: kind.to_owned(),
@@ -6370,6 +6567,7 @@ fn append_member_search(
 fn append_scope_typst(
     catalog: &DocCatalog,
     scope: &DocScope,
+    path: &mut Vec<String>,
     git_commit: &str,
     output: &mut String,
 ) {
@@ -6453,7 +6651,9 @@ fn append_scope_typst(
         append_members_typst(&item.members, 4, output);
         let reference = match catalog.component.language {
             ApiLanguage::Rust => rustdoc_href(catalog, item),
-            ApiLanguage::Python => format!("reference/python/#{}", catalog.component.id),
+            ApiLanguage::Python => {
+                python_item_routes(catalog)[&api_item_anchor(path, item)].clone()
+            }
             _ => String::new(),
         };
         if !reference.is_empty() {
@@ -6471,7 +6671,9 @@ fn append_scope_typst(
         }
     }
     for child in scope.scopes.values() {
-        append_scope_typst(catalog, child, git_commit, output);
+        path.push(child.id.clone());
+        append_scope_typst(catalog, child, path, git_commit, output);
+        path.pop();
     }
 }
 
@@ -6560,19 +6762,6 @@ fn rustdoc_href(catalog: &DocCatalog, item: &DocItem) -> String {
             format!("{base}{}.{name}.html", rustdoc_type_prefix(item))
         }
         _ => format!("reference/rust/{crate_name}/index.html"),
-    }
-}
-
-fn rustdoc_link_label(kind: alphal00p_docs_schema::DocItemKind) -> &'static str {
-    use alphal00p_docs_schema::DocItemKind;
-    match kind {
-        DocItemKind::Function
-        | DocItemKind::Trait
-        | DocItemKind::ExportedMacro
-        | DocItemKind::Method
-        | DocItemKind::Type
-        | DocItemKind::Setting => "Open this item in complete Rustdoc",
-        _ => "Open the complete crate Rustdoc",
     }
 }
 
@@ -6997,7 +7186,7 @@ fn slug(value: &str) -> String {
 
 fn generated_reference_redirect(product: &str, target: &str, label: &str) -> String {
     format!(
-        "<!doctype html><meta charset=\"utf-8\"><meta http-equiv=\"refresh\" content=\"0; url={}\"><link rel=\"canonical\" href=\"{}\"><title>{} · {}</title><a href=\"{}\">Open the {} for {}</a>",
+        "<!doctype html><meta charset=\"utf-8\"><meta name=\"robots\" content=\"noindex\"><meta http-equiv=\"refresh\" content=\"0; url={}\"><link rel=\"canonical\" href=\"{}\"><title>{} · {}</title><a href=\"{}\">Open the {} for {}</a>",
         escape_html(target),
         escape_html(target),
         escape_html(product),
@@ -7010,10 +7199,9 @@ fn generated_reference_redirect(product: &str, target: &str, label: &str) -> Str
 
 fn reference_page(product: &str, title: &str, body: &str) -> String {
     format!(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>{} · {}</title><style>body{{max-width:75rem;margin:auto;padding:2rem 1rem;color:#172033;font:16px/1.5 system-ui}}a{{color:#5b4bdb}}pre{{overflow:auto;padding:1rem;background:#f1f3f7}}table{{width:100%;border-collapse:collapse;margin:1rem 0 2rem}}th,td{{padding:.45rem .6rem;border:1px solid #d9dce5;text-align:left;vertical-align:top}}th{{background:#f1f3f7}}section{{padding-top:.5rem}}</style></head><body><nav><a href=\"../../\">Documentation home</a></nav><h1>{} · {}</h1>{body}</body></html>",
+        "<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width\"><title>{} · {}</title><style>body{{max-width:75rem;margin:auto;padding:2rem 1rem;color:#172033;font:16px/1.5 system-ui}}a{{color:#5b4bdb}}pre{{overflow:auto;padding:1rem;background:#f1f3f7}}table{{width:100%;border-collapse:collapse;margin:1rem 0 2rem}}th,td{{padding:.45rem .6rem;border:1px solid #d9dce5;text-align:left;vertical-align:top}}th{{background:#f1f3f7}}section{{padding-top:.5rem}}</style></head><body><nav><a href=\"../../\">Documentation home</a></nav><h1>{}</h1>{body}</body></html>",
         escape_html(product),
         escape_html(title),
-        escape_html(product),
         escape_html(title),
     )
 }
@@ -7056,361 +7244,612 @@ fn render_cli_help(help: &str) -> String {
         .collect()
 }
 
-fn render_gammaloop_generated_reference(product: &str, reference: &GammaLoopReference) -> String {
-    let visible_commands = reference
+fn cli_route_segment(value: &str) -> String {
+    if value == "!" {
+        return "bang".to_owned();
+    }
+    if let Some(sequence) = value.strip_suffix("[]") {
+        return format!("{}-items", slug(sequence));
+    }
+    slug(value)
+}
+
+fn cli_command_route(path: &str) -> String {
+    let segments = path
+        .split_whitespace()
+        .map(cli_route_segment)
+        .collect::<Vec<_>>();
+    format!("reference/cli/commands/{}/", segments.join("/"))
+}
+
+fn cli_setting_namespace(path: &str) -> &str {
+    path.rsplit_once('.')
+        .map(|(namespace, _)| namespace)
+        .unwrap_or(path)
+}
+
+fn cli_setting_namespace_route(namespace: &str) -> String {
+    format!(
+        "reference/cli/settings/{}/",
+        namespace
+            .split('.')
+            .map(cli_route_segment)
+            .collect::<Vec<_>>()
+            .join("/")
+    )
+}
+
+fn cli_setting_namespaces(reference: &GammaLoopReference) -> BTreeSet<String> {
+    let mut namespaces = BTreeSet::new();
+    for setting in &reference.settings {
+        let segments = setting.path.split('.').collect::<Vec<_>>();
+        for end in 1..segments.len() {
+            namespaces.insert(segments[..end].join("."));
+        }
+    }
+    namespaces
+}
+
+fn visible_cli_commands(reference: &GammaLoopReference) -> Vec<&CliCommand> {
+    reference
         .commands
         .iter()
-        .filter(|command| !command.hidden && !command.generated_help);
-    let visible_command_count = visible_commands.clone().count();
-    let visible_argument_count = visible_commands
-        .clone()
+        .filter(|command| !command.hidden && !command.generated_help)
+        .collect()
+}
+
+fn render_gammaloop_reference_index(product: &str, reference: &GammaLoopReference) -> String {
+    let commands = visible_cli_commands(reference);
+    let argument_count = commands
+        .iter()
         .flat_map(|command| &command.arguments)
         .filter(|argument| !argument.hidden)
         .count();
-    let documented_command_count = visible_commands
-        .clone()
-        .filter(|command| !command.about.trim().is_empty())
-        .count();
-    let documented_argument_count = visible_commands
-        .clone()
-        .flat_map(|command| &command.arguments)
-        .filter(|argument| !argument.hidden && !argument.help.trim().is_empty())
-        .count();
-    let documented_setting_count = reference
-        .settings
-        .iter()
-        .filter(|setting| !setting.description.trim().is_empty())
-        .count();
+    let namespaces = cli_setting_namespaces(reference);
     let mut body = format!(
-        "<p>This version-specific reference is generated from the compiled Clap parser and serialized settings schemas. It preserves exact usage, value arity, aliases, inherited options, conflicts, defaults, and allowed values. <a href=\"reference/generated/gammaloop-reference.json\">Download the schema-v{} JSON</a>.</p><p>Start from the compact family indexes, then expand only the command or settings group you need. Stable command, argument, and setting fragments remain valid.</p><p class=\"reference-summary\">{visible_command_count} public commands · {visible_argument_count} public arguments · {} settings</p><section class=\"reference-coverage\" aria-labelledby=\"cli-coverage-title\"><h2 id=\"cli-coverage-title\">Reference coverage</h2><p>Parser and schema facts are exhaustive. The description counts below expose prose that is still missing at those source boundaries.</p><div class=\"reference-coverage-grid\"><article><strong>{visible_command_count}</strong><span>public commands</span><progress value=\"{documented_command_count}\" max=\"{visible_command_count}\">{documented_command_count} of {visible_command_count}</progress><small>{documented_command_count} described</small></article><article><strong>{visible_argument_count}</strong><span>public arguments</span><progress value=\"{documented_argument_count}\" max=\"{visible_argument_count}\">{documented_argument_count} of {visible_argument_count}</progress><small>{documented_argument_count} described</small></article><article><strong>{}</strong><span>settings</span><progress value=\"{documented_setting_count}\" max=\"{}\">{documented_setting_count} of {}</progress><small>{documented_setting_count} described</small></article></div></section><nav class=\"reference-guide-links\" aria-label=\"Related task guides\"><a href=\"tutorial/\">Create your first state</a><a href=\"guides/process-generation/\">Generate a process</a><a href=\"guides/diagnostics/\">Diagnose a run</a></nav><div data-reference-filter-root><div class=\"reference-tools\"><label for=\"cli-reference-filter\">Filter commands, aliases, arguments, and setting paths</label><input id=\"cli-reference-filter\" type=\"search\" data-reference-filter placeholder=\"Try clean-state, integrate, or runtime.integrator\"><output data-reference-filter-count aria-live=\"polite\"></output><div class=\"reference-disclosure-actions\"><button type=\"button\" data-reference-expand>Expand all</button><button type=\"button\" data-reference-collapse>Collapse all</button></div></div><div data-reference-filter-scope>",
+        "<p>This version-specific reference is generated from the compiled Clap parser and serialized settings schemas. Commands use one manpage-style page each; settings follow their native namespace hierarchy. <a href=\"reference/generated/gammaloop-reference.json\">Download the schema-v{} JSON</a>.</p><p class=\"reference-summary\">{} public commands · {argument_count} public arguments · {} settings · {} settings namespaces</p><nav class=\"reference-guide-links\" aria-label=\"Related task guides\"><a href=\"tutorial/\">Create your first state</a><a href=\"guides/process-generation/\">Generate a process</a><a href=\"guides/diagnostics/\">Diagnose a run</a><a href=\"reference/cli/settings/\">Browse settings namespaces</a></nav><div data-reference-filter-root><div class=\"reference-tools\"><label for=\"cli-reference-filter\">Filter commands, aliases, and options</label><input id=\"cli-reference-filter\" type=\"search\" data-reference-filter placeholder=\"Try generate, integrate, or --help\"><output data-reference-filter-count aria-live=\"polite\"></output></div><div data-reference-filter-scope>",
         reference.schema_version,
+        commands.len(),
         reference.settings.len(),
-        reference.settings.len(),
-        reference.settings.len(),
-        reference.settings.len(),
+        namespaces.len(),
     );
-
-    let mut command_families = BTreeMap::<String, Vec<_>>::new();
-    for command in visible_commands {
+    let mut families = BTreeMap::<String, Vec<&CliCommand>>::new();
+    for command in &commands {
         let family = command
             .path
             .split_whitespace()
             .nth(1)
-            .unwrap_or("global")
+            .unwrap_or("gammaloop")
             .to_owned();
-        command_families.entry(family).or_default().push(command);
+        families.entry(family).or_default().push(command);
     }
-    let command_index = command_families
-        .iter()
-        .map(|(family, commands)| {
-            format!(
-                "<a href=\"#command-family-{}\" data-reference-index-entry data-reference-search=\"{}\"><code>{}</code><span>{} command{}</span></a>",
-                escape_html(&slug(family)),
-                escape_html(&format!(
-                    "{} {}",
-                    family,
-                    commands
-                        .iter()
-                        .map(|command| command.path.as_str())
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                )),
-                escape_html(family),
-                commands.len(),
-                if commands.len() == 1 { "" } else { "s" },
-            )
-        })
-        .collect::<String>();
-    body.push_str(&format!(
-        "<h2 id=\"command-tree\">Command families</h2><div class=\"reference-index\">{command_index}</div>"
-    ));
-    for (family, commands) in command_families {
-        let family_count = commands.len();
+    for (family, commands) in families {
         body.push_str(&format!(
-            "<details class=\"reference-group\" id=\"command-family-{}\" data-reference-group><summary class=\"reference-group-heading\"><span class=\"reference-title\"><code>{}</code></span><span>{family_count} command{}</span></summary><div class=\"reference-group-body\">",
+            "<section class=\"cli-command-family\" id=\"command-family-{}\" data-reference-group><h2><code>{}</code></h2><div class=\"cli-command-list\">",
             escape_html(&slug(&family)),
             escape_html(&family),
-            if family_count == 1 { "" } else { "s" },
         ));
         for command in commands {
-            let command_anchor = generated_anchor("command", &command.path);
-            let visible_aliases = command
+            let route = cli_command_route(&command.path);
+            let aliases = command
                 .aliases
                 .iter()
                 .filter(|alias| alias.visible)
-                .map(|alias| match alias.kind {
-                    CliAliasKind::Name => alias.name.clone(),
-                    CliAliasKind::ShortFlag => format!("-{}", alias.name),
-                    CliAliasKind::LongFlag => format!("--{}", alias.name),
-                })
-                .collect::<Vec<_>>();
-            let hidden_alias_count = command
-                .aliases
-                .iter()
-                .filter(|alias| !alias.visible)
-                .count();
-            let aliases = if visible_aliases.is_empty() && hidden_alias_count == 0 {
-                String::new()
-            } else {
-                format!(
-                    "<p class=\"reference-aliases\"><strong>Aliases:</strong> {}{}</p>",
-                    if visible_aliases.is_empty() {
-                        "none".to_owned()
-                    } else {
-                        visible_aliases
-                            .iter()
-                            .map(|alias| format!("<code>{}</code>", escape_html(alias)))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    },
-                    if hidden_alias_count == 0 {
-                        String::new()
-                    } else {
-                        format!(
-                            " · {hidden_alias_count} hidden parser alias{}",
-                            if hidden_alias_count == 1 { "" } else { "es" }
-                        )
-                    }
-                )
-            };
-            let mut arguments = String::new();
-            let mut search_terms = vec![command.path.clone(), command.about.clone()];
-            search_terms.extend(visible_aliases);
-            for argument in command.arguments.iter().filter(|argument| !argument.hidden) {
-                let argument_anchor =
-                    generated_anchor("argument", &format!("{}::{}", command.path, argument.id));
-                let mut names = Vec::new();
-                if let Some(short) = argument.short {
-                    names.push(format!("-{short}"));
-                }
-                if let Some(long) = &argument.long {
-                    names.push(format!("--{long}"));
-                }
-                if names.is_empty() {
-                    names.push(argument.id.clone());
-                }
-                names.extend(
-                    argument
-                        .aliases
-                        .iter()
-                        .filter(|alias| alias.visible)
-                        .map(|alias| match alias.kind {
-                            CliAliasKind::Name => alias.name.clone(),
-                            CliAliasKind::ShortFlag => format!("-{}", alias.name),
-                            CliAliasKind::LongFlag => format!("--{}", alias.name),
-                        }),
-                );
-                search_terms.extend(names.iter().cloned());
-                search_terms.push(argument.help.clone());
-                let action = match argument.action {
-                    CliArgumentAction::Set => "set one value",
-                    CliArgumentAction::Append => "append values",
-                    CliArgumentAction::SetTrue => "boolean flag (true)",
-                    CliArgumentAction::SetFalse => "boolean flag (false)",
-                    CliArgumentAction::Count => "count occurrences",
-                    CliArgumentAction::Help
-                    | CliArgumentAction::HelpShort
-                    | CliArgumentAction::HelpLong => "show help",
-                    CliArgumentAction::Version => "show version",
-                };
-                let arity = match (argument.arity.min, argument.arity.max) {
-                    (0, Some(0)) => "no value".to_owned(),
-                    (min, Some(max)) if min == max => format!("exactly {min}"),
-                    (min, Some(max)) => format!("{min}–{max}"),
-                    (min, None) => format!("{min} or more"),
-                };
-                let mut behavior = vec![action.to_owned(), arity];
-                if argument.required {
-                    behavior.push("required".to_owned());
-                }
-                if argument.inherited {
-                    behavior.push("inherited global".to_owned());
-                } else if argument.global {
-                    behavior.push("global".to_owned());
-                }
-                if argument.exclusive {
-                    behavior.push("exclusive".to_owned());
-                }
-                if argument.require_equals {
-                    behavior.push("requires =".to_owned());
-                }
-                let values = [
-                    (!argument.value_names.is_empty())
-                        .then(|| format!("names: {}", argument.value_names.join(", "))),
-                    (!argument.defaults.is_empty())
-                        .then(|| format!("default: {}", argument.defaults.join(", "))),
-                    (!argument.possible_values.is_empty())
-                        .then(|| format!("allowed: {}", argument.possible_values.join(", "))),
-                    argument
-                        .value_delimiter
-                        .map(|delimiter| format!("delimiter: {delimiter}")),
-                    argument
-                        .value_terminator
-                        .as_ref()
-                        .map(|terminator| format!("terminator: {terminator}")),
-                ]
-                .into_iter()
-                .flatten()
+                .map(|alias| alias.name.as_str())
                 .collect::<Vec<_>>()
-                .join(" · ");
-                arguments.push_str(&format!(
-                    "<tr id=\"{}\"{}><td><code>{}</code></td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
-                    escape_html(&argument_anchor),
-                    if argument.inherited { " class=\"reference-inherited\"" } else { "" },
-                    escape_html(&names.join(", ")),
-                    if argument.help.is_empty() { "<span class=\"reference-missing\">Description missing at the parser boundary</span>".to_owned() } else { render_cli_help(&argument.help) },
-                    escape_html(&behavior.join(" · ")),
-                    if values.is_empty() { "—".to_owned() } else { escape_html(&values) },
-                    if argument.conflicts_with.is_empty() {
-                        "—".to_owned()
-                    } else {
-                        argument
-                            .conflicts_with
-                            .iter()
-                            .map(|conflict| format!("<code>{}</code>", escape_html(conflict)))
-                            .collect::<Vec<_>>()
-                            .join(", ")
-                    },
-                ));
-            }
-            let table = if arguments.is_empty() {
-                "<p>No public arguments.</p>".to_owned()
-            } else {
-                format!(
-                    "<div class=\"reference-table-wrap\"><table class=\"reference-table\"><thead><tr><th>Argument</th><th>Description</th><th>Action and arity</th><th>Values</th><th>Conflicts</th></tr></thead><tbody>{arguments}</tbody></table></div>"
-                )
-            };
-            let usage_id = format!("{command_anchor}-usage");
-            let public_argument_count = command
+                .join(" ");
+            let options = command
                 .arguments
                 .iter()
                 .filter(|argument| !argument.hidden)
-                .count();
-            let command_summary = if command.about.is_empty() {
-                "<span class=\"reference-missing\">Description missing at the parser boundary.</span>"
-                    .to_owned()
-            } else {
-                render_doc_inline(
-                    &compact_help_summary(&command.about),
-                    DocFormat::RustMarkdown,
-                )
-            };
-            let command_description = if command.about.is_empty() {
-                String::new()
-            } else {
-                format!(
-                    "<div class=\"reference-description\">{}</div>",
-                    render_cli_help(&command.about)
-                )
-            };
-            body.push_str(&format!(
-                "<details class=\"reference-detail\" id=\"{}\" data-reference-entry data-reference-search=\"{}\"><summary class=\"reference-detail-heading\"><span class=\"reference-title\"><code>{}</code></span><span class=\"api-kind\">{public_argument_count} argument{}</span><span class=\"reference-card-summary\">{command_summary}</span></summary><div class=\"reference-detail-body\"><a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to {}\">Permanent link</a>{aliases}{command_description}<div class=\"reference-copy-row\"><pre class=\"api-signature\" id=\"{}\"><code>{}</code></pre><button type=\"button\" data-copy-target=\"{}\">Copy usage</button></div>{table}</div></details>",
-                escape_html(&command_anchor),
-                escape_html(&search_terms.join(" ").split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()),
-                escape_html(&command.path),
-                if public_argument_count == 1 { "" } else { "s" },
-                escape_html(&command_anchor),
-                escape_html(&command.path),
-                escape_html(&usage_id),
-                escape_html(&command.usage),
-                escape_html(&usage_id),
-            ));
-        }
-        body.push_str("</div></details>");
-    }
-    let hidden_command_count = reference
-        .commands
-        .iter()
-        .filter(|command| command.hidden && !command.generated_help)
-        .count();
-    if hidden_command_count > 0 {
-        body.push_str(&format!(
-            "<details class=\"reference-internal\"><summary>{hidden_command_count} hidden parser command{}</summary><p>Hidden commands remain in the downloadable generated catalog for parser parity, but are not promoted as supported user tasks.</p></details>",
-            if hidden_command_count == 1 { "" } else { "s" }
-        ));
-    }
-    let generated_help_count = reference
-        .commands
-        .iter()
-        .filter(|command| command.generated_help)
-        .count();
-    if generated_help_count > 0 {
-        body.push_str(&format!(
-            "<details class=\"reference-internal\"><summary>{generated_help_count} generated help-tree nodes</summary><p>The compiled parser exposes these nodes for nested <code>help</code> traversal. They remain in the downloadable schema for parity but are intentionally omitted from primary command navigation and completeness counts.</p></details>"
-        ));
-    }
-
-    let mut setting_groups = BTreeMap::<String, Vec<_>>::new();
-    for setting in &reference.settings {
-        let mut segments = setting.path.split('.');
-        let root = segments.next().unwrap_or("settings");
-        let family = segments.next().unwrap_or("general");
-        setting_groups
-            .entry(format!("{root}.{family}"))
-            .or_default()
-            .push(setting);
-    }
-    let settings_index = setting_groups
-        .iter()
-        .map(|(group, settings)| {
-            format!(
-                "<a href=\"#settings-group-{}\" data-reference-index-entry data-reference-search=\"{}\"><code>{}</code><span>{} setting{}</span></a>",
-                escape_html(&slug(group)),
-                escape_html(&format!(
-                    "{} {}",
-                    group,
-                    settings
+                .flat_map(|argument| {
+                    argument
+                        .long
                         .iter()
-                        .map(|setting| setting.path.as_str())
-                        .collect::<Vec<_>>()
-                        .join(" ")
-                )),
-                escape_html(group),
-                settings.len(),
-                if settings.len() == 1 { "" } else { "s" },
-            )
-        })
-        .collect::<String>();
-    body.push_str(&format!(
-        "<h2 id=\"settings\">Settings groups</h2><p>CLI settings govern startup and session behavior; runtime settings govern generated integrands, sampling, stability, subtraction, events, selectors, and observables. Precedence and live tracing reload behavior are explained in the <a href=\"guides/diagnostics/\">diagnostics guide</a>.</p><div class=\"reference-index\">{settings_index}</div>"
+                        .map(|name| format!("--{name}"))
+                        .chain(argument.short.iter().map(|name| format!("-{name}")))
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            body.push_str(&format!(
+                "<a class=\"cli-command-link\" id=\"{}\" href=\"{}\" data-reference-entry data-reference-redirect data-reference-search=\"{}\"><span><code>{}</code><small>{}</small></span><span aria-hidden=\"true\">→</span></a>",
+                escape_html(&generated_anchor("command", &command.path)),
+                escape_html(&route),
+                escape_html(&format!("{} {} {} {}", command.path, command.about, aliases, options)),
+                escape_html(&command.path),
+                if command.about.trim().is_empty() {
+                    "Description missing at the parser boundary".to_owned()
+                } else {
+                    escape_html(&compact_help_summary(&command.about))
+                },
+            ));
+            for argument in command.arguments.iter().filter(|argument| !argument.hidden) {
+                body.push_str(&format!(
+                    "<a class=\"legacy-reference-anchor\" id=\"{}\" href=\"{}#{}\" data-reference-redirect tabindex=\"-1\" aria-hidden=\"true\"></a>",
+                    escape_html(&generated_anchor(
+                        "argument",
+                        &format!("{}::{}", command.path, argument.id),
+                    )),
+                    escape_html(&route),
+                    escape_html(&generated_anchor(
+                        "argument",
+                        &format!("{}::{}", command.path, argument.id),
+                    )),
+                ));
+            }
+        }
+        body.push_str("</div></section>");
+    }
+    body.push_str("</div></div><section class=\"cli-settings-callout\"><p class=\"portal-kicker\">Configuration reference</p><h2><a href=\"reference/cli/settings/\">Settings namespaces</a></h2><p>Browse parent and child namespaces instead of searching one monolithic settings list.</p></section>");
+    let mut legacy_setting_groups = BTreeMap::new();
+    for setting in &reference.settings {
+        let namespace = cli_setting_namespace(&setting.path);
+        let route = cli_setting_namespace_route(namespace);
+        body.push_str(&format!(
+            "<a class=\"legacy-reference-anchor\" id=\"{}\" href=\"{}#{}\" data-reference-redirect tabindex=\"-1\" aria-hidden=\"true\"></a>",
+            escape_html(&generated_anchor("setting", &setting.path)),
+            escape_html(&route),
+            escape_html(&generated_anchor("setting", &setting.path)),
+        ));
+        let segments = setting.path.split('.').take(2).collect::<Vec<_>>();
+        legacy_setting_groups
+            .entry(segments.join("."))
+            .or_insert_with(|| namespace.to_owned());
+    }
+    for (group, fallback) in legacy_setting_groups {
+        let target = if namespaces.contains(&group) {
+            &group
+        } else {
+            &fallback
+        };
+        body.push_str(&format!(
+            "<a class=\"legacy-reference-anchor\" id=\"settings-group-{}\" href=\"{}\" data-reference-redirect tabindex=\"-1\" aria-hidden=\"true\"></a>",
+            escape_html(&slug(&group)),
+            escape_html(&cli_setting_namespace_route(target)),
+        ));
+    }
+    reference_page(product, "CLI commands and settings", &body)
+}
+
+fn render_cli_argument_names(argument: &CliArgument) -> String {
+    let mut names = Vec::new();
+    if let Some(short) = argument.short {
+        names.push(format!("-{short}"));
+    }
+    if let Some(long) = &argument.long {
+        names.push(format!("--{long}"));
+    }
+    if names.is_empty() {
+        names.push(argument.id.clone());
+    }
+    names.extend(argument.aliases.iter().filter(|alias| alias.visible).map(
+        |alias| match alias.kind {
+            CliAliasKind::Name => alias.name.clone(),
+            CliAliasKind::ShortFlag => format!("-{}", alias.name),
+            CliAliasKind::LongFlag => format!("--{}", alias.name),
+        },
     ));
-    for (group, settings) in setting_groups {
-        let setting_count = settings.len();
-        let described_count = settings
-            .iter()
-            .filter(|setting| !setting.description.trim().is_empty())
-            .count();
-        let mut cards = String::new();
-        for setting in settings {
-            let default = setting
-                .default
-                .as_ref()
-                .map(Value::to_string)
-                .unwrap_or_else(|| "no serialized default".to_owned());
-            let anchor = generated_anchor("setting", &setting.path);
-            cards.push_str(&format!(
-                "<article class=\"reference-setting\" id=\"{}\" data-reference-entry data-reference-search=\"{}\"><div class=\"reference-setting-heading\"><code>{}</code><a href=\"#{}\" aria-label=\"Permanent link to {}\">#</a></div><div class=\"reference-description\">{}</div><dl class=\"reference-facts\"><div><dt>Type</dt><dd><code>{}</code></dd></div><div><dt>Required</dt><dd>{}</dd></div><div><dt>Default</dt><dd><code>{}</code></dd></div><div><dt>Allowed values</dt><dd>{}</dd></div></dl></article>",
-                escape_html(&anchor),
-                escape_html(&format!("{} {} {} {}", setting.path, setting.value_type, setting.description, setting.possible_values.join(" ")).split_whitespace().collect::<Vec<_>>().join(" ").to_lowercase()),
-                escape_html(&setting.path),
-                escape_html(&anchor),
-                escape_html(&setting.path),
-                if setting.description.is_empty() { "<span class=\"reference-missing\">Description missing in the settings schema.</span>".to_owned() } else { render_cli_help(&setting.description) },
-                escape_html(&setting.value_type),
-                if setting.required { "yes" } else { "no" },
-                escape_html(&default),
-                if setting.possible_values.is_empty() { "Any value accepted by the declared type".to_owned() } else { setting.possible_values.iter().map(|value| format!("<code>{}</code>", escape_html(value))).collect::<Vec<_>>().join(", ") },
+    names.join(", ")
+}
+
+fn render_cli_arguments<'a>(
+    command: &CliCommand,
+    title: &str,
+    arguments: impl Iterator<Item = &'a CliArgument>,
+) -> String {
+    let arguments = arguments.collect::<Vec<_>>();
+    if arguments.is_empty() {
+        return String::new();
+    }
+    let mut body = format!("<section class=\"cli-argument-section\"><h2>{title}</h2>");
+    for argument in arguments {
+        let anchor = generated_anchor("argument", &format!("{}::{}", command.path, argument.id));
+        let action = match argument.action {
+            CliArgumentAction::Set => "sets one value",
+            CliArgumentAction::Append => "accepts repeated values",
+            CliArgumentAction::SetTrue => "sets true",
+            CliArgumentAction::SetFalse => "sets false",
+            CliArgumentAction::Count => "counts occurrences",
+            CliArgumentAction::Help
+            | CliArgumentAction::HelpShort
+            | CliArgumentAction::HelpLong => "shows help",
+            CliArgumentAction::Version => "shows the version",
+        };
+        let arity = match (argument.arity.min, argument.arity.max) {
+            (0, Some(0)) => "no value".to_owned(),
+            (min, Some(max)) if min == max => format!("{min} value(s)"),
+            (min, Some(max)) => format!("{min}–{max} values"),
+            (min, None) => format!("{min} or more values"),
+        };
+        let names = render_cli_argument_names(argument);
+        let mut facts = format!(
+            "<div><dt>Behavior</dt><dd>{action}; {arity}{}</dd></div>",
+            if argument.required { "; required" } else { "" },
+        );
+        if argument.global || argument.inherited {
+            facts.push_str(&format!(
+                "<div><dt>Scope</dt><dd>{}</dd></div>",
+                if argument.inherited {
+                    "inherited global"
+                } else {
+                    "global"
+                },
+            ));
+        }
+        if argument.exclusive {
+            facts.push_str("<div><dt>Exclusive</dt><dd>yes</dd></div>");
+        }
+        if argument.require_equals {
+            facts.push_str("<div><dt>Requires equals sign</dt><dd>yes</dd></div>");
+        }
+        if !argument.value_names.is_empty() {
+            facts.push_str(&format!(
+                "<div><dt>Value names</dt><dd>{}</dd></div>",
+                argument
+                    .value_names
+                    .iter()
+                    .map(|name| format!("<code>{}</code>", escape_html(name)))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            ));
+        }
+        if let Some(delimiter) = argument.value_delimiter {
+            facts.push_str(&format!(
+                "<div><dt>Value delimiter</dt><dd><code>{}</code></dd></div>",
+                escape_html(&delimiter.to_string()),
+            ));
+        }
+        if let Some(terminator) = &argument.value_terminator {
+            facts.push_str(&format!(
+                "<div><dt>Value terminator</dt><dd><code>{}</code></dd></div>",
+                escape_html(terminator),
+            ));
+        }
+        if !argument.defaults.is_empty() {
+            facts.push_str(&format!(
+                "<div><dt>Default</dt><dd><code>{}</code></dd></div>",
+                escape_html(&argument.defaults.join(", ")),
+            ));
+        }
+        if !argument.possible_values.is_empty() {
+            facts.push_str(&format!(
+                "<div><dt>Values</dt><dd>{}</dd></div>",
+                argument
+                    .possible_values
+                    .iter()
+                    .map(|value| format!("<code>{}</code>", escape_html(value)))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            ));
+        }
+        if !argument.conflicts_with.is_empty() {
+            facts.push_str(&format!(
+                "<div><dt>Conflicts with</dt><dd>{}</dd></div>",
+                argument
+                    .conflicts_with
+                    .iter()
+                    .map(|value| format!("<code>{}</code>", escape_html(value)))
+                    .collect::<Vec<_>>()
+                    .join(", "),
             ));
         }
         body.push_str(&format!(
-            "<details class=\"reference-group\" id=\"settings-group-{}\" data-reference-group><summary class=\"reference-group-heading\"><span class=\"reference-title\"><code>{}</code></span><span>{setting_count} setting{} · {described_count} described</span></summary><div class=\"reference-setting-grid reference-group-body\">{cards}</div></details>",
-            escape_html(&slug(&group)),
-            escape_html(&group),
-            if setting_count == 1 { "" } else { "s" },
+            "<article class=\"cli-argument\" id=\"{}\"><header><h3><code>{}</code></h3><a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to {}\">#</a></header>{}<dl class=\"reference-facts\">{facts}</dl></article>",
+            escape_html(&anchor),
+            escape_html(&names),
+            escape_html(&anchor),
+            escape_html(&names),
+            if argument.help.trim().is_empty() {
+                "<p class=\"reference-missing\">Description missing at the parser boundary.</p>".to_owned()
+            } else {
+                render_cli_help(&argument.help)
+            },
+        ));
+    }
+    body.push_str("</section>");
+    body
+}
+
+fn render_cli_command_page(
+    product: &str,
+    reference: &GammaLoopReference,
+    command: &CliCommand,
+) -> String {
+    let command_anchor = generated_anchor("command", &command.path);
+    let (workflow_route, workflow_title) = if command.path.starts_with("gammaLoop generate")
+        || command.path == "gammaLoop import graphs"
+        || command.path.starts_with("gammaLoop save dot")
+        || command.path.starts_with("gammaLoop save uv-forest")
+    {
+        ("guides/process-generation/", "Process generation workflow")
+    } else if command.path.starts_with("gammaLoop integrate")
+        || command.path.starts_with("gammaLoop evaluate")
+        || command.path.starts_with("gammaLoop inspect")
+        || command.path.starts_with("gammaLoop display integrand")
+        || command.path.starts_with("gammaLoop display quantities")
+        || command.path.starts_with("gammaLoop display observables")
+        || command.path.starts_with("gammaLoop display selectors")
+    {
+        (
+            "guides/events-and-observables/",
+            "Events and observables workflow",
+        )
+    } else if command.path.starts_with("gammaLoop set")
+        || command.path.starts_with("gammaLoop display settings")
+        || command.path.starts_with("gammaLoop approach")
+        || command.path.starts_with("gammaLoop bench")
+        || command.path.starts_with("gammaLoop profile")
+        || command.path.starts_with("gammaLoop batch")
+    {
+        ("guides/diagnostics/", "Configuration and diagnostics guide")
+    } else {
+        ("tutorial/", "Create your first state")
+    };
+    let mut body = format!(
+        "<span id=\"{}\" aria-hidden=\"true\"></span><p class=\"reference-context\"><a href=\"reference/cli/\">CLI reference</a> <span aria-hidden=\"true\">/</span> Command</p><nav class=\"reference-guide-links\" aria-label=\"CLI reference navigation\"><a href=\"reference/cli/\">All commands</a><a href=\"reference/cli/settings/\">Settings namespaces</a><a href=\"{}\">{}</a></nav>",
+        escape_html(&command_anchor),
+        escape_html(workflow_route),
+        escape_html(workflow_title),
+    );
+    if command.about.trim().is_empty() {
+        body.push_str(
+            "<p class=\"reference-missing\">Description missing at the parser boundary.</p>",
+        );
+    } else {
+        body.push_str(&format!(
+            "<div class=\"reference-description\">{}</div>",
+            render_cli_help(&command.about),
+        ));
+    }
+    body.push_str(&format!(
+        "<h2>Synopsis</h2><div class=\"reference-copy-row\"><pre class=\"api-signature\" id=\"{}-usage\"><code>{}</code></pre><button type=\"button\" data-copy-target=\"{}-usage\">Copy command</button></div>",
+        escape_html(&command_anchor),
+        escape_html(&command.usage),
+        escape_html(&command_anchor),
+    ));
+    let aliases = command
+        .aliases
+        .iter()
+        .filter(|alias| alias.visible)
+        .map(|alias| match alias.kind {
+            CliAliasKind::Name => alias.name.clone(),
+            CliAliasKind::ShortFlag => format!("-{}", alias.name),
+            CliAliasKind::LongFlag => format!("--{}", alias.name),
+        })
+        .collect::<Vec<_>>();
+    if !aliases.is_empty() {
+        body.push_str(&format!(
+            "<p class=\"reference-aliases\"><strong>Aliases:</strong> {}</p>",
+            aliases
+                .iter()
+                .map(|alias| format!("<code>{}</code>", escape_html(alias)))
+                .collect::<Vec<_>>()
+                .join(", "),
+        ));
+    }
+    body.push_str(&render_cli_arguments(
+        command,
+        "Positional arguments",
+        command
+            .arguments
+            .iter()
+            .filter(|argument| !argument.hidden && argument.positional),
+    ));
+    body.push_str(&render_cli_arguments(
+        command,
+        "Options",
+        command
+            .arguments
+            .iter()
+            .filter(|argument| !argument.hidden && !argument.positional && !argument.inherited),
+    ));
+    body.push_str(&render_cli_arguments(
+        command,
+        "Inherited and global options",
+        command
+            .arguments
+            .iter()
+            .filter(|argument| !argument.hidden && argument.inherited),
+    ));
+    let prefix = format!("{} ", command.path);
+    let direct_children = visible_cli_commands(reference)
+        .into_iter()
+        .filter(|candidate| {
+            candidate.path.starts_with(&prefix) && !candidate.path[prefix.len()..].contains(' ')
+        })
+        .collect::<Vec<_>>();
+    let parent = command.path.rsplit_once(' ').and_then(|(parent, _)| {
+        reference
+            .commands
+            .iter()
+            .find(|candidate| candidate.path == parent && !candidate.hidden)
+    });
+    if parent.is_some() || !direct_children.is_empty() {
+        body.push_str("<section class=\"cli-related\"><h2>Command hierarchy</h2><nav aria-label=\"Related commands\">");
+        if let Some(parent) = parent {
+            body.push_str(&format!(
+                "<a href=\"{}\"><span>Parent</span><code>{}</code></a>",
+                escape_html(&cli_command_route(&parent.path)),
+                escape_html(&parent.path),
+            ));
+        }
+        for child in direct_children {
+            body.push_str(&format!(
+                "<a href=\"{}\"><span>Subcommand</span><code>{}</code></a>",
+                escape_html(&cli_command_route(&child.path)),
+                escape_html(&child.path),
+            ));
+        }
+        body.push_str("</nav></section>");
+    }
+    reference_page(product, &command.path, &body)
+}
+
+fn render_cli_settings_index(product: &str, reference: &GammaLoopReference) -> String {
+    let namespaces = cli_setting_namespaces(reference);
+    let mut body = format!(
+        "<p>The {} generated settings are organized by their actual schema namespaces. Open a namespace to see its direct settings and child namespaces.</p><nav class=\"reference-guide-links\" aria-label=\"CLI settings navigation\"><a href=\"reference/cli/\">All commands</a><a href=\"guides/diagnostics/\">Precedence and live reload</a></nav><div data-reference-filter-root><div class=\"reference-tools\"><label for=\"settings-namespace-filter\">Filter settings namespaces</label><input id=\"settings-namespace-filter\" type=\"search\" data-reference-filter placeholder=\"Try runtime.integrator or cli.global\"><output data-reference-filter-count aria-live=\"polite\"></output></div><div class=\"settings-namespace-list\" data-reference-filter-scope>",
+        reference.settings.len(),
+    );
+    for namespace in namespaces {
+        let direct = reference
+            .settings
+            .iter()
+            .filter(|setting| cli_setting_namespace(&setting.path) == namespace)
+            .count();
+        let prefix = format!("{namespace}.");
+        let descendants = reference
+            .settings
+            .iter()
+            .filter(|setting| setting.path.starts_with(&prefix))
+            .count();
+        body.push_str(&format!(
+            "<a href=\"{}\" data-reference-entry data-reference-search=\"{}\"><code>{}</code><span>{direct} direct · {descendants} total settings</span></a>",
+            escape_html(&cli_setting_namespace_route(&namespace)),
+            escape_html(&namespace),
+            escape_html(&namespace),
         ));
     }
     body.push_str("</div></div>");
-    reference_page(product, "CLI commands and settings", &body)
+    reference_page(product, "Settings namespaces", &body)
+}
+
+fn render_cli_setting(setting: &SettingReference, body: &mut String) {
+    let default = setting
+        .default
+        .as_ref()
+        .map(Value::to_string)
+        .unwrap_or_else(|| "no serialized default".to_owned());
+    let anchor = generated_anchor("setting", &setting.path);
+    body.push_str(&format!(
+        "<section class=\"reference-setting reference-setting-flat\" id=\"{}\"><header><h3><code>{}</code></h3><a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to {}\">#</a></header><div class=\"reference-description\">{}</div><dl class=\"reference-facts\"><div><dt>Type</dt><dd><code>{}</code></dd></div><div><dt>Required</dt><dd>{}</dd></div><div><dt>Default</dt><dd><code>{}</code></dd></div><div><dt>Allowed values</dt><dd>{}</dd></div></dl></section>",
+        escape_html(&anchor),
+        escape_html(&setting.path),
+        escape_html(&anchor),
+        escape_html(&setting.path),
+        if setting.description.trim().is_empty() {
+            "<p class=\"reference-missing\">Description missing in the settings schema.</p>".to_owned()
+        } else {
+            render_cli_help(&setting.description)
+        },
+        escape_html(&setting.value_type),
+        if setting.required { "yes" } else { "no" },
+        escape_html(&default),
+        if setting.possible_values.is_empty() {
+            "Any value accepted by the declared type".to_owned()
+        } else {
+            setting
+                .possible_values
+                .iter()
+                .map(|value| format!("<code>{}</code>", escape_html(value)))
+                .collect::<Vec<_>>()
+                .join(", ")
+        },
+    ));
+}
+
+fn render_cli_settings_namespace_page(
+    product: &str,
+    reference: &GammaLoopReference,
+    namespace: &str,
+    namespaces: &BTreeSet<String>,
+) -> String {
+    let parent = namespace.rsplit_once('.').map(|(parent, _)| parent);
+    let prefix = format!("{namespace}.");
+    let children = namespaces
+        .iter()
+        .filter(|candidate| {
+            candidate.starts_with(&prefix) && !candidate[prefix.len()..].contains('.')
+        })
+        .collect::<Vec<_>>();
+    let settings = reference
+        .settings
+        .iter()
+        .filter(|setting| cli_setting_namespace(&setting.path) == namespace)
+        .collect::<Vec<_>>();
+    let mut body = "<p class=\"reference-context\"><a href=\"reference/cli/settings/\">Settings namespaces</a> <span aria-hidden=\"true\">/</span> Namespace</p><nav class=\"reference-guide-links\" aria-label=\"Settings reference navigation\"><a href=\"reference/cli/\">All commands</a><a href=\"reference/cli/settings/\">All namespaces</a><a href=\"guides/diagnostics/\">Configuration and diagnostics guide</a></nav>".to_owned();
+    if parent.is_some() || !children.is_empty() {
+        body.push_str("<section class=\"settings-hierarchy\"><h2>Namespace hierarchy</h2><nav aria-label=\"Related settings namespaces\">");
+        if let Some(parent) = parent {
+            body.push_str(&format!(
+                "<a href=\"{}\"><span>Parent</span><code>{}</code></a>",
+                escape_html(&cli_setting_namespace_route(parent)),
+                escape_html(parent),
+            ));
+        }
+        for child in children {
+            body.push_str(&format!(
+                "<a href=\"{}\"><span>Child</span><code>{}</code></a>",
+                escape_html(&cli_setting_namespace_route(child)),
+                escape_html(child),
+            ));
+        }
+        body.push_str("</nav></section>");
+    }
+    if settings.is_empty() {
+        body.push_str("<p>This namespace owns child namespaces but no settings directly.</p>");
+    } else {
+        body.push_str("<h2>Settings</h2><div class=\"reference-setting-list\">");
+        for setting in settings {
+            render_cli_setting(setting, &mut body);
+        }
+        body.push_str("</div>");
+    }
+    reference_page(product, &format!("{namespace} settings"), &body)
+}
+
+fn write_gammaloop_reference_pages(
+    product: &str,
+    reference: &GammaLoopReference,
+    site: &Path,
+) -> Result<Vec<SitePage>> {
+    let mut pages = Vec::new();
+    let mut routes = BTreeSet::new();
+    for command in visible_cli_commands(reference) {
+        let route = cli_command_route(&command.path);
+        ensure!(
+            routes.insert(route.clone()),
+            "duplicate generated CLI route {route}"
+        );
+        let destination = site.join(&route);
+        fs::create_dir_all(&destination)?;
+        fs::write(
+            destination.join("index.html"),
+            render_cli_command_page(product, reference, command),
+        )?;
+        pages.push(SitePage::new(route, command.path.clone(), "CLI reference"));
+    }
+    let settings_index = site.join("reference/cli/settings");
+    fs::create_dir_all(&settings_index)?;
+    fs::write(
+        settings_index.join("index.html"),
+        render_cli_settings_index(product, reference),
+    )?;
+    pages.push(SitePage::new(
+        "reference/cli/settings/",
+        "Settings namespaces",
+        "CLI reference",
+    ));
+    let namespaces = cli_setting_namespaces(reference);
+    for namespace in &namespaces {
+        let route = cli_setting_namespace_route(namespace);
+        ensure!(
+            routes.insert(route.clone()),
+            "duplicate generated settings route {route}"
+        );
+        let destination = site.join(&route);
+        fs::create_dir_all(&destination)?;
+        fs::write(
+            destination.join("index.html"),
+            render_cli_settings_namespace_page(product, reference, namespace, &namespaces),
+        )?;
+        pages.push(SitePage::new(
+            route,
+            format!("{namespace} settings"),
+            "CLI reference",
+        ));
+    }
+    Ok(pages)
 }
 
 fn render_vakint_generated_reference(product: &str, reference: &VakintReference) -> String {
@@ -7802,10 +8241,99 @@ mod tests {
             route: "products/gammaloop/snapshots/v0.3.4/".to_owned(),
             components: Vec::new(),
         };
-        let sidebar = builder.site_sidebar(product, &metadata, &current, "", BuildScope::FullSite);
+        let sidebar =
+            builder.site_sidebar(product, &metadata, &current, "", BuildScope::FullSite, &[]);
         assert!(!sidebar.contains("developers/"));
         assert!(!sidebar.contains("For developers"));
         assert!(sidebar.contains("href=\"../../../../citations/#gammaloop\">Cite GammaLoop</a>"));
+    }
+
+    #[test]
+    fn python_sidebar_lists_only_the_current_module_and_marks_one_page() {
+        let builder = SiteBuilder::discover().unwrap();
+        let product = builder
+            .registry
+            .product
+            .iter()
+            .find(|product| product.id == "gammaloop")
+            .unwrap();
+        let component = product.python_components.first().unwrap();
+        let module_route = format!("reference/python/{}/", component.id);
+        let engine_route = format!("{module_route}Engine/");
+        let result_route = format!("{module_route}results/EvaluationResult/");
+        let generated = vec![
+            SitePage::new(&engine_route, "gammaloop.Engine", "Python API"),
+            SitePage::new(&result_route, "gammaloop.EvaluationResult", "Python API"),
+            SitePage::new(
+                "reference/cli/generate/",
+                "gammaloop generate",
+                "CLI reference",
+            ),
+        ];
+        let metadata = SnapshotMetadata {
+            schema: SCHEMA_VERSION,
+            product: &product.id,
+            title: &product.title,
+            channel: BuildChannel::Latest,
+            snapshot_tag: None,
+            git_commit: "0123456789abcdef".to_owned(),
+            git_timestamp: 1,
+            route: "products/gammaloop/latest/".to_owned(),
+            components: Vec::new(),
+        };
+        let current = SitePage::new(&result_route, "EvaluationResult", "Python API");
+        let sidebar = builder.site_sidebar(
+            product,
+            &metadata,
+            &current,
+            "",
+            BuildScope::FullSite,
+            &generated,
+        );
+
+        assert!(sidebar.contains(&format!(
+            "<p class=\"sidebar-group-title\">{} symbols</p>",
+            python_display_module(component)
+        )));
+        assert!(sidebar.contains(&format!(
+            "<nav class=\"sidebar-group sidebar-python-group\" aria-label=\"{} Python symbols\">",
+            python_display_module(component)
+        )));
+        assert!(sidebar.contains(&format!("href=\"{module_route}\">Module overview</a>")));
+        assert!(sidebar.contains(&format!("href=\"{engine_route}\"><code>Engine</code></a>")));
+        assert!(sidebar.contains(
+            "href=\"reference/python/gammaloop-python/results/EvaluationResult/\" aria-current=\"page\"><code>results.EvaluationResult</code></a>"
+        ));
+        assert!(
+            sidebar.contains("href=\"reference/python/\" aria-current=\"location\">Python API</a>")
+        );
+        assert!(!sidebar.contains("gammaloop generate"));
+        assert_eq!(sidebar.matches("aria-current=\"page\"").count(), 1);
+
+        let module = SitePage::new(&module_route, "gammaloop Python API", "Reference");
+        let module_sidebar = builder.site_sidebar(
+            product,
+            &metadata,
+            &module,
+            "",
+            BuildScope::FullSite,
+            &generated,
+        );
+        assert!(module_sidebar.contains(&format!(
+            "href=\"{module_route}\" aria-current=\"page\">Module overview</a>"
+        )));
+        assert_eq!(module_sidebar.matches("aria-current=\"page\"").count(), 1);
+
+        let tutorial = SitePage::new("tutorial/", "Tutorial", "Tutorial");
+        let tutorial_sidebar = builder.site_sidebar(
+            product,
+            &metadata,
+            &tutorial,
+            "",
+            BuildScope::FullSite,
+            &generated,
+        );
+        assert!(!tutorial_sidebar.contains("sidebar-python-group"));
     }
 
     #[test]
@@ -7847,6 +8375,18 @@ mod tests {
     }
 
     #[test]
+    fn cli_special_path_segments_have_stable_routes() {
+        assert_eq!(
+            cli_command_route("gammaLoop !"),
+            "reference/cli/commands/gammaloop/bang/"
+        );
+        assert_eq!(
+            cli_command_route("gammaLoop result[]"),
+            "reference/cli/commands/gammaloop/result-items/"
+        );
+    }
+
+    #[test]
     fn product_bundles_render_authored_typst_but_allow_package_assets() {
         let builder = SiteBuilder::discover().unwrap();
         let site = tempfile::tempdir().unwrap();
@@ -7874,27 +8414,55 @@ mod tests {
     }
 
     #[test]
-    fn generated_cli_reference_de_ranks_help_and_preserves_flag_semantics() {
+    fn cli_reference_index_and_manpages_preserve_parser_semantics() {
         let builder = SiteBuilder::discover().unwrap();
         let (reference, _) = builder.generated_references().unwrap();
-        let public_commands = reference
-            .commands
+        let commands = visible_cli_commands(&reference);
+        let index = render_gammaloop_reference_index("GammaLoop", &reference);
+        let (command, argument) = commands
             .iter()
-            .filter(|command| !command.hidden && !command.generated_help)
-            .count();
-        let rendered = render_gammaloop_generated_reference("GammaLoop", &reference);
+            .find_map(|command| {
+                command
+                    .arguments
+                    .iter()
+                    .find(|argument| argument.long.as_deref() == Some("clean-state"))
+                    .map(|argument| (*command, argument))
+            })
+            .unwrap();
+        let route = cli_command_route(&command.path);
+        let argument_anchor =
+            generated_anchor("argument", &format!("{}::{}", command.path, argument.id));
+        let command_page = render_cli_command_page("GammaLoop", &reference, command);
+        let all_command_pages = commands
+            .iter()
+            .map(|command| render_cli_command_page("GammaLoop", &reference, command))
+            .collect::<String>();
 
-        assert!(rendered.contains(&format!("{public_commands} public commands")));
-        assert!(rendered.contains("generated help-tree nodes"));
-        assert!(!rendered.contains("<h4><code>gammaLoop help"));
-        assert!(rendered.contains("data-reference-filter"));
-        assert!(rendered.contains("--clean-state"));
-        assert!(rendered.contains("boolean flag (true) · no value"));
-        assert!(rendered.contains(
+        assert!(index.contains(&format!("{} public commands", commands.len())));
+        assert!(index.contains("class=\"cli-command-link\""));
+        assert!(index.contains("data-reference-filter"));
+        assert!(
+            index.contains("data-reference-entry data-reference-redirect data-reference-search")
+        );
+        assert!(!index.contains("gammaLoop help"));
+        assert!(!index.contains("<details"));
+        assert!(index.contains(&format!(
+            "id=\"{}\" href=\"{route}#{argument_anchor}\" data-reference-redirect tabindex=\"-1\" aria-hidden=\"true\"",
+            argument_anchor,
+        )));
+        assert!(command_page.contains(&format!(
+            "<article class=\"cli-argument\" id=\"{argument_anchor}\""
+        )));
+        assert!(command_page.contains("--clean-state"));
+        assert!(command_page.contains("sets true; no value"));
+        assert!(!command_page.contains("--clean-state &lt;"));
+        assert!(!command_page.contains("<details"));
+        assert!(!command_page.contains("data-reference-entry"));
+        assert!(!command_page.contains("data-reference-search"));
+        assert!(all_command_pages.contains(
             "Process reference: <code>#&lt;id&gt;</code>, <code>name:&lt;name&gt;</code>"
         ));
-        assert!(rendered.contains("dotted <code>KEY=VALUE</code> assignments"));
-        assert!(!rendered.contains("--clean-state &lt;"));
+        assert!(all_command_pages.contains("dotted <code>KEY=VALUE</code> assignments"));
     }
 
     #[test]
@@ -7914,92 +8482,157 @@ mod tests {
     }
 
     #[test]
-    fn generated_cli_reference_is_progressively_disclosed_without_changing_fragments() {
+    fn cli_manpages_preserve_value_and_global_parser_facts() {
         let builder = SiteBuilder::discover().unwrap();
         let (reference, _) = builder.generated_references().unwrap();
-        let command = reference
-            .commands
-            .iter()
-            .find(|command| !command.hidden && !command.generated_help)
-            .unwrap();
-        let argument = command
-            .arguments
-            .iter()
-            .find(|argument| !argument.hidden)
-            .unwrap();
-        let setting = reference.settings.first().unwrap();
-        let rendered = render_gammaloop_generated_reference("GammaLoop", &reference);
+        let page = |path: &str| {
+            let command = visible_cli_commands(&reference)
+                .into_iter()
+                .find(|command| command.path == path)
+                .unwrap();
+            render_cli_command_page("GammaLoop", &reference, command)
+        };
 
-        assert!(rendered.contains("id=\"cli-coverage-title\""));
-        assert!(rendered.contains("data-reference-expand"));
-        assert!(rendered.contains("<details class=\"reference-group\""));
-        assert!(rendered.contains(&format!(
-            "<details class=\"reference-detail\" id=\"{}\"",
-            generated_anchor("command", &command.path)
-        )));
-        assert!(rendered.contains(&format!(
-            "id=\"{}\"",
-            generated_anchor("argument", &format!("{}::{}", command.path, argument.id))
-        )));
-        assert!(rendered.contains(&format!(
-            "<article class=\"reference-setting\" id=\"{}\"",
-            generated_anchor("setting", &setting.path)
-        )));
+        let import_model = page("gammaLoop import model");
+        assert!(import_model.contains("<div><dt>Requires equals sign</dt><dd>yes</dd></div>"));
+        assert!(
+            import_model
+                .contains("<div><dt>Value names</dt><dd><code>SIMPLIFY_MODEL</code></dd></div>")
+        );
+
+        let inspect = page("gammaLoop inspect");
+        assert!(inspect.contains("href=\"guides/events-and-observables/\""));
+        assert!(inspect.contains("<div><dt>Value names</dt><dd><code>POINT</code></dd></div>"));
+        assert_eq!(
+            inspect
+                .matches("<div><dt>Value delimiter</dt><dd><code>,</code></dd></div>")
+                .count(),
+            2
+        );
+
+        let generate = page("gammaLoop generate");
+        assert!(generate.contains("href=\"guides/process-generation/\""));
+        assert!(generate.contains("<div><dt>Scope</dt><dd>global</dd></div>"));
+        let generate_xs = page("gammaLoop generate xs");
+        assert!(generate_xs.contains("<div><dt>Scope</dt><dd>inherited global</dd></div>"));
     }
 
     #[test]
-    fn python_catalog_disclosures_report_member_coverage_and_preserve_fragments() {
-        use alphal00p_docs_schema::{
-            DocComponent, DocMemberKind, DocProduct, DocText, SCHEMA_VERSION,
-        };
+    fn cli_settings_use_namespace_pages_and_canonical_fragments() {
+        let builder = SiteBuilder::discover().unwrap();
+        let (reference, _) = builder.generated_references().unwrap();
+        let setting = reference.settings.first().unwrap();
+        let namespace = cli_setting_namespace(&setting.path);
+        let route = cli_setting_namespace_route(namespace);
+        let anchor = generated_anchor("setting", &setting.path);
+        let namespaces = cli_setting_namespaces(&reference);
+        let index = render_gammaloop_reference_index("GammaLoop", &reference);
+        let settings_index = render_cli_settings_index("GammaLoop", &reference);
+        let namespace_page =
+            render_cli_settings_namespace_page("GammaLoop", &reference, namespace, &namespaces);
+        let site = tempfile::tempdir().unwrap();
+        let pages = write_gammaloop_reference_pages("GammaLoop", &reference, site.path()).unwrap();
 
-        let mut root = DocScope::new("module", "Module exports");
-        let mut engine = DocItem::new(
-            "Engine",
-            "Engine",
-            "Engine",
-            alphal00p_docs_schema::DocItemKind::PythonClass,
+        assert!(settings_index.contains(&format!("href=\"{route}\"")));
+        assert!(settings_index.contains("data-reference-entry data-reference-search"));
+        assert!(namespace_page.contains("<h2>Settings</h2>"));
+        assert!(namespace_page.contains("href=\"guides/diagnostics/\""));
+        assert!(namespace_page.contains(&format!(
+            "<section class=\"reference-setting reference-setting-flat\" id=\"{anchor}\""
+        )));
+        assert!(!namespace_page.contains("<details"));
+        assert!(!namespace_page.contains("data-reference-entry"));
+        assert!(!namespace_page.contains("data-reference-search"));
+        assert!(index.contains(&format!(
+            "id=\"{anchor}\" href=\"{route}#{anchor}\" data-reference-redirect tabindex=\"-1\" aria-hidden=\"true\""
+        )));
+        assert!(site.path().join(&route).join("index.html").is_file());
+        assert!(pages.iter().any(|page| page.route == route));
+    }
+
+    #[test]
+    fn python_module_indexes_use_the_public_module_name() {
+        let builder = SiteBuilder::discover().unwrap();
+        let product = builder
+            .registry
+            .product
+            .iter()
+            .find(|product| product.id == "spenso")
+            .unwrap();
+        let component = product.python_components.first().unwrap();
+        let module = python_display_module(component);
+        let catalog = builder
+            .component_catalog(product, ApiLanguage::Python, component)
+            .unwrap();
+        let rendered =
+            render_python_catalog_for_module(&catalog, module, "spynso3.pyi", "0123456789abcdef");
+        let routes = python_item_routes(&catalog);
+        let supported = catalog_surface_items(&catalog.root, true);
+        let (path, item) = supported
+            .first()
+            .map(|(path, item)| (path.as_slice(), *item))
+            .unwrap();
+        let symbol = render_python_item_page(
+            &catalog,
+            module,
+            (path, item),
+            "spynso3.pyi",
+            "0123456789abcdef",
+            &routes,
+            (None, None),
         );
-        engine.summary = Some("Runs one documented workflow.".to_owned());
-        engine.docs = Some(DocText::new(
-            DocFormat::PythonDocstring,
-            "Runs one documented workflow.",
+
+        assert_eq!(module, "symbolica.community.spenso");
+        assert_ne!(module, catalog.component.package);
+        assert_eq!(item.required_features.as_slice(), ["python_stubgen"]);
+        assert!(rendered.contains(&format!("<p><code>{module}</code> · version")));
+        assert!(!rendered.contains(&format!(
+            "<p><code>{}</code> · version",
+            catalog.component.package
+        )));
+        assert!(rendered.contains(
+            "<strong>Source-build provenance:</strong> this catalog was generated with <code>python_stubgen</code>."
         ));
-        let mut run = DocMember::new("run", DocMemberKind::Method);
-        run.signature = Some("def run(self, engine: Engine) -> None:".to_owned());
-        let mut engine_parameter = DocMember::new("engine", DocMemberKind::Parameter);
-        engine_parameter.signature = Some("Engine".to_owned());
-        run.members.push(engine_parameter);
-        engine.members.push(run);
-        root.define_item(engine).unwrap();
-        let catalog = DocCatalog {
-            schema_version: SCHEMA_VERSION,
-            product: DocProduct::new("example", "Example"),
-            component: DocComponent::new(
-                "example-python",
-                "example",
-                "Example Python",
-                "1.0.0",
-                ApiLanguage::Python,
-            ),
-            root,
-        };
+        assert!(!symbol.contains("api-feature-requirement"));
+        assert!(symbol.contains("href=\"guides/python/\""));
+    }
 
-        let rendered = render_python_catalog(&catalog, "example-python.pyi", "0123456789abcdef");
-        assert!(rendered.contains("id=\"python-coverage-title\""));
-        assert!(rendered.contains("0 of 1"));
-        assert!(rendered.contains("data-reference-expand"));
-        assert!(
-            rendered.contains(
-                "<details class=\"api-item\" data-api-surface=\"supported\" id=\"engine\""
-            )
+    #[test]
+    fn python_symbol_links_cover_prose_and_inline_code_but_not_existing_links_or_examples() {
+        let links = BTreeMap::from([
+            (
+                "EvaluationResult".to_owned(),
+                "reference/python/gammaloop-python/EvaluationResult/".to_owned(),
+            ),
+            (
+                "amp".to_owned(),
+                "reference/python/gammaloop-python/amp/".to_owned(),
+            ),
+        ]);
+        let rendered = link_python_symbols(
+            "<article><p>EvaluationResult and gammaloop.EvaluationResult, but not EvaluationResults.</p><p><code>EvaluationResult</code> at https://example.test/EvaluationResult?value=amp, HTTPS://example.test/EvaluationResult, ftp://example.test/EvaluationResult, data:text/plain,EvaluationResult, docs.example/EvaluationResult, or reference/EvaluationResult/ &amp; standalone amp.</p><a href=\"manual/\">EvaluationResult</a><pre><code>EvaluationResult()</code></pre></article>",
+            &links,
         );
-        assert!(rendered.contains("<details class=\"api-member\" id=\"engine-run-method\""));
-        assert!(rendered.contains("class=\"api-parameter-table\""));
-        assert!(!rendered.contains("engine-run-method-engine-parameter"));
-        assert!(rendered.contains("engine: <a href=\"#engine\">Engine</a>"));
-        assert!(!rendered.contains("builtins."));
-        assert!(rendered.contains("Member description missing from the generated catalog."));
+
+        assert_eq!(
+            rendered
+                .matches("href=\"reference/python/gammaloop-python/EvaluationResult/\"")
+                .count(),
+            3
+        );
+        assert!(rendered.contains("<code><a href=\"reference/python/gammaloop-python/EvaluationResult/\">EvaluationResult</a></code>"));
+        assert!(rendered.contains("EvaluationResults"));
+        assert!(rendered.contains("https://example.test/EvaluationResult?value=amp"));
+        assert!(rendered.contains("HTTPS://example.test/EvaluationResult"));
+        assert!(rendered.contains("ftp://example.test/EvaluationResult"));
+        assert!(rendered.contains("data:text/plain,EvaluationResult"));
+        assert!(rendered.contains("docs.example/EvaluationResult"));
+        assert!(rendered.contains("reference/EvaluationResult/"));
+        assert!(rendered.contains("<a href=\"manual/\">EvaluationResult</a>"));
+        assert!(rendered.contains("<pre><code>EvaluationResult()</code></pre>"));
+        assert!(rendered.contains(
+            "&amp; standalone <a href=\"reference/python/gammaloop-python/amp/\">amp</a>"
+        ));
     }
 
     #[test]
@@ -8040,6 +8673,22 @@ mod tests {
         assert!(python.contains("<code data-lang=\"python\">engine.run()</code>"));
         assert!(python.contains("<p>Reuse the engine.</p>"));
         assert!(!python.contains("```"));
+    }
+
+    #[test]
+    fn markdown_style_python_returns_render_as_prose() {
+        let rendered = render_doc_text(
+            &alphal00p_docs_schema::DocText::new(
+                DocFormat::PythonDocstring,
+                "# Returns\nThe simplified expression is returned without changing the input.",
+            ),
+            3,
+        );
+
+        assert!(rendered.contains(
+            "<section class=\"api-doc-section api-doc-returns\"><h3>Returns</h3><p>The simplified expression is returned without changing the input.</p>"
+        ));
+        assert!(!rendered.contains("class=\"api-doc-type\""));
     }
 
     #[test]
@@ -8194,10 +8843,6 @@ mod tests {
     #[test]
     fn rustdoc_uses_the_derive_page_for_derive_macros() {
         assert_eq!(
-            rustdoc_link_label(alphal00p_docs_schema::DocItemKind::Command),
-            "Open the complete crate Rustdoc"
-        );
-        assert_eq!(
             rustdoc_macro_prefix(Some(
                 "#[derive(SimpleRepresentation)] #[representation(...)]"
             )),
@@ -8234,19 +8879,16 @@ mod tests {
             rustdoc_href(&catalog, item),
             "reference/rust/spenso_macros/derive.SimpleRepresentation.html"
         );
-        let mut rendered = String::new();
-        render_api_scope(
+        let mut entries = Vec::new();
+        append_catalog_search_with_component_name(
             &catalog,
             &catalog.root,
-            &mut Vec::new(),
-            "0123456789abcdef",
-            2,
-            &mut rendered,
+            &catalog.component.id,
+            &mut entries,
         );
-        assert!(
-            rendered
-                .contains("href=\"reference/rust/spenso_macros/derive.SimpleRepresentation.html\"")
-        );
+        assert!(entries.iter().any(|entry| {
+            entry.href == "reference/rust/spenso_macros/derive.SimpleRepresentation.html"
+        }));
     }
 
     #[test]
@@ -8883,8 +9525,14 @@ mod tests {
                 components: Vec::new(),
             };
 
-            let sidebar =
-                builder.site_sidebar(product, &metadata, &page, "../", BuildScope::ProductPreview);
+            let sidebar = builder.site_sidebar(
+                product,
+                &metadata,
+                &page,
+                "../",
+                BuildScope::ProductPreview,
+                &[],
+            );
             assert!(!sidebar.contains("developers/"), "{}", product.id);
             assert!(
                 sidebar.contains(&format!(
@@ -9028,7 +9676,7 @@ mod tests {
     }
 
     #[test]
-    fn python_catalogs_render_as_structured_reference() {
+    fn python_symbol_pages_and_search_use_canonical_routes() {
         use alphal00p_docs_schema::{
             DocComponent, DocExample, DocMemberKind, DocProduct, DocText, SCHEMA_VERSION,
         };
@@ -9058,12 +9706,13 @@ mod tests {
             "Runs the documented workflow.\n\nConstruct one engine and reuse it.",
         ));
         item.signature = Some("class Engine:".to_owned());
+        item.required_features = vec!["binding".to_owned(), "accelerated".to_owned()];
         let mut method = DocMember::new("run", DocMemberKind::Method);
         let mut integer_overload = DocMember::new("run", DocMemberKind::Overload);
-        integer_overload.signature = Some("def run(self, value: int) -> int:".to_owned());
+        integer_overload.signature = Some("def run(self, value: int) -> LateSupported:".to_owned());
         integer_overload.docs = Some(DocText::new(
             DocFormat::PythonDocstring,
-            "Run one value.\n\nParameters\n----------\nvalue : int\n    Input value.\n\nReturns\n-------\nint\n    Processed value.\n\nRaises\n------\nValueError\n    If the value is invalid.\n\nExamples\n--------\n>>> engine.run(1)\n1\n\nNotes\n-----\nThe engine retains its state.",
+            "Run one value.\n\nParameters\n----------\nvalue : int\n    Input value.\n\nReturns\n-------\nLateSupported\n    Processed value.\n\nRaises\n------\nValueError\n    If the value is invalid.\n\nExamples\n--------\n>>> engine.run(1)\n1\n\nNotes\n-----\nThe engine retains its state.",
         ));
         let mut value = DocMember::new("value", DocMemberKind::Parameter);
         value.signature = Some("int".to_owned());
@@ -9096,7 +9745,7 @@ mod tests {
             "LateSupported",
             "LateSupported",
             "LateSupported",
-            alphal00p_docs_schema::DocItemKind::PythonFunction,
+            alphal00p_docs_schema::DocItemKind::PythonClass,
         );
         later_supported.summary = Some("A supported export in a later scope.".to_owned());
         later_supported.examples.push(DocExample::new(
@@ -9106,110 +9755,184 @@ mod tests {
         ));
         curated.define_item(later_supported).unwrap();
         root.define_scope(curated).unwrap();
+        let mut component = DocComponent::new(
+            "example-python",
+            "example",
+            "Example Python",
+            "1.0.0",
+            ApiLanguage::Python,
+        );
+        component.features.push("binding".to_owned());
         let catalog = DocCatalog {
             schema_version: SCHEMA_VERSION,
             product: DocProduct::new("example", "Example"),
-            component: DocComponent::new(
-                "example-python",
-                "example",
-                "Example Python",
-                "1.0.0",
-                ApiLanguage::Python,
-            ),
+            component,
             root,
         };
 
-        let rendered = render_python_catalog(&catalog, "example-python.pyi", "0123456789abcdef");
-        assert!(rendered.contains("class=\"api-item\" data-api-surface=\"supported\""));
-        assert!(rendered.contains("data-reference-filter"));
-        assert!(rendered.contains("data-reference-index-entry"));
-        assert!(rendered.contains(">Class</span>"));
-        assert!(rendered.contains(">Method</span>"));
-        assert!(rendered.contains(">Property · read/write</span>"));
-        assert!(rendered.contains(">Property · read-only</span>"));
-        assert!(rendered.contains("<h2><code>Engine</code></h2>"));
-        assert!(rendered.contains("<h3><code>run</code></h3>"));
-        assert!(rendered.contains("<h2>Curated helpers</h2>"));
-        assert!(rendered.contains("<h3><code>LateSupported</code></h3>"));
-        assert!(rendered.contains("<h4>Example usage</h4>"));
-        assert!(rendered.contains("class=\"api-implementation-group\""));
-        assert!(
-            rendered.find("id=\"engine\"").unwrap()
-                < rendered.find("id=\"internalengine\"").unwrap()
+        let module = "public.example";
+        let routes = python_item_routes(&catalog);
+        let module_page = render_python_catalog_for_module(
+            &catalog,
+            module,
+            "example-python.pyi",
+            "0123456789abcdef",
         );
-        assert!(
-            rendered.find("id=\"curated-latesupported\"").unwrap()
-                < rendered.find("id=\"internalengine\"").unwrap()
+        let supported = catalog_surface_items(&catalog.root, true);
+        let (engine_path, engine) = supported
+            .iter()
+            .find(|(_, item)| item.name == "Engine")
+            .map(|(path, item)| (path.as_slice(), *item))
+            .unwrap();
+        let engine_anchor = api_item_anchor(engine_path, engine);
+        let engine_route = &routes[&engine_anchor];
+        let engine_page = render_python_item_page(
+            &catalog,
+            module,
+            (engine_path, engine),
+            "example-python.pyi",
+            "0123456789abcdef",
+            &routes,
+            (None, None),
         );
-        assert!(rendered.contains("href=\"tutorial/\""));
-        assert!(rendered.contains("href=\"reference/interfaces/\""));
-        assert!(rendered.contains("href=\"reference/python/example-python.pyi\""));
-        assert!(rendered.contains("class Engine:"));
-        assert!(rendered.contains("Construct one engine and reuse it."));
-        assert_eq!(rendered.matches("Runs the documented workflow.").count(), 1);
-        assert!(rendered.contains("def run(self, value: int)"));
-        assert!(!rendered.contains("class=\"api-doc-section api-doc-parameters\""));
-        assert!(rendered.contains("class=\"api-parameter-table\""));
-        assert!(rendered.contains("<td><code>value</code></td><td><code>int</code></td>"));
-        assert!(rendered.contains("class=\"api-doc-section api-doc-returns\""));
-        assert!(rendered.contains("class=\"api-doc-section api-doc-raises\""));
-        assert!(rendered.contains("class=\"api-doc-section api-doc-examples\""));
-        assert!(rendered.contains("class=\"api-doc-section api-doc-notes\""));
-        assert!(rendered.contains("Type-checker stub source"));
-        assert!(rendered.contains("view its generated source"));
-        assert!(!rendered.contains("<details class=\"stub-source\""));
-        assert_eq!(rendered.matches("id=\"engine-run-method\"").count(), 1);
+        let (late_path, late) = supported
+            .iter()
+            .find(|(_, item)| item.name == "LateSupported")
+            .map(|(path, item)| (path.as_slice(), *item))
+            .unwrap();
+        let late_anchor = api_item_anchor(late_path, late);
+        let late_route = &routes[&late_anchor];
+        let late_page = render_python_item_page(
+            &catalog,
+            module,
+            (late_path, late),
+            "example-python.pyi",
+            "0123456789abcdef",
+            &routes,
+            (None, None),
+        );
+
+        assert_eq!(engine_route, "reference/python/example-python/Engine/");
         assert_eq!(
-            rendered
+            late_route,
+            "reference/python/example-python/curated/LateSupported/"
+        );
+        assert!(module_page.contains("data-reference-filter"));
+        assert!(module_page.contains("data-reference-entry data-reference-search"));
+        assert!(module_page.contains("id=\"python-inventory-title\">API inventory"));
+        assert!(!module_page.contains("<progress"));
+        assert!(!module_page.contains("full descriptions"));
+        assert_eq!(module_page.matches("class=\"api-symbol-card\"").count(), 2);
+        assert_eq!(module_page.matches("class=\"api-symbol-meta\"").count(), 1);
+        assert!(module_page.contains(">3 members</span>"));
+        assert!(!module_page.contains("0 members"));
+        assert!(module_page.contains(&format!("href=\"{engine_route}\"")));
+        assert!(module_page.contains(&format!("href=\"{late_route}\"")));
+        assert!(!module_page.contains("InternalEngine"));
+        assert!(!module_page.contains("<details"));
+        assert!(module_page.contains("href=\"tutorial/\""));
+        assert!(module_page.contains("href=\"reference/interfaces/\""));
+        assert!(module_page.contains("href=\"reference/python/example-python.pyi\""));
+        assert!(module_page.contains(
+            "<strong>Source-build provenance:</strong> this catalog was generated with <code>binding</code>."
+        ));
+        assert!(module_page.contains(&format!(
+            "<a class=\"legacy-reference-anchor\" id=\"{engine_anchor}\" href=\"{engine_route}\" data-reference-redirect tabindex=\"-1\" aria-hidden=\"true\"></a>"
+        )));
+        assert!(module_page.contains(&format!(
+            "id=\"engine-run-method\" href=\"{engine_route}#engine-run-method\" data-reference-redirect tabindex=\"-1\" aria-hidden=\"true\""
+        )));
+
+        assert!(engine_page.contains("class Engine:"));
+        assert!(engine_page.contains(
+            "<strong>Additional source-build feature:</strong> This binding is generated when <code>accelerated</code> is enabled."
+        ));
+        assert!(!engine_page.contains("<code>binding</code> is enabled"));
+        assert!(!engine_page.contains("data-reference-entry"));
+        assert!(!engine_page.contains("data-reference-search"));
+        assert!(engine_page.contains("Construct one engine and reuse it."));
+        assert_eq!(
+            engine_page.matches("Runs the documented workflow.").count(),
+            1
+        );
+        assert!(
+            engine_page
+                .contains("<section class=\"api-member api-member-flat\" id=\"engine-run-method\"")
+        );
+        assert!(!engine_page.contains("<details"));
+        assert!(engine_page.contains(">Method</span>"));
+        assert!(engine_page.contains(">Property · read/write</span>"));
+        assert!(engine_page.contains(">Property · read-only</span>"));
+        assert!(engine_page.contains("def run(self, value: int)"));
+        assert!(engine_page.contains(&format!(
+            "<p class=\"api-doc-type\"><code><a href=\"{late_route}\">LateSupported</a></code></p>"
+        )));
+        assert!(!engine_page.contains(&format!("href=\"{engine_route}\">Engine</a>")));
+        assert!(engine_page.contains("class=\"api-parameter-table\""));
+        assert!(engine_page.contains("<td><code>value</code></td><td><code>int</code></td>"));
+        assert!(engine_page.contains("class=\"api-doc-section api-doc-returns\""));
+        assert!(engine_page.contains("class=\"api-doc-section api-doc-raises\""));
+        assert!(engine_page.contains("class=\"api-doc-section api-doc-examples\""));
+        assert!(engine_page.contains("class=\"api-doc-section api-doc-notes\""));
+        assert_eq!(
+            engine_page
                 .matches("id=\"engine-run-method-overload\"")
                 .count(),
             1
         );
         assert_eq!(
-            rendered
+            engine_page
                 .matches("id=\"engine-run-method-overload-2\"")
                 .count(),
             1
         );
-        assert_eq!(rendered.matches("<h4>Overloads</h4>").count(), 1);
-        assert_eq!(rendered.matches("<h5>Overload ").count(), 2);
-        assert_eq!(rendered.matches("<h3><code>run</code></h3>").count(), 1);
+        assert_eq!(engine_page.matches("<h4>Overloads</h4>").count(), 1);
+        assert_eq!(engine_page.matches("<h5>Overload ").count(), 2);
         assert_eq!(
-            rendered.matches("id=\"engine-global-data-getter\"").count(),
-            1
-        );
-        assert_eq!(
-            rendered.matches("id=\"engine-global-data-setter\"").count(),
-            1
-        );
-        assert!(rendered.contains("api-property-setter-signature"));
-        assert!(rendered.contains("def global_data(self, value: str)"));
-        assert!(rendered.contains("<td><code>value</code></td><td><code>str</code></td>"));
-        assert_eq!(
-            rendered
+            engine_page
                 .matches("<h3><code>global_data</code></h3>")
                 .count(),
             1
         );
+        assert_eq!(
+            engine_page
+                .matches("id=\"engine-global-data-setter\"")
+                .count(),
+            1
+        );
+        assert!(
+            engine_page.contains(
+                "<div class=\"api-member-anchor-alias\" id=\"engine-global-data-setter\">"
+            )
+        );
+        assert!(engine_page.contains("api-property-setter-signature"));
+        assert!(engine_page.contains("def global_data(self, value: str)"));
+        assert!(late_page.contains("<h2>Example usage</h2>"));
+        assert!(late_page.contains("LateSupported()"));
 
         let mut entries = Vec::new();
-        append_catalog_search(&catalog, &catalog.root, &mut entries);
+        append_catalog_search_with_component_name(&catalog, &catalog.root, module, &mut entries);
+        assert!(entries.iter().any(|entry| {
+            entry.title == "public.example.Engine" && entry.href == *engine_route
+        }));
+        assert!(entries.iter().any(|entry| {
+            entry.title == "public.example.LateSupported" && entry.href == *late_route
+        }));
         assert!(
             entries
                 .iter()
-                .any(|entry| entry.href == "reference/python/example-python/#engine")
+                .any(|entry| { entry.href == format!("{engine_route}#engine-run-method") })
         );
         assert!(
             entries.iter().any(|entry| {
-                entry.href == "reference/python/example-python/#engine-run-method"
+                entry.href == format!("{engine_route}#engine-run-method-overload")
             })
         );
-        assert!(entries.iter().any(|entry| {
-            entry.href == "reference/python/example-python/#engine-run-method-overload"
-        }));
-        assert!(entries.iter().any(|entry| {
-            entry.href == "reference/python/example-python/#engine-run-method-overload-2"
-        }));
+        assert!(
+            entries.iter().any(|entry| {
+                entry.href == format!("{engine_route}#engine-run-method-overload-2")
+            })
+        );
         assert_eq!(
             entries
                 .iter()
@@ -9224,12 +9947,16 @@ mod tests {
                 .count(),
             2
         );
-        assert!(entries.iter().any(|entry| {
-            entry.href == "reference/python/example-python/#engine-global-data-getter"
-        }));
-        assert!(!entries.iter().any(|entry| {
-            entry.href == "reference/python/example-python/#engine-global-data-setter"
-        }));
+        assert!(
+            entries
+                .iter()
+                .any(|entry| { entry.href == format!("{engine_route}#engine-global-data-getter") })
+        );
+        assert!(
+            !entries
+                .iter()
+                .any(|entry| { entry.href == format!("{engine_route}#engine-global-data-setter") })
+        );
         assert_eq!(
             entries
                 .iter()
@@ -9240,6 +9967,20 @@ mod tests {
         assert!(entries.iter().all(|entry| {
             !entry.title.contains("InternalEngine") && !entry.href.contains("internalengine")
         }));
+    }
+
+    #[test]
+    fn python_member_fragments_have_scroll_and_target_styles() {
+        let builder = SiteBuilder::discover().unwrap();
+        let css = fs::read_to_string(builder.root.join("docs/assets/site.css")).unwrap();
+
+        assert!(css.contains(
+            ".api-member, .api-overload, .api-member-anchor-alias { scroll-margin-top: calc(var(--header-height) + 1rem); }"
+        ));
+        assert!(css.contains(".api-member-anchor-alias:target > .api-member"));
+        assert!(css.contains(
+            ".reference-coverage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));"
+        ));
     }
 
     #[test]
@@ -9604,7 +10345,7 @@ mod tests {
     }
 
     #[test]
-    fn every_product_has_first_class_structured_references() {
+    fn every_product_orients_rust_to_native_rustdoc_and_keeps_legacy_redirects() {
         let builder = SiteBuilder::discover().unwrap();
         let output = tempfile::tempdir().unwrap();
         for product in &builder.registry.product {
@@ -9612,36 +10353,84 @@ mod tests {
             fs::create_dir_all(&site).unwrap();
             builder.write_site_assets(&site).unwrap();
             builder.write_component_catalogs(product, &site).unwrap();
-            builder.write_generated_reference(product, &site).unwrap();
+            let mut generated_pages = builder.write_generated_reference(product, &site).unwrap();
             let metadata = builder
                 .metadata(product, BuildChannel::Latest, None, Path::new("latest"))
                 .unwrap();
-            builder
+            let python_pages = builder
                 .write_python_reference(product, &metadata, &site)
                 .unwrap();
-            builder.write_rustdoc_placeholder(product, &site).unwrap();
+            generated_pages.extend(python_pages.iter().cloned());
             builder
-                .write_rust_reference(product, &metadata, &site)
+                .write_rust_reference_with_availability(product, &site, true)
                 .unwrap();
             builder.write_reference_hub(product, &site).unwrap();
 
             let hub = fs::read_to_string(site.join("reference/index.html")).unwrap();
             assert!(hub.contains("Rust API"), "{}", product.id);
             assert!(hub.contains("Python API"), "{}", product.id);
+            let rust_index = fs::read_to_string(site.join("reference/rust/index.html")).unwrap();
+            assert!(
+                rust_index.contains("Rustdoc is the canonical Rust API reference"),
+                "{}",
+                product.id
+            );
+            assert!(!rust_index.contains("class=\"api-item\""), "{}", product.id);
+            for component in &product.python_components {
+                let module_route = format!("reference/python/{}/", component.id);
+                let component_pages = python_pages
+                    .iter()
+                    .filter(|page| page.route.starts_with(&module_route))
+                    .collect::<Vec<_>>();
+                let module_page = SitePage::new(
+                    &module_route,
+                    format!("{} Python API", python_display_module(component)),
+                    "Reference",
+                );
+                let sidebar = builder.site_sidebar(
+                    product,
+                    &metadata,
+                    &module_page,
+                    "",
+                    BuildScope::FullSite,
+                    &generated_pages,
+                );
+                assert_eq!(
+                    sidebar.matches("sidebar-python-symbol").count(),
+                    component_pages.len(),
+                    "{}:{}",
+                    product.id,
+                    component.id,
+                );
+                for page in component_pages {
+                    assert!(
+                        sidebar.contains(&format!("href=\"{}\"", page.route)),
+                        "{}:{}:{}",
+                        product.id,
+                        component.id,
+                        page.route,
+                    );
+                }
+            }
             for component in &product.rust_components {
-                let structured = site
+                let legacy = site
                     .join("reference/rust/supported")
                     .join(&component.id)
                     .join("index.html");
-                assert!(structured.is_file(), "{}:{}", product.id, component.id);
+                let crate_name = component.package.replace('-', "_");
+                assert!(legacy.is_file(), "{}:{}", product.id, component.id);
+                assert!(rust_index.contains(&format!(
+                    "href=\"reference/rust/{crate_name}/\">Open canonical Rustdoc"
+                )));
+                let redirect = fs::read_to_string(legacy).unwrap();
+                assert!(redirect.contains("name=\"robots\" content=\"noindex\""));
+                assert!(redirect.contains(&format!(
+                    "http-equiv=\"refresh\" content=\"0; url=../../{crate_name}/\""
+                )));
                 assert!(
-                    fs::read_to_string(structured)
-                        .unwrap()
-                        .contains("class=\"api-item\""),
-                    "{}:{}",
-                    product.id,
-                    component.id
+                    redirect.contains(&format!("rel=\"canonical\" href=\"../../{crate_name}/\""))
                 );
+                assert!(!redirect.contains("assets/site.css"));
             }
         }
         assert!(
@@ -9658,6 +10447,51 @@ mod tests {
         );
         assert!(product_hero(&builder.registry.product[0]).contains("product-logo-gammaloop"));
         assert!(product_hero(&builder.registry.product[2]).contains("product-logo-spenso"));
+    }
+
+    #[test]
+    fn generated_search_uses_cli_leaf_routes_and_setting_namespaces() {
+        let builder = SiteBuilder::discover().unwrap();
+        let product = builder
+            .registry
+            .product
+            .iter()
+            .find(|product| product.id == "gammaloop")
+            .unwrap();
+        let site = tempfile::tempdir().unwrap();
+        builder
+            .write_component_catalogs(product, site.path())
+            .unwrap();
+        builder
+            .write_search_index(product, site.path(), false)
+            .unwrap();
+        let entries = serde_json::from_slice::<Vec<SearchEntry>>(
+            &fs::read(site.path().join("search-index.json")).unwrap(),
+        )
+        .unwrap();
+        let (reference, _) = builder.generated_references().unwrap();
+        let command = visible_cli_commands(&reference).into_iter().next().unwrap();
+        let setting = reference.settings.first().unwrap();
+        let namespace = cli_setting_namespace(&setting.path);
+        let setting_route = format!(
+            "{}#{}",
+            cli_setting_namespace_route(namespace),
+            generated_anchor("setting", &setting.path)
+        );
+
+        assert!(entries.iter().any(|entry| {
+            entry.kind == "command"
+                && entry.title == command.path
+                && entry.href == cli_command_route(&command.path)
+        }));
+        assert!(entries.iter().any(|entry| {
+            entry.kind == "setting" && entry.title == setting.path && entry.href == setting_route
+        }));
+        assert!(entries.iter().any(|entry| {
+            entry.kind == "settings namespace"
+                && entry.title == format!("{namespace} settings")
+                && entry.href == cli_setting_namespace_route(namespace)
+        }));
     }
 
     #[test]
@@ -9874,7 +10708,7 @@ mod tests {
                     site.path(),
                     &page,
                     (None, None),
-                    BuildScope::FullSite,
+                    (BuildScope::FullSite, &[]),
                 )
                 .unwrap();
             let rendered = fs::read_to_string(destination.join("index.html")).unwrap();
@@ -9886,6 +10720,61 @@ mod tests {
             assert!(rendered.contains("issues/new?labels=documentation&amp;title="));
             assert!(rendered.contains("Report a documentation issue"));
         }
+    }
+
+    #[test]
+    fn dense_reference_tocs_only_list_sections_and_omit_empty_pagination() {
+        let builder = SiteBuilder::discover().unwrap();
+        let product = builder
+            .registry
+            .product
+            .iter()
+            .find(|product| product.id == "gammaloop")
+            .unwrap();
+        let component = product.python_components.first().unwrap();
+        let page = SitePage::new(
+            format!("reference/python/{}/Engine/", component.id),
+            "Engine",
+            "Python API",
+        );
+        let site = tempfile::tempdir().unwrap();
+        let destination = site.path().join(&page.route);
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(
+            destination.join("index.html"),
+            "<!doctype html><html><body><h1>Engine</h1><h2>Members</h2><h3>run</h3></body></html>",
+        )
+        .unwrap();
+        let metadata = SnapshotMetadata {
+            schema: SCHEMA_VERSION,
+            product: &product.id,
+            title: &product.title,
+            channel: BuildChannel::Latest,
+            snapshot_tag: None,
+            git_commit: "0123456789abcdef".to_owned(),
+            git_timestamp: 1,
+            route: "products/gammaloop/latest/".to_owned(),
+            components: Vec::new(),
+        };
+        builder
+            .decorate_html_page(
+                product,
+                &metadata,
+                site.path(),
+                &page,
+                (None, None),
+                (BuildScope::FullSite, &[]),
+            )
+            .unwrap();
+        let rendered = fs::read_to_string(destination.join("index.html")).unwrap();
+
+        assert!(
+            rendered
+                .contains("<a class=\"toc-link\" data-level=\"2\" href=\"#members\">Members</a>")
+        );
+        assert!(!rendered.contains("<a class=\"toc-link\" data-level=\"3\" href=\"#run\">run</a>"));
+        assert!(rendered.contains("<h3 id=\"run\">run</h3>"));
+        assert!(!rendered.contains("aria-label=\"Documentation pagination\""));
     }
 
     #[test]
@@ -9917,7 +10806,13 @@ mod tests {
                 components: Vec::new(),
             };
             builder
-                .decorate_site_pages(product, &metadata, &product_site, BuildScope::FullSite)
+                .decorate_site_pages_with_generated(
+                    product,
+                    &metadata,
+                    &product_site,
+                    BuildScope::FullSite,
+                    &[],
+                )
                 .unwrap();
 
             let navigation_routes = product_site_pages(product)

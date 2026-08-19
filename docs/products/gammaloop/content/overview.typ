@@ -20,7 +20,7 @@ and diagnostics meet in one stateful workflow.
 - To create and resume a known state, follow the #link("tutorial/")[first-state tutorial].
 - To adapt a process specification or generation filters, use the
   #link("guides/process-generation/")[process-generation guide] with the
-  #link("reference/cli/#command-gammaloop-generate-9dcc9f488fe75777")[generated `generate` reference].
+  #link("reference/cli/commands/gammaloop/generate/#command-gammaloop-generate-9dcc9f488fe75777")[generated `generate` reference].
 - To inspect concrete cut events, selectors, and histogram snapshots without a full integration,
   follow the #link("guides/events-and-observables/")[events and observables guide].
 - To automate a loaded state or diagnose a long run, choose the

@@ -20,11 +20,11 @@ than a detached copy of the graph.
 
 - To construct and validate a graph with a boundary, follow the
   #link("tutorial/")[first-graph tutorial] and the exact
-  #link("reference/rust/supported/linnet/#supported-hedgegraphbuilder")[`HedgeGraphBuilder`
+  #link("reference/rust/linnet/half_edge/builder/struct.HedgeGraphBuilder.html")[`HedgeGraphBuilder`
   reference].
 - To enumerate cycles, cuts, or connected regions, use the
   #link("guides/algorithms/")[graph-algorithms guide] with the
-  #link("reference/rust/supported/linnet/#supported-hedgegraph")[`HedgeGraph` reference].
+  #link("reference/rust/linnet/half_edge/struct.HedgeGraph.html")[`HedgeGraph` reference].
 - To render a tree of existing DOT files and rebuild only changed figures, use the
   #link("guides/clinnet/")[Clinnet command-line guide].
 - To lay out or render a graph, continue to the #link("guides/linnest/")[Linnest Typst guide];
@@ -79,7 +79,7 @@ presentation boundary.
   model in collider workflows and adds process generation, integration, and persistent state.
 ])
 
-The rendered guides and generated APIs are the canonical usage reference. Contributors can
-follow the stores, invariants, mutation flow, and feature boundaries in the
+The rendered guides, native Rustdoc, and generated Python API are the canonical references.
+Contributors can follow the stores, invariants, mutation flow, and feature boundaries in the
 #developer-link("linnet-architecture", "linnet-architecture.typ", "Linnet implementation architecture").
 ]

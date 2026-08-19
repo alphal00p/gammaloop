@@ -74,10 +74,10 @@ fn main() {
 
 The expected invariant is four distinct left/cut/right partitions separating `a` from `c`.
 Changing the diagonal changes that count, while changing only node or edge payloads does not.
-The generated #link("reference/rust/supported/linnet/#supported-hedgegraph")[`HedgeGraph`
-reference] and
-#link("reference/rust/supported/linnet/#supported-hedgegraphbuilder")[builder reference] give the
-exact supported type boundaries.
+The native #link("reference/rust/linnet/half_edge/struct.HedgeGraph.html")[`HedgeGraph`
+Rustdoc] and
+#link("reference/rust/linnet/half_edge/builder/struct.HedgeGraphBuilder.html")[builder Rustdoc]
+give the exact compiled type boundaries for this revision.
 
 #callout("Interpret a cut mismatch structurally", [
   A failed `graph.check()` indicates a storage or involution invariant and must be resolved before

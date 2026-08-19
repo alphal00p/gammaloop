@@ -14,10 +14,10 @@ The `spenso` crate organizes its public surface into `structure`, `tensors`, `co
 - network stores and libraries bind symbolic tensor names to concrete data and execute a graph.
 
 Trait implementations and generic constraints determine which combinations of structure and
-data support an operation. Consult the #link("reference/rust/")[curated Rust API] when a method
-is unavailable for a particular tensor type, then follow its Rustdoc link for exhaustive generic
-detail. The `shadowing` API and symbolic parallelism controls require their corresponding Cargo
-features.
+data support an operation. Consult the #link("reference/rust/")[Rust orientation] to choose the
+relevant crate, then use its revision-specific Rustdoc when a method is unavailable for a
+particular tensor type. The `shadowing` API and symbolic parallelism controls require their
+corresponding Cargo features.
 
 == Proc macros and HEP data
 
@@ -35,9 +35,9 @@ use spenso::structure::representation::RepName;
 struct Flavor {}
 ```
 
-The `spenso-macros` card in the #link("reference/rust/")[Rust reference] lists the derive's
-helper attributes, allowed targets, and feature conditions. Macro expansion happens at compile
-time and produces ordinary Rust implementations.
+The #link("reference/rust/spenso_macros/derive.SimpleRepresentation.html")[`SimpleRepresentation`
+Rustdoc] lists the derive's helper attributes and allowed targets. Macro expansion happens at
+compile time and produces ordinary Rust implementations.
 
 `spenso-hep-lib` supplies domain data and tensor-library construction for high-energy physics.
 It is intentionally separate from the generic core. Users who need gamma matrices or physics

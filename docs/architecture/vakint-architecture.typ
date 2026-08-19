@@ -158,5 +158,5 @@ For supported workflows, see the
 #link("../../../products/vakint/latest/guides/evaluation/")[evaluation and reproducibility guide],
 #link("../../../products/vakint/latest/reference/interfaces/")[Rust/Python interface guide], and
 #link("../../../products/vakint/latest/reference/topologies/")[generated topology table]. Exact
-supported Rust signatures are in the
-#link("../../../products/vakint/latest/reference/rust/supported/vakint/")[curated Vakint reference].
+Rust signatures are in the
+#link("../../../products/vakint/latest/reference/rust/vakint/")[native Vakint Rustdoc].

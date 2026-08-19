@@ -219,7 +219,7 @@ thread configuration.
 For supported workflows, start with the
 #link("../../../products/spenso/latest/tutorial/")[first-contraction tutorial], continue with the
 #link("../../../products/spenso/latest/guides/networks/")[network guide], and use the
-#link("../../../products/spenso/latest/reference/rust/supported/spenso/")[curated Rust reference]
+#link("../../../products/spenso/latest/reference/rust/spenso/")[native Spenso Rustdoc]
 for exact public signatures. Python construction and execution are documented in the
 #link("../../../products/spenso/latest/guides/python/")[Spynso3 workflow], whose ownership is
 separate from the core crate described here.

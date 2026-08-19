@@ -22,10 +22,11 @@ a `topo(...)` structure built from propagators.
   #link("reference/topologies/")[generated topology table].
 - To tensor-reduce and evaluate with an explicit backend policy, use the
   #link("guides/evaluation/")[evaluation guide] with the exact
-  #link("reference/rust/supported/vakint/#supported-evaluationorder")[`EvaluationOrder`]
+  #link("reference/rust/vakint/struct.EvaluationOrder.html")[`EvaluationOrder`]
   reference.
 - To embed Vakint in Rust or `symbolica.community.vakint`, use the
-  #link("reference/interfaces/")[interface guide] and generated Rust/Python signatures before
+  #link("reference/interfaces/")[interface guide], native Rustdoc, and generated Python
+  signatures before
   selecting external tools.
 
 == Workflow

@@ -19,13 +19,13 @@ network execution build on that separation.
 
 - To verify slot duality with one numerical contraction, follow the
   #link("tutorial/")[first-contraction tutorial] and the exact
-  #link("reference/rust/supported/spenso/#supported-contract")[`Contract` reference].
+  #link("reference/rust/spenso/contraction/trait.Contract.html")[`Contract` reference].
 - To assemble and execute several tensor/scalar nodes, use the
   #link("guides/networks/")[tensor-network guide] with the
-  #link("reference/rust/supported/spenso/#supported-network")[`Network` reference].
+  #link("reference/rust/spenso/network/struct.Network.html")[`Network` reference].
 - To construct tensors or execute a network from Python, follow the
   #link("guides/python/")[Python tensor-workflow guide] with the exact
-  #link("reference/python/spynso3/#exports-tensornetwork")[`TensorNetwork` reference].
+  #link("reference/python/spynso3/TensorNetwork/")[`TensorNetwork` reference].
 - To parse symbolic tensor functions or apply Dirac/color identities, review the
   #link("reference/interfaces/")[feature and interface guide], then continue with
   #product-link("idenso", label: "Idenso") for representation-aware rewrites.
@@ -69,8 +69,8 @@ Spenso uses #product-link("linnet", label: "Linnet") for the underlying network 
 Symbolica expressions. #product-link("gammaloop", label: "GammaLoop") consumes these components
 inside a broader collider workflow.
 
-The #link("reference/interfaces/")[interface guide] and generated Rust/Python references list
-the public modules, traits, feature gates, and import paths.
+The #link("reference/interfaces/")[interface guide], native Rustdoc, and generated Python
+reference list the public modules, traits, feature gates, and import paths.
 
 Contributors changing structures, contraction, parsing, storage, or network scheduling should
 also read the source-audited

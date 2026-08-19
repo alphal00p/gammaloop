@@ -21,7 +21,7 @@ cargo test --locked -p alphal00p-docs-examples
 
 Vakint uses Symbolica; ensure your use satisfies its license terms. External integration tools
 are unnecessary for the matching-only settings below. The documentation test compiles this
-example against the same workspace revision as the generated Rust reference.
+example against the same workspace revision as the published Rustdoc.
 
 == Match a one-loop topology
 
