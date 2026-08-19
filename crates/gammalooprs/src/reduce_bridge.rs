@@ -11,8 +11,26 @@ use crate::graph::Graph;
 use crate::graph::lmb::LMBext;
 use crate::utils::{GS, W_};
 
-/// Reduce a one-loop graph's numerator to master integrals. 
-pub(crate) fn reduce_graph_numerator(graph: &Graph, num: &Atom) -> Option<String> {
+/// The outcome of attempting to reduce a graph's numerator
+pub(crate) enum ReduceOutcome {
+    /// Reduced to `Σ coeff × master`, formatted for the dot `reduced_num`.
+    Reduced(String),
+    /// Not a one-loop graph
+    NotOneLoop(usize),
+    /// One-loop, but the contracted numerator is identically zero.
+    ZeroNumerator,
+    /// One-loop with a non-zero numerator, but the reducer produced no terms.
+    Unsupported,
+}
+
+/// Reduce a one-loop graph's numerator to master integrals.
+pub(crate) fn reduce_graph_numerator(graph: &Graph, num: &Atom) -> ReduceOutcome {
+    // The reducer only handles a single loop; tree/multi-loop short-circuit.
+    let n_loops = graph.loop_momentum_basis.loop_edges.len();
+    if n_loops != 1 {
+        return ReduceOutcome::NotOneLoop(n_loops);
+    }
+
     // Complete the Dirac traces to a scalar
     let scalar = num
         .collect_gamma_chains()
@@ -48,7 +66,8 @@ pub(crate) fn reduce_graph_numerator(graph: &Graph, num: &Atom) -> Option<String
         });
     }
     if edges.is_empty() {
-        return None;
+        // A one-loop graph should have loop propagators; be defensive.
+        return ReduceOutcome::NotOneLoop(n_loops);
     }
 
     let heads = oneloop::bridge::GammaloopHeads {
@@ -60,7 +79,11 @@ pub(crate) fn reduce_graph_numerator(graph: &Graph, num: &Atom) -> Option<String
     let family = oneloop::bridge::family_from_gammaloop(&num_lmb, &edges, &heads);
     let reduction = oneloop::reduce::reduce(&family);
     if reduction.terms.is_empty() {
-        return None;
+        return if num_lmb.is_zero() {
+            ReduceOutcome::ZeroNumerator
+        } else {
+            ReduceOutcome::Unsupported
+        };
     }
 
     let show = |a: &Atom| {
@@ -72,7 +95,7 @@ pub(crate) fn reduce_graph_numerator(graph: &Graph, num: &Atom) -> Option<String
         .iter()
         .map(|(coeff, master)| format!("({}) {}", show(coeff), format_master(master, &show)))
         .collect();
-    Some(terms.join(" + ").replace('"', "\\\""))
+    ReduceOutcome::Reduced(terms.join(" + ").replace('"', "\\\""))
 }
 
 /// Format a master integral as `A0/B0/C0/D0(args...)`

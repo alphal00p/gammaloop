@@ -57,11 +57,36 @@ impl Graph {
             }
 
             if settings.reduce {
-                if let Some(reduced) = crate::reduce_bridge::reduce_graph_numerator(self, &num) {
-                    dotgraph
-                        .global_data
-                        .statements
-                        .insert("reduced_num".into(), reduced);
+                use crate::reduce_bridge::ReduceOutcome;
+                match crate::reduce_bridge::reduce_graph_numerator(self, &num) {
+                    ReduceOutcome::Reduced(reduced) => {
+                        dotgraph
+                            .global_data
+                            .statements
+                            .insert("reduced_num".into(), reduced);
+                    }
+                    ReduceOutcome::NotOneLoop(n) => {
+                        dotgraph
+                            .global_data
+                            .statements
+                            .insert("reduce_status".into(), "not_one_loop".into());
+                        dotgraph
+                            .global_data
+                            .statements
+                            .insert("reduce_loops".into(), n.to_string());
+                    }
+                    ReduceOutcome::ZeroNumerator => {
+                        dotgraph
+                            .global_data
+                            .statements
+                            .insert("reduce_status".into(), "zero_numerator".into());
+                    }
+                    ReduceOutcome::Unsupported => {
+                        dotgraph
+                            .global_data
+                            .statements
+                            .insert("reduce_status".into(), "unsupported".into());
+                    }
                 }
             }
 
