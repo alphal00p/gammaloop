@@ -284,7 +284,7 @@ impl ExactLibraryReference {
 
 enum LibraryReference {
     Symbol(Symbol),
-    Exact(ExactLibraryReference),
+    Exact(Box<ExactLibraryReference>),
 }
 
 pub struct ConvertibleToLibraryReference(LibraryReference);
@@ -295,6 +295,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToLibraryReference {
     fn extract(value: pyo3::Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
         if let Ok(expression) = value.extract::<PyRef<'_, TensorExpression>>() {
             return ExactLibraryReference::from_expression(&expression)
+                .map(Box::new)
                 .map(LibraryReference::Exact)
                 .map(Self);
         }

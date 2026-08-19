@@ -304,7 +304,7 @@ pub(crate) enum TensorOperand {
 #[derive(IntoPyObject)]
 enum TensorDispatch {
     Expression(Py<TensorExpression>),
-    Network(SpensoNet),
+    Network(Py<SpensoNet>),
 }
 
 #[cfg(feature = "python_stubgen")]
@@ -1671,6 +1671,7 @@ impl TensorExpression {
         if let Some(right) = concrete_network(rhs)? {
             return Self::promoted_network(&self_, py)?
                 .add_network(right, false)
+                .and_then(|network| Py::new(py, network))
                 .map(TensorDispatch::Network);
         }
         let left = Self::structured(&self_);
@@ -1702,6 +1703,7 @@ impl TensorExpression {
         if let Some(left) = concrete_network(lhs)? {
             return left
                 .add_network(Self::promoted_network(&self_, py)?, false)
+                .and_then(|network| Py::new(py, network))
                 .map(TensorDispatch::Network);
         }
         Self::__add__(self_, py, lhs)
@@ -1715,6 +1717,7 @@ impl TensorExpression {
         if let Some(right) = concrete_network(rhs)? {
             return Self::promoted_network(&self_, py)?
                 .add_network(right, true)
+                .and_then(|network| Py::new(py, network))
                 .map(TensorDispatch::Network);
         }
         let left = Self::structured(&self_);
@@ -1746,6 +1749,7 @@ impl TensorExpression {
         if let Some(left) = concrete_network(lhs)? {
             return left
                 .add_network(Self::promoted_network(&self_, py)?, true)
+                .and_then(|network| Py::new(py, network))
                 .map(TensorDispatch::Network);
         }
         let right = Self::structured(&self_);
@@ -1777,6 +1781,7 @@ impl TensorExpression {
         if let Some(right) = concrete_network(rhs)? {
             return Self::promoted_network(&self_, py)?
                 .multiply_network(right)
+                .and_then(|network| Py::new(py, network))
                 .map(TensorDispatch::Network);
         }
         let left = Self::structured(&self_);
@@ -1800,6 +1805,7 @@ impl TensorExpression {
         if let Some(left) = concrete_network(lhs)? {
             return left
                 .multiply_network(Self::promoted_network(&self_, py)?)
+                .and_then(|network| Py::new(py, network))
                 .map(TensorDispatch::Network);
         }
         let right = Self::structured(&self_);
@@ -1823,6 +1829,7 @@ impl TensorExpression {
         if let Some(right) = concrete_network(rhs)? {
             return Self::promoted_network(&self_, py)?
                 .__truediv__(ConvertibleToSpensoNet(right))
+                .and_then(|network| Py::new(py, network))
                 .map(TensorDispatch::Network);
         }
         let value = Self::structured(&self_);
@@ -1847,6 +1854,7 @@ impl TensorExpression {
         if let Some(left) = concrete_network(lhs)? {
             return Self::promoted_network(&self_, py)?
                 .__rtruediv__(ConvertibleToSpensoNet(left))
+                .and_then(|network| Py::new(py, network))
                 .map(TensorDispatch::Network);
         }
         let value = Self::structured(&self_);
@@ -1876,6 +1884,7 @@ impl TensorExpression {
         if let Some(right) = concrete_network(rhs)? {
             return Self::promoted_network(&self_, py)?
                 .outer(ConvertibleToSpensoNet(right))
+                .and_then(|network| Py::new(py, network))
                 .map(TensorDispatch::Network);
         }
         let left = Self::structured(&self_);
@@ -1910,6 +1919,7 @@ impl TensorExpression {
         if let Some(rhs) = concrete_network(rhs)? {
             return Self::promoted_network(&self_, py)?
                 .contract(ConvertibleToSpensoNet(rhs), left, right)
+                .and_then(|network| Py::new(py, network))
                 .map(TensorDispatch::Network);
         }
         let value = Self::structured(&self_);
@@ -1933,6 +1943,7 @@ impl TensorExpression {
         if let Some(rhs) = concrete_network(rhs)? {
             return Self::promoted_network(&self_, py)?
                 .compose(ConvertibleToSpensoNet(rhs), left, right)
+                .and_then(|network| Py::new(py, network))
                 .map(TensorDispatch::Network);
         }
         let value = Self::structured(&self_);
@@ -2076,7 +2087,10 @@ fn dot(
     if is_concrete_network(left) || is_concrete_network(right) {
         let left = left.extract::<ConvertibleToSpensoNet>()?.to_net();
         let right = right.extract::<ConvertibleToSpensoNet>()?;
-        return left.dot(right).map(TensorDispatch::Network);
+        return left
+            .dot(right)
+            .and_then(|network| Py::new(py, network))
+            .map(TensorDispatch::Network);
     }
     let left = structured_operand(left, "dot()")?;
     let right = structured_operand(right, "dot()")?;
@@ -2173,6 +2187,7 @@ fn chain(
                 (0, start_slot.slot.aind()),
                 (1, end_slot.slot.aind()),
             ]))
+            .and_then(|network| Py::new(py, network))
             .map(TensorDispatch::Network);
     }
 
@@ -2299,6 +2314,7 @@ fn trace(
         }
         return value
             .trace(Some((channel.input, channel.output)))
+            .and_then(|network| Py::new(py, network))
             .map(TensorDispatch::Network);
     }
 

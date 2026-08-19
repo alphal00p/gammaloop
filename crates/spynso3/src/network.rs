@@ -211,12 +211,7 @@ fn non_scalar_zero_network(value: &StructuredAtom) -> Option<ParsingNet> {
 fn network_from_arithmetic(
     expression: ArithmeticStructure,
     library: &TensorLibrary<MixedTensor<f64, ExplicitKey<AbstractIndex>>, AbstractIndex>,
-) -> eyre::Result<(
-    ParsingNet,
-    StructuredAtom,
-    StructuredAtom,
-    Option<(Symbol, Vec<Atom>)>,
-)> {
+) -> eyre::Result<SpensoNet> {
     match expression {
         ArithmeticStructure::Tensor(expression) => Python::attach(|py| {
             let expression = expression.bind(py).borrow();
@@ -225,11 +220,16 @@ fn network_from_arithmetic(
             let descriptor = TensorExpression::descriptor_name(&expression)
                 .map(|name| (name, TensorExpression::descriptor_args(&expression)));
             if let Some(network) = non_scalar_zero_network(&materialized) {
-                return Ok((network, structure, materialized, descriptor));
+                return Ok(SpensoNet {
+                    network,
+                    structure,
+                    materialized,
+                    descriptor,
+                });
             }
 
-            Ok((
-                ParsingNet::try_from_view(
+            Ok(SpensoNet {
+                network: ParsingNet::try_from_view(
                     materialized.atom.as_view(),
                     library,
                     &ParseSettings::default(),
@@ -237,7 +237,7 @@ fn network_from_arithmetic(
                 structure,
                 materialized,
                 descriptor,
-            ))
+            })
         }),
         expression => {
             let atom = expression.to_expression()?.expr;
@@ -245,12 +245,16 @@ fn network_from_arithmetic(
                 atom.clone(),
                 PartialStructure::from_logical_slots(std::iter::empty()),
             );
-            Ok((
-                ParsingNet::try_from_view(atom.as_view(), library, &ParseSettings::default())?,
-                value.clone(),
-                value,
-                None,
-            ))
+            Ok(SpensoNet {
+                network: ParsingNet::try_from_view(
+                    atom.as_view(),
+                    library,
+                    &ParseSettings::default(),
+                )?,
+                structure: value.clone(),
+                materialized: value,
+                descriptor: None,
+            })
         }
     }
 }
@@ -306,14 +310,8 @@ impl SpensoNet {
         let library = library
             .map(|value| &value.library)
             .unwrap_or(HEP_LIB.deref());
-        let (network, structure, materialized, descriptor) = network_from_arithmetic(expr, library)
-            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-        Ok(Self {
-            network,
-            structure,
-            materialized,
-            descriptor,
-        })
+        network_from_arithmetic(expr, library)
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))
     }
 }
 
@@ -327,15 +325,9 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToSpensoNet {
             Ok(ConvertibleToSpensoNet(SpensoNet::from_tensor(num)?))
         } else if let Ok(a) = ob.extract::<ArithmeticStructure>() {
             let library = SpensorLibrary::construct();
-            let (network, structure, materialized, descriptor) =
-                network_from_arithmetic(a, &library.library)
-                    .map_err(|a| PyRuntimeError::new_err(a.to_string()))?;
-            Ok(ConvertibleToSpensoNet(SpensoNet {
-                network,
-                structure,
-                materialized,
-                descriptor,
-            }))
+            network_from_arithmetic(a, &library.library)
+                .map(ConvertibleToSpensoNet)
+                .map_err(|a| PyRuntimeError::new_err(a.to_string()))
         } else {
             Err(exceptions::PyTypeError::new_err(
                 "Cannot convert to expression",
