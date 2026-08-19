@@ -531,7 +531,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
         adjoint_rep: representation_symbol(ColorAdjoint {}.to_symbolic(std::iter::empty::<Atom>())),
         adj_: symbol!("adj_"),
         nc_: symbol!("nc_"),
-        na: symbol!("NA";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
+        na: symbol!("NA";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(8,1).to_multi_prec_float(prec).into()))),
         tr: symbol!("spenso::TR";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(1,2).to_multi_prec_float(prec).into()))),
         nc: symbol!("spenso::Nc";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
     }

@@ -213,6 +213,13 @@ fn color_invariant_macros_build_scalar_heads() {
 }
 
 #[test]
+fn default_su3_adjoint_dimension_evaluates_to_eight() {
+    test_initialize();
+
+    assert_eq!(Atom::var(CS.na).to_float(16), Atom::num(8).to_float(16));
+}
+
+#[test]
 fn color_invariant_print_special_cases_are_compact() {
     test_initialize();
     let cof_n = ColorFundamental {}.to_symbolic([Atom::var(CS.nc)]);
