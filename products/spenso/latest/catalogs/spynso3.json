@@ -504,13 +504,16 @@
                   "format": "python-docstring",
                   "body": "Create and register a new representation with specified properties.\n\n# Parameters:\n- name: String name for the representation\n- dimension: Size of the representation (int or symbolic)\n- is_self_dual: If True, creates self-dual representation; if False, creates dualizable pair\n\n# Examples:\n```python\nfrom symbolica.community.spenso import Representation\nimport symbolica as sp\n\n# Self-dual representation (indices contract with themselves)\neuclidean = Representation(\"Euclidean\", 4, is_self_dual=True)\n\n# Dualizable representation (needs dual partner for contraction)\nvector_up = Representation(\"VectorUp\", 4, is_self_dual=False)\n\n# Symbolic dimension\nn = sp.S('n')\ngeneral = Representation(\"General\", n, is_self_dual=True)\n```"
                 },
-                "signature": "def __new__(cls, name: str, dimension: int | Expression | str, is_self_dual: bool = ...) -> Representation:",
+                "signature": "def __new__(cls, name: str, dimension: int | Expression | str, is_self_dual: bool = True) -> Representation:",
                 "default": null,
                 "members": [
                   {
                     "name": "name",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "String name for the representation"
+                    },
                     "signature": "str",
                     "default": null,
                     "members": []
@@ -518,7 +521,10 @@
                   {
                     "name": "dimension",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Size of the representation (int or symbolic)"
+                    },
                     "signature": "int | Expression | str",
                     "default": null,
                     "members": []
@@ -526,9 +532,12 @@
                   {
                     "name": "is_self_dual",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "If True, creates self-dual representation; if False, creates dualizable pair"
+                    },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "True",
                     "members": []
                   }
                 ]
@@ -554,7 +563,10 @@
                   {
                     "name": "i",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "First index"
+                    },
                     "signature": "int | Expression | str",
                     "default": null,
                     "members": []
@@ -562,7 +574,10 @@
                   {
                     "name": "j",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Second index"
+                    },
                     "signature": "int | Expression | str",
                     "default": null,
                     "members": []
@@ -582,7 +597,10 @@
                   {
                     "name": "i",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "First index"
+                    },
                     "signature": "int | Expression | str",
                     "default": null,
                     "members": []
@@ -590,7 +608,10 @@
                   {
                     "name": "j",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Second index"
+                    },
                     "signature": "int | Expression | str",
                     "default": null,
                     "members": []
@@ -610,7 +631,10 @@
                   {
                     "name": "i",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "First index"
+                    },
                     "signature": "int | Expression | str",
                     "default": null,
                     "members": []
@@ -618,7 +642,10 @@
                   {
                     "name": "j",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Second index"
+                    },
                     "signature": "int | Expression | str",
                     "default": null,
                     "members": []
@@ -665,7 +692,10 @@
                   {
                     "name": "dimension",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "The dimension of the bispinor space"
+                    },
                     "signature": "int | Expression | str",
                     "default": null,
                     "members": []
@@ -685,7 +715,10 @@
                   {
                     "name": "dimension",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "The dimension of the Euclidean space"
+                    },
                     "signature": "int | Expression | str",
                     "default": null,
                     "members": []
@@ -705,7 +738,10 @@
                   {
                     "name": "dimension",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "The dimension of the Minkowski space"
+                    },
                     "signature": "int | Expression | str",
                     "default": null,
                     "members": []
@@ -725,7 +761,10 @@
                   {
                     "name": "dimension",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "The dimension of the color group (e.g., 3 for SU(3))"
+                    },
                     "signature": "int | Expression | str",
                     "default": null,
                     "members": []
@@ -745,7 +784,10 @@
                   {
                     "name": "dimension",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "The dimension of the adjoint representation (e.g., 8 for SU(3))"
+                    },
                     "signature": "int | Expression | str",
                     "default": null,
                     "members": []
@@ -765,7 +807,10 @@
                   {
                     "name": "dimension",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "The dimension of the sextet representation (e.g., 6 for SU(3))"
+                    },
                     "signature": "int | Expression | str",
                     "default": null,
                     "members": []
@@ -832,13 +877,16 @@
                   "format": "python-docstring",
                   "body": "Create a new slot with a custom representation and index.\n\n# Parameters:\n- name: String name for the representation\n- dimension: Size of the representation space\n- aind: The abstract index (int, str, or Symbol)\n- dual: If True, creates dualizable representation; if False, self-dual\n\n# Examples:\n```python\nfrom symbolica.community.spenso import Slot\nimport symbolica as sp\n\n# Self-dual slot\neuclidean_slot = Slot(\"Euclidean\", 4, 'mu', dual=False)\n\n# Dualizable slot\nvector_slot = Slot(\"Vector\", 4, 'nu', dual=True)\n\n# With symbolic index\nsym_index = sp.S('alpha')\nsymbolic_slot = Slot(\"Custom\", 3, sym_index, dual=False)\n```"
                 },
-                "signature": "def __new__(cls, name: str, dimension: int, aind: int | Expression | str, dual: bool = ...) -> Slot:",
+                "signature": "def __new__(cls, name: str, dimension: int, aind: int | Expression | str, dual: bool = False) -> Slot:",
                 "default": null,
                 "members": [
                   {
                     "name": "name",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "String name for the representation"
+                    },
                     "signature": "str",
                     "default": null,
                     "members": []
@@ -846,7 +894,10 @@
                   {
                     "name": "dimension",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "Size of the representation space"
+                    },
                     "signature": "int",
                     "default": null,
                     "members": []
@@ -854,7 +905,10 @@
                   {
                     "name": "aind",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "The abstract index (int, str, or Symbol)"
+                    },
                     "signature": "int | Expression | str",
                     "default": null,
                     "members": []
@@ -862,9 +916,12 @@
                   {
                     "name": "dual",
                     "kind": "parameter",
-                    "docs": null,
+                    "docs": {
+                      "format": "python-docstring",
+                      "body": "If True, creates dualizable representation; if False, self-dual"
+                    },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "False",
                     "members": []
                   }
                 ]
@@ -1209,7 +1266,7 @@
                   "format": "python-docstring",
                   "body": "Create an optimized evaluator for symbolic tensor expressions.\n\nCompiles the symbolic expressions in this tensor into an optimized evaluation tree\nthat can efficiently compute numerical values for different parameter inputs.\n\nParameters\n----------\nconstants : dict\n    Dict mapping symbolic expressions to their constant numerical values\nfuns : dict\n    Dict mapping function signatures to their symbolic definitions\nparams : list of Expression\n    List of symbolic parameters that will be varied during evaluation\niterations : int, optional\n    Number of optimization iterations for Horner scheme (default: 100)\nn_cores : int, optional\n    Number of CPU cores to use for optimization (default: 4)\nverbose : bool, optional\n    Whether to print optimization progress (default: False)\n\nReturns\n-------\nTensorEvaluator\n    An optimized evaluator for efficient numerical evaluation\n\nExamples\n--------\n>>> from symbolica import S\n>>> from symbolica.community.spenso import Tensor, TensorIndices, Representation as R\n>>> x, y = S(\"x\", \"y\")\n>>> structure = TensorIndices(R.euc(2)(1))\n>>> tensor = Tensor.dense(structure, [x * y, x + y])\n>>> evaluator = tensor.evaluator(constants={}, funs={}, params=[x, y], iterations=50)\n>>> results = evaluator.evaluate_complex([[1.0, 2.0], [3.0, 4.0]])"
                 },
-                "signature": "def evaluator(self, constants: Mapping[Expression, Expression], funs: Mapping[tuple[Expression, str, Sequence[Expression]], Expression], params: Sequence[Expression], iterations: int = ..., n_cores: int = ..., verbose: bool = ...) -> TensorEvaluator:",
+                "signature": "def evaluator(self, constants: Mapping[Expression, Expression], funs: Mapping[tuple[Expression, str, Sequence[Expression]], Expression], params: Sequence[Expression], iterations: int = 100, n_cores: int = 4, verbose: bool = False) -> TensorEvaluator:",
                 "default": null,
                 "members": [
                   {
@@ -1253,7 +1310,7 @@
                       "body": "Number of optimization iterations for Horner scheme (default: 100)"
                     },
                     "signature": "int",
-                    "default": "...",
+                    "default": "100",
                     "members": []
                   },
                   {
@@ -1264,7 +1321,7 @@
                       "body": "Number of CPU cores to use for optimization (default: 4)"
                     },
                     "signature": "int",
-                    "default": "...",
+                    "default": "4",
                     "members": []
                   },
                   {
@@ -1275,7 +1332,7 @@
                       "body": "Whether to print optimization progress (default: False)"
                     },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "False",
                     "members": []
                   }
                 ]
@@ -1381,7 +1438,7 @@
                   "format": "python-docstring",
                   "body": "Compile the evaluator to a shared library using C++ for maximum performance.\n\nGenerates optimized C++ code with optional inline assembly and compiles it\ninto a shared library that can be loaded for extremely fast evaluation.\n\nParameters\n----------\nfunction_name : str\n    Name for the generated C++ function\nfilename : str\n    Path for the generated C++ source file\nlibrary_name : str\n    Name for the compiled shared library\ninline_asm : str, optional\n    Type of inline assembly optimization (\"default\", \"x64\", \"aarch64\", \"none\")\noptimization_level : int, optional\n    Compiler optimization level 0-3 (default: 3)\ncompiler_path : str, optional\n    Path to specific C++ compiler (default: system default)\ncustom_header : str, optional\n    Additional C++ header code to include\n\nReturns\n-------\nCompiledTensorEvaluator\n    A compiled evaluator for maximum performance evaluation\n\nExamples\n--------\n>>> compiled = evaluator.compile(\n...     function_name=\"fast_eval\",\n...     filename=\"tensor_eval.cpp\",\n...     library_name=\"tensor_lib\",\n...     optimization_level=3,\n... )\n>>> results = compiled.evaluate_complex([[1.0, 2.0], [3.0, 4.0]])"
                 },
-                "signature": "def compile(self, function_name: str, filename: str, library_name: str, inline_asm: str = ..., optimization_level: int = ..., compiler_path: Optional[str] = None, custom_header: Optional[str] = None) -> CompiledTensorEvaluator:",
+                "signature": "def compile(self, function_name: str, filename: str, library_name: str, inline_asm: str = 'default', optimization_level: int = 3, compiler_path: Optional[str] = None, custom_header: Optional[str] = None) -> CompiledTensorEvaluator:",
                 "default": null,
                 "members": [
                   {
@@ -1425,7 +1482,7 @@
                       "body": "Type of inline assembly optimization (\"default\", \"x64\", \"aarch64\", \"none\")"
                     },
                     "signature": "str",
-                    "default": "...",
+                    "default": "'default'",
                     "members": []
                   },
                   {
@@ -1436,7 +1493,7 @@
                       "body": "Compiler optimization level 0-3 (default: 3)"
                     },
                     "signature": "int",
-                    "default": "...",
+                    "default": "3",
                     "members": []
                   },
                   {
@@ -2450,7 +2507,7 @@
                   "format": "python-docstring",
                   "body": "Execute the tensor network to perform tensor contractions and simplifications.\n\nProcesses the computational graph by executing tensor operations such as\ncontractions, additions, and multiplications. The execution can be controlled\nby mode and step limits.\n\nParameters\n----------\nlibrary : TensorLibrary, optional\n    Optional tensor library for resolving tensor operations\nfunction_library : None, optional\n    Reserved for an internally supplied function library\nn_steps : int, optional\n    Maximum number of execution steps (None for complete execution)\nmode : ExecutionMode, optional\n    Execution strategy. ExecutionMode.Single selects one smallest-degree rewrite per\n    step; use n_steps to bound how many steps run.\n\nExamples\n--------\n>>> from symbolica.community.spenso import TensorNetwork, ExecutionMode, TensorLibrary\n>>> network = TensorNetwork(some_expression)\n>>> network.execute()\n>>> network.execute(n_steps=5)\n>>> network.execute(mode=ExecutionMode.Scalar)\n>>> lib = TensorLibrary.hep_lib()\n>>> network.execute(library=lib)"
                 },
-                "signature": "def execute(self, library: Optional[TensorLibrary] = None, function_library: None = None, n_steps: Optional[int] = None, mode: ExecutionMode = ...) -> None:",
+                "signature": "def execute(self, library: Optional[TensorLibrary] = None, function_library: None = None, n_steps: Optional[int] = None, mode: ExecutionMode = ExecutionMode.All) -> None:",
                 "default": null,
                 "members": [
                   {
@@ -2494,7 +2551,7 @@
                       "body": "Execution strategy. ExecutionMode.Single selects one smallest-degree rewrite per step; use n_steps to bound how many steps run."
                     },
                     "signature": "ExecutionMode",
-                    "default": "...",
+                    "default": "ExecutionMode.All",
                     "members": []
                   }
                 ]

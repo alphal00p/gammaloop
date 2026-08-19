@@ -1239,7 +1239,7 @@
                   "format": "python-docstring",
                   "body": "Load or create a GammaLoop state and initialize its CLI session.\n\nParameters\n----------\nstate_folder : path-like, optional\n    State directory to load or create. The default is ``./gammaloop_state``.\nboot_commands_path : path-like, optional\n    TOML run card whose commands are applied during startup.\nmodel_file : path-like, optional\n    Model file override used while loading or initializing the state.\ntrace_logs_filename : str, optional\n    File receiving native trace records for this session.\nlevel : LogLevel, optional\n    Terminal log-level override for this session.\nlogfile_level : LogLevel, optional\n    File log-level override for this session.\nlogging_prefix : object, optional\n    Native logging-prefix configuration.\nread_only_state : bool, default=False\n    Prevent writes whose target lies inside the active state directory and\n    disable file logging there. In-memory session changes remain possible.\nsettings_global_path : path-like, optional\n    TOML file overriding the global settings loaded at startup.\nsettings_runtime_defaults_path : path-like, optional\n    TOML file overriding the default runtime settings loaded at startup.\nclean_state : bool, default=False\n    Remove the resolved state path before startup. This is destructive and\n    cannot be combined with ``read_only_state=True``.\n\nReturns\n-------\nGammaLoopAPI\n    A stateful API instance sharing one state, history, and settings session.\n\nRaises\n------\nException\n    If startup options conflict, the state or settings cannot be loaded, a\n    boot command fails, or a boot card requests process exit.\n\nExamples\n--------\nOpen an existing generated state without permitting writes to it::\n\n    api = GammaLoopAPI(state_folder=\"./state\", read_only_state=True)"
                 },
-                "signature": "def __new__(cls, state_folder: Optional[str | os.PathLike | pathlib.Path] = None, boot_commands_path: Optional[str | os.PathLike | pathlib.Path] = None, model_file: Optional[str | os.PathLike | pathlib.Path] = None, trace_logs_filename: Optional[str] = None, level: Optional[LogLevel] = None, logfile_level: Optional[LogLevel] = None, logging_prefix: object | None = None, read_only_state: bool = ..., settings_global_path: Optional[str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: Optional[str | os.PathLike | pathlib.Path] = None, clean_state: bool = ...) -> GammaLoopAPI:",
+                "signature": "def __new__(cls, state_folder: Optional[str | os.PathLike | pathlib.Path] = None, boot_commands_path: Optional[str | os.PathLike | pathlib.Path] = None, model_file: Optional[str | os.PathLike | pathlib.Path] = None, trace_logs_filename: Optional[str] = None, level: Optional[LogLevel] = None, logfile_level: Optional[LogLevel] = None, logging_prefix: object | None = None, read_only_state: bool = False, settings_global_path: Optional[str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: Optional[str | os.PathLike | pathlib.Path] = None, clean_state: bool = False) -> GammaLoopAPI:",
                 "default": null,
                 "members": [
                   {
@@ -1327,7 +1327,7 @@
                       "body": "Prevent writes whose target lies inside the active state directory and disable file logging there. In-memory session changes remain possible."
                     },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "False",
                     "members": []
                   },
                   {
@@ -1360,7 +1360,7 @@
                       "body": "Remove the resolved state path before startup. This is destructive and cannot be combined with ``read_only_state=True``."
                     },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "False",
                     "members": []
                   }
                 ]
@@ -1372,7 +1372,7 @@
                   "format": "python-docstring",
                   "body": "Evaluate one integration or momentum-space sample.\n\nParameters\n----------\npoint : Sequence[float]\n    Coordinates for one sample. In integration space, the length must match\n    the selected integrand and ``discrete_dim``. In momentum space, values\n    are grouped as ``(px, py, pz)`` and the length must be a multiple of 3.\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand to evaluate. Supply this when selection is ambiguous.\nuse_arb_prec : bool, default=False\n    Request arbitrary-precision internal evaluation.\nminimal_output : bool, default=False\n    Omit the optional evaluation metadata from the returned sample.\nreturn_events : bool, optional\n    Temporarily override event generation for this call. The integrand setting\n    is restored afterward.\nmomentum_space : bool, default=False\n    Interpret ``point`` as flattened three-momenta instead of integration-space\n    coordinates.\nintegrator_weight : float, optional\n    Weight associated with this sample. The default is 1.0.\ndiscrete_dim : Sequence[int], optional\n    Discrete integration coordinates used to determine the expected dimension.\ngraph_name : str, optional\n    Graph selected for momentum-space evaluation.\norientation : int, optional\n    Orientation index for ``graph_name`` in momentum-space evaluation.\n\nReturns\n-------\nEvaluationResult\n    The sample evaluation and the observable snapshot for its one-row batch.\n\nRaises\n------\nException\n    If integrand selection is ambiguous or invalid, dimensions do not match,\n    graph or orientation selection is invalid, or warm-up/evaluation fails.\n\nNotes\n-----\nArbitrary precision affects the internal calculation, but Python-visible\nnumeric fields use the package's ``float64`` output contract. Evaluation may\nwarm the integrand and update in-memory caches or observable snapshots even in\na read-only-state session.\n\nExamples\n--------\nEvaluate a point whose dimension matches integrand 0::\n\n    result = api.evaluate_sample(point, process_id=0, minimal_output=True)\n    value = result.integrand_result"
                 },
-                "signature": "def evaluate_sample(self, point: Sequence[float], process_id: Optional[int] = None, integrand_name: Optional[str] = None, use_arb_prec: bool = ..., minimal_output: bool = ..., return_events: Optional[bool] = None, momentum_space: bool = ..., integrator_weight: Optional[float] = None, discrete_dim: Optional[Sequence[int]] = None, graph_name: Optional[str] = None, orientation: Optional[int] = None) -> EvaluationResult:",
+                "signature": "def evaluate_sample(self, point: Sequence[float], process_id: Optional[int] = None, integrand_name: Optional[str] = None, use_arb_prec: bool = False, minimal_output: bool = False, return_events: Optional[bool] = None, momentum_space: bool = False, integrator_weight: Optional[float] = None, discrete_dim: Optional[Sequence[int]] = None, graph_name: Optional[str] = None, orientation: Optional[int] = None) -> EvaluationResult:",
                 "default": null,
                 "members": [
                   {
@@ -1416,7 +1416,7 @@
                       "body": "Request arbitrary-precision internal evaluation."
                     },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "False",
                     "members": []
                   },
                   {
@@ -1427,7 +1427,7 @@
                       "body": "Omit the optional evaluation metadata from the returned sample."
                     },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "False",
                     "members": []
                   },
                   {
@@ -1449,7 +1449,7 @@
                       "body": "Interpret ``point`` as flattened three-momenta instead of integration-space coordinates."
                     },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "False",
                     "members": []
                   },
                   {
@@ -1505,7 +1505,7 @@
                   "format": "python-docstring",
                   "body": "Evaluate a batch of integration or momentum-space samples.\n\nParameters\n----------\npoints : numpy.ndarray[numpy.float64]\n    Two-dimensional array with one sample per row. Integration-space columns\n    must match the selected integrand; momentum-space columns are flattened\n    ``(px, py, pz)`` groups.\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand to evaluate. Supply this when selection is ambiguous.\nuse_arb_prec : bool, default=False\n    Request arbitrary-precision internal evaluation.\nminimal_output : bool, default=False\n    Omit the optional evaluation metadata from every returned sample.\nreturn_events : bool, optional\n    Temporarily override event generation for this call. The integrand setting\n    is restored afterward.\nmomentum_space : bool, default=False\n    Interpret each row as flattened three-momenta instead of integration-space\n    coordinates.\nintegrator_weights : numpy.ndarray[numpy.float64], optional\n    One weight per row. Defaults to 1.0 for every sample.\ndiscrete_dims : numpy.ndarray[numpy.unsignedinteger], optional\n    Two-dimensional array with one row of discrete coordinates per sample.\ngraph_names : Sequence[str | None], optional\n    Momentum-space graph selection for each sample.\norientations : Sequence[int | None], optional\n    Momentum-space orientation selection for each sample.\n\nReturns\n-------\nBatchEvaluationResult\n    Per-sample evaluations and one observable snapshot for the complete batch.\n\nRaises\n------\nException\n    If integrand selection is ambiguous or invalid, array or option lengths do\n    not match, dimensions are invalid, or warm-up/evaluation fails.\n\nNotes\n-----\nArbitrary precision affects the internal calculation, but Python-visible\nnumeric fields use the package's ``float64`` output contract. Evaluation may\nupdate in-memory caches or observable snapshots in a read-only-state session.\n\nExamples\n--------\nEvaluate a caller-provided two-dimensional array::\n\n    points = numpy.asarray(points, dtype=numpy.float64)\n    result = api.evaluate_samples(points, process_id=0, minimal_output=True)"
                 },
-                "signature": "def evaluate_samples(self, points: numpy.NDArray[numpy.float64], process_id: Optional[int] = None, integrand_name: Optional[str] = None, use_arb_prec: bool = ..., minimal_output: bool = ..., return_events: Optional[bool] = None, momentum_space: bool = ..., integrator_weights: Optional[numpy.NDArray[numpy.float64]] = None, discrete_dims: numpy.NDArray[numpy.unsignedinteger] | None = None, graph_names: Optional[Sequence[Optional[str]]] = None, orientations: Optional[Sequence[Optional[int]]] = None) -> BatchEvaluationResult:",
+                "signature": "def evaluate_samples(self, points: numpy.NDArray[numpy.float64], process_id: Optional[int] = None, integrand_name: Optional[str] = None, use_arb_prec: bool = False, minimal_output: bool = False, return_events: Optional[bool] = None, momentum_space: bool = False, integrator_weights: Optional[numpy.NDArray[numpy.float64]] = None, discrete_dims: numpy.NDArray[numpy.unsignedinteger] | None = None, graph_names: Optional[Sequence[Optional[str]]] = None, orientations: Optional[Sequence[Optional[int]]] = None) -> BatchEvaluationResult:",
                 "default": null,
                 "members": [
                   {
@@ -1549,7 +1549,7 @@
                       "body": "Request arbitrary-precision internal evaluation."
                     },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "False",
                     "members": []
                   },
                   {
@@ -1560,7 +1560,7 @@
                       "body": "Omit the optional evaluation metadata from every returned sample."
                     },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "False",
                     "members": []
                   },
                   {
@@ -1582,7 +1582,7 @@
                       "body": "Interpret each row as flattened three-momenta instead of integration-space coordinates."
                     },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "False",
                     "members": []
                   },
                   {
@@ -1638,7 +1638,7 @@
                   "format": "python-docstring",
                   "body": "Import DOT graphs into a new or existing process/integrand collection.\n\nParameters\n----------\ngraphs : str\n    DOT file path when ``format=\"dot\"`` or inline DOT text when\n    ``format=\"string\"``.\nprocess_name, process_id : str or int, optional\n    Process to create or update. Inline text requires one of these selectors.\nintegrand_name : str, optional\n    Integrand within the selected process.\nformat : {\"dot\", \"string\"}, default=\"dot\"\n    Select file-backed or inline input.\noverwrite, append : bool, default=False\n    Replace an existing collection or append to it; these modes conflict.\n\nRaises\n------\nException\n    If selectors conflict, the source is missing or malformed, or importing fails."
                 },
-                "signature": "def import_graphs(self, graphs: str, process_name: Optional[str] = None, process_id: Optional[int] = None, integrand_name: Optional[str] = None, format: str = ..., overwrite: bool = ..., append: bool = ...) -> None:",
+                "signature": "def import_graphs(self, graphs: str, process_name: Optional[str] = None, process_id: Optional[int] = None, integrand_name: Optional[str] = None, format: str = 'dot', overwrite: bool = False, append: bool = False) -> None:",
                 "default": null,
                 "members": [
                   {
@@ -1693,7 +1693,7 @@
                       "body": "Select file-backed or inline input."
                     },
                     "signature": "str",
-                    "default": "...",
+                    "default": "'dot'",
                     "members": []
                   },
                   {
@@ -1704,7 +1704,7 @@
                       "body": "Replace an existing collection or append to it; these modes conflict."
                     },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "False",
                     "members": []
                   },
                   {
@@ -1715,7 +1715,7 @@
                       "body": "Replace an existing collection or append to it; these modes conflict."
                     },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "False",
                     "members": []
                   }
                 ]
@@ -1727,7 +1727,7 @@
                   "format": "python-docstring",
                   "body": "Generate loop-momentum bases for each supplied graph.\n\nParameters\n----------\ngraphs : str\n    DOT file path or inline DOT text, as selected by ``format``.\nformat : {\"dot\", \"string\"}, default=\"dot\"\n    Select file-backed or inline input.\n\nReturns\n-------\nlist\n    Per graph, a list of ``(loop_edges, external_edges, edge_signatures)``\n    tuples. Each signature contains its loop and external coefficients."
                 },
-                "signature": "def get_lmbs(self, graphs: str, format: str = ...) -> list[list[tuple[list[int], list[int], dict[int, tuple[list[int], list[int]]]]]]:",
+                "signature": "def get_lmbs(self, graphs: str, format: str = 'dot') -> list[list[tuple[list[int], list[int], dict[int, tuple[list[int], list[int]]]]]]:",
                 "default": null,
                 "members": [
                   {
@@ -1749,7 +1749,7 @@
                       "body": "Select file-backed or inline input."
                     },
                     "signature": "str",
-                    "default": "...",
+                    "default": "'dot'",
                     "members": []
                   }
                 ]
@@ -1817,7 +1817,7 @@
                   "format": "python-docstring",
                   "body": "Evaluate one generated graph group as a symbolic or numerical expression.\n\nParameters\n----------\nprocess_id : int, optional\n    Process containing the requested graph group.\ngraphs_group_name : str, optional\n    Group to evaluate when the current state is ambiguous.\nresult_path : path-like, optional\n    Optional destination for the evaluated expression.\nnumerical : bool, default=True\n    Evaluate numerically instead of retaining a symbolic result.\nnumber_of_terms_in_epsilon_expansion : int, optional\n    Truncate the dimensional-regulator expansion to this many terms.\n\nReturns\n-------\nstr\n    Canonical Symbolica representation of the result."
                 },
-                "signature": "def evaluate(self, process_id: Optional[int] = None, graphs_group_name: Optional[str] = None, result_path: Optional[str | os.PathLike | pathlib.Path] = None, numerical: bool = ..., number_of_terms_in_epsilon_expansion: Optional[int] = None) -> str:",
+                "signature": "def evaluate(self, process_id: Optional[int] = None, graphs_group_name: Optional[str] = None, result_path: Optional[str | os.PathLike | pathlib.Path] = None, numerical: bool = True, number_of_terms_in_epsilon_expansion: Optional[int] = None) -> str:",
                 "default": null,
                 "members": [
                   {
@@ -1861,7 +1861,7 @@
                       "body": "Evaluate numerically instead of retaining a symbolic result."
                     },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "True",
                     "members": []
                   },
                   {
@@ -1884,7 +1884,7 @@
                   "format": "python-docstring",
                   "body": "Replace the active model from a GammaLoop model file or supported model source.\n\n``simplify_model`` applies the standard symbolic simplification pass while\nimporting. Existing process data may no longer be compatible with a replaced\nmodel, so import the model before generating processes.\n\nParameters\n----------\nmodel_specifier : path-like\n    Path or model specifier accepted by GammaLoop's model importer.\nsimplify_model : bool, default=True\n    Apply the standard symbolic simplification pass while importing."
                 },
-                "signature": "def import_model(self, model_specifier: str | os.PathLike | pathlib.Path, simplify_model: bool = ...) -> None:",
+                "signature": "def import_model(self, model_specifier: str | os.PathLike | pathlib.Path, simplify_model: bool = True) -> None:",
                 "default": null,
                 "members": [
                   {
@@ -1906,7 +1906,7 @@
                       "body": "Apply the standard symbolic simplification pass while importing."
                     },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "True",
                     "members": []
                   }
                 ]
@@ -2252,7 +2252,7 @@
                   "format": "python-docstring",
                   "body": "Create an evenly binned continuous histogram accumulator.\n\nParameters\n----------\ntitle : str\n    Human-readable title used by snapshots and exported output.\nx_min : float\n    Lower edge of the histogram range.\nx_max : float\n    Upper edge of the histogram range.\nn_bins : int\n    Number of equal-width in-range bins.\ntype_description : str, default=\"AL\"\n    HwU ``TYPE@`` metadata.\nphase : {\"real\", \"imag\"}, default=\"real\"\n    Component of each complex event weight to accumulate.\nvalue_transform : {\"identity\", \"log10\"}, default=\"identity\"\n    Transformation applied to coordinates before binning.\nlog_x_axis : bool, default=False\n    Request logarithmic horizontal-axis rendering.\nlog_y_axis : bool, default=True\n    Request logarithmic vertical-axis rendering."
                 },
-                "signature": "def continuous(title: str, x_min: float, x_max: float, n_bins: int, type_description: str = ..., phase: str = ..., value_transform: str = ..., log_x_axis: bool = ..., log_y_axis: bool = ...) -> HistogramAccumulator:",
+                "signature": "def continuous(title: str, x_min: float, x_max: float, n_bins: int, type_description: str = 'AL', phase: str = 'real', value_transform: str = 'identity', log_x_axis: bool = False, log_y_axis: bool = True) -> HistogramAccumulator:",
                 "default": null,
                 "members": [
                   {
@@ -2307,7 +2307,7 @@
                       "body": "HwU ``TYPE@`` metadata."
                     },
                     "signature": "str",
-                    "default": "...",
+                    "default": "'AL'",
                     "members": []
                   },
                   {
@@ -2318,7 +2318,7 @@
                       "body": "Component of each complex event weight to accumulate."
                     },
                     "signature": "str",
-                    "default": "...",
+                    "default": "'real'",
                     "members": []
                   },
                   {
@@ -2329,7 +2329,7 @@
                       "body": "Transformation applied to coordinates before binning."
                     },
                     "signature": "str",
-                    "default": "...",
+                    "default": "'identity'",
                     "members": []
                   },
                   {
@@ -2340,7 +2340,7 @@
                       "body": "Request logarithmic horizontal-axis rendering."
                     },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "False",
                     "members": []
                   },
                   {
@@ -2351,7 +2351,7 @@
                       "body": "Request logarithmic vertical-axis rendering."
                     },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "True",
                     "members": []
                   }
                 ]
@@ -2363,7 +2363,7 @@
                   "format": "python-docstring",
                   "body": "Create a discrete histogram accumulator over an inclusive integer range.\n\nParameters\n----------\ntitle : str\n    Human-readable title used by snapshots and exported output.\nmin_bin_id : int\n    Smallest accepted bin identifier.\nmax_bin_id : int\n    Largest accepted bin identifier, inclusive.\nordering : {\"ascending_bin_id\", \"value_descending\", \"abs_value_descending\"}, default=\"ascending_bin_id\"\n    Ordering used when bins are returned or exported.\nlabels : Sequence[str], optional\n    One label per bin, ordered by ascending bin identifier.\ntype_description : str, default=\"AL\"\n    HwU ``TYPE@`` metadata.\nphase : {\"real\", \"imag\"}, default=\"real\"\n    Component of each complex event weight to accumulate.\nlog_y_axis : bool, default=True\n    Request logarithmic vertical-axis rendering.\n\nRaises\n------\nValueError\n    If the range, label count, ordering, or phase is invalid."
                 },
-                "signature": "def discrete(title: str, min_bin_id: int, max_bin_id: int, ordering: str = ..., labels: Optional[Sequence[str]] = None, type_description: str = ..., phase: str = ..., log_y_axis: bool = ...) -> HistogramAccumulator:",
+                "signature": "def discrete(title: str, min_bin_id: int, max_bin_id: int, ordering: str = 'ascending_bin_id', labels: Optional[Sequence[str]] = None, type_description: str = 'AL', phase: str = 'real', log_y_axis: bool = True) -> HistogramAccumulator:",
                 "default": null,
                 "members": [
                   {
@@ -2407,7 +2407,7 @@
                       "body": "Ordering used when bins are returned or exported."
                     },
                     "signature": "str",
-                    "default": "...",
+                    "default": "'ascending_bin_id'",
                     "members": []
                   },
                   {
@@ -2429,7 +2429,7 @@
                       "body": "HwU ``TYPE@`` metadata."
                     },
                     "signature": "str",
-                    "default": "...",
+                    "default": "'AL'",
                     "members": []
                   },
                   {
@@ -2440,7 +2440,7 @@
                       "body": "Component of each complex event weight to accumulate."
                     },
                     "signature": "str",
-                    "default": "...",
+                    "default": "'real'",
                     "members": []
                   },
                   {
@@ -2451,7 +2451,7 @@
                       "body": "Request logarithmic vertical-axis rendering."
                     },
                     "signature": "bool",
-                    "default": "...",
+                    "default": "True",
                     "members": []
                   }
                 ]

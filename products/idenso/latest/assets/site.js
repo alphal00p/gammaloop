@@ -247,8 +247,6 @@
     if (!scope) return;
     const entries = [...scope.querySelectorAll("[data-reference-entry]")];
     const groups = [...scope.querySelectorAll("[data-reference-group]")];
-    const indexEntries = [...scope.querySelectorAll("[data-reference-index-entry]")];
-    const implementationGroups = [...scope.querySelectorAll("details[data-reference-implementation]")];
     const count = input.parentElement?.querySelector("[data-reference-filter-count]") ||
       document.querySelector("[data-reference-filter-count]");
     const initialQuery = new URLSearchParams(location.search).get("q");
@@ -262,29 +260,9 @@
         entry.hidden = !match;
         if (match) visible += 1;
       });
-      indexEntries.forEach((entry) => {
-        const haystack = (entry.dataset.referenceSearch || entry.textContent).toLowerCase();
-        entry.hidden = !terms.every((term) => haystack.includes(term));
-      });
       groups.forEach((group) => {
         group.hidden = !group.querySelector("[data-reference-entry]:not([hidden])");
       });
-      if (terms.length) {
-        entries.filter((entry) => !entry.hidden).forEach((entry) => {
-          if (entry.matches("details")) entry.open = true;
-          let parent = entry.parentElement?.closest("details");
-          while (parent) {
-            parent.open = true;
-            parent = parent.parentElement?.closest("details");
-          }
-        });
-        groups.filter((group) => !group.hidden && group.matches("details")).forEach((group) => {
-          group.open = true;
-        });
-        implementationGroups.forEach((group) => {
-          group.open = Boolean(group.querySelector("[data-reference-entry]:not([hidden])"));
-        });
-      }
       if (count) {
         count.textContent = `${visible} of ${entries.length} entr${entries.length === 1 ? "y" : "ies"}`;
       }
@@ -296,12 +274,6 @@
       history.replaceState(null, "", `${location.pathname}${params.size ? `?${params}` : ""}${location.hash}`);
       updateReference();
     });
-    root?.querySelector("[data-reference-expand]")?.addEventListener("click", () => {
-      scope.querySelectorAll("details:not([hidden])").forEach((details) => details.open = true);
-    });
-    root?.querySelector("[data-reference-collapse]")?.addEventListener("click", () => {
-      scope.querySelectorAll("details").forEach((details) => details.open = false);
-    });
     updateReference();
   });
 
@@ -309,6 +281,10 @@
     if (!location.hash) return;
     const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
     if (!target) return;
+    if (target.matches("a[data-reference-redirect]") && target.href) {
+      location.replace(target.href);
+      return;
+    }
     if (target.matches("details")) target.open = true;
     let parent = target.parentElement?.closest("details");
     while (parent) {

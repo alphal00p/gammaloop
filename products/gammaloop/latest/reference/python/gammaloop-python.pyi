@@ -398,7 +398,7 @@ class GammaLoopAPI:
     settings, processes, or run history. Create separate instances when independent
     sessions are required.
     """
-    def __new__(cls, state_folder: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, boot_commands_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, model_file: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, trace_logs_filename: typing.Optional[builtins.str] = None, level: typing.Optional[LogLevel] = None, logfile_level: typing.Optional[LogLevel] = None, logging_prefix: builtins.object | None = None, read_only_state: builtins.bool = ..., settings_global_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, clean_state: builtins.bool = ...) -> GammaLoopAPI:
+    def __new__(cls, state_folder: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, boot_commands_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, model_file: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, trace_logs_filename: typing.Optional[builtins.str] = None, level: typing.Optional[LogLevel] = None, logfile_level: typing.Optional[LogLevel] = None, logging_prefix: builtins.object | None = None, read_only_state: builtins.bool = False, settings_global_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, clean_state: builtins.bool = False) -> GammaLoopAPI:
         r"""
         Load or create a GammaLoop state and initialize its CLI session.
 
@@ -446,7 +446,7 @@ class GammaLoopAPI:
 
             api = GammaLoopAPI(state_folder="./state", read_only_state=True)
         """
-    def evaluate_sample(self, point: typing.Sequence[builtins.float], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = ..., minimal_output: builtins.bool = ..., return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = ..., integrator_weight: typing.Optional[builtins.float] = None, discrete_dim: typing.Optional[typing.Sequence[builtins.int]] = None, graph_name: typing.Optional[builtins.str] = None, orientation: typing.Optional[builtins.int] = None) -> EvaluationResult:
+    def evaluate_sample(self, point: typing.Sequence[builtins.float], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = False, minimal_output: builtins.bool = False, return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = False, integrator_weight: typing.Optional[builtins.float] = None, discrete_dim: typing.Optional[typing.Sequence[builtins.int]] = None, graph_name: typing.Optional[builtins.str] = None, orientation: typing.Optional[builtins.int] = None) -> EvaluationResult:
         r"""
         Evaluate one integration or momentum-space sample.
 
@@ -504,7 +504,7 @@ class GammaLoopAPI:
             result = api.evaluate_sample(point, process_id=0, minimal_output=True)
             value = result.integrand_result
         """
-    def evaluate_samples(self, points: numpy.typing.NDArray[numpy.float64], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = ..., minimal_output: builtins.bool = ..., return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = ..., integrator_weights: typing.Optional[numpy.typing.NDArray[numpy.float64]] = None, discrete_dims: numpy.typing.NDArray[numpy.unsignedinteger] | None = None, graph_names: typing.Optional[typing.Sequence[typing.Optional[builtins.str]]] = None, orientations: typing.Optional[typing.Sequence[typing.Optional[builtins.int]]] = None) -> BatchEvaluationResult:
+    def evaluate_samples(self, points: numpy.typing.NDArray[numpy.float64], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = False, minimal_output: builtins.bool = False, return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = False, integrator_weights: typing.Optional[numpy.typing.NDArray[numpy.float64]] = None, discrete_dims: numpy.typing.NDArray[numpy.unsignedinteger] | None = None, graph_names: typing.Optional[typing.Sequence[typing.Optional[builtins.str]]] = None, orientations: typing.Optional[typing.Sequence[typing.Optional[builtins.int]]] = None) -> BatchEvaluationResult:
         r"""
         Evaluate a batch of integration or momentum-space samples.
 
@@ -561,7 +561,7 @@ class GammaLoopAPI:
             points = numpy.asarray(points, dtype=numpy.float64)
             result = api.evaluate_samples(points, process_id=0, minimal_output=True)
         """
-    def import_graphs(self, graphs: builtins.str, process_name: typing.Optional[builtins.str] = None, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, format: builtins.str = ..., overwrite: builtins.bool = ..., append: builtins.bool = ...) -> None:
+    def import_graphs(self, graphs: builtins.str, process_name: typing.Optional[builtins.str] = None, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, format: builtins.str = 'dot', overwrite: builtins.bool = False, append: builtins.bool = False) -> None:
         r"""
         Import DOT graphs into a new or existing process/integrand collection.
 
@@ -584,7 +584,7 @@ class GammaLoopAPI:
         Exception
             If selectors conflict, the source is missing or malformed, or importing fails.
         """
-    def get_lmbs(self, graphs: builtins.str, format: builtins.str = ...) -> builtins.list[builtins.list[tuple[builtins.list[builtins.int], builtins.list[builtins.int], builtins.dict[builtins.int, tuple[builtins.list[builtins.int], builtins.list[builtins.int]]]]]]:
+    def get_lmbs(self, graphs: builtins.str, format: builtins.str = 'dot') -> builtins.list[builtins.list[tuple[builtins.list[builtins.int], builtins.list[builtins.int], builtins.dict[builtins.int, tuple[builtins.list[builtins.int], builtins.list[builtins.int]]]]]]:
         r"""
         Generate loop-momentum bases for each supplied graph.
 
@@ -632,7 +632,7 @@ class GammaLoopAPI:
         str
             JSON representation of the model currently owned by this session.
         """
-    def evaluate(self, process_id: typing.Optional[builtins.int] = None, graphs_group_name: typing.Optional[builtins.str] = None, result_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, numerical: builtins.bool = ..., number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None) -> builtins.str:
+    def evaluate(self, process_id: typing.Optional[builtins.int] = None, graphs_group_name: typing.Optional[builtins.str] = None, result_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, numerical: builtins.bool = True, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None) -> builtins.str:
         r"""
         Evaluate one generated graph group as a symbolic or numerical expression.
 
@@ -654,7 +654,7 @@ class GammaLoopAPI:
         str
             Canonical Symbolica representation of the result.
         """
-    def import_model(self, model_specifier: builtins.str | os.PathLike | pathlib.Path, simplify_model: builtins.bool = ...) -> None:
+    def import_model(self, model_specifier: builtins.str | os.PathLike | pathlib.Path, simplify_model: builtins.bool = True) -> None:
         r"""
         Replace the active model from a GammaLoop model file or supported model source.
 
@@ -921,7 +921,7 @@ class HistogramAccumulator:
     Mutable continuous or discrete histogram accumulator with sample-level statistics.
     """
     @staticmethod
-    def continuous(title: builtins.str, x_min: builtins.float, x_max: builtins.float, n_bins: builtins.int, type_description: builtins.str = ..., phase: builtins.str = ..., value_transform: builtins.str = ..., log_x_axis: builtins.bool = ..., log_y_axis: builtins.bool = ...) -> HistogramAccumulator:
+    def continuous(title: builtins.str, x_min: builtins.float, x_max: builtins.float, n_bins: builtins.int, type_description: builtins.str = 'AL', phase: builtins.str = 'real', value_transform: builtins.str = 'identity', log_x_axis: builtins.bool = False, log_y_axis: builtins.bool = True) -> HistogramAccumulator:
         r"""
         Create an evenly binned continuous histogram accumulator.
 
@@ -947,7 +947,7 @@ class HistogramAccumulator:
             Request logarithmic vertical-axis rendering.
         """
     @staticmethod
-    def discrete(title: builtins.str, min_bin_id: builtins.int, max_bin_id: builtins.int, ordering: builtins.str = ..., labels: typing.Optional[typing.Sequence[builtins.str]] = None, type_description: builtins.str = ..., phase: builtins.str = ..., log_y_axis: builtins.bool = ...) -> HistogramAccumulator:
+    def discrete(title: builtins.str, min_bin_id: builtins.int, max_bin_id: builtins.int, ordering: builtins.str = 'ascending_bin_id', labels: typing.Optional[typing.Sequence[builtins.str]] = None, type_description: builtins.str = 'AL', phase: builtins.str = 'real', log_y_axis: builtins.bool = True) -> HistogramAccumulator:
         r"""
         Create a discrete histogram accumulator over an inclusive integer range.
 
