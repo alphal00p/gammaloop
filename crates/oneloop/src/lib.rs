@@ -1,6 +1,7 @@
 //! One-loop IBP reduction of Feynman integrals to the four scalar master integrals.
 
 pub mod amplitude;
+pub mod bridge;
 pub mod error;
 pub mod family;
 pub mod masters;
