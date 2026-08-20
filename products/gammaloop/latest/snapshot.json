@@ -4,8 +4,8 @@
   "title": "GammaLoop",
   "channel": "latest",
   "snapshot_tag": null,
-  "git_commit": "ca048331ffff03c26283f747d212ffd14d63a917",
-  "git_timestamp": 1787212724,
+  "git_commit": "3ab0e0c3531bbde148406e2f5b2de02972446117",
+  "git_timestamp": 1787215625,
   "route": "/products/gammaloop/latest/",
   "components": [
     {

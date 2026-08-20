@@ -15,6 +15,11 @@
   --border: #3d2645;
   --hairline: #d9cfd9;
   --shadow: 0 10px 28px rgb(61 38 69 / 10%);
+  --syntax-call: #4b69c6;
+  --syntax-comment: #74747c;
+  --syntax-keyword: #d73948;
+  --syntax-number: #9b5e00;
+  --syntax-string: #198810;
   --header-height: 3.5rem;
   --sidebar-width: 17rem;
   --toc-width: 14rem;
@@ -39,6 +44,11 @@
   --border: #d8b9e3;
   --hairline: #57475b;
   --shadow: 0 12px 32px rgb(0 0 0 / 30%);
+  --syntax-call: #9cb5ff;
+  --syntax-comment: #aaa3ad;
+  --syntax-keyword: #ff8793;
+  --syntax-number: #e7b66f;
+  --syntax-string: #71d083;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -57,6 +67,11 @@
     --border: #d8b9e3;
     --hairline: #57475b;
     --shadow: 0 12px 32px rgb(0 0 0 / 30%);
+    --syntax-call: #9cb5ff;
+    --syntax-comment: #aaa3ad;
+    --syntax-keyword: #ff8793;
+    --syntax-number: #e7b66f;
+    --syntax-string: #71d083;
   }
 }
 
@@ -275,6 +290,11 @@ button, select { color: inherit; }
   box-shadow: 0 3px 0 var(--accent-soft);
   line-height: 1.55;
 }
+.syntax-call { color: var(--syntax-call); }
+.syntax-comment { color: var(--syntax-comment); font-style: italic; }
+.syntax-keyword, .syntax-operator { color: var(--syntax-keyword); }
+.syntax-number { color: var(--syntax-number); }
+.syntax-string { color: var(--syntax-string); }
 .docs-article table { display: block; width: 100%; overflow-x: auto; border-collapse: collapse; }
 .docs-article th, .docs-article td { padding: 0.55rem 0.7rem; border: 1px solid var(--hairline); text-align: left; vertical-align: top; }
 .docs-article th { background: var(--accent-soft); color: var(--ink-strong); }
@@ -410,6 +430,7 @@ button, select { color: inherit; }
 .reference-copy-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem; align-items: stretch; }
 .reference-copy-row pre { min-width: 0; margin: 0; }
 .reference-copy-row button { padding: 0.4rem 0.65rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--canvas); color: var(--link); cursor: pointer; }
+.api-example-copy-row { align-items: start; margin: 1.2rem 0 1.6rem; }
 .reference-table-wrap { width: 100%; overflow-x: auto; }
 .reference-missing { color: var(--ink-muted); font-size: 0.82rem; }
 .cli-command-family { margin: 2rem 0; }

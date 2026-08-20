@@ -259,6 +259,43 @@
     updatePublications();
   }
 
+  const pythonTokens = /(?<comment>#[^\n]*)|(?<string>[rRuUbBfF]{0,2}(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'))|(?<keyword>\b(?:False|None|True|and|as|assert|async|await|break|case|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|match|nonlocal|not|or|pass|raise|return|try|while|with|yield)\b)|(?<number>\b(?:0[xX][\dA-Fa-f](?:_?[\dA-Fa-f])*|\d(?:_?\d)*(?:\.\d(?:_?\d)*)?(?:[eE][+-]?\d(?:_?\d)*)?j?)\b)|(?<call>\b[A-Za-z_]\w*(?=\s*\())|(?<operator>->|:=|==|!=|<=|>=|\/\/|\*\*|<<|>>|[-+*/%@&|^~<>:=])/g;
+  document.querySelectorAll(".api-doc-examples code[data-lang='python']").forEach((code, index) => {
+    const source = code.textContent;
+    if (!code.children.length) {
+      const highlighted = document.createDocumentFragment();
+      let cursor = 0;
+      for (const match of source.matchAll(pythonTokens)) {
+        highlighted.append(source.slice(cursor, match.index));
+        const token = document.createElement("span");
+        token.className = `syntax-${Object.keys(match.groups).find((name) => match.groups[name])}`;
+        token.textContent = match[0];
+        highlighted.append(token);
+        cursor = match.index + match[0].length;
+      }
+      highlighted.append(source.slice(cursor));
+      code.replaceChildren(highlighted);
+    }
+
+    const pre = code.parentElement;
+    if (!pre || pre.tagName !== "PRE" || pre.parentElement?.classList.contains("reference-copy-row")) return;
+    let serial = index + 1;
+    let target;
+    do {
+      target = `python-example-${serial++}`;
+    } while (document.getElementById(target));
+    pre.id = target;
+    const row = document.createElement("div");
+    row.className = "reference-copy-row api-example-copy-row";
+    pre.before(row);
+    row.append(pre);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.dataset.copyTarget = target;
+    button.textContent = "Copy example";
+    row.append(button);
+  });
+
   document.querySelectorAll("[data-copy-target]").forEach((button) => {
     button.addEventListener("click", async () => {
       const target = document.getElementById(button.dataset.copyTarget);
