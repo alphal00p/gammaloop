@@ -354,6 +354,12 @@ def progressive_navigation_errors(root: Path) -> list[str]:
         "wide reference tables have no contained horizontal scroll": (
             r"(?:^|\n)\s*\.reference-table-wrap\s*\{[^}]*overflow-x:\s*auto"
         ),
+        "generated Python examples have no copy-row layout": (
+            r"(?:^|\n)\s*\.api-example-copy-row\s*\{[^}]*align-items:\s*start"
+        ),
+        "generated Python examples have no syntax token colors": (
+            r"(?:^|\n)\s*\.syntax-keyword\s*,\s*\.syntax-operator\s*\{[^}]*color:"
+        ),
     }
     errors.extend(
         message for message, pattern in base_rules.items() if not re.search(pattern, css)
@@ -407,6 +413,13 @@ def progressive_navigation_errors(root: Path) -> list[str]:
         "clicking the mobile backdrop does not restore toggle focus": (
             r"backdrop\??\.addEventListener\(\s*[\"']click[\"'].*?"
             r"closeMenu\(\)\s*;\s*menu\??\.focus\(\)"
+        ),
+        "generated Python examples are not selected for highlighting": (
+            r"api-doc-examples\s+code\[data-lang=[\\\"']python[\\\"']\]"
+        ),
+        "generated Python examples do not receive copy controls": (
+            r"button\.dataset\.copyTarget\s*=\s*target.*?"
+            r"button\.textContent\s*=\s*[\"']Copy example[\"']"
         ),
         "Tab does not wrap from the mobile drawer end to its beginning": (
             r"event\.key\s*===\s*[\"']Tab[\"'].*?sidebar-open.*?"
