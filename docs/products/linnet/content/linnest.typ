@@ -1,13 +1,13 @@
 #import "../../shared.typ": boundary
-#import "/crates/linnest/typst/docs/manual.typ": manual as linnest-manual
+#import "/crates/linnest/typst/docs/manual.typ": linnest-guide
 
 #let linnest = [
-= Linnest Typst API
+= Build and draw with Linnest
 
 Linnest is the Typst and WebAssembly interface to Linnet's graph model, DOT parser,
-layout algorithms, graph queries, and physics-aware drawing styles. This page embeds
-the package's complete maintained manual so its workflows and generated module reference
-are available in the same searchable Linnet documentation corpus.
+layout algorithms, graph queries, and physics-aware drawing styles. This guide follows
+one graph from construction through layout and drawing; the separate
+#link("reference/typst/")[Typst API reference] carries the supported symbol inventory.
 
 #boundary("Choose the interface deliberately", [
   Use Linnet's Rust or Python interfaces for graph construction and algorithms in an
@@ -15,5 +15,12 @@ are available in the same searchable Linnet documentation corpus.
   document.
 ])
 
-#linnest-manual
+#linnest-guide
+
+== Continue into the API
+
+Use the #link("reference/typst/graph/")[graph module] for construction and queries,
+the #link("reference/typst/layout/")[layout functions] for placement, and the
+#link("reference/typst/drawing/")[drawing functions] for CeTZ output. Physics styles and
+subgraph objects have their own focused reference pages.
 ]

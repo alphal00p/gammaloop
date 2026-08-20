@@ -1,7 +1,19 @@
 #import "../../shared.typ": boundary
 
 #let api = [
-= Rust and Python APIs
+= Choose a Linnet interface
+
+Use Rust when Linnet is part of an application or library, Python for standalone DOT-backed
+graph workflows, and Linnest when a Typst document owns layout and drawing. Each interface
+shares the half-edge model while exposing the conventions natural to its language.
+
+== Typst package
+
+Linnest combines Typst functions with a WebAssembly plugin. Follow the
+#link("guides/linnest/")[Linnest workflow guide] for a first drawing, then use the focused
+#link("reference/typst/")[Typst API reference] for its graph, layout, drawing, physics, and
+subgraph surfaces. The curve helpers are Kurvst re-exports and stay documented in their
+canonical GammaLoop guide.
 
 == Rust package
 

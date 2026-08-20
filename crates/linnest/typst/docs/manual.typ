@@ -28,7 +28,7 @@
 #outline(depth: 3)
 #let crown = $star$
 
-#let manual = [
+#let linnest-guide = [
 == Linnet
 
 The `linnet` crate wrapped by this package is built around a half-edge graph data structure.
@@ -193,6 +193,14 @@ the checkout-relative form because they are also compiled as repository tests.
 
 === Graph Objects
 
+Graph values combine archived Linnet topology with native Typst data. The
+#link("reference/typst/graph/#graph-object-api")[focused graph reference]
+documents their constructors, transforms, queries, and update operations.
+]
+
+#let graph-objects = [
+=== Graph object API
+
 Graph objects are Typst dictionaries wrapping archived Rust graph bytes plus
 native Typst data arrays for graph, node, edge, source, and sink data. The Rust
 graph may also carry an internal opaque payload, but that payload is used only
@@ -225,7 +233,9 @@ zero-copy values.
   Tidy can document each field.
 - `draw(graph, ..)` draws a laid-out graph object with CeTZ.
 - `dot(graph)` returns a DOT string for inspection or export.
+]
 
+#let graph-concepts = [
 === Graph Specs
 
 The Typst construction API is half-edge first: create node items, create source
@@ -382,7 +392,9 @@ fields:
 )
 #let g = graph.eval-fields(g, eval-edge-fields: ("display-label",))
 ```
+]
 
+#let placement-concepts = [
 === Placements
 
 `graph.pos` creates a first-class placement. The default `mode: "pin"` turns a
@@ -451,6 +463,10 @@ pos="y:<coord>!"            // pin y
 pos="x:<coord>!,y:<coord>"  // pin x, start numeric y
 pos="x:<coord>,y:<coord>!"  // start numeric x, pin y
 ```
+]
+
+#let drawing-concepts = [
+=== Drawing
 
 Draw styling is Typst-native. Pass dictionaries or callbacks to `draw`; edge
 callbacks receive the merged `scope`, edge statements, source/sink half-edge
@@ -481,7 +497,9 @@ flipped, and undirected edges suppress the mark.
 )
 #draw(layout(g), source-style: oriented-arrow, sink-style: oriented-arrow)
 ```
+]
 
+#let physics-concepts = [
 === Physics Edge Styles
 
 `physics.style(..)` returns `source-style`, `sink-style`, and `edge-label`
@@ -631,7 +649,9 @@ fields to the Rust topology spec:
   ),
 )
 ```
+]
 
+#let graph-query-concepts = [
 === Graph Queries
 
 `graph.info(g)` returns graph metadata. `nodes(g)` returns node records,
@@ -645,7 +665,9 @@ The key is read from half-edge statements or numeric ids and can be
 
 `graph.cycles(g)` returns subgraph objects for a cycle basis.
 `graph.forests(g)` returns subgraph objects for spanning forests.
+]
 
+#let layout-concepts = [
 === Layout Model
 
 `layout` starts from a traversal-tree placement, then optimizes the positions of
@@ -751,7 +773,9 @@ from the attached node. With `label-layout: "fixed-length"`, the label remains
 at distance $L_l$ from the edge point and only rotates around it under repulsive
 forces. `label-steps`, `label-step`, `label-early-tol`, and
 `label-max-delta-scale` control the label relaxation iteration.
+]
 
+#let subgraph-concepts = [
 === Subgraphs
 
 Subgraph objects are opaque zero-copy values.
@@ -762,61 +786,96 @@ Subgraph objects are opaque zero-copy values.
 - `subgraph.to-label(sg)` returns the base62 label.
 - `subgraph.hedges(sg)` returns included hedge indices.
 - `subgraph.contains(sg, hedge)` tests hedge membership.
+]
 
-=== Generated Reference
-
-#context {
-  let tidy-style = dictionary(tidy.styles.default)
-  let show-example-source(code, ..args) = block(code)
-  let _ = tidy-style.insert("show-example", show-example-source)
-  let api-link(prefix, name, display: none) = {
-    raw(if display == none { name } else { display }, lang: none)
-  }
-  let tidy-scope = (
-    api-link: api-link,
-    draw: draw,
-    graph: graph,
-    layout: layout,
-    physics: physics,
-    subgraph: subgraph,
-  )
-
-  let graph-docs = tidy.parse-module(
-    read("../src/graph.typ"),
-    name: "graph",
-    preamble: "#import graph: *\n",
-    scope: tidy-scope,
-  )
-  let draw-docs = tidy.parse-module(
-    read("../src/draw.typ"),
-    name: "draw",
-    scope: tidy-scope,
-  )
-  let layout-docs = tidy.parse-module(
-    read("../src/layout.typ"),
-    name: "layout",
-    scope: tidy-scope,
-  )
-  let physics-docs = tidy.parse-module(
-    read("../src/physics-edge-style.typ"),
-    name: "physics",
-    preamble: "#import graph: *\n",
-    scope: tidy-scope,
-  )
-  let subgraph-docs = tidy.parse-module(
-    read("../src/subgraph.typ"),
-    name: "subgraph",
-    scope: tidy-scope,
-  )
-
-  [
-    #tidy.show-module(graph-docs, style: tidy-style, sort-functions: none, enable-cross-references: false)
-    #tidy.show-module(layout-docs, style: tidy-style, sort-functions: none, enable-cross-references: false)
-    #tidy.show-module(physics-docs, style: tidy-style, sort-functions: none, enable-cross-references: false)
-    #tidy.show-module(draw-docs, style: tidy-style, sort-functions: none, enable-cross-references: false)
-    #tidy.show-module(subgraph-docs, style: tidy-style, sort-functions: none, enable-cross-references: false)
-  ]
+#let _show-example-source(code, ..args) = {
+  let displayed-code = code.text
+    .split("\n")
+    .filter(line => not line.starts-with(">>>"))
+    .map(line => line.trim("<<<", at: start))
+    .join("\n")
+  block(raw(displayed-code, lang: "typ", block: true))
 }
+// Typst 0.15 drops Tidy's variable-name stack from HTML, so restore its heading there.
+#let _show-variable(variable-doc, style-args) = {
+  if target() == "html" {
+    heading(variable-doc.name, level: style-args.first-heading-level + 1)
+  }
+  tidy.styles.default.show-variable(variable-doc, style-args)
+}
+#let _api-link(prefix, name, display: none) = {
+  raw(if display == none { name } else { display }, lang: none)
+}
+
+#let _tidy-scope = (
+  api-link: _api-link,
+  draw: draw,
+  graph: graph,
+  layout: layout,
+  physics: physics,
+  subgraph: subgraph,
+)
+
+#let _show-reference(source, name, preamble: "", function-aliases: (:)) = context {
+  let style = dictionary(tidy.styles.default)
+  let _ = style.insert("show-example", _show-example-source)
+  let _ = style.insert("show-variable", _show-variable)
+  let docs = tidy.parse-module(
+    source,
+    name: name,
+    preamble: preamble,
+    scope: _tidy-scope,
+  )
+  for (index, function-doc) in docs.functions.enumerate() {
+    if function-doc.name in function-aliases {
+      function-doc.name = function-aliases.at(function-doc.name)
+      docs.functions.at(index) = function-doc
+    }
+  }
+  tidy.show-module(
+    docs,
+    style: style,
+    sort-functions: none,
+    enable-cross-references: false,
+  )
+}
+
+#let graph-reference = _show-reference(
+  read("../src/graph.typ"),
+  "graph",
+  preamble: "#import graph: *\n",
+)
+#let layout-reference = _show-reference(
+  read("../src/layout.typ"),
+  "Reference",
+  function-aliases: (sequence: "layout-sequence"),
+)
+#let physics-reference = _show-reference(
+  read("../src/physics-edge-style.typ"),
+  "physics",
+  preamble: "#import graph: *\n",
+)
+#let drawing-reference = _show-reference(read("../src/draw.typ"), "Reference")
+#let subgraph-reference = _show-reference(read("../src/subgraph.typ"), "subgraph")
+
+#let manual = [
+#linnest-guide
+#graph-objects
+#graph-concepts
+#placement-concepts
+#drawing-concepts
+#physics-concepts
+#graph-query-concepts
+#layout-concepts
+#subgraph-concepts
+
+== Generated Reference
+
+#graph-reference
+#layout-reference
+#physics-reference
+#drawing-reference
+#subgraph-reference
 ]
 
 #manual

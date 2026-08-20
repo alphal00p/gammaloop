@@ -219,7 +219,7 @@ boundary. The follow-up review compared navigation, rendered output, search,
 reference generation, task journeys, release coverage, source ownership, and
 developer freshness across the whole site. It found these broader conditions:
 
-The current registries contain 39 authored product routes, 12 canonical
+The current registries contain 45 authored product routes, 12 canonical
 journeys, and 31 developer records, of which 14 are current. The counts below
 are derived from `docs/products/registry.toml`, `docs/examples.toml`, and
 `docs/developers.toml`; they are not estimates from the rendered navigation.
@@ -228,8 +228,8 @@ are derived from `docs/products/registry.toml`, `docs/examples.toml`, and
   columns: (1.5fr, 3fr, 3fr),
   table.header([*System*], [*What this revision establishes*], [*What is still lacking*]),
   [Information architecture],
-  [39 authored product routes now use one visible hierarchy: 5 Start pages, 5 Tutorials, 11 Guides, 6 authored Reference pages, and 12 Version history pages. Product and task navigation no longer mixes guides, interfaces, and releases under a generic Manual label, while all 23 moved `manual/*` routes remain as non-navigated redirects. The builder also rejects a PDF chapter set or order that differs from the HTML page registry],
-  [Depth is still unbalanced: GammaLoop has 8 authored routes, Linnet 9, Spenso 10, Idenso 7, and Vakint 5. A shared installation/compatibility matrix and a maintained three-task map per product are absent],
+  [45 authored product routes now use one visible hierarchy: 5 Start pages, 5 Tutorials, 11 Guides, 6 authored Reference pages, 6 Typst API pages, and 12 Version history pages. Product and task navigation no longer mixes guides, interfaces, and releases under a generic Manual label, while all 23 moved `manual/*` routes remain as non-navigated redirects. The builder also rejects a PDF chapter set or order that differs from the HTML page registry],
+  [Depth is still unbalanced: GammaLoop has 8 authored routes, Linnet 15, Spenso 10, Idenso 7, and Vakint 5. A shared installation/compatibility matrix and a maintained three-task map per product are absent],
   [Reference generation],
   [Python signatures drop `typing.`/`builtins.` noise and follow native constructor, bound-method, class/static-method, and property conventions; module indexes link one page per supported class/function; parameter tables and compact grouped member indexes lead to flat stable sections; adjacent and cross-symbol links replace nested disclosure cards. GammaLoop commands use one flat manpage each with compact argument navigation and source-faithful conflicts, requirements, and omitted-value defaults; settings follow all inferred schema namespaces and display structured defaults without expanding them into raw page text. Contextual sidebars expose nearby symbols, commands, and namespaces. Rust no longer duplicates declarations and members in a custom browser: each product has a concise orientation page, and authored tasks link to exact pages in the native Rustdoc built for that revision],
   [GammaLoop's 191 supported reachable Python members have prose, but parameters, return semantics, meaningful task examples, external-type inventory links, and backlinks remain uneven across Python modules. Vakint's 27-row topology inventory exposes only name, loop count, and slot count—not the match expression, mass/propagator pattern, backend applicability, or epsilon-depth limits needed to compare an unrecognized integral. Clinnet is not in the generated CLI inventory. Browser-level interaction, light/dark visual regression, and axe coverage are not enforced; the present checks cover static semantics, responsive containment, and drawer focus contracts only. Rustdoc federation remains open],
@@ -249,7 +249,7 @@ are derived from `docs/products/registry.toml`, `docs/examples.toml`, and
   [All 14 current notes require resolving anchors and reviewed digests; their registered scopes were rechecked, high-level system architecture is now included for all five products, and the rendered lifecycle/evidence boundary distinguishes current guidance from 17 proposal, investigation, superseded, or archived records],
   [Every one of the 31 records still has placeholder ownership; nine historical/investigation records lack immutable evidence revisions. Review expiry, CODEOWNERS integration, contextual product links, and automatic changed-trigger review remain open],
   [Semantic quality],
-  [The deterministic HTML gate discovers and checks every non-redirect page owned by the shared portal/manual shell. The redesigned full build contains 305 such pages, including generated symbol, command, and namespace routes; invalid multiple-page-heading structures and nine headerless data tables in current architecture notes were corrected],
+  [The deterministic HTML gate discovers and checks every non-redirect page owned by the shared portal/manual shell. The redesigned full build contains 311 such pages, including generated symbol, command, and namespace routes; invalid multiple-page-heading structures and nine headerless data tables in current architecture notes were corrected],
   [Standards HTML validation, axe/browser execution, keyboard/viewport/visual regression, spelling, and scheduled external-link health remain open],
 )
 
@@ -265,7 +265,7 @@ release notes are not counted as complete history.
   [`DOC-001`], [Partial], [Compiled usage semantics and representative parser checks exist; the exhaustive invocation matrix remains open],
   [`DOC-002`], [Partial], [The misleading beginner promises were corrected, but five clean external runs and the scheduled tier are not complete],
   [`DOC-003`], [Complete], [Clean single-product previews rewrite ecosystem links and pass local-link validation],
-  [`DOC-004`], [Partial], [Python and CLI now use interface-native indexes and flat detail pages rather than nested disclosure boxes; the 305-page deterministic semantic/no-JS audit passes, while browser visual and axe fixtures remain open],
+  [`DOC-004`], [Partial], [Python and CLI now use interface-native indexes and flat detail pages rather than nested disclosure boxes; the 311-page deterministic semantic/no-JS audit passes, while browser visual and axe fixtures remain open],
   [`DOC-005`], [Partial], [GammaLoop's curated Python surface expands from 4 to 28 of 40 exports, all 191 supported reachable members and 96 of 103 supported parameter rows have source-owned documentation, and Spynso3's 14 top-level exports are promoted; implementation-detail prose, generated setter parameters, and task coverage remain open],
   [`DOC-006`], [Partial], [Catalog generation rejects empty public CLI, argument, or settings prose; current non-empty coverage is 79/79, 412/412, and 181/181, including nested array and tagged-union settings, but substantive-quality and task-backlink gates remain open],
   [`DOC-007`], [Partial], [Five task choosers, a normalized Guides hierarchy, deeper subject chapters, and a new Spenso Python workflow are present; checked beginner and real-value paths do not yet cover every headline capability],
@@ -276,7 +276,7 @@ release notes are not counted as complete history.
   [`DOC-012`], [Partial], [The portal offers five task-first product routes and each overview has task-to-guide/reference links; a registry-owned shared task model and complete reference backlinks remain open],
   [`DOC-013`], [Partial], [Ordinary pull requests retain complete previews, and the temporary `docs` publisher is gated on pull request 96's exact open head revision; branch protection does not yet enforce an always-created path-routed documentation check],
   [`DOC-014`], [Partial], [Local links, fragments, containment, source paths, and search targets are checked; scheduled external checking remains open],
-  [`DOC-015`], [Partial], [A required deterministic audit discovers all generated shell pages and checks their headings, table headers, control labels, landmarks, internal ARIA references, and no-JavaScript navigation; the current full build covers 305 pages. Standards HTML validation, browser/axe, spelling, keyboard, viewport, and visual gates remain open],
+  [`DOC-015`], [Partial], [A required deterministic audit discovers all generated shell pages and checks their headings, table headers, control labels, landmarks, internal ARIA references, and no-JavaScript navigation; the current full build covers 311 pages. Standards HTML validation, browser/axe, spelling, keyboard, viewport, and visual gates remain open],
   [`DOC-016`], [Partial], [Search is federated across five products, developer notes, and registry-backed software citations; it indexes rendered body prose and imported/included headings and has representative task-query ranking fixtures. Product pages link their exact citation fragment, while product/developer pages have pinned source and issue routes. Synonyms, Rustdoc federation, and browser-level search checks remain open],
   [`DOC-017`], [Partial], [The source-backed Idenso convention specification is deep; equivalent auditable anchors remain uneven across products],
   [`DOC-018`], [Partial], [Native Rustdoc is the canonical version-specific API browser. Concise product orientation pages identify crates, versions, features, support expectations, and authored workflow guides; task pages link directly to exact Rustdoc items. Source-backed support catalogs remain internal coverage and drift checks, and the former custom `reference/rust/supported/*` browser routes are compatibility redirects rather than navigation or search targets. Redirect-fragment and Rustdoc-federation coverage remain to be enforced],
@@ -519,8 +519,8 @@ presentation in a browser rather than merely proving compilation.
 
 At the reviewed baseline each product had exactly five short authored pages.
 The current branch replaces that quota with a common Start, Tutorial, Guides,
-Reference, and Version history hierarchy and grows the products to between five
-and ten authored routes. The shape is easier to navigate, but route count is
+Reference, Typst API, and Version history hierarchy and grows the products to between five
+and fifteen authored routes. The shape is easier to navigate, but route count is
 not task completeness and the remaining depth is still uneven:
 
 #table(
