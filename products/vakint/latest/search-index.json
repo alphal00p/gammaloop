@@ -387,7 +387,7 @@
     "summary": "String representation of the numerical result.",
     "href": "reference/python/vakint-community/VakintNumericalResult/#exports-vakintnumericalresult-str-method",
     "kind": "python-api",
-    "text": "String representation of the numerical result.\n\n## Examples\n```python\nresult = VakintNumericalResult([\n  (-3, (0.0, -11440.53140354612)),\n  (-2, (0.0,  57169.95521898031)),\n  (-1, (0.0, -178748.9838377694)),\n  (0, (0.0,  321554.1122184795)),\n])\n\nstr(result)\nε^-3 : (0+-11440.5314035461i)\nε^-2 : (0+57169.9552189803i)\nε^-1 : (0+-178748.983837769i)\nε^ 0 : (0+321554.112218480i) def __str__(self) -> str:"
+    "text": "String representation of the numerical result.\n\n## Examples\n```python\n>>> result = VakintNumericalResult([\n...   (-3, (0.0, -11440.53140354612)),\n...   (-2, (0.0,  57169.95521898031)),\n...   (-1, (0.0, -178748.9838377694)),\n...   (0, (0.0,  321554.1122184795)),\n... ])\n>>> str(result)\nε^-3 : (0+-11440.5314035461i)\nε^-2 : (0+57169.9552189803i)\nε^-1 : (0+-178748.983837769i)\nε^ 0 : (0+321554.112218480i)\n``` def __str__(self) -> str:"
   },
   {
     "title": "symbolica.community.vakint.VakintNumericalResult.to_list",

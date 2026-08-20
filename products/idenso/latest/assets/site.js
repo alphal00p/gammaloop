@@ -110,8 +110,10 @@
     return score;
   };
 
+  let searchGeneration = 0;
   const renderSearch = async (query) => {
     if (!searchResults) return;
+    const generation = ++searchGeneration;
     const normalized = normalizeSearch(query.trim());
     searchResults.replaceChildren();
     if (!normalized) {
@@ -124,7 +126,10 @@
       return;
     }
     const terms = normalized.split(/\s+/);
-    const matches = (await getIndex())
+    const index = await getIndex();
+    if (generation !== searchGeneration) return;
+    searchResults.replaceChildren();
+    const matches = index
       .map((entry, index) => ({ entry, index, score: searchScore(entry, normalized, terms) }))
       .filter((match) => match.score !== null)
       .sort((left, right) => right.score - left.score ||
@@ -260,12 +265,23 @@
   }
 
   const pythonTokens = /(?<comment>#[^\n]*)|(?<string>[rRuUbBfF]{0,2}(?:"""[\s\S]*?"""|'''[\s\S]*?'''|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'))|(?<keyword>\b(?:False|None|True|and|as|assert|async|await|break|case|class|continue|def|del|elif|else|except|finally|for|from|global|if|import|in|is|lambda|match|nonlocal|not|or|pass|raise|return|try|while|with|yield)\b)|(?<number>\b(?:0[xX][\dA-Fa-f](?:_?[\dA-Fa-f])*|\d(?:_?\d)*(?:\.\d(?:_?\d)*)?(?:[eE][+-]?\d(?:_?\d)*)?j?)\b)|(?<call>\b[A-Za-z_]\w*(?=\s*\())|(?<operator>->|:=|==|!=|<=|>=|\/\/|\*\*|<<|>>|[-+*/%@&|^~<>:=])/g;
-  document.querySelectorAll(".api-doc-examples code[data-lang='python']").forEach((code, index) => {
-    const source = code.textContent;
-    if (!code.children.length) {
+  const syntaxSelector = ".syntax-call, .syntax-comment, .syntax-keyword, .syntax-number, .syntax-operator, .syntax-string";
+  document.querySelectorAll("code[data-lang='python']").forEach((code) => {
+    const walker = document.createTreeWalker(code, NodeFilter.SHOW_TEXT, {
+      acceptNode: (node) => node.parentElement?.closest(syntaxSelector)
+        ? NodeFilter.FILTER_REJECT
+        : NodeFilter.FILTER_ACCEPT,
+    });
+    const textNodes = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode);
+    textNodes.forEach((node) => {
+      const source = node.data;
       const highlighted = document.createDocumentFragment();
       let cursor = 0;
+      let found = false;
+      pythonTokens.lastIndex = 0;
       for (const match of source.matchAll(pythonTokens)) {
+        found = true;
         highlighted.append(source.slice(cursor, match.index));
         const token = document.createElement("span");
         token.className = `syntax-${Object.keys(match.groups).find((name) => match.groups[name])}`;
@@ -273,41 +289,108 @@
         highlighted.append(token);
         cursor = match.index + match[0].length;
       }
+      if (!found) return;
       highlighted.append(source.slice(cursor));
-      code.replaceChildren(highlighted);
-    }
-
-    const pre = code.parentElement;
-    if (!pre || pre.tagName !== "PRE" || pre.parentElement?.classList.contains("reference-copy-row")) return;
-    let serial = index + 1;
-    let target;
-    do {
-      target = `python-example-${serial++}`;
-    } while (document.getElementById(target));
-    pre.id = target;
-    const row = document.createElement("div");
-    row.className = "reference-copy-row api-example-copy-row";
-    pre.before(row);
-    row.append(pre);
-    const button = document.createElement("button");
-    button.type = "button";
-    button.dataset.copyTarget = target;
-    button.textContent = "Copy example";
-    row.append(button);
+      node.replaceWith(highlighted);
+    });
   });
 
+  const copyButtons = new Map([...document.querySelectorAll("[data-copy-target]")]
+    .map((button) => [button.dataset.copyTarget, button]));
+  let copySerial = 0;
+  document.querySelectorAll(".docs-article pre, .citation-card pre").forEach((pre) => {
+    let button = pre.id ? copyButtons.get(pre.id) : undefined;
+    let row = pre.parentElement?.classList.contains("reference-copy-row")
+      ? pre.parentElement
+      : undefined;
+    if (!button) {
+      if (!pre.id) {
+        let target;
+        do {
+          target = `copy-block-${++copySerial}`;
+        } while (document.getElementById(target));
+        pre.id = target;
+      }
+      button = document.createElement("button");
+      button.type = "button";
+      button.dataset.copyTarget = pre.id;
+      button.textContent = pre.closest(".api-doc-examples")
+        ? "Copy example"
+        : pre.matches(".api-signature, .api-member-signature")
+          ? "Copy signature"
+          : "Copy code";
+      copyButtons.set(pre.id, button);
+    }
+    if (!row) {
+      row = document.createElement("div");
+      row.className = "reference-copy-row api-example-copy-row";
+      pre.before(row);
+      row.append(pre);
+    }
+    if (button.parentElement !== row) row.append(button);
+  });
+
+  const writeClipboard = async (value) => {
+    if (navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(value);
+        return;
+      } catch {
+        // Fall through for browsers that expose Clipboard without granting it.
+      }
+    }
+    const input = document.createElement("textarea");
+    input.value = value;
+    input.readOnly = true;
+    input.setAttribute("aria-hidden", "true");
+    Object.assign(input.style, { position: "fixed", inset: "0 auto auto -100vw", opacity: "0" });
+    body.append(input);
+    let copied = false;
+    try {
+      input.select();
+      copied = document.execCommand("copy");
+    } finally {
+      input.remove();
+    }
+    if (!copied) throw new Error("clipboard copy unavailable");
+  };
+
   document.querySelectorAll("[data-copy-target]").forEach((button) => {
+    const label = button.textContent.trim() || "Copy code";
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    const status = document.createElement("span");
+    status.className = "copy-status";
+    status.setAttribute("role", "status");
+    button.parentElement?.append(status);
+    let resetTimer;
+    const resetCopyState = () => {
+      delete button.dataset.copyState;
+      delete button.dataset.copyFeedback;
+      button.setAttribute("aria-label", label);
+      button.title = label;
+      status.textContent = "";
+    };
     button.addEventListener("click", async () => {
       const target = document.getElementById(button.dataset.copyTarget);
       if (!target) return;
+      clearTimeout(resetTimer);
       try {
-        await navigator.clipboard.writeText(target.textContent.trim());
-        const label = button.textContent;
-        button.textContent = "Copied";
-        setTimeout(() => button.textContent = label, 1500);
+        await writeClipboard(target.textContent.trim());
+        button.dataset.copyState = "copied";
+        button.dataset.copyFeedback = "Copied";
+        button.setAttribute("aria-label", "Copied");
+        button.title = "Copied";
+        status.textContent = `${label.replace(/^Copy /, "")} copied.`;
       } catch {
-        target.focus?.();
+        button.dataset.copyState = "error";
+        button.dataset.copyFeedback = "Copy unavailable";
+        button.setAttribute("aria-label", "Copy unavailable");
+        button.title = "Copy unavailable";
+        status.textContent = "Copy unavailable. Select the code and copy it manually.";
       }
+      button.focus({ preventScroll: true });
+      resetTimer = setTimeout(resetCopyState, 1800);
     });
   });
 
