@@ -690,7 +690,7 @@ review_triggers = ["docs/developers.toml", "crates/alphal00p-docs-builder/src/li
 path = "crates/alphal00p-docs-builder/src/lib.rs"
 symbol = "alphal00p_docs_builder::SiteBuilder::check"
 anchor = "pub fn check(&self) -> Result<()> {"
-digest = "4447cf5858323ca8324cd8027aad465d9656eaeb"
+digest = "078e3e491eaa4f3048c875ce3dad3c6fdc82c25c"
 
 [[section.note]]
 id = "documentation-improvement-plan"

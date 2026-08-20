@@ -6522,7 +6522,16 @@ fn render_python_example(content: &[&str]) -> String {
         .first()
         .is_some_and(|line| line.trim_start().starts_with(">>>"))
     {
-        return render_code(content);
+        let source = content
+            .iter()
+            .filter_map(|line| {
+                let line = line.trim_start();
+                line.strip_prefix(">>>")
+                    .or_else(|| line.strip_prefix("..."))
+                    .map(|line| line.strip_prefix(' ').unwrap_or(line))
+            })
+            .collect::<Vec<_>>();
+        return render_code(&source);
     }
     if let Some(code_start) = content
         .iter()
@@ -9309,6 +9318,23 @@ mod tests {
             "<code data-lang=\"python\">for name, values in groups.items():\n    for value in values:\n        print(name, value)</code>"
         ));
         assert!(!rendered.contains("<code data-lang=\"python\">Iterate over grouped values"));
+    }
+
+    #[test]
+    fn python_doctest_examples_render_as_copyable_source() {
+        let rendered = render_doc_text(
+            &alphal00p_docs_schema::DocText::new(
+                DocFormat::PythonDocstring,
+                "Examples\n--------\n>>> values = [\n...     1,\n...     2,\n... ]\n>>> sum(values)\n3",
+            ),
+            3,
+        );
+
+        assert!(rendered.contains(
+            "<code data-lang=\"python\">values = [\n    1,\n    2,\n]\nsum(values)</code>"
+        ));
+        assert!(!rendered.contains("&gt;&gt;&gt;"));
+        assert!(!rendered.contains("\n3</code>"));
     }
 
     #[test]
