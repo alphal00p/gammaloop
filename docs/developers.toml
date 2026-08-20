@@ -664,7 +664,7 @@ review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/*
 path = "flake.nix"
 symbol = "alphal00pDocsCargoArtifacts"
 anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
-digest = "73e7342390117ecda49fc7a4ec0e2d3e8eeff34d"
+digest = "25c62a12dc6bd1ff694522e19f7507a107f20947"
 
 [[section]]
 id = "documentation"

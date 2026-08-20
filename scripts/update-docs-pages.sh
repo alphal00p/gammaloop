@@ -213,6 +213,8 @@ case "$mode" in
     latest)
         [ "$#" -eq 3 ] || usage
         [ -f "$build_root/index.html" ] || fail "latest build has no repository portal"
+        [ -f "$build_root/search-index.json" ] ||
+            fail "latest build has no federated search index"
         [ -f "$build_root/.nojekyll" ] || fail "latest build has no .nojekyll marker"
         [ -f "$build_root/assets/site.css" ] || fail "latest build has no portal stylesheet"
         [ -f "$build_root/assets/site.js" ] || fail "latest build has no portal script"
@@ -282,6 +284,7 @@ case "$mode" in
         done
 
         install -m 0644 "$build_root/index.html" "$pages_root/index.html"
+        install -m 0644 "$build_root/search-index.json" "$pages_root/search-index.json"
         install -m 0644 "$build_root/.nojekyll" "$pages_root/.nojekyll"
         rm -rf -- "$pages_root/assets"
         cp -a "$build_root/assets" "$pages_root/assets"

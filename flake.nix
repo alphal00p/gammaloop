@@ -3194,7 +3194,19 @@
               mkdir -p "$docs_pages_test/.git"
               printf 'historical snapshot\n' > "$docs_pages_test/products/gammaloop/snapshots/legacy/.note"
               printf 'removed developer route\n' > "$docs_pages_test/developers/old.txt"
+              mv "$docs_first/search-index.json" "$TMPDIR/federated-search-index.json"
+              if bash scripts/update-docs-pages.sh latest "$docs_first" "$docs_pages_test" \
+                2> "$TMPDIR/missing-federated-search-index.err"; then
+                missing_search_status=0
+              else
+                missing_search_status=$?
+              fi
+              mv "$TMPDIR/federated-search-index.json" "$docs_first/search-index.json"
+              test "$missing_search_status" -ne 0
+              grep -Fq 'latest build has no federated search index' \
+                "$TMPDIR/missing-federated-search-index.err"
               bash scripts/update-docs-pages.sh latest "$docs_first" "$docs_pages_test"
+              cmp "$docs_pages_test/search-index.json" "$docs_first/search-index.json"
               test -s "$docs_pages_test/products/gammaloop/snapshots/legacy/.note"
               test ! -e "$docs_pages_test/developers/old.txt"
               test -s "$docs_pages_test/developers/architecture/gammaloop-architecture/index.html"
@@ -3266,6 +3278,28 @@
               test -s "$out/products/spenso/latest/reference/rust/spenso_hep_lib/index.html"
               test -s "$out/products/idenso/latest/reference/rust/idenso/index.html"
               test -s "$out/products/vakint/latest/reference/rust/vakint/index.html"
+              test -s "$out/products/gammaloop/latest/reference/rust/theme.css"
+              grep -Fq 'href="../theme.css"' \
+                "$out/products/gammaloop/latest/reference/rust/gammalooprs/index.html"
+              grep -Fq 'class="alphal00p-rustdoc-bar"' \
+                "$out/products/gammaloop/latest/reference/rust/gammalooprs/index.html"
+              test -s \
+                "$out/products/gammaloop/latest/reference/rust/src/gammalooprs/lib.rs.html"
+              grep -Fq 'href="../../theme.css"' \
+                "$out/products/gammaloop/latest/reference/rust/src/gammalooprs/lib.rs.html"
+              grep -Fq 'class="alphal00p-rustdoc-bar"' \
+                "$out/products/gammaloop/latest/reference/rust/src/gammalooprs/lib.rs.html"
+              test -s "$out/products/linnet/latest/reference/typst/index.html"
+              for typst_page in graph layout drawing physics subgraph; do
+                test -s \
+                  "$out/products/linnet/latest/reference/typst/$typst_page/index.html"
+              done
+              grep -Fq '"title": "graph.build"' \
+                "$out/products/linnet/latest/search-index.json"
+              ! grep -Fq '"title": "Parameters"' \
+                "$out/products/linnet/latest/search-index.json"
+              grep -Fq '/products/gammaloop/latest/guides/kurvst/' \
+                "$out/products/linnet/latest/reference/typst/index.html"
             '';
           }
         );
