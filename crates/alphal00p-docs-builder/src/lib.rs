@@ -1045,6 +1045,9 @@ impl SiteBuilder {
         }
         self.require_file(Path::new("docs/assets/site.css"))?;
         self.require_file(Path::new("docs/assets/site.js"))?;
+        self.require_file(Path::new("docs/assets/rustdoc.css"))?;
+        self.require_file(Path::new("docs/assets/STIXTwoMath-Regular.woff2"))?;
+        self.require_file(Path::new("docs/assets/STIX-Two-OFL.txt"))?;
         self.require_file(Path::new("scripts/render-docs-svg-assets.sh"))?;
         for source in [
             "docs/assets/typst/theme.typ",
@@ -1747,6 +1750,11 @@ impl SiteBuilder {
             ("docs/assets/site.css", "site.css"),
             ("docs/assets/site.js", "site.js"),
             (
+                "docs/assets/STIXTwoMath-Regular.woff2",
+                "STIXTwoMath-Regular.woff2",
+            ),
+            ("docs/assets/STIX-Two-OFL.txt", "STIX-Two-OFL.txt"),
+            (
                 "docs/assets/local-unitarity-light.svg",
                 "local-unitarity-light.svg",
             ),
@@ -1758,7 +1766,13 @@ impl SiteBuilder {
             ("assets/gammalooplogo-light.svg", "gammalooplogo-light.svg"),
             ("assets/gammalooplogo-dark.svg", "gammalooplogo-dark.svg"),
         ] {
-            fs::copy(self.root.join(source), assets.join(name))
+            let target = assets.join(name);
+            match fs::remove_file(&target) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+            fs::copy(self.root.join(source), target)
                 .wrap_err_with(|| format!("failed to copy documentation asset {source}"))?;
         }
         Ok(())
@@ -2175,16 +2189,51 @@ impl SiteBuilder {
         if persistent_target_root.is_some() {
             clear_persistent_rustdoc_output(&target)?;
         }
-        let rustdoc_flags = env::var("RUSTDOCFLAGS").map_or_else(
-            |_| STRICT_RUSTDOC_FLAGS.to_owned(),
-            |flags| format!("{flags} {STRICT_RUSTDOC_FLAGS}"),
+        let rustdoc_css = self.root.join("docs/assets/rustdoc.css");
+        let rustdoc_before_content = target.join("alphal00p-rustdoc-before-content.html");
+        fs::write(
+            &rustdoc_before_content,
+            format!(
+                "<nav class=\"alphal00p-rustdoc-bar\" aria-label=\"αLoop documentation\"><a href=\"{PUBLISHED_DOCS_ROOT}/\">αLoop docs</a><span aria-hidden=\"true\">/</span><span>{} · Rust API</span></nav>",
+                escape_html(&product.title),
+            ),
+        )?;
+        let mut rustdoc_flags = env::var("CARGO_ENCODED_RUSTDOCFLAGS")
+            .ok()
+            .filter(|flags| !flags.is_empty())
+            .map(|flags| flags.split('\x1f').map(str::to_owned).collect::<Vec<_>>())
+            .or_else(|| {
+                env::var("RUSTDOCFLAGS").ok().map(|flags| {
+                    flags
+                        .split_whitespace()
+                        .map(str::to_owned)
+                        .collect::<Vec<_>>()
+                })
+            })
+            .unwrap_or_default();
+        ensure!(
+            !rustdoc_flags.iter().any(|flag| {
+                flag == "--extend-css"
+                    || flag.starts_with("--extend-css=")
+                    || flag.starts_with("-e") && !flag.starts_with("--")
+            }),
+            "the documentation builder supplies --extend-css; remove it from inherited Rustdoc flags"
         );
+        rustdoc_flags.extend(STRICT_RUSTDOC_FLAGS.split_whitespace().map(str::to_owned));
+        rustdoc_flags.extend([
+            "--extend-css".to_owned(),
+            rustdoc_css.to_string_lossy().into_owned(),
+            "--html-before-content".to_owned(),
+            rustdoc_before_content.to_string_lossy().into_owned(),
+        ]);
+        let rustdoc_flags = rustdoc_flags.join("\x1f");
         for component in &product.rust_components {
             let mut command = Command::new("cargo");
             command
                 .current_dir(&self.root)
                 .env("CARGO_TARGET_DIR", &target)
-                .env("RUSTDOCFLAGS", &rustdoc_flags)
+                .env_remove("RUSTDOCFLAGS")
+                .env("CARGO_ENCODED_RUSTDOCFLAGS", &rustdoc_flags)
                 .args(["doc", "--locked", "--no-deps", "--no-default-features"]);
             if let Some(profile) = env::var_os("ALPHAL00P_DOCS_CARGO_PROFILE") {
                 command.arg("--profile").arg(profile);
@@ -2299,7 +2348,7 @@ impl SiteBuilder {
                     item_page.join("index.html"),
                     reference_page(
                         &product.title,
-                        &format!("{}.{}", module, item.name),
+                        &item.name,
                         &render_python_item_page(
                             &catalog,
                             module,
@@ -2436,6 +2485,13 @@ impl SiteBuilder {
             product.rust_components.len(),
             product.python_components.len(),
         ));
+        let has_typst = product
+            .pages
+            .iter()
+            .any(|page| page.route == "reference/typst/");
+        if has_typst {
+            cards.push_str("<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Typst-native reference</p><h2><a href=\"reference/typst/\">Typst API</a></h2><p>Package exports grouped by graph construction, layout, drawing, physics, and subgraph operations.</p></article>");
+        }
         if let Some((route, title)) = supplemental_reference(&product.id) {
             cards.push_str(&format!(
                 "<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Generated from the implementation</p><h2><a href=\"{route}\">{}</a></h2><p>Version-specific reference data, also available as JSON for tooling.</p></article>",
@@ -2444,13 +2500,24 @@ impl SiteBuilder {
         }
         let destination = site.join("reference");
         fs::create_dir_all(&destination)?;
+        let mut interface_shapes = vec!["native Rustdoc for crates"];
+        if !product.python_components.is_empty() {
+            interface_shapes.push("class and function pages for Python");
+        }
+        if has_typst {
+            interface_shapes.push("focused function and module pages for Typst");
+        }
+        if product.id == "gammaloop" {
+            interface_shapes.push("manpage-style command pages for the CLI");
+        }
         fs::write(
             destination.join("index.html"),
             reference_page(
                 &product.title,
                 "Reference",
                 &format!(
-                    "<p>Choose the reference shaped for the interface you use: native Rustdoc for crates, class and function pages for Python, and manpage-style command pages for the CLI. Authored guides connect those exact interfaces to complete workflows.</p><div class=\"reference-hub-grid\">{cards}</div>"
+                    "<p>Choose the reference shaped for the interface you use: {}. Authored guides connect those exact interfaces to complete workflows.</p><div class=\"reference-hub-grid\">{cards}</div>",
+                    interface_shapes.join("; "),
                 ),
             ),
         )?;
@@ -2605,9 +2672,88 @@ impl SiteBuilder {
         if scope == BuildScope::ProductPreview {
             body = self.rewrite_product_preview_links(&body, metadata, page)?;
         }
+        for (color, class) in [
+            ("#4b69c6", "syntax-call"),
+            ("#d73948", "syntax-keyword"),
+            ("#b60157", "syntax-number"),
+            ("#198810", "syntax-string"),
+            ("#6b6b6f", "syntax-raw"),
+            ("#8b41b1", "syntax-property"),
+            ("#1d6c76", "syntax-label"),
+        ] {
+            body = body.replace(
+                &format!("<span style=\"color: {color}\">"),
+                &format!("<span class=\"{class}\">"),
+            );
+        }
+        let invalid_parameter =
+            Regex::new(r#"(?s)<p>(?P<heading><h5\b[^>]*>.*?</h5>)(?P<details>.*?)</p>"#)?;
+        body = invalid_parameter
+            .replace_all(&body, |captures: &regex::Captures<'_>| {
+                let heading = captures
+                    .name("heading")
+                    .expect("Tidy parameter heading")
+                    .as_str();
+                let details = captures
+                    .name("details")
+                    .expect("Tidy parameter details")
+                    .as_str();
+                if details.trim().is_empty() {
+                    heading.to_owned()
+                } else {
+                    format!("{heading}<p>{details}</p>")
+                }
+            })
+            .into_owned();
+        body = inject_heading_ids(&body)?.0;
+        if let Some((reference_heading, reference_scope)) = match page.route.as_str() {
+            "reference/typst/graph/" => Some(("graph", Some("graph"))),
+            "reference/typst/layout/" | "reference/typst/drawing/" => Some(("reference", None)),
+            "reference/typst/physics/" => Some(("physics", Some("physics"))),
+            "reference/typst/subgraph/" => Some(("subgraph", Some("subgraph"))),
+            _ => None,
+        } {
+            let marker = format!("<h2 id=\"{reference_heading}\">");
+            if let Some(reference_start) = body.find(&marker) {
+                if let Some(reference_scope) = reference_scope {
+                    let symbol_heading = Regex::new(r#"<h3 id=\"[^\"]+\">(?P<title>[^<]+)</h3>"#)?;
+                    let qualified = symbol_heading
+                        .replace_all(
+                            &body[reference_start..],
+                            |captures: &regex::Captures<'_>| {
+                                let title = captures
+                                    .name("title")
+                                    .expect("Tidy symbol heading")
+                                    .as_str();
+                                let symbol = decode_html_text(title);
+                                format!(
+                                    "<h3 id=\"{reference_scope}.{}\">{title}</h3>",
+                                    escape_html(&symbol),
+                                )
+                            },
+                        )
+                        .into_owned();
+                    body.replace_range(reference_start.., &qualified);
+                }
+                let wrapper = format!("<div>{marker}");
+                body = body.replacen(
+                    &wrapper,
+                    &format!("<div class=\"typst-api-module\">{marker}"),
+                    1,
+                );
+            }
+        }
+        if page.route == "reference/typst/layout/" {
+            body = body
+                .replace("<h3 id=\"layouts-layout\">", "<h3 id=\"layouts.layout\">")
+                .replace(
+                    "<h3 id=\"layouts-sequence\">",
+                    "<h3 id=\"layouts.sequence\">",
+                );
+        }
         let (body, headings) = inject_heading_ids(&body)?;
         let dense_reference = matches!(page.group.as_str(), "Python API" | "CLI reference");
-        let toc = headings
+        let toc_links = headings
             .iter()
             .filter(|heading| heading.level == 2 || heading.level == 3 && !dense_reference)
             .map(|heading| {
@@ -2618,7 +2764,19 @@ impl SiteBuilder {
                     escape_html(&heading.title)
                 )
             })
-            .collect::<String>();
+            .collect::<Vec<_>>();
+        let toc = if toc_links.len() >= 3 || dense_reference && !toc_links.is_empty() {
+            toc_links.concat()
+        } else {
+            String::new()
+        };
+        let inline_toc = if toc.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "<details class=\"docs-inline-toc\"><summary>On this page</summary><nav aria-label=\"On this page\">{toc}</nav></details>"
+            )
+        };
         let sidebar =
             self.site_sidebar(product, metadata, page, &docs_root, scope, generated_pages);
         let product_options = self.product_options(product, metadata, &docs_root, scope);
@@ -2712,14 +2870,32 @@ impl SiteBuilder {
                 "<aside class=\"docs-toc\" aria-label=\"On this page\"><p class=\"toc-title\">On this page</p>{toc}</aside>"
             )
         };
+        let reference_language = if page.route.starts_with("reference/python/") {
+            "python"
+        } else if page.route.starts_with("reference/typst/") {
+            "typst"
+        } else if page.route.starts_with("reference/rust/") {
+            "rust"
+        } else if page.route.starts_with("reference/cli/") {
+            "cli"
+        } else {
+            ""
+        };
+        let breadcrumb_page = if page.group == page.title {
+            String::new()
+        } else {
+            format!(" / {}", escape_html(&page.title))
+        };
         let favicon = favicon_links(&format!("{docs_root}assets/"));
         let html = format!(
-            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\">{favicon}<title>{} · {}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\"><script defer src=\"{}assets/site.js\"></script></head><body data-docs-root=\"{}\" data-search-index=\"{}search-index.json\" data-search-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"site-header\"><button class=\"header-button menu-button\" type=\"button\" data-menu-toggle aria-label=\"Open navigation\" aria-controls=\"docs-sidebar\" aria-expanded=\"false\">☰</button><a class=\"site-brand\" href=\"{}\"><span class=\"site-brand-mark\">α</span><span class=\"site-brand-name\">αLoop docs</span></a><div class=\"site-header-tools\"><select class=\"product-select\" data-product-select aria-label=\"Select project\">{}</select><button class=\"header-button\" type=\"button\" data-search-open><span class=\"header-search-label\">Search</span> <span class=\"header-button-label\">⌘K</span></button><button class=\"header-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\">◐</button></div></header><div class=\"docs-shell\">{sidebar}<main class=\"docs-main\" id=\"main-content\"><nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"{}\">{}</a> / {} / {}</nav><article class=\"docs-article\">{body}</article>{page_navigation}{feedback}<footer class=\"page-footer\">{} · <a href=\"{}manual.pdf\">Complete PDF manual</a> · documented revision <code>{}</code></footer></main>{toc_markup}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search all projects and developer notes\" aria-label=\"Search all documentation\"><button class=\"header-button\" value=\"close\">Close</button></form><ul class=\"search-results\" data-search-results aria-live=\"polite\"></ul></dialog></body></html>",
+            "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\">{favicon}<title>{} · {}</title><link rel=\"stylesheet\" href=\"{}assets/site.css\"><script defer src=\"{}assets/site.js\"></script></head><body data-reference-language=\"{}\" data-has-toc=\"{}\" data-docs-root=\"{}\" data-search-index=\"{}search-index.json\" data-search-root=\"{}\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"site-header\"><button class=\"header-button menu-button\" type=\"button\" data-menu-toggle aria-label=\"Open navigation\" aria-controls=\"docs-sidebar\" aria-expanded=\"false\">☰</button><a class=\"site-brand\" href=\"{}\"><span class=\"site-brand-mark\">α</span><span class=\"site-brand-name\">αLoop docs</span></a><div class=\"site-header-tools\"><select class=\"product-select\" data-product-select aria-label=\"Select project\">{}</select><button class=\"header-button\" type=\"button\" data-search-open aria-label=\"Search all documentation\"><span class=\"header-search-label\">Search</span> <span class=\"header-button-label\">⌘K</span><span class=\"header-search-icon\" aria-hidden=\"true\">⌕</span></button><button class=\"header-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\">◐</button></div></header><div class=\"docs-shell\">{sidebar}<main class=\"docs-main\" id=\"main-content\"><nav class=\"breadcrumbs\" aria-label=\"Breadcrumb\"><a href=\"{}\">{}</a> / {}{}</nav>{inline_toc}<article class=\"docs-article\">{body}</article>{page_navigation}{feedback}<footer class=\"page-footer\">{} · <a href=\"{}manual.pdf\">Complete PDF manual</a> · documented revision <code>{}</code></footer></main>{toc_markup}</div><button class=\"sidebar-backdrop\" type=\"button\" data-sidebar-backdrop aria-label=\"Close navigation\"></button><dialog class=\"search-dialog\" data-search-dialog><form class=\"search-form\" method=\"dialog\"><input class=\"search-input\" type=\"search\" data-search-input placeholder=\"Search all projects and developer notes\" aria-label=\"Search all documentation\"><button class=\"header-button\" value=\"close\">Close</button></form><ul class=\"search-results\" data-search-results aria-live=\"polite\"></ul></dialog></body></html>",
             escape_html(&format!("{} — {}", product.tagline, page.title)),
             escape_html(&product.title),
             escape_html(&page.title),
             escape_html(&docs_root),
             escape_html(&docs_root),
+            escape_html(reference_language),
+            if toc.is_empty() { "false" } else { "true" },
             escape_html(&docs_root),
             escape_html(search_root),
             escape_html(search_root),
@@ -2728,7 +2904,7 @@ impl SiteBuilder {
             escape_html(product_root),
             escape_html(&product.title),
             escape_html(&page.group),
-            escape_html(&page.title),
+            breadcrumb_page,
             escape_html(&version),
             escape_html(&docs_root),
             escape_html(&metadata.git_commit.chars().take(12).collect::<String>()),
@@ -5207,20 +5383,52 @@ fn append_rendered_page_search(
     html: &str,
     entries: &mut Vec<SearchEntry>,
 ) -> Result<()> {
-    let body = extract_html_body(html)?;
+    const ARTICLE: &str = "<article class=\"docs-article\">";
+    let body = if let Some(start) = html.find(ARTICLE).map(|start| start + ARTICLE.len()) {
+        let end = html
+            .rfind("</article>")
+            .context("rendered page has no documentation article end")?;
+        ensure!(start <= end, "rendered documentation article is malformed");
+        &html[start..end]
+    } else {
+        extract_html_body(html)?
+    };
     let (_, headings) = inject_heading_ids(body)?;
-    entries.extend(
-        headings
-            .into_iter()
-            .filter(|heading| heading.level >= 2 && heading.title != page.title)
-            .map(|heading| SearchEntry {
-                title: heading.title,
-                summary: format!("{} · {}", product.title, page.title),
-                href: format!("{page_href}#{}", heading.id),
-                kind: page.group.to_lowercase(),
-                text: String::new(),
-            }),
-    );
+    let typst_scope = page
+        .route
+        .strip_prefix("reference/typst/")
+        .map(|route| route.trim_matches('/'))
+        .filter(|route| !route.is_empty() && !route.contains('/'));
+    let module_scope =
+        typst_scope.filter(|scope| matches!(*scope, "graph" | "physics" | "subgraph"));
+    let mut in_generated_reference = false;
+    for heading in headings {
+        if heading.level == 2 && module_scope == Some(heading.title.as_str()) {
+            in_generated_reference = true;
+        }
+        if heading.level < 2
+            || heading.title == page.title
+            || page.group == "Typst API" && (heading.level > 3 || heading.title == "Parameters")
+        {
+            continue;
+        }
+        let title = if heading.level == 3 && heading.id.contains('.') {
+            heading.id.clone()
+        } else if let Some(scope) =
+            module_scope.filter(|_| in_generated_reference && heading.level == 3)
+        {
+            format!("{scope}.{}", heading.title)
+        } else {
+            heading.title
+        };
+        entries.push(SearchEntry {
+            title,
+            summary: format!("{} · {}", product.title, page.title),
+            href: format!("{page_href}#{}", heading.id),
+            kind: page.group.to_lowercase(),
+            text: String::new(),
+        });
+    }
     Ok(())
 }
 
@@ -5873,7 +6081,7 @@ fn render_python_item_page(
     }
     if let Some(signature) = python_item_display_signature(item) {
         body.push_str(&format!(
-            "<div class=\"reference-copy-row\"><pre class=\"api-signature\" id=\"{}-signature\"><code>{}</code></pre><button type=\"button\" data-copy-target=\"{}-signature\">Copy signature</button></div>",
+            "<div class=\"reference-copy-row\"><pre class=\"api-signature\" id=\"{}-signature\"><code data-lang=\"python\">{}</code></pre><button type=\"button\" data-copy-target=\"{}-signature\">Copy signature</button></div>",
             escape_html(&anchor),
             render_signature_code(&signature, &item_links),
             escape_html(&anchor),
@@ -6081,7 +6289,7 @@ fn render_api_members_flat(
         ));
         if let Some(signature) = python_member_display_signature(member) {
             body.push_str(&format!(
-                "<pre class=\"api-member-signature\"><code>{}</code></pre>",
+                "<pre class=\"api-member-signature\"><code data-lang=\"python\">{}</code></pre>",
                 render_signature_code(&signature, item_links),
             ));
         }
@@ -6123,7 +6331,7 @@ fn render_api_members_flat(
             ));
             if let Some(signature) = python_member_display_signature(setter) {
                 body.push_str(&format!(
-                    "<pre class=\"api-member-signature api-property-setter-signature\"><code>{}</code></pre>",
+                    "<pre class=\"api-member-signature api-property-setter-signature\"><code data-lang=\"python\">{}</code></pre>",
                     render_signature_code(&signature, item_links),
                 ));
             }
@@ -6190,7 +6398,7 @@ fn render_api_overloads(
         ));
         if let Some(signature) = python_member_display_signature(overload) {
             body.push_str(&format!(
-                "<pre class=\"api-member-signature api-overload-signature\"><code>{}</code></pre>",
+                "<pre class=\"api-member-signature api-overload-signature\"><code data-lang=\"python\">{}</code></pre>",
                 render_signature_code(&signature, item_links),
             ));
         }
@@ -6399,10 +6607,31 @@ fn render_prose_blocks(lines: &[&str], format: DocFormat) -> String {
         while index < lines.len() && !lines[index].trim().starts_with("```") {
             index += 1;
         }
+        let code_lines = &lines[code_start..index];
+        let code = if format == DocFormat::PythonDocstring
+            && language.trim() == "python"
+            && code_lines
+                .iter()
+                .find(|line| !line.trim().is_empty())
+                .is_some_and(|line| line.trim_start().starts_with(">>>"))
+        {
+            code_lines
+                .iter()
+                .filter_map(|line| {
+                    let line = line.trim_start();
+                    line.strip_prefix(">>>")
+                        .or_else(|| line.strip_prefix("..."))
+                        .map(|line| line.strip_prefix(' ').unwrap_or(line))
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        } else {
+            code_lines.join("\n")
+        };
         rendered.push_str(&format!(
             "<pre><code data-lang=\"{}\">{}</code></pre>",
             escape_html(language.trim()),
-            escape_html(&lines[code_start..index].join("\n")),
+            escape_html(&code),
         ));
         index += usize::from(index < lines.len());
         prose_start = index;
@@ -8137,7 +8366,7 @@ fn render_cli_command_page(
         ));
     }
     body.push_str(&format!(
-        "<h2>Synopsis</h2><div class=\"reference-copy-row\"><pre class=\"api-signature\" id=\"{}-usage\"><code>{}</code></pre><button type=\"button\" data-copy-target=\"{}-usage\">Copy usage</button></div>",
+        "<h2>Synopsis</h2><div class=\"reference-copy-row\"><pre class=\"api-signature\" id=\"{}-usage\"><code data-lang=\"shell\">{}</code></pre><button type=\"button\" data-copy-target=\"{}-usage\">Copy usage</button></div>",
         escape_html(&command_anchor),
         escape_html(&command.usage),
         escape_html(&command_anchor),
@@ -9338,6 +9567,41 @@ mod tests {
     }
 
     #[test]
+    fn python_doctest_main_remains_at_module_scope() {
+        let rendered = render_doc_text(
+            &alphal00p_docs_schema::DocText::new(
+                DocFormat::PythonDocstring,
+                "Examples\n--------\n>>> def main():\n...     return 1\n>>> main()\n1",
+            ),
+            3,
+        );
+
+        assert!(
+            rendered
+                .contains("<code data-lang=\"python\">def main():\n    return 1\nmain()</code>")
+        );
+        assert!(!rendered.contains("&gt;&gt;&gt;"));
+    }
+
+    #[test]
+    fn fenced_python_doctests_render_source_without_prompts_or_output() {
+        let rendered = render_doc_text(
+            &alphal00p_docs_schema::DocText::new(
+                DocFormat::PythonDocstring,
+                "Examples\n--------\n```python\n>>> def main():\n...     return 1\n>>> main()\n1\n```",
+            ),
+            3,
+        );
+
+        assert!(
+            rendered
+                .contains("<code data-lang=\"python\">def main():\n    return 1\nmain()</code>")
+        );
+        assert!(!rendered.contains("&gt;&gt;&gt;"));
+        assert!(!rendered.contains("\n1</code>"));
+    }
+
+    #[test]
     fn compiled_developer_typst_allows_safe_urls_images_and_prose() {
         let source = "<main><a href=\"guide?x=1&amp;y=2\">Guide</a><img src=\"data:image/png;base64,AAAA\"><pre><code>url(example)</code></pre></main>";
         assert!(validate_developer_typst_body(source).is_ok());
@@ -10105,6 +10369,93 @@ mod tests {
     }
 
     #[test]
+    fn typst_reference_search_uses_qualified_symbols_without_parameter_noise() {
+        let builder = SiteBuilder::discover().unwrap();
+        let product = builder
+            .registry
+            .product
+            .iter()
+            .find(|product| product.id == "linnet")
+            .unwrap();
+        let page = product
+            .pages
+            .iter()
+            .find(|page| page.id == "typst-graph")
+            .unwrap();
+        let html = r#"<!doctype html><html><body><article class="docs-article"><h2 id="graph">graph</h2><h3 id="build">build</h3><h4 id="parameters">Parameters</h4><h5 id="input">input</h5><p>Input graph data.</p></article></body></html>"#;
+        let mut entries = Vec::new();
+
+        append_rendered_page_search(product, page, &page.route, html, &mut entries).unwrap();
+
+        assert!(
+            entries
+                .iter()
+                .any(|entry| entry.title == "graph.build" && entry.href.ends_with("#build"))
+        );
+        assert!(
+            entries
+                .iter()
+                .all(|entry| entry.title != "Parameters" && entry.title != "input")
+        );
+        assert!(
+            rendered_article_search_text(html)
+                .unwrap()
+                .contains("Input graph data")
+        );
+    }
+
+    #[test]
+    fn typst_module_symbol_anchors_are_qualified_without_qualifying_concepts() {
+        let builder = SiteBuilder::discover().unwrap();
+        let product = builder
+            .registry
+            .product
+            .iter()
+            .find(|product| product.id == "linnet")
+            .unwrap();
+        let page = SitePage::new("reference/typst/graph/", "graph module", "Typst API");
+        let site = tempfile::tempdir().unwrap();
+        let destination = site.path().join(&page.route);
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(
+            destination.join("index.html"),
+            r##"<!doctype html><html><body><h1>graph module</h1><h2>Concepts</h2><h3>Graph Specs</h3><div><h2>graph</h2><h3>build</h3><code data-lang="typc"><span style="color: #d73948">none</span></code><p><h5>value</h5><code>int</code></p></div></body></html>"##,
+        )
+        .unwrap();
+        let metadata = SnapshotMetadata {
+            schema: SCHEMA_VERSION,
+            product: &product.id,
+            title: &product.title,
+            channel: BuildChannel::Latest,
+            snapshot_tag: None,
+            git_commit: "0123456789abcdef".to_owned(),
+            git_timestamp: 1,
+            route: "products/linnet/latest/".to_owned(),
+            components: Vec::new(),
+        };
+
+        builder
+            .decorate_html_page(
+                product,
+                &metadata,
+                site.path(),
+                &page,
+                (None, None),
+                (BuildScope::FullSite, &[]),
+            )
+            .unwrap();
+        let rendered = fs::read_to_string(destination.join("index.html")).unwrap();
+
+        assert!(rendered.contains("<h3 id=\"graph.build\">build</h3>"));
+        assert!(rendered.contains("<h3 id=\"graph-specs\">Graph Specs</h3>"));
+        assert!(!rendered.contains("id=\"graph.graph-specs\""));
+        assert!(rendered.contains("<div class=\"typst-api-module\"><h2 id=\"graph\">"));
+        assert!(rendered.contains("<span class=\"syntax-keyword\">none</span>"));
+        assert!(!rendered.contains("style=\"color: #d73948\""));
+        assert!(!rendered.contains("<p><h5"));
+    }
+
+    #[test]
     fn product_preview_developer_links_use_revision_pinned_sources() {
         let builder = SiteBuilder::discover().unwrap();
         for product in &builder.registry.product {
@@ -10693,6 +11044,24 @@ mod tests {
     }
 
     #[test]
+    fn site_assets_replace_read_only_generated_files() {
+        let builder = SiteBuilder::discover().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        builder.write_site_assets(output.path()).unwrap();
+        let font = output.path().join("assets/STIXTwoMath-Regular.woff2");
+        let mut permissions = fs::metadata(&font).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&font, permissions).unwrap();
+
+        builder.write_site_assets(output.path()).unwrap();
+
+        assert_eq!(
+            fs::read(font).unwrap(),
+            fs::read(builder.root.join("docs/assets/STIXTwoMath-Regular.woff2")).unwrap()
+        );
+    }
+
+    #[test]
     fn pdf_manual_chapter_order_must_match_the_page_registry() {
         let mut builder = SiteBuilder::discover().unwrap();
         builder.registry.product[0].pages.swap(0, 1);
@@ -10786,6 +11155,8 @@ mod tests {
             "gammalooplogo-light.svg",
             "gammalooplogo-dark.svg",
             "spensologo.svg",
+            "STIXTwoMath-Regular.woff2",
+            "STIX-Two-OFL.txt",
             "publications.json",
         ] {
             assert!(output.path().join("assets").join(asset).is_file());
@@ -11036,6 +11407,13 @@ mod tests {
             let hub = fs::read_to_string(site.join("reference/index.html")).unwrap();
             assert!(hub.contains("Rust API"), "{}", product.id);
             assert!(hub.contains("Python API"), "{}", product.id);
+            if product
+                .pages
+                .iter()
+                .any(|page| page.route == "reference/typst/")
+            {
+                assert!(hub.contains("href=\"reference/typst/\">Typst API</a>"));
+            }
             let rust_index = fs::read_to_string(site.join("reference/rust/index.html")).unwrap();
             assert!(
                 rust_index.contains("Rustdoc is the canonical Rust API reference"),
@@ -11077,6 +11455,19 @@ mod tests {
                         component.id,
                         page.route,
                     );
+                    let symbol =
+                        fs::read_to_string(site.join(&page.route).join("index.html")).unwrap();
+                    let short_title = page.title.rsplit('.').next().unwrap();
+                    assert!(
+                        symbol.contains(&format!("<h1>{}</h1>", escape_html(short_title))),
+                        "{}:{}:{}",
+                        product.id,
+                        component.id,
+                        page.route,
+                    );
+                    if symbol.contains("class=\"api-signature\"") {
+                        assert!(symbol.contains("<code data-lang=\"python\">"));
+                    }
                 }
             }
             for component in &product.rust_components {
@@ -11442,6 +11833,52 @@ mod tests {
         assert!(!rendered.contains("<a class=\"toc-link\" data-level=\"3\" href=\"#run\">run</a>"));
         assert!(rendered.contains("<h3 id=\"run\">run</h3>"));
         assert!(!rendered.contains("aria-label=\"Documentation pagination\""));
+    }
+
+    #[test]
+    fn complex_reference_pages_keep_an_inline_outline_below_the_right_rail() {
+        let builder = SiteBuilder::discover().unwrap();
+        let product = builder
+            .registry
+            .product
+            .iter()
+            .find(|product| product.id == "linnet")
+            .unwrap();
+        let page = SitePage::new("reference/typst/graph/", "graph module", "Typst API");
+        let site = tempfile::tempdir().unwrap();
+        let destination = site.path().join(&page.route);
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(
+            destination.join("index.html"),
+            "<!doctype html><html><body><h1>graph module</h1><h2>Concepts</h2><h2>Reference</h2><h3>build</h3></body></html>",
+        )
+        .unwrap();
+        let metadata = SnapshotMetadata {
+            schema: SCHEMA_VERSION,
+            product: &product.id,
+            title: &product.title,
+            channel: BuildChannel::Latest,
+            snapshot_tag: None,
+            git_commit: "0123456789abcdef".to_owned(),
+            git_timestamp: 1,
+            route: "products/linnet/latest/".to_owned(),
+            components: Vec::new(),
+        };
+
+        builder
+            .decorate_html_page(
+                product,
+                &metadata,
+                site.path(),
+                &page,
+                (None, None),
+                (BuildScope::FullSite, &[]),
+            )
+            .unwrap();
+        let rendered = fs::read_to_string(destination.join("index.html")).unwrap();
+
+        assert!(rendered.contains("<aside class=\"docs-toc\" aria-label=\"On this page\">"));
+        assert!(rendered.contains("<details class=\"docs-inline-toc\">"));
     }
 
     #[test]

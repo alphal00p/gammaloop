@@ -392,18 +392,18 @@ class VakintNumericalResult:
 
         ## Examples
         ```python
-        result = VakintNumericalResult([
-          (-3, (0.0, -11440.53140354612)),
-          (-2, (0.0,  57169.95521898031)),
-          (-1, (0.0, -178748.9838377694)),
-          (0, (0.0,  321554.1122184795)),
-        ])
-
-        str(result)
+        >>> result = VakintNumericalResult([
+        ...   (-3, (0.0, -11440.53140354612)),
+        ...   (-2, (0.0,  57169.95521898031)),
+        ...   (-1, (0.0, -178748.9838377694)),
+        ...   (0, (0.0,  321554.1122184795)),
+        ... ])
+        >>> str(result)
         ε^-3 : (0+-11440.5314035461i)
         ε^-2 : (0+57169.9552189803i)
         ε^-1 : (0+-178748.983837769i)
         ε^ 0 : (0+321554.112218480i)
+        ```
         """
     def to_list(self) -> builtins.list[tuple[builtins.int, tuple[builtins.float, builtins.float]]]:
         r"""
@@ -473,4 +473,3 @@ class VakintNumericalResult:
         max_pull : Optional[float]
            The maximum pull for comparison. Default is 3.0.
         """
-

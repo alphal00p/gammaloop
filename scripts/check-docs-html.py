@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import ast
 import re
 import sys
 from collections import Counter
@@ -145,6 +146,15 @@ class DocumentAudit(HTMLParser):
             "attributes": attributes,
             "text": [],
             "has_header": False,
+            "python_example": (
+                tag == "code"
+                and attributes.get("data-lang") == "python"
+                and any(
+                    "api-doc-examples"
+                    in ancestor["attributes"].get("class", "").split()
+                    for ancestor in ancestors
+                )
+            ),
         }
         if tag not in VOID_ELEMENTS:
             self.stack.append(node)
@@ -158,7 +168,9 @@ class DocumentAudit(HTMLParser):
 
     def handle_data(self, data: str) -> None:
         for ancestor in self.stack:
-            if ancestor["tag"] in {"button", "title"}:
+            if ancestor["tag"] in {"button", "title"} or ancestor[
+                "python_example"
+            ]:
                 ancestor["text"].append(data)
 
     def handle_endtag(self, tag: str) -> None:
@@ -179,6 +191,14 @@ class DocumentAudit(HTMLParser):
         attributes = node["attributes"]
         if tag == "title":
             self.title = text
+        elif tag == "code" and node["python_example"]:
+            try:
+                ast.parse("".join(node["text"]))
+            except SyntaxError as error:
+                self.errors.append(
+                    "a rendered Python example is invalid at "
+                    f"line {error.lineno}: {error.msg}"
+                )
         elif tag == "button" and not text and not self._has_accessible_name(attributes):
             self.errors.append("a button has no text or accessible name")
         elif tag == "table" and not node["has_header"]:
@@ -304,10 +324,16 @@ def css_media_body(stylesheet: str, max_width: str) -> str | None:
 def progressive_navigation_errors(root: Path) -> list[str]:
     """Check progressive mobile navigation, drawer focus, and compact references."""
 
-    assets = {name: root / "assets" / name for name in ("site.css", "site.js")}
+    asset_names = (
+        "site.css",
+        "site.js",
+        "STIXTwoMath-Regular.woff2",
+        "STIX-Two-OFL.txt",
+    )
+    assets = {name: root / "assets" / name for name in asset_names}
     missing = [path for path in assets.values() if not path.is_file()]
     if missing:
-        return [f"missing navigation asset {path.relative_to(root)}" for path in missing]
+        return [f"missing documentation asset {path.relative_to(root)}" for path in missing]
     css = assets["site.css"].read_text(encoding="utf-8")
     script = assets["site.js"].read_text(encoding="utf-8")
     errors: list[str] = []
@@ -349,13 +375,30 @@ def progressive_navigation_errors(root: Path) -> list[str]:
         ),
         "long documentation headings do not wrap": (
             r"(?:^|\n)\s*\.docs-article\s+h1\s*,[^{}]*\{[^}]*"
+            r"overflow-wrap:\s*(?:anywhere|break-word)"
+        ),
+        "long inline links and code are not contained": (
+            r"(?:^|\n)\s*\.docs-article\s+a\s*,\s*"
+            r"\.docs-article\s+:not\(pre\)\s*>\s*code\s*\{[^}]*"
             r"overflow-wrap:\s*anywhere"
+        ),
+        "display MathML has no contained horizontal scroll": (
+            r"(?:^|\n)\s*\.docs-article\s+math\[display=[\"']block[\"']\]"
+            r"\s*\{[^}]*max-width:\s*100%[^}]*overflow-x:\s*auto"
+        ),
+        "MathML does not use the bundled math font": (
+            r"(?:^|\n)\s*\.docs-article\s+math\s*\{[^}]*"
+            r"font-family:\s*[\"']STIX Two Math[\"']"
         ),
         "wide reference tables have no contained horizontal scroll": (
             r"(?:^|\n)\s*\.reference-table-wrap\s*\{[^}]*overflow-x:\s*auto"
         ),
-        "generated Python examples have no copy-row layout": (
-            r"(?:^|\n)\s*\.api-example-copy-row\s*\{[^}]*align-items:\s*start"
+        "copy controls are not positioned inside their code blocks": (
+            r"(?:^|\n)\s*\.reference-copy-row\s*\{[^}]*position:\s*relative"
+        ),
+        "copy controls have no icon-button layout": (
+            r"(?:^|\n)\s*\.js\s+button\[data-copy-target\]\s*\{[^}]*"
+            r"position:\s*absolute[^}]*place-items:\s*center"
         ),
         "generated Python examples have no syntax token colors": (
             r"(?:^|\n)\s*\.syntax-keyword\s*,\s*\.syntax-operator\s*\{[^}]*color:"
@@ -364,6 +407,14 @@ def progressive_navigation_errors(root: Path) -> list[str]:
     errors.extend(
         message for message, pattern in base_rules.items() if not re.search(pattern, css)
     )
+
+    contextual_css = css_media_body(css, "82rem")
+    if contextual_css is None:
+        errors.append("site.css has no complete max-width: 82rem contextual navigation rules")
+    elif not re.search(
+        r"\.docs-inline-toc\s*\{[^}]*display:\s*block", contextual_css
+    ):
+        errors.append("the inline page outline is not shown when the right rail is hidden")
 
     if not re.search(r"\.classList\.add\([\"']js[\"']\)", script):
         errors.append("site.js does not add the progressive-enhancement marker")
@@ -414,12 +465,23 @@ def progressive_navigation_errors(root: Path) -> list[str]:
             r"backdrop\??\.addEventListener\(\s*[\"']click[\"'].*?"
             r"closeMenu\(\)\s*;\s*menu\??\.focus\(\)"
         ),
-        "generated Python examples are not selected for highlighting": (
-            r"api-doc-examples\s+code\[data-lang=[\\\"']python[\\\"']\]"
+        "Python code is not selected generally for highlighting": (
+            r"querySelectorAll\(\s*[\"']code\[data-lang=[\\\"']python[\\\"']\]"
         ),
-        "generated Python examples do not receive copy controls": (
-            r"button\.dataset\.copyTarget\s*=\s*target.*?"
-            r"button\.textContent\s*=\s*[\"']Copy example[\"']"
+        "Python highlighting replaces linked signature markup": (
+            r"createTreeWalker\(\s*code\s*,\s*NodeFilter\.SHOW_TEXT.*?"
+            r"node\.replaceWith\(highlighted\)"
+        ),
+        "documentation code blocks do not receive shared copy controls": (
+            r"querySelectorAll\(\s*[\"']\.docs-article pre,\s*\.citation-card pre[\"']"
+            r".*?button\.dataset\.copyTarget\s*=\s*pre\.id"
+        ),
+        "copy controls have no accessible label": (
+            r"button\.setAttribute\(\s*[\"']aria-label[\"']\s*,\s*label\s*\)"
+        ),
+        "copy controls provide no copied feedback": (
+            r"button\.dataset\.copyState\s*=\s*[\"']copied[\"'].*?"
+            r"button\.dataset\.copyFeedback\s*=\s*[\"']Copied[\"']"
         ),
         "Tab does not wrap from the mobile drawer end to its beginning": (
             r"event\.key\s*===\s*[\"']Tab[\"'].*?sidebar-open.*?"
