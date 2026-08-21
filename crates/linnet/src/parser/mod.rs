@@ -72,17 +72,50 @@ use crate::{
     permutation::Permutation,
 };
 
-/// Strips surrounding quotes from a string if present
-pub(crate) fn strip_quotes(s: &str) -> &str {
-    if s.len() >= 2 {
-        let chars: Vec<char> = s.chars().collect();
-        if (chars[0] == '"' && chars[chars.len() - 1] == '"')
-            || (chars[0] == '\'' && chars[chars.len() - 1] == '\'')
-        {
-            return &s[1..s.len() - 1];
+/// Strips surrounding quotes from a string if present and decodes the escapes
+/// emitted by this module's canonical DOT serializer.
+pub(crate) fn strip_quotes(s: &str) -> String {
+    let Some(inner) = s
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .or_else(|| {
+            s.strip_prefix('\'')
+                .and_then(|value| value.strip_suffix('\''))
+        })
+    else {
+        return s.to_owned();
+    };
+    let mut output = String::with_capacity(inner.len());
+    let mut chars = inner.chars().peekable();
+    while let Some(character) = chars.next() {
+        if character == '\\' && matches!(chars.peek(), Some('"')) {
+            output.push(chars.next().expect("peeked character"));
+        } else {
+            output.push(character);
         }
     }
-    s
+    output
+}
+
+pub(crate) fn escape_dot_string(value: &str) -> String {
+    value.replace('"', "\\\"")
+}
+
+pub(crate) fn dot_id(value: &str) -> String {
+    let keyword = matches!(
+        value.to_ascii_lowercase().as_str(),
+        "node" | "edge" | "graph" | "digraph" | "subgraph" | "strict"
+    );
+    let mut characters = value.chars();
+    let plain = characters
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && characters.all(|character| character.is_ascii_alphanumeric() || character == '_');
+    if plain && !keyword {
+        value.to_owned()
+    } else {
+        format!("\"{}\"", escape_dot_string(value))
+    }
 }
 
 pub mod set;
@@ -161,7 +194,10 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
     }
 
     pub fn write_io<W: std::io::Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
-        writeln!(writer, "digraph {}{{", self.global_data.name)?;
+        let name = (!self.global_data.name.is_empty())
+            .then(|| format!(" {}", dot_id(&self.global_data.name)))
+            .unwrap_or_default();
+        writeln!(writer, "digraph{name} {{")?;
 
         writeln!(writer, "{:4}", self.global_data)?;
 
@@ -170,7 +206,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
             node_data.remove_common(&self.global_data);
 
             if let Some(name) = &node_data.name {
-                write!(writer, "\t{name}")?;
+                write!(writer, "\t{}", dot_id(name))?;
             } else {
                 write!(writer, "\t{n}")?;
             }
@@ -198,7 +234,13 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
                 self,
                 eid,
                 |h| h.statement.clone(),
-                |a| self[a].name.clone().unwrap_or(a.to_string()),
+                |a| {
+                    self[a]
+                        .name
+                        .as_deref()
+                        .map(dot_id)
+                        .unwrap_or_else(|| a.to_string())
+                },
                 data.orientation,
                 attr,
             )?;
@@ -208,7 +250,10 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
     }
 
     pub fn write_fmt<W: std::fmt::Write>(&self, writer: &mut W) -> Result<(), std::fmt::Error> {
-        writeln!(writer, "digraph {}{{", self.global_data.name)?;
+        let name = (!self.global_data.name.is_empty())
+            .then(|| format!(" {}", dot_id(&self.global_data.name)))
+            .unwrap_or_default();
+        writeln!(writer, "digraph{name} {{")?;
 
         let mut writer = CodeFormatter::new(writer, "  ");
         writer.indent(1);
@@ -221,7 +266,11 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
             write!(
                 writer,
                 "\n{}{};",
-                node_data.name.clone().unwrap_or(n.to_string()),
+                node_data
+                    .name
+                    .as_deref()
+                    .map(dot_id)
+                    .unwrap_or_else(|| n.to_string()),
                 if !data.is_empty() {
                     format!("[{data}]")
                 } else {
@@ -245,7 +294,13 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
                 self,
                 eid,
                 |h| h.statement.clone(),
-                |a| self[a].name.clone().unwrap_or(a.to_string()),
+                |a| {
+                    self[a]
+                        .name
+                        .as_deref()
+                        .map(dot_id)
+                        .unwrap_or_else(|| a.to_string())
+                },
                 data.orientation,
                 attr,
             )?;
@@ -283,7 +338,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
     {
         let ast_graph: SubGraphFreeGraph = dot_parser::ast::Graph::from_file(p)?.into();
 
-        Ok(Self::from((ast_graph, Figment::new())))
+        Self::from_parser(ast_graph, Figment::new())
     }
 
     #[allow(clippy::result_large_err, clippy::type_complexity)]
@@ -294,7 +349,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
             .filter_map(&|(k, v)| Some((k.into(), strip_quotes(v).to_string())))
             .into();
 
-        Ok(Self::from((ast_graph, Figment::new())))
+        Self::from_parser(ast_graph, Figment::new())
     }
 
     #[cfg(feature = "serde")]
@@ -306,8 +361,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
             .filter_map(&|(k, v)| Some((k.into(), strip_quotes(v).to_string())))
             .into();
 
-        let graph = Self::from((ast_graph, figment));
-        Ok(graph)
+        Self::from_parser(ast_graph, figment)
     }
 
     pub fn back_and_forth_dot(self) -> Self {
@@ -353,15 +407,11 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
             &|d| Some(format!("{d}label={}", d.format(&vertex_format))),
         )
     }
-}
 
-pub mod error;
-pub use error::{HedgeParseError, HedgeParseExt};
-
-impl<S: NodeStorageOps<NodeData = DotVertexData>> From<(SubGraphFreeGraph, Figment)>
-    for DotGraph<S>
-{
-    fn from((value, fig): (SubGraphFreeGraph, Figment)) -> Self {
+    fn from_parser<'a>(
+        value: SubGraphFreeGraph,
+        fig: Figment,
+    ) -> Result<Self, HedgeParseError<'a, (), (), (), ()>> {
         let is_digraph = value.is_digraph;
         let name = value.name.clone();
         let (attrs, ids, nodes, edges) = value.nodes_and_edges();
@@ -369,7 +419,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> From<(SubGraphFreeGraph, Figme
         // let can_graph = dot_parser::canonical::Graph::from(ast_graph);
         let mut global_data = GlobalData::try_from((attrs, ids)).unwrap();
         if let Some(name) = name {
-            global_data.add_name(name);
+            global_data.add_name(strip_quotes(&name));
         }
         global_data.set_figment(fig);
 
@@ -377,7 +427,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> From<(SubGraphFreeGraph, Figme
         let mut map = BTreeMap::new();
 
         for (id, n) in nodes {
-            let idorstatements = match DotVertexData::from_parser(n, &global_data) {
+            let idorstatements = match DotVertexData::from_parser(n, &global_data)? {
                 Either::Left(d) => NodeIdOrDangling::Id(g.add_node(d)),
                 Either::Right(statements) => NodeIdOrDangling::Dangling { statements },
             };
@@ -391,7 +441,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> From<(SubGraphFreeGraph, Figme
             .sorted_by(|a, b| Ord::cmp(&(&a.from, &a.to), &(&b.from, &b.to)))
         {
             let (data, orientation, source, target) =
-                DotEdgeData::from_parser(e, &map, is_digraph, &global_data);
+                DotEdgeData::from_parser(e, &map, is_digraph, &global_data)?;
             match target {
                 Either::Left(a) => {
                     g.add_edge(source, a, data, orientation);
@@ -408,52 +458,76 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> From<(SubGraphFreeGraph, Figme
         };
 
         // println!("Built: {}", g.debug_dot());
-        g.apply_explicit_id_ordering();
-        g
+        g.apply_explicit_id_ordering()?;
+        Ok(g)
     }
 }
 
+pub mod error;
+pub use error::{DotParseError, ExplicitIdKind, HedgeParseError, HedgeParseExt};
+
 impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
-    pub fn apply_explicit_id_ordering(&mut self) {
+    pub fn apply_explicit_id_ordering(&mut self) -> Result<(), DotParseError> {
         // println!("Built: {}", self.debug_dot());
 
         let mut used_edges = HashSet::new();
         let n_edges = self.n_edges();
 
-        let mut edge_map = self.new_edgevec(|d, e, _| {
-            d.edge_id.inspect(|d| {
-                assert!(
-                    used_edges.insert(*d),
-                    "Duplicate edge ID: {d} for edge {e}:{used_edges:?}"
-                );
-                assert!(d.0 < n_edges, "Edge {d} out of bounds (len={n_edges})")
-            })
-        });
+        let mut edge_map = self.new_edgevec(|d, _, _| d.edge_id);
+        for id in edge_map.iter().filter_map(|(_, id)| *id) {
+            if id.0 >= n_edges {
+                return Err(DotParseError::ExplicitIdOutOfBounds {
+                    kind: ExplicitIdKind::Edge,
+                    id: id.0,
+                    len: n_edges,
+                });
+            }
+            if !used_edges.insert(id) {
+                return Err(DotParseError::DuplicateExplicitId {
+                    kind: ExplicitIdKind::Edge,
+                    id: id.0,
+                });
+            }
+        }
 
         let mut used_hedges = HashSet::new();
 
         let n_hedges = self.n_hedges();
-        let mut hedge_map = self.new_hedgevec(|h, d| {
-            d.id.inspect(|d| {
-                assert!(
-                    used_hedges.insert(*d),
-                    "Duplicate hedge ID: {d} for hedge {h}",
-                );
-                assert!(d.0 < n_hedges, "Hedge {d} out of bounds (len={n_hedges})")
-            })
-        });
+        let mut hedge_map = self.new_hedgevec(|_, d| d.id);
+        for id in hedge_map.iter().filter_map(|(_, id)| *id) {
+            if id.0 >= n_hedges {
+                return Err(DotParseError::ExplicitIdOutOfBounds {
+                    kind: ExplicitIdKind::Hedge,
+                    id: id.0,
+                    len: n_hedges,
+                });
+            }
+            if !used_hedges.insert(id) {
+                return Err(DotParseError::DuplicateExplicitId {
+                    kind: ExplicitIdKind::Hedge,
+                    id: id.0,
+                });
+            }
+        }
 
         let mut used_nodes = HashSet::new();
         let n_nodes = self.n_nodes();
-        let mut node_map = self.new_nodevec(|ni, _, v| {
-            v.index.inspect(|i| {
-                assert!(
-                    used_nodes.insert(*i),
-                    "Duplicate node index: {i} for node {ni}"
-                );
-                assert!(i.0 < n_nodes, "Node {i} out of bounds (len ={n_nodes})")
-            })
-        });
+        let mut node_map = self.new_nodevec(|_, _, v| v.index);
+        for id in node_map.iter().filter_map(|(_, id)| *id) {
+            if id.0 >= n_nodes {
+                return Err(DotParseError::ExplicitIdOutOfBounds {
+                    kind: ExplicitIdKind::Node,
+                    id: id.0,
+                    len: n_nodes,
+                });
+            }
+            if !used_nodes.insert(id) {
+                return Err(DotParseError::DuplicateExplicitId {
+                    kind: ExplicitIdKind::Node,
+                    id: id.0,
+                });
+            }
+        }
 
         // println!(
         //     "Hedge Map: {}",
@@ -482,9 +556,24 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
         //     "Filled Edge Map: {}",
         //     edge_map.display_string(|i| format!("{i:?}"))
         // );
-        let edge_perm: Permutation = edge_map.try_into().unwrap();
-        let node_perm: Permutation = node_map.try_into().unwrap();
-        let hedge_perm: Permutation = hedge_map.try_into().unwrap();
+        let edge_perm: Permutation =
+            edge_map
+                .try_into()
+                .map_err(|()| DotParseError::InvalidExplicitIdPermutation {
+                    kind: ExplicitIdKind::Edge,
+                })?;
+        let node_perm: Permutation =
+            node_map
+                .try_into()
+                .map_err(|()| DotParseError::InvalidExplicitIdPermutation {
+                    kind: ExplicitIdKind::Node,
+                })?;
+        let hedge_perm: Permutation =
+            hedge_map
+                .try_into()
+                .map_err(|()| DotParseError::InvalidExplicitIdPermutation {
+                    kind: ExplicitIdKind::Hedge,
+                })?;
         // println!("Hedge Perm: {hedge_perm}");
         // println!("Edge Perm: {edge_perm}");
         // println!("Node Perm: {node_perm}");
@@ -495,6 +584,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
         // println!("Permuted Edge Graph: {}", g.debug_dot());
         <HedgeGraph<_, _, _, _> as Swap<NodeIndex>>::permute(&mut self.graph, &node_perm);
         // println!("Permuted Node Graph:{}", g.debug_dot());
+        Ok(())
     }
 }
 
@@ -584,7 +674,7 @@ pub mod test {
 
     use crate::{
         half_edge::{nodestore::NodeStorageVec, subgraph::SuBitGraph},
-        parser::{DotGraph, DotVertexData},
+        parser::{DotGraph, DotParseError, DotVertexData, ExplicitIdKind, HedgeParseError},
     };
 
     use super::GraphSet;
@@ -634,6 +724,178 @@ pub mod test {
         assert!(!serialized.contains(" []"));
         let reparsed: Result<DotGraph, _> = DotGraph::from_string(serialized);
         assert!(reparsed.is_ok());
+    }
+
+    #[test]
+    fn canonical_dot_escapes_names_keys_and_quoted_values() {
+        let source = r#"digraph "graph \"name" {
+            "node \"one" ["node-key"="a\"b\N"];
+            "node \"one" -> other ["edge-key"="c\"d\l"];
+        }"#;
+        let graph: DotGraph = DotGraph::from_string(source).unwrap();
+        let serialized = graph.debug_dot();
+        let reparsed: DotGraph = DotGraph::from_string(&serialized).unwrap();
+
+        assert_eq!(reparsed.global_data.name, "graph \"name");
+        assert!(reparsed.iter_nodes().any(|(_, _, node)| {
+            node.name.as_deref() == Some("node \"one")
+                && node.statements.get("node-key").map(String::as_str) == Some("a\"b\\N")
+        }));
+        assert_eq!(
+            reparsed
+                .iter_edges()
+                .next()
+                .and_then(|(_, _, edge)| edge.data.statements.get("edge-key"))
+                .map(String::as_str),
+            Some("c\"d\\l")
+        );
+        assert_eq!(reparsed, reparsed.clone().back_and_forth_dot());
+        assert!(serialized.contains("\"graph \\\"name\""));
+        assert!(serialized.contains("\"node-key\"=\"a\\\"b\\N\""));
+        assert!(serialized.contains("\"edge-key\"=\"c\\\"d\\l\""));
+    }
+
+    #[test]
+    fn invalid_direction_returns_an_error() {
+        for dot in [
+            "digraph { a -> b [dir=sideways]; }",
+            "digraph { edge [dir=sideways]; a -> b; }",
+        ] {
+            let parsed: Result<DotGraph, _> = DotGraph::from_string(dot);
+            let error = parsed.unwrap_err();
+            assert!(matches!(
+                error,
+                HedgeParseError::DotParseError(DotParseError::InvalidEdgeDirection { value })
+                    if value == "sideways"
+            ));
+        }
+    }
+
+    #[test]
+    fn graph_sets_return_semantic_errors() {
+        let parsed = GraphSet::<_, _, _, _, NodeStorageVec<DotVertexData>>::from_string(
+            "digraph valid { a -> b; } digraph invalid { a -> b [dir=sideways]; }",
+        );
+        let error = parsed.unwrap_err();
+
+        assert!(matches!(
+            error,
+            HedgeParseError::DotParseError(DotParseError::InvalidEdgeDirection { value })
+                if value == "sideways"
+        ));
+    }
+
+    #[test]
+    fn external_endpoint_data_returns_errors() {
+        for (dot, external_source) in [
+            ("digraph { a; ext [style=invis]; ext:port -> a; }", true),
+            (
+                "digraph { a; ext [style=invis]; ext -> a [source=payload]; }",
+                true,
+            ),
+            ("digraph { a; ext [style=invis]; a -> ext:port; }", false),
+            (
+                "digraph { a; ext [style=invis]; a -> ext [sink=payload]; }",
+                false,
+            ),
+        ] {
+            let parsed: Result<DotGraph, _> = DotGraph::from_string(dot);
+            let error = parsed.unwrap_err();
+            assert!(matches!(
+                (error, external_source),
+                (
+                    HedgeParseError::DotParseError(DotParseError::ExternalSourceEndpointData),
+                    true
+                ) | (
+                    HedgeParseError::DotParseError(DotParseError::ExternalSinkEndpointData),
+                    false
+                )
+            ));
+        }
+    }
+
+    #[test]
+    fn edges_between_external_nodes_return_errors() {
+        let parsed: Result<DotGraph, _> = DotGraph::from_string(
+            "digraph { source [style=invis]; sink [style=invis]; source -> sink; }",
+        );
+        let error = parsed.unwrap_err();
+
+        assert!(matches!(
+            error,
+            HedgeParseError::DotParseError(DotParseError::EdgeBetweenExternalNodes)
+        ));
+    }
+
+    #[test]
+    fn malformed_explicit_ids_return_errors() {
+        let cases = [
+            ("digraph { a [id=invalid]; }", ExplicitIdKind::Node),
+            ("digraph { node [id=invalid]; a; }", ExplicitIdKind::Node),
+            ("digraph { a -> b [id=invalid]; }", ExplicitIdKind::Edge),
+            (
+                "digraph { a:999999999999999999999999999999999999 -> b:0; }",
+                ExplicitIdKind::Hedge,
+            ),
+        ];
+
+        for (dot, expected_kind) in cases {
+            let parsed: Result<DotGraph, _> = DotGraph::from_string(dot);
+            let error = parsed.unwrap_err();
+            assert!(matches!(
+                error,
+                HedgeParseError::DotParseError(DotParseError::InvalidExplicitId {
+                    kind,
+                    ..
+                }) if kind == expected_kind
+            ));
+        }
+    }
+
+    #[test]
+    fn duplicate_explicit_ids_return_errors() {
+        let cases = [
+            ("digraph { a [id=0]; b [id=0]; }", ExplicitIdKind::Node),
+            (
+                "digraph { a -> b [id=0]; a -> b [id=0]; }",
+                ExplicitIdKind::Edge,
+            ),
+            ("digraph { a:0 -> b:0; }", ExplicitIdKind::Hedge),
+        ];
+
+        for (dot, expected_kind) in cases {
+            let parsed: Result<DotGraph, _> = DotGraph::from_string(dot);
+            let error = parsed.unwrap_err();
+            assert!(matches!(
+                error,
+                HedgeParseError::DotParseError(DotParseError::DuplicateExplicitId {
+                    kind,
+                    id: 0,
+                }) if kind == expected_kind
+            ));
+        }
+    }
+
+    #[test]
+    fn out_of_bounds_explicit_ids_return_errors() {
+        let cases = [
+            ("digraph { a [id=1]; }", ExplicitIdKind::Node, 1, 1),
+            ("digraph { a -> b [id=1]; }", ExplicitIdKind::Edge, 1, 1),
+            ("digraph { a:2 -> b:0; }", ExplicitIdKind::Hedge, 2, 2),
+        ];
+
+        for (dot, expected_kind, expected_id, expected_len) in cases {
+            let parsed: Result<DotGraph, _> = DotGraph::from_string(dot);
+            let error = parsed.unwrap_err();
+            assert!(matches!(
+                error,
+                HedgeParseError::DotParseError(DotParseError::ExplicitIdOutOfBounds {
+                    kind,
+                    id,
+                    len,
+                }) if kind == expected_kind && id == expected_id && len == expected_len
+            ));
+        }
     }
 
     #[test]

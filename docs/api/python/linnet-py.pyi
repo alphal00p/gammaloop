@@ -2,777 +2,1223 @@
 # ruff: noqa: E501, F401
 
 import builtins
+import enum
 import os
 import pathlib
 import typing
 
 __all__ = [
-    "Cycle",
+    "AUTO",
+    "Angle",
+    "Auto",
+    "Color",
+    "Dash",
+    "DebugLevel",
+    "DotCodec",
     "DotEdgeData",
-    "DotGraph",
-    "DotGraphBuilder",
-    "DotHedgeData",
+    "DotHalfEdgeData",
     "DotVertexData",
-    "EdgeData",
-    "EdgeIndex",
-    "EdgeStatements",
+    "DrawOptions",
+    "EdgeSpec",
     "Flow",
+    "Fraction",
     "GlobalData",
-    "GlobalStatements",
-    "Hedge",
-    "HedgeNode",
-    "HedgePair",
-    "NodeIndex",
-    "NodeStatements",
+    "Graph",
+    "GraphStyleOptions",
+    "HalfEdgeSpec",
+    "INHERIT",
+    "Inherit",
+    "Insets",
+    "LayoutOptions",
+    "Length",
+    "Mark",
+    "MathSymbol",
+    "NodeSpec",
     "Orientation",
-    "OrientedCut",
-    "Subgraph",
-    "TraversalTree",
+    "PhysicsOptions",
+    "Anchor",
+    "Compass",
+    "DashPattern",
+    "Edge",
+    "EdgeDrawing",
+    "EdgeLengthResolution",
+    "EdgeValue",
+    "HalfEdge",
+    "HalfEdgeDrawing",
+    "HalfEdgeValue",
+    "LabelLayout",
+    "LayoutAlgorithm",
+    "LayoutDirection",
+    "LayoutNodes",
+    "MarkDirection",
+    "MarkOrientation",
+    "MarkPosition",
+    "MarkSymbol",
+    "Node",
+    "NodeDrawing",
+    "NodeValue",
+    "Pattern",
+    "Placement",
+    "RankAlignment",
+    "RenderMode",
+    "RoutePoints",
+    "Routing",
+    "StrokeCap",
+    "StrokeJoin",
+    "TextStyle",
+    "TypstFields",
+    "Ratio",
+    "RelativeLength",
+    "RenderConfig",
+    "Stroke",
+    "TextLabel",
+    "TypstBind",
+    "TypstCall",
+    "TypstModule",
+    "TypstRef",
+    "build",
+    "edge",
+    "node",
+    "sink",
+    "source",
 ]
 
+class _TypstValueRef(typing.Protocol): ...
+class _TypstContentRef(typing.Protocol): ...
+class _TypstFunctionRef(typing.Protocol):
+    def call(self, *args: _NativeValue, **kwargs: _NativeValue) -> TypstCall: ...
+    def bind(self, *args: _NativeValue, **kwargs: _NativeValue) -> TypstBind: ...
+
+_FunctionExpression: typing.TypeAlias = _TypstFunctionRef | TypstBind
+_TypstExpression: typing.TypeAlias = _TypstValueRef | _TypstContentRef | _FunctionExpression | TypstCall
+_NativeArray: typing.TypeAlias = builtins.list["_NativeValue"] | builtins.tuple["_NativeValue", ...]
+_NativeDict: typing.TypeAlias = builtins.dict[builtins.str, "_NativeValue"]
+_NativeValue: typing.TypeAlias = (
+    None
+    | builtins.bool
+    | builtins.int
+    | builtins.float
+    | builtins.str
+    | Auto
+    | Inherit
+    | LayoutAlgorithm
+    | LayoutDirection
+    | LabelLayout
+    | RankAlignment
+    | LayoutNodes
+    | Placement
+    | Compass
+    | Routing
+    | RoutePoints
+    | Anchor
+    | Pattern
+    | EdgeLengthResolution
+    | DebugLevel
+    | StrokeCap
+    | StrokeJoin
+    | TextStyle
+    | RenderMode
+    | TypstFields
+    | DashPattern
+    | MarkSymbol
+    | MarkPosition
+    | MarkOrientation
+    | MarkDirection
+    | Length
+    | Ratio
+    | RelativeLength
+    | Angle
+    | Fraction
+    | Color
+    | Stroke
+    | Dash
+    | Insets
+    | Mark
+    | TextLabel
+    | MathSymbol
+    | _TypstExpression
+    | _NativeArray
+    | _NativeDict
+)
+_ValueExpression: typing.TypeAlias = _TypstValueRef | TypstCall
+_Number: typing.TypeAlias = builtins.int | builtins.float | _ValueExpression | Inherit
+_Integer: typing.TypeAlias = builtins.int | _ValueExpression | Inherit
+_Boolean: typing.TypeAlias = builtins.bool | _ValueExpression | Inherit
+_LengthValue: typing.TypeAlias = builtins.int | builtins.float | Length | Ratio | RelativeLength | _ValueExpression | Inherit
+_LengthArray: typing.TypeAlias = builtins.list[_LengthValue] | builtins.tuple[_LengthValue, ...]
+_Paint: typing.TypeAlias = Color | _ValueExpression | Inherit
+_StrokeValue: typing.TypeAlias = Stroke | Color | Length | builtins.int | builtins.float | _ValueExpression | Inherit
+_DashValue: typing.TypeAlias = Dash | _ValueExpression | Inherit
+_StaticContent: typing.TypeAlias = builtins.str | TextLabel | MathSymbol | _TypstContentRef | TypstCall | Inherit
+_Content: typing.TypeAlias = _StaticContent | _FunctionExpression
+_Dictionary: typing.TypeAlias = _NativeDict | _ValueExpression | Inherit
+_StyleValue: typing.TypeAlias = _NativeDict | _ValueExpression | _FunctionExpression
+_Style: typing.TypeAlias = _StyleValue | Inherit
+_StyleLayers: typing.TypeAlias = _Style | builtins.list[_NativeDict] | builtins.tuple[_NativeDict, ...]
+_PlacementValue: typing.TypeAlias = Placement | _NativeDict | _TypstExpression | None | Inherit
+_CompassValue: typing.TypeAlias = Compass | None | Inherit
+_RoutingValue: typing.TypeAlias = Routing | None | Inherit
+_AnchorValue: typing.TypeAlias = Anchor | Auto | None | Inherit
+_Radius: typing.TypeAlias = builtins.int | builtins.float | builtins.list[builtins.int | builtins.float] | builtins.tuple[builtins.int | builtins.float, ...] | _ValueExpression | Inherit
+_Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets | _ValueExpression | Inherit
+_FieldNames: typing.TypeAlias = builtins.str | builtins.list[builtins.str] | builtins.tuple[builtins.str, ...] | _ValueExpression | Inherit
+_OptionalString: typing.TypeAlias = builtins.str | None
+_OptionalHalfEdgeSpec: typing.TypeAlias = HalfEdgeSpec | None
+_GraphItem: typing.TypeAlias = NodeSpec | EdgeSpec
+_OptionalGlobalData: typing.TypeAlias = GlobalData | None
+_OptionalDotCodec: typing.TypeAlias = DotCodec | None
+_OptionalRenderConfig: typing.TypeAlias = RenderConfig | None
+_OptionalPaint: typing.TypeAlias = _Paint | None
+_OptionalLengthValue: typing.TypeAlias = _LengthValue | None
+_OptionalStrokeCap: typing.TypeAlias = StrokeCap | None | Inherit
+_OptionalStrokeJoin: typing.TypeAlias = StrokeJoin | None | Inherit
+_OptionalDashValue: typing.TypeAlias = _DashValue | None
+_OptionalStrokeValue: typing.TypeAlias = _StrokeValue | None
+_MarkAnchor: typing.TypeAlias = Anchor | Inherit
+_MarkShorten: typing.TypeAlias = _LengthValue | None | Auto
+_TextStyleValue: typing.TypeAlias = TextStyle | Inherit
+_AutoOptionalStaticContent: typing.TypeAlias = _StaticContent | None | Auto
+_OptionalStaticContent: typing.TypeAlias = _StaticContent | None
+_AutoOptionalContent: typing.TypeAlias = _Content | None | Auto
+_OptionalContent: typing.TypeAlias = _Content | None
+_OptionalStyle: typing.TypeAlias = _Style | None
+_OptionalStyleLayers: typing.TypeAlias = _StyleLayers | None
+_OptionalBoolean: typing.TypeAlias = _Boolean | None
+_OptionalInteger: typing.TypeAlias = _Integer | None
+_DrawingCoordinate: typing.TypeAlias = builtins.int | builtins.float | _ValueExpression
+_DrawingPointDict = typing.TypedDict(
+    "_DrawingPointDict",
+    {"x": _DrawingCoordinate, "y": _DrawingCoordinate},
+)
+_DrawingPoint: typing.TypeAlias = builtins.list[_DrawingCoordinate] | builtins.tuple[_DrawingCoordinate, _DrawingCoordinate] | _DrawingPointDict | _ValueExpression | None | Inherit
+_DrawingString: typing.TypeAlias = builtins.str | _ValueExpression | None | Inherit
+_DrawingScalar: typing.TypeAlias = builtins.str | builtins.int | builtins.float | _ValueExpression | None | Inherit
+_DrawingAngle: typing.TypeAlias = builtins.int | builtins.float | Angle | _ValueExpression | None | Inherit
+_DrawingDecoration: typing.TypeAlias = Pattern | _StyleLayers | None | Inherit
+_NodeSelector: typing.TypeAlias = typing.Callable[[Node], _OptionalStyle] | None | Inherit
+_EdgeSelector: typing.TypeAlias = typing.Callable[[Edge], _OptionalStyleLayers] | None | Inherit
+_HalfEdgeSelector: typing.TypeAlias = typing.Callable[[HalfEdge], _OptionalStyleLayers] | None | Inherit
+_HedgeSelection: typing.TypeAlias = builtins.list[builtins.bool] | builtins.tuple[builtins.bool, ...]
+_SubgraphExpression: typing.TypeAlias = _ValueExpression | _FunctionExpression
+_SubgraphSelection: typing.TypeAlias = _HedgeSelection | _SubgraphExpression
+_OptionalHedgeSelection: typing.TypeAlias = _SubgraphSelection | None | Inherit
+_NodeIndexArray: typing.TypeAlias = builtins.list[builtins.int] | builtins.tuple[builtins.int, ...]
+_NodeIndices: typing.TypeAlias = _NodeIndexArray | _ValueExpression | Inherit
+_NodeGroup: typing.TypeAlias = _NodeIndexArray | _SubgraphExpression
+_NodeGroups: typing.TypeAlias = builtins.list[_NodeGroup] | builtins.tuple[_NodeGroup, ...] | _ValueExpression | Inherit
+_LabelLayoutValue: typing.TypeAlias = LabelLayout | Inherit
+_LayoutAlgorithmValue: typing.TypeAlias = LayoutAlgorithm | Inherit
+_LayoutNodesValue: typing.TypeAlias = LayoutNodes | Inherit
+_LayoutDirectionValue: typing.TypeAlias = LayoutDirection | Inherit
+_RankAlignmentValue: typing.TypeAlias = RankAlignment | Inherit
+_DrawSubgraphRecord = typing.TypedDict(
+    "_DrawSubgraphRecord",
+    {"subgraph": _SubgraphSelection},
+)
+_StyledDrawSubgraphRecord = typing.TypedDict(
+    "_StyledDrawSubgraphRecord",
+    {"subgraph": _SubgraphSelection, "edge-style": _StyleValue | None},
+)
+_DrawSubgraphEntry: typing.TypeAlias = _SubgraphSelection | _DrawSubgraphRecord | _StyledDrawSubgraphRecord
+_DrawSubgraphs: typing.TypeAlias = _SubgraphSelection | builtins.list[_DrawSubgraphEntry] | builtins.tuple[_DrawSubgraphEntry, ...] | None | Inherit
+_AutoLengthValue: typing.TypeAlias = _LengthValue | Auto
+_AutoNumber: typing.TypeAlias = _Number | Auto
+_DebugValue: typing.TypeAlias = DebugLevel | Inherit
+_AutoRadius: typing.TypeAlias = _Radius | Auto
+_AutoFunction: typing.TypeAlias = _FunctionExpression | Auto
+_OptionalNumber: typing.TypeAlias = _Number | None
+_EdgeLengthResolver: typing.TypeAlias = EdgeLengthResolution | _ValueExpression | _FunctionExpression | Inherit
+_OptionalPadding: typing.TypeAlias = _Padding | None
+_TypstFieldsValue: typing.TypeAlias = TypstFields | Inherit
+_MomentumMark: typing.TypeAlias = Mark | _NativeDict | _ValueExpression | None | Auto | Inherit
+_OptionalFieldNames: typing.TypeAlias = _FieldNames | None
+_TemplatePath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | None | Inherit
+_ExecutablePath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | Inherit
+_RenderModeValue: typing.TypeAlias = RenderMode | Auto | Inherit
+_RenderStyle: typing.TypeAlias = GraphStyleOptions | None | Inherit
+_RenderLayouts: typing.TypeAlias = LayoutOptions | None | Inherit
+_RenderDrawing: typing.TypeAlias = DrawOptions | None | Inherit
+_RenderPhysics: typing.TypeAlias = PhysicsOptions | None | Inherit
+
+
+AUTO: Auto
+INHERIT: Inherit
 @typing.final
-class Cycle:
+class Angle:
     r"""
-    Cycle represented as a subgraph and optional loop count.
+    A Typst angle in degrees or radians.
     """
-    @property
-    def filter(self) -> Subgraph:
-        r"""
-        Subgraph filter for this cycle.
-        """
-    @property
-    def loop_count(self) -> typing.Optional[builtins.int]:
-        r"""
-        Optional loop count for this cycle.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Debug-style representation.
-        """
+    def __new__(cls, value: builtins.float, unit: typing.Literal['deg', 'rad']) -> Angle: ...
+    @staticmethod
+    def degrees(value: builtins.float) -> Angle: ...
+    @staticmethod
+    def radians(value: builtins.float) -> Angle: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class Auto:
+    r"""
+    Type of the `AUTO` sentinel, which requests automatic selection.
+    """
+    def __repr__(self) -> builtins.str: ...
+    def __copy__(self) -> Auto: ...
+    def __deepcopy__(self, _memo: typing.Any) -> Auto: ...
+
+@typing.final
+class Color:
+    r"""
+    A safe Typst color value.
+    """
+    def __new__(cls, value: builtins.str) -> Color: ...
+    @staticmethod
+    def rgb(red: builtins.int, green: builtins.int, blue: builtins.int, alpha: typing.Optional[builtins.int] = None) -> Color: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class Dash:
+    r"""
+    A named or explicit Typst dash pattern.
+    """
+    def __new__(cls, pattern: DashPattern) -> Dash: ...
+    @staticmethod
+    def pattern(values: _LengthArray, *, phase: _LengthValue | None = None) -> Dash: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class DotCodec:
+    r"""
+    An explicit mapping between graph values and DOT-representable records.
+    """
+    def __new__(cls, *, encode_node: typing.Callable[[NodeValue], DotVertexData], decode_node: typing.Callable[[DotVertexData], NodeValue], encode_edge: typing.Callable[[EdgeValue], DotEdgeData], decode_edge: typing.Callable[[DotEdgeData], EdgeValue], encode_half_edge: typing.Callable[[HalfEdgeValue], DotHalfEdgeData], decode_half_edge: typing.Callable[[DotHalfEdgeData], HalfEdgeValue]) -> DotCodec: ...
+    @classmethod
+    def linnest(cls) -> DotCodec: ...
+    @classmethod
+    def topology(cls) -> DotCodec: ...
 
 @typing.final
 class DotEdgeData:
     r"""
-    DOT edge data (attributes + optional edge id).
+    The DOT-representable record exchanged for one edge by a `DotCodec`.
     """
     @property
-    def statements(self) -> EdgeStatements:
-        r"""
-        Edge attributes as a dict-like proxy.
-        """
+    def edge_id(self) -> typing.Optional[builtins.int]: ...
     @property
-    def local_statements(self) -> EdgeStatements:
-        r"""
-        Local edge attributes as a dict-like proxy.
-        """
+    def payload(self) -> typing.Optional[builtins.list[builtins.int]]: ...
     @property
-    def edge_id(self) -> typing.Optional[EdgeIndex]:
-        r"""
-        Optional edge id.
-        """
-    def __new__(cls, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, local_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, edge_id: typing.Optional[builtins.int] = None) -> DotEdgeData:
-        r"""
-        Create edge data from fields.
-        """
-    def add_statement(self, key: builtins.str, value: builtins.str) -> None:
-        r"""
-        Insert or update an attribute statement.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Debug-style representation.
-        """
+    def statements(self) -> builtins.dict[builtins.str, builtins.str]: ...
+    @property
+    def local_statements(self) -> builtins.dict[builtins.str, builtins.str]: ...
+    def __new__(cls, *, edge_id: typing.Optional[builtins.int] = None, payload: typing.Optional[typing.Sequence[builtins.int]] = None, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, local_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None) -> DotEdgeData: ...
 
 @typing.final
-class DotGraph:
+class DotHalfEdgeData:
     r"""
-    DOT-backed hedge graph.
+    The DOT-representable record exchanged for one half-edge by a `DotCodec`.
     """
     @property
-    def global_data(self) -> GlobalData:
-        r"""
-        Global graph attributes.
-        """
-    @global_data.setter
-    def global_data(self, value: GlobalData) -> None: ...
-    @classmethod
-    def from_string(cls, s: builtins.str) -> DotGraph:
-        r"""
-        Parse a DOT string into a graph.
-        """
-    @classmethod
-    def from_string_set(cls, s: builtins.str) -> builtins.list[DotGraph]:
-        r"""
-        Parse a DOT string into multiple graphs.
-        """
-    @classmethod
-    def from_file(cls, path: builtins.str | os.PathLike | pathlib.Path) -> DotGraph:
-        r"""
-        Parse a DOT file into a graph.
-        """
-    def debug_dot(self) -> builtins.str:
-        r"""
-        Serialize graph to DOT for debugging.
-        """
-    def dot(self) -> builtins.str:
-        r"""
-        Serialize the full graph to DOT.
-        """
-    def render(self, output: builtins.str | os.PathLike | pathlib.Path, *, template: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, inputs: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, typst: builtins.str = 'typst') -> pathlib.Path:
-        r"""
-        Render the graph to PDF, SVG, or PNG through Typst.
-        """
-    def to_svg(self, *, template: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, inputs: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, typst: builtins.str = 'typst') -> builtins.str:
-        r"""
-        Render the graph through Typst and return the resulting SVG document.
-        """
-    def _repr_svg_(self) -> builtins.str:
-        r"""
-        Render the graph inline in notebook frontends.
-        """
-    def dot_of(self, subgraph: Subgraph) -> builtins.str:
-        r"""
-        Serialize a subgraph to DOT.
-        """
-    def n_nodes(self) -> builtins.int:
-        r"""
-        Number of nodes.
-        """
-    def n_edges(self) -> builtins.int:
-        r"""
-        Number of edges.
-        """
-    def n_hedges(self) -> builtins.int:
-        r"""
-        Number of hedges.
-        """
-    def n_externals(self) -> builtins.int:
-        r"""
-        Number of external hedges.
-        """
-    def n_internals(self) -> builtins.int:
-        r"""
-        Number of internal hedges.
-        """
-    def full_filter(self) -> Subgraph:
-        r"""
-        Subgraph including all hedges.
-        """
-    def empty_subgraph(self) -> Subgraph:
-        r"""
-        Empty subgraph of this graph.
-        """
-    def iter_edges(self) -> builtins.list[tuple[HedgePair, EdgeIndex, EdgeData]]:
-        r"""
-        Iterate edges in the full graph.
-        """
-    def iter_edges_of(self, subgraph: Subgraph) -> builtins.list[tuple[HedgePair, EdgeIndex, EdgeData]]:
-        r"""
-        Iterate edges within a subgraph.
-        """
-    def iter_nodes(self) -> builtins.list[tuple[NodeIndex, builtins.list[Hedge], DotVertexData]]:
-        r"""
-        Iterate nodes in the full graph.
-        """
-    def iter_nodes_of(self, subgraph: Subgraph) -> builtins.list[tuple[NodeIndex, builtins.list[Hedge], DotVertexData]]:
-        r"""
-        Iterate nodes within a subgraph.
-        """
-    def connected_components(self, subgraph: Subgraph) -> builtins.list[Subgraph]:
-        r"""
-        Connected components of a subgraph.
-        """
-    def count_connected_components(self, subgraph: Subgraph) -> builtins.int:
-        r"""
-        Count connected components.
-        """
-    def is_connected(self, subgraph: Subgraph) -> builtins.bool:
-        r"""
-        Whether a subgraph is connected.
-        """
-    def depth_first_traverse(self, subgraph: Subgraph, root_node: NodeIndex, include_hedge: typing.Optional[Hedge]) -> TraversalTree:
-        r"""
-        Depth-first traversal from a root node.
-        """
-    def breadth_first_traverse(self, subgraph: Subgraph, root_node: NodeIndex, include_hedge: typing.Optional[Hedge]) -> TraversalTree:
-        r"""
-        Breadth-first traversal from a root node.
-        """
-    def bridges(self) -> Subgraph:
-        r"""
-        Bridges in the full graph.
-        """
-    def bridges_of(self, subgraph: Subgraph) -> Subgraph:
-        r"""
-        Bridges within a subgraph.
-        """
-    def cycle_basis(self) -> tuple[builtins.list[Cycle], Subgraph]:
-        r"""
-        Cycle basis of the full graph.
-        """
-    def cycle_basis_of(self, subgraph: Subgraph) -> tuple[builtins.list[Cycle], Subgraph]:
-        r"""
-        Cycle basis of a subgraph.
-        """
-    def all_spanning_forests(self) -> builtins.list[Subgraph]:
-        r"""
-        All spanning forests of the full graph.
-        """
-    def all_spanning_forests_of(self, subgraph: Subgraph) -> builtins.list[Subgraph]:
-        r"""
-        All spanning forests of a subgraph.
-        """
-    def combine_to_single_hedgenode(self, nodes: typing.Sequence[NodeIndex]) -> HedgeNode:
-        r"""
-        Combine nodes into a single hedge node.
-        """
-    def all_cuts(self, source: HedgeNode, target: HedgeNode) -> builtins.list[tuple[Subgraph, OrientedCut, Subgraph]]:
-        r"""
-        All cuts between two hedge nodes.
-        """
-    def all_cuts_from_ids(self, source: typing.Sequence[NodeIndex], target: typing.Sequence[NodeIndex]) -> builtins.list[tuple[Subgraph, OrientedCut, Subgraph]]:
-        r"""
-        All cuts between two sets of node indices.
-        """
-    def contract_subgraph(self, subgraph: Subgraph, node_data_merge: typing.Optional[DotVertexData] = None) -> None:
-        r"""
-        Contract a subgraph into a single node, deleting its edges.
-        """
-    def join(self, other: DotGraph, matching_fn: typing.Any, merge_fn: typing.Any) -> DotGraph:
-        r"""
-        Join two graphs, matching dangling edges via a Python callback.
-        """
-    def join_mut(self, other: DotGraph, matching_fn: typing.Any, merge_fn: typing.Any) -> None:
-        r"""
-        In-place join, matching dangling edges via a Python callback.
-        """
-    def extract(self, subgraph: Subgraph, split_edge_fn: typing.Any, internal_data: typing.Any, split_node: typing.Any, owned_node: typing.Any) -> DotGraph:
-        r"""
-        Extract a subgraph with Python callbacks to transform edge/node data.
-        """
-    @typing.overload
-    def __getitem__(self, key: Hedge) -> DotHedgeData: ...
-    @typing.overload
-    def __getitem__(self, key: NodeIndex) -> DotVertexData: ...
-    @typing.overload
-    def __getitem__(self, key: EdgeIndex) -> DotEdgeData: ...
-
-@typing.final
-class DotGraphBuilder:
-    r"""
-    Builder for constructing DOT graphs programmatically.
-    """
-    def __new__(cls) -> DotGraphBuilder:
-        r"""
-        Create a new, empty graph builder.
-        """
-    def add_node(self, name: typing.Optional[builtins.str] = None, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, *, index: typing.Optional[builtins.int] = None) -> NodeIndex:
-        r"""
-        Add a named node with optional DOT attributes and return its index.
-        """
-    def add_edge(self, source: NodeIndex, sink: NodeIndex, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, orientation: typing.Optional[typing.Union[builtins.str, Orientation]] = None, *, local_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, edge_id: typing.Optional[builtins.int] = None, source_hedge: typing.Optional[DotHedgeData] = None, sink_hedge: typing.Optional[DotHedgeData] = None) -> None:
-        r"""
-        Add an edge between two nodes with optional DOT attributes.
-        """
-    def add_external_edge(self, source: NodeIndex, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, orientation: typing.Optional[typing.Union[builtins.str, Orientation]] = None, flow: typing.Optional[typing.Union[builtins.str, Flow]] = None, *, local_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, edge_id: typing.Optional[builtins.int] = None, hedge: typing.Optional[DotHedgeData] = None) -> None:
-        r"""
-        Add a dangling (external) edge incident to a node.
-        """
-    def build(self) -> DotGraph:
-        r"""
-        Build the graph and reset the builder.
-        """
-
-@typing.final
-class DotHedgeData:
-    r"""
-    DOT hedge (half-edge) data.
-    """
+    def statement(self) -> typing.Optional[builtins.str]: ...
     @property
-    def statement(self) -> typing.Optional[builtins.str]:
-        r"""
-        Optional statement string.
-        """
+    def index(self) -> typing.Optional[builtins.int]: ...
     @property
-    def id(self) -> typing.Optional[Hedge]:
-        r"""
-        Optional hedge id.
-        """
+    def payload(self) -> typing.Optional[builtins.list[builtins.int]]: ...
     @property
-    def port_label(self) -> typing.Optional[builtins.str]:
-        r"""
-        Optional port label.
-        """
+    def port_label(self) -> typing.Optional[builtins.str]: ...
     @property
-    def compasspt(self) -> typing.Optional[builtins.str]:
-        r"""
-        Optional compass point as a string.
-        """
-    def __new__(cls, statement: typing.Optional[builtins.str] = None, id: typing.Optional[builtins.int] = None, port_label: typing.Optional[builtins.str] = None, compasspt: typing.Optional[builtins.str] = None) -> DotHedgeData:
-        r"""
-        Create hedge data from fields.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Debug-style representation.
-        """
+    def compass(self) -> typing.Optional[builtins.str]: ...
+    def __new__(cls, *, statement: typing.Optional[builtins.str] = None, index: typing.Optional[builtins.int] = None, payload: typing.Optional[typing.Sequence[builtins.int]] = None, port_label: typing.Optional[builtins.str] = None, compass: typing.Optional[builtins.str] = None) -> DotHalfEdgeData: ...
 
 @typing.final
 class DotVertexData:
     r"""
-    DOT vertex data (name, optional index, and attribute statements).
+    The DOT-representable record exchanged for one node by a `DotCodec`.
     """
     @property
-    def name(self) -> typing.Optional[builtins.str]:
-        r"""
-        Optional vertex name.
-        """
+    def name(self) -> typing.Optional[builtins.str]: ...
     @property
-    def index(self) -> typing.Optional[NodeIndex]:
-        r"""
-        Optional node index.
-        """
+    def index(self) -> typing.Optional[builtins.int]: ...
     @property
-    def statements(self) -> NodeStatements:
-        r"""
-        Attribute statements as a dict-like proxy.
-        """
-    def __new__(cls, name: typing.Optional[builtins.str] = None, index: typing.Optional[builtins.int] = None, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None) -> DotVertexData:
-        r"""
-        Create vertex data from fields.
-        """
-    def add_statement(self, key: builtins.str, value: builtins.str) -> None:
-        r"""
-        Insert or update an attribute statement.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Debug-style representation.
-        """
+    def payload(self) -> typing.Optional[builtins.list[builtins.int]]: ...
+    @property
+    def statements(self) -> builtins.dict[builtins.str, builtins.str]: ...
+    def __new__(cls, *, name: typing.Optional[builtins.str] = None, index: typing.Optional[builtins.int] = None, payload: typing.Optional[typing.Sequence[builtins.int]] = None, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None) -> DotVertexData: ...
 
 @typing.final
-class EdgeData:
+class DrawOptions:
     r"""
-    Edge data with orientation.
+    Full typed option surface for `linnest.draw`.
     """
-    @property
-    def orientation(self) -> Orientation:
-        r"""
-        Orientation of this edge.
-        """
-    @property
-    def data(self) -> DotEdgeData:
-        r"""
-        DOT edge data.
-        """
-    def __new__(cls, orientation: typing.Any, data: typing.Any) -> EdgeData:
-        r"""
-        Create edge data from orientation and DotEdgeData.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Debug-style representation.
-        """
-
-@typing.final
-class EdgeIndex:
-    r"""
-    Edge index identifier.
-    """
-    @property
-    def value(self) -> builtins.int:
-        r"""
-        Numeric value of this edge index.
-        """
-    def __eq__(self, other: builtins.object) -> builtins.bool: ...
-    def __hash__(self) -> builtins.int: ...
-    def __new__(cls, value: builtins.int) -> EdgeIndex:
-        r"""
-        Create an edge index from a zero-based index.
-        """
-    def __int__(self) -> builtins.int:
-        r"""
-        Convert to int.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Debug-style representation.
-        """
-
-@typing.final
-class EdgeStatements:
-    r"""
-    Dict-like proxy for edge attribute statements.
-    """
-    def __getitem__(self, key: builtins.str) -> builtins.str: ...
-    def __setitem__(self, key: builtins.str, value: builtins.str) -> None: ...
-    def __delitem__(self, key: builtins.str) -> None: ...
-    def __contains__(self, key: builtins.str) -> builtins.bool: ...
-    def __len__(self) -> builtins.int: ...
-    def __iter__(self) -> typing.Iterator[builtins.str]: ...
-    def get(self, key: builtins.str, default: typing.Any = None) -> typing.Any: ...
-    def keys(self) -> builtins.list[builtins.str]: ...
-    def values(self) -> builtins.list[builtins.str]: ...
-    def items(self) -> builtins.list[tuple[builtins.str, builtins.str]]: ...
-    def clear(self) -> None: ...
-    def update(self, other: typing.Mapping[builtins.str, builtins.str]) -> None: ...
-    def pop(self, key: builtins.str, default: typing.Any = None) -> typing.Any: ...
-    def popitem(self) -> tuple[builtins.str, builtins.str]: ...
-    def setdefault(self, key: builtins.str, default: typing.Optional[builtins.str] = None) -> builtins.str: ...
     def __repr__(self) -> builtins.str: ...
+    def __new__(cls, *, scope: _Dictionary = ..., unit: _AutoLengthValue = ..., title: _AutoOptionalStaticContent = ..., subgraph: _DrawSubgraphs = ..., debug: _DebugValue = ..., node_radius: _AutoRadius = ..., node_min_radius: _Number = ..., node_label_padding: _Number = ..., node_fill: _Paint = ..., node_stroke: _StrokeValue = ..., node_outset: _AutoNumber = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., node_label: _AutoOptionalContent = ..., draw_node: _AutoFunction = ..., edge_stroke: _StrokeValue = ..., edge_offset: _Number = ..., edge_length: _OptionalNumber = ..., edge_ratio: _OptionalNumber = ..., edge_resolve_length: _EdgeLengthResolver = ..., edge_accuracy: _Number = ..., edge_optimize: _Boolean = ..., source_style: _OptionalStyleLayers = ..., sink_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _OptionalStyle = ..., edge_omega: _Number = ..., edge_trim_accuracy: _Number = ..., padding: _OptionalPadding = ..., debug_edge_radius: _Number = ..., debug_edge_fill: _Paint = ..., debug_edge_stroke: _StrokeValue = ..., debug_edge_label_fill: _Paint = ..., subgraph_edge_style: _Style = ..., subgraph_edge_underlay: _Boolean = ...) -> DrawOptions: ...
 
 @typing.final
-class Flow:
+class EdgeSpec:
     r"""
-    Flow direction (Source/Sink).
+    A declarative internal or external edge description consumed by `build()`.
     """
-    @staticmethod
-    def source() -> Flow:
-        r"""
-        Flow::Source.
-        """
-    @staticmethod
-    def sink() -> Flow:
-        r"""
-        Flow::Sink.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Debug-style representation.
-        """
+    @property
+    def name(self) -> typing.Optional[builtins.str]: ...
+    @property
+    def data(self) -> typing.Any: ...
+    @data.setter
+    def data(self, value: typing.Any) -> None: ...
+    @property
+    def drawing(self) -> EdgeDrawing: ...
+    @property
+    def orientation(self) -> Orientation: ...
+
+@typing.final
+class Fraction:
+    r"""
+    A Typst fractional track size such as `1fr`.
+    """
+    @property
+    def value(self) -> builtins.float: ...
+    def __new__(cls, value: builtins.float) -> Fraction: ...
+    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class GlobalData:
     r"""
-    Global graph attributes (graph/node/edge statements).
+    DOT graph metadata kept separate from arbitrary Python element data.
     """
     @property
-    def name(self) -> builtins.str:
-        r"""
-        Graph name.
-        """
+    def name(self) -> builtins.str: ...
     @name.setter
     def name(self, value: builtins.str) -> None: ...
     @property
-    def statements(self) -> GlobalStatements:
-        r"""
-        Graph-level statements.
-        """
+    def payload(self) -> typing.Optional[builtins.list[builtins.int]]: ...
+    @payload.setter
+    def payload(self, value: typing.Optional[builtins.list[builtins.int]]) -> None: ...
+    @property
+    def statements(self) -> builtins.dict[builtins.str, builtins.str]: ...
     @statements.setter
     def statements(self, value: builtins.dict[builtins.str, builtins.str]) -> None: ...
     @property
-    def edge_statements(self) -> GlobalStatements:
-        r"""
-        Default edge statements.
-        """
+    def edge_statements(self) -> builtins.dict[builtins.str, builtins.str]: ...
     @edge_statements.setter
     def edge_statements(self, value: builtins.dict[builtins.str, builtins.str]) -> None: ...
     @property
-    def node_statements(self) -> GlobalStatements:
-        r"""
-        Default node statements.
-        """
+    def node_statements(self) -> builtins.dict[builtins.str, builtins.str]: ...
     @node_statements.setter
     def node_statements(self, value: builtins.dict[builtins.str, builtins.str]) -> None: ...
-    def __new__(cls, name: typing.Optional[builtins.str] = None, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, edge_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, node_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None) -> GlobalData:
-        r"""
-        Create global data from fields.
-        """
-    def add_statement(self, key: builtins.str, value: builtins.str) -> None:
-        r"""
-        Insert or update a graph-level statement.
-        """
-    def add_edge_statement(self, key: builtins.str, value: builtins.str) -> None:
-        r"""
-        Insert or update a default edge statement.
-        """
-    def add_node_statement(self, key: builtins.str, value: builtins.str) -> None:
-        r"""
-        Insert or update a default node statement.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Debug-style representation.
-        """
-
-@typing.final
-class GlobalStatements:
-    r"""
-    Dict-like proxy for global statements.
-    """
-    def __getitem__(self, key: builtins.str) -> builtins.str: ...
-    def __setitem__(self, key: builtins.str, value: builtins.str) -> None: ...
-    def __delitem__(self, key: builtins.str) -> None: ...
-    def __contains__(self, key: builtins.str) -> builtins.bool: ...
-    def __len__(self) -> builtins.int: ...
-    def __iter__(self) -> typing.Iterator[builtins.str]: ...
-    def get(self, key: builtins.str, default: typing.Any = None) -> typing.Any: ...
-    def keys(self) -> builtins.list[builtins.str]: ...
-    def values(self) -> builtins.list[builtins.str]: ...
-    def items(self) -> builtins.list[tuple[builtins.str, builtins.str]]: ...
-    def clear(self) -> None: ...
-    def update(self, other: typing.Mapping[builtins.str, builtins.str]) -> None: ...
-    def pop(self, key: builtins.str, default: typing.Any = None) -> typing.Any: ...
-    def popitem(self) -> tuple[builtins.str, builtins.str]: ...
-    def setdefault(self, key: builtins.str, default: typing.Optional[builtins.str] = None) -> builtins.str: ...
+    def __new__(cls, name: builtins.str = '', *, payload: typing.Optional[typing.Sequence[builtins.int]] = None, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, edge_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, node_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None) -> GlobalData: ...
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
-class Hedge:
+class Graph:
     r"""
-    Half-edge identifier.
+    An owned topology with arbitrary element data and typed rendering configuration.
     """
     @property
-    def value(self) -> builtins.int:
-        r"""
-        Numeric value of this hedge.
-        """
-    def __eq__(self, other: builtins.object) -> builtins.bool: ...
-    def __hash__(self) -> builtins.int: ...
-    def __new__(cls, value: builtins.int) -> Hedge:
-        r"""
-        Create a hedge from a zero-based index.
-        """
-    def __int__(self) -> builtins.int:
-        r"""
-        Convert to int.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Debug-style representation.
-        """
-
-@typing.final
-class HedgeNode:
-    r"""
-    Hedge node with internal graph and hairs.
-    """
+    def name(self) -> typing.Optional[builtins.str]: ...
     @property
-    def internal_graph(self) -> Subgraph:
-        r"""
-        Internal subgraph.
-        """
+    def global_data(self) -> GlobalData: ...
+    @global_data.setter
+    def global_data(self, value: GlobalData) -> None: ...
     @property
-    def hairs(self) -> Subgraph:
-        r"""
-        Hair subgraph.
-        """
-    def __new__(cls, internal_graph: Subgraph, hairs: Subgraph) -> HedgeNode:
-        r"""
-        Create a hedge node from internal graph and hairs subgraphs.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Debug-style representation.
-        """
-
-@typing.final
-class HedgePair:
-    r"""
-    Hedge pairing (paired, unpaired, split).
-    """
+    def render_config(self) -> RenderConfig: ...
+    @render_config.setter
+    def render_config(self, value: RenderConfig) -> None: ...
     @property
-    def kind(self) -> builtins.str:
-        r"""
-        Kind of hedge pair: \"paired\", \"unpaired\", or \"split\".
-        """
+    def n_nodes(self) -> builtins.int: ...
     @property
-    def source(self) -> typing.Optional[Hedge]:
-        r"""
-        Source hedge (paired/split).
-        """
+    def n_edges(self) -> builtins.int: ...
     @property
-    def sink(self) -> typing.Optional[Hedge]:
-        r"""
-        Sink hedge (paired/split).
-        """
-    @property
-    def hedge(self) -> typing.Optional[Hedge]:
-        r"""
-        Hedge (unpaired only).
-        """
-    @property
-    def flow(self) -> typing.Optional[Flow]:
-        r"""
-        Flow for unpaired hedge.
-        """
-    @property
-    def split(self) -> typing.Optional[Flow]:
-        r"""
-        Which side is split for split edges.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Debug-style representation.
-        """
-
-@typing.final
-class NodeIndex:
-    r"""
-    Node index identifier.
-    """
-    @property
-    def value(self) -> builtins.int:
-        r"""
-        Numeric value of this node index.
-        """
-    def __eq__(self, other: builtins.object) -> builtins.bool: ...
-    def __hash__(self) -> builtins.int: ...
-    def __new__(cls, value: builtins.int) -> NodeIndex:
-        r"""
-        Create a node index from a zero-based index.
-        """
-    def __int__(self) -> builtins.int:
-        r"""
-        Convert to int.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Debug-style representation.
-        """
-
-@typing.final
-class NodeStatements:
-    r"""
-    Dict-like proxy for node attribute statements.
-    """
-    def __getitem__(self, key: builtins.str) -> builtins.str: ...
-    def __setitem__(self, key: builtins.str, value: builtins.str) -> None: ...
-    def __delitem__(self, key: builtins.str) -> None: ...
-    def __contains__(self, key: builtins.str) -> builtins.bool: ...
+    def n_half_edges(self) -> builtins.int: ...
+    def __new__(cls, *, name: typing.Optional[builtins.str] = None, global_data: typing.Optional[GlobalData] = None, codec: typing.Optional[DotCodec] = None, render_config: RenderConfig | None = None) -> Graph: ...
     def __len__(self) -> builtins.int: ...
-    def __iter__(self) -> typing.Iterator[builtins.str]: ...
-    def get(self, key: builtins.str, default: typing.Any = None) -> typing.Any: ...
-    def keys(self) -> builtins.list[builtins.str]: ...
-    def values(self) -> builtins.list[builtins.str]: ...
-    def items(self) -> builtins.list[tuple[builtins.str, builtins.str]]: ...
-    def clear(self) -> None: ...
-    def update(self, other: typing.Mapping[builtins.str, builtins.str]) -> None: ...
-    def pop(self, key: builtins.str, default: typing.Any = None) -> typing.Any: ...
-    def popitem(self) -> tuple[builtins.str, builtins.str]: ...
-    def setdefault(self, key: builtins.str, default: typing.Optional[builtins.str] = None) -> builtins.str: ...
+    def node(self, key: builtins.int | builtins.str) -> Node: ...
+    def edge(self, key: builtins.int | builtins.str) -> Edge: ...
+    def half_edge(self, index: builtins.int) -> HalfEdge: ...
+    def nodes(self) -> builtins.list[Node]: ...
+    def edges(self) -> builtins.list[Edge]: ...
+    def half_edges(self) -> builtins.list[HalfEdge]: ...
+    def reorder_nodes(self, order: typing.Sequence[builtins.int]) -> None: ...
+    def reorder_edges(self, order: typing.Sequence[builtins.int]) -> None: ...
+    def reverse_edge(self, key: builtins.int | builtins.str) -> None: ...
+    def map(self, *, node: typing.Callable[[Node], typing.Any] | None = None, edge: typing.Callable[[Edge], typing.Any] | None = None, source: typing.Callable[[HalfEdge], typing.Any] | None = None, sink: typing.Callable[[HalfEdge], typing.Any] | None = None) -> Graph: ...
+    @classmethod
+    def from_dot(cls, source: builtins.str, codec: DotCodec) -> Graph: ...
+    @classmethod
+    def from_dot_set(cls, source: builtins.str, codec: DotCodec) -> builtins.list[Graph]: ...
+    @classmethod
+    def from_dot_file(cls, path: builtins.str | os.PathLike[builtins.str], codec: DotCodec) -> Graph: ...
+    def to_dot(self, codec: typing.Optional[DotCodec] = None) -> builtins.str: ...
+    def render(self, output: builtins.str | os.PathLike[builtins.str], *, config: RenderConfig | None = None) -> pathlib.Path: ...
+    def to_svg(self, *, config: RenderConfig | None = None) -> builtins.str: ...
+    def _repr_svg_(self) -> builtins.str: ...
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
-class Orientation:
+class GraphStyleOptions:
     r"""
-    Edge orientation (Default/Reversed/Undirected).
+    Options applied by `linnest.graph.style` before layout measurement.
     """
-    @staticmethod
-    def default() -> Orientation:
-        r"""
-        Orientation::Default.
-        """
-    @staticmethod
-    def reversed() -> Orientation:
-        r"""
-        Orientation::Reversed.
-        """
-    @staticmethod
-    def undirected() -> Orientation:
-        r"""
-        Orientation::Undirected.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Debug-style representation.
-        """
+    def __repr__(self) -> builtins.str: ...
+    def __new__(cls, *, scope: _Dictionary = ..., unit: _LengthValue = ..., node_label: _AutoOptionalContent = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., edge_label: _OptionalContent = ..., edge_label_style: _Style = ..., node_selector: _NodeSelector = ..., edge_selector: _EdgeSelector = ..., source_selector: _HalfEdgeSelector = ..., sink_selector: _HalfEdgeSelector = ...) -> GraphStyleOptions: ...
 
 @typing.final
-class OrientedCut:
+class HalfEdgeSpec:
     r"""
-    Oriented cut represented by left/right subgraphs.
+    A declarative edge endpoint produced by `source()` or `sink()`.
     """
     @property
-    def left(self) -> Subgraph:
-        r"""
-        Left side of the cut.
-        """
+    def flow(self) -> Flow: ...
     @property
-    def right(self) -> Subgraph:
-        r"""
-        Right side of the cut.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Debug-style representation.
-        """
+    def data(self) -> typing.Any: ...
+    @data.setter
+    def data(self, value: typing.Any) -> None: ...
+    @property
+    def drawing(self) -> HalfEdgeDrawing: ...
 
 @typing.final
-class Subgraph:
+class Inherit:
     r"""
-    Subgraph represented as a bitset of hedges.
+    Type of the `INHERIT` sentinel, which preserves a lower-precedence setting.
     """
-    @classmethod
-    def empty(cls, size: builtins.int) -> Subgraph:
-        r"""
-        Create an empty subgraph of the given size (number of hedges).
-        """
-    @classmethod
-    def full(cls, size: builtins.int) -> Subgraph:
-        r"""
-        Create a full subgraph including all hedges.
-        """
-    @classmethod
-    def from_hedges(cls, size: builtins.int, hedges: typing.Sequence[Hedge]) -> Subgraph:
-        r"""
-        Create a subgraph from a list of hedges.
-        """
-    def to_hedges(self) -> builtins.list[Hedge]:
-        r"""
-        List included hedges.
-        """
-    def size(self) -> builtins.int:
-        r"""
-        Total number of hedges in the parent graph.
-        """
-    def n_included(self) -> builtins.int:
-        r"""
-        Number of included hedges.
-        """
-    def includes(self, hedge: typing.Any) -> builtins.bool:
-        r"""
-        Whether a hedge is included.
-        """
-    def union(self, other: Subgraph) -> Subgraph:
-        r"""
-        Union with another subgraph.
-        """
-    def intersection(self, other: Subgraph) -> Subgraph:
-        r"""
-        Intersection with another subgraph.
-        """
-    def sym_diff(self, other: Subgraph) -> Subgraph:
-        r"""
-        Symmetric difference with another subgraph.
-        """
-    def subtract(self, other: Subgraph) -> Subgraph:
-        r"""
-        Subtract another subgraph.
-        """
-    def __repr__(self) -> builtins.str:
-        r"""
-        Debug-style representation.
-        """
+    def __repr__(self) -> builtins.str: ...
+    def __copy__(self) -> Inherit: ...
+    def __deepcopy__(self, _memo: typing.Any) -> Inherit: ...
 
 @typing.final
-class TraversalTree:
+class Insets:
     r"""
-    Traversal tree produced by DFS/BFS.
+    Typed CeTZ/Typst inset values.
     """
-    def tree_subgraph(self) -> Subgraph:
-        r"""
-        Subgraph corresponding to the tree edges.
-        """
-    def node_order(self) -> builtins.list[NodeIndex]:
-        r"""
-        Node order from traversal.
-        """
-    def covers(self, subgraph: Subgraph) -> Subgraph:
-        r"""
-        Covers a subgraph with the traversal tree.
-        """
-    def iter_hedges(self) -> builtins.list[tuple[Hedge, builtins.str, typing.Optional[Hedge]]]:
-        r"""
-        Iterate hedges as (hedge, kind, root_hedge).
-        """
+    def __repr__(self) -> builtins.str: ...
+    def __new__(cls, *, all: _LengthValue = ..., x: _LengthValue = ..., y: _LengthValue = ..., left: _LengthValue = ..., right: _LengthValue = ..., top: _LengthValue = ..., bottom: _LengthValue = ...) -> Insets: ...
+
+@typing.final
+class LayoutOptions:
+    r"""
+    One or more ordered Linnest layout passes.
+    """
+    @property
+    def pass_count(self) -> builtins.int: ...
+    @staticmethod
+    def sequence(passes: typing.Sequence[LayoutOptions]) -> LayoutOptions: ...
+    def __repr__(self) -> builtins.str: ...
+    def __new__(cls, *, subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
+    def then(self, *, subgraph: _OptionalHedgeSelection = ..., viewport_width: _Number = ..., viewport_height: _Number = ..., tree_dx: _Number = ..., tree_dy: _Number = ..., steps: _Integer = ..., seed: _Integer = ..., step: _Number = ..., step_shrink: _Number = ..., cool: _Number = ..., accept_floor: _Number = ..., early_tolerance: _Number = ..., temperature: _Number = ..., delta: _Number = ..., beta: _Number = ..., spring_strength: _Number = ..., centering_strength: _Number = ..., epochs: _Integer = ..., crossing_penalty: _Number = ..., dangling_repulsion: _Number = ..., edge_edge_repulsion: _Number = ..., directional_force: _Number = ..., label_length_scale: _Number = ..., label_spring: _Number = ..., label_charge: _Number = ..., label_steps: _Integer = ..., label_layout: _LabelLayoutValue = ..., label_step: _Number = ..., label_early_tolerance: _Number = ..., label_max_delta_scale: _Number = ..., edge_vertex_repulsion: _Number = ..., epsilon: _Number = ..., incremental_energy: _Boolean = ..., algorithm: _LayoutAlgorithmValue = ..., nodes: _LayoutNodesValue = ..., direction: _LayoutDirectionValue = ..., rank_align: _RankAlignmentValue = ..., roots: _NodeIndices = ..., rank_same: _NodeGroups = ..., route_edge_weight: _Number = ..., route_exit_weight: _Number = ..., route_label_width_scale: _Number = ..., route_label_width_cap: _Number = ..., z_spring: _Number = ..., z_spring_growth: _Number = ..., length_scale: _Number = ...) -> LayoutOptions: ...
+
+@typing.final
+class Length:
+    r"""
+    A Typst length such as `2pt` or `1.2em`.
+    """
+    @property
+    def value(self) -> builtins.float: ...
+    @property
+    def unit(self) -> builtins.str: ...
+    def __new__(cls, value: builtins.float, unit: typing.Literal['pt', 'mm', 'cm', 'in', 'em']) -> Length: ...
+    @staticmethod
+    def pt(value: builtins.float) -> Length: ...
+    @staticmethod
+    def mm(value: builtins.float) -> Length: ...
+    @staticmethod
+    def cm(value: builtins.float) -> Length: ...
+    @staticmethod
+    def inches(value: builtins.float) -> Length: ...
+    @staticmethod
+    def em(value: builtins.float) -> Length: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class Mark:
+    r"""
+    Typed CeTZ mark configuration.
+    """
+    @staticmethod
+    def barbed() -> Mark: ...
+    @staticmethod
+    def straight() -> Mark: ...
+    def __repr__(self) -> builtins.str: ...
+    def __new__(cls, *, start: _NativeValue = ..., end: _NativeValue = ..., fill: _OptionalPaint = ..., stroke: _OptionalStrokeValue = ..., scale: _Number = ..., anchor: _MarkAnchor = ..., shorten_to: _MarkShorten = ...) -> Mark: ...
+
+@typing.final
+class MathSymbol:
+    r"""
+    Safe mathematical identifier content, optionally with scripts.
+    """
+    def __new__(cls, symbol: builtins.str, *, subscript: builtins.str | builtins.int | None = None, superscript: builtins.str | builtins.int | None = None) -> MathSymbol: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class NodeSpec:
+    r"""
+    A declarative node description consumed by `build()`.
+    """
+    @property
+    def name(self) -> typing.Optional[builtins.str]: ...
+    @property
+    def data(self) -> typing.Any: ...
+    @data.setter
+    def data(self, value: typing.Any) -> None: ...
+    @property
+    def drawing(self) -> NodeDrawing: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class PhysicsOptions:
+    r"""
+    Physics line decoration and label options.
+    """
+    def __repr__(self) -> builtins.str: ...
+    def __new__(cls, *, map: _Dictionary = ..., default: _Dictionary = ..., typst_fields: _TypstFieldsValue = ..., scope: _Dictionary = ..., orientation_split: _Boolean = ..., momentum_arrows: _Boolean = ..., momentum_arrow_offset: _Number = ..., momentum_arrow_length: _Number = ..., momentum_arrow_ratio: _Number = ..., momentum_arrow_stroke: _OptionalStrokeValue = ..., momentum_arrow_mark: _MomentumMark = ..., show_momentum: _Boolean = ..., show_node_index: _Boolean = ..., show_edge_index: _Boolean = ..., show_half_edge_index: _Boolean = ..., show_particle: _Boolean = ..., momentum_fields: _OptionalFieldNames = ..., edge_index_fields: _OptionalFieldNames = ..., momentum_prefix: _OptionalStaticContent = ..., edge_index_prefix: _OptionalStaticContent = ..., half_edge_index_prefix: _OptionalStaticContent = ..., particle_prefix: _OptionalStaticContent = ..., label_separator: _StaticContent = ..., label_size: _LengthValue = ..., label_fill: _Paint = ...) -> PhysicsOptions: ...
+
+@typing.final
+class Edge:
+    r"""
+    A live edge view whose data and drawing metadata update its graph.
+    """
+    @property
+    def index(self) -> builtins.int: ...
+    @property
+    def name(self) -> typing.Optional[builtins.str]: ...
+    @property
+    def data(self) -> typing.Any: ...
+    @data.setter
+    def data(self, value: typing.Any) -> None: ...
+    @property
+    def drawing(self) -> EdgeDrawing: ...
+    @property
+    def orientation(self) -> Orientation: ...
+    @property
+    def source(self) -> typing.Optional[HalfEdge]: ...
+    @property
+    def sink(self) -> typing.Optional[HalfEdge]: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class EdgeDrawing:
+    r"""
+    Mutable typed drawing metadata for an edge.
+    """
+    @property
+    def label(self) -> _OptionalStaticContent: ...
+    @label.setter
+    def label(self, value: _OptionalStaticContent) -> None: ...
+    @property
+    def particle(self) -> _DrawingString: ...
+    @particle.setter
+    def particle(self, value: _DrawingString) -> None: ...
+    @property
+    def momentum(self) -> _DrawingScalar: ...
+    @momentum.setter
+    def momentum(self, value: _DrawingScalar) -> None: ...
+    @property
+    def cut_id(self) -> _DrawingScalar: ...
+    @cut_id.setter
+    def cut_id(self, value: _DrawingScalar) -> None: ...
+    @property
+    def placement(self) -> _PlacementValue: ...
+    @placement.setter
+    def placement(self, value: _PlacementValue) -> None: ...
+    @property
+    def label_position(self) -> _DrawingPoint: ...
+    @label_position.setter
+    def label_position(self, value: _DrawingPoint) -> None: ...
+    @property
+    def label_offset(self) -> _OptionalNumber: ...
+    @label_offset.setter
+    def label_offset(self, value: _OptionalNumber) -> None: ...
+    @property
+    def label_angle(self) -> _DrawingAngle: ...
+    @label_angle.setter
+    def label_angle(self, value: _DrawingAngle) -> None: ...
+    @property
+    def bend(self) -> _DrawingAngle: ...
+    @bend.setter
+    def bend(self, value: _DrawingAngle) -> None: ...
+    @property
+    def routing(self) -> _RoutingValue: ...
+    @routing.setter
+    def routing(self, value: _RoutingValue) -> None: ...
+    @property
+    def minimum_length(self) -> _OptionalInteger: ...
+    @minimum_length.setter
+    def minimum_length(self, value: _OptionalInteger) -> None: ...
+    @property
+    def same_rank(self) -> _OptionalBoolean: ...
+    @same_rank.setter
+    def same_rank(self, value: _OptionalBoolean) -> None: ...
+    @property
+    def style(self) -> _OptionalStyleLayers: ...
+    @style.setter
+    def style(self, value: _OptionalStyleLayers) -> None: ...
+    @property
+    def label_style(self) -> _OptionalStyle: ...
+    @label_style.setter
+    def label_style(self, value: _OptionalStyle) -> None: ...
+    @property
+    def momentum_style(self) -> _OptionalStyleLayers: ...
+    @momentum_style.setter
+    def momentum_style(self, value: _OptionalStyleLayers) -> None: ...
+    @property
+    def decoration(self) -> _DrawingDecoration: ...
+    @decoration.setter
+    def decoration(self, value: _DrawingDecoration) -> None: ...
+    @property
+    def extensions(self) -> builtins.dict[builtins.str, _NativeValue]: ...
+    @extensions.setter
+    def extensions(self, value: builtins.dict[builtins.str, _NativeValue]) -> None: ...
+    def __repr__(self) -> builtins.str: ...
+    def __new__(cls, *, label: _OptionalStaticContent = ..., particle: _DrawingString = ..., momentum: _DrawingScalar = ..., cut_id: _DrawingScalar = ..., placement: _PlacementValue = ..., label_position: _DrawingPoint = ..., label_offset: _OptionalNumber = ..., label_angle: _DrawingAngle = ..., bend: _DrawingAngle = ..., routing: _RoutingValue = ..., minimum_length: _OptionalInteger = ..., same_rank: _OptionalBoolean = ..., style: _OptionalStyleLayers = ..., label_style: _OptionalStyle = ..., momentum_style: _OptionalStyleLayers = ..., decoration: _DrawingDecoration = ..., extensions: _NativeDict = ...) -> EdgeDrawing: ...
+
+@typing.final
+class EdgeValue:
+    r"""
+    Detached edge data and drawing metadata passed across a `DotCodec` boundary.
+    """
+    @property
+    def data(self) -> typing.Any: ...
+    @data.setter
+    def data(self, value: typing.Any) -> None: ...
+    @property
+    def drawing(self) -> EdgeDrawing: ...
+    def __new__(cls, *, data: typing.Any = None, drawing: typing.Optional[EdgeDrawing] = None) -> EdgeValue: ...
+
+@typing.final
+class HalfEdge:
+    r"""
+    A live half-edge view whose data and drawing metadata update its graph.
+    """
+    @property
+    def index(self) -> builtins.int: ...
+    @property
+    def flow(self) -> Flow: ...
+    @property
+    def data(self) -> typing.Any: ...
+    @data.setter
+    def data(self, value: typing.Any) -> None: ...
+    @property
+    def drawing(self) -> HalfEdgeDrawing: ...
+    @property
+    def node(self) -> Node: ...
+    @property
+    def edge(self) -> Edge: ...
+    @property
+    def pair(self) -> typing.Optional[HalfEdge]: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class HalfEdgeDrawing:
+    r"""
+    Mutable typed drawing metadata for one endpoint of an edge.
+    """
+    @property
+    def label(self) -> _OptionalStaticContent: ...
+    @label.setter
+    def label(self, value: _OptionalStaticContent) -> None: ...
+    @property
+    def statement(self) -> _DrawingString: ...
+    @statement.setter
+    def statement(self, value: _DrawingString) -> None: ...
+    @property
+    def port_label(self) -> _DrawingString: ...
+    @port_label.setter
+    def port_label(self, value: _DrawingString) -> None: ...
+    @property
+    def compass(self) -> _CompassValue: ...
+    @compass.setter
+    def compass(self, value: _CompassValue) -> None: ...
+    @property
+    def anchor(self) -> _AnchorValue: ...
+    @anchor.setter
+    def anchor(self, value: _AnchorValue) -> None: ...
+    @property
+    def routing(self) -> _RoutingValue: ...
+    @routing.setter
+    def routing(self, value: _RoutingValue) -> None: ...
+    @property
+    def style(self) -> _OptionalStyleLayers: ...
+    @style.setter
+    def style(self, value: _OptionalStyleLayers) -> None: ...
+    @property
+    def extensions(self) -> builtins.dict[builtins.str, _NativeValue]: ...
+    @extensions.setter
+    def extensions(self, value: builtins.dict[builtins.str, _NativeValue]) -> None: ...
+    def __repr__(self) -> builtins.str: ...
+    def __new__(cls, *, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeDrawing: ...
+
+@typing.final
+class HalfEdgeValue:
+    r"""
+    Detached half-edge data and drawing metadata passed across a `DotCodec` boundary.
+    """
+    @property
+    def data(self) -> typing.Any: ...
+    @data.setter
+    def data(self, value: typing.Any) -> None: ...
+    @property
+    def drawing(self) -> HalfEdgeDrawing: ...
+    def __new__(cls, *, data: typing.Any = None, drawing: typing.Optional[HalfEdgeDrawing] = None) -> HalfEdgeValue: ...
+
+@typing.final
+class Node:
+    r"""
+    A live node view whose data and drawing metadata update its graph.
+    """
+    @property
+    def index(self) -> builtins.int: ...
+    @property
+    def name(self) -> typing.Optional[builtins.str]: ...
+    @property
+    def data(self) -> typing.Any: ...
+    @data.setter
+    def data(self, value: typing.Any) -> None: ...
+    @property
+    def drawing(self) -> NodeDrawing: ...
+    @property
+    def incidence(self) -> builtins.list[HalfEdge]: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class NodeDrawing:
+    r"""
+    Mutable typed drawing metadata for a node.
+    """
+    @property
+    def label(self) -> _OptionalStaticContent: ...
+    @label.setter
+    def label(self, value: _OptionalStaticContent) -> None: ...
+    @property
+    def placement(self) -> _PlacementValue: ...
+    @placement.setter
+    def placement(self, value: _PlacementValue) -> None: ...
+    @property
+    def shift(self) -> _DrawingPoint: ...
+    @shift.setter
+    def shift(self, value: _DrawingPoint) -> None: ...
+    @property
+    def rank(self) -> _OptionalInteger: ...
+    @rank.setter
+    def rank(self, value: _OptionalInteger) -> None: ...
+    @property
+    def minimum_size(self) -> _OptionalNumber: ...
+    @minimum_size.setter
+    def minimum_size(self, value: _OptionalNumber) -> None: ...
+    @property
+    def maximum_size(self) -> _OptionalNumber: ...
+    @maximum_size.setter
+    def maximum_size(self, value: _OptionalNumber) -> None: ...
+    @property
+    def style(self) -> _OptionalStyle: ...
+    @style.setter
+    def style(self, value: _OptionalStyle) -> None: ...
+    @property
+    def label_style(self) -> _OptionalStyle: ...
+    @label_style.setter
+    def label_style(self, value: _OptionalStyle) -> None: ...
+    @property
+    def extensions(self) -> builtins.dict[builtins.str, _NativeValue]: ...
+    @extensions.setter
+    def extensions(self, value: builtins.dict[builtins.str, _NativeValue]) -> None: ...
+    def __repr__(self) -> builtins.str: ...
+    def __new__(cls, *, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., shift: _DrawingPoint = ..., rank: _OptionalInteger = ..., minimum_size: _OptionalNumber = ..., maximum_size: _OptionalNumber = ..., style: _OptionalStyle = ..., label_style: _OptionalStyle = ..., extensions: _NativeDict = ...) -> NodeDrawing: ...
+
+@typing.final
+class NodeValue:
+    r"""
+    Detached node data and drawing metadata passed across a `DotCodec` boundary.
+    """
+    @property
+    def data(self) -> typing.Any: ...
+    @data.setter
+    def data(self, value: typing.Any) -> None: ...
+    @property
+    def drawing(self) -> NodeDrawing: ...
+    def __new__(cls, *, data: typing.Any = None, drawing: typing.Optional[NodeDrawing] = None) -> NodeValue: ...
+
+@typing.final
+class Ratio:
+    r"""
+    A Typst ratio expressed in percent.
+    """
+    @property
+    def percent(self) -> builtins.float: ...
+    def __new__(cls, percent: builtins.float) -> Ratio: ...
+    @staticmethod
+    def from_fraction(value: builtins.float) -> Ratio: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class RelativeLength:
+    r"""
+    A sum of a Typst ratio and length.
+    """
+    def __new__(cls, ratio: typing.Optional[Ratio] = None, length: typing.Optional[Length] = None) -> RelativeLength: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class RenderConfig:
+    r"""
+    Complete rendering configuration, including renderer transport settings.
+    """
+    @property
+    def template(self) -> _TemplatePath: ...
+    @template.setter
+    def template(self, value: _TemplatePath) -> None: ...
+    @property
+    def typst_executable(self) -> _ExecutablePath: ...
+    @typst_executable.setter
+    def typst_executable(self, value: _ExecutablePath) -> None: ...
+    @property
+    def title(self) -> _AutoOptionalStaticContent: ...
+    @title.setter
+    def title(self, value: _AutoOptionalStaticContent) -> None: ...
+    @property
+    def mode(self) -> _RenderModeValue: ...
+    @mode.setter
+    def mode(self, value: _RenderModeValue) -> None: ...
+    @property
+    def style(self) -> _RenderStyle: ...
+    @style.setter
+    def style(self, value: _RenderStyle) -> None: ...
+    @property
+    def layouts(self) -> _RenderLayouts: ...
+    @layouts.setter
+    def layouts(self, value: _RenderLayouts) -> None: ...
+    @property
+    def drawing(self) -> _RenderDrawing: ...
+    @drawing.setter
+    def drawing(self, value: _RenderDrawing) -> None: ...
+    @property
+    def physics(self) -> _RenderPhysics: ...
+    @physics.setter
+    def physics(self, value: _RenderPhysics) -> None: ...
+    def overlay(self, overlay: RenderConfig) -> RenderConfig: ...
+    def __repr__(self) -> builtins.str: ...
+    def __new__(cls, *, template: _TemplatePath = ..., typst_executable: _ExecutablePath = ..., title: _AutoOptionalStaticContent = ..., mode: _RenderModeValue = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., physics: _RenderPhysics = ...) -> RenderConfig: ...
+
+@typing.final
+class Stroke:
+    r"""
+    A typed Typst stroke dictionary.
+    """
+    def __repr__(self) -> builtins.str: ...
+    def __new__(cls, *, paint: _OptionalPaint = ..., thickness: _OptionalLengthValue = ..., cap: _OptionalStrokeCap = ..., join: _OptionalStrokeJoin = ..., dash: _OptionalDashValue = ..., miter_limit: _Number = ...) -> Stroke: ...
+
+@typing.final
+class TextLabel:
+    r"""
+    Literal text content with optional typed text styling.
+    """
+    @property
+    def text(self) -> builtins.str: ...
+    def __repr__(self) -> builtins.str: ...
+    def __new__(cls, text: str, *, fill: _Paint = ..., size: _LengthValue = ..., weight: _NativeValue = ..., style: _TextStyleValue = ...) -> TextLabel: ...
+
+@typing.final
+class TypstBind:
+    r"""
+    A Typst function partially applied through its native `.with` method.
+    """
+    def call(self, *args: _NativeValue, **kwargs: _NativeValue) -> TypstCall: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class TypstCall:
+    r"""
+    A call to an explicitly imported Typst function.
+    """
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class TypstModule:
+    r"""
+    A local or package Typst module whose exports can be referenced safely.
+    """
+    def __new__(cls, path: builtins.str | os.PathLike[builtins.str]) -> TypstModule: ...
+    @staticmethod
+    def file(path: builtins.str | os.PathLike[builtins.str]) -> TypstModule: ...
+    @staticmethod
+    def package(specification: builtins.str) -> TypstModule: ...
+    def value(self, export: builtins.str) -> _TypstValueRef: ...
+    def content(self, export: builtins.str) -> _TypstContentRef: ...
+    def function(self, export: builtins.str) -> _TypstFunctionRef: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class TypstRef:
+    r"""
+    A typed export from a Typst module.
+    """
+    def call(self, *args: _NativeValue, **kwargs: _NativeValue) -> TypstCall: ...
+    def bind(self, *args: _NativeValue, **kwargs: _NativeValue) -> TypstBind: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class DebugLevel(enum.Enum):
+    r"""
+    Finite debug detail accepted by Linnest's drawing layer.
+    """
+    Off = ...
+    Canvas = ...
+    EdgePositions = ...
+
+@typing.final
+class Flow(enum.Enum):
+    r"""
+    The directed role of a half-edge within its edge.
+    """
+    Source = ...
+    Sink = ...
+
+@typing.final
+class Orientation(enum.Enum):
+    r"""
+    How an edge's declared endpoints determine its logical direction.
+    """
+    Default = ...
+    Reversed = ...
+    Undirected = ...
+
+@typing.final
+class Anchor(enum.Enum):
+    r"""
+    A finite CeTZ box or content anchor.
+    """
+    Center = ...
+    North = ...
+    NorthEast = ...
+    East = ...
+    SouthEast = ...
+    South = ...
+    SouthWest = ...
+    West = ...
+    NorthWest = ...
+
+@typing.final
+class Compass(enum.Enum):
+    r"""
+    A finite DOT compass point.
+    """
+    N = ...
+    NE = ...
+    E = ...
+    SE = ...
+    S = ...
+    SW = ...
+    W = ...
+    NW = ...
+    Center = ...
+    Any = ...
+
+@typing.final
+class DashPattern(enum.Enum):
+    r"""
+    Built-in Typst stroke dash pattern.
+    """
+    Solid = ...
+    Dotted = ...
+    DenselyDotted = ...
+    LooselyDotted = ...
+    Dashed = ...
+    DenselyDashed = ...
+    LooselyDashed = ...
+    DashDotted = ...
+    DenselyDashDotted = ...
+    LooselyDashDotted = ...
+
+@typing.final
+class EdgeLengthResolution(enum.Enum):
+    r"""
+    How fixed and relative edge-length limits are combined.
+    """
+    Min = ...
+    Shorter = ...
+    Max = ...
+    Longer = ...
+    Length = ...
+    Fixed = ...
+    Ratio = ...
+    Relative = ...
+    Disabled = ...
+    Full = ...
+
+@typing.final
+class LabelLayout(enum.Enum):
+    r"""
+    Strategy used to position edge labels.
+    """
+    Normal = ...
+    DanglingTangent = ...
+    FixedLength = ...
+
+@typing.final
+class LayoutAlgorithm(enum.Enum):
+    r"""
+    Algorithm used by a Linnest layout pass.
+    """
+    Force = ...
+    Anneal = ...
+    Tree = ...
+    Dot = ...
+    StableLayered = ...
+
+@typing.final
+class LayoutDirection(enum.Enum):
+    r"""
+    Rank direction used by tree and layered layouts.
+    """
+    Down = ...
+    Right = ...
+
+@typing.final
+class LayoutNodes(enum.Enum):
+    r"""
+    Whether a pass lays out or preserves its selected nodes.
+    """
+    Layout = ...
+    Fixed = ...
+
+@typing.final
+class MarkDirection(enum.Enum):
+    r"""
+    Direction of a mark along an edge path.
+    """
+    Forward = ...
+    Backward = ...
+
+@typing.final
+class MarkOrientation(enum.Enum):
+    r"""
+    Frame used to orient an edge mark.
+    """
+    Path = ...
+    Edge = ...
+
+@typing.final
+class MarkPosition(enum.Enum):
+    r"""
+    Location of a mark on a rendered edge path.
+    """
+    End = ...
+    Center = ...
+    CenterIfDangling = ...
+
+@typing.final
+class MarkSymbol(enum.Enum):
+    r"""
+    Built-in mark symbol used by Linnest physics styles.
+    """
+    Barbed = ...
+    Straight = ...
+
+@typing.final
+class Pattern(enum.Enum):
+    r"""
+    Kurvst path decoration pattern.
+    """
+    Wave = ...
+    Zigzag = ...
+    Coil = ...
+    Normal = ...
+    Curve = ...
+
+@typing.final
+class Placement(enum.Enum):
+    r"""
+    Coordinate-constraint mode for an explicit placement.
+    """
+    Pin = ...
+    Start = ...
+
+@typing.final
+class RankAlignment(enum.Enum):
+    r"""
+    Alignment within a layered-layout rank.
+    """
+    Center = ...
+    Start = ...
+    Left = ...
+    End = ...
+    Right = ...
+
+@typing.final
+class RenderMode(enum.Enum):
+    r"""
+    Renderer mode used by the Clinnet V1 template.
+    """
+    Auto = ...
+    Generic = ...
+    Amplitude = ...
+    CrossSection = ...
+
+@typing.final
+class RoutePoints(enum.Enum):
+    r"""
+    Whether layout-provided route points participate in edge routing.
+    """
+    Ignore = ...
+    Through = ...
+
+@typing.final
+class Routing(enum.Enum):
+    r"""
+    Route construction used for an anchored edge.
+    """
+    EdgePosition = ...
+    Direct = ...
+    HobbyThrough = ...
+    StraightThrough = ...
+
+@typing.final
+class StrokeCap(enum.Enum):
+    r"""
+    Endpoint shape for a Typst stroke.
+    """
+    Butt = ...
+    Round = ...
+    Square = ...
+
+@typing.final
+class StrokeJoin(enum.Enum):
+    r"""
+    Join shape for a Typst stroke.
+    """
+    Miter = ...
+    Round = ...
+    Bevel = ...
+
+@typing.final
+class TextStyle(enum.Enum):
+    r"""
+    Finite Typst text slant.
+    """
+    Normal = ...
+    Italic = ...
+    Oblique = ...
+
+@typing.final
+class TypstFields(enum.Enum):
+    r"""
+    Safe literal interpretation of Typst-valued graph fields.
+    """
+    Plain = ...
+
+def build(*items: _GraphItem, name: _OptionalString = None, global_data: _OptionalGlobalData = None, codec: _OptionalDotCodec = None, render_config: _OptionalRenderConfig = None) -> Graph:
+    r"""
+    Build a graph from declarative node and edge specs.
+    """
+
+def edge(first: HalfEdgeSpec, name: _OptionalString = None, second: _OptionalHalfEdgeSpec = None, *, data: typing.Any = None, orientation: Orientation = Orientation.Default, label: _OptionalStaticContent = ..., particle: _DrawingString = ..., momentum: _DrawingScalar = ..., cut_id: _DrawingScalar = ..., placement: _PlacementValue = ..., label_position: _DrawingPoint = ..., label_offset: _OptionalNumber = ..., label_angle: _DrawingAngle = ..., bend: _DrawingAngle = ..., routing: _RoutingValue = ..., minimum_length: _OptionalInteger = ..., same_rank: _OptionalBoolean = ..., style: _OptionalStyleLayers = ..., label_style: _OptionalStyle = ..., momentum_style: _OptionalStyleLayers = ..., decoration: _DrawingDecoration = ..., extensions: _NativeDict = ...) -> EdgeSpec:
+    r"""
+    Describe an edge from one or two endpoint specs.
+    """
+
+def node(name: _OptionalString = None, *, data: typing.Any = None, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., shift: _DrawingPoint = ..., rank: _OptionalInteger = ..., minimum_size: _OptionalNumber = ..., maximum_size: _OptionalNumber = ..., style: _OptionalStyle = ..., label_style: _OptionalStyle = ..., extensions: _NativeDict = ...) -> NodeSpec:
+    r"""
+    Describe a node while preserving its arbitrary Python data by identity.
+    """
+
+def sink(node: NodeSpec, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
+    r"""
+    Attach a sink endpoint and its metadata to a node spec.
+    """
+
+def source(node: NodeSpec, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
+    r"""
+    Attach a source endpoint and its metadata to a node spec.
+    """

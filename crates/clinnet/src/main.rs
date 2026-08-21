@@ -8,7 +8,9 @@ use std::time::Duration;
 
 use blake3::Hasher;
 use clap::{ArgAction, Parser};
-use clinnet::TypstRenderer;
+use clinnet::{
+    TypstAngleUnit, TypstConfig, TypstLengthUnit, TypstRenderRequest, TypstRenderer, TypstValue,
+};
 use eyre::{Context, Result, bail, eyre};
 use indicatif::{ProgressBar, ProgressStyle};
 use parking_lot::Mutex as ParkingMutex;
@@ -18,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{self, Map as JsonMap, Value as JsonValue};
 use walkdir::WalkDir;
 
-const TEMPLATE_SUBDIR: &str = "templates";
+const DEFAULT_TEMPLATE_SUBDIR: &str = ".clinnet/templates";
 
 fn main() {
     if let Err(err) = run() {
@@ -98,7 +100,7 @@ struct OutputArgs {
 
 #[derive(Parser, Debug)]
 struct InputArgs {
-    /// Add a string key-value pair visible through `sys.inputs` in Typst.
+    /// Override one typed field in the generated render configuration.
     #[arg(long, value_name = "key=value", action = ArgAction::Append, value_parser = parse_input_pair)]
     input: Vec<(String, String)>,
 }
@@ -234,12 +236,12 @@ fn run() -> Result<()> {
         .figure_template
         .as_ref()
         .map(|path| absolutize(&cwd, path))
-        .unwrap_or_else(|| build_dir.join("templates").join("figure.typ"));
+        .unwrap_or_else(|| build_dir.join(DEFAULT_TEMPLATE_SUBDIR).join("figure.typ"));
     let requested_grid_template = draw_args
         .grid_template
         .as_ref()
         .map(|path| absolutize(&cwd, path))
-        .unwrap_or_else(|| build_dir.join("templates").join("grid.typ"));
+        .unwrap_or_else(|| build_dir.join(DEFAULT_TEMPLATE_SUBDIR).join("grid.typ"));
 
     fs::create_dir_all(&build_dir)
         .with_context(|| format!("failed to create build directory {}", build_dir.display()))?;
@@ -271,7 +273,7 @@ fn run() -> Result<()> {
         style_files.push(canonical);
     }
     style_files.extend(collect_template_dependency_files(
-        &build_dir.join(TEMPLATE_SUBDIR),
+        &build_dir.join(DEFAULT_TEMPLATE_SUBDIR),
         &figure_template,
         &[grid_template.clone(), fig_index_path.clone()],
     )?);
@@ -599,14 +601,23 @@ fn run_grid_from_metadata(metadata: &RunMetadata, renderer: &TypstRenderer) -> R
             .iter()
             .map(|record| record.output_path.as_path()),
     );
-    renderer
-        .clone()
-        .inputs(metadata.input.clone())
-        .compile_template(
-            &metadata.grid_template,
-            &metadata.grid_output,
-            &dependencies,
-        )
+    let entrypoint = grid_dir.join("grid-entrypoint.typ");
+    let template_path = diff_paths(&metadata.grid_template, &grid_dir)
+        .unwrap_or_else(|| metadata.grid_template.clone())
+        .to_string_lossy()
+        .replace('\\', "/");
+    let config = grid_render_config(&metadata.input)?;
+    fs::write(
+        &entrypoint,
+        format!(
+            "#import {} as template\n#template.render({config})\n",
+            typst_string_literal(&template_path),
+        ),
+    )
+    .with_context(|| format!("failed to write grid entrypoint {}", entrypoint.display()))?;
+    dependencies.push(entrypoint.as_path());
+    dependencies.push(metadata.grid_template.as_path());
+    renderer.compile_template(&entrypoint, &metadata.grid_output, &dependencies)
 }
 
 /// Compute the metadata file path under the build directory.
@@ -723,12 +734,11 @@ fn build_figure(
     input_args: &[(String, String)],
     renderer: &TypstRenderer,
 ) -> Result<()> {
-    renderer
-        .clone()
-        .template(template)
-        .title(derive_title(&plan.relative))
-        .inputs(input_args.iter().cloned())
-        .render_file(&plan.data_path, &plan.output_path)
+    let dot = fs::read_to_string(&plan.data_path)
+        .with_context(|| format!("failed to read DOT input {}", plan.data_path.display()))?;
+    let config = figure_render_config(plan, input_args)?;
+    let request = TypstRenderRequest::new(dot, config).template(template);
+    renderer.render(&request, &plan.output_path)
 }
 
 fn escape_typst_string(value: &str) -> String {
@@ -736,6 +746,282 @@ fn escape_typst_string(value: &str) -> String {
         .replace('\\', "\\\\")
         .replace('"', "\\\"")
         .replace('\n', "\\n")
+}
+
+fn input_map(inputs: &[(String, String)]) -> BTreeMap<&str, &str> {
+    inputs
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect()
+}
+
+fn bool_input(key: &str, value: &str) -> Result<bool> {
+    match value.to_ascii_lowercase().as_str() {
+        "true" | "on" | "yes" | "1" => Ok(true),
+        "false" | "off" | "no" | "0" => Ok(false),
+        _ => bail!("{key} must be true or false, found {value:?}"),
+    }
+}
+
+fn integer_input(key: &str, value: &str) -> Result<i64> {
+    value
+        .parse()
+        .with_context(|| format!("{key} must be an integer, found {value:?}"))
+}
+
+fn typst_native_scalar(value: &str) -> String {
+    if matches!(value, "auto" | "none")
+        || matches!(
+            value,
+            "black"
+                | "white"
+                | "red"
+                | "green"
+                | "blue"
+                | "aqua"
+                | "gray"
+                | "lime"
+                | "maroon"
+                | "navy"
+                | "olive"
+                | "orange"
+                | "purple"
+                | "silver"
+                | "teal"
+                | "yellow"
+        )
+        || value.parse::<i64>().is_ok()
+        || value.parse::<f64>().is_ok()
+    {
+        return value.to_owned();
+    }
+    let split = value
+        .find(|character: char| !character.is_ascii_digit() && !matches!(character, '.' | '-'))
+        .unwrap_or(value.len());
+    let (number, unit) = value.split_at(split);
+    if number.parse::<f64>().is_ok()
+        && matches!(
+            unit,
+            "pt" | "mm" | "cm" | "in" | "em" | "fr" | "%" | "deg" | "rad"
+        )
+    {
+        value.to_owned()
+    } else {
+        typst_string_literal(value)
+    }
+}
+
+fn typst_native_value(value: &str) -> TypstValue {
+    if value == "auto" {
+        return TypstValue::Auto;
+    }
+    if value == "none" {
+        return TypstValue::None;
+    }
+    if matches!(
+        value,
+        "black"
+            | "white"
+            | "red"
+            | "green"
+            | "blue"
+            | "aqua"
+            | "gray"
+            | "lime"
+            | "maroon"
+            | "navy"
+            | "olive"
+            | "orange"
+            | "purple"
+            | "silver"
+            | "teal"
+            | "yellow"
+    ) {
+        return TypstValue::NamedColor(value.to_owned());
+    }
+    if let Ok(value) = value.parse::<i64>() {
+        return TypstValue::Integer(value);
+    }
+    if let Ok(value) = value.parse::<f64>() {
+        return TypstValue::Float(value);
+    }
+    let split = value
+        .find(|character: char| !character.is_ascii_digit() && !matches!(character, '.' | '-'))
+        .unwrap_or(value.len());
+    let (number, unit) = value.split_at(split);
+    let Ok(number) = number.parse::<f64>() else {
+        return TypstValue::String(value.to_owned());
+    };
+    match unit {
+        "pt" => TypstValue::Length(number, TypstLengthUnit::Pt),
+        "mm" => TypstValue::Length(number, TypstLengthUnit::Mm),
+        "cm" => TypstValue::Length(number, TypstLengthUnit::Cm),
+        "in" => TypstValue::Length(number, TypstLengthUnit::In),
+        "em" => TypstValue::Length(number, TypstLengthUnit::Em),
+        "fr" => TypstValue::Fraction(number),
+        "%" => TypstValue::Ratio(number),
+        "deg" => TypstValue::Angle(number, TypstAngleUnit::Deg),
+        "rad" => TypstValue::Angle(number, TypstAngleUnit::Rad),
+        _ => TypstValue::String(value.to_owned()),
+    }
+}
+
+fn typed_dictionary(
+    fields: impl IntoIterator<Item = (impl Into<String>, TypstValue)>,
+) -> TypstValue {
+    TypstValue::Dictionary(
+        fields
+            .into_iter()
+            .map(|(key, value)| (key.into(), value))
+            .collect(),
+    )
+}
+
+fn dictionary_source(fields: impl IntoIterator<Item = (impl AsRef<str>, String)>) -> String {
+    let fields = fields
+        .into_iter()
+        .map(|(key, value)| format!("{}: {value}", typst_string_literal(key.as_ref())))
+        .collect::<Vec<_>>();
+    if fields.is_empty() {
+        "(:)".to_owned()
+    } else {
+        format!("({},)", fields.join(", "))
+    }
+}
+
+fn figure_render_config(plan: &FigurePlan, inputs: &[(String, String)]) -> Result<TypstConfig> {
+    let inputs = input_map(inputs);
+    if inputs.contains_key("typst-fields") {
+        bail!("typst-fields is not supported by the V1 renderer; fields are always plain data");
+    }
+    let relative = path_key(&plan.relative);
+    let detected_amplitude = relative.starts_with("processes/amplitudes/")
+        || relative.contains("/processes/amplitudes/");
+    let detected_cross_section = relative.starts_with("processes/cross_sections/")
+        || relative.contains("/processes/cross_sections/");
+    let amplitude = inputs
+        .get("amplitude-mode")
+        .map(|value| bool_input("amplitude-mode", value))
+        .transpose()?
+        .unwrap_or(detected_amplitude);
+    let cross_section = inputs
+        .get("cross-section-mode")
+        .map(|value| bool_input("cross-section-mode", value))
+        .transpose()?
+        .unwrap_or(detected_cross_section);
+    if amplitude && cross_section {
+        bail!("a figure cannot use amplitude and cross-section modes together");
+    }
+    let mode = if amplitude {
+        "amplitude"
+    } else if cross_section {
+        "cross-section"
+    } else {
+        "generic"
+    };
+
+    let mut layout = Vec::new();
+    for key in ["steps", "seed"] {
+        if let Some(value) = inputs.get(key) {
+            layout.push((key, TypstValue::Integer(integer_input(key, value)?)));
+        }
+    }
+
+    let mut physics = Vec::new();
+    for key in [
+        "momentum-arrows",
+        "show-edge-index",
+        "show-node-index",
+        "show-half-edge-index",
+        "show-particle",
+    ] {
+        if let Some(value) = inputs.get(key) {
+            physics.push((key, TypstValue::Bool(bool_input(key, value)?)));
+        }
+    }
+    if let Some(value) = inputs.get("momentum-arrow-mark") {
+        physics.push(("momentum-arrow-mark", typst_native_value(value)));
+    }
+    let paint = inputs.get("momentum-arrow-paint");
+    let thickness = inputs.get("momentum-arrow-thickness");
+    if paint.is_some() || thickness.is_some() {
+        let stroke = typed_dictionary([
+            (
+                "paint",
+                paint.map_or_else(
+                    || TypstValue::NamedColor("black".to_owned()),
+                    |value| typst_native_value(value),
+                ),
+            ),
+            (
+                "thickness",
+                thickness.map_or_else(
+                    || TypstValue::Length(0.55, TypstLengthUnit::Pt),
+                    |value| typst_native_value(value),
+                ),
+            ),
+            ("cap", TypstValue::String("round".to_owned())),
+        ]);
+        physics.push(("momentum-arrow-stroke", stroke));
+    }
+
+    let TypstValue::Dictionary(fields) = typed_dictionary([
+        ("title", TypstValue::String(derive_title(&plan.relative))),
+        ("mode", TypstValue::String(mode.to_owned())),
+        ("layouts", TypstValue::Array(vec![typed_dictionary(layout)])),
+        (
+            "style",
+            typed_dictionary(Vec::<(String, TypstValue)>::new()),
+        ),
+        ("draw", typed_dictionary(Vec::<(String, TypstValue)>::new())),
+        ("physics", typed_dictionary(physics)),
+        (
+            "elements",
+            typed_dictionary([
+                ("graph", TypstValue::None),
+                ("nodes", TypstValue::Array(Vec::new())),
+                ("edges", TypstValue::Array(Vec::new())),
+                ("hedges", TypstValue::Array(Vec::new())),
+            ]),
+        ),
+    ]) else {
+        unreachable!("typed_dictionary always returns a dictionary")
+    };
+    TypstConfig::new(fields)
+}
+
+fn grid_render_config(inputs: &[(String, String)]) -> Result<String> {
+    let inputs = input_map(inputs);
+    let mut fields = Vec::new();
+    for key in ["columns", "rows"] {
+        if let Some(value) = inputs.get(key) {
+            fields.push((key, integer_input(key, value)?.to_string()));
+        }
+    }
+    for key in [
+        "row_height",
+        "top_margin",
+        "bottom_margin",
+        "left_margin",
+        "right_margin",
+        "graph_label_size",
+    ] {
+        if let Some(value) = inputs.get(key) {
+            fields.push((key, typst_native_scalar(value)));
+        }
+    }
+    for key in ["page_format", "align", "graph_label_position"] {
+        if let Some(value) = inputs.get(key) {
+            fields.push((key, typst_string_literal(value)));
+        }
+    }
+    if let Some(value) = inputs.get("page_numbers") {
+        fields.push((
+            "page_numbers",
+            bool_input("page_numbers", value)?.to_string(),
+        ));
+    }
+    Ok(dictionary_source(fields))
 }
 
 fn path_key(path: &Path) -> String {
@@ -1033,6 +1319,12 @@ fn parse_input_pair(raw: &str) -> Result<(String, String), String> {
     if key.is_empty() {
         return Err("the key was missing or empty".to_owned());
     }
+    if key == "typst-fields" {
+        return Err(
+            "typst-fields is not supported by the V1 renderer; fields are always plain data"
+                .to_owned(),
+        );
+    }
     let val = val.trim().to_owned();
     Ok((key, val))
 }
@@ -1063,5 +1355,23 @@ mod tests {
         assert!(should_hash_template_dependency(Path::new("grid.typ")));
         assert!(should_hash_template_dependency(Path::new("fig-index.typ")));
         assert!(!should_hash_template_dependency(Path::new("figure.pdf")));
+    }
+
+    #[test]
+    fn v1_config_rejects_typst_field_evaluation() {
+        assert!(parse_input_pair("typst-fields=eval").is_err());
+        let plan = FigurePlan {
+            data_path: PathBuf::from("example.dot"),
+            relative: PathBuf::from("processes/amplitudes/example.dot"),
+            output_path: PathBuf::from("example.pdf"),
+        };
+        let error = figure_render_config(&plan, &[("typst-fields".to_owned(), "eval".to_owned())])
+            .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("not supported by the V1 renderer")
+        );
     }
 }

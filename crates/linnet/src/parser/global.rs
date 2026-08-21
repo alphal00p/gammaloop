@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, fmt::Display};
 use dot_parser::{ast::AttrStmt, canonical::IDEq};
 use figment::Figment;
 
-use super::strip_quotes;
+use super::{dot_id, escape_dot_string, strip_quotes};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -91,9 +91,15 @@ impl Display for GlobalData {
         if !self.statements.is_empty() {
             for (key, value) in &self.statements {
                 if let Some(indent) = f.width() {
-                    writeln!(f, "{}{key} = \"{value}\";", vec![" "; indent].join(""))?;
+                    writeln!(
+                        f,
+                        "{}{} = \"{}\";",
+                        vec![" "; indent].join(""),
+                        dot_id(key),
+                        escape_dot_string(value)
+                    )?;
                 } else {
-                    write!(f, "\n{key} = \"{value}\";")?;
+                    write!(f, "\n{} = \"{}\";", dot_id(key), escape_dot_string(value))?;
                 }
             }
         }
@@ -110,7 +116,7 @@ impl Display for GlobalData {
                 if !first {
                     write!(f, ", ")?;
                 }
-                write!(f, "{key} = \"{value}\"")?;
+                write!(f, "{} = \"{}\"", dot_id(key), escape_dot_string(value))?;
                 first = false;
             }
             writeln!(f, "]")?;
@@ -128,7 +134,7 @@ impl Display for GlobalData {
                 if !first {
                     write!(f, ", ")?;
                 }
-                write!(f, "{key} = \"{value}\"")?;
+                write!(f, "{} = \"{}\"", dot_id(key), escape_dot_string(value))?;
                 first = false;
             }
             writeln!(f, "]")?;
@@ -152,7 +158,7 @@ impl TryFrom<(Vec<AttrStmt<(String, String)>>, Vec<IDEq>)> for GlobalData {
                     for l in l.elems {
                         statements.extend(
                             l.into_iter()
-                                .map(|(k, v)| (k, strip_quotes(&v).to_string())),
+                                .map(|(k, v)| (strip_quotes(&k), strip_quotes(&v))),
                         );
                     }
                 }
@@ -160,7 +166,7 @@ impl TryFrom<(Vec<AttrStmt<(String, String)>>, Vec<IDEq>)> for GlobalData {
                     for l in l.elems {
                         node_statements.extend(
                             l.into_iter()
-                                .map(|(k, v)| (k, strip_quotes(&v).to_string())),
+                                .map(|(k, v)| (strip_quotes(&k), strip_quotes(&v))),
                         );
                     }
                 }
@@ -168,7 +174,7 @@ impl TryFrom<(Vec<AttrStmt<(String, String)>>, Vec<IDEq>)> for GlobalData {
                     for l in l.elems {
                         edge_statements.extend(
                             l.into_iter()
-                                .map(|(k, v)| (k, strip_quotes(&v).to_string())),
+                                .map(|(k, v)| (strip_quotes(&k), strip_quotes(&v))),
                         );
                     }
                 }
@@ -176,13 +182,13 @@ impl TryFrom<(Vec<AttrStmt<(String, String)>>, Vec<IDEq>)> for GlobalData {
         }
 
         for e in value.1 {
-            statements.insert(e.lhs, strip_quotes(&e.rhs).to_string());
+            statements.insert(strip_quotes(&e.lhs), strip_quotes(&e.rhs));
         }
 
         let mut name = String::new();
         statements.retain(|k, v| {
             if k.as_str() == "name" {
-                name = strip_quotes(v).to_string();
+                name = strip_quotes(v);
                 false
             } else {
                 true

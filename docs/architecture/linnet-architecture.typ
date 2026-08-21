@@ -97,7 +97,8 @@ DOT text/file
 Invisible endpoint nodes represent dangling edges. `dir` controls superficial orientation, while
 the endpoint side determines underlying flow. Serialization maps caller data into the DOT data
 types and writes through a caller-provided `fmt::Write` or `io::Write`; DOT parsing separately
-offers string- and file-based entry points.
+offers string- and file-based entry points. Malformed direction, endpoint, and explicit-ID data
+are reported as parser errors; they do not panic or publish a partially constructed graph.
 
 == Feature and persistence boundaries
 

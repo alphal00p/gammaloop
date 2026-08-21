@@ -102,41 +102,56 @@
   label: none,
 )
 
-/// Small built-in particle map for standalone physics diagrams. GammaLoop
+#let _photon = (
+  source: source-stroke(c: black, thickness: massless) + wave,
+  sink: sink-stroke(c: black, thickness: massless) + wave,
+  label: mi(`{\gamma}`),
+)
+#let _gluon = (
+  source: source-stroke(c: black, thickness: massless) + coil,
+  sink: sink-stroke(c: black, thickness: massless) + coil,
+  label: mi(`{g}`),
+)
+#let _fermion = (
+  source: source-stroke(c: blue, thickness: massless),
+  sink: sink-stroke(c: blue, thickness: massless),
+  fermion-arrow: true,
+  label: mi(`{f}`),
+)
+#let _scalar = (
+  source: source-stroke(c: black, thickness: massive, dash: dashed),
+  sink: sink-stroke(c: black, thickness: massive, dash: dashed),
+  label: mi(`{\phi}`),
+)
+#let _ghost = (
+  source: source-stroke(c: black, thickness: massless, dash: dotted),
+  sink: sink-stroke(c: black, thickness: massless, dash: dotted),
+  label: mi(`{c}`),
+)
+
+/// Small model-neutral particle map for standalone physics diagrams. Common
+/// aliases share line geometry but retain their conventional label. GammaLoop
 /// generated `edge-style.typ` files pass their model-specific map to `style`.
 /// -> dictionary
 #let default-map = (
-  "a": (
-    source: source-stroke(c: black, thickness: massless) + wave,
-    sink: sink-stroke(c: black, thickness: massless) + wave,
-    label: mi(`{\gamma}`),
-  ),
-  "photon": (
-    source: source-stroke(c: black, thickness: massless) + wave,
-    sink: sink-stroke(c: black, thickness: massless) + wave,
-    label: mi(`{\gamma}`),
-  ),
-  "g": (
-    source: source-stroke(c: black, thickness: massless) + coil,
-    sink: sink-stroke(c: black, thickness: massless) + coil,
-    label: mi(`{g}`),
-  ),
-  "gluon": (
-    source: source-stroke(c: black, thickness: massless) + coil,
-    sink: sink-stroke(c: black, thickness: massless) + coil,
-    label: mi(`{g}`),
-  ),
-  "fermion": (
-    source: source-stroke(c: blue, thickness: massless),
-    sink: sink-stroke(c: blue, thickness: massless),
-    fermion-arrow: true,
-    label: mi(`{f}`),
-  ),
-  "scalar": (
-    source: source-stroke(c: black, thickness: massive, dash: dashed),
-    sink: sink-stroke(c: black, thickness: massive, dash: dashed),
-    label: mi(`{\phi}`),
-  ),
+  "a": _photon,
+  "gamma": _photon,
+  "γ": _photon,
+  "photon": _photon,
+  "g": _gluon,
+  "gluon": _gluon,
+  "fermion": _fermion,
+  "anti-fermion": _fermion + (label: mi(`{\bar f}`)),
+  "e-": _fermion + (label: mi(`{e^-}`)),
+  "e+": _fermion + (label: mi(`{e^+}`)),
+  "mu-": _fermion + (label: mi(`{\mu^-}`)),
+  "mu+": _fermion + (label: mi(`{\mu^+}`)),
+  "tau-": _fermion + (label: mi(`{\tau^-}`)),
+  "tau+": _fermion + (label: mi(`{\tau^+}`)),
+  "q": _fermion + (label: mi(`{q}`)),
+  "qbar": _fermion + (label: mi(`{\bar q}`)),
+  "scalar": _scalar,
+  "ghost": _ghost,
 )
 
 #let _momentum-arrow-stroke = (paint: black, thickness: 0.55pt, cap: "round")
