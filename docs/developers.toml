@@ -70,9 +70,9 @@ digest = "afea0cf9f45b3ce7526c91b708dbd3e360aad060"
 path = "crates/gammaloop-api/src/python.rs"
 symbol = "gammaloop_api::python::GammaLoopAPI"
 anchor = "struct GammaLoopAPI {"
-# No architecture impact: the 2026-08-21 APIDOC-001 review only corrected
-# sample-evaluation docstrings; the Python binding behavior is unchanged.
-digest = "ea354c6e74ce301bdd4ab7cfbe37ab7816df58fb"
+# No architecture impact: the 2026-08-21 APIDOC-001/APIDOC-202 reviews only
+# corrected sample-evaluation and histogram docstrings; binding behavior is unchanged.
+digest = "9099fdbfcd33e681ec71ce1f94090d580dc5a3b6"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/lib.rs"

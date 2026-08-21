@@ -50,6 +50,21 @@ owner = "GammaLoop maintainers"
 test_command = "cargo test --locked -p alphal00p-docs-examples"
 
 [[example]]
+id = "gammaloop-python-histogram-accumulator"
+marker = "gammaloop-python-histogram-accumulator"
+product = "gammaloop"
+task = "Merge and inspect independent caller-owned histogram samples"
+audience = "real-value"
+source = "docs/products/gammaloop/content/api.typ"
+route = "reference/interfaces/"
+prerequisites = ["Built GammaLoop Python API"]
+expected = "Two distinct-bin samples retain exact weight and squared-weight sums; pending donor state is consumed before a two-bin rebin."
+verification = "compile"
+tier = "pull-request"
+owner = "GammaLoop maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
 id = "linnet-first-graph"
 marker = "linnet-first-graph"
 product = "linnet"

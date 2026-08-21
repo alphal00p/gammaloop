@@ -147,6 +147,38 @@ connected workflows rather than forty unrelated entry points:
   contract is aligned.
 ])
 
+=== Aggregate independent histogram samples
+
+This safe standalone use keeps one entry per bin in each independent sample. Merge pending worker
+state before committing it, then retain raw sums and squared sums for later combinations:
+
+// docs-example: compile gammaloop-python-histogram-accumulator
+```python
+from gammaloop import HistogramAccumulator
+
+left = HistogramAccumulator.continuous("energy", 0.0, 4.0, 4)
+right = HistogramAccumulator.continuous("energy", 0.0, 4.0, 4)
+left.fill_continuous_sample([(0.5, 2.0)])
+right.fill_continuous_sample([(2.5, 3.0)])
+left.merge_in_place(right)
+left.update_results()
+
+snapshot = left.snapshot()
+assert snapshot.sample_count == 2
+assert snapshot.bins[0].sum_weights == 2.0
+assert snapshot.bins[0].sum_weights_squared == 4.0
+assert snapshot.bins[0].sum_weights / snapshot.sample_count == 1.0
+assert snapshot.bins[2].sum_weights == 3.0
+assert snapshot.bins[2].sum_weights_squared == 9.0
+assert right.snapshot().sample_count == 0
+assert len(left.rebin(2).snapshot().bins) == 2
+```
+
+`snapshot()` includes both committed and pending samples. `update_results()` moves pending values
+into the completed counters; it is not needed merely to inspect the current snapshot. A successful
+`merge_in_place` consumes only the donor's pending samples, so merge worker accumulators before
+committing them.
+
 == Inspect and evaluate an existing state
 
 The following workflow assumes that `./state` contains a generated integrand. Evaluation points

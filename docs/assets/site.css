@@ -309,7 +309,7 @@ body[data-has-toc="false"] .docs-shell { grid-template-columns: var(--sidebar-wi
 .docs-article a, .docs-article :not(pre) > code { overflow-wrap: anywhere; }
 .docs-article :where(img, svg, video, canvas, iframe) { max-width: 100%; }
 .docs-article math { font-family: "STIX Two Math", math; font-synthesis: none; }
-.docs-article math[display="block"] { display: block; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+.docs-article math[display="block"] { display: block math; max-width: 100%; overflow-x: auto; overflow-y: hidden; }
 .docs-article pre {
   max-width: 100%;
   overflow-x: auto;
@@ -520,6 +520,7 @@ button[data-copy-target] { display: none; }
 .api-example-copy-row { margin: 1.2rem 0 1.6rem; }
 .typst-api-module pre { max-height: 30rem; overflow: auto; }
 .reference-table-wrap { width: 100%; overflow-x: auto; }
+.reference-table-wrap > table { display: table; overflow: visible; }
 .reference-missing { color: var(--ink-muted); font-size: 0.82rem; }
 .cli-command-family { margin: 2rem 0; }
 .cli-command-family > h2 { padding-bottom: 0.55rem; border-bottom: 1px solid var(--border); }

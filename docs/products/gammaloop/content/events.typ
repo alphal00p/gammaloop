@@ -77,14 +77,32 @@ api = GammaLoopAPI(
 )
 api.run("run display_named_settings_examples")
 
+info = api.get_integrand_info()
+assert info.kind == "cross section"
+assert info.graph_count == 2
+assert info.graph_group_count == len(info.graph_groups)
+assert all(
+    sum(graph.is_master for graph in group.graphs) == 1
+    for group in info.graph_groups
+)
+
 point = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67]
 single = api.evaluate_sample(point, return_events=True)
+assert single.parameterization_jacobian is not None
+assert single.stability_results
+assert single.event_groups
 
 points = np.array([
     point,
     [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],
 ], dtype=float)
 batch = api.evaluate_samples(points, return_events=True)
+assert len(batch.samples) == 2
+assert all(sample.event_groups for sample in batch.samples)
+assert len(batch.observables["leading_jet_pt_hist"].bins) == 8
+assert len(batch.observables["jet_count_hist"].bins) == 6
+assert batch.observables["leading_jet_pt_hist"].sample_count == 2
+assert batch.observables["jet_count_hist"].sample_count == 2
 
 print(single.integrand_result, single.generated_event_count)
 for group in single.event_groups:
