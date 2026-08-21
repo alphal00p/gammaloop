@@ -88,6 +88,13 @@ The manual does not let a physicist determine whether a proposed calculation is
 partonic or hadronic, supported or experimental, or dependent on an unavailable
 model, contribution, backend, tool, or license.
 
+*Source-audit findings (2026-08-21):* the demonstrable runtime path uses fixed partonic external
+momenta and a PDF factor of one; no PDF convolution or factorization scale was found. Automatic
+polarization sums cover scalar, spinor, and vector states, while complex masses are unsupported.
+Built-in JSON models, optional UFO import, observables, clustering, and multiple evaluator/UV
+backends have narrower feature and tool boundaries than the overview implies. Compiled loop-count
+ceilings are implementation bounds, not evidence of complete physics coverage at those orders.
+
 *Complete when:* a physicist-facing chapter explains the forward-graph/cut relation,
 real/virtual combination, common integration variables, local cancellation, the role
 of correlated events and UV/IR/threshold subtraction, and applicable observable
@@ -103,6 +110,13 @@ Settings expose convention-sensitive choices, but no authored chapter assembles 
 scientific contract. Terms such as state, event group, graph group, raised cut,
 orientation, loop-momentum basis, E-surface, integration coordinate, and target are
 introduced without one canonical physical definition.
+
+*Source-audit findings (2026-08-21):* the implemented metric is `diag(+,-,-,-)` and stored external
+momenta are positive-energy four-vectors with separate incoming/final signatures. The one- and
+two-particle flux formulas and the sample × parameterization-Jacobian × integrator-weight relation
+are source-verifiable. A universal phase-space/amplitude normalization, automatic color average,
+complete symmetry-factor contract, powered-coupling meaning, perturbative-order mapping, and the
+energy-unit premise behind picobarn conversion remain unverified and must not be inferred.
 
 *Complete when:* the manual states metric and momentum flow, integration and
 phase-space measures, flux, symmetry, color and helicity factors, units, amplitude
@@ -165,12 +179,17 @@ tolerance, backend/tool versions, and normalization. API-local work remains unde
 
 === MANUAL-202 · Spenso physicist-to-type bridge
 
-*Priority:* P0 · *Status:* Open
+*Priority:* P0 · *Status:* In progress
 
 The first tutorial uses a dimension-two `Lorentz` representation for a generic scalar
 contraction, while the HEP library receives only a brief mention. The network guide
 also describes a reusable stored plan more strongly than the documented public
 strategy interface appears to support.
+
+*Progress (`umvyopkm`):* the toy contraction now identifies its two-dimensional representation
+as Euclidean linear algebra rather than Lorentz physics, and the network guide accurately
+describes execution-time strategy selection instead of a cached public plan. The complete
+Einstein-notation-to-type bridge and convention-explicit HEP workflow remain open.
 
 *Complete when:* the planning/reuse claim matches the public implementation and the
 toy representation is physically honest. A familiar Einstein-notation expression is
@@ -182,12 +201,19 @@ contracts.
 
 === MANUAL-203 · Idenso user contract versus implementation evidence
 
-*Priority:* P0 · *Status:* Open
+*Priority:* P0 · *Status:* In progress
 
 The FORM color/Dirac reference combines mathematical rules, shipped behavior, target
 patterns, source mappings, implementation excerpts, historical Typst and search
 commands, validation logs, and unresolved uncertainties. A public reader cannot
 reliably distinguish current behavior from a proposed implementation contract.
+
+*Progress (`umvyopkm`):* the public page is now a concise shipped-rule contract with explicit
+dimension, gamma-five, epsilon, color-normalization, and partial-normal-form boundaries. FORM
+sources, target patterns, historical commands, and unresolved provenance remain available in a
+separate classified developer source map. The beginner metric example is now explicitly
+four-dimensional Minkowski and checks its free-index rank, but a complete checked Dirac/color
+workflow still remains.
 
 *Complete when:* every public rule is classified as shipped and scientifically
 reviewed, with conventions and checked identities. Target designs, source maps,
@@ -247,4 +273,3 @@ finds no conflicting current definitions.
   [Release and reproducibility narrative], [`DOC-011`], [Fill GammaLoop/Vakint histories, current Spenso/Idenso gaps, and Linnet-Python history; distinguish API, physics/numerical/default, and compatibility changes; pin revision-sensitive dependencies and sources.],
   [Methods and citations], [`DOC-017`], [Place defining sources next to Local Unitarity and subtraction, Vakint backends, Idenso identities, Spenso HEP conventions, and nontrivial graph algorithms; a broad publication feed is not a method map.],
 )
-

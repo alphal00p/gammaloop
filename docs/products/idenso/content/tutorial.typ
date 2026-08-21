@@ -3,9 +3,9 @@
 #let tutorial = [
 = Tutorial
 
-This tutorial uses Idenso's Python community module to contract one metric tensor with a
-vector. It is intentionally small: the point is to establish the registered tensor syntax and
-observe one algebra pass before composing a larger Dirac or color pipeline.
+This tutorial uses Idenso's Python community module to contract one four-dimensional Minkowski
+metric tensor with a vector. It is intentionally small: the point is to establish the registered
+tensor syntax and observe one algebra pass before composing a larger Dirac or color pipeline.
 
 == Prerequisites
 
@@ -35,7 +35,7 @@ from symbolica.community.idenso import initialize, list_dangling, simplify_metri
 from symbolica.community.spenso import Representation, TensorName
 
 initialize()
-rep = Representation.euc(3)
+rep = Representation.mink(4)
 mu = rep("mu")
 nu = rep("nu")
 
@@ -43,16 +43,20 @@ g = TensorName.g()
 q = TensorName("q")
 expression = g(mu, nu) * q(mu)
 
-print("free before:", list_dangling(expression))
+free_before = list_dangling(expression)
 reduced = simplify_metrics(expression)
+free_after = list_dangling(reduced)
+
+assert len(free_before) == 1
+assert len(free_after) == 1
 print("reduced:", reduced)
-print("free after:", list_dangling(reduced))
 ```
 
-Run `python metric_first.py`. Success means the metric is removed from the reduced expression,
-the contracted `mu` no longer appears as a free index, and the result is a rank-one expression
-carrying `nu`. Printed output can vary with the installed Symbolica version; inspect the
-expression structure instead of comparing exact text.
+Run `python metric_first.py`. Success means both rank assertions pass, the metric is removed from
+the reduced expression, and the result is a rank-one expression carrying `nu`. The rewrite is
+abstract: the registered Minkowski metric supplies index compatibility, but this example does
+not substitute a numerical signature. Printed output can vary with the installed Symbolica
+version; inspect the expression structure instead of comparing exact text.
 
 #callout("Verification scope and cost", [
   The docs harness compiles this Python source without importing native modules; it syntax-checks

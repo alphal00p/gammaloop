@@ -49,7 +49,10 @@ digest = "e9dd13bbf6172e526731689a87d74c4d8ab8f356"
 path = "crates/gammalooprs/src/integrands/process/mod.rs"
 symbol = "gammalooprs::integrands::process::ProcessIntegrand::warm_up"
 anchor = "pub fn warm_up(&mut self, model"
-digest = "d27636d8cba005d85314c5604c40247720a01168"
+# No architecture impact: the 2026-08-21 APIDOC-001 review only clarified the
+# momentum-input/precision contract, retained the legacy precision behavior,
+# and added regression coverage.
+digest = "db0d56f036565015124898a73ab46a0ffd5738c2"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -67,7 +70,9 @@ digest = "afea0cf9f45b3ce7526c91b708dbd3e360aad060"
 path = "crates/gammaloop-api/src/python.rs"
 symbol = "gammaloop_api::python::GammaLoopAPI"
 anchor = "struct GammaLoopAPI {"
-digest = "206804596b1bb7ea2ec67ce0fe6edd5c29f33c8d"
+# No architecture impact: the 2026-08-21 APIDOC-001 review only corrected
+# sample-evaluation docstrings; the Python binding behavior is unchanged.
+digest = "91f000b0dce727a646989d00b6e0846b80324df7"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/lib.rs"
@@ -260,7 +265,9 @@ review_triggers = ["crates/spenso/Cargo.toml", "crates/spenso/src/structure.rs",
 path = "crates/spenso/src/structure.rs"
 symbol = "spenso::structure::TensorStructure"
 anchor = "pub trait TensorStructure {"
-digest = "759930f73a92dcb35ae24716a803d4bb345e70d8"
+# No architecture impact: the 2026-08-21 APIDOC-105 review made the existing
+# slot-order, index-matching, and coordinate contracts explicit in Rustdoc.
+digest = "ab1dc7572762b2c448186744d1d26b973bae6979"
 
 [[section.note.scope]]
 path = "crates/spenso/src/tensors/data.rs"
@@ -272,13 +279,17 @@ digest = "090c832fa7615c126e7fbc54747b687f75e21dd4"
 path = "crates/spenso/src/contraction.rs"
 symbol = "spenso::contraction::Contract blanket implementation"
 anchor = "impl<T, U, O> Contract<T> for U"
-digest = "29a1af94793a0b1ae3bf3cc4e306c89f91582a55"
+# No architecture impact: the 2026-08-21 APIDOC-105 review documented the
+# implemented structural matching, result-storage, and error boundaries.
+digest = "1a6c276ef07e2ee5b1270f4b0302ba6540295894"
 
 [[section.note.scope]]
 path = "crates/spenso/src/network/mod.rs"
 symbol = "spenso::network::Network"
 anchor = "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {"
-digest = "5dbcfbc152494f12bc03ab512d9346a4bf5cb2d8"
+# No architecture impact: the 2026-08-21 APIDOC-105 review documented the
+# existing in-place execution lifecycle and added a checked Rustdoc example.
+digest = "32fcc116c7b6ca1c803b160b682673fa4a2fbf3c"
 
 [[section.note.scope]]
 path = "crates/spenso/src/network/parsing/mod.rs"
@@ -338,6 +349,21 @@ anchor = "pub struct SchoonschipSettings {"
 digest = "6924df328f8de538c789d2b07b312508e7c87534"
 
 [[section.note]]
+id = "idenso-form-color-dirac-source-map"
+title = "Idenso FORM color and Dirac source map"
+summary = "FORM sources, Symbolica and Spenso target patterns, implementation mappings, historical validation commands, and unresolved provenance retained behind the concise public convention contract."
+source = "docs/architecture/idenso-form-color-dirac-source-map.typ"
+kind = "Implementation source map"
+status = "Mixed shipped evidence and target specification · reviewed 2026-08-21"
+lifecycle = "proposal"
+owner = "unassigned"
+reviewed_at = "2026-08-21"
+review_ref = "umvyopkm"
+products = ["idenso"]
+topics = ["FORM", "Dirac algebra", "color algebra", "Symbolica", "Spenso", "provenance"]
+review_triggers = ["crates/idenso/src/dirac/**", "crates/idenso/src/color/**", "docs/products/idenso/content/form-symbolica-color-and-dirac.typ"]
+
+[[section.note]]
 id = "linnet-architecture"
 title = "Linnet implementation architecture"
 summary = "Half-edge storage, subgraph views, mutation and DOT flows, feature and serialization boundaries, invariants, and verification."
@@ -356,13 +382,17 @@ review_triggers = ["crates/linnet/src/lib.rs", "crates/linnet/src/half_edge.rs",
 path = "crates/linnet/src/half_edge.rs"
 symbol = "linnet::half_edge::HedgeGraph"
 anchor = "pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {"
-digest = "bce399647d3ffcc8f3e1a52d3773db95719bde8d"
+# No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
+# public graph-invariant and DOT parsing documentation without changing behavior.
+digest = "899105d1558d0f52d4ea0abf0df2b7072c690aef"
 
 [[section.note.scope]]
 path = "crates/linnet/src/half_edge/involution.rs"
 symbol = "linnet::half_edge::involution::Involution"
 anchor = "pub struct Involution<E = EdgeIndex> {"
-digest = "aafadafcd5bd741effcaf4c77d68cd51ac0dc8a1"
+# No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
+# public involution invariants and terminology without changing behavior.
+digest = "6e8478c6f7cae54185a93ab8aedadc6f6d8fc937"
 
 [[section.note.scope]]
 path = "crates/linnet/src/half_edge/subgraph.rs"
@@ -374,7 +404,9 @@ digest = "05983dad9fdb3db00351c9e536a439ce48efd94b"
 path = "crates/linnet/src/parser/mod.rs"
 symbol = "linnet::parser::DotGraph"
 anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {"
-digest = "9c216349b08fcc8bbce6bfa7176f5b1e9ae7a82a"
+# No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
+# documented DOT parser path and added a parse/serialize/reparse example.
+digest = "de73f796b7c5b0a24c8711830783c00a903943f5"
 
 [[section.note]]
 id = "vakint-architecture"
@@ -413,7 +445,9 @@ digest = "39e48cf8f2a5f368b6eac525e5b2e19ebe41854e"
 path = "crates/vakint/src/symbolica_community_module/mod.rs"
 symbol = "vakint::symbolica_community_module::VakintWrapper"
 anchor = "pub struct VakintWrapper {"
-digest = "a3b0b164562768eb39c856216d67b16c88303c38"
+# No architecture impact: the 2026-08-21 APIDOC-005 review made the Python
+# wrapper contracts and required tool boundaries explicit without changing behavior.
+digest = "a3a987e8cf8564a79aab31e5e6cc4d269330b8a6"
 
 [[section]]
 id = "proposals"
@@ -690,7 +724,9 @@ review_triggers = ["docs/developers.toml", "crates/alphal00p-docs-builder/src/li
 path = "crates/alphal00p-docs-builder/src/lib.rs"
 symbol = "alphal00p_docs_builder::SiteBuilder::check"
 anchor = "pub fn check(&self) -> Result<()> {"
-digest = "9334327a16b10075946ddbee64e7514ef3e32926"
+# No documentation-system architecture impact: the 2026-08-21 integrity pass
+# only routes two generated CLI pages to their precise sample-evaluation contract.
+digest = "640feca6e766176706623a332fa7081e4abeea4c"
 
 [[section.note]]
 id = "documentation-improvement-plan"

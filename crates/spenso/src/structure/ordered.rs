@@ -413,8 +413,15 @@ impl<'a, R: RepName, Aind> IntoIterator for &'a mut OrderedStructure<R, Aind> {
 }
 
 impl<R: RepName, Aind: AbsInd> OrderedStructure<R, Aind> {
-    /// Creates a new ordered structure from this unsorted list of slots.
-    /// Returns a tuple struct of a the permutation that was used to sort the vector as well as the ordered structure itself
+    /// Canonicalizes an unsorted external-slot list.
+    ///
+    /// The returned [`PermutedStructure`] contains the finalized structure and
+    /// the representation/index permutations used to reach its external-slot
+    /// order. Tensor component data must be supplied in that finalized order or
+    /// permuted with the recorded mappings; constructing a [`DenseTensor`]
+    /// directly from `.structure` does not reorder the component vector.
+    ///
+    /// [`DenseTensor`]: crate::tensors::data::DenseTensor
     pub fn new(structure: Vec<Slot<R, Aind>>) -> PermutedStructure<Self> {
         PermutedStructure::from(structure)
     }

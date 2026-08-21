@@ -141,6 +141,25 @@ let request = EvaluateSamples {
     orientations: None,
 };
 assert_eq!(request.return_generated_events, Some(true));
+
+let loop_momenta = arr2(&[[
+    0.11, -0.07, 0.19, // k1 = (px, py, pz)
+    -0.13, 0.05, 0.29, // k2 = (px, py, pz)
+]]);
+let momentum_request = EvaluateSamples {
+    process_id: None,
+    integrand_name: None,
+    use_arb_prec: true,
+    minimal_output: true,
+    return_generated_events: None,
+    momentum_space: true,
+    points: loop_momenta.view(),
+    integrator_weights: None,
+    discrete_dims: None,
+    graph_names: None,
+    orientations: None,
+};
+assert_eq!(momentum_request.points.ncols(), 2 * 3);
 ```
 
 Read
@@ -150,6 +169,10 @@ with its
 `EvaluateSamples` path returns the cross-language `f64` boundary. Rust callers that must retain
 the active numeric precision use `EvaluateSamplesPrecise`; arbitrary-precision internal
 evaluation does not make the ordinary result fields arbitrary-precision.
+`use_arb_prec=true` forces arbitrary-precision (Arb) internal evaluation, using the configured
+Arb stability level when available and a default Arb level otherwise.
+The #link("reference/interfaces/#sample-evaluation-contract")[sample evaluation contract]
+defines this flattened momentum layout and the precision behavior once for CLI, Rust, and Python.
 
 #boundary("Verification and resource cost", [
   The pull-request gate parses the commands, compiles the Python source, and type-checks the Rust

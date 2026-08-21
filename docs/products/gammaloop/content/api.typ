@@ -195,7 +195,30 @@ and
 return detached, read-only `SettingsValue` snapshots. Use `get(path)`, attribute access, indexing,
 or `to_dict()` to read them; modifying derived Python values does not update the live session.
 
-== Sample evaluation and precision
+== Sample evaluation contract
+
+All three supported interfaces use the same two input layouts:
+
+- An *integration-space* row contains the unit-hypercube coordinates expected by the selected
+  integrand and discrete dimensions. Its required length is integrand-specific.
+- A *momentum-space* row is
+  `[k1x, k1y, k1z, k2x, k2y, k2z, ...]`: exactly one spatial `(px, py, pz)` triplet per
+  independent loop momentum. It contains neither loop-energy components nor external momenta;
+  GammaLoop obtains the latter from the integrand's kinematics. Select momentum space explicitly
+  with `--momentum-space`, `momentum_space=true`, or `momentum_space=True`.
+
+Every momentum-space row must therefore have a coordinate count divisible by three, and its number
+of complete triplets must match the selected integrand, graph, or graph group. `approach` axes use
+the same layout and dimension as their midpoint. The CLI, structured Rust API, and Python API all
+reach the same input builder and reject incomplete triplets before numerical evaluation.
+
+Precision selection is independent of the coordinate layout. With `use_arb_prec=false`, the
+configured stability ladder may evaluate and escalate through `f64`, `f128`, and arbitrary
+precision. Setting `use_arb_prec=true` forces arbitrary-precision (Arb) internal evaluation,
+using the configured Arb stability level when available and a default Arb level otherwise.
+The `-f` CLI shorthand has the same behavior. CLI output, Python numeric fields,
+and ordinary Rust `EvaluateSamples` results remain `f64`. Only Rust `EvaluateSamplesPrecise`
+retains the numeric type used by the selected stability level.
 
 #link("reference/python/gammaloop-python/GammaLoopAPI/#exports-gammaloopapi-evaluate-sample-method")[`evaluate_sample`]
 returns one sample result and the observable bundle for that one-sample batch.
@@ -206,7 +229,7 @@ row count as the input batch when provided. Graph and orientation selection appl
 momentum-space evaluation.
 
 Both the ordinary Rust and Python endpoints expose numeric results through an `f64` contract, even
-when `use_arb_prec=True` requests arbitrary-precision internal evaluation. Evaluation may warm the
+when `use_arb_prec=True` forces arbitrary-precision internal evaluation. Evaluation may warm the
 integrand and update in-memory caches or observable snapshots, including in a read-only-state
 session. Rust-only callers that must retain the active precision use `evaluate_sample_precise` and
 `evaluate_samples_precise`.

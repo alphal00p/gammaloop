@@ -54,7 +54,7 @@ pub struct Approach {
     )]
     pub integrand_name: Option<String>,
 
-    /// The midpoint to inspect (x y) or (p0 px ...)
+    /// Integration coordinates, or flattened loop momenta `(px, py, pz) ...` with `--momentum-space`
     #[arg(
         short = 'x',
         long = "point",
@@ -65,7 +65,7 @@ pub struct Approach {
     )]
     pub point: Vec<f64>,
 
-    /// Direction vector for one approach axis, as comma-separated components
+    /// Direction vector in the same coordinate layout and dimension as `--point`
     #[arg(
         long = "approach-axis",
         value_name = "AXIS",
@@ -98,11 +98,11 @@ pub struct Approach {
     #[arg(long = "n-cores", value_name = "N")]
     pub n_cores: Option<usize>,
 
-    /// Evaluate in f128 precision
+    /// Force arbitrary-precision (Arb) internal evaluation; results remain f64
     #[arg(short = 'f', long = "use_arb_prec")]
     pub use_arb_prec: bool,
 
-    /// Interpret point as momentum-space coordinates
+    /// Interpret `--point` and every axis as spatial loop-momentum triplets
     #[arg(short = 'm', long)]
     pub momentum_space: bool,
 

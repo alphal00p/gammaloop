@@ -25,18 +25,18 @@ operation establishes that relationship.
 
 Pairwise contraction matches compatible dual slots, determines the output structure, and then
 contracts the selected data backends. A tensor network generalizes this to many nodes connected
-through abstract indices. Planning selects a contraction order; execution applies that plan to
-the current data.
+through abstract indices. The current public API selects a contraction strategy while executing
+the network; it does not expose a separately stored, reusable plan object.
 
-The cheapest-looking local pair is not always the cheapest complete plan. Intermediate tensor
+The cheapest-looking local pair is not always the cheapest complete order. Intermediate tensor
 dimensions, sparsity, symbolic expression growth, and reusable subexpressions can dominate.
-Record the planner/configuration with performance results and invalidate a stored plan when the
-network structure changes.
+Record the strategy and step bound with performance results. A structural change can lead the
+same strategy to choose a different order.
 
-#callout("Plan structure, execute data", [
-  A plan is meaningful for the network structure it was derived from. Replacing values without
-  changing slots can reuse it; adding a tensor, changing a representation, or rewiring an index
-  requires validation or replanning.
+#callout("Strategy selection is not a cached plan", [
+  Replacing values without changing slots preserves the contraction problem, but the public API
+  still runs the selected strategy during execution. Adding a tensor, changing a representation,
+  or rewiring an index changes that problem and requires a fresh execution decision.
 ])
 
 == Execute a small tensor/scalar network

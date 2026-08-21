@@ -1,79 +1,47 @@
-//! # DOT Language Parser and Serializer
+//! # DOT interchange
 //!
-//! This module provides the functionality to parse graph descriptions written in the
-//! [DOT language](https://graphviz.org/doc/info/lang.html) and convert them into
-//! `HedgeGraph` instances. It also handles the reverse process: serializing
-//! `HedgeGraph` instances back into the DOT language format, suitable for use
-//! with Graphviz tools or for storage.
+//! This module parses the [DOT language](https://graphviz.org/doc/info/lang.html)
+//! into Linnet's half-edge model and serializes half-edge graphs back to DOT.
+//! [`DotGraph::from_string`] and [`DotGraph::from_file`] parse one graph. A
+//! [`DotGraph`] retains [`GlobalData`] alongside a [`HedgeGraph`] whose node,
+//! edge, and half-edge payloads are [`DotVertexData`], [`DotEdgeData`], and
+//! [`DotHedgeData`]. Use [`set::DotGraphSet`] for input containing multiple graphs.
 //!
-//! ## Key Features:
+//! Parsed DOT attributes remain available in those payload types. In particular,
+//! external-port flow and edge orientation are preserved in the parsed graph
+//! rather than discarded as drawing-only attributes. [`DotGraph`] dereferences to
+//! its inner [`HedgeGraph`] for graph algorithms.
 //!
-//! - **Parsing DOT:**
-//!   - Parses DOT files or strings into `HedgeGraph<E, V, S>` instances.
-//!   - Uses the external `dot-parser` crate for initial AST parsing, then converts
-//!     this AST into the `HedgeGraph` structure.
-//!   - Handles DOT node and edge attributes, storing them in `DotVertexData` and
-//!     `DotEdgeData` respectively before they are (optionally) converted into
-//!     the generic `V` and `E` types of the `HedgeGraph`.
-//!   - Supports parsing of "flow" attributes for nodes to indicate sources/sinks,
-//!     and "dir" attributes for edges to set orientation.
-//! - **Serialization to DOT:**
-//!   - Converts `HedgeGraph` instances into DOT language strings.
-//!   - Allows custom mapping of generic node and edge data (`V`, `E`) to DOT attributes
-//!     via provided closure functions.
+//! ## Parse, inspect, and serialize
 //!
-//! ## Core Components:
+//! ```rust
+//! use linnet::parser::DotGraph;
 //!
-//! - **`DotVertexData`**: A struct that holds attributes (key-value pairs) parsed from
-//!   a DOT node definition. This includes standard DOT attributes like `label`, `shape`,
-//!   `color`, as well as custom attributes. It can also capture an explicit `id` and
-//!   a `flow` (source/sink) for external port representation.
-//! - **`DotEdgeData`**: Similar to `DotVertexData`, this struct stores attributes for
-//!   edges parsed from DOT, such as `label`, `color`, `dir` (direction), etc.
-//! - **`HedgeGraph::from_file(path)` and `HedgeGraph::from_string(dot_string)`**:
-//!   These are the primary functions for parsing DOT files and strings into a
-//!   `HedgeGraph`. They require that the target `E` (edge data) and `V` (vertex data)
-//!   types implement `TryFrom<DotEdgeData>` and `TryFrom<DotVertexData>` respectively.
-//! - **`HedgeGraphSet::from_file(path)` and `HedgeGraphSet::from_string(dot_string)`**:
-//!   Similar to the above, but can parse files or strings containing multiple DOT graphs.
-//! - **`HedgeGraph::dot_serialize_io(writer, edge_map, node_map)` and `HedgeGraph::dot_serialize_fmt(formatter, edge_map, node_map)`**:
-//!   Methods on `HedgeGraph` used to serialize the graph to an `io::Write` or `fmt::Write`
-//!   target. The `edge_map` and `node_map` closures define how to convert the graph's
-//!   edge and node data into DOT attribute strings.
-//! - **`dot!(...)` macro**: A utility macro for conveniently creating a `HedgeGraph`
-//!   from an inline DOT string literal, typically used in tests or examples.
-//!   The graph created will have `DotEdgeData` and `DotVertexData` as its edge and node
-//!   data types.
-//! - **`HedgeParseError`**: Enum representing potential errors during parsing.
+//! let graph: DotGraph = DotGraph::from_string(
+//!     r#"digraph example {
+//!         incoming -> interaction [label="particle"];
+//!     }"#,
+//! )
+//! .unwrap();
 //!
-//! ## Usage Example (Conceptual):
+//! assert_eq!(graph.n_nodes(), 2);
+//! assert_eq!(graph.n_edges(), 1);
+//! assert_eq!(graph.n_hedges(), 2);
 //!
-//! ```rust,ignore
-//! use linnet::half_edge::HedgeGraph;
-//! use linnet::dot_parser::{DotEdgeData, DotVertexData};
-//!
-//! // Define how your custom V/E types are created from DOT attributes
-//! impl TryFrom<DotVertexData> for MyVertexData { /* ... */ }
-//! impl TryFrom<DotEdgeData> for MyEdgeData { /* ... */ }
-//!
-//! // Parsing a DOT string
-//! let dot_string = "digraph G { a -> b [label=\"edge1\"]; }";
-//! let graph: Result<HedgeGraph<MyEdgeData, MyVertexData, _>, _> = HedgeGraph::from_string(dot_string);
-//!
-//! // Serializing a graph to DOT
-//! if let Ok(g) = graph {
-//!     let mut output = String::new();
-//!     g.dot_serialize_fmt(
-//!         &mut output,
-//!         &|edge_data| format!("label=\"{}\"", edge_data.custom_label),
-//!         &|vertex_data| format!("label=\"Node {}\"", vertex_data.id)
-//!     ).unwrap();
-//!     println!("{}", output);
-//! }
+//! let mut output = String::new();
+//! graph.write_fmt(&mut output).unwrap();
+//! let round_trip: DotGraph = DotGraph::from_string(output).unwrap();
+//! assert_eq!(round_trip.n_nodes(), graph.n_nodes());
+//! assert_eq!(round_trip.n_edges(), graph.n_edges());
 //! ```
 //!
-//! This module acts as a bridge between the `linnet` graph structures and the widely-used
-//! DOT language, facilitating interoperability and visualization.
+//! The [`dot!`] macro is a shorthand for parsing an inline DOT token tree. To
+//! serialize a graph with application-specific payloads, use
+//! [`HedgeGraph::dot_serialize_io`] or [`HedgeGraph::dot_serialize_fmt`]. Those
+//! methods take graph-level metadata plus mappings for half-edge, edge, and node
+//! payloads; parsing does not implicitly convert DOT payloads into user types.
+//!
+//! [`HedgeGraph`]: crate::half_edge::HedgeGraph
 
 use std::{
     collections::BTreeMap,

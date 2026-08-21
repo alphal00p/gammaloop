@@ -33,10 +33,17 @@ def main() -> None:
     )
     batch_result = api.evaluate_samples(batch_points)
 
-    momentum_result = api.evaluate_sample(
-        [0.11, -0.07, 0.19, -0.13, 0.05, 0.29],
-        momentum_space=True,
-    )
+    # Momentum-space input has one flattened (px, py, pz) triplet per loop;
+    # neither loop energies nor external momenta belong in this array.
+    loop_momenta = [
+        0.11,
+        -0.07,
+        0.19,  # k1 = (px, py, pz)
+        -0.13,
+        0.05,
+        0.29,  # k2 = (px, py, pz)
+    ]
+    momentum_result = api.evaluate_sample(loop_momenta, momentum_space=True)
 
     print("== x-space evaluate_sample ==\n")
     print(result)

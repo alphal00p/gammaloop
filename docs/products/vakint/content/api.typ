@@ -59,11 +59,16 @@ The structured #link("reference/python/")[Python reference] covers the four expo
 backends:
 
 ```python
+from symbolica import E
 from symbolica.community.vakint import Vakint
 
 vakint = Vakint(evaluation_order=[])
-# Supply a Symbolica Expression in the Vakint namespace to `to_canonical`.
+expr = E(
+    "topo(prop(18,edge(7,7),k(99),muvsq,1))",
+    default_namespace="vakint",
+)
 canonical = vakint.to_canonical(expr, short_form=True)
+assert "I1L" in str(canonical)
 ```
 
 `Vakint` exposes canonicalization, tensor reduction, integral evaluation, complete evaluation,

@@ -25,7 +25,7 @@ metric, epsilon, and color algebra.
   #link("reference/rust/idenso/trait.IndexTooling.html")[`IndexTooling`] and
   #link("reference/rust/idenso/cook/trait.Cookable.html")[`Cookable`] Rustdoc.
 - To audit a sign or normalization in a Dirac/color pass, use the source-backed
-  #link("reference/form-color-dirac/")[FORM, Symbolica, and Spenso rule specification].
+  #link("reference/form-color-dirac/")[shipped color and Dirac convention reference].
 
 == A controlled rewrite pipeline
 

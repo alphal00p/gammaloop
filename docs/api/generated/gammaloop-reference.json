@@ -12844,7 +12844,7 @@
           "value_names": [
             "POINT"
           ],
-          "help": "The point to inspect (x y) or (p0 px ...)",
+          "help": "Integration coordinates, or flattened loop momenta `(px, py, pz) ...` with `--momentum-space`",
           "required": false,
           "positional": false,
           "index": null,
@@ -12872,7 +12872,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "Evaluate in f128 precision",
+          "help": "Force arbitrary-precision (Arb) internal evaluation; output remains f64",
           "required": false,
           "positional": false,
           "index": null,
@@ -12902,7 +12902,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "Interpret point as momentum-space coordinates",
+          "help": "Interpret `--point` as spatial loop-momentum triplets; energy components are not accepted",
           "required": false,
           "positional": false,
           "index": null,
@@ -13135,7 +13135,7 @@
           "value_names": [
             "POINT"
           ],
-          "help": "The midpoint to inspect (x y) or (p0 px ...)",
+          "help": "Integration coordinates, or flattened loop momenta `(px, py, pz) ...` with `--momentum-space`",
           "required": false,
           "positional": false,
           "index": null,
@@ -13165,7 +13165,7 @@
           "value_names": [
             "AXIS"
           ],
-          "help": "Direction vector for one approach axis, as comma-separated components",
+          "help": "Direction vector in the same coordinate layout and dimension as `--point`",
           "required": false,
           "positional": false,
           "index": null,
@@ -13349,7 +13349,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "Evaluate in f128 precision",
+          "help": "Force arbitrary-precision (Arb) internal evaluation; results remain f64",
           "required": false,
           "positional": false,
           "index": null,
@@ -13379,7 +13379,7 @@
           "takes_values": false,
           "value_required": false,
           "value_names": [],
-          "help": "Interpret point as momentum-space coordinates",
+          "help": "Interpret `--point` and every axis as spatial loop-momentum triplets",
           "required": false,
           "positional": false,
           "index": null,

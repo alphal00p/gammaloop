@@ -1,21 +1,25 @@
-//! # Half-Edge Graph Representation
+//! # Half-edge incidence graphs
 //!
-//! This module provides the core data structures and algorithms for representing
-//! and manipulating graphs using the **half-edge** (or doubly connected edge list - DCEL)
-//! data structure. This representation is particularly useful for algorithms that
-//! require efficient traversal of graph topology, such as iterating around faces,
-//! finding incident edges to a node, or quickly accessing an edge's opposite pair.
+//! This module represents graph incidence with **half-edges**. Every [`Hedge`] is
+//! incident to one node. An [`Involution`] either pairs two half-edges into an
+//! internal edge or maps a dangling half-edge to itself while recording its
+//! [`Flow`]. This makes graph boundaries, cuts, and half-edge subgraphs explicit.
+//!
+//! Linnet does not store an embedding or a cyclic order of half-edges around a
+//! node. Its representation is therefore not a doubly connected edge list (DCEL),
+//! and it does not by itself define faces or face traversal.
 //!
 //! ## Key Concepts and Components:
 //!
-//! ### 1. `HedgeGraph<E, V, S>`
+//! ### 1. `HedgeGraph<E, V, H, S>`
 //! This is the central struct representing a graph.
 //!   - `E`: Generic type for data associated with edges.
 //!   - `V`: Generic type for data associated with nodes (vertices).
+//!   - `H`: Generic type for data associated with individual half-edges.
 //!   - `S`: A type implementing `NodeStorage`, which defines how node data and their connectivity to half-edges are stored.
 //!
-//! `HedgeGraph` stores half-edges in an `edge_store` (typically `SmartHedgeVec`)
-//! and nodes in a `node_store`.
+//! `HedgeGraph` stores edge data and the pairing involution in a `SmartEdgeVec`,
+//! per-half-edge data in a `HedgeVec`, and nodes in a `NodeStorage` implementation.
 //!
 //! ### 2. `Hedge` and `NodeIndex`
 //!   - `Hedge`: An identifier (often an index) for a single directed half-edge.
@@ -238,30 +242,30 @@ pub mod swap;
     derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
 )]
 #[cfg_attr(feature = "rkyv", archive(check_bytes))]
-/// The main graph data structure, representing a graph using the half-edge
-/// (or doubly connected edge list - DCEL) principle.
+/// A graph whose incidence and boundary are represented with half-edges.
 ///
-/// A `HedgeGraph` stores nodes and edges (represented as pairs of half-edges).
-/// It is generic over the data associated with edges (`E`), nodes/vertices (`V`),
-/// and the specific storage strategy used for nodes (`S`).
+/// Each half-edge is incident to one node. The graph's involution pairs two
+/// half-edges into an internal edge; a dangling half-edge is an identity entry
+/// with an associated [`Flow`]. `HedgeGraph` does not store an embedding or a
+/// rotation system, so it does not define faces or an order around a node.
 ///
-/// The half-edge representation allows for efficient traversal of graph topology,
-/// such as iterating around faces (in planar embeddings), finding incident edges
-/// to a node, or quickly accessing an edge's opposite half-edge.
+/// The graph is generic over edge data (`E`), node data (`V`), per-half-edge
+/// data (`H`), and the node storage strategy (`S`).
 ///
 /// # Type Parameters
 ///
 /// - `E`: The type of data associated with each edge (or pair of half-edges).
 /// - `V`: The type of data associated with each node (vertex).
+/// - `H`: The type of data associated with each individual half-edge.
 /// - `S`: The node storage strategy, implementing the [`NodeStorage`] trait.
 ///   This determines how node data and their connectivity to half-edges
 ///   are stored. Defaults to [`DefaultNodeStore<V>`] (feature-selected; `nodestore-vec` uses
 ///   [`nodestore::NodeStorageVec<V>`]).
 pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {
     pub(crate) hedge_data: HedgeVec<H>,
-    /// Internal storage for all half-edges, their data, and their topological
-    /// relationships (e.g., opposite half-edge, next half-edge around a node).
-    /// This is typically a [`SmartHedgeVec<E>`].
+    /// Edge data and the involution that pairs internal half-edges or marks
+    /// dangling half-edges as identity entries.
+    /// This is a [`SmartEdgeVec<E>`].
     pub(crate) edge_store: SmartEdgeVec<E>,
     /// Storage for all nodes in the graph, including their data (`V`) and
     /// information about the half-edges incident to them.

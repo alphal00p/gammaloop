@@ -934,6 +934,30 @@ mod tests {
     }
 
     #[test]
+    fn sample_evaluation_help_uses_the_runtime_coordinate_and_precision_contract() {
+        let reference = export().unwrap();
+
+        for command_path in ["gammaLoop inspect", "gammaLoop approach"] {
+            let point = argument(&reference, command_path, "point");
+            let use_arb_prec = argument(&reference, command_path, "use_arb_prec");
+            let momentum_space = argument(&reference, command_path, "momentum_space");
+
+            assert!(point.help.contains("(px, py, pz)"), "{}", point.help);
+            assert!(
+                use_arb_prec.help.contains("arbitrary-precision")
+                    && use_arb_prec.help.contains("Arb"),
+                "{}",
+                use_arb_prec.help
+            );
+            assert!(
+                momentum_space.help.contains("loop-momentum triplets"),
+                "{}",
+                momentum_space.help
+            );
+        }
+    }
+
+    #[test]
     fn conflicts_and_global_inheritance_match_the_compiled_parser() {
         let reference = export().unwrap();
         let python = argument(&reference, "gammaLoop save standalone", "python");

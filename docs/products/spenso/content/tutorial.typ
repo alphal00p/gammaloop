@@ -5,7 +5,8 @@
 
 This tutorial performs one concrete tensor contraction in Rust. The example makes the tensor
 structure, dual index matching, storage, and numerical result visible—the same layers that a
-larger Spenso network coordinates automatically.
+larger Spenso network coordinates automatically. It uses a two-dimensional Euclidean
+representation as a small linear-algebra example; it is not a Lorentz-space physics example.
 
 == Prerequisites
 
@@ -31,14 +32,14 @@ use spenso::{
     contraction::Contract,
     structure::{
         OrderedStructure, PermutedStructure,
-        representation::{LibraryRep, Lorentz, RepName},
+        representation::{Euclidean, LibraryRep, RepName},
         slot::{DualSlotTo, IsAbstractSlot},
     },
     tensors::data::{DenseTensor, GetTensorData, SetTensorData},
 };
 
 fn main() {
-    let rep = Lorentz {};
+    let rep = Euclidean {};
     let left_free = rep.new_slot(2, 0).to_lib();
     let right_free = rep.new_slot(2, 2).to_lib();
     let shared = rep.new_slot(2, 10).to_lib();

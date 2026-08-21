@@ -4,7 +4,8 @@ use vakint::{EvaluationOrder, Vakint, VakintExpression, VakintSettings};
 fn main() {
     let settings = VakintSettings {
         allow_unknown_integrals: false,
-        evaluation_order: EvaluationOrder::alphaloop_only(),
+        // Matching and canonicalization do not need an evaluation backend.
+        evaluation_order: EvaluationOrder::empty(),
         ..VakintSettings::default()
     };
     let vakint = Vakint::new().unwrap();

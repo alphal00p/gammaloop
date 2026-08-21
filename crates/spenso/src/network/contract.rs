@@ -1,3 +1,10 @@
+//! Pair-selection policies for products inside a tensor network.
+//!
+//! These types are execution-time policies, not stored contraction plans. Each
+//! decision inspects the current operands, contracts a selected pair through
+//! [`crate::contraction::Contract`], and replaces those operands with the
+//! result.
+
 use std::{
     env,
     fmt::{Debug, Display},
@@ -46,19 +53,33 @@ fn max_lazy_tensor_sum_distributed_terms() -> usize {
 const PAIR_SCORE_ORDER_LEN: usize = 12;
 const PAIR_SCORE_ORDER_END: u8 = u8::MAX;
 
+/// Score component: number of free slots in the pair result.
 pub const PAIR_SCORE_RESULT_RANK: u8 = 0;
+/// Score component: estimated number of stored output components.
 pub const PAIR_SCORE_ESTIMATED_OUTPUT_ENTRIES: u8 = 1;
+/// Score component: full dense size of the pair result.
 pub const PAIR_SCORE_OUTPUT_DENSE_SIZE: u8 = 2;
+/// Score component: largest estimated products accumulated per output entry.
 pub const PAIR_SCORE_MAX_OUTPUT_ENTRY_PRODUCTS: u8 = 3;
+/// Score component preferring a pair with at least one simple numeric tensor.
 pub const PAIR_SCORE_SIMPLE_TENSOR_PENALTY: u8 = 4;
+/// Score component preferring a pair with an extractable common factor.
 pub const PAIR_SCORE_COMMON_FACTOR_PENALTY: u8 = 5;
+/// Score component estimating total symbolic byte/term multiplication work.
 pub const PAIR_SCORE_ATOM_WORK: u8 = 6;
+/// Score component estimating worst-case growth of one symbolic output entry.
 pub const PAIR_SCORE_MAX_ENTRY_GROWTH: u8 = 7;
+/// Score component: product of the operands' stored-entry counts.
 pub const PAIR_SCORE_ENTRY_WORK: u8 = 8;
+/// Score component preferring more matched slots as the final tie-breaker.
 pub const PAIR_SCORE_INVERSE_DEGREE: u8 = 9;
 
+/// Default upper bound for exact sparse-join estimation during pair scoring.
 pub const DEFAULT_EXACT_JOIN_LIMIT: usize = 20_000;
 
+/// Packs score-component identifiers in lexicographic comparison order.
+///
+/// Fill unused trailing positions with `u8::MAX`.
 pub const fn pack_pair_score_order(components: [u8; PAIR_SCORE_ORDER_LEN]) -> u128 {
     let mut packed = 0u128;
     let mut index = 0;
@@ -69,6 +90,8 @@ pub const fn pack_pair_score_order(components: [u8; PAIR_SCORE_ORDER_LEN]) -> u1
     packed
 }
 
+/// Reports whether a packed score order contains `component` before its first
+/// `u8::MAX` terminator.
 pub const fn pair_score_order_contains(score_order: u128, component: u8) -> bool {
     let mut index = 0;
     while index < PAIR_SCORE_ORDER_LEN {
@@ -94,6 +117,8 @@ const fn pair_score_order_needs_output_dense_size(score_order: u128) -> bool {
         || pair_score_order_contains(score_order, PAIR_SCORE_OUTPUT_DENSE_SIZE)
 }
 
+/// Default score order: result rank, sparse/dense output estimates, symbolic
+/// work estimates, and contraction degree.
 pub const PAIR_SCORE_SPARSE_ATOM_AWARE: u128 = pack_pair_score_order([
     PAIR_SCORE_RESULT_RANK,
     PAIR_SCORE_ESTIMATED_OUTPUT_ENTRIES,
@@ -109,6 +134,7 @@ pub const PAIR_SCORE_SPARSE_ATOM_AWARE: u128 = pack_pair_score_order([
     PAIR_SCORE_ORDER_END,
 ]);
 
+/// Score order for symbolic work without sparse-output estimation.
 pub const PAIR_SCORE_ATOM_AWARE: u128 = pack_pair_score_order([
     PAIR_SCORE_RESULT_RANK,
     PAIR_SCORE_ATOM_WORK,
@@ -124,6 +150,7 @@ pub const PAIR_SCORE_ATOM_AWARE: u128 = pack_pair_score_order([
     PAIR_SCORE_ORDER_END,
 ]);
 
+/// Score order using result rank followed only by contraction degree.
 pub const PAIR_SCORE_RESULT_RANK_ONLY: u128 = pack_pair_score_order([
     PAIR_SCORE_RESULT_RANK,
     PAIR_SCORE_INVERSE_DEGREE,
@@ -139,6 +166,7 @@ pub const PAIR_SCORE_RESULT_RANK_ONLY: u128 = pack_pair_score_order([
     PAIR_SCORE_ORDER_END,
 ]);
 
+/// Score order using stored-entry work and symbolic work after result rank.
 pub const PAIR_SCORE_ENTRY_AWARE: u128 = pack_pair_score_order([
     PAIR_SCORE_RESULT_RANK,
     PAIR_SCORE_ENTRY_WORK,
@@ -239,6 +267,17 @@ impl ResultRankPairScore {
     }
 }
 
+/// Repeatedly contracts the pair with the fewest matching slot pairs.
+///
+/// Pairs with at least one structural match are preferred to exterior products.
+/// When no matched pair remains, disjoint factors are combined by exterior
+/// product. Each selection scans the current operand pairs, so pair selection
+/// alone is quadratic in the number of remaining tensor operands.
+///
+/// `CStrat` is forwarded to direct [`Contract`] implementations and `COpt`
+/// selects optional post-contraction component optimization.
+///
+/// [`Contract`]: crate::contraction::Contract
 pub struct SmallestDegree<CStrat = (), COpt = ()> {
     phantom: std::marker::PhantomData<(CStrat, COpt)>,
 }
@@ -251,10 +290,28 @@ impl<CStrat, COpt> Default for SmallestDegree<CStrat, COpt> {
     }
 }
 
+/// Incremental [`SmallestDegree`] policy performing at most `N` pair rewrites
+/// per ready-product invocation.
+///
+/// This supports in-place partial graph rewriting. It is useful with an
+/// execution strategy that repeatedly revisits the updated product; it is not a
+/// stored plan or a global limit on a complete network execution.
 pub struct SmallestDegreeIter<const N: usize, CStrat = (), COpt = ()> {
     phantom: std::marker::PhantomData<(CStrat, COpt)>,
 }
 
+/// Repeatedly chooses the pair with the smallest lexicographic score.
+///
+/// `SCORE_ORDER` packs the score components in comparison order. Structural
+/// result rank is normally first; the supplied presets can then account for
+/// estimated sparse output, dense size, symbolic expression work, and operand
+/// degree. `EXACT_JOIN_LIMIT` bounds exact sparse-join estimation, not the
+/// contraction itself. The strategy first consumes structurally matched pairs,
+/// then combines remaining disjoint factors by exterior product.
+///
+/// Pair selection scans all current operand pairs and may additionally inspect
+/// tensor storage profiles. It recomputes this score after every contraction;
+/// no reusable plan is retained.
 pub struct MinResultRankWith<
     const SCORE_ORDER: u128,
     const EXACT_JOIN_LIMIT: usize = DEFAULT_EXACT_JOIN_LIMIT,
@@ -264,6 +321,8 @@ pub struct MinResultRankWith<
     phantom: std::marker::PhantomData<(CStrat, COpt)>,
 }
 
+/// Sparse- and symbolic-work-aware minimum-result-rank policy using the default
+/// exact-join limit.
 pub type MinResultRank<COpt = ()> =
     MinResultRankWith<PAIR_SCORE_SPARSE_ATOM_AWARE, DEFAULT_EXACT_JOIN_LIMIT, (), COpt>;
 
@@ -277,6 +336,11 @@ impl<const SCORE_ORDER: u128, const EXACT_JOIN_LIMIT: usize, CStrat, COpt> Defau
     }
 }
 
+/// Contracts scalar factors but leaves distinct nonscalar tensor factors
+/// uncontracted.
+///
+/// Use this for scalar-only execution stages. Extracting one final result still
+/// fails if a product contains multiple nonscalar operands afterward.
 pub struct ContractScalars<CStrat = ()> {
     phantom: std::marker::PhantomData<CStrat>,
 }
@@ -289,19 +353,40 @@ impl<CStrat> Default for ContractScalars<CStrat> {
     }
 }
 
+/// Incremental policy that contracts one minimum-degree pair per invocation.
+///
+/// `D` enables pair diagnostics on the legacy owned-product path. This policy
+/// supports partial graph rewriting and is intended for execution strategies
+/// that revisit the remaining product.
 pub struct SingleSmallestDegree<const D: bool, CStrat = (), COpt = ()> {
     phantom: std::marker::PhantomData<(CStrat, COpt)>,
 }
 
+/// Incremental policy that contracts one maximum-degree pair per invocation.
+///
+/// `D` enables pair diagnostics on the legacy owned-product path.
 pub struct SingleLargestDegree<const D: bool, CStrat = (), COpt = ()> {
     phantom: std::marker::PhantomData<(CStrat, COpt)>,
 }
 
+/// Names the two complete built-in pair-selection families.
+///
+/// [`Network::execute`](super::Network::execute) selects a concrete strategy by
+/// generic type; this descriptive enum is not itself passed to that method and
+/// does not contain a stored plan.
 pub enum ContractionMode {
+    /// Minimize the number of matched slots contracted in the next pair.
     SmallestDegree,
+    /// Minimize the configured result-rank score.
     MinResultRank,
 }
 
+/// Selects and evaluates tensor pairs inside one ready product operation.
+///
+/// The execution strategy owns graph scheduling. A contraction strategy sees
+/// the current ready operation and mutable value store, and returns the leaf
+/// that replaces that operation. Implementations may support incremental graph
+/// rewriting, but they do not own a persistent plan.
 pub trait ContractionStrategy<E, L, K, FK, Aind>: Sized {
     /// Whether this strategy can incrementally rewrite a ready product subgraph in place.
     const SUPPORTS_PARTIAL_GRAPH_REWRITE: bool = false;
@@ -350,22 +435,33 @@ pub trait ContractionStrategy<E, L, K, FK, Aind>: Sized {
 }
 
 #[derive(Debug, Clone)]
+/// One current operand in a ready product contraction.
+///
+/// `source` identifies an original or incrementally rewritten graph node when
+/// one exists. A materialized intermediate may have no source node yet.
 pub struct ProductOperand<K, Aind> {
     leaf: NetworkLeaf<K, Aind>,
     source: Option<NodeIndex>,
 }
 
 impl<K, Aind> ProductOperand<K, Aind> {
+    /// Returns the leaf value represented by this operand.
     pub fn leaf(&self) -> &NetworkLeaf<K, Aind> {
         &self.leaf
     }
 
+    /// Returns the graph node from which this operand came, if retained.
     pub fn source(&self) -> Option<NodeIndex> {
         self.source
     }
 }
 
 #[derive(Debug, Clone)]
+/// Transient operands for one ready product operation.
+///
+/// A contraction strategy constructs this from the current graph, rewrites its
+/// operands as pairs are evaluated, and then returns a replacement leaf. It is
+/// deliberately not a reusable contraction plan.
 pub struct ProductContraction<K, Aind> {
     operands: Vec<ProductOperand<K, Aind>>,
 }
@@ -389,6 +485,12 @@ impl ProductRewriteProgress {
 }
 
 impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
+    /// Captures the leaf children of a ready product operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `operation` is not a product or one of its children
+    /// is still an unevaluated operation node.
     #[allow(clippy::result_large_err)]
     pub fn from_operation<FK>(
         graph: &NetworkGraph<K, FK, Aind>,
@@ -424,6 +526,7 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Ok(Self { operands })
     }
 
+    /// Returns the product operands in their current rewrite order.
     pub fn operands(&self) -> &[ProductOperand<K, Aind>] {
         &self.operands
     }
@@ -1210,6 +1313,17 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         }
     }
 
+    /// Contracts operands `left` and `right` and replaces them with their
+    /// result.
+    ///
+    /// Library operands are materialized first. Direct contraction follows the
+    /// free/dummy matching and output-coordinate contract of
+    /// [`crate::contraction::Contract`].
+    ///
+    /// # Errors
+    ///
+    /// Propagates library resolution, structural, coefficient, and contraction
+    /// failures. A scalar operand at either requested position is rejected.
     #[allow(clippy::result_large_err)]
     pub fn contract_pair<LT, T, L, Sc, CStrat, COpt, FK, Store>(
         &mut self,
@@ -1380,6 +1494,12 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Ok(())
     }
 
+    /// Selects and contracts one pair using the configured degree direction.
+    ///
+    /// Returns `false` when fewer than two tensor operands remain. In minimum
+    /// mode, matched pairs are preferred and an exterior product is used only
+    /// when no pair shares a slot. Maximum mode follows the raw score ordering,
+    /// in which a zero-degree exterior pair has the sentinel maximum score.
     #[allow(clippy::result_large_err)]
     pub fn contract_one_by_degree<
         const DEBUG: bool,
@@ -1647,6 +1767,11 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         Ok(true)
     }
 
+    /// Returns the next minimum- or maximum-degree tensor pair without
+    /// contracting it.
+    ///
+    /// A zero-degree exterior-product pair is considered only when no positive
+    /// matching degree is available in minimum mode.
     pub fn best_degree_pair<Store, const LARGEST: bool>(
         &self,
         executor: &Store,
@@ -1765,6 +1890,10 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         best.map(|(left, right, degree, _)| (left, right, degree))
     }
 
+    /// Returns the matched pair with the smallest configured result score.
+    ///
+    /// Exterior-product pairs are excluded; use
+    /// [`Self::best_exterior_result_rank_pair`] for that phase.
     pub fn best_result_rank_pair<
         Sc,
         Store,
@@ -1784,6 +1913,8 @@ impl<K, Aind: AbsInd> ProductContraction<K, Aind> {
         )
     }
 
+    /// Returns the exterior-product pair with the smallest configured result
+    /// score.
     pub fn best_exterior_result_rank_pair<
         Sc,
         Store,

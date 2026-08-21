@@ -34,7 +34,7 @@ pub struct Inspect {
         completion_integrand_selector(crate::completion::SelectorKind::Any)
     )]
     pub integrand_name: Option<String>,
-    /// The point to inspect (x y) or (p0 px ...)
+    /// Integration coordinates, or flattened loop momenta `(px, py, pz) ...` with `--momentum-space`
     #[arg(
         short = 'x',
         long = "point",
@@ -45,11 +45,11 @@ pub struct Inspect {
     )]
     pub point: Vec<f64>,
 
-    /// Evaluate in f128 precision
+    /// Force arbitrary-precision (Arb) internal evaluation; output remains f64
     #[arg(short = 'f', long = "use_arb_prec")]
     pub use_arb_prec: bool,
 
-    /// Interpret point as momentum-space coordinates
+    /// Interpret `--point` as spatial loop-momentum triplets; energy components are not accepted
     #[arg(short = 'm', long)]
     pub momentum_space: bool,
 

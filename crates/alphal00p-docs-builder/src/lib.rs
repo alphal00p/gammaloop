@@ -8320,35 +8320,41 @@ fn render_cli_command_page(
     command: &CliCommand,
 ) -> String {
     let command_anchor = generated_anchor("command", &command.path);
-    let (workflow_route, workflow_title) = if command.path.starts_with("gammaLoop generate")
-        || command.path == "gammaLoop import graphs"
-        || command.path.starts_with("gammaLoop save dot")
-        || command.path.starts_with("gammaLoop save uv-forest")
-    {
-        ("guides/process-generation/", "Process generation workflow")
-    } else if command.path.starts_with("gammaLoop integrate")
-        || command.path.starts_with("gammaLoop evaluate")
-        || command.path.starts_with("gammaLoop inspect")
-        || command.path.starts_with("gammaLoop display integrand")
-        || command.path.starts_with("gammaLoop display quantities")
-        || command.path.starts_with("gammaLoop display observables")
-        || command.path.starts_with("gammaLoop display selectors")
-    {
-        (
-            "guides/events-and-observables/",
-            "Events and observables workflow",
-        )
-    } else if command.path.starts_with("gammaLoop set")
-        || command.path.starts_with("gammaLoop display settings")
-        || command.path.starts_with("gammaLoop approach")
-        || command.path.starts_with("gammaLoop bench")
-        || command.path.starts_with("gammaLoop profile")
-        || command.path.starts_with("gammaLoop batch")
-    {
-        ("guides/diagnostics/", "Configuration and diagnostics guide")
-    } else {
-        ("tutorial/", "Create your first state")
-    };
+    let (workflow_route, workflow_title) =
+        if command.path == "gammaLoop inspect" || command.path == "gammaLoop approach" {
+            (
+                "reference/interfaces/#sample-evaluation-contract",
+                "Sample evaluation contract",
+            )
+        } else if command.path.starts_with("gammaLoop generate")
+            || command.path == "gammaLoop import graphs"
+            || command.path.starts_with("gammaLoop save dot")
+            || command.path.starts_with("gammaLoop save uv-forest")
+        {
+            ("guides/process-generation/", "Process generation workflow")
+        } else if command.path.starts_with("gammaLoop integrate")
+            || command.path.starts_with("gammaLoop evaluate")
+            || command.path.starts_with("gammaLoop inspect")
+            || command.path.starts_with("gammaLoop display integrand")
+            || command.path.starts_with("gammaLoop display quantities")
+            || command.path.starts_with("gammaLoop display observables")
+            || command.path.starts_with("gammaLoop display selectors")
+        {
+            (
+                "guides/events-and-observables/",
+                "Events and observables workflow",
+            )
+        } else if command.path.starts_with("gammaLoop set")
+            || command.path.starts_with("gammaLoop display settings")
+            || command.path.starts_with("gammaLoop approach")
+            || command.path.starts_with("gammaLoop bench")
+            || command.path.starts_with("gammaLoop profile")
+            || command.path.starts_with("gammaLoop batch")
+        {
+            ("guides/diagnostics/", "Configuration and diagnostics guide")
+        } else {
+            ("tutorial/", "Create your first state")
+        };
     let mut body = format!(
         "<span id=\"{}\" aria-hidden=\"true\"></span><p class=\"reference-context\"><a href=\"reference/cli/\">CLI reference</a> <span aria-hidden=\"true\">/</span> Command</p><nav class=\"reference-guide-links\" aria-label=\"CLI reference navigation\"><a href=\"reference/cli/\">All commands</a><a href=\"reference/cli/settings/\">Settings namespaces</a><a href=\"{}\">{}</a></nav>",
         escape_html(&command_anchor),

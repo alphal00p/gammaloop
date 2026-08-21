@@ -471,13 +471,13 @@ mod tests {
 
     #[test]
     fn approach_command_parses_momentum_space_selectors() {
-        let command: Commands = "approach -p #0 -i default -x 1.0,-7.0e-2,0.0,1.0 --approach-axis=-1.0e-3,0.0,0.0,1.0 --n-points 1 --linear --n-cores 1 --momentum-space --graph-id 2 --orientation-id 1"
+        let command: Commands = "approach -p #0 -i default -x 1.0,-7.0e-2,0.0,-0.2,0.3,0.4 --approach-axis=-1.0e-3,0.0,0.0,0.0,0.0,0.0 --n-points 1 --linear --n-cores 1 --momentum-space --graph-id 2 --orientation-id 1"
             .parse()
             .unwrap();
         match command {
             Commands::Approach(approach) => {
-                assert_eq!(approach.point, vec![1.0, -7.0e-2, 0.0, 1.0]);
-                assert_eq!(approach.approach_axes, vec!["-1.0e-3,0.0,0.0,1.0"]);
+                assert_eq!(approach.point, vec![1.0, -7.0e-2, 0.0, -0.2, 0.3, 0.4]);
+                assert_eq!(approach.approach_axes, vec!["-1.0e-3,0.0,0.0,0.0,0.0,0.0"]);
                 assert!(approach.momentum_space);
                 assert!(approach.linear);
                 assert_eq!(approach.graph_id, Some(2));
