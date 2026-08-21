@@ -726,6 +726,264 @@
     "kind": "developer current implemented · reviewed 2026-08-18 heading"
   },
   {
+    "title": "Idenso FORM color and Dirac source map",
+    "summary": "FORM sources, Symbolica and Spenso target patterns, implementation mappings, historical validation commands, and unresolved provenance retained behind the concise public convention contract.",
+    "href": "architecture/idenso-form-color-dirac-source-map/",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21"
+  },
+  {
+    "title": "FORM color and Dirac rules",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#form-color-and-dirac-rules",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Source Inventory",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#source-inventory",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Notational Conventions",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#notational-conventions",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Gamma-algebra replacement rules",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#gamma-algebra-replacement-rules",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Overview",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#overview",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "G1. Gamma-chain product and joining",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#g1-gamma-chain-product-and-joining",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "G2. Chain orientation and reversal",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#g2-chain-orientation-and-reversal",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "G3. Metric contraction in gamma chains",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#g3-metric-contraction-in-gamma-chains",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "G4. Trace closure with explicit bispinor contraction",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#g4-trace-closure-with-explicit-bispinor-contraction",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "G5. Odd and even trace recursion",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#g5-odd-and-even-trace-recursion",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "G6. Four-dimensional Chisholm reductions",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#g6-four-dimensional-chisholm-reductions",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "G7. Gamma-five and epsilon rules",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#g7-gamma-five-and-epsilon-rules",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Color-algebra replacement rules from color.h",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#color-algebra-replacement-rules-from-color-h",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Overview",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#overview-2",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "C1. Open color-line joining",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#c1-open-color-line-joining",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "C2. Trace closure and trace normalization",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#c2-trace-closure-and-trace-normalization",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "C3. Fundamental Casimir and adjacent contractions",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#c3-fundamental-casimir-and-adjacent-contractions",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "C4. Fundamental Fierz generator contraction",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#c4-fundamental-fierz-generator-contraction",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "C5. Structure-constant loop contractions",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#c5-structure-constant-loop-contractions",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "C6. Mixed trace–structure contraction",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#c6-mixed-trace-structure-contraction",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "C7. Symmetric invariant contractions",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#c7-symmetric-invariant-contractions",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "C8. simpli and generalized Jacobi strategy",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#c8-simpli-and-generalized-jacobi-strategy",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Symbolica and Spenso rewrite patterns",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#symbolica-and-spenso-rewrite-patterns",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Rust pattern construction guidelines",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#rust-pattern-construction-guidelines",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Gamma collection patterns",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#gamma-collection-patterns",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Gamma terminal and trace patterns",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#gamma-terminal-and-trace-patterns",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Gamma Chisholm and trace recursion builders",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#gamma-chisholm-and-trace-recursion-builders",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Color collection patterns",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#color-collection-patterns",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Color trace and Casimir patterns",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#color-trace-and-casimir-patterns",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Color structure-constant and invariant patterns",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#color-structure-constant-and-invariant-patterns",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "FORM short-circuit rewrite order",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#form-short-circuit-rewrite-order",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "FORM-side test cases in Symbolica/Spenso syntax",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#form-side-test-cases-in-symbolica-spenso-syntax",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Gamma trace tests",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#gamma-trace-tests",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Compact color-rule tests",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#compact-color-rule-tests",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "FORM color.tar.gz example families",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#form-color-tar-gz-example-families",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Implementation caveats",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#implementation-caveats",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Appendix: source map",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#appendix-source-map",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Appendix: validation",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#appendix-validation",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Typst compile result",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#typst-compile-result",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Static checks",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#static-checks",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Unresolved uncertainties",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#unresolved-uncertainties",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "References",
+    "summary": "Idenso FORM color and Dirac source map",
+    "href": "architecture/idenso-form-color-dirac-source-map/#references",
+    "kind": "developer proposal mixed shipped evidence and target specification · reviewed 2026-08-21 heading"
+  },
+  {
     "title": "Linnet implementation architecture",
     "summary": "Half-edge storage, subgraph views, mutation and DOT flows, feature and serialization boundaries, invariants, and verification.",
     "href": "architecture/linnet-architecture/",
@@ -2212,5 +2470,335 @@
     "summary": "Documentation quality review and improvement plan",
     "href": "architecture/documentation-improvement-plan/#remaining-maintainer-decisions",
     "kind": "developer proposal in progress heading"
+  },
+  {
+    "title": "Manual content debt register",
+    "summary": "A maintained inventory of audience, scientific-explanation, workflow, terminology, result-interpretation, and product-handoff gaps in the authored manuals.",
+    "href": "architecture/manual-content-debt-register/",
+    "kind": "developer proposal open · reviewed 2026-08-21"
+  },
+  {
+    "title": "Purpose",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#purpose",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Audience contract",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#audience-contract",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Audit summary",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#audit-summary",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Maintenance contract",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#maintenance-contract",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "GammaLoop manual",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#gammaloop-manual",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "MANUAL-101 · Physics scope and Local Unitarity contract",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#manual-101-physics-scope-and-local-unitarity-contract",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "MANUAL-102 · Scientific conventions and GammaLoop glossary",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#manual-102-scientific-conventions-and-gammaloop-glossary",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "MANUAL-103 · Result interpretation and scientific validation",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#manual-103-result-interpretation-and-scientific-validation",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "MANUAL-104 · Public troubleshooting and companion-tool boundary",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#manual-104-public-troubleshooting-and-companion-tool-boundary",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Domain and graph manuals",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#domain-and-graph-manuals",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "MANUAL-201 · Vakint mathematical contract",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#manual-201-vakint-mathematical-contract",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "MANUAL-202 · Spenso physicist-to-type bridge",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#manual-202-spenso-physicist-to-type-bridge",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "MANUAL-203 · Idenso user contract versus implementation evidence",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#manual-203-idenso-user-contract-versus-implementation-evidence",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "MANUAL-204 · Linnest draw-first progression",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#manual-204-linnest-draw-first-progression",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "MANUAL-205 · Linnet physical cuts, flow, and mutation mappings",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#manual-205-linnet-physical-cuts-flow-and-mutation-mappings",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Cross-product findings",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#cross-product-findings",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "MANUAL-301 · Audience ladder and product handoffs",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#manual-301-audience-ladder-and-product-handoffs",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "MANUAL-302 · Canonical terminology ownership",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#manual-302-canonical-terminology-ownership",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Concrete findings already owned by the strategy register",
+    "summary": "Manual content debt register",
+    "href": "architecture/manual-content-debt-register/#concrete-findings-already-owned-by-the-strategy-register",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "API documentation debt register",
+    "summary": "A maintained inventory of inaccurate, incomplete, provisional, and example-deficient Rust and Python reference surfaces, with stable IDs and completion conditions.",
+    "href": "architecture/api-documentation-debt-register/",
+    "kind": "developer proposal open · reviewed 2026-08-21"
+  },
+  {
+    "title": "Purpose",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#purpose",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Maintenance contract",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#maintenance-contract",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Audit snapshot",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#audit-snapshot",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Native Rustdoc",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#native-rustdoc",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Python",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#python",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Integrity defects",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#integrity-defects",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-001 · GammaLoop sample coordinates and precision",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-001-gammaloop-sample-coordinates-and-precision",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-002 · Incorrect Linnet Rustdoc claims",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-002-incorrect-linnet-rustdoc-claims",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-003 · Contradictory Spynso network examples",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-003-contradictory-spynso-network-examples",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-004 · Idenso identity claims require scientific review",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-004-idenso-identity-claims-require-scientific-review",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-005 · Vakint reference examples and public terminology",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-005-vakint-reference-examples-and-public-terminology",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-006 · Spenso parallel state and error-label integrity",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-006-spenso-parallel-state-and-error-label-integrity",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-007 · GammaLoop accepted-but-unsupported calculation options",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-007-gammaloop-accepted-but-unsupported-calculation-options",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-008 · Spenso example isolation under restricted Symbolica",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-008-spenso-example-isolation-under-restricted-symbolica",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Native Rustdoc gaps",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#native-rustdoc-gaps",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-101 · GammaLoop scientific-core contract",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-101-gammaloop-scientific-core-contract",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-102 · GammaLoop Rust facade workflow",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-102-gammaloop-rust-facade-workflow",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-103 · Vakint native engine and result model",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-103-vakint-native-engine-and-result-model",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-104 · Spenso HEP conventions",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-104-spenso-hep-conventions",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-105 · Spenso structure and network invariants",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-105-spenso-structure-and-network-invariants",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-106 · Idenso rewrite-stage contracts",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-106-idenso-rewrite-stage-contracts",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-107 · Linnet behavioral Rust examples",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-107-linnet-behavioral-rust-examples",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-108 · Linnest Rust support boundary",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-108-linnest-rust-support-boundary",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Python reference gaps",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#python-reference-gaps",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-201 · GammaLoop integration-result boundary",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-201-gammaloop-integration-result-boundary",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-202 · GammaLoop evaluation and event journeys",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-202-gammaloop-evaluation-and-event-journeys",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-203 · Linnet Python algorithms and proxies",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-203-linnet-python-algorithms-and-proxies",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-204 · Spynso standalone examples and member semantics",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-204-spynso-standalone-examples-and-member-semantics",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-205 · Idenso Python transformation coverage",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-205-idenso-python-transformation-coverage",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-206 · Vakint Python journeys and failures",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-206-vakint-python-journeys-and-failures",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "Cross-reference infrastructure gaps",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#cross-reference-infrastructure-gaps",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-301 · Curated support boundaries",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-301-curated-support-boundaries",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-302 · Structured, verified examples",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-302-structured-verified-examples",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
+  },
+  {
+    "title": "APIDOC-303 · Semantic completeness gate",
+    "summary": "API documentation debt register",
+    "href": "architecture/api-documentation-debt-register/#apidoc-303-semantic-completeness-gate",
+    "kind": "developer proposal open · reviewed 2026-08-21 heading"
   }
 ]

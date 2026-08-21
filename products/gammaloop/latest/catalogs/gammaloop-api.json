@@ -50,7 +50,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Selects the state folder, boot commands, settings overrides, logging, and read-only mode."
+              "body": "Programmatic startup options for an embedded GammaLoop session.\n\nThe resolved state folder is the explicit `state_folder`, otherwise the folder named by the\nboot card, otherwise `./gammaloop_state`. A saved, manifested folder is deserialized; a missing,\nempty, or unmanifested folder starts a blank in-memory state. Loading a blank state does not\ncreate or save the folder by itself.\n\n`read_only_state` prevents GammaLoop-managed writes to the active state tree, not arbitrary\nfilesystem writes: explicit exports elsewhere and external processes such as the `!` shell\ncommand remain outside that boundary. `clean_state` removes the resolved path and therefore\ncannot be combined with read-only mode."
             },
             "summary": "Selects the state folder, boot commands, settings overrides, logging, and read-only mode.",
             "signature": "pub struct StateLoadOption {}",
@@ -191,7 +191,7 @@
             "source": {
               "identifier": "gammaloop_api::StateLoadOption",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 470,
+              "line": 526,
               "column": 1
             }
           },
@@ -204,7 +204,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Owns the physics state, run history, settings, and session state returned by the loading facade."
+              "body": "Owned state and settings produced by [`StateLoadOption::load`].\n\nThis value is the persistence boundary for an embedded session. It owns the mutable state and\nreplay history, but neither dropping it nor dropping a [`CliSession`]\nautomatically saves them. Inspect `cli_settings.session.startup_warnings` after loading: a boot\ncard that disagrees with a saved state's frozen settings can force the session into read-only\nmode to protect reproducibility."
             },
             "summary": "Owns the physics state, run history, settings, and session state returned by the loading facade.",
             "signature": "pub struct LoadedState {}",
@@ -290,7 +290,7 @@
             "source": {
               "identifier": "gammaloop_api::LoadedState",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 495,
+              "line": 558,
               "column": 1
             }
           },
@@ -303,7 +303,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Loads the selected state and returns the supported session boundary."
+              "body": "Resolve, initialize, and load an embedded GammaLoop session.\n\nFor an existing manifested state this restores the saved model, processes, settings, run\nhistory, and integrand backends. `model_file` is an override only on that saved-state path.\nFor a missing or unmanifested path the method creates a blank state in memory instead.\nWhen supplied, the boot run history and settings overrides are applied before this method\nreturns, so loading can mutate the domain state and can perform command-specific external\nwrites.\n\nThis method initializes process-global GammaLoop/Symbolica services and tracing. It never\nautomatically persists the returned state. It fails when the state or settings cannot be\nread or validated, startup initialization fails, a boot command fails or requests exit, or\nthe requested clean/read-only combination is inconsistent."
             },
             "summary": "Loads the selected state and returns the supported session boundary.",
             "signature": "fn load(self) -> Result < LoadedState >",
@@ -333,7 +333,7 @@
             "source": {
               "identifier": "gammaloop_api::StateLoadOption::load",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 554,
+              "line": 635,
               "column": 1
             }
           },
@@ -346,7 +346,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Borrows a loaded state as a command session while keeping state ownership explicit."
+              "body": "Borrow the state, history, and effective settings as one command session.\n\nThe returned session holds mutable borrows of this bundle. End its lexical scope (or drop\nit) before reading the fields of `LoadedState` directly. Commands update these owned values;\nthey do not create a second state or save on drop."
             },
             "summary": "Borrows a loaded state as a command session while keeping state ownership explicit.",
             "signature": "fn cli_session(& mut self) -> CliSession < '_ >",
@@ -376,7 +376,7 @@
             "source": {
               "identifier": "gammaloop_api::LoadedState::cli_session",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 511,
+              "line": 579,
               "column": 1
             }
           },
@@ -389,7 +389,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Borrows a loaded state's coordinated state, history, settings, and transient session data."
+              "body": "Mutably borrowed view used to execute GammaLoop commands.\n\nA session updates its caller-owned [`State`], [`RunHistory`], and effective settings in place.\nIt may also write files according to the selected command. Read-only mode prevents\nGammaLoop-managed writes into the active state tree, but does not constrain explicit exports or\nexternal processes such as the `!` shell command."
             },
             "summary": "Borrows a loaded state's coordinated state, history, settings, and transient session data.",
             "signature": "pub struct CliSession < 'a > {}",
@@ -408,7 +408,7 @@
             "source": {
               "identifier": "gammaloop_api::session::CliSession",
               "file": "crates/gammaloop-api/src/session.rs",
-              "line": 93,
+              "line": 109,
               "column": 1
             }
           },
@@ -421,7 +421,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Runs one command through the same stateful execution path used by the CLI and Python facade."
+              "body": "Prepare and execute one command against the borrowed state.\n\nOrdinary successful commands are normalized and appended to the replayable run history;\ncommand-block definition controls have specialized recording behavior. A command can mutate\nthe state and settings or write its requested outputs before returning. Inspect both\n[`CommandExecution::flow`] and [`CommandExecution::output`]: save/quit requests use\n[`ControlFlow::Break`], while only evaluation and integration currently return structured\noutput.\n\nErrors include parse/preparation failures, invalid state or settings, unavailable backends,\nnumerical command failures, and forbidden writes into a read-only state tree. An error does\nnot imply that every command-specific external effect was rolled back."
             },
             "summary": "Runs one command through the same stateful execution path used by the CLI and Python facade.",
             "signature": "fn execute_command(& mut self, command : CommandHistory) -> Result <\nCommandExecution >",
@@ -458,7 +458,7 @@
             "source": {
               "identifier": "gammaloop_api::session::CliSession::execute_command",
               "file": "crates/gammaloop-api/src/session.rs",
-              "line": 118,
+              "line": 151,
               "column": 1
             }
           },
@@ -1613,7 +1613,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Selects an integrand, coordinates, weights, discrete dimensions, and optional momentum-space channels for a batch."
+              "body": "Evaluate one or more integrand inputs through the ordinary `f64` result boundary.\n\nEach row of [`Self::points`] has one of two layouts:\n\n- with [`Self::momentum_space`] set to `false`, the row contains integration-space\ncoordinates and must have the dimension selected by the integrand and\n[`Self::discrete_dims`];\n- with [`Self::momentum_space`] set to `true`, the row contains exactly one\n`(px, py, pz)` triplet per independent loop momentum. The flattened order is\n`[k1x, k1y, k1z, k2x, k2y, k2z, ...]`. Energies and external momenta are not\ninputs to this interface.\n\nA momentum-space row whose length is not a multiple of three is rejected before\nevaluation. The selected integrand, graph, or graph group determines the required\nnumber of loop momenta and rejects the wrong number of complete triplets.\n\n[`Self::use_arb_prec`] is a legacy compatibility flag: it selects the configured\n`f128` stability level, falling back to arbitrary precision only when no `f128`\nlevel exists. It does not change this type's `f64` output contract. Use\n[`EvaluateSamplesPrecise`] when the caller must retain an `f64`, `f128`, or\narbitrary-precision result.\n\nThe [GammaLoop sample-evaluation contract](https://alphal00p.github.io/gammaloop/products/gammaloop/latest/reference/interfaces/#sample-evaluation-contract)\nconnects this request to the CLI and Python interfaces and to the maintained\nchecked example.\n\n# Example\n\n```rust\nuse gammaloop_api::commands::evaluate_samples::EvaluateSamples;\nuse ndarray::arr2;\n\nlet loop_momenta = arr2(&[[\n0.11, -0.07, 0.19, // k1 = (px, py, pz)\n-0.13, 0.05, 0.29, // k2 = (px, py, pz)\n]]);\nlet request = EvaluateSamples {\nprocess_id: Some(0),\nintegrand_name: None,\nuse_arb_prec: true,\nminimal_output: true,\nreturn_generated_events: None,\nmomentum_space: true,\npoints: loop_momenta.view(),\nintegrator_weights: None,\ndiscrete_dims: None,\ngraph_names: None,\norientations: None,\n};\n\nassert_eq!(request.points.ncols(), 2 * 3);\nassert!(request.momentum_space);\n```"
             },
             "summary": "Selects an integrand, coordinates, weights, discrete dimensions, and optional momentum-space channels for a batch.",
             "signature": "pub struct EvaluateSamples < 'a > {}",
@@ -1622,6 +1622,11 @@
             "params": [],
             "returns": null,
             "examples": [
+              {
+                "title": "Example 1",
+                "language": "rust",
+                "code": "use gammaloop_api::commands::evaluate_samples::EvaluateSamples;\nuse ndarray::arr2;\n\nlet loop_momenta = arr2(&[[\n0.11, -0.07, 0.19, // k1 = (px, py, pz)\n-0.13, 0.05, 0.29, // k2 = (px, py, pz)\n]]);\nlet request = EvaluateSamples {\nprocess_id: Some(0),\nintegrand_name: None,\nuse_arb_prec: true,\nminimal_output: true,\nreturn_generated_events: None,\nmomentum_space: true,\npoints: loop_momenta.view(),\nintegrator_weights: None,\ndiscrete_dims: None,\ngraph_names: None,\norientations: None,\n};\n\nassert_eq!(request.points.ncols(), 2 * 3);\nassert!(request.momentum_space);"
+              },
               {
                 "title": "Supported usage",
                 "language": "rust",
@@ -1656,7 +1661,7 @@
                 "kind": "field",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "Request arbitrary-precision internal evaluation."
+                  "body": "Select configured f128, or Arb when f128 is unavailable, instead of the full ladder."
                 },
                 "signature": "bool",
                 "default": null,
@@ -1689,7 +1694,7 @@
                 "kind": "field",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "Interpret point rows as flattened three-momenta instead of integration coordinates."
+                  "body": "Interpret rows as consecutive spatial loop-momentum `(px, py, pz)` triplets."
                 },
                 "signature": "bool",
                 "default": null,
@@ -1700,7 +1705,7 @@
                 "kind": "field",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "Two-dimensional coordinates with one sample per row."
+                  "body": "Two-dimensional inputs with one integration or momentum-space sample per row."
                 },
                 "signature": "ArrayView2 < 'a, f64 >",
                 "default": null,
@@ -1754,7 +1759,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::EvaluateSamples",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 23,
+              "line": 76,
               "column": 1
             }
           },
@@ -1767,7 +1772,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Runs a one-row request and returns the sample plus its observable snapshot through the f64 output contract."
+              "body": "Evaluate exactly one sample through the ordinary `f64` result boundary.\n\nThis rejects requests whose [`EvaluateSamples::points`] view does not have exactly\none row. See [`EvaluateSamples`] for the remaining contract."
             },
             "summary": "Runs a one-row request and returns the sample plus its observable snapshot through the f64 output contract.",
             "signature": "fn evaluate_sample < 'a >\n(state : & mut State, request : & EvaluateSamples < 'a > ,) -> Result <\nSingleSampleEvaluationResult >",
@@ -1804,7 +1809,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_sample",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 306,
+              "line": 380,
               "column": 1
             }
           },
@@ -1817,7 +1822,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Runs a batch request and returns per-sample values plus one batch-level observable snapshot."
+              "body": "Evaluate a batch through the ordinary `f64` result boundary.\n\nSee [`EvaluateSamples`] for the coordinate, validation, and precision contract."
             },
             "summary": "Runs a batch request and returns per-sample values plus one batch-level observable snapshot.",
             "signature": "fn evaluate_samples < 'a >\n(state : & mut State, request : & EvaluateSamples < 'a > ,) -> Result <\nBatchSampleEvaluationResult >",
@@ -1854,7 +1859,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_samples",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 299,
+              "line": 369,
               "column": 1
             }
           },
@@ -1867,7 +1872,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Accepts f64 integration or momentum-space coordinates while preserving the selected precision for internal computation and returned values."
+              "body": "Evaluate inputs while preserving the numeric type used by the final stability level.\n\nCoordinate layouts and validation are identical to [`EvaluateSamples`]. With\n[`Self::use_arb_prec`] set to `false`, the configured stability ladder may return\nan `f64`, `f128`, or arbitrary-precision result. Setting it to `true` selects the\nconfigured `f128` level, or arbitrary precision when `f128` is unavailable. Unlike\n[`EvaluateSamples`], this request retains that active result type."
             },
             "summary": "Accepts f64 integration or momentum-space coordinates while preserving the selected precision for internal computation and returned values.",
             "signature": "pub struct EvaluateSamplesPrecise < 'a > {}",
@@ -1910,7 +1915,7 @@
                 "kind": "field",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "Request arbitrary-precision internal evaluation."
+                  "body": "Select configured f128, or Arb when f128 is unavailable, instead of the full ladder."
                 },
                 "signature": "bool",
                 "default": null,
@@ -1943,7 +1948,7 @@
                 "kind": "field",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "Interpret point rows as flattened three-momenta instead of integration coordinates."
+                  "body": "Interpret rows as consecutive spatial loop-momentum `(px, py, pz)` triplets."
                 },
                 "signature": "bool",
                 "default": null,
@@ -1954,7 +1959,7 @@
                 "kind": "field",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "Two-dimensional coordinates with one sample per row."
+                  "body": "Two-dimensional inputs with one integration or momentum-space sample per row."
                 },
                 "signature": "ArrayView2 < 'a, f64 >",
                 "default": null,
@@ -2008,7 +2013,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::EvaluateSamplesPrecise",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 151,
+              "line": 211,
               "column": 1
             }
           },
@@ -2021,7 +2026,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Returns a single result in the active f64, f128, or arbitrary-precision representation."
+              "body": "Evaluate exactly one sample while retaining its active numeric result type.\n\nThis rejects requests whose [`EvaluateSamplesPrecise::points`] view does not have\nexactly one row. See [`EvaluateSamplesPrecise`] for the remaining contract."
             },
             "summary": "Returns a single result in the active f64, f128, or arbitrary-precision representation.",
             "signature": "fn evaluate_sample_precise < 'a >\n(state : & mut State, request : & EvaluateSamplesPrecise < 'a > ,) -> Result <\nPreciseSingleSampleEvaluationResult >",
@@ -2058,7 +2063,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_sample_precise",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 282,
+              "line": 349,
               "column": 1
             }
           },
@@ -2071,7 +2076,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Returns every sample in the active precision together with one batch-level observable snapshot."
+              "body": "Evaluate a batch while retaining each sample's active numeric result type.\n\nSee [`EvaluateSamplesPrecise`] for the coordinate, validation, and precision contract."
             },
             "summary": "Returns every sample in the active precision together with one batch-level observable snapshot.",
             "signature": "fn evaluate_samples_precise < 'a >\n(state : & mut State, request : & EvaluateSamplesPrecise < 'a > ,) -> Result <\nPreciseBatchSampleEvaluationResult >",
@@ -2108,7 +2113,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_samples_precise",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 275,
+              "line": 338,
               "column": 1
             }
           },
@@ -2336,7 +2341,7 @@
             "source": {
               "identifier": "gammaloop_api::CLISettings",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 290,
+              "line": 335,
               "column": 1
             }
           },
@@ -2424,7 +2429,7 @@
             "source": {
               "identifier": "gammaloop_api::CLISettings",
               "file": "crates/gammaloop-api/src/lib.rs",
-              "line": 290,
+              "line": 335,
               "column": 1
             }
           }

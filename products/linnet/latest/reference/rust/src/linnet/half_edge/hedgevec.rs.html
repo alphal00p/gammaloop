@@ -24,10 +24,10 @@
 <a href=#23 id=23 data-nosnippet>23</a></span><span class="doccomment">/// A specialized vector-like structure for storing edge data along with its
 <a href=#24 id=24 data-nosnippet>24</a>/// topological [`Involution`].
 <a href=#25 id=25 data-nosnippet>25</a>///
-<a href=#26 id=26 data-nosnippet>26</a>/// `SmartHedgeVec` is a core component for managing edges in a [`HedgeGraph`].
+<a href=#26 id=26 data-nosnippet>26</a>/// `SmartEdgeVec` is a core component for managing edges in a [`HedgeGraph`].
 <a href=#27 id=27 data-nosnippet>27</a>/// It stores the custom edge data (`T`) and the [`HedgePair`] for each edge.
-<a href=#28 id=28 data-nosnippet>28</a>/// The associated `Involution` within `SmartHedgeVec` then stores `EdgeIndex` values,
-<a href=#29 id=29 data-nosnippet>29</a>/// which point back into this `SmartHedgeVec`'s `data` vector. This design
+<a href=#28 id=28 data-nosnippet>28</a>/// The associated `Involution` within `SmartEdgeVec` then stores `EdgeIndex` values,
+<a href=#29 id=29 data-nosnippet>29</a>/// which point back into this `SmartEdgeVec`'s `data` vector. This design
 <a href=#30 id=30 data-nosnippet>30</a>/// separates the topological mapping of half-edges (handled by `Involution`)
 <a href=#31 id=31 data-nosnippet>31</a>/// from the storage of the actual edge data and pairing information.
 <a href=#32 id=32 data-nosnippet>32</a>///
@@ -42,7 +42,7 @@
 <a href=#41 id=41 data-nosnippet>41</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) data: EdgeVec&lt;(T, HedgePair)&gt;,
 <a href=#42 id=42 data-nosnippet>42</a>    <span class="doccomment">/// The [`Involution`] structure that manages the topological relationships of half-edges.
 <a href=#43 id=43 data-nosnippet>43</a>    /// In this context, the `Involution` stores `EdgeIndex` as its data, pointing back
-<a href=#44 id=44 data-nosnippet>44</a>    /// to the `data` vector of this `SmartHedgeVec`.
+<a href=#44 id=44 data-nosnippet>44</a>    /// to the `data` vector of this `SmartEdgeVec`.
 <a href=#45 id=45 data-nosnippet>45</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) involution: Involution,
 <a href=#46 id=46 data-nosnippet>46</a>}
 <a href=#47 id=47 data-nosnippet>47</a>

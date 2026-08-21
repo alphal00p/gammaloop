@@ -107,7 +107,7 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Return the Dirac adjoint of a Symbolica tensor expression.\n\nThis reverses the spinor chain and applies the representation-aware adjoint\nrules used by Idenso's Dirac algebra."
+              "body": "Return the Dirac adjoint of a Symbolica tensor expression.\n\nIdenso takes the symbolic complex conjugate, reverses compatible open bispinor chains, and\ninserts the registered `gamma0` factors required at dangling bispinor slots.\nThe input must use the representation-aware Spenso forms registered by `initialize()`.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import dirac_adjoint, initialize, list_dangling\n>>> from symbolica.community.spenso import Representation, TensorName\n>>> initialize()\n>>> initialize() is None  # Registration is idempotent.\nTrue\n>>> bispinor = Representation.bis(4)\n>>> spinor = TensorName(\"u\")(bispinor(\"alpha\")).to_expression()\n>>> adjoint = dirac_adjoint(spinor)\n>>> len(list_dangling(adjoint)) == 1\nTrue\n>>> \"gamma0\" in str(adjoint)\nTrue\n```\n\n# Arguments\n- `self_`: a Spenso-compatible tensor expression.\n\n# Returns\nThe representation-aware Dirac adjoint."
             },
             "summary": "Return the Dirac adjoint of a Symbolica tensor expression.",
             "signature": "def dirac_adjoint(self_: Expression) -> Expression:",
@@ -136,9 +136,9 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Expands factorized terms containing Dirac bispinor indices.\n\nFinds and expands factorized expressions involving bispinor tensors and spinors,\nunfolding multiplicative structures into expanded sums for subsequent simplification.\nDoes not expand into explicit components but rather expands nested factorizations.\n\n**Factorization Expansion:**\n- `ψ(α) * (γ(μ,α,β) + σ(μ,α,β)) → ψ(α)*γ(μ,α,β) + ψ(α)*σ(μ,α,β)`\n- Nested products with bispinor indices get distributed\n- Parenthesized expressions are expanded algebraically\n- Prepares expressions for gamma matrix simplification\n\n\n# Arguments\n- `self_`: expression containing factorized terms with bispinor indices\n\n# Returns\nExpanded expression with factorizations unfolded."
+              "body": "Expand products around factors carrying registered bispinor indices.\n\n# Arguments\n- `self_`: a factorized Spenso-compatible expression.\n\n# Returns\nThe expression distributed around its bispinor-bearing factors. No explicit spinor\ncomponents are substituted.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import expand_bis, initialize\n>>> from symbolica.community.spenso import Representation, TensorName\n>>> initialize()\n>>> bispinor = Representation.bis(4)\n>>> alpha, beta = bispinor(\"alpha\"), bispinor(\"beta\")\n>>> u, v, w = TensorName(\"u\"), TensorName(\"v\"), TensorName(\"w\")\n>>> u_alpha = u(alpha).to_expression()\n>>> v_beta, w_beta = v(beta).to_expression(), w(beta).to_expression()\n>>> factorized = u_alpha * (v_beta + w_beta)\n>>> expand_bis(factorized) == u_alpha * v_beta + u_alpha * w_beta\nTrue\n```"
             },
-            "summary": "Expands factorized terms containing Dirac bispinor indices.",
+            "summary": "Expand products around factors carrying registered bispinor indices.",
             "signature": "def expand_bis(self_: Expression) -> Expression:",
             "since": null,
             "keywords": [],
@@ -149,7 +149,7 @@
             "source": {
               "identifier": "idenso-community::expand_bis",
               "file": "docs/api/python/idenso-community.pyi",
-              "line": 102,
+              "line": 125,
               "column": 1
             }
           },
@@ -165,9 +165,9 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Expands factorized terms containing SU(N) color indices.\n\nFinds and expands factorized expressions involving color tensors and fields,\nunfolding multiplicative structures into expanded sums for subsequent simplification.\nDoes not expand into explicit components but rather expands nested factorizations.\n\n**Factorization Expansion:**\n- `q(a) * (T(b,a,c) + S(b,a,c)) → q(a)*T(b,a,c) + q(a)*S(b,a,c)`\n- Nested products with color indices get distributed\n- Parenthesized expressions are expanded algebraically\n- Prepares expressions for color algebra simplification\n\n**Applications:**\n- Expanding factorized QCD expressions before simplification\n- Preparing for SU(N) algebra algorithms\n- Unfolding nested products in gauge theory calculations\n- Algebraic manipulation of color structures\n\n# Arguments\n- `self_`: expression containing factorized terms with color indices\n\n# Returns\nExpanded expression with factorizations unfolded."
+              "body": "Expand products around registered color factors.\n\nFundamental, antifundamental, adjoint, color-chain, color-trace, and supported invariant\nfactors form the selected sector. This only distributes the symbolic expression; use\n`simplify_color()` separately to apply SU(N) identities.\n\n# Arguments\n- `self_`: a factorized Spenso-compatible expression.\n\n# Returns\nThe expression distributed around its color-bearing factors.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import expand_color, initialize\n>>> from symbolica.community.spenso import Representation, TensorName\n>>> initialize()\n>>> adjoint, fundamental = Representation.coad(8), Representation.cof(3)\n>>> antifundamental = fundamental.dual()\n>>> generator = TensorName.t()\n>>> t_a = generator(\n...     adjoint(\"a\"), fundamental(\"i\"), antifundamental(\"j\")\n... ).to_expression()\n>>> t_b = generator(\n...     adjoint(\"b\"), fundamental(\"k\"), antifundamental(\"l\")\n... ).to_expression()\n>>> t_c = generator(\n...     adjoint(\"c\"), fundamental(\"m\"), antifundamental(\"n\")\n... ).to_expression()\n>>> factorized = t_a * (t_b + t_c)\n>>> expand_color(factorized) == t_a * t_b + t_a * t_c\nTrue\n```"
             },
-            "summary": "Expands factorized terms containing SU(N) color indices.",
+            "summary": "Expand products around registered color factors.",
             "signature": "def expand_color(self_: Expression) -> Expression:",
             "since": null,
             "keywords": [],
@@ -178,7 +178,7 @@
             "source": {
               "identifier": "idenso-community::expand_color",
               "file": "docs/api/python/idenso-community.pyi",
-              "line": 124,
+              "line": 152,
               "column": 1
             }
           },
@@ -194,9 +194,9 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Expands factorized terms containing metric tensors.\n\nFinds and expands factorized expressions involving metric tensors and related\ngeometric objects, unfolding multiplicative structures for subsequent simplification.\n\n# Arguments\n- `self_`: expression containing factorized metric terms\n\n# Returns\nThe expanded expression with metric factorizations unfolded."
+              "body": "Expand products around registered metric tensors.\n\nThis is a structural expansion only. It neither contracts the metrics nor substitutes a\ndimension or signature; call `simplify_metrics()` separately for supported contractions.\n\n# Arguments\n- `self_`: a factorized Spenso-compatible expression.\n\n# Returns\nThe expression distributed around its metric factors.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import expand_metrics, initialize\n>>> from symbolica.community.spenso import Representation, TensorName\n>>> initialize()\n>>> minkowski = Representation.mink(4)\n>>> metric = TensorName.g()\n>>> g_mn = metric(minkowski(\"mu\"), minkowski(\"nu\")).to_expression()\n>>> g_rs = metric(minkowski(\"rho\"), minkowski(\"sigma\")).to_expression()\n>>> g_ab = metric(minkowski(\"alpha\"), minkowski(\"beta\")).to_expression()\n>>> factorized = g_mn * (g_rs + g_ab)\n>>> expand_metrics(factorized) == g_mn * g_rs + g_mn * g_ab\nTrue\n```"
             },
-            "summary": "Expands factorized terms containing metric tensors.",
+            "summary": "Expand products around registered metric tensors.",
             "signature": "def expand_metrics(self_: Expression) -> Expression:",
             "since": null,
             "keywords": [],
@@ -207,7 +207,7 @@
             "source": {
               "identifier": "idenso-community::expand_metrics",
               "file": "docs/api/python/idenso-community.pyi",
-              "line": 151,
+              "line": 189,
               "column": 1
             }
           },
@@ -223,9 +223,9 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Expands factorized terms containing Minkowski spacetime indices.\n\nFinds and expands factorized expressions involving Minkowski tensors and vectors,\nunfolding multiplicative structures into expanded sums for subsequent simplification.\nDoes not expand into explicit components but rather expands nested factorizations.\n\n**Factorization Expansion:**\n- `A(μ) * (B(ν) + C(ν)) → A(μ)*B(ν) + A(μ)*C(ν)`\n- Nested products with Minkowski indices get distributed\n- Parenthesized expressions are expanded algebraically\n- Prepares expressions for metric simplification and contractions\n\n**Applications:**\n- Expanding factorized tensor expressions before simplification\n- Preparing for index contraction algorithms\n- Unfolding nested products in field theory calculations\n- Algebraic manipulation of relativistic expressions\n\n# Arguments\n- `self_`: expression containing factorized terms with Minkowski indices\n\n# Returns\nExpanded expression with factorizations unfolded.\n\n# Examples:\n```python\nimport symbolica as sp\nfrom symbolica.community.idenso import expand_mink\n\n# Expand factorized vector expression\np = sp.S('p')\nq = sp.S('q')\nr = sp.S('r')\nmu = sp.S('mu')\nfactorized = p(mu) * (q(mu) + r(mu))\nexpanded = expand_mink(factorized)  # p(mu)*q(mu) + p(mu)*r(mu)\n\n# Complex factorization\nA = sp.S('A')\nexpr = A * (p(mu) * q(mu) + r(mu))\nresult = expand_mink(expr)  # A*p(mu)*q(mu) + A*r(mu)\n```"
+              "body": "Expand products around factors carrying registered Minkowski indices.\n\nThis is a selective symbolic expansion: Minkowski-bearing factors become polynomial\nvariables while unrelated sectors remain coefficients. It does not substitute explicit\nfour-vector components or choose a metric signature.\n\n# Arguments\n- `self_`: a factorized Spenso-compatible expression.\n\n# Returns\nThe expression distributed around its Minkowski-bearing factors.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import expand_mink, initialize\n>>> from symbolica.community.spenso import Representation, TensorName\n>>> initialize()\n>>> minkowski = Representation.mink(4)\n>>> mu, nu = minkowski(\"mu\"), minkowski(\"nu\")\n>>> p, q, r = TensorName(\"p\"), TensorName(\"q\"), TensorName(\"r\")\n>>> p_mu = p(mu).to_expression()\n>>> q_nu, r_nu = q(nu).to_expression(), r(nu).to_expression()\n>>> factorized = p_mu * (q_nu + r_nu)\n>>> expand_mink(factorized) == p_mu * q_nu + p_mu * r_nu\nTrue\n```"
             },
-            "summary": "Expands factorized terms containing Minkowski spacetime indices.",
+            "summary": "Expand products around factors carrying registered Minkowski indices.",
             "signature": "def expand_mink(self_: Expression) -> Expression:",
             "since": null,
             "keywords": [],
@@ -236,7 +236,7 @@
             "source": {
               "identifier": "idenso-community::expand_mink",
               "file": "docs/api/python/idenso-community.pyi",
-              "line": 165,
+              "line": 218,
               "column": 1
             }
           },
@@ -252,9 +252,9 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Expands factorized terms containing both Minkowski and bispinor indices.\n\nCombines the functionality of `expand_mink()` and `expand_bis()` to perform\nsimultaneous expansion of factorized expressions involving both spacetime\nand spinor indices.\n\n# Arguments\n- `self_`: expression containing factorized terms with both index types\n\n# Returns\nExpanded expression with all factorizations unfolded."
+              "body": "Expand products around factors carrying Minkowski or bispinor indices.\n\nThis combines the selection patterns of `expand_mink()` and `expand_bis()` in one\ncoefficient pass. Other representation families remain in the coefficient sector.\n\n# Arguments\n- `self_`: a factorized Spenso-compatible expression.\n\n# Returns\nThe expression distributed around both selected representation families.\n\n# Examples\n```python\n>>> from symbolica.community.idenso import expand_mink_bis, initialize\n>>> from symbolica.community.spenso import Representation, TensorName\n>>> initialize()\n>>> minkowski, bispinor = Representation.mink(4), Representation.bis(4)\n>>> p_mu = TensorName(\"p\")(minkowski(\"mu\")).to_expression()\n>>> q_mu = TensorName(\"q\")(minkowski(\"mu\")).to_expression()\n>>> u_a = TensorName(\"u\")(bispinor(\"a\")).to_expression()\n>>> v_a = TensorName(\"v\")(bispinor(\"a\")).to_expression()\n>>> factorized = (p_mu + q_mu) * (u_a + v_a)\n>>> expected = p_mu * u_a + p_mu * v_a + q_mu * u_a + q_mu * v_a\n>>> expand_mink_bis(factorized) == expected\nTrue\n```"
             },
-            "summary": "Expands factorized terms containing both Minkowski and bispinor indices.",
+            "summary": "Expand products around factors carrying Minkowski or bispinor indices.",
             "signature": "def expand_mink_bis(self_: Expression) -> Expression:",
             "since": null,
             "keywords": [],
@@ -265,7 +265,7 @@
             "source": {
               "identifier": "idenso-community::expand_mink_bis",
               "file": "docs/api/python/idenso-community.pyi",
-              "line": 211,
+              "line": 248,
               "column": 1
             }
           },
@@ -294,7 +294,7 @@
             "source": {
               "identifier": "idenso-community::initialize",
               "file": "docs/api/python/idenso-community.pyi",
-              "line": 226,
+              "line": 278,
               "column": 1
             }
           },
@@ -323,7 +323,7 @@
             "source": {
               "identifier": "idenso-community::list_dangling",
               "file": "docs/api/python/idenso-community.pyi",
-              "line": 234,
+              "line": 286,
               "column": 1
             }
           },
@@ -339,9 +339,9 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Applies SU(N) color algebra rules to simplify color group structures.\n\nPerforms comprehensive simplifications of SU(N) color algebra including:\n\n**Structure constants:**\n- `f^{abc}f^{ade} = CA δ^{bc}` (Casimir relations)\n- `f^{abc}f^{bcd} = CA f^{acd}` (Jacobi identities)\n- Antisymmetry: `f^{abc} = -f^{bac}`\n\n**Generators and traces:**\n- `Tr(T^a T^b) = TR δ^{ab}` (orthogonality)\n- `T^a_{ij} T^a_{kl} = δ_{il}δ_{jk}/Nc - δ_{ij}δ_{kl}/Nc²` (Fierz identity)\n- `(T^a)² = CF` (fundamental Casimir)\n\n**Color factors:**\n- `Nc`: Number of colors\n- `CA = Nc`: Adjoint Casimir\n- `CF = (Nc² - 1)/(2Nc)`: Fundamental Casimir\n- `TR = 1/2`: Normalization factor\n\n# Arguments\n- `self_`: expression containing SU(N) color structures\n\n# Returns\nSimplified expression with color algebra reduced to scalar factors (`Nc`, `CA`, `CF`,\n`TR`) when possible.\n\n# Notes\nIf explicit color indices remain after simplification, it indicates the expression\ncould not be fully reduced to color-scalar form."
+              "body": "Simplify registered Spenso color chains, traces, generators, and structure constants.\n\nWith the default Python settings, the simplifier evaluates supported closed traces and\nexpands contractions between generators on separate fundamental chains. Its normalization\nconventions are\n\n- `Tr(T^a T^b) = TR δ^{ab}`;\n- `Σ_a (T^a)_i^j (T^a)_k^l = TR (δ_i^l δ_k^j - δ_i^j δ_k^l/Nc)`;\n- `Σ_a (T^a)_i^j (T^a)_j^k = CF δ_i^k`;\n- `Σ_{c,d} f^{acd} f^{bcd} = CA δ^{ab}`.\n\n`CA = Nc`, `CF = (Nc² - 1)/(2Nc)`, and `TR = 1/2` are the conventional fundamental\nSU(Nc) specialization, not identities imposed on every input. The default simplifier keeps\nrepresentation invariants symbolic where possible; explicit dimension substitution is a\nseparate Rust setting.\n\n# Examples\n```python\n>>> from symbolica import E\n>>> from symbolica.community.idenso import initialize, simplify_color\n>>> initialize()\n>>> generators = E('''\n...     t(coad(Nc^2-1,a),cof(Nc,i),dind(cof(Nc,j)))\n...     * t(coad(Nc^2-1,a),cof(Nc,k),dind(cof(Nc,l)))\n... ''', default_namespace=\"spenso\")\n>>> simplified = simplify_color(generators)\n>>> \"t(\" not in str(simplified) and \"g(\" in str(simplified)\nTrue\n```\n\n# Arguments\n- `self_`: expression containing SU(N) color structures\n\n# Returns\nThe simplified expression. Unsupported or open indexed structures may remain explicitly in\nthe result; their presence is not an error.\n\n# Notes\nOnly representation-aware Spenso color forms are recognized. Plain Symbolica functions with\nsimilar names are left unchanged."
             },
-            "summary": "Applies SU(N) color algebra rules to simplify color group structures.",
+            "summary": "Simplify registered Spenso color chains, traces, generators, and structure constants.",
             "signature": "def simplify_color(self_: Expression) -> Expression:",
             "since": null,
             "keywords": [],
@@ -352,7 +352,7 @@
             "source": {
               "identifier": "idenso-community::simplify_color",
               "file": "docs/api/python/idenso-community.pyi",
-              "line": 274,
+              "line": 326,
               "column": 1
             }
           },
@@ -368,9 +368,9 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Applies Clifford algebra rules and trace identities to simplify gamma matrix expressions.\n\nPerforms comprehensive simplifications of Dirac gamma matrix algebra including:\n- **Anticommutation relations**: `{γᵘ, γᵛ} = 2gᵘᵛ`\n- **Trace identities**: `Tr(γᵘ) = 0`, `Tr(γᵘγᵛ) = 4gᵘᵛ`, etc.\n- **Gamma5 properties**: `{γ₅, γᵘ} = 0`, `(γ₅)² = 1`\n- **Chain simplifications**: Reduces products of gamma matrices\n- **Contraction rules**: Simplifies contracted gamma matrix products\n\nThe function recognizes gamma matrices represented as `spenso::gamma(spenso::mink(dim,mu), spenso::bis(dim,alpha), spenso::bis(dim,beta))`\nwhere `mu` is the Lorentz index and `alpha`, `beta` are spinor indices.\nThese can be easily created using the hep_lib.\n\n# Arguments\n- `self_`: expression containing gamma matrix products and traces\n\n# Returns\nThe simplified expression with gamma algebra applied.\n\n# Examples:\n```python\nfrom symbolica.community.spenso import TensorLibrary, TensorName\nfrom symbolica.community.idenso import simplify_gamma\nfrom symbolica import S, Expression\n# Get HEP library with standard tensors\nhep_lib = TensorLibrary.hep_lib()\n# Access standard tensors like gamma matrices\ngamma_structure = hep_lib[S(\"spenso::gamma\")]\nprint(gamma_structure)\nprint(simplify_gamma(gamma_structure(7, 3, 4) * gamma_structure(3, 7, 4)))\n```"
+              "body": "Simplify registered Spenso gamma chains and traces with Idenso's default rules.\n\nThe dimension-generic part applies compatible Clifford anticommutation, adjacent\ncontractions, and ordinary odd/even trace recursion. Chisholm identities, gamma-five\nanticommutation and traces, gamma-zero conjugation, and chiral-projector rules are applied\nonly when the expression carries explicit four-dimensional Minkowski and bispinor\nrepresentations.\n\nThis function does not select or implement a dimensional-regularization gamma-five scheme.\nIts gamma-five rules are strictly four-dimensional, and the default Python entry point does\nnot enable the optional three-gamma epsilon expansion available through Rust settings.\nGamma factors must use the Spenso representation-aware forms registered by `initialize()`;\nunrecognized plain Symbolica functions are left unchanged.\n\n# Examples\n```python\n>>> from symbolica import E\n>>> from symbolica.community.idenso import initialize, simplify_gamma\n>>> initialize()\n>>> trace = E('''\n...     gamma(bis(4,a),bis(4,b),mink(4,mu))\n...     * gamma(bis(4,b),bis(4,a),mink(4,nu))\n... ''', default_namespace=\"spenso\")\n>>> simplified = simplify_gamma(trace)\n>>> \"gamma(\" not in str(simplified) and \"g(\" in str(simplified)\nTrue\n```\n\n# Arguments\n- `self_`: expression containing gamma matrix products and traces\n\n# Returns\nThe simplified expression with gamma algebra applied."
             },
-            "summary": "Applies Clifford algebra rules and trace identities to simplify gamma matrix expressions.",
+            "summary": "Simplify registered Spenso gamma chains and traces with Idenso's default rules.",
             "signature": "def simplify_gamma(self_: Expression) -> Expression:",
             "since": null,
             "keywords": [],
@@ -381,7 +381,7 @@
             "source": {
               "identifier": "idenso-community::simplify_gamma",
               "file": "docs/api/python/idenso-community.pyi",
-              "line": 308,
+              "line": 370,
               "column": 1
             }
           },
@@ -410,7 +410,7 @@
             "source": {
               "identifier": "idenso-community::simplify_metrics",
               "file": "docs/api/python/idenso-community.pyi",
-              "line": 343,
+              "line": 407,
               "column": 1
             }
           },
@@ -439,7 +439,7 @@
             "source": {
               "identifier": "idenso-community::to_dots",
               "file": "docs/api/python/idenso-community.pyi",
-              "line": 381,
+              "line": 445,
               "column": 1
             }
           },
@@ -468,7 +468,7 @@
             "source": {
               "identifier": "idenso-community::wrap_dummies",
               "file": "docs/api/python/idenso-community.pyi",
-              "line": 415,
+              "line": 479,
               "column": 1
             }
           },
@@ -497,7 +497,7 @@
             "source": {
               "identifier": "idenso-community::wrap_indices",
               "file": "docs/api/python/idenso-community.pyi",
-              "line": 455,
+              "line": 519,
               "column": 1
             }
           }

@@ -612,8 +612,8 @@
 <a href=#611 id=611 data-nosnippet>611</a>
 <a href=#612 id=612 data-nosnippet>612</a><span class="doccomment">/// Trait for applying SU(N) color algebra simplification rules to a symbolic expression.
 <a href=#613 id=613 data-nosnippet>613</a>///
-<a href=#614 id=614 data-nosnippet>614</a>/// Implementors provide a method to simplify expressions containing color factors
-<a href=#615 id=615 data-nosnippet>615</a>/// like structure constants (`f_abc`), generators (`T^a`), traces (`TR`), and the
+<a href=#614 id=614 data-nosnippet>614</a>/// Implementors simplify expressions containing color factors such as structure constants
+<a href=#615 id=615 data-nosnippet>615</a>/// (`f_abc`), generators (`T^a`), closed traces, the trace normalization (`TR`), and the
 <a href=#616 id=616 data-nosnippet>616</a>/// number of colors (`Nc`).
 <a href=#617 id=617 data-nosnippet>617</a></span><span class="kw">pub trait </span>ColorSimplifier {
 <a href=#618 id=618 data-nosnippet>618</a>    <span class="doccomment">/// Attempts to simplify the color structure of the expression.
@@ -621,163 +621,160 @@
 <a href=#620 id=620 data-nosnippet>620</a>    /// Applies various identities of SU(N) algebra, including Fierz identities,
 <a href=#621 id=621 data-nosnippet>621</a>    /// Casimir relations, and contractions involving `f_abc` and `T^a`.
 <a href=#622 id=622 data-nosnippet>622</a>    ///
-<a href=#623 id=623 data-nosnippet>623</a>    /// # Returns
-<a href=#624 id=624 data-nosnippet>624</a>    /// - `Ok(Atom)`: The simplified expression, ideally with only color-scalar factors remaining.
-<a href=#625 id=625 data-nosnippet>625</a>    /// - `Err(ColorError::NotFully(Atom))`: If the simplification could not fully remove all
-<a href=#626 id=626 data-nosnippet>626</a>    ///   explicit color index structures (like `cof(...)`, `coad(...)`). The partially
-<a href=#627 id=627 data-nosnippet>627</a>    ///   simplified `Atom` is included in the error.
-<a href=#628 id=628 data-nosnippet>628</a>    </span><span class="kw">fn </span>simplify_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom;
+<a href=#623 id=623 data-nosnippet>623</a>    /// Returns a rewritten atom. Unsupported or open indexed structures may remain in the
+<a href=#624 id=624 data-nosnippet>624</a>    /// result; their presence is not reported as an error.
+<a href=#625 id=625 data-nosnippet>625</a>    </span><span class="kw">fn </span>simplify_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom;
+<a href=#626 id=626 data-nosnippet>626</a>
+<a href=#627 id=627 data-nosnippet>627</a>    <span class="doccomment">/// Simplifies color structures with explicit chain/trace settings.
+<a href=#628 id=628 data-nosnippet>628</a>    </span><span class="kw">fn </span>simplify_color_with(<span class="kw-2">&amp;</span><span class="self">self</span>, settings: ColorSimplifySettings) -&gt; Atom;
 <a href=#629 id=629 data-nosnippet>629</a>
-<a href=#630 id=630 data-nosnippet>630</a>    <span class="doccomment">/// Simplifies color structures with explicit chain/trace settings.
-<a href=#631 id=631 data-nosnippet>631</a>    </span><span class="kw">fn </span>simplify_color_with(<span class="kw-2">&amp;</span><span class="self">self</span>, settings: ColorSimplifySettings) -&gt; Atom;
+<a href=#630 id=630 data-nosnippet>630</a>    <span class="doccomment">/// Rewrites `Nc`/`NA` scalar factors into the `CA`, `CF` Casimir basis.
+<a href=#631 id=631 data-nosnippet>631</a>    </span><span class="kw">fn </span>to_color_casimir(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom;
 <a href=#632 id=632 data-nosnippet>632</a>
-<a href=#633 id=633 data-nosnippet>633</a>    <span class="doccomment">/// Rewrites `Nc`/`NA` scalar factors into the `CA`, `CF` Casimir basis.
-<a href=#634 id=634 data-nosnippet>634</a>    </span><span class="kw">fn </span>to_color_casimir(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom;
+<a href=#633 id=633 data-nosnippet>633</a>    <span class="doccomment">/// Rewrites color scalar factors with explicit control over normalization choices.
+<a href=#634 id=634 data-nosnippet>634</a>    </span><span class="kw">fn </span>to_color_casimir_with(<span class="kw-2">&amp;</span><span class="self">self</span>, settings: ColorCasimirSettings) -&gt; Atom;
 <a href=#635 id=635 data-nosnippet>635</a>
-<a href=#636 id=636 data-nosnippet>636</a>    <span class="doccomment">/// Rewrites color scalar factors with explicit control over normalization choices.
-<a href=#637 id=637 data-nosnippet>637</a>    </span><span class="kw">fn </span>to_color_casimir_with(<span class="kw-2">&amp;</span><span class="self">self</span>, settings: ColorCasimirSettings) -&gt; Atom;
+<a href=#636 id=636 data-nosnippet>636</a>    <span class="doccomment">/// Rewrites supported `cof(N)` invariant factors into explicit dimension formulas.
+<a href=#637 id=637 data-nosnippet>637</a>    </span><span class="kw">fn </span>to_cof_dimension_invariants(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom;
 <a href=#638 id=638 data-nosnippet>638</a>
-<a href=#639 id=639 data-nosnippet>639</a>    <span class="doccomment">/// Rewrites supported `cof(N)` invariant factors into explicit dimension formulas.
-<a href=#640 id=640 data-nosnippet>640</a>    </span><span class="kw">fn </span>to_cof_dimension_invariants(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom;
+<a href=#639 id=639 data-nosnippet>639</a>    <span class="doccomment">/// Expands factorized terms around color representation factors.
+<a href=#640 id=640 data-nosnippet>640</a>    </span><span class="kw">fn </span>expand_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;(Atom, Atom)&gt;;
 <a href=#641 id=641 data-nosnippet>641</a>
-<a href=#642 id=642 data-nosnippet>642</a>    <span class="doccomment">/// Expands factorized terms around color representation factors.
-<a href=#643 id=643 data-nosnippet>643</a>    </span><span class="kw">fn </span>expand_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;(Atom, Atom)&gt;;
+<a href=#642 id=642 data-nosnippet>642</a>    <span class="doccomment">/// Collects factorized terms around color representation factors.
+<a href=#643 id=643 data-nosnippet>643</a>    </span><span class="kw">fn </span>collect_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom;
 <a href=#644 id=644 data-nosnippet>644</a>
-<a href=#645 id=645 data-nosnippet>645</a>    <span class="doccomment">/// Collects factorized terms around color representation factors.
-<a href=#646 id=646 data-nosnippet>646</a>    </span><span class="kw">fn </span>collect_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom;
-<a href=#647 id=647 data-nosnippet>647</a>
-<a href=#648 id=648 data-nosnippet>648</a>    <span class="kw">fn </span>collect_color_constants(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom;
-<a href=#649 id=649 data-nosnippet>649</a>
-<a href=#650 id=650 data-nosnippet>650</a>    <span class="comment">// fn canonize_color(&amp;self) -&gt; Atom;
-<a href=#651 id=651 data-nosnippet>651</a>
-<a href=#652 id=652 data-nosnippet>652</a>    </span><span class="kw">fn </span>wrap_color(<span class="kw-2">&amp;</span><span class="self">self</span>, symbol: Symbol) -&gt; Atom;
-<a href=#653 id=653 data-nosnippet>653</a>}
-<a href=#654 id=654 data-nosnippet>654</a><span class="kw">impl </span>ColorSimplifier <span class="kw">for </span>Atom {
-<a href=#655 id=655 data-nosnippet>655</a>    <span class="kw">fn </span>simplify_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
-<a href=#656 id=656 data-nosnippet>656</a>        <span class="self">self</span>.simplify_color_with(ColorSimplifySettings::default())
-<a href=#657 id=657 data-nosnippet>657</a>    }
-<a href=#658 id=658 data-nosnippet>658</a>
-<a href=#659 id=659 data-nosnippet>659</a>    <span class="kw">fn </span>simplify_color_with(<span class="kw-2">&amp;</span><span class="self">self</span>, settings: ColorSimplifySettings) -&gt; Atom {
-<a href=#660 id=660 data-nosnippet>660</a>        <span class="self">self</span>.as_view().simplify_color_with(settings)
-<a href=#661 id=661 data-nosnippet>661</a>    }
-<a href=#662 id=662 data-nosnippet>662</a>
-<a href=#663 id=663 data-nosnippet>663</a>    <span class="kw">fn </span>to_color_casimir(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
-<a href=#664 id=664 data-nosnippet>664</a>        <span class="self">self</span>.to_color_casimir_with(ColorCasimirSettings::default())
-<a href=#665 id=665 data-nosnippet>665</a>    }
-<a href=#666 id=666 data-nosnippet>666</a>
-<a href=#667 id=667 data-nosnippet>667</a>    <span class="kw">fn </span>to_color_casimir_with(<span class="kw-2">&amp;</span><span class="self">self</span>, settings: ColorCasimirSettings) -&gt; Atom {
-<a href=#668 id=668 data-nosnippet>668</a>        casimir::color_casimir_basis_impl(<span class="self">self</span>.as_atom_view(), settings)
-<a href=#669 id=669 data-nosnippet>669</a>    }
-<a href=#670 id=670 data-nosnippet>670</a>
-<a href=#671 id=671 data-nosnippet>671</a>    <span class="kw">fn </span>to_cof_dimension_invariants(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
-<a href=#672 id=672 data-nosnippet>672</a>        CofDimensionInvariantRewriter.run(<span class="self">self</span>.as_atom_view())
-<a href=#673 id=673 data-nosnippet>673</a>    }
-<a href=#674 id=674 data-nosnippet>674</a>
-<a href=#675 id=675 data-nosnippet>675</a>    <span class="kw">fn </span>expand_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;(Atom, Atom)&gt; {
-<a href=#676 id=676 data-nosnippet>676</a>        <span class="self">self</span>.as_view().expand_color()
-<a href=#677 id=677 data-nosnippet>677</a>    }
-<a href=#678 id=678 data-nosnippet>678</a>
-<a href=#679 id=679 data-nosnippet>679</a>    <span class="kw">fn </span>collect_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
-<a href=#680 id=680 data-nosnippet>680</a>        <span class="self">self</span>.as_view().collect_color()
-<a href=#681 id=681 data-nosnippet>681</a>    }
-<a href=#682 id=682 data-nosnippet>682</a>
-<a href=#683 id=683 data-nosnippet>683</a>    <span class="kw">fn </span>collect_color_constants(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
-<a href=#684 id=684 data-nosnippet>684</a>        <span class="self">self</span>.as_view().collect_color_constants()
-<a href=#685 id=685 data-nosnippet>685</a>    }
-<a href=#686 id=686 data-nosnippet>686</a>
-<a href=#687 id=687 data-nosnippet>687</a>    <span class="comment">// fn canonize_color(&amp;self) -&gt; Atom {
-<a href=#688 id=688 data-nosnippet>688</a>    //     self.as_view().canonize_color()
-<a href=#689 id=689 data-nosnippet>689</a>    // }
-<a href=#690 id=690 data-nosnippet>690</a>
-<a href=#691 id=691 data-nosnippet>691</a>    </span><span class="kw">fn </span>wrap_color(<span class="kw-2">&amp;</span><span class="self">self</span>, symbol: Symbol) -&gt; Atom {
-<a href=#692 id=692 data-nosnippet>692</a>        <span class="self">self</span>.as_view().wrap_color(symbol)
-<a href=#693 id=693 data-nosnippet>693</a>    }
-<a href=#694 id=694 data-nosnippet>694</a>}
-<a href=#695 id=695 data-nosnippet>695</a>
-<a href=#696 id=696 data-nosnippet>696</a><span class="kw">impl </span>ColorSimplifier <span class="kw">for </span>AtomView&lt;<span class="lifetime">'_</span>&gt; {
-<a href=#697 id=697 data-nosnippet>697</a>    <span class="kw">fn </span>simplify_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
-<a href=#698 id=698 data-nosnippet>698</a>        <span class="self">self</span>.simplify_color_with(ColorSimplifySettings::default())
-<a href=#699 id=699 data-nosnippet>699</a>    }
-<a href=#700 id=700 data-nosnippet>700</a>
-<a href=#701 id=701 data-nosnippet>701</a>    <span class="kw">fn </span>simplify_color_with(<span class="kw-2">&amp;</span><span class="self">self</span>, settings: ColorSimplifySettings) -&gt; Atom {
-<a href=#702 id=702 data-nosnippet>702</a>        ColorAlgebraSimplifier { settings }.run(<span class="kw-2">*</span><span class="self">self</span>)
-<a href=#703 id=703 data-nosnippet>703</a>    }
-<a href=#704 id=704 data-nosnippet>704</a>
-<a href=#705 id=705 data-nosnippet>705</a>    <span class="kw">fn </span>collect_color_constants(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
-<a href=#706 id=706 data-nosnippet>706</a>        <span class="self">self</span>.collect_with_map(
-<a href=#707 id=707 data-nosnippet>707</a>            |a| {
-<a href=#708 id=708 data-nosnippet>708</a>                <span class="macro">matches!</span>(a,AtomView::Var(a) <span class="kw">if </span>a.get_symbol()==CS.tr || a.get_symbol()==CS.ca|| a.get_symbol()==CS.cf )
-<a href=#709 id=709 data-nosnippet>709</a>                    || <span class="macro">matches!</span>(a, AtomView::Fun(f) <span class="kw">if </span>f.get_symbol() == CS.cas || f.get_symbol() == CS.idx || f.get_symbol() == CS.gram)
-<a href=#710 id=710 data-nosnippet>710</a>            },
-<a href=#711 id=711 data-nosnippet>711</a>        )
-<a href=#712 id=712 data-nosnippet>712</a>        .unwrap_collect()
-<a href=#713 id=713 data-nosnippet>713</a>    }
-<a href=#714 id=714 data-nosnippet>714</a>
-<a href=#715 id=715 data-nosnippet>715</a>    <span class="kw">fn </span>collect_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
-<a href=#716 id=716 data-nosnippet>716</a>        <span class="self">self</span>.collect_reps([
-<a href=#717 id=717 data-nosnippet>717</a>            ColorAdjoint {}.into(),
-<a href=#718 id=718 data-nosnippet>718</a>            ColorFundamental {}.into(),
-<a href=#719 id=719 data-nosnippet>719</a>            ColorSextet {}.into(),
-<a href=#720 id=720 data-nosnippet>720</a>        ])
-<a href=#721 id=721 data-nosnippet>721</a>    }
-<a href=#722 id=722 data-nosnippet>722</a>
-<a href=#723 id=723 data-nosnippet>723</a>    <span class="kw">fn </span>to_color_casimir(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
-<a href=#724 id=724 data-nosnippet>724</a>        <span class="self">self</span>.to_color_casimir_with(ColorCasimirSettings::default())
-<a href=#725 id=725 data-nosnippet>725</a>    }
-<a href=#726 id=726 data-nosnippet>726</a>
-<a href=#727 id=727 data-nosnippet>727</a>    <span class="kw">fn </span>to_color_casimir_with(<span class="kw-2">&amp;</span><span class="self">self</span>, settings: ColorCasimirSettings) -&gt; Atom {
-<a href=#728 id=728 data-nosnippet>728</a>        casimir::color_casimir_basis_impl(<span class="self">self</span>.as_atom_view(), settings)
-<a href=#729 id=729 data-nosnippet>729</a>    }
-<a href=#730 id=730 data-nosnippet>730</a>
-<a href=#731 id=731 data-nosnippet>731</a>    <span class="kw">fn </span>to_cof_dimension_invariants(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
-<a href=#732 id=732 data-nosnippet>732</a>        CofDimensionInvariantRewriter.run(<span class="self">self</span>.as_atom_view())
-<a href=#733 id=733 data-nosnippet>733</a>    }
-<a href=#734 id=734 data-nosnippet>734</a>
-<a href=#735 id=735 data-nosnippet>735</a>    <span class="kw">fn </span>expand_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;(Atom, Atom)&gt; {
-<a href=#736 id=736 data-nosnippet>736</a>        <span class="kw">let </span>cof = ColorFundamental {};
-<a href=#737 id=737 data-nosnippet>737</a>        <span class="kw">let </span>coaf = ColorFundamental {}.dual();
-<a href=#738 id=738 data-nosnippet>738</a>        <span class="kw">let </span>coad = ColorAdjoint {};
-<a href=#739 id=739 data-nosnippet>739</a>
-<a href=#740 id=740 data-nosnippet>740</a>        <span class="kw">let </span>color_trace_pat = <span class="macro">function!</span>(T.trace, cof.to_symbolic([RS.b__]), RS.a___).to_pattern();
-<a href=#741 id=741 data-nosnippet>741</a>        <span class="kw">let </span>color_chain_pat = <span class="macro">function!</span>(
-<a href=#742 id=742 data-nosnippet>742</a>            T.chain,
-<a href=#743 id=743 data-nosnippet>743</a>            cof.to_symbolic([RS.b__]),
-<a href=#744 id=744 data-nosnippet>744</a>            coaf.to_symbolic([RS.c__]),
-<a href=#745 id=745 data-nosnippet>745</a>            RS.a___
-<a href=#746 id=746 data-nosnippet>746</a>        )
-<a href=#747 id=747 data-nosnippet>747</a>        .to_pattern();
-<a href=#748 id=748 data-nosnippet>748</a>        <span class="kw">let </span>color_d_pat = <span class="macro">function!</span>(CS.d, RS.a___).to_pattern();
-<a href=#749 id=749 data-nosnippet>749</a>        <span class="kw">let </span>color_gram_pat = <span class="macro">function!</span>(CS.gram, RS.a___).to_pattern();
-<a href=#750 id=750 data-nosnippet>750</a>        <span class="kw">let </span>color_cas_pat = <span class="macro">function!</span>(CS.cas, RS.a___).to_pattern();
-<a href=#751 id=751 data-nosnippet>751</a>        <span class="kw">let </span>color_idx_pat = <span class="macro">function!</span>(CS.idx, RS.a___).to_pattern();
-<a href=#752 id=752 data-nosnippet>752</a>        <span class="kw">let </span>cof_pat = <span class="macro">function!</span>(RS.f_, RS.a___, cof.to_symbolic([RS.b__]), RS.c___).to_pattern();
-<a href=#753 id=753 data-nosnippet>753</a>        <span class="kw">let </span>coaf_pat = <span class="macro">function!</span>(RS.f_, RS.a___, coaf.to_symbolic([RS.b__]), RS.c___).to_pattern();
-<a href=#754 id=754 data-nosnippet>754</a>        <span class="kw">let </span>coad_pat = <span class="macro">function!</span>(RS.f_, RS.a___, coad.to_symbolic([RS.b__]), RS.c___).to_pattern();
-<a href=#755 id=755 data-nosnippet>755</a>
-<a href=#756 id=756 data-nosnippet>756</a>        <span class="self">self</span>.expand_in_patterns(<span class="kw-2">&amp;</span>[
-<a href=#757 id=757 data-nosnippet>757</a>            color_trace_pat,
-<a href=#758 id=758 data-nosnippet>758</a>            color_chain_pat,
-<a href=#759 id=759 data-nosnippet>759</a>            color_d_pat,
-<a href=#760 id=760 data-nosnippet>760</a>            color_gram_pat,
-<a href=#761 id=761 data-nosnippet>761</a>            color_cas_pat,
-<a href=#762 id=762 data-nosnippet>762</a>            color_idx_pat,
-<a href=#763 id=763 data-nosnippet>763</a>            cof_pat,
-<a href=#764 id=764 data-nosnippet>764</a>            coad_pat,
-<a href=#765 id=765 data-nosnippet>765</a>            coaf_pat,
-<a href=#766 id=766 data-nosnippet>766</a>        ])
-<a href=#767 id=767 data-nosnippet>767</a>    }
-<a href=#768 id=768 data-nosnippet>768</a>
-<a href=#769 id=769 data-nosnippet>769</a>    <span class="comment">// fn canonize_color(&amp;self) -&gt; Atom {
-<a href=#770 id=770 data-nosnippet>770</a>    //     self..canonize_color()
-<a href=#771 id=771 data-nosnippet>771</a>    // }
-<a href=#772 id=772 data-nosnippet>772</a>
-<a href=#773 id=773 data-nosnippet>773</a>    </span><span class="kw">fn </span>wrap_color(<span class="kw-2">&amp;</span><span class="self">self</span>, symbol: Symbol) -&gt; Atom {
-<a href=#774 id=774 data-nosnippet>774</a>        <span class="self">self</span>.expand_color()
-<a href=#775 id=775 data-nosnippet>775</a>            .into_iter()
-<a href=#776 id=776 data-nosnippet>776</a>            .fold(Atom::Zero, |a, (c, s)| a + <span class="macro">function!</span>(symbol, c) * s)
-<a href=#777 id=777 data-nosnippet>777</a>    }
-<a href=#778 id=778 data-nosnippet>778</a>}
-<a href=#779 id=779 data-nosnippet>779</a>
-<a href=#780 id=780 data-nosnippet>780</a><span class="attr">#[cfg(test)]
-<a href=#781 id=781 data-nosnippet>781</a></span><span class="kw">mod </span>test;
+<a href=#645 id=645 data-nosnippet>645</a>    <span class="kw">fn </span>collect_color_constants(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom;
+<a href=#646 id=646 data-nosnippet>646</a>
+<a href=#647 id=647 data-nosnippet>647</a>    <span class="comment">// fn canonize_color(&amp;self) -&gt; Atom;
+<a href=#648 id=648 data-nosnippet>648</a>
+<a href=#649 id=649 data-nosnippet>649</a>    </span><span class="kw">fn </span>wrap_color(<span class="kw-2">&amp;</span><span class="self">self</span>, symbol: Symbol) -&gt; Atom;
+<a href=#650 id=650 data-nosnippet>650</a>}
+<a href=#651 id=651 data-nosnippet>651</a><span class="kw">impl </span>ColorSimplifier <span class="kw">for </span>Atom {
+<a href=#652 id=652 data-nosnippet>652</a>    <span class="kw">fn </span>simplify_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
+<a href=#653 id=653 data-nosnippet>653</a>        <span class="self">self</span>.simplify_color_with(ColorSimplifySettings::default())
+<a href=#654 id=654 data-nosnippet>654</a>    }
+<a href=#655 id=655 data-nosnippet>655</a>
+<a href=#656 id=656 data-nosnippet>656</a>    <span class="kw">fn </span>simplify_color_with(<span class="kw-2">&amp;</span><span class="self">self</span>, settings: ColorSimplifySettings) -&gt; Atom {
+<a href=#657 id=657 data-nosnippet>657</a>        <span class="self">self</span>.as_view().simplify_color_with(settings)
+<a href=#658 id=658 data-nosnippet>658</a>    }
+<a href=#659 id=659 data-nosnippet>659</a>
+<a href=#660 id=660 data-nosnippet>660</a>    <span class="kw">fn </span>to_color_casimir(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
+<a href=#661 id=661 data-nosnippet>661</a>        <span class="self">self</span>.to_color_casimir_with(ColorCasimirSettings::default())
+<a href=#662 id=662 data-nosnippet>662</a>    }
+<a href=#663 id=663 data-nosnippet>663</a>
+<a href=#664 id=664 data-nosnippet>664</a>    <span class="kw">fn </span>to_color_casimir_with(<span class="kw-2">&amp;</span><span class="self">self</span>, settings: ColorCasimirSettings) -&gt; Atom {
+<a href=#665 id=665 data-nosnippet>665</a>        casimir::color_casimir_basis_impl(<span class="self">self</span>.as_atom_view(), settings)
+<a href=#666 id=666 data-nosnippet>666</a>    }
+<a href=#667 id=667 data-nosnippet>667</a>
+<a href=#668 id=668 data-nosnippet>668</a>    <span class="kw">fn </span>to_cof_dimension_invariants(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
+<a href=#669 id=669 data-nosnippet>669</a>        CofDimensionInvariantRewriter.run(<span class="self">self</span>.as_atom_view())
+<a href=#670 id=670 data-nosnippet>670</a>    }
+<a href=#671 id=671 data-nosnippet>671</a>
+<a href=#672 id=672 data-nosnippet>672</a>    <span class="kw">fn </span>expand_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;(Atom, Atom)&gt; {
+<a href=#673 id=673 data-nosnippet>673</a>        <span class="self">self</span>.as_view().expand_color()
+<a href=#674 id=674 data-nosnippet>674</a>    }
+<a href=#675 id=675 data-nosnippet>675</a>
+<a href=#676 id=676 data-nosnippet>676</a>    <span class="kw">fn </span>collect_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
+<a href=#677 id=677 data-nosnippet>677</a>        <span class="self">self</span>.as_view().collect_color()
+<a href=#678 id=678 data-nosnippet>678</a>    }
+<a href=#679 id=679 data-nosnippet>679</a>
+<a href=#680 id=680 data-nosnippet>680</a>    <span class="kw">fn </span>collect_color_constants(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
+<a href=#681 id=681 data-nosnippet>681</a>        <span class="self">self</span>.as_view().collect_color_constants()
+<a href=#682 id=682 data-nosnippet>682</a>    }
+<a href=#683 id=683 data-nosnippet>683</a>
+<a href=#684 id=684 data-nosnippet>684</a>    <span class="comment">// fn canonize_color(&amp;self) -&gt; Atom {
+<a href=#685 id=685 data-nosnippet>685</a>    //     self.as_view().canonize_color()
+<a href=#686 id=686 data-nosnippet>686</a>    // }
+<a href=#687 id=687 data-nosnippet>687</a>
+<a href=#688 id=688 data-nosnippet>688</a>    </span><span class="kw">fn </span>wrap_color(<span class="kw-2">&amp;</span><span class="self">self</span>, symbol: Symbol) -&gt; Atom {
+<a href=#689 id=689 data-nosnippet>689</a>        <span class="self">self</span>.as_view().wrap_color(symbol)
+<a href=#690 id=690 data-nosnippet>690</a>    }
+<a href=#691 id=691 data-nosnippet>691</a>}
+<a href=#692 id=692 data-nosnippet>692</a>
+<a href=#693 id=693 data-nosnippet>693</a><span class="kw">impl </span>ColorSimplifier <span class="kw">for </span>AtomView&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#694 id=694 data-nosnippet>694</a>    <span class="kw">fn </span>simplify_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
+<a href=#695 id=695 data-nosnippet>695</a>        <span class="self">self</span>.simplify_color_with(ColorSimplifySettings::default())
+<a href=#696 id=696 data-nosnippet>696</a>    }
+<a href=#697 id=697 data-nosnippet>697</a>
+<a href=#698 id=698 data-nosnippet>698</a>    <span class="kw">fn </span>simplify_color_with(<span class="kw-2">&amp;</span><span class="self">self</span>, settings: ColorSimplifySettings) -&gt; Atom {
+<a href=#699 id=699 data-nosnippet>699</a>        ColorAlgebraSimplifier { settings }.run(<span class="kw-2">*</span><span class="self">self</span>)
+<a href=#700 id=700 data-nosnippet>700</a>    }
+<a href=#701 id=701 data-nosnippet>701</a>
+<a href=#702 id=702 data-nosnippet>702</a>    <span class="kw">fn </span>collect_color_constants(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
+<a href=#703 id=703 data-nosnippet>703</a>        <span class="self">self</span>.collect_with_map(
+<a href=#704 id=704 data-nosnippet>704</a>            |a| {
+<a href=#705 id=705 data-nosnippet>705</a>                <span class="macro">matches!</span>(a,AtomView::Var(a) <span class="kw">if </span>a.get_symbol()==CS.tr || a.get_symbol()==CS.ca|| a.get_symbol()==CS.cf )
+<a href=#706 id=706 data-nosnippet>706</a>                    || <span class="macro">matches!</span>(a, AtomView::Fun(f) <span class="kw">if </span>f.get_symbol() == CS.cas || f.get_symbol() == CS.idx || f.get_symbol() == CS.gram)
+<a href=#707 id=707 data-nosnippet>707</a>            },
+<a href=#708 id=708 data-nosnippet>708</a>        )
+<a href=#709 id=709 data-nosnippet>709</a>        .unwrap_collect()
+<a href=#710 id=710 data-nosnippet>710</a>    }
+<a href=#711 id=711 data-nosnippet>711</a>
+<a href=#712 id=712 data-nosnippet>712</a>    <span class="kw">fn </span>collect_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
+<a href=#713 id=713 data-nosnippet>713</a>        <span class="self">self</span>.collect_reps([
+<a href=#714 id=714 data-nosnippet>714</a>            ColorAdjoint {}.into(),
+<a href=#715 id=715 data-nosnippet>715</a>            ColorFundamental {}.into(),
+<a href=#716 id=716 data-nosnippet>716</a>            ColorSextet {}.into(),
+<a href=#717 id=717 data-nosnippet>717</a>        ])
+<a href=#718 id=718 data-nosnippet>718</a>    }
+<a href=#719 id=719 data-nosnippet>719</a>
+<a href=#720 id=720 data-nosnippet>720</a>    <span class="kw">fn </span>to_color_casimir(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
+<a href=#721 id=721 data-nosnippet>721</a>        <span class="self">self</span>.to_color_casimir_with(ColorCasimirSettings::default())
+<a href=#722 id=722 data-nosnippet>722</a>    }
+<a href=#723 id=723 data-nosnippet>723</a>
+<a href=#724 id=724 data-nosnippet>724</a>    <span class="kw">fn </span>to_color_casimir_with(<span class="kw-2">&amp;</span><span class="self">self</span>, settings: ColorCasimirSettings) -&gt; Atom {
+<a href=#725 id=725 data-nosnippet>725</a>        casimir::color_casimir_basis_impl(<span class="self">self</span>.as_atom_view(), settings)
+<a href=#726 id=726 data-nosnippet>726</a>    }
+<a href=#727 id=727 data-nosnippet>727</a>
+<a href=#728 id=728 data-nosnippet>728</a>    <span class="kw">fn </span>to_cof_dimension_invariants(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Atom {
+<a href=#729 id=729 data-nosnippet>729</a>        CofDimensionInvariantRewriter.run(<span class="self">self</span>.as_atom_view())
+<a href=#730 id=730 data-nosnippet>730</a>    }
+<a href=#731 id=731 data-nosnippet>731</a>
+<a href=#732 id=732 data-nosnippet>732</a>    <span class="kw">fn </span>expand_color(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;(Atom, Atom)&gt; {
+<a href=#733 id=733 data-nosnippet>733</a>        <span class="kw">let </span>cof = ColorFundamental {};
+<a href=#734 id=734 data-nosnippet>734</a>        <span class="kw">let </span>coaf = ColorFundamental {}.dual();
+<a href=#735 id=735 data-nosnippet>735</a>        <span class="kw">let </span>coad = ColorAdjoint {};
+<a href=#736 id=736 data-nosnippet>736</a>
+<a href=#737 id=737 data-nosnippet>737</a>        <span class="kw">let </span>color_trace_pat = <span class="macro">function!</span>(T.trace, cof.to_symbolic([RS.b__]), RS.a___).to_pattern();
+<a href=#738 id=738 data-nosnippet>738</a>        <span class="kw">let </span>color_chain_pat = <span class="macro">function!</span>(
+<a href=#739 id=739 data-nosnippet>739</a>            T.chain,
+<a href=#740 id=740 data-nosnippet>740</a>            cof.to_symbolic([RS.b__]),
+<a href=#741 id=741 data-nosnippet>741</a>            coaf.to_symbolic([RS.c__]),
+<a href=#742 id=742 data-nosnippet>742</a>            RS.a___
+<a href=#743 id=743 data-nosnippet>743</a>        )
+<a href=#744 id=744 data-nosnippet>744</a>        .to_pattern();
+<a href=#745 id=745 data-nosnippet>745</a>        <span class="kw">let </span>color_d_pat = <span class="macro">function!</span>(CS.d, RS.a___).to_pattern();
+<a href=#746 id=746 data-nosnippet>746</a>        <span class="kw">let </span>color_gram_pat = <span class="macro">function!</span>(CS.gram, RS.a___).to_pattern();
+<a href=#747 id=747 data-nosnippet>747</a>        <span class="kw">let </span>color_cas_pat = <span class="macro">function!</span>(CS.cas, RS.a___).to_pattern();
+<a href=#748 id=748 data-nosnippet>748</a>        <span class="kw">let </span>color_idx_pat = <span class="macro">function!</span>(CS.idx, RS.a___).to_pattern();
+<a href=#749 id=749 data-nosnippet>749</a>        <span class="kw">let </span>cof_pat = <span class="macro">function!</span>(RS.f_, RS.a___, cof.to_symbolic([RS.b__]), RS.c___).to_pattern();
+<a href=#750 id=750 data-nosnippet>750</a>        <span class="kw">let </span>coaf_pat = <span class="macro">function!</span>(RS.f_, RS.a___, coaf.to_symbolic([RS.b__]), RS.c___).to_pattern();
+<a href=#751 id=751 data-nosnippet>751</a>        <span class="kw">let </span>coad_pat = <span class="macro">function!</span>(RS.f_, RS.a___, coad.to_symbolic([RS.b__]), RS.c___).to_pattern();
+<a href=#752 id=752 data-nosnippet>752</a>
+<a href=#753 id=753 data-nosnippet>753</a>        <span class="self">self</span>.expand_in_patterns(<span class="kw-2">&amp;</span>[
+<a href=#754 id=754 data-nosnippet>754</a>            color_trace_pat,
+<a href=#755 id=755 data-nosnippet>755</a>            color_chain_pat,
+<a href=#756 id=756 data-nosnippet>756</a>            color_d_pat,
+<a href=#757 id=757 data-nosnippet>757</a>            color_gram_pat,
+<a href=#758 id=758 data-nosnippet>758</a>            color_cas_pat,
+<a href=#759 id=759 data-nosnippet>759</a>            color_idx_pat,
+<a href=#760 id=760 data-nosnippet>760</a>            cof_pat,
+<a href=#761 id=761 data-nosnippet>761</a>            coad_pat,
+<a href=#762 id=762 data-nosnippet>762</a>            coaf_pat,
+<a href=#763 id=763 data-nosnippet>763</a>        ])
+<a href=#764 id=764 data-nosnippet>764</a>    }
+<a href=#765 id=765 data-nosnippet>765</a>
+<a href=#766 id=766 data-nosnippet>766</a>    <span class="comment">// fn canonize_color(&amp;self) -&gt; Atom {
+<a href=#767 id=767 data-nosnippet>767</a>    //     self..canonize_color()
+<a href=#768 id=768 data-nosnippet>768</a>    // }
+<a href=#769 id=769 data-nosnippet>769</a>
+<a href=#770 id=770 data-nosnippet>770</a>    </span><span class="kw">fn </span>wrap_color(<span class="kw-2">&amp;</span><span class="self">self</span>, symbol: Symbol) -&gt; Atom {
+<a href=#771 id=771 data-nosnippet>771</a>        <span class="self">self</span>.expand_color()
+<a href=#772 id=772 data-nosnippet>772</a>            .into_iter()
+<a href=#773 id=773 data-nosnippet>773</a>            .fold(Atom::Zero, |a, (c, s)| a + <span class="macro">function!</span>(symbol, c) * s)
+<a href=#774 id=774 data-nosnippet>774</a>    }
+<a href=#775 id=775 data-nosnippet>775</a>}
+<a href=#776 id=776 data-nosnippet>776</a>
+<a href=#777 id=777 data-nosnippet>777</a><span class="attr">#[cfg(test)]
+<a href=#778 id=778 data-nosnippet>778</a></span><span class="kw">mod </span>test;
 </code></pre></div></section></main></body></html>

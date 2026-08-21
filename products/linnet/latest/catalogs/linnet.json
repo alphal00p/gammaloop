@@ -54,7 +54,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "The main graph data structure, representing a graph using the half-edge\n(or doubly connected edge list - DCEL) principle.\n\nA `HedgeGraph` stores nodes and edges (represented as pairs of half-edges).\nIt is generic over the data associated with edges (`E`), nodes/vertices (`V`),\nand the specific storage strategy used for nodes (`S`).\n\nThe half-edge representation allows for efficient traversal of graph topology,\nsuch as iterating around faces (in planar embeddings), finding incident edges\nto a node, or quickly accessing an edge's opposite half-edge.\n\n# Type Parameters\n\n- `E`: The type of data associated with each edge (or pair of half-edges).\n- `V`: The type of data associated with each node (vertex).\n- `S`: The node storage strategy, implementing the [`NodeStorage`] trait.\nThis determines how node data and their connectivity to half-edges\nare stored. Defaults to [`DefaultNodeStore<V>`] (feature-selected; `nodestore-vec` uses\n[`nodestore::NodeStorageVec<V>`])."
+              "body": "A graph whose incidence and boundary are represented with half-edges.\n\nEach half-edge is incident to one node. The graph's involution pairs two\nhalf-edges into an internal edge; a dangling half-edge is an identity entry\nwith an associated [`Flow`]. `HedgeGraph` does not store an embedding or a\nrotation system, so it does not define faces or an order around a node.\n\nThe graph is generic over edge data (`E`), node data (`V`), per-half-edge\ndata (`H`), and the node storage strategy (`S`).\n\n# Type Parameters\n\n- `E`: The type of data associated with each edge (or pair of half-edges).\n- `V`: The type of data associated with each node (vertex).\n- `H`: The type of data associated with each individual half-edge.\n- `S`: The node storage strategy, implementing the [`NodeStorage`] trait.\nThis determines how node data and their connectivity to half-edges\nare stored. Defaults to [`DefaultNodeStore<V>`] (feature-selected; `nodestore-vec` uses\n[`nodestore::NodeStorageVec<V>`])."
             },
             "summary": "Stores graph topology as paired half-edges with independent edge, vertex, and half-edge payloads.",
             "signature": "pub struct HedgeGraph < E, V, H = NoData, S : NodeStorage < NodeData = V > =\nDefaultNodeStore < V > > {}",
@@ -85,7 +85,7 @@
             "source": {
               "identifier": "linnet::half_edge::HedgeGraph",
               "file": "crates/linnet/src/half_edge.rs",
-              "line": 260,
+              "line": 264,
               "column": 1
             }
           },
@@ -253,7 +253,7 @@
             "source": {
               "identifier": "linnet::parser::DotGraph",
               "file": "crates/linnet/src/parser/mod.rs",
-              "line": 149,
+              "line": 117,
               "column": 1
             }
           },

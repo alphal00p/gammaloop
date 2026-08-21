@@ -20,683 +20,757 @@
 <a href=#19 id=19 data-nosnippet>19</a>
 <a href=#20 id=20 data-nosnippet>20</a><span class="kw">use </span><span class="kw">crate</span>::state::{ProcessRef, State};
 <a href=#21 id=21 data-nosnippet>21</a>
-<a href=#22 id=22 data-nosnippet>22</a><span class="attr">#[derive(Debug, Clone)]
-<a href=#23 id=23 data-nosnippet>23</a></span><span class="kw">pub struct </span>EvaluateSamples&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#24 id=24 data-nosnippet>24</a>    <span class="doccomment">/// Process containing the integrand; required when process selection is ambiguous.
-<a href=#25 id=25 data-nosnippet>25</a>    </span><span class="kw">pub </span>process_id: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#26 id=26 data-nosnippet>26</a>    <span class="doccomment">/// Integrand to evaluate; required when the selected process has multiple candidates.
-<a href=#27 id=27 data-nosnippet>27</a>    </span><span class="kw">pub </span>integrand_name: <span class="prelude-ty">Option</span>&lt;String&gt;,
-<a href=#28 id=28 data-nosnippet>28</a>    <span class="doccomment">/// Request arbitrary-precision internal evaluation.
-<a href=#29 id=29 data-nosnippet>29</a>    </span><span class="kw">pub </span>use_arb_prec: bool,
-<a href=#30 id=30 data-nosnippet>30</a>    <span class="doccomment">/// Omit optional evaluation metadata from each returned sample.
-<a href=#31 id=31 data-nosnippet>31</a>    </span><span class="kw">pub </span>minimal_output: bool,
-<a href=#32 id=32 data-nosnippet>32</a>    <span class="doccomment">/// Temporary event-generation override restored after this evaluation.
-<a href=#33 id=33 data-nosnippet>33</a>    </span><span class="kw">pub </span>return_generated_events: <span class="prelude-ty">Option</span>&lt;bool&gt;,
-<a href=#34 id=34 data-nosnippet>34</a>    <span class="doccomment">/// Interpret point rows as flattened three-momenta instead of integration coordinates.
-<a href=#35 id=35 data-nosnippet>35</a>    </span><span class="kw">pub </span>momentum_space: bool,
-<a href=#36 id=36 data-nosnippet>36</a>    <span class="doccomment">/// Two-dimensional coordinates with one sample per row.
-<a href=#37 id=37 data-nosnippet>37</a>    </span><span class="kw">pub </span>points: ArrayView2&lt;<span class="lifetime">'a</span>, f64&gt;,
-<a href=#38 id=38 data-nosnippet>38</a>    <span class="doccomment">/// Optional weight for each sample row; omitted weights default to one.
-<a href=#39 id=39 data-nosnippet>39</a>    </span><span class="kw">pub </span>integrator_weights: <span class="prelude-ty">Option</span>&lt;ArrayView1&lt;<span class="lifetime">'a</span>, f64&gt;&gt;,
-<a href=#40 id=40 data-nosnippet>40</a>    <span class="doccomment">/// Optional discrete integration coordinates with one row per sample.
-<a href=#41 id=41 data-nosnippet>41</a>    </span><span class="kw">pub </span>discrete_dims: <span class="prelude-ty">Option</span>&lt;ArrayView2&lt;<span class="lifetime">'a</span>, usize&gt;&gt;,
-<a href=#42 id=42 data-nosnippet>42</a>    <span class="doccomment">/// Optional momentum-space graph selection for each sample.
-<a href=#43 id=43 data-nosnippet>43</a>    </span><span class="kw">pub </span>graph_names: <span class="prelude-ty">Option</span>&lt;Vec&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt;&gt;,
-<a href=#44 id=44 data-nosnippet>44</a>    <span class="doccomment">/// Optional momentum-space orientation selection for each sample.
-<a href=#45 id=45 data-nosnippet>45</a>    </span><span class="kw">pub </span>orientations: <span class="prelude-ty">Option</span>&lt;Vec&lt;<span class="prelude-ty">Option</span>&lt;usize&gt;&gt;&gt;,
-<a href=#46 id=46 data-nosnippet>46</a>}
-<a href=#47 id=47 data-nosnippet>47</a>
-<a href=#48 id=48 data-nosnippet>48</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; EvaluateSamples&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#49 id=49 data-nosnippet>49</a>    <span class="kw">pub fn </span>run(<span class="kw-2">&amp;</span><span class="self">self</span>, state: <span class="kw-2">&amp;mut </span>State) -&gt; <span class="prelude-ty">Result</span>&lt;BatchSampleEvaluationResult&gt; {
-<a href=#50 id=50 data-nosnippet>50</a>        <span class="kw">let </span>process_ref = <span class="self">self</span>.process_id.map(ProcessRef::Id);
-<a href=#51 id=51 data-nosnippet>51</a>        <span class="kw">let </span>(process_id, integrand_name) =
-<a href=#52 id=52 data-nosnippet>52</a>            state.find_integrand_ref(process_ref.as_ref(), <span class="self">self</span>.integrand_name.as_ref())<span class="question-mark">?</span>;
-<a href=#53 id=53 data-nosnippet>53</a>        <span class="kw">let </span>model = state.resolve_model_for_integrand(process_id, <span class="kw-2">&amp;</span>integrand_name)<span class="question-mark">?</span>;
-<a href=#54 id=54 data-nosnippet>54</a>
-<a href=#55 id=55 data-nosnippet>55</a>        <span class="kw">let </span>integrand = state
-<a href=#56 id=56 data-nosnippet>56</a>            .process_list
-<a href=#57 id=57 data-nosnippet>57</a>            .get_integrand_mut(process_id, <span class="kw-2">&amp;</span>integrand_name)<span class="question-mark">?</span>;
-<a href=#58 id=58 data-nosnippet>58</a>        <span class="kw">let </span>run_result = with_return_generated_events_override(
-<a href=#59 id=59 data-nosnippet>59</a>            integrand,
-<a href=#60 id=60 data-nosnippet>60</a>            <span class="self">self</span>.return_generated_events,
-<a href=#61 id=61 data-nosnippet>61</a>            |integrand| {
-<a href=#62 id=62 data-nosnippet>62</a>                integrand.warm_up(<span class="kw-2">&amp;</span>model)<span class="question-mark">?</span>;
-<a href=#63 id=63 data-nosnippet>63</a>
-<a href=#64 id=64 data-nosnippet>64</a>                <span class="kw">let </span>batch_len = <span class="self">self</span>.points.nrows();
-<a href=#65 id=65 data-nosnippet>65</a>                <span class="kw">let </span>integrator_weights =
-<a href=#66 id=66 data-nosnippet>66</a>                    normalize_integrator_weights(<span class="self">self</span>.integrator_weights.as_ref(), batch_len)<span class="question-mark">?</span>;
-<a href=#67 id=67 data-nosnippet>67</a>                <span class="kw">let </span>graph_names = normalize_optional_per_sample(
-<a href=#68 id=68 data-nosnippet>68</a>                    <span class="self">self</span>.graph_names.as_ref(),
-<a href=#69 id=69 data-nosnippet>69</a>                    batch_len,
-<a href=#70 id=70 data-nosnippet>70</a>                    <span class="string">"graph_names"</span>,
-<a href=#71 id=71 data-nosnippet>71</a>                )<span class="question-mark">?</span>;
-<a href=#72 id=72 data-nosnippet>72</a>                <span class="kw">let </span>orientations = normalize_optional_per_sample(
-<a href=#73 id=73 data-nosnippet>73</a>                    <span class="self">self</span>.orientations.as_ref(),
-<a href=#74 id=74 data-nosnippet>74</a>                    batch_len,
-<a href=#75 id=75 data-nosnippet>75</a>                    <span class="string">"orientations"</span>,
-<a href=#76 id=76 data-nosnippet>76</a>                )<span class="question-mark">?</span>;
-<a href=#77 id=77 data-nosnippet>77</a>
-<a href=#78 id=78 data-nosnippet>78</a>                <span class="kw">if </span>!<span class="self">self</span>.momentum_space
-<a href=#79 id=79 data-nosnippet>79</a>                    &amp;&amp; (graph_names.iter().any(Option::is_some)
-<a href=#80 id=80 data-nosnippet>80</a>                        || orientations.iter().any(Option::is_some))
-<a href=#81 id=81 data-nosnippet>81</a>                {
-<a href=#82 id=82 data-nosnippet>82</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#83 id=83 data-nosnippet>83</a>                    <span class="string">"Graph and orientation selection are only supported in momentum-space evaluation."
-<a href=#84 id=84 data-nosnippet>84</a>                </span>));
-<a href=#85 id=85 data-nosnippet>85</a>                }
-<a href=#86 id=86 data-nosnippet>86</a>
-<a href=#87 id=87 data-nosnippet>87</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(discrete_dims) = <span class="kw-2">&amp;</span><span class="self">self</span>.discrete_dims {
-<a href=#88 id=88 data-nosnippet>88</a>                    <span class="kw">if </span>discrete_dims.nrows() != batch_len {
-<a href=#89 id=89 data-nosnippet>89</a>                        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#90 id=90 data-nosnippet>90</a>                            <span class="string">"Expected {} rows in discrete_dims, got {}."</span>,
-<a href=#91 id=91 data-nosnippet>91</a>                            batch_len,
-<a href=#92 id=92 data-nosnippet>92</a>                            discrete_dims.nrows()
-<a href=#93 id=93 data-nosnippet>93</a>                        ));
-<a href=#94 id=94 data-nosnippet>94</a>                    }
-<a href=#95 id=95 data-nosnippet>95</a>                }
-<a href=#96 id=96 data-nosnippet>96</a>
-<a href=#97 id=97 data-nosnippet>97</a>                <span class="kw">let </span>samples = <span class="kw">if </span><span class="self">self</span>.momentum_space {
-<a href=#98 id=98 data-nosnippet>98</a>                    <span class="kw">let </span>inputs = build_momentum_inputs(
-<a href=#99 id=99 data-nosnippet>99</a>                        integrand,
-<a href=#100 id=100 data-nosnippet>100</a>                        <span class="kw-2">&amp;</span><span class="self">self</span>.points,
-<a href=#101 id=101 data-nosnippet>101</a>                        <span class="kw-2">&amp;</span>integrator_weights,
-<a href=#102 id=102 data-nosnippet>102</a>                        <span class="self">self</span>.discrete_dims.as_ref(),
-<a href=#103 id=103 data-nosnippet>103</a>                        <span class="kw-2">&amp;</span>graph_names,
-<a href=#104 id=104 data-nosnippet>104</a>                        <span class="kw-2">&amp;</span>orientations,
-<a href=#105 id=105 data-nosnippet>105</a>                    )<span class="question-mark">?</span>;
-<a href=#106 id=106 data-nosnippet>106</a>                    integrand
-<a href=#107 id=107 data-nosnippet>107</a>                        .evaluate_momentum_configurations_raw(<span class="kw-2">&amp;</span>model, <span class="kw-2">&amp;</span>inputs, <span class="self">self</span>.use_arb_prec)<span class="question-mark">?
-<a href=#108 id=108 data-nosnippet>108</a>                        </span>.samples
-<a href=#109 id=109 data-nosnippet>109</a>                } <span class="kw">else </span>{
-<a href=#110 id=110 data-nosnippet>110</a>                    <span class="kw">let </span>samples = build_havana_samples(
-<a href=#111 id=111 data-nosnippet>111</a>                        integrand,
-<a href=#112 id=112 data-nosnippet>112</a>                        <span class="kw-2">&amp;</span><span class="self">self</span>.points,
-<a href=#113 id=113 data-nosnippet>113</a>                        <span class="kw-2">&amp;</span>integrator_weights,
-<a href=#114 id=114 data-nosnippet>114</a>                        <span class="self">self</span>.discrete_dims.as_ref(),
-<a href=#115 id=115 data-nosnippet>115</a>                    )<span class="question-mark">?</span>;
-<a href=#116 id=116 data-nosnippet>116</a>                    integrand
-<a href=#117 id=117 data-nosnippet>117</a>                        .evaluate_samples_raw(
-<a href=#118 id=118 data-nosnippet>118</a>                            <span class="kw-2">&amp;</span>model,
-<a href=#119 id=119 data-nosnippet>119</a>                            <span class="kw-2">&amp;</span>samples,
-<a href=#120 id=120 data-nosnippet>120</a>                            <span class="number">1</span>,
-<a href=#121 id=121 data-nosnippet>121</a>                            <span class="self">self</span>.use_arb_prec,
-<a href=#122 id=122 data-nosnippet>122</a>                            <span class="bool-val">false</span>,
-<a href=#123 id=123 data-nosnippet>123</a>                            Complex::new_zero(),
-<a href=#124 id=124 data-nosnippet>124</a>                        )<span class="question-mark">?
-<a href=#125 id=125 data-nosnippet>125</a>                        </span>.samples
-<a href=#126 id=126 data-nosnippet>126</a>                };
-<a href=#127 id=127 data-nosnippet>127</a>
-<a href=#128 id=128 data-nosnippet>128</a>                <span class="kw">let </span>observables = integrand
-<a href=#129 id=129 data-nosnippet>129</a>                    .observable_snapshot_bundle()
-<a href=#130 id=130 data-nosnippet>130</a>                    .unwrap_or_else(ObservableSnapshotBundle::default);
-<a href=#131 id=131 data-nosnippet>131</a>
-<a href=#132 id=132 data-nosnippet>132</a>                <span class="prelude-val">Ok</span>((samples, observables))
-<a href=#133 id=133 data-nosnippet>133</a>            },
-<a href=#134 id=134 data-nosnippet>134</a>        );
-<a href=#135 id=135 data-nosnippet>135</a>
-<a href=#136 id=136 data-nosnippet>136</a>        <span class="kw">let </span>(samples, observables) = run_result<span class="question-mark">?</span>;
-<a href=#137 id=137 data-nosnippet>137</a>
-<a href=#138 id=138 data-nosnippet>138</a>        <span class="prelude-val">Ok</span>(BatchSampleEvaluationResult {
-<a href=#139 id=139 data-nosnippet>139</a>            samples: samples
-<a href=#140 id=140 data-nosnippet>140</a>                .into_iter()
-<a href=#141 id=141 data-nosnippet>141</a>                .map(|evaluation| SampleEvaluationResult {
-<a href=#142 id=142 data-nosnippet>142</a>                    evaluation: evaluation.into_output(<span class="self">self</span>.minimal_output),
-<a href=#143 id=143 data-nosnippet>143</a>                })
-<a href=#144 id=144 data-nosnippet>144</a>                .collect(),
-<a href=#145 id=145 data-nosnippet>145</a>            observables,
-<a href=#146 id=146 data-nosnippet>146</a>        })
-<a href=#147 id=147 data-nosnippet>147</a>    }
-<a href=#148 id=148 data-nosnippet>148</a>}
+<a href=#22 id=22 data-nosnippet>22</a><span class="doccomment">/// Evaluate one or more integrand inputs through the ordinary `f64` result boundary.
+<a href=#23 id=23 data-nosnippet>23</a>///
+<a href=#24 id=24 data-nosnippet>24</a>/// Each row of [`Self::points`] has one of two layouts:
+<a href=#25 id=25 data-nosnippet>25</a>///
+<a href=#26 id=26 data-nosnippet>26</a>/// - with [`Self::momentum_space`] set to `false`, the row contains integration-space
+<a href=#27 id=27 data-nosnippet>27</a>///   coordinates and must have the dimension selected by the integrand and
+<a href=#28 id=28 data-nosnippet>28</a>///   [`Self::discrete_dims`];
+<a href=#29 id=29 data-nosnippet>29</a>/// - with [`Self::momentum_space`] set to `true`, the row contains exactly one
+<a href=#30 id=30 data-nosnippet>30</a>///   `(px, py, pz)` triplet per independent loop momentum. The flattened order is
+<a href=#31 id=31 data-nosnippet>31</a>///   `[k1x, k1y, k1z, k2x, k2y, k2z, ...]`. Energies and external momenta are not
+<a href=#32 id=32 data-nosnippet>32</a>///   inputs to this interface.
+<a href=#33 id=33 data-nosnippet>33</a>///
+<a href=#34 id=34 data-nosnippet>34</a>/// A momentum-space row whose length is not a multiple of three is rejected before
+<a href=#35 id=35 data-nosnippet>35</a>/// evaluation. The selected integrand, graph, or graph group determines the required
+<a href=#36 id=36 data-nosnippet>36</a>/// number of loop momenta and rejects the wrong number of complete triplets.
+<a href=#37 id=37 data-nosnippet>37</a>///
+<a href=#38 id=38 data-nosnippet>38</a>/// [`Self::use_arb_prec`] is a legacy compatibility flag: it selects the configured
+<a href=#39 id=39 data-nosnippet>39</a>/// `f128` stability level, falling back to arbitrary precision only when no `f128`
+<a href=#40 id=40 data-nosnippet>40</a>/// level exists. It does not change this type's `f64` output contract. Use
+<a href=#41 id=41 data-nosnippet>41</a>/// [`EvaluateSamplesPrecise`] when the caller must retain an `f64`, `f128`, or
+<a href=#42 id=42 data-nosnippet>42</a>/// arbitrary-precision result.
+<a href=#43 id=43 data-nosnippet>43</a>///
+<a href=#44 id=44 data-nosnippet>44</a>/// The [GammaLoop sample-evaluation contract](https://alphal00p.github.io/gammaloop/products/gammaloop/latest/reference/interfaces/#sample-evaluation-contract)
+<a href=#45 id=45 data-nosnippet>45</a>/// connects this request to the CLI and Python interfaces and to the maintained
+<a href=#46 id=46 data-nosnippet>46</a>/// checked example.
+<a href=#47 id=47 data-nosnippet>47</a>///
+<a href=#48 id=48 data-nosnippet>48</a>/// # Example
+<a href=#49 id=49 data-nosnippet>49</a>///
+<a href=#50 id=50 data-nosnippet>50</a>/// ```rust
+<a href=#51 id=51 data-nosnippet>51</a>/// use gammaloop_api::commands::evaluate_samples::EvaluateSamples;
+<a href=#52 id=52 data-nosnippet>52</a>/// use ndarray::arr2;
+<a href=#53 id=53 data-nosnippet>53</a>///
+<a href=#54 id=54 data-nosnippet>54</a>/// let loop_momenta = arr2(&amp;[[
+<a href=#55 id=55 data-nosnippet>55</a>///     0.11, -0.07, 0.19, // k1 = (px, py, pz)
+<a href=#56 id=56 data-nosnippet>56</a>///     -0.13, 0.05, 0.29, // k2 = (px, py, pz)
+<a href=#57 id=57 data-nosnippet>57</a>/// ]]);
+<a href=#58 id=58 data-nosnippet>58</a>/// let request = EvaluateSamples {
+<a href=#59 id=59 data-nosnippet>59</a>///     process_id: Some(0),
+<a href=#60 id=60 data-nosnippet>60</a>///     integrand_name: None,
+<a href=#61 id=61 data-nosnippet>61</a>///     use_arb_prec: true,
+<a href=#62 id=62 data-nosnippet>62</a>///     minimal_output: true,
+<a href=#63 id=63 data-nosnippet>63</a>///     return_generated_events: None,
+<a href=#64 id=64 data-nosnippet>64</a>///     momentum_space: true,
+<a href=#65 id=65 data-nosnippet>65</a>///     points: loop_momenta.view(),
+<a href=#66 id=66 data-nosnippet>66</a>///     integrator_weights: None,
+<a href=#67 id=67 data-nosnippet>67</a>///     discrete_dims: None,
+<a href=#68 id=68 data-nosnippet>68</a>///     graph_names: None,
+<a href=#69 id=69 data-nosnippet>69</a>///     orientations: None,
+<a href=#70 id=70 data-nosnippet>70</a>/// };
+<a href=#71 id=71 data-nosnippet>71</a>///
+<a href=#72 id=72 data-nosnippet>72</a>/// assert_eq!(request.points.ncols(), 2 * 3);
+<a href=#73 id=73 data-nosnippet>73</a>/// assert!(request.momentum_space);
+<a href=#74 id=74 data-nosnippet>74</a>/// ```
+<a href=#75 id=75 data-nosnippet>75</a></span><span class="attr">#[derive(Debug, Clone)]
+<a href=#76 id=76 data-nosnippet>76</a></span><span class="kw">pub struct </span>EvaluateSamples&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#77 id=77 data-nosnippet>77</a>    <span class="doccomment">/// Process containing the integrand; required when process selection is ambiguous.
+<a href=#78 id=78 data-nosnippet>78</a>    </span><span class="kw">pub </span>process_id: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#79 id=79 data-nosnippet>79</a>    <span class="doccomment">/// Integrand to evaluate; required when the selected process has multiple candidates.
+<a href=#80 id=80 data-nosnippet>80</a>    </span><span class="kw">pub </span>integrand_name: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#81 id=81 data-nosnippet>81</a>    <span class="doccomment">/// Select configured f128, or Arb when f128 is unavailable, instead of the full ladder.
+<a href=#82 id=82 data-nosnippet>82</a>    </span><span class="kw">pub </span>use_arb_prec: bool,
+<a href=#83 id=83 data-nosnippet>83</a>    <span class="doccomment">/// Omit optional evaluation metadata from each returned sample.
+<a href=#84 id=84 data-nosnippet>84</a>    </span><span class="kw">pub </span>minimal_output: bool,
+<a href=#85 id=85 data-nosnippet>85</a>    <span class="doccomment">/// Temporary event-generation override restored after this evaluation.
+<a href=#86 id=86 data-nosnippet>86</a>    </span><span class="kw">pub </span>return_generated_events: <span class="prelude-ty">Option</span>&lt;bool&gt;,
+<a href=#87 id=87 data-nosnippet>87</a>    <span class="doccomment">/// Interpret rows as consecutive spatial loop-momentum `(px, py, pz)` triplets.
+<a href=#88 id=88 data-nosnippet>88</a>    </span><span class="kw">pub </span>momentum_space: bool,
+<a href=#89 id=89 data-nosnippet>89</a>    <span class="doccomment">/// Two-dimensional inputs with one integration or momentum-space sample per row.
+<a href=#90 id=90 data-nosnippet>90</a>    </span><span class="kw">pub </span>points: ArrayView2&lt;<span class="lifetime">'a</span>, f64&gt;,
+<a href=#91 id=91 data-nosnippet>91</a>    <span class="doccomment">/// Optional weight for each sample row; omitted weights default to one.
+<a href=#92 id=92 data-nosnippet>92</a>    </span><span class="kw">pub </span>integrator_weights: <span class="prelude-ty">Option</span>&lt;ArrayView1&lt;<span class="lifetime">'a</span>, f64&gt;&gt;,
+<a href=#93 id=93 data-nosnippet>93</a>    <span class="doccomment">/// Optional discrete integration coordinates with one row per sample.
+<a href=#94 id=94 data-nosnippet>94</a>    </span><span class="kw">pub </span>discrete_dims: <span class="prelude-ty">Option</span>&lt;ArrayView2&lt;<span class="lifetime">'a</span>, usize&gt;&gt;,
+<a href=#95 id=95 data-nosnippet>95</a>    <span class="doccomment">/// Optional momentum-space graph selection for each sample.
+<a href=#96 id=96 data-nosnippet>96</a>    </span><span class="kw">pub </span>graph_names: <span class="prelude-ty">Option</span>&lt;Vec&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt;&gt;,
+<a href=#97 id=97 data-nosnippet>97</a>    <span class="doccomment">/// Optional momentum-space orientation selection for each sample.
+<a href=#98 id=98 data-nosnippet>98</a>    </span><span class="kw">pub </span>orientations: <span class="prelude-ty">Option</span>&lt;Vec&lt;<span class="prelude-ty">Option</span>&lt;usize&gt;&gt;&gt;,
+<a href=#99 id=99 data-nosnippet>99</a>}
+<a href=#100 id=100 data-nosnippet>100</a>
+<a href=#101 id=101 data-nosnippet>101</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; EvaluateSamples&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#102 id=102 data-nosnippet>102</a>    <span class="kw">pub fn </span>run(<span class="kw-2">&amp;</span><span class="self">self</span>, state: <span class="kw-2">&amp;mut </span>State) -&gt; <span class="prelude-ty">Result</span>&lt;BatchSampleEvaluationResult&gt; {
+<a href=#103 id=103 data-nosnippet>103</a>        <span class="kw">let </span>process_ref = <span class="self">self</span>.process_id.map(ProcessRef::Id);
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="kw">let </span>(process_id, integrand_name) =
+<a href=#105 id=105 data-nosnippet>105</a>            state.find_integrand_ref(process_ref.as_ref(), <span class="self">self</span>.integrand_name.as_ref())<span class="question-mark">?</span>;
+<a href=#106 id=106 data-nosnippet>106</a>        <span class="kw">let </span>model = state.resolve_model_for_integrand(process_id, <span class="kw-2">&amp;</span>integrand_name)<span class="question-mark">?</span>;
+<a href=#107 id=107 data-nosnippet>107</a>
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="kw">let </span>integrand = state
+<a href=#109 id=109 data-nosnippet>109</a>            .process_list
+<a href=#110 id=110 data-nosnippet>110</a>            .get_integrand_mut(process_id, <span class="kw-2">&amp;</span>integrand_name)<span class="question-mark">?</span>;
+<a href=#111 id=111 data-nosnippet>111</a>        <span class="kw">let </span>run_result = with_return_generated_events_override(
+<a href=#112 id=112 data-nosnippet>112</a>            integrand,
+<a href=#113 id=113 data-nosnippet>113</a>            <span class="self">self</span>.return_generated_events,
+<a href=#114 id=114 data-nosnippet>114</a>            |integrand| {
+<a href=#115 id=115 data-nosnippet>115</a>                integrand.warm_up(<span class="kw-2">&amp;</span>model)<span class="question-mark">?</span>;
+<a href=#116 id=116 data-nosnippet>116</a>
+<a href=#117 id=117 data-nosnippet>117</a>                <span class="kw">let </span>batch_len = <span class="self">self</span>.points.nrows();
+<a href=#118 id=118 data-nosnippet>118</a>                <span class="kw">let </span>integrator_weights =
+<a href=#119 id=119 data-nosnippet>119</a>                    normalize_integrator_weights(<span class="self">self</span>.integrator_weights.as_ref(), batch_len)<span class="question-mark">?</span>;
+<a href=#120 id=120 data-nosnippet>120</a>                <span class="kw">let </span>graph_names = normalize_optional_per_sample(
+<a href=#121 id=121 data-nosnippet>121</a>                    <span class="self">self</span>.graph_names.as_ref(),
+<a href=#122 id=122 data-nosnippet>122</a>                    batch_len,
+<a href=#123 id=123 data-nosnippet>123</a>                    <span class="string">"graph_names"</span>,
+<a href=#124 id=124 data-nosnippet>124</a>                )<span class="question-mark">?</span>;
+<a href=#125 id=125 data-nosnippet>125</a>                <span class="kw">let </span>orientations = normalize_optional_per_sample(
+<a href=#126 id=126 data-nosnippet>126</a>                    <span class="self">self</span>.orientations.as_ref(),
+<a href=#127 id=127 data-nosnippet>127</a>                    batch_len,
+<a href=#128 id=128 data-nosnippet>128</a>                    <span class="string">"orientations"</span>,
+<a href=#129 id=129 data-nosnippet>129</a>                )<span class="question-mark">?</span>;
+<a href=#130 id=130 data-nosnippet>130</a>
+<a href=#131 id=131 data-nosnippet>131</a>                <span class="kw">if </span>!<span class="self">self</span>.momentum_space
+<a href=#132 id=132 data-nosnippet>132</a>                    &amp;&amp; (graph_names.iter().any(Option::is_some)
+<a href=#133 id=133 data-nosnippet>133</a>                        || orientations.iter().any(Option::is_some))
+<a href=#134 id=134 data-nosnippet>134</a>                {
+<a href=#135 id=135 data-nosnippet>135</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#136 id=136 data-nosnippet>136</a>                    <span class="string">"Graph and orientation selection are only supported in momentum-space evaluation."
+<a href=#137 id=137 data-nosnippet>137</a>                </span>));
+<a href=#138 id=138 data-nosnippet>138</a>                }
+<a href=#139 id=139 data-nosnippet>139</a>
+<a href=#140 id=140 data-nosnippet>140</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(discrete_dims) = <span class="kw-2">&amp;</span><span class="self">self</span>.discrete_dims {
+<a href=#141 id=141 data-nosnippet>141</a>                    <span class="kw">if </span>discrete_dims.nrows() != batch_len {
+<a href=#142 id=142 data-nosnippet>142</a>                        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#143 id=143 data-nosnippet>143</a>                            <span class="string">"Expected {} rows in discrete_dims, got {}."</span>,
+<a href=#144 id=144 data-nosnippet>144</a>                            batch_len,
+<a href=#145 id=145 data-nosnippet>145</a>                            discrete_dims.nrows()
+<a href=#146 id=146 data-nosnippet>146</a>                        ));
+<a href=#147 id=147 data-nosnippet>147</a>                    }
+<a href=#148 id=148 data-nosnippet>148</a>                }
 <a href=#149 id=149 data-nosnippet>149</a>
-<a href=#150 id=150 data-nosnippet>150</a><span class="attr">#[derive(Debug, Clone)]
-<a href=#151 id=151 data-nosnippet>151</a></span><span class="kw">pub struct </span>EvaluateSamplesPrecise&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#152 id=152 data-nosnippet>152</a>    <span class="doccomment">/// Process containing the integrand; required when process selection is ambiguous.
-<a href=#153 id=153 data-nosnippet>153</a>    </span><span class="kw">pub </span>process_id: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#154 id=154 data-nosnippet>154</a>    <span class="doccomment">/// Integrand to evaluate; required when the selected process has multiple candidates.
-<a href=#155 id=155 data-nosnippet>155</a>    </span><span class="kw">pub </span>integrand_name: <span class="prelude-ty">Option</span>&lt;String&gt;,
-<a href=#156 id=156 data-nosnippet>156</a>    <span class="doccomment">/// Request arbitrary-precision internal evaluation.
-<a href=#157 id=157 data-nosnippet>157</a>    </span><span class="kw">pub </span>use_arb_prec: bool,
-<a href=#158 id=158 data-nosnippet>158</a>    <span class="doccomment">/// Omit optional evaluation metadata from each returned sample.
-<a href=#159 id=159 data-nosnippet>159</a>    </span><span class="kw">pub </span>minimal_output: bool,
-<a href=#160 id=160 data-nosnippet>160</a>    <span class="doccomment">/// Temporary event-generation override restored after this evaluation.
-<a href=#161 id=161 data-nosnippet>161</a>    </span><span class="kw">pub </span>return_generated_events: <span class="prelude-ty">Option</span>&lt;bool&gt;,
-<a href=#162 id=162 data-nosnippet>162</a>    <span class="doccomment">/// Interpret point rows as flattened three-momenta instead of integration coordinates.
-<a href=#163 id=163 data-nosnippet>163</a>    </span><span class="kw">pub </span>momentum_space: bool,
-<a href=#164 id=164 data-nosnippet>164</a>    <span class="doccomment">/// Two-dimensional coordinates with one sample per row.
-<a href=#165 id=165 data-nosnippet>165</a>    </span><span class="kw">pub </span>points: ArrayView2&lt;<span class="lifetime">'a</span>, f64&gt;,
-<a href=#166 id=166 data-nosnippet>166</a>    <span class="doccomment">/// Optional weight for each sample row; omitted weights default to one.
-<a href=#167 id=167 data-nosnippet>167</a>    </span><span class="kw">pub </span>integrator_weights: <span class="prelude-ty">Option</span>&lt;ArrayView1&lt;<span class="lifetime">'a</span>, f64&gt;&gt;,
-<a href=#168 id=168 data-nosnippet>168</a>    <span class="doccomment">/// Optional discrete integration coordinates with one row per sample.
-<a href=#169 id=169 data-nosnippet>169</a>    </span><span class="kw">pub </span>discrete_dims: <span class="prelude-ty">Option</span>&lt;ArrayView2&lt;<span class="lifetime">'a</span>, usize&gt;&gt;,
-<a href=#170 id=170 data-nosnippet>170</a>    <span class="doccomment">/// Optional momentum-space graph selection for each sample.
-<a href=#171 id=171 data-nosnippet>171</a>    </span><span class="kw">pub </span>graph_names: <span class="prelude-ty">Option</span>&lt;Vec&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt;&gt;,
-<a href=#172 id=172 data-nosnippet>172</a>    <span class="doccomment">/// Optional momentum-space orientation selection for each sample.
-<a href=#173 id=173 data-nosnippet>173</a>    </span><span class="kw">pub </span>orientations: <span class="prelude-ty">Option</span>&lt;Vec&lt;<span class="prelude-ty">Option</span>&lt;usize&gt;&gt;&gt;,
-<a href=#174 id=174 data-nosnippet>174</a>}
-<a href=#175 id=175 data-nosnippet>175</a>
-<a href=#176 id=176 data-nosnippet>176</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; EvaluateSamplesPrecise&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="kw">pub fn </span>run(<span class="kw-2">&amp;</span><span class="self">self</span>, state: <span class="kw-2">&amp;mut </span>State) -&gt; <span class="prelude-ty">Result</span>&lt;PreciseBatchSampleEvaluationResult&gt; {
-<a href=#178 id=178 data-nosnippet>178</a>        <span class="kw">let </span>process_ref = <span class="self">self</span>.process_id.map(ProcessRef::Id);
-<a href=#179 id=179 data-nosnippet>179</a>        <span class="kw">let </span>(process_id, integrand_name) =
-<a href=#180 id=180 data-nosnippet>180</a>            state.find_integrand_ref(process_ref.as_ref(), <span class="self">self</span>.integrand_name.as_ref())<span class="question-mark">?</span>;
-<a href=#181 id=181 data-nosnippet>181</a>        <span class="kw">let </span>model = state.resolve_model_for_integrand(process_id, <span class="kw-2">&amp;</span>integrand_name)<span class="question-mark">?</span>;
-<a href=#182 id=182 data-nosnippet>182</a>
-<a href=#183 id=183 data-nosnippet>183</a>        <span class="kw">let </span>integrand = state
-<a href=#184 id=184 data-nosnippet>184</a>            .process_list
-<a href=#185 id=185 data-nosnippet>185</a>            .get_integrand_mut(process_id, <span class="kw-2">&amp;</span>integrand_name)<span class="question-mark">?</span>;
-<a href=#186 id=186 data-nosnippet>186</a>        <span class="kw">let </span>(raw_samples, observables) = with_return_generated_events_override(
-<a href=#187 id=187 data-nosnippet>187</a>            integrand,
-<a href=#188 id=188 data-nosnippet>188</a>            <span class="self">self</span>.return_generated_events,
-<a href=#189 id=189 data-nosnippet>189</a>            |integrand| {
-<a href=#190 id=190 data-nosnippet>190</a>                integrand.warm_up(<span class="kw-2">&amp;</span>model)<span class="question-mark">?</span>;
-<a href=#191 id=191 data-nosnippet>191</a>
-<a href=#192 id=192 data-nosnippet>192</a>                <span class="kw">let </span>batch_len = <span class="self">self</span>.points.nrows();
-<a href=#193 id=193 data-nosnippet>193</a>                <span class="kw">let </span>integrator_weights =
-<a href=#194 id=194 data-nosnippet>194</a>                    normalize_integrator_weights(<span class="self">self</span>.integrator_weights.as_ref(), batch_len)<span class="question-mark">?</span>;
-<a href=#195 id=195 data-nosnippet>195</a>                <span class="kw">let </span>graph_names = normalize_optional_per_sample(
-<a href=#196 id=196 data-nosnippet>196</a>                    <span class="self">self</span>.graph_names.as_ref(),
-<a href=#197 id=197 data-nosnippet>197</a>                    batch_len,
-<a href=#198 id=198 data-nosnippet>198</a>                    <span class="string">"graph_names"</span>,
-<a href=#199 id=199 data-nosnippet>199</a>                )<span class="question-mark">?</span>;
-<a href=#200 id=200 data-nosnippet>200</a>                <span class="kw">let </span>orientations = normalize_optional_per_sample(
-<a href=#201 id=201 data-nosnippet>201</a>                    <span class="self">self</span>.orientations.as_ref(),
-<a href=#202 id=202 data-nosnippet>202</a>                    batch_len,
-<a href=#203 id=203 data-nosnippet>203</a>                    <span class="string">"orientations"</span>,
-<a href=#204 id=204 data-nosnippet>204</a>                )<span class="question-mark">?</span>;
-<a href=#205 id=205 data-nosnippet>205</a>
-<a href=#206 id=206 data-nosnippet>206</a>                <span class="kw">if </span>!<span class="self">self</span>.momentum_space
-<a href=#207 id=207 data-nosnippet>207</a>                    &amp;&amp; (graph_names.iter().any(Option::is_some)
-<a href=#208 id=208 data-nosnippet>208</a>                        || orientations.iter().any(Option::is_some))
-<a href=#209 id=209 data-nosnippet>209</a>                {
-<a href=#210 id=210 data-nosnippet>210</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#211 id=211 data-nosnippet>211</a>                        <span class="string">"Graph and orientation selection are only supported in momentum-space evaluation."
-<a href=#212 id=212 data-nosnippet>212</a>                    </span>));
-<a href=#213 id=213 data-nosnippet>213</a>                }
-<a href=#214 id=214 data-nosnippet>214</a>
-<a href=#215 id=215 data-nosnippet>215</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(discrete_dims) = <span class="kw-2">&amp;</span><span class="self">self</span>.discrete_dims {
-<a href=#216 id=216 data-nosnippet>216</a>                    <span class="kw">if </span>discrete_dims.nrows() != batch_len {
-<a href=#217 id=217 data-nosnippet>217</a>                        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#218 id=218 data-nosnippet>218</a>                            <span class="string">"Expected {} rows in discrete_dims, got {}."</span>,
-<a href=#219 id=219 data-nosnippet>219</a>                            batch_len,
-<a href=#220 id=220 data-nosnippet>220</a>                            discrete_dims.nrows()
-<a href=#221 id=221 data-nosnippet>221</a>                        ));
-<a href=#222 id=222 data-nosnippet>222</a>                    }
-<a href=#223 id=223 data-nosnippet>223</a>                }
-<a href=#224 id=224 data-nosnippet>224</a>
-<a href=#225 id=225 data-nosnippet>225</a>                <span class="kw">let </span><span class="kw-2">mut </span>raw_samples = <span class="kw">if </span><span class="self">self</span>.momentum_space {
-<a href=#226 id=226 data-nosnippet>226</a>                    <span class="kw">let </span>inputs = build_momentum_inputs(
-<a href=#227 id=227 data-nosnippet>227</a>                        integrand,
-<a href=#228 id=228 data-nosnippet>228</a>                        <span class="kw-2">&amp;</span><span class="self">self</span>.points,
-<a href=#229 id=229 data-nosnippet>229</a>                        <span class="kw-2">&amp;</span>integrator_weights,
-<a href=#230 id=230 data-nosnippet>230</a>                        <span class="self">self</span>.discrete_dims.as_ref(),
-<a href=#231 id=231 data-nosnippet>231</a>                        <span class="kw-2">&amp;</span>graph_names,
-<a href=#232 id=232 data-nosnippet>232</a>                        <span class="kw-2">&amp;</span>orientations,
-<a href=#233 id=233 data-nosnippet>233</a>                    )<span class="question-mark">?</span>;
-<a href=#234 id=234 data-nosnippet>234</a>                    integrand
-<a href=#235 id=235 data-nosnippet>235</a>                        .evaluate_momentum_configurations_precise_raw(
-<a href=#236 id=236 data-nosnippet>236</a>                            <span class="kw-2">&amp;</span>model,
-<a href=#237 id=237 data-nosnippet>237</a>                            <span class="kw-2">&amp;</span>inputs,
-<a href=#238 id=238 data-nosnippet>238</a>                            <span class="self">self</span>.use_arb_prec,
-<a href=#239 id=239 data-nosnippet>239</a>                        )<span class="question-mark">?
-<a href=#240 id=240 data-nosnippet>240</a>                        </span>.samples
-<a href=#241 id=241 data-nosnippet>241</a>                } <span class="kw">else </span>{
-<a href=#242 id=242 data-nosnippet>242</a>                    <span class="kw">let </span>samples = build_havana_samples(
-<a href=#243 id=243 data-nosnippet>243</a>                        integrand,
-<a href=#244 id=244 data-nosnippet>244</a>                        <span class="kw-2">&amp;</span><span class="self">self</span>.points,
-<a href=#245 id=245 data-nosnippet>245</a>                        <span class="kw-2">&amp;</span>integrator_weights,
-<a href=#246 id=246 data-nosnippet>246</a>                        <span class="self">self</span>.discrete_dims.as_ref(),
-<a href=#247 id=247 data-nosnippet>247</a>                    )<span class="question-mark">?</span>;
-<a href=#248 id=248 data-nosnippet>248</a>                    integrand
-<a href=#249 id=249 data-nosnippet>249</a>                        .evaluate_samples_precise_raw(
-<a href=#250 id=250 data-nosnippet>250</a>                            <span class="kw-2">&amp;</span>model,
-<a href=#251 id=251 data-nosnippet>251</a>                            <span class="kw-2">&amp;</span>samples,
-<a href=#252 id=252 data-nosnippet>252</a>                            <span class="self">self</span>.use_arb_prec,
-<a href=#253 id=253 data-nosnippet>253</a>                            Complex::new_zero(),
-<a href=#254 id=254 data-nosnippet>254</a>                        )<span class="question-mark">?
-<a href=#255 id=255 data-nosnippet>255</a>                        </span>.samples
-<a href=#256 id=256 data-nosnippet>256</a>                };
-<a href=#257 id=257 data-nosnippet>257</a>
-<a href=#258 id=258 data-nosnippet>258</a>                <span class="kw">let </span>observables = merge_precise_observables(integrand, <span class="kw-2">&amp;mut </span>raw_samples)<span class="question-mark">?</span>;
-<a href=#259 id=259 data-nosnippet>259</a>                <span class="prelude-val">Ok</span>((raw_samples, observables))
-<a href=#260 id=260 data-nosnippet>260</a>            },
-<a href=#261 id=261 data-nosnippet>261</a>        )<span class="question-mark">?</span>;
-<a href=#262 id=262 data-nosnippet>262</a>
-<a href=#263 id=263 data-nosnippet>263</a>        <span class="prelude-val">Ok</span>(PreciseBatchSampleEvaluationResult {
-<a href=#264 id=264 data-nosnippet>264</a>            samples: raw_samples
-<a href=#265 id=265 data-nosnippet>265</a>                .into_iter()
-<a href=#266 id=266 data-nosnippet>266</a>                .map(|evaluation| PreciseSampleEvaluationResult {
-<a href=#267 id=267 data-nosnippet>267</a>                    evaluation: evaluation.into_output(<span class="self">self</span>.minimal_output),
-<a href=#268 id=268 data-nosnippet>268</a>                })
-<a href=#269 id=269 data-nosnippet>269</a>                .collect(),
-<a href=#270 id=270 data-nosnippet>270</a>            observables,
-<a href=#271 id=271 data-nosnippet>271</a>        })
-<a href=#272 id=272 data-nosnippet>272</a>    }
-<a href=#273 id=273 data-nosnippet>273</a>}
+<a href=#150 id=150 data-nosnippet>150</a>                <span class="kw">let </span>samples = <span class="kw">if </span><span class="self">self</span>.momentum_space {
+<a href=#151 id=151 data-nosnippet>151</a>                    <span class="kw">let </span>inputs = build_momentum_inputs(
+<a href=#152 id=152 data-nosnippet>152</a>                        integrand,
+<a href=#153 id=153 data-nosnippet>153</a>                        <span class="kw-2">&amp;</span><span class="self">self</span>.points,
+<a href=#154 id=154 data-nosnippet>154</a>                        <span class="kw-2">&amp;</span>integrator_weights,
+<a href=#155 id=155 data-nosnippet>155</a>                        <span class="self">self</span>.discrete_dims.as_ref(),
+<a href=#156 id=156 data-nosnippet>156</a>                        <span class="kw-2">&amp;</span>graph_names,
+<a href=#157 id=157 data-nosnippet>157</a>                        <span class="kw-2">&amp;</span>orientations,
+<a href=#158 id=158 data-nosnippet>158</a>                    )<span class="question-mark">?</span>;
+<a href=#159 id=159 data-nosnippet>159</a>                    integrand
+<a href=#160 id=160 data-nosnippet>160</a>                        .evaluate_momentum_configurations_raw(<span class="kw-2">&amp;</span>model, <span class="kw-2">&amp;</span>inputs, <span class="self">self</span>.use_arb_prec)<span class="question-mark">?
+<a href=#161 id=161 data-nosnippet>161</a>                        </span>.samples
+<a href=#162 id=162 data-nosnippet>162</a>                } <span class="kw">else </span>{
+<a href=#163 id=163 data-nosnippet>163</a>                    <span class="kw">let </span>samples = build_havana_samples(
+<a href=#164 id=164 data-nosnippet>164</a>                        integrand,
+<a href=#165 id=165 data-nosnippet>165</a>                        <span class="kw-2">&amp;</span><span class="self">self</span>.points,
+<a href=#166 id=166 data-nosnippet>166</a>                        <span class="kw-2">&amp;</span>integrator_weights,
+<a href=#167 id=167 data-nosnippet>167</a>                        <span class="self">self</span>.discrete_dims.as_ref(),
+<a href=#168 id=168 data-nosnippet>168</a>                    )<span class="question-mark">?</span>;
+<a href=#169 id=169 data-nosnippet>169</a>                    integrand
+<a href=#170 id=170 data-nosnippet>170</a>                        .evaluate_samples_raw(
+<a href=#171 id=171 data-nosnippet>171</a>                            <span class="kw-2">&amp;</span>model,
+<a href=#172 id=172 data-nosnippet>172</a>                            <span class="kw-2">&amp;</span>samples,
+<a href=#173 id=173 data-nosnippet>173</a>                            <span class="number">1</span>,
+<a href=#174 id=174 data-nosnippet>174</a>                            <span class="self">self</span>.use_arb_prec,
+<a href=#175 id=175 data-nosnippet>175</a>                            <span class="bool-val">false</span>,
+<a href=#176 id=176 data-nosnippet>176</a>                            Complex::new_zero(),
+<a href=#177 id=177 data-nosnippet>177</a>                        )<span class="question-mark">?
+<a href=#178 id=178 data-nosnippet>178</a>                        </span>.samples
+<a href=#179 id=179 data-nosnippet>179</a>                };
+<a href=#180 id=180 data-nosnippet>180</a>
+<a href=#181 id=181 data-nosnippet>181</a>                <span class="kw">let </span>observables = integrand
+<a href=#182 id=182 data-nosnippet>182</a>                    .observable_snapshot_bundle()
+<a href=#183 id=183 data-nosnippet>183</a>                    .unwrap_or_else(ObservableSnapshotBundle::default);
+<a href=#184 id=184 data-nosnippet>184</a>
+<a href=#185 id=185 data-nosnippet>185</a>                <span class="prelude-val">Ok</span>((samples, observables))
+<a href=#186 id=186 data-nosnippet>186</a>            },
+<a href=#187 id=187 data-nosnippet>187</a>        );
+<a href=#188 id=188 data-nosnippet>188</a>
+<a href=#189 id=189 data-nosnippet>189</a>        <span class="kw">let </span>(samples, observables) = run_result<span class="question-mark">?</span>;
+<a href=#190 id=190 data-nosnippet>190</a>
+<a href=#191 id=191 data-nosnippet>191</a>        <span class="prelude-val">Ok</span>(BatchSampleEvaluationResult {
+<a href=#192 id=192 data-nosnippet>192</a>            samples: samples
+<a href=#193 id=193 data-nosnippet>193</a>                .into_iter()
+<a href=#194 id=194 data-nosnippet>194</a>                .map(|evaluation| SampleEvaluationResult {
+<a href=#195 id=195 data-nosnippet>195</a>                    evaluation: evaluation.into_output(<span class="self">self</span>.minimal_output),
+<a href=#196 id=196 data-nosnippet>196</a>                })
+<a href=#197 id=197 data-nosnippet>197</a>                .collect(),
+<a href=#198 id=198 data-nosnippet>198</a>            observables,
+<a href=#199 id=199 data-nosnippet>199</a>        })
+<a href=#200 id=200 data-nosnippet>200</a>    }
+<a href=#201 id=201 data-nosnippet>201</a>}
+<a href=#202 id=202 data-nosnippet>202</a>
+<a href=#203 id=203 data-nosnippet>203</a><span class="doccomment">/// Evaluate inputs while preserving the numeric type used by the final stability level.
+<a href=#204 id=204 data-nosnippet>204</a>///
+<a href=#205 id=205 data-nosnippet>205</a>/// Coordinate layouts and validation are identical to [`EvaluateSamples`]. With
+<a href=#206 id=206 data-nosnippet>206</a>/// [`Self::use_arb_prec`] set to `false`, the configured stability ladder may return
+<a href=#207 id=207 data-nosnippet>207</a>/// an `f64`, `f128`, or arbitrary-precision result. Setting it to `true` selects the
+<a href=#208 id=208 data-nosnippet>208</a>/// configured `f128` level, or arbitrary precision when `f128` is unavailable. Unlike
+<a href=#209 id=209 data-nosnippet>209</a>/// [`EvaluateSamples`], this request retains that active result type.
+<a href=#210 id=210 data-nosnippet>210</a></span><span class="attr">#[derive(Debug, Clone)]
+<a href=#211 id=211 data-nosnippet>211</a></span><span class="kw">pub struct </span>EvaluateSamplesPrecise&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#212 id=212 data-nosnippet>212</a>    <span class="doccomment">/// Process containing the integrand; required when process selection is ambiguous.
+<a href=#213 id=213 data-nosnippet>213</a>    </span><span class="kw">pub </span>process_id: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#214 id=214 data-nosnippet>214</a>    <span class="doccomment">/// Integrand to evaluate; required when the selected process has multiple candidates.
+<a href=#215 id=215 data-nosnippet>215</a>    </span><span class="kw">pub </span>integrand_name: <span class="prelude-ty">Option</span>&lt;String&gt;,
+<a href=#216 id=216 data-nosnippet>216</a>    <span class="doccomment">/// Select configured f128, or Arb when f128 is unavailable, instead of the full ladder.
+<a href=#217 id=217 data-nosnippet>217</a>    </span><span class="kw">pub </span>use_arb_prec: bool,
+<a href=#218 id=218 data-nosnippet>218</a>    <span class="doccomment">/// Omit optional evaluation metadata from each returned sample.
+<a href=#219 id=219 data-nosnippet>219</a>    </span><span class="kw">pub </span>minimal_output: bool,
+<a href=#220 id=220 data-nosnippet>220</a>    <span class="doccomment">/// Temporary event-generation override restored after this evaluation.
+<a href=#221 id=221 data-nosnippet>221</a>    </span><span class="kw">pub </span>return_generated_events: <span class="prelude-ty">Option</span>&lt;bool&gt;,
+<a href=#222 id=222 data-nosnippet>222</a>    <span class="doccomment">/// Interpret rows as consecutive spatial loop-momentum `(px, py, pz)` triplets.
+<a href=#223 id=223 data-nosnippet>223</a>    </span><span class="kw">pub </span>momentum_space: bool,
+<a href=#224 id=224 data-nosnippet>224</a>    <span class="doccomment">/// Two-dimensional inputs with one integration or momentum-space sample per row.
+<a href=#225 id=225 data-nosnippet>225</a>    </span><span class="kw">pub </span>points: ArrayView2&lt;<span class="lifetime">'a</span>, f64&gt;,
+<a href=#226 id=226 data-nosnippet>226</a>    <span class="doccomment">/// Optional weight for each sample row; omitted weights default to one.
+<a href=#227 id=227 data-nosnippet>227</a>    </span><span class="kw">pub </span>integrator_weights: <span class="prelude-ty">Option</span>&lt;ArrayView1&lt;<span class="lifetime">'a</span>, f64&gt;&gt;,
+<a href=#228 id=228 data-nosnippet>228</a>    <span class="doccomment">/// Optional discrete integration coordinates with one row per sample.
+<a href=#229 id=229 data-nosnippet>229</a>    </span><span class="kw">pub </span>discrete_dims: <span class="prelude-ty">Option</span>&lt;ArrayView2&lt;<span class="lifetime">'a</span>, usize&gt;&gt;,
+<a href=#230 id=230 data-nosnippet>230</a>    <span class="doccomment">/// Optional momentum-space graph selection for each sample.
+<a href=#231 id=231 data-nosnippet>231</a>    </span><span class="kw">pub </span>graph_names: <span class="prelude-ty">Option</span>&lt;Vec&lt;<span class="prelude-ty">Option</span>&lt;String&gt;&gt;&gt;,
+<a href=#232 id=232 data-nosnippet>232</a>    <span class="doccomment">/// Optional momentum-space orientation selection for each sample.
+<a href=#233 id=233 data-nosnippet>233</a>    </span><span class="kw">pub </span>orientations: <span class="prelude-ty">Option</span>&lt;Vec&lt;<span class="prelude-ty">Option</span>&lt;usize&gt;&gt;&gt;,
+<a href=#234 id=234 data-nosnippet>234</a>}
+<a href=#235 id=235 data-nosnippet>235</a>
+<a href=#236 id=236 data-nosnippet>236</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; EvaluateSamplesPrecise&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#237 id=237 data-nosnippet>237</a>    <span class="kw">pub fn </span>run(<span class="kw-2">&amp;</span><span class="self">self</span>, state: <span class="kw-2">&amp;mut </span>State) -&gt; <span class="prelude-ty">Result</span>&lt;PreciseBatchSampleEvaluationResult&gt; {
+<a href=#238 id=238 data-nosnippet>238</a>        <span class="kw">let </span>process_ref = <span class="self">self</span>.process_id.map(ProcessRef::Id);
+<a href=#239 id=239 data-nosnippet>239</a>        <span class="kw">let </span>(process_id, integrand_name) =
+<a href=#240 id=240 data-nosnippet>240</a>            state.find_integrand_ref(process_ref.as_ref(), <span class="self">self</span>.integrand_name.as_ref())<span class="question-mark">?</span>;
+<a href=#241 id=241 data-nosnippet>241</a>        <span class="kw">let </span>model = state.resolve_model_for_integrand(process_id, <span class="kw-2">&amp;</span>integrand_name)<span class="question-mark">?</span>;
+<a href=#242 id=242 data-nosnippet>242</a>
+<a href=#243 id=243 data-nosnippet>243</a>        <span class="kw">let </span>integrand = state
+<a href=#244 id=244 data-nosnippet>244</a>            .process_list
+<a href=#245 id=245 data-nosnippet>245</a>            .get_integrand_mut(process_id, <span class="kw-2">&amp;</span>integrand_name)<span class="question-mark">?</span>;
+<a href=#246 id=246 data-nosnippet>246</a>        <span class="kw">let </span>(raw_samples, observables) = with_return_generated_events_override(
+<a href=#247 id=247 data-nosnippet>247</a>            integrand,
+<a href=#248 id=248 data-nosnippet>248</a>            <span class="self">self</span>.return_generated_events,
+<a href=#249 id=249 data-nosnippet>249</a>            |integrand| {
+<a href=#250 id=250 data-nosnippet>250</a>                integrand.warm_up(<span class="kw-2">&amp;</span>model)<span class="question-mark">?</span>;
+<a href=#251 id=251 data-nosnippet>251</a>
+<a href=#252 id=252 data-nosnippet>252</a>                <span class="kw">let </span>batch_len = <span class="self">self</span>.points.nrows();
+<a href=#253 id=253 data-nosnippet>253</a>                <span class="kw">let </span>integrator_weights =
+<a href=#254 id=254 data-nosnippet>254</a>                    normalize_integrator_weights(<span class="self">self</span>.integrator_weights.as_ref(), batch_len)<span class="question-mark">?</span>;
+<a href=#255 id=255 data-nosnippet>255</a>                <span class="kw">let </span>graph_names = normalize_optional_per_sample(
+<a href=#256 id=256 data-nosnippet>256</a>                    <span class="self">self</span>.graph_names.as_ref(),
+<a href=#257 id=257 data-nosnippet>257</a>                    batch_len,
+<a href=#258 id=258 data-nosnippet>258</a>                    <span class="string">"graph_names"</span>,
+<a href=#259 id=259 data-nosnippet>259</a>                )<span class="question-mark">?</span>;
+<a href=#260 id=260 data-nosnippet>260</a>                <span class="kw">let </span>orientations = normalize_optional_per_sample(
+<a href=#261 id=261 data-nosnippet>261</a>                    <span class="self">self</span>.orientations.as_ref(),
+<a href=#262 id=262 data-nosnippet>262</a>                    batch_len,
+<a href=#263 id=263 data-nosnippet>263</a>                    <span class="string">"orientations"</span>,
+<a href=#264 id=264 data-nosnippet>264</a>                )<span class="question-mark">?</span>;
+<a href=#265 id=265 data-nosnippet>265</a>
+<a href=#266 id=266 data-nosnippet>266</a>                <span class="kw">if </span>!<span class="self">self</span>.momentum_space
+<a href=#267 id=267 data-nosnippet>267</a>                    &amp;&amp; (graph_names.iter().any(Option::is_some)
+<a href=#268 id=268 data-nosnippet>268</a>                        || orientations.iter().any(Option::is_some))
+<a href=#269 id=269 data-nosnippet>269</a>                {
+<a href=#270 id=270 data-nosnippet>270</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#271 id=271 data-nosnippet>271</a>                        <span class="string">"Graph and orientation selection are only supported in momentum-space evaluation."
+<a href=#272 id=272 data-nosnippet>272</a>                    </span>));
+<a href=#273 id=273 data-nosnippet>273</a>                }
 <a href=#274 id=274 data-nosnippet>274</a>
-<a href=#275 id=275 data-nosnippet>275</a><span class="kw">pub fn </span>evaluate_samples_precise&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#276 id=276 data-nosnippet>276</a>    state: <span class="kw-2">&amp;mut </span>State,
-<a href=#277 id=277 data-nosnippet>277</a>    request: <span class="kw-2">&amp;</span>EvaluateSamplesPrecise&lt;<span class="lifetime">'a</span>&gt;,
-<a href=#278 id=278 data-nosnippet>278</a>) -&gt; <span class="prelude-ty">Result</span>&lt;PreciseBatchSampleEvaluationResult&gt; {
-<a href=#279 id=279 data-nosnippet>279</a>    request.run(state)
-<a href=#280 id=280 data-nosnippet>280</a>}
-<a href=#281 id=281 data-nosnippet>281</a>
-<a href=#282 id=282 data-nosnippet>282</a><span class="kw">pub fn </span>evaluate_sample_precise&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#283 id=283 data-nosnippet>283</a>    state: <span class="kw-2">&amp;mut </span>State,
-<a href=#284 id=284 data-nosnippet>284</a>    request: <span class="kw-2">&amp;</span>EvaluateSamplesPrecise&lt;<span class="lifetime">'a</span>&gt;,
-<a href=#285 id=285 data-nosnippet>285</a>) -&gt; <span class="prelude-ty">Result</span>&lt;PreciseSingleSampleEvaluationResult&gt; {
-<a href=#286 id=286 data-nosnippet>286</a>    <span class="kw">let </span><span class="kw-2">mut </span>results = request.run(state)<span class="question-mark">?</span>;
-<a href=#287 id=287 data-nosnippet>287</a>    <span class="kw">if </span>results.samples.len() != <span class="number">1 </span>{
-<a href=#288 id=288 data-nosnippet>288</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#289 id=289 data-nosnippet>289</a>            <span class="string">"evaluate_sample_precise expects exactly one sample, got {}."</span>,
-<a href=#290 id=290 data-nosnippet>290</a>            results.samples.len()
-<a href=#291 id=291 data-nosnippet>291</a>        ));
-<a href=#292 id=292 data-nosnippet>292</a>    }
-<a href=#293 id=293 data-nosnippet>293</a>    <span class="prelude-val">Ok</span>(PreciseSingleSampleEvaluationResult {
-<a href=#294 id=294 data-nosnippet>294</a>        sample: results.samples.remove(<span class="number">0</span>),
-<a href=#295 id=295 data-nosnippet>295</a>        observables: results.observables,
-<a href=#296 id=296 data-nosnippet>296</a>    })
-<a href=#297 id=297 data-nosnippet>297</a>}
-<a href=#298 id=298 data-nosnippet>298</a>
-<a href=#299 id=299 data-nosnippet>299</a><span class="kw">pub fn </span>evaluate_samples&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#300 id=300 data-nosnippet>300</a>    state: <span class="kw-2">&amp;mut </span>State,
-<a href=#301 id=301 data-nosnippet>301</a>    request: <span class="kw-2">&amp;</span>EvaluateSamples&lt;<span class="lifetime">'a</span>&gt;,
-<a href=#302 id=302 data-nosnippet>302</a>) -&gt; <span class="prelude-ty">Result</span>&lt;BatchSampleEvaluationResult&gt; {
-<a href=#303 id=303 data-nosnippet>303</a>    request.run(state)
-<a href=#304 id=304 data-nosnippet>304</a>}
-<a href=#305 id=305 data-nosnippet>305</a>
-<a href=#306 id=306 data-nosnippet>306</a><span class="kw">pub fn </span>evaluate_sample&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#307 id=307 data-nosnippet>307</a>    state: <span class="kw-2">&amp;mut </span>State,
-<a href=#308 id=308 data-nosnippet>308</a>    request: <span class="kw-2">&amp;</span>EvaluateSamples&lt;<span class="lifetime">'a</span>&gt;,
-<a href=#309 id=309 data-nosnippet>309</a>) -&gt; <span class="prelude-ty">Result</span>&lt;SingleSampleEvaluationResult&gt; {
-<a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">let </span><span class="kw-2">mut </span>results = request.run(state)<span class="question-mark">?</span>;
-<a href=#311 id=311 data-nosnippet>311</a>    <span class="kw">if </span>results.samples.len() != <span class="number">1 </span>{
-<a href=#312 id=312 data-nosnippet>312</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#313 id=313 data-nosnippet>313</a>            <span class="string">"evaluate_sample expects exactly one sample, got {}."</span>,
-<a href=#314 id=314 data-nosnippet>314</a>            results.samples.len()
-<a href=#315 id=315 data-nosnippet>315</a>        ));
-<a href=#316 id=316 data-nosnippet>316</a>    }
-<a href=#317 id=317 data-nosnippet>317</a>    <span class="prelude-val">Ok</span>(SingleSampleEvaluationResult {
-<a href=#318 id=318 data-nosnippet>318</a>        sample: results.samples.remove(<span class="number">0</span>),
-<a href=#319 id=319 data-nosnippet>319</a>        observables: results.observables,
-<a href=#320 id=320 data-nosnippet>320</a>    })
-<a href=#321 id=321 data-nosnippet>321</a>}
+<a href=#275 id=275 data-nosnippet>275</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(discrete_dims) = <span class="kw-2">&amp;</span><span class="self">self</span>.discrete_dims {
+<a href=#276 id=276 data-nosnippet>276</a>                    <span class="kw">if </span>discrete_dims.nrows() != batch_len {
+<a href=#277 id=277 data-nosnippet>277</a>                        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#278 id=278 data-nosnippet>278</a>                            <span class="string">"Expected {} rows in discrete_dims, got {}."</span>,
+<a href=#279 id=279 data-nosnippet>279</a>                            batch_len,
+<a href=#280 id=280 data-nosnippet>280</a>                            discrete_dims.nrows()
+<a href=#281 id=281 data-nosnippet>281</a>                        ));
+<a href=#282 id=282 data-nosnippet>282</a>                    }
+<a href=#283 id=283 data-nosnippet>283</a>                }
+<a href=#284 id=284 data-nosnippet>284</a>
+<a href=#285 id=285 data-nosnippet>285</a>                <span class="kw">let </span><span class="kw-2">mut </span>raw_samples = <span class="kw">if </span><span class="self">self</span>.momentum_space {
+<a href=#286 id=286 data-nosnippet>286</a>                    <span class="kw">let </span>inputs = build_momentum_inputs(
+<a href=#287 id=287 data-nosnippet>287</a>                        integrand,
+<a href=#288 id=288 data-nosnippet>288</a>                        <span class="kw-2">&amp;</span><span class="self">self</span>.points,
+<a href=#289 id=289 data-nosnippet>289</a>                        <span class="kw-2">&amp;</span>integrator_weights,
+<a href=#290 id=290 data-nosnippet>290</a>                        <span class="self">self</span>.discrete_dims.as_ref(),
+<a href=#291 id=291 data-nosnippet>291</a>                        <span class="kw-2">&amp;</span>graph_names,
+<a href=#292 id=292 data-nosnippet>292</a>                        <span class="kw-2">&amp;</span>orientations,
+<a href=#293 id=293 data-nosnippet>293</a>                    )<span class="question-mark">?</span>;
+<a href=#294 id=294 data-nosnippet>294</a>                    integrand
+<a href=#295 id=295 data-nosnippet>295</a>                        .evaluate_momentum_configurations_precise_raw(
+<a href=#296 id=296 data-nosnippet>296</a>                            <span class="kw-2">&amp;</span>model,
+<a href=#297 id=297 data-nosnippet>297</a>                            <span class="kw-2">&amp;</span>inputs,
+<a href=#298 id=298 data-nosnippet>298</a>                            <span class="self">self</span>.use_arb_prec,
+<a href=#299 id=299 data-nosnippet>299</a>                        )<span class="question-mark">?
+<a href=#300 id=300 data-nosnippet>300</a>                        </span>.samples
+<a href=#301 id=301 data-nosnippet>301</a>                } <span class="kw">else </span>{
+<a href=#302 id=302 data-nosnippet>302</a>                    <span class="kw">let </span>samples = build_havana_samples(
+<a href=#303 id=303 data-nosnippet>303</a>                        integrand,
+<a href=#304 id=304 data-nosnippet>304</a>                        <span class="kw-2">&amp;</span><span class="self">self</span>.points,
+<a href=#305 id=305 data-nosnippet>305</a>                        <span class="kw-2">&amp;</span>integrator_weights,
+<a href=#306 id=306 data-nosnippet>306</a>                        <span class="self">self</span>.discrete_dims.as_ref(),
+<a href=#307 id=307 data-nosnippet>307</a>                    )<span class="question-mark">?</span>;
+<a href=#308 id=308 data-nosnippet>308</a>                    integrand
+<a href=#309 id=309 data-nosnippet>309</a>                        .evaluate_samples_precise_raw(
+<a href=#310 id=310 data-nosnippet>310</a>                            <span class="kw-2">&amp;</span>model,
+<a href=#311 id=311 data-nosnippet>311</a>                            <span class="kw-2">&amp;</span>samples,
+<a href=#312 id=312 data-nosnippet>312</a>                            <span class="self">self</span>.use_arb_prec,
+<a href=#313 id=313 data-nosnippet>313</a>                            Complex::new_zero(),
+<a href=#314 id=314 data-nosnippet>314</a>                        )<span class="question-mark">?
+<a href=#315 id=315 data-nosnippet>315</a>                        </span>.samples
+<a href=#316 id=316 data-nosnippet>316</a>                };
+<a href=#317 id=317 data-nosnippet>317</a>
+<a href=#318 id=318 data-nosnippet>318</a>                <span class="kw">let </span>observables = merge_precise_observables(integrand, <span class="kw-2">&amp;mut </span>raw_samples)<span class="question-mark">?</span>;
+<a href=#319 id=319 data-nosnippet>319</a>                <span class="prelude-val">Ok</span>((raw_samples, observables))
+<a href=#320 id=320 data-nosnippet>320</a>            },
+<a href=#321 id=321 data-nosnippet>321</a>        )<span class="question-mark">?</span>;
 <a href=#322 id=322 data-nosnippet>322</a>
-<a href=#323 id=323 data-nosnippet>323</a><span class="kw">fn </span>with_return_generated_events_override&lt;R&gt;(
-<a href=#324 id=324 data-nosnippet>324</a>    integrand: <span class="kw-2">&amp;mut </span>gammalooprs::integrands::process::ProcessIntegrand,
-<a href=#325 id=325 data-nosnippet>325</a>    return_generated_events: <span class="prelude-ty">Option</span>&lt;bool&gt;,
-<a href=#326 id=326 data-nosnippet>326</a>    run: <span class="kw">impl </span>FnOnce(<span class="kw-2">&amp;mut </span>gammalooprs::integrands::process::ProcessIntegrand) -&gt; <span class="prelude-ty">Result</span>&lt;R&gt;,
-<a href=#327 id=327 data-nosnippet>327</a>) -&gt; <span class="prelude-ty">Result</span>&lt;R&gt; {
-<a href=#328 id=328 data-nosnippet>328</a>    <span class="kw">let </span>previous_generate_events = integrand.get_settings().general.generate_events;
-<a href=#329 id=329 data-nosnippet>329</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(return_generated_events) = return_generated_events {
-<a href=#330 id=330 data-nosnippet>330</a>        integrand.get_mut_settings().general.generate_events = return_generated_events;
-<a href=#331 id=331 data-nosnippet>331</a>    }
-<a href=#332 id=332 data-nosnippet>332</a>    <span class="kw">let </span>result = run(integrand);
-<a href=#333 id=333 data-nosnippet>333</a>    <span class="kw">if </span>integrand.get_settings().general.generate_events != previous_generate_events {
-<a href=#334 id=334 data-nosnippet>334</a>        integrand.get_mut_settings().general.generate_events = previous_generate_events;
-<a href=#335 id=335 data-nosnippet>335</a>    }
-<a href=#336 id=336 data-nosnippet>336</a>    result
-<a href=#337 id=337 data-nosnippet>337</a>}
-<a href=#338 id=338 data-nosnippet>338</a>
-<a href=#339 id=339 data-nosnippet>339</a><span class="kw">fn </span>normalize_optional_per_sample&lt;T: Clone&gt;(
-<a href=#340 id=340 data-nosnippet>340</a>    values: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Vec&lt;<span class="prelude-ty">Option</span>&lt;T&gt;&gt;&gt;,
-<a href=#341 id=341 data-nosnippet>341</a>    batch_len: usize,
-<a href=#342 id=342 data-nosnippet>342</a>    label: <span class="kw-2">&amp;</span>str,
-<a href=#343 id=343 data-nosnippet>343</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="prelude-ty">Option</span>&lt;T&gt;&gt;&gt; {
-<a href=#344 id=344 data-nosnippet>344</a>    <span class="kw">match </span>values {
-<a href=#345 id=345 data-nosnippet>345</a>        <span class="prelude-val">Some</span>(values) =&gt; {
-<a href=#346 id=346 data-nosnippet>346</a>            <span class="kw">if </span>values.len() != batch_len {
-<a href=#347 id=347 data-nosnippet>347</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#348 id=348 data-nosnippet>348</a>                    <span class="string">"Expected {} entries in {}, got {}."</span>,
-<a href=#349 id=349 data-nosnippet>349</a>                    batch_len,
-<a href=#350 id=350 data-nosnippet>350</a>                    label,
-<a href=#351 id=351 data-nosnippet>351</a>                    values.len()
-<a href=#352 id=352 data-nosnippet>352</a>                ));
-<a href=#353 id=353 data-nosnippet>353</a>            }
-<a href=#354 id=354 data-nosnippet>354</a>            <span class="prelude-val">Ok</span>(values.clone())
-<a href=#355 id=355 data-nosnippet>355</a>        }
-<a href=#356 id=356 data-nosnippet>356</a>        <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Ok</span>(<span class="macro">vec!</span>[<span class="prelude-val">None</span>; batch_len]),
-<a href=#357 id=357 data-nosnippet>357</a>    }
-<a href=#358 id=358 data-nosnippet>358</a>}
-<a href=#359 id=359 data-nosnippet>359</a>
-<a href=#360 id=360 data-nosnippet>360</a><span class="kw">fn </span>normalize_integrator_weights(
-<a href=#361 id=361 data-nosnippet>361</a>    integrator_weights: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ArrayView1&lt;<span class="lifetime">'_</span>, f64&gt;&gt;,
-<a href=#362 id=362 data-nosnippet>362</a>    batch_len: usize,
-<a href=#363 id=363 data-nosnippet>363</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;f64&gt;&gt; {
-<a href=#364 id=364 data-nosnippet>364</a>    <span class="kw">match </span>integrator_weights {
-<a href=#365 id=365 data-nosnippet>365</a>        <span class="prelude-val">Some</span>(weights) =&gt; {
-<a href=#366 id=366 data-nosnippet>366</a>            <span class="kw">if </span>weights.len() != batch_len {
-<a href=#367 id=367 data-nosnippet>367</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#368 id=368 data-nosnippet>368</a>                    <span class="string">"Expected {} entries in integrator_weights, got {}."</span>,
-<a href=#369 id=369 data-nosnippet>369</a>                    batch_len,
-<a href=#370 id=370 data-nosnippet>370</a>                    weights.len()
-<a href=#371 id=371 data-nosnippet>371</a>                ));
-<a href=#372 id=372 data-nosnippet>372</a>            }
-<a href=#373 id=373 data-nosnippet>373</a>            <span class="prelude-val">Ok</span>(weights.iter().copied().collect())
-<a href=#374 id=374 data-nosnippet>374</a>        }
-<a href=#375 id=375 data-nosnippet>375</a>        <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Ok</span>(<span class="macro">vec!</span>[<span class="number">1.0</span>; batch_len]),
-<a href=#376 id=376 data-nosnippet>376</a>    }
-<a href=#377 id=377 data-nosnippet>377</a>}
-<a href=#378 id=378 data-nosnippet>378</a>
-<a href=#379 id=379 data-nosnippet>379</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>build_havana_sample(
-<a href=#380 id=380 data-nosnippet>380</a>    integrand: <span class="kw-2">&amp;</span>gammalooprs::integrands::process::ProcessIntegrand,
-<a href=#381 id=381 data-nosnippet>381</a>    point: <span class="kw-2">&amp;</span>[f64],
-<a href=#382 id=382 data-nosnippet>382</a>    discrete_dim: <span class="kw-2">&amp;</span>[usize],
-<a href=#383 id=383 data-nosnippet>383</a>    integrator_weight: f64,
-<a href=#384 id=384 data-nosnippet>384</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Sample&lt;F&lt;f64&gt;&gt;&gt; {
-<a href=#385 id=385 data-nosnippet>385</a>    <span class="kw">let </span>expected_dimension = integrand.expected_x_space_dimension(discrete_dim)<span class="question-mark">?</span>;
-<a href=#386 id=386 data-nosnippet>386</a>    <span class="kw">if </span>point.len() != expected_dimension {
-<a href=#387 id=387 data-nosnippet>387</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#388 id=388 data-nosnippet>388</a>            <span class="string">"Expected {} x-space coordinates for this integrand selection, got {}."</span>,
-<a href=#389 id=389 data-nosnippet>389</a>            expected_dimension,
-<a href=#390 id=390 data-nosnippet>390</a>            point.len()
-<a href=#391 id=391 data-nosnippet>391</a>        ));
-<a href=#392 id=392 data-nosnippet>392</a>    }
-<a href=#393 id=393 data-nosnippet>393</a>
-<a href=#394 id=394 data-nosnippet>394</a>    <span class="prelude-val">Ok</span>(havana_sample(
-<a href=#395 id=395 data-nosnippet>395</a>        point.iter().map(|<span class="kw-2">&amp;</span>x| F(x)).collect::&lt;Vec&lt;F&lt;f64&gt;&gt;&gt;(),
-<a href=#396 id=396 data-nosnippet>396</a>        discrete_dim,
-<a href=#397 id=397 data-nosnippet>397</a>        F(integrator_weight),
-<a href=#398 id=398 data-nosnippet>398</a>    ))
-<a href=#399 id=399 data-nosnippet>399</a>}
-<a href=#400 id=400 data-nosnippet>400</a>
-<a href=#401 id=401 data-nosnippet>401</a><span class="kw">fn </span>build_havana_samples(
-<a href=#402 id=402 data-nosnippet>402</a>    integrand: <span class="kw-2">&amp;</span>gammalooprs::integrands::process::ProcessIntegrand,
-<a href=#403 id=403 data-nosnippet>403</a>    points: <span class="kw-2">&amp;</span>ArrayView2&lt;<span class="lifetime">'_</span>, f64&gt;,
-<a href=#404 id=404 data-nosnippet>404</a>    integrator_weights: <span class="kw-2">&amp;</span>[f64],
-<a href=#405 id=405 data-nosnippet>405</a>    discrete_dims: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ArrayView2&lt;<span class="lifetime">'_</span>, usize&gt;&gt;,
-<a href=#406 id=406 data-nosnippet>406</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Sample&lt;F&lt;f64&gt;&gt;&gt;&gt; {
-<a href=#407 id=407 data-nosnippet>407</a>    (<span class="number">0</span>..points.nrows())
-<a href=#408 id=408 data-nosnippet>408</a>        .map(|sample_index| {
-<a href=#409 id=409 data-nosnippet>409</a>            <span class="kw">let </span>discrete_dim: Vec&lt;usize&gt; = discrete_dims
-<a href=#410 id=410 data-nosnippet>410</a>                .as_ref()
-<a href=#411 id=411 data-nosnippet>411</a>                .map(|dims| dims.row(sample_index).iter().copied().collect())
-<a href=#412 id=412 data-nosnippet>412</a>                .unwrap_or_default();
-<a href=#413 id=413 data-nosnippet>413</a>            build_havana_sample(
-<a href=#414 id=414 data-nosnippet>414</a>                integrand,
-<a href=#415 id=415 data-nosnippet>415</a>                points
-<a href=#416 id=416 data-nosnippet>416</a>                    .row(sample_index)
-<a href=#417 id=417 data-nosnippet>417</a>                    .as_slice()
-<a href=#418 id=418 data-nosnippet>418</a>                    .expect(<span class="string">"point rows are contiguous"</span>),
-<a href=#419 id=419 data-nosnippet>419</a>                <span class="kw-2">&amp;</span>discrete_dim,
-<a href=#420 id=420 data-nosnippet>420</a>                integrator_weights[sample_index],
-<a href=#421 id=421 data-nosnippet>421</a>            )
-<a href=#422 id=422 data-nosnippet>422</a>        })
-<a href=#423 id=423 data-nosnippet>423</a>        .collect()
-<a href=#424 id=424 data-nosnippet>424</a>}
-<a href=#425 id=425 data-nosnippet>425</a>
-<a href=#426 id=426 data-nosnippet>426</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>build_momentum_input(
-<a href=#427 id=427 data-nosnippet>427</a>    integrand: <span class="kw-2">&amp;</span>gammalooprs::integrands::process::ProcessIntegrand,
-<a href=#428 id=428 data-nosnippet>428</a>    point: <span class="kw-2">&amp;</span>[f64],
-<a href=#429 id=429 data-nosnippet>429</a>    integrator_weight: f64,
-<a href=#430 id=430 data-nosnippet>430</a>    discrete_dim: <span class="kw-2">&amp;</span>[usize],
-<a href=#431 id=431 data-nosnippet>431</a>    graph_name: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;,
-<a href=#432 id=432 data-nosnippet>432</a>    orientation: <span class="prelude-ty">Option</span>&lt;usize&gt;,
-<a href=#433 id=433 data-nosnippet>433</a>) -&gt; <span class="prelude-ty">Result</span>&lt;MomentumSpaceEvaluationInput&gt; {
-<a href=#434 id=434 data-nosnippet>434</a>    <span class="kw">if </span>!point.len().is_multiple_of(<span class="number">3</span>) {
-<a href=#435 id=435 data-nosnippet>435</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#436 id=436 data-nosnippet>436</a>            <span class="string">"Momentum-space evaluation expects a multiple of 3 coordinates, got {}."</span>,
-<a href=#437 id=437 data-nosnippet>437</a>            point.len()
-<a href=#438 id=438 data-nosnippet>438</a>        ));
-<a href=#439 id=439 data-nosnippet>439</a>    }
-<a href=#440 id=440 data-nosnippet>440</a>
-<a href=#441 id=441 data-nosnippet>441</a>    <span class="kw">let </span>loop_momenta = point
-<a href=#442 id=442 data-nosnippet>442</a>        .chunks_exact(<span class="number">3</span>)
-<a href=#443 id=443 data-nosnippet>443</a>        .map(|coords| ThreeMomentum {
-<a href=#444 id=444 data-nosnippet>444</a>            px: F(coords[<span class="number">0</span>]),
-<a href=#445 id=445 data-nosnippet>445</a>            py: F(coords[<span class="number">1</span>]),
-<a href=#446 id=446 data-nosnippet>446</a>            pz: F(coords[<span class="number">2</span>]),
-<a href=#447 id=447 data-nosnippet>447</a>        })
-<a href=#448 id=448 data-nosnippet>448</a>        .collect();
-<a href=#449 id=449 data-nosnippet>449</a>
-<a href=#450 id=450 data-nosnippet>450</a>    <span class="kw">match </span><span class="kw-2">&amp;</span>integrand.get_settings().sampling {
-<a href=#451 id=451 data-nosnippet>451</a>        gammalooprs::settings::runtime::SamplingSettings::Default(<span class="kw">_</span>)
-<a href=#452 id=452 data-nosnippet>452</a>        | gammalooprs::settings::runtime::SamplingSettings::MultiChanneling(<span class="kw">_</span>) =&gt; {
-<a href=#453 id=453 data-nosnippet>453</a>            <span class="kw">if </span>!discrete_dim.is_empty() {
-<a href=#454 id=454 data-nosnippet>454</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#455 id=455 data-nosnippet>455</a>                    <span class="string">"This integrand does not use discrete graph sampling; expected no discrete dimensions, got {:?}."</span>,
-<a href=#456 id=456 data-nosnippet>456</a>                    discrete_dim
-<a href=#457 id=457 data-nosnippet>457</a>                ));
-<a href=#458 id=458 data-nosnippet>458</a>            }
-<a href=#459 id=459 data-nosnippet>459</a>
-<a href=#460 id=460 data-nosnippet>460</a>            <span class="kw">if </span>orientation.is_some() &amp;&amp; graph_name.is_none() {
-<a href=#461 id=461 data-nosnippet>461</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#462 id=462 data-nosnippet>462</a>                    <span class="string">"A specific orientation requires a specific graph in momentum-space evaluation."
-<a href=#463 id=463 data-nosnippet>463</a>                </span>));
-<a href=#464 id=464 data-nosnippet>464</a>            }
-<a href=#465 id=465 data-nosnippet>465</a>
-<a href=#466 id=466 data-nosnippet>466</a>            <span class="kw">let </span>graph_id = graph_name
-<a href=#467 id=467 data-nosnippet>467</a>                .map(|graph_name| {
-<a href=#468 id=468 data-nosnippet>468</a>                    integrand.find_graph_id_by_name(graph_name).ok_or_else(|| {
-<a href=#469 id=469 data-nosnippet>469</a>                        <span class="macro">eyre!</span>(
-<a href=#470 id=470 data-nosnippet>470</a>                            <span class="string">"Unknown graph '{}' in momentum-space evaluation."</span>,
-<a href=#471 id=471 data-nosnippet>471</a>                            graph_name
-<a href=#472 id=472 data-nosnippet>472</a>                        )
-<a href=#473 id=473 data-nosnippet>473</a>                    })
-<a href=#474 id=474 data-nosnippet>474</a>                })
-<a href=#475 id=475 data-nosnippet>475</a>                .transpose()<span class="question-mark">?</span>;
-<a href=#476 id=476 data-nosnippet>476</a>
-<a href=#477 id=477 data-nosnippet>477</a>            <span class="kw">if let </span>(<span class="prelude-val">Some</span>(graph_id), <span class="prelude-val">Some</span>(orientation)) = (graph_id, orientation) {
-<a href=#478 id=478 data-nosnippet>478</a>                <span class="kw">let </span>orientation_count =
-<a href=#479 id=479 data-nosnippet>479</a>                    integrand.graph_orientation_count(graph_id).ok_or_else(|| {
-<a href=#480 id=480 data-nosnippet>480</a>                        <span class="macro">eyre!</span>(
-<a href=#481 id=481 data-nosnippet>481</a>                            <span class="string">"Graph id {} is invalid for momentum-space evaluation."</span>,
-<a href=#482 id=482 data-nosnippet>482</a>                            graph_id
-<a href=#483 id=483 data-nosnippet>483</a>                        )
-<a href=#484 id=484 data-nosnippet>484</a>                    })<span class="question-mark">?</span>;
-<a href=#485 id=485 data-nosnippet>485</a>                <span class="kw">if </span>orientation &gt;= orientation_count {
-<a href=#486 id=486 data-nosnippet>486</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#487 id=487 data-nosnippet>487</a>                        <span class="string">"Orientation {} is out of range for graph '{}'; the graph has {} orientations."</span>,
-<a href=#488 id=488 data-nosnippet>488</a>                        orientation,
-<a href=#489 id=489 data-nosnippet>489</a>                        graph_name.expect(<span class="string">"graph name should exist when graph_id exists"</span>),
-<a href=#490 id=490 data-nosnippet>490</a>                        orientation_count
-<a href=#491 id=491 data-nosnippet>491</a>                    ));
-<a href=#492 id=492 data-nosnippet>492</a>                }
-<a href=#493 id=493 data-nosnippet>493</a>            }
-<a href=#494 id=494 data-nosnippet>494</a>
-<a href=#495 id=495 data-nosnippet>495</a>            <span class="prelude-val">Ok</span>(MomentumSpaceEvaluationInput {
-<a href=#496 id=496 data-nosnippet>496</a>                loop_momenta,
-<a href=#497 id=497 data-nosnippet>497</a>                integrator_weight: F(integrator_weight),
-<a href=#498 id=498 data-nosnippet>498</a>                graph_id,
-<a href=#499 id=499 data-nosnippet>499</a>                group_id: <span class="prelude-val">None</span>,
-<a href=#500 id=500 data-nosnippet>500</a>                orientation,
-<a href=#501 id=501 data-nosnippet>501</a>                channel_id: <span class="prelude-val">None</span>,
-<a href=#502 id=502 data-nosnippet>502</a>            })
-<a href=#503 id=503 data-nosnippet>503</a>        }
-<a href=#504 id=504 data-nosnippet>504</a>        gammalooprs::settings::runtime::SamplingSettings::DiscreteGraphs(settings) =&gt; {
-<a href=#505 id=505 data-nosnippet>505</a>            <span class="kw">if </span>!discrete_dim.is_empty() &amp;&amp; (graph_name.is_some() || orientation.is_some()) {
-<a href=#506 id=506 data-nosnippet>506</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#507 id=507 data-nosnippet>507</a>                    <span class="string">"Discrete dimensions are mutually exclusive with explicit graph/orientation selection in momentum-space evaluation."
-<a href=#508 id=508 data-nosnippet>508</a>                </span>));
-<a href=#509 id=509 data-nosnippet>509</a>            }
-<a href=#510 id=510 data-nosnippet>510</a>
-<a href=#511 id=511 data-nosnippet>511</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(graph_name) = graph_name {
-<a href=#512 id=512 data-nosnippet>512</a>                <span class="kw">let </span>graph_id = integrand.find_graph_id_by_name(graph_name).ok_or_else(|| {
-<a href=#513 id=513 data-nosnippet>513</a>                    <span class="macro">eyre!</span>(
-<a href=#514 id=514 data-nosnippet>514</a>                        <span class="string">"Unknown graph '{}' in momentum-space evaluation."</span>,
-<a href=#515 id=515 data-nosnippet>515</a>                        graph_name
-<a href=#516 id=516 data-nosnippet>516</a>                    )
-<a href=#517 id=517 data-nosnippet>517</a>                })<span class="question-mark">?</span>;
-<a href=#518 id=518 data-nosnippet>518</a>
-<a href=#519 id=519 data-nosnippet>519</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(orientation) = orientation {
-<a href=#520 id=520 data-nosnippet>520</a>                    <span class="kw">let </span>orientation_count =
-<a href=#521 id=521 data-nosnippet>521</a>                        integrand.graph_orientation_count(graph_id).ok_or_else(|| {
-<a href=#522 id=522 data-nosnippet>522</a>                            <span class="macro">eyre!</span>(
-<a href=#523 id=523 data-nosnippet>523</a>                                <span class="string">"Graph id {} is invalid for momentum-space evaluation."</span>,
-<a href=#524 id=524 data-nosnippet>524</a>                                graph_id
-<a href=#525 id=525 data-nosnippet>525</a>                            )
-<a href=#526 id=526 data-nosnippet>526</a>                        })<span class="question-mark">?</span>;
-<a href=#527 id=527 data-nosnippet>527</a>                    <span class="kw">if </span>orientation &gt;= orientation_count {
-<a href=#528 id=528 data-nosnippet>528</a>                        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#529 id=529 data-nosnippet>529</a>                            <span class="string">"Orientation {} is out of range for graph '{}'; the graph has {} orientations."</span>,
-<a href=#530 id=530 data-nosnippet>530</a>                            orientation,
-<a href=#531 id=531 data-nosnippet>531</a>                            graph_name,
-<a href=#532 id=532 data-nosnippet>532</a>                            orientation_count
-<a href=#533 id=533 data-nosnippet>533</a>                        ));
-<a href=#534 id=534 data-nosnippet>534</a>                    }
-<a href=#535 id=535 data-nosnippet>535</a>                }
-<a href=#536 id=536 data-nosnippet>536</a>
-<a href=#537 id=537 data-nosnippet>537</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(MomentumSpaceEvaluationInput {
-<a href=#538 id=538 data-nosnippet>538</a>                    loop_momenta,
-<a href=#539 id=539 data-nosnippet>539</a>                    integrator_weight: F(integrator_weight),
-<a href=#540 id=540 data-nosnippet>540</a>                    graph_id: <span class="prelude-val">Some</span>(graph_id),
-<a href=#541 id=541 data-nosnippet>541</a>                    group_id: <span class="prelude-val">None</span>,
-<a href=#542 id=542 data-nosnippet>542</a>                    orientation,
-<a href=#543 id=543 data-nosnippet>543</a>                    channel_id: <span class="prelude-val">None</span>,
-<a href=#544 id=544 data-nosnippet>544</a>                });
-<a href=#545 id=545 data-nosnippet>545</a>            }
-<a href=#546 id=546 data-nosnippet>546</a>
-<a href=#547 id=547 data-nosnippet>547</a>            <span class="kw">let </span>(group_from_dims, orientation_from_dims, channel_id) = <span class="kw">if </span>discrete_dim.is_empty() {
-<a href=#548 id=548 data-nosnippet>548</a>                (<span class="prelude-val">None</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>)
-<a href=#549 id=549 data-nosnippet>549</a>            } <span class="kw">else </span>{
-<a href=#550 id=550 data-nosnippet>550</a>                integrand.resolve_discrete_selection(discrete_dim)<span class="question-mark">?
-<a href=#551 id=551 data-nosnippet>551</a>            </span>};
-<a href=#552 id=552 data-nosnippet>552</a>
-<a href=#553 id=553 data-nosnippet>553</a>            <span class="kw">let </span>group_from_name = graph_name
-<a href=#554 id=554 data-nosnippet>554</a>                .map(|graph_name| integrand.resolve_group_id_by_master_name(graph_name))
-<a href=#555 id=555 data-nosnippet>555</a>                .transpose()<span class="question-mark">?</span>;
-<a href=#556 id=556 data-nosnippet>556</a>
-<a href=#557 id=557 data-nosnippet>557</a>            <span class="kw">let </span>group_id = <span class="kw">match </span>(group_from_dims, group_from_name) {
-<a href=#558 id=558 data-nosnippet>558</a>                (<span class="prelude-val">Some</span>(group_id), <span class="prelude-val">Some</span>(group_from_name)) <span class="kw">if </span>group_id != group_from_name =&gt; {
-<a href=#559 id=559 data-nosnippet>559</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#560 id=560 data-nosnippet>560</a>                        <span class="string">"Discrete dimensions select graph group {}, but graph '{}' resolves to group {}."</span>,
-<a href=#561 id=561 data-nosnippet>561</a>                        group_id.<span class="number">0</span>,
-<a href=#562 id=562 data-nosnippet>562</a>                        graph_name.expect(<span class="string">"graph name must exist"</span>),
-<a href=#563 id=563 data-nosnippet>563</a>                        group_from_name.<span class="number">0
-<a href=#564 id=564 data-nosnippet>564</a>                    </span>));
-<a href=#565 id=565 data-nosnippet>565</a>                }
-<a href=#566 id=566 data-nosnippet>566</a>                (<span class="prelude-val">Some</span>(group_id), <span class="kw">_</span>) =&gt; <span class="prelude-val">Some</span>(group_id),
-<a href=#567 id=567 data-nosnippet>567</a>                (<span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(group_id)) =&gt; <span class="prelude-val">Some</span>(group_id),
-<a href=#568 id=568 data-nosnippet>568</a>                (<span class="prelude-val">None</span>, <span class="prelude-val">None</span>) =&gt; <span class="prelude-val">None</span>,
-<a href=#569 id=569 data-nosnippet>569</a>            };
-<a href=#570 id=570 data-nosnippet>570</a>
-<a href=#571 id=571 data-nosnippet>571</a>            <span class="kw">let </span>orientation = <span class="kw">match </span>(orientation_from_dims, orientation) {
-<a href=#572 id=572 data-nosnippet>572</a>                (<span class="prelude-val">Some</span>(from_dims), <span class="prelude-val">Some</span>(from_arg)) <span class="kw">if </span>from_dims != from_arg =&gt; {
-<a href=#573 id=573 data-nosnippet>573</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#574 id=574 data-nosnippet>574</a>                        <span class="string">"Discrete dimensions select orientation {}, but the explicit momentum-space orientation is {}."</span>,
-<a href=#575 id=575 data-nosnippet>575</a>                        from_dims,
-<a href=#576 id=576 data-nosnippet>576</a>                        from_arg
-<a href=#577 id=577 data-nosnippet>577</a>                    ));
-<a href=#578 id=578 data-nosnippet>578</a>                }
-<a href=#579 id=579 data-nosnippet>579</a>                (<span class="prelude-val">Some</span>(from_dims), <span class="kw">_</span>) =&gt; <span class="prelude-val">Some</span>(from_dims),
-<a href=#580 id=580 data-nosnippet>580</a>                (<span class="prelude-val">None</span>, from_arg) =&gt; from_arg,
-<a href=#581 id=581 data-nosnippet>581</a>            };
-<a href=#582 id=582 data-nosnippet>582</a>
-<a href=#583 id=583 data-nosnippet>583</a>            <span class="kw">if </span>group_id.is_none() &amp;&amp; orientation.is_some() {
-<a href=#584 id=584 data-nosnippet>584</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#585 id=585 data-nosnippet>585</a>                    <span class="string">"A specific orientation requires a specific graph group in momentum-space evaluation."
-<a href=#586 id=586 data-nosnippet>586</a>                </span>));
-<a href=#587 id=587 data-nosnippet>587</a>            }
-<a href=#588 id=588 data-nosnippet>588</a>
-<a href=#589 id=589 data-nosnippet>589</a>            <span class="kw">if </span>settings.sample_orientations &amp;&amp; group_id.is_some() &amp;&amp; orientation.is_none() {
-<a href=#590 id=590 data-nosnippet>590</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
-<a href=#591 id=591 data-nosnippet>591</a>                    <span class="string">"Momentum-space evaluation for this integrand requires an orientation selection."
-<a href=#592 id=592 data-nosnippet>592</a>                </span>));
-<a href=#593 id=593 data-nosnippet>593</a>            }
-<a href=#594 id=594 data-nosnippet>594</a>
-<a href=#595 id=595 data-nosnippet>595</a>            <span class="prelude-val">Ok</span>(MomentumSpaceEvaluationInput {
-<a href=#596 id=596 data-nosnippet>596</a>                loop_momenta,
-<a href=#597 id=597 data-nosnippet>597</a>                integrator_weight: F(integrator_weight),
-<a href=#598 id=598 data-nosnippet>598</a>                graph_id: <span class="prelude-val">None</span>,
-<a href=#599 id=599 data-nosnippet>599</a>                group_id,
-<a href=#600 id=600 data-nosnippet>600</a>                orientation,
-<a href=#601 id=601 data-nosnippet>601</a>                channel_id,
-<a href=#602 id=602 data-nosnippet>602</a>            })
-<a href=#603 id=603 data-nosnippet>603</a>        }
-<a href=#604 id=604 data-nosnippet>604</a>    }
-<a href=#605 id=605 data-nosnippet>605</a>}
-<a href=#606 id=606 data-nosnippet>606</a>
-<a href=#607 id=607 data-nosnippet>607</a><span class="kw">fn </span>build_momentum_inputs(
-<a href=#608 id=608 data-nosnippet>608</a>    integrand: <span class="kw-2">&amp;</span>gammalooprs::integrands::process::ProcessIntegrand,
-<a href=#609 id=609 data-nosnippet>609</a>    points: <span class="kw-2">&amp;</span>ArrayView2&lt;<span class="lifetime">'_</span>, f64&gt;,
-<a href=#610 id=610 data-nosnippet>610</a>    integrator_weights: <span class="kw-2">&amp;</span>[f64],
-<a href=#611 id=611 data-nosnippet>611</a>    discrete_dims: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ArrayView2&lt;<span class="lifetime">'_</span>, usize&gt;&gt;,
-<a href=#612 id=612 data-nosnippet>612</a>    graph_names: <span class="kw-2">&amp;</span>[<span class="prelude-ty">Option</span>&lt;String&gt;],
-<a href=#613 id=613 data-nosnippet>613</a>    orientations: <span class="kw-2">&amp;</span>[<span class="prelude-ty">Option</span>&lt;usize&gt;],
-<a href=#614 id=614 data-nosnippet>614</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;MomentumSpaceEvaluationInput&gt;&gt; {
-<a href=#615 id=615 data-nosnippet>615</a>    (<span class="number">0</span>..points.nrows())
-<a href=#616 id=616 data-nosnippet>616</a>        .map(|sample_index| {
-<a href=#617 id=617 data-nosnippet>617</a>            <span class="kw">let </span>discrete_dim: Vec&lt;usize&gt; = discrete_dims
-<a href=#618 id=618 data-nosnippet>618</a>                .as_ref()
-<a href=#619 id=619 data-nosnippet>619</a>                .map(|dims| dims.row(sample_index).iter().copied().collect())
-<a href=#620 id=620 data-nosnippet>620</a>                .unwrap_or_default();
-<a href=#621 id=621 data-nosnippet>621</a>            build_momentum_input(
-<a href=#622 id=622 data-nosnippet>622</a>                integrand,
-<a href=#623 id=623 data-nosnippet>623</a>                points
-<a href=#624 id=624 data-nosnippet>624</a>                    .row(sample_index)
-<a href=#625 id=625 data-nosnippet>625</a>                    .as_slice()
-<a href=#626 id=626 data-nosnippet>626</a>                    .expect(<span class="string">"point rows are contiguous"</span>),
-<a href=#627 id=627 data-nosnippet>627</a>                integrator_weights[sample_index],
-<a href=#628 id=628 data-nosnippet>628</a>                <span class="kw-2">&amp;</span>discrete_dim,
-<a href=#629 id=629 data-nosnippet>629</a>                graph_names[sample_index].as_deref(),
-<a href=#630 id=630 data-nosnippet>630</a>                orientations[sample_index],
-<a href=#631 id=631 data-nosnippet>631</a>            )
-<a href=#632 id=632 data-nosnippet>632</a>        })
-<a href=#633 id=633 data-nosnippet>633</a>        .collect()
-<a href=#634 id=634 data-nosnippet>634</a>}
-<a href=#635 id=635 data-nosnippet>635</a>
-<a href=#636 id=636 data-nosnippet>636</a><span class="kw">fn </span>clear_precise_event_groups(
-<a href=#637 id=637 data-nosnippet>637</a>    result: <span class="kw-2">&amp;mut </span>gammalooprs::integrands::evaluation::PreciseEvaluationResult,
-<a href=#638 id=638 data-nosnippet>638</a>) {
-<a href=#639 id=639 data-nosnippet>639</a>    <span class="kw">match </span>result {
-<a href=#640 id=640 data-nosnippet>640</a>        gammalooprs::integrands::evaluation::PreciseEvaluationResult::Double(result) =&gt; {
-<a href=#641 id=641 data-nosnippet>641</a>            result.event_groups.clear()
-<a href=#642 id=642 data-nosnippet>642</a>        }
-<a href=#643 id=643 data-nosnippet>643</a>        gammalooprs::integrands::evaluation::PreciseEvaluationResult::Quad(result) =&gt; {
-<a href=#644 id=644 data-nosnippet>644</a>            result.event_groups.clear()
-<a href=#645 id=645 data-nosnippet>645</a>        }
-<a href=#646 id=646 data-nosnippet>646</a>        gammalooprs::integrands::evaluation::PreciseEvaluationResult::Arb(result) =&gt; {
-<a href=#647 id=647 data-nosnippet>647</a>            result.event_groups.clear()
-<a href=#648 id=648 data-nosnippet>648</a>        }
-<a href=#649 id=649 data-nosnippet>649</a>    }
-<a href=#650 id=650 data-nosnippet>650</a>}
-<a href=#651 id=651 data-nosnippet>651</a>
-<a href=#652 id=652 data-nosnippet>652</a><span class="kw">fn </span>merge_precise_observables(
-<a href=#653 id=653 data-nosnippet>653</a>    integrand: <span class="kw-2">&amp;</span>gammalooprs::integrands::process::ProcessIntegrand,
-<a href=#654 id=654 data-nosnippet>654</a>    results: <span class="kw-2">&amp;mut </span>[gammalooprs::integrands::evaluation::PreciseEvaluationResult],
-<a href=#655 id=655 data-nosnippet>655</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ObservableSnapshotBundle&gt; {
-<a href=#656 id=656 data-nosnippet>656</a>    <span class="kw">let </span><span class="kw-2">mut </span>observables = ObservableSnapshotBundle::default();
-<a href=#657 id=657 data-nosnippet>657</a>    <span class="kw">let </span><span class="kw-2">mut </span>have_observables = <span class="bool-val">false</span>;
-<a href=#658 id=658 data-nosnippet>658</a>
-<a href=#659 id=659 data-nosnippet>659</a>    <span class="kw">for </span>evaluation <span class="kw">in </span>results.iter_mut() {
-<a href=#660 id=660 data-nosnippet>660</a>        <span class="kw">let </span>sample_observables = integrand
-<a href=#661 id=661 data-nosnippet>661</a>            .build_observable_snapshots_for_precise_result(evaluation)
-<a href=#662 id=662 data-nosnippet>662</a>            .unwrap_or_default();
-<a href=#663 id=663 data-nosnippet>663</a>        <span class="kw">if </span>!sample_observables.histograms.is_empty() {
-<a href=#664 id=664 data-nosnippet>664</a>            <span class="kw">if </span>have_observables {
-<a href=#665 id=665 data-nosnippet>665</a>                observables.merge_in_place(<span class="kw-2">&amp;</span>sample_observables)<span class="question-mark">?</span>;
-<a href=#666 id=666 data-nosnippet>666</a>            } <span class="kw">else </span>{
-<a href=#667 id=667 data-nosnippet>667</a>                observables = sample_observables;
-<a href=#668 id=668 data-nosnippet>668</a>                have_observables = <span class="bool-val">true</span>;
-<a href=#669 id=669 data-nosnippet>669</a>            }
-<a href=#670 id=670 data-nosnippet>670</a>        }
-<a href=#671 id=671 data-nosnippet>671</a>        <span class="kw">if </span>!integrand.get_settings().general.generate_events {
-<a href=#672 id=672 data-nosnippet>672</a>            clear_precise_event_groups(evaluation);
-<a href=#673 id=673 data-nosnippet>673</a>        }
-<a href=#674 id=674 data-nosnippet>674</a>    }
-<a href=#675 id=675 data-nosnippet>675</a>
-<a href=#676 id=676 data-nosnippet>676</a>    <span class="prelude-val">Ok</span>(observables)
-<a href=#677 id=677 data-nosnippet>677</a>}
-<a href=#678 id=678 data-nosnippet>678</a>
-<a href=#679 id=679 data-nosnippet>679</a><span class="kw">fn </span>set_top_level_sample_weight(sample: <span class="kw-2">&amp;mut </span>Sample&lt;F&lt;f64&gt;&gt;, integrator_weight: F&lt;f64&gt;) {
-<a href=#680 id=680 data-nosnippet>680</a>    <span class="kw">match </span>sample {
-<a href=#681 id=681 data-nosnippet>681</a>        Sample::Continuous(weight, <span class="kw">_</span>)
-<a href=#682 id=682 data-nosnippet>682</a>        | Sample::Discrete(weight, <span class="kw">_</span>, <span class="kw">_</span>)
-<a href=#683 id=683 data-nosnippet>683</a>        | Sample::Uniform(weight, <span class="kw">_</span>, <span class="kw">_</span>) =&gt; <span class="kw-2">*</span>weight = integrator_weight,
-<a href=#684 id=684 data-nosnippet>684</a>    }
-<a href=#685 id=685 data-nosnippet>685</a>}
-<a href=#686 id=686 data-nosnippet>686</a>
-<a href=#687 id=687 data-nosnippet>687</a><span class="kw">fn </span>havana_sample(
-<a href=#688 id=688 data-nosnippet>688</a>    cont: Vec&lt;F&lt;f64&gt;&gt;,
-<a href=#689 id=689 data-nosnippet>689</a>    discrete_dimensions: <span class="kw-2">&amp;</span>[usize],
-<a href=#690 id=690 data-nosnippet>690</a>    integrator_weight: F&lt;f64&gt;,
-<a href=#691 id=691 data-nosnippet>691</a>) -&gt; Sample&lt;F&lt;f64&gt;&gt; {
-<a href=#692 id=692 data-nosnippet>692</a>    <span class="kw">let </span><span class="kw-2">mut </span>sample = Sample::Continuous(F(<span class="number">1.0</span>), cont);
-<a href=#693 id=693 data-nosnippet>693</a>
-<a href=#694 id=694 data-nosnippet>694</a>    <span class="kw">for </span><span class="kw-2">&amp;</span>discrete_dimension <span class="kw">in </span>discrete_dimensions.iter().rev() {
-<a href=#695 id=695 data-nosnippet>695</a>        sample = Sample::Discrete(F(<span class="number">1.0</span>), discrete_dimension, <span class="prelude-val">Some</span>(Box::new(sample)));
-<a href=#696 id=696 data-nosnippet>696</a>    }
-<a href=#697 id=697 data-nosnippet>697</a>
-<a href=#698 id=698 data-nosnippet>698</a>    set_top_level_sample_weight(<span class="kw-2">&amp;mut </span>sample, integrator_weight);
-<a href=#699 id=699 data-nosnippet>699</a>    sample
-<a href=#700 id=700 data-nosnippet>700</a>}
+<a href=#323 id=323 data-nosnippet>323</a>        <span class="prelude-val">Ok</span>(PreciseBatchSampleEvaluationResult {
+<a href=#324 id=324 data-nosnippet>324</a>            samples: raw_samples
+<a href=#325 id=325 data-nosnippet>325</a>                .into_iter()
+<a href=#326 id=326 data-nosnippet>326</a>                .map(|evaluation| PreciseSampleEvaluationResult {
+<a href=#327 id=327 data-nosnippet>327</a>                    evaluation: evaluation.into_output(<span class="self">self</span>.minimal_output),
+<a href=#328 id=328 data-nosnippet>328</a>                })
+<a href=#329 id=329 data-nosnippet>329</a>                .collect(),
+<a href=#330 id=330 data-nosnippet>330</a>            observables,
+<a href=#331 id=331 data-nosnippet>331</a>        })
+<a href=#332 id=332 data-nosnippet>332</a>    }
+<a href=#333 id=333 data-nosnippet>333</a>}
+<a href=#334 id=334 data-nosnippet>334</a>
+<a href=#335 id=335 data-nosnippet>335</a><span class="doccomment">/// Evaluate a batch while retaining each sample's active numeric result type.
+<a href=#336 id=336 data-nosnippet>336</a>///
+<a href=#337 id=337 data-nosnippet>337</a>/// See [`EvaluateSamplesPrecise`] for the coordinate, validation, and precision contract.
+<a href=#338 id=338 data-nosnippet>338</a></span><span class="kw">pub fn </span>evaluate_samples_precise&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#339 id=339 data-nosnippet>339</a>    state: <span class="kw-2">&amp;mut </span>State,
+<a href=#340 id=340 data-nosnippet>340</a>    request: <span class="kw-2">&amp;</span>EvaluateSamplesPrecise&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#341 id=341 data-nosnippet>341</a>) -&gt; <span class="prelude-ty">Result</span>&lt;PreciseBatchSampleEvaluationResult&gt; {
+<a href=#342 id=342 data-nosnippet>342</a>    request.run(state)
+<a href=#343 id=343 data-nosnippet>343</a>}
+<a href=#344 id=344 data-nosnippet>344</a>
+<a href=#345 id=345 data-nosnippet>345</a><span class="doccomment">/// Evaluate exactly one sample while retaining its active numeric result type.
+<a href=#346 id=346 data-nosnippet>346</a>///
+<a href=#347 id=347 data-nosnippet>347</a>/// This rejects requests whose [`EvaluateSamplesPrecise::points`] view does not have
+<a href=#348 id=348 data-nosnippet>348</a>/// exactly one row. See [`EvaluateSamplesPrecise`] for the remaining contract.
+<a href=#349 id=349 data-nosnippet>349</a></span><span class="kw">pub fn </span>evaluate_sample_precise&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#350 id=350 data-nosnippet>350</a>    state: <span class="kw-2">&amp;mut </span>State,
+<a href=#351 id=351 data-nosnippet>351</a>    request: <span class="kw-2">&amp;</span>EvaluateSamplesPrecise&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#352 id=352 data-nosnippet>352</a>) -&gt; <span class="prelude-ty">Result</span>&lt;PreciseSingleSampleEvaluationResult&gt; {
+<a href=#353 id=353 data-nosnippet>353</a>    <span class="kw">let </span><span class="kw-2">mut </span>results = request.run(state)<span class="question-mark">?</span>;
+<a href=#354 id=354 data-nosnippet>354</a>    <span class="kw">if </span>results.samples.len() != <span class="number">1 </span>{
+<a href=#355 id=355 data-nosnippet>355</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#356 id=356 data-nosnippet>356</a>            <span class="string">"evaluate_sample_precise expects exactly one sample, got {}."</span>,
+<a href=#357 id=357 data-nosnippet>357</a>            results.samples.len()
+<a href=#358 id=358 data-nosnippet>358</a>        ));
+<a href=#359 id=359 data-nosnippet>359</a>    }
+<a href=#360 id=360 data-nosnippet>360</a>    <span class="prelude-val">Ok</span>(PreciseSingleSampleEvaluationResult {
+<a href=#361 id=361 data-nosnippet>361</a>        sample: results.samples.remove(<span class="number">0</span>),
+<a href=#362 id=362 data-nosnippet>362</a>        observables: results.observables,
+<a href=#363 id=363 data-nosnippet>363</a>    })
+<a href=#364 id=364 data-nosnippet>364</a>}
+<a href=#365 id=365 data-nosnippet>365</a>
+<a href=#366 id=366 data-nosnippet>366</a><span class="doccomment">/// Evaluate a batch through the ordinary `f64` result boundary.
+<a href=#367 id=367 data-nosnippet>367</a>///
+<a href=#368 id=368 data-nosnippet>368</a>/// See [`EvaluateSamples`] for the coordinate, validation, and precision contract.
+<a href=#369 id=369 data-nosnippet>369</a></span><span class="kw">pub fn </span>evaluate_samples&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#370 id=370 data-nosnippet>370</a>    state: <span class="kw-2">&amp;mut </span>State,
+<a href=#371 id=371 data-nosnippet>371</a>    request: <span class="kw-2">&amp;</span>EvaluateSamples&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#372 id=372 data-nosnippet>372</a>) -&gt; <span class="prelude-ty">Result</span>&lt;BatchSampleEvaluationResult&gt; {
+<a href=#373 id=373 data-nosnippet>373</a>    request.run(state)
+<a href=#374 id=374 data-nosnippet>374</a>}
+<a href=#375 id=375 data-nosnippet>375</a>
+<a href=#376 id=376 data-nosnippet>376</a><span class="doccomment">/// Evaluate exactly one sample through the ordinary `f64` result boundary.
+<a href=#377 id=377 data-nosnippet>377</a>///
+<a href=#378 id=378 data-nosnippet>378</a>/// This rejects requests whose [`EvaluateSamples::points`] view does not have exactly
+<a href=#379 id=379 data-nosnippet>379</a>/// one row. See [`EvaluateSamples`] for the remaining contract.
+<a href=#380 id=380 data-nosnippet>380</a></span><span class="kw">pub fn </span>evaluate_sample&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#381 id=381 data-nosnippet>381</a>    state: <span class="kw-2">&amp;mut </span>State,
+<a href=#382 id=382 data-nosnippet>382</a>    request: <span class="kw-2">&amp;</span>EvaluateSamples&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#383 id=383 data-nosnippet>383</a>) -&gt; <span class="prelude-ty">Result</span>&lt;SingleSampleEvaluationResult&gt; {
+<a href=#384 id=384 data-nosnippet>384</a>    <span class="kw">let </span><span class="kw-2">mut </span>results = request.run(state)<span class="question-mark">?</span>;
+<a href=#385 id=385 data-nosnippet>385</a>    <span class="kw">if </span>results.samples.len() != <span class="number">1 </span>{
+<a href=#386 id=386 data-nosnippet>386</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#387 id=387 data-nosnippet>387</a>            <span class="string">"evaluate_sample expects exactly one sample, got {}."</span>,
+<a href=#388 id=388 data-nosnippet>388</a>            results.samples.len()
+<a href=#389 id=389 data-nosnippet>389</a>        ));
+<a href=#390 id=390 data-nosnippet>390</a>    }
+<a href=#391 id=391 data-nosnippet>391</a>    <span class="prelude-val">Ok</span>(SingleSampleEvaluationResult {
+<a href=#392 id=392 data-nosnippet>392</a>        sample: results.samples.remove(<span class="number">0</span>),
+<a href=#393 id=393 data-nosnippet>393</a>        observables: results.observables,
+<a href=#394 id=394 data-nosnippet>394</a>    })
+<a href=#395 id=395 data-nosnippet>395</a>}
+<a href=#396 id=396 data-nosnippet>396</a>
+<a href=#397 id=397 data-nosnippet>397</a><span class="kw">fn </span>with_return_generated_events_override&lt;R&gt;(
+<a href=#398 id=398 data-nosnippet>398</a>    integrand: <span class="kw-2">&amp;mut </span>gammalooprs::integrands::process::ProcessIntegrand,
+<a href=#399 id=399 data-nosnippet>399</a>    return_generated_events: <span class="prelude-ty">Option</span>&lt;bool&gt;,
+<a href=#400 id=400 data-nosnippet>400</a>    run: <span class="kw">impl </span>FnOnce(<span class="kw-2">&amp;mut </span>gammalooprs::integrands::process::ProcessIntegrand) -&gt; <span class="prelude-ty">Result</span>&lt;R&gt;,
+<a href=#401 id=401 data-nosnippet>401</a>) -&gt; <span class="prelude-ty">Result</span>&lt;R&gt; {
+<a href=#402 id=402 data-nosnippet>402</a>    <span class="kw">let </span>previous_generate_events = integrand.get_settings().general.generate_events;
+<a href=#403 id=403 data-nosnippet>403</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(return_generated_events) = return_generated_events {
+<a href=#404 id=404 data-nosnippet>404</a>        integrand.get_mut_settings().general.generate_events = return_generated_events;
+<a href=#405 id=405 data-nosnippet>405</a>    }
+<a href=#406 id=406 data-nosnippet>406</a>    <span class="kw">let </span>result = run(integrand);
+<a href=#407 id=407 data-nosnippet>407</a>    <span class="kw">if </span>integrand.get_settings().general.generate_events != previous_generate_events {
+<a href=#408 id=408 data-nosnippet>408</a>        integrand.get_mut_settings().general.generate_events = previous_generate_events;
+<a href=#409 id=409 data-nosnippet>409</a>    }
+<a href=#410 id=410 data-nosnippet>410</a>    result
+<a href=#411 id=411 data-nosnippet>411</a>}
+<a href=#412 id=412 data-nosnippet>412</a>
+<a href=#413 id=413 data-nosnippet>413</a><span class="kw">fn </span>normalize_optional_per_sample&lt;T: Clone&gt;(
+<a href=#414 id=414 data-nosnippet>414</a>    values: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>Vec&lt;<span class="prelude-ty">Option</span>&lt;T&gt;&gt;&gt;,
+<a href=#415 id=415 data-nosnippet>415</a>    batch_len: usize,
+<a href=#416 id=416 data-nosnippet>416</a>    label: <span class="kw-2">&amp;</span>str,
+<a href=#417 id=417 data-nosnippet>417</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;<span class="prelude-ty">Option</span>&lt;T&gt;&gt;&gt; {
+<a href=#418 id=418 data-nosnippet>418</a>    <span class="kw">match </span>values {
+<a href=#419 id=419 data-nosnippet>419</a>        <span class="prelude-val">Some</span>(values) =&gt; {
+<a href=#420 id=420 data-nosnippet>420</a>            <span class="kw">if </span>values.len() != batch_len {
+<a href=#421 id=421 data-nosnippet>421</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#422 id=422 data-nosnippet>422</a>                    <span class="string">"Expected {} entries in {}, got {}."</span>,
+<a href=#423 id=423 data-nosnippet>423</a>                    batch_len,
+<a href=#424 id=424 data-nosnippet>424</a>                    label,
+<a href=#425 id=425 data-nosnippet>425</a>                    values.len()
+<a href=#426 id=426 data-nosnippet>426</a>                ));
+<a href=#427 id=427 data-nosnippet>427</a>            }
+<a href=#428 id=428 data-nosnippet>428</a>            <span class="prelude-val">Ok</span>(values.clone())
+<a href=#429 id=429 data-nosnippet>429</a>        }
+<a href=#430 id=430 data-nosnippet>430</a>        <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Ok</span>(<span class="macro">vec!</span>[<span class="prelude-val">None</span>; batch_len]),
+<a href=#431 id=431 data-nosnippet>431</a>    }
+<a href=#432 id=432 data-nosnippet>432</a>}
+<a href=#433 id=433 data-nosnippet>433</a>
+<a href=#434 id=434 data-nosnippet>434</a><span class="kw">fn </span>normalize_integrator_weights(
+<a href=#435 id=435 data-nosnippet>435</a>    integrator_weights: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ArrayView1&lt;<span class="lifetime">'_</span>, f64&gt;&gt;,
+<a href=#436 id=436 data-nosnippet>436</a>    batch_len: usize,
+<a href=#437 id=437 data-nosnippet>437</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;f64&gt;&gt; {
+<a href=#438 id=438 data-nosnippet>438</a>    <span class="kw">match </span>integrator_weights {
+<a href=#439 id=439 data-nosnippet>439</a>        <span class="prelude-val">Some</span>(weights) =&gt; {
+<a href=#440 id=440 data-nosnippet>440</a>            <span class="kw">if </span>weights.len() != batch_len {
+<a href=#441 id=441 data-nosnippet>441</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#442 id=442 data-nosnippet>442</a>                    <span class="string">"Expected {} entries in integrator_weights, got {}."</span>,
+<a href=#443 id=443 data-nosnippet>443</a>                    batch_len,
+<a href=#444 id=444 data-nosnippet>444</a>                    weights.len()
+<a href=#445 id=445 data-nosnippet>445</a>                ));
+<a href=#446 id=446 data-nosnippet>446</a>            }
+<a href=#447 id=447 data-nosnippet>447</a>            <span class="prelude-val">Ok</span>(weights.iter().copied().collect())
+<a href=#448 id=448 data-nosnippet>448</a>        }
+<a href=#449 id=449 data-nosnippet>449</a>        <span class="prelude-val">None </span>=&gt; <span class="prelude-val">Ok</span>(<span class="macro">vec!</span>[<span class="number">1.0</span>; batch_len]),
+<a href=#450 id=450 data-nosnippet>450</a>    }
+<a href=#451 id=451 data-nosnippet>451</a>}
+<a href=#452 id=452 data-nosnippet>452</a>
+<a href=#453 id=453 data-nosnippet>453</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>build_havana_sample(
+<a href=#454 id=454 data-nosnippet>454</a>    integrand: <span class="kw-2">&amp;</span>gammalooprs::integrands::process::ProcessIntegrand,
+<a href=#455 id=455 data-nosnippet>455</a>    point: <span class="kw-2">&amp;</span>[f64],
+<a href=#456 id=456 data-nosnippet>456</a>    discrete_dim: <span class="kw-2">&amp;</span>[usize],
+<a href=#457 id=457 data-nosnippet>457</a>    integrator_weight: f64,
+<a href=#458 id=458 data-nosnippet>458</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Sample&lt;F&lt;f64&gt;&gt;&gt; {
+<a href=#459 id=459 data-nosnippet>459</a>    <span class="kw">let </span>expected_dimension = integrand.expected_x_space_dimension(discrete_dim)<span class="question-mark">?</span>;
+<a href=#460 id=460 data-nosnippet>460</a>    <span class="kw">if </span>point.len() != expected_dimension {
+<a href=#461 id=461 data-nosnippet>461</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#462 id=462 data-nosnippet>462</a>            <span class="string">"Expected {} x-space coordinates for this integrand selection, got {}."</span>,
+<a href=#463 id=463 data-nosnippet>463</a>            expected_dimension,
+<a href=#464 id=464 data-nosnippet>464</a>            point.len()
+<a href=#465 id=465 data-nosnippet>465</a>        ));
+<a href=#466 id=466 data-nosnippet>466</a>    }
+<a href=#467 id=467 data-nosnippet>467</a>
+<a href=#468 id=468 data-nosnippet>468</a>    <span class="prelude-val">Ok</span>(havana_sample(
+<a href=#469 id=469 data-nosnippet>469</a>        point.iter().map(|<span class="kw-2">&amp;</span>x| F(x)).collect::&lt;Vec&lt;F&lt;f64&gt;&gt;&gt;(),
+<a href=#470 id=470 data-nosnippet>470</a>        discrete_dim,
+<a href=#471 id=471 data-nosnippet>471</a>        F(integrator_weight),
+<a href=#472 id=472 data-nosnippet>472</a>    ))
+<a href=#473 id=473 data-nosnippet>473</a>}
+<a href=#474 id=474 data-nosnippet>474</a>
+<a href=#475 id=475 data-nosnippet>475</a><span class="kw">fn </span>build_havana_samples(
+<a href=#476 id=476 data-nosnippet>476</a>    integrand: <span class="kw-2">&amp;</span>gammalooprs::integrands::process::ProcessIntegrand,
+<a href=#477 id=477 data-nosnippet>477</a>    points: <span class="kw-2">&amp;</span>ArrayView2&lt;<span class="lifetime">'_</span>, f64&gt;,
+<a href=#478 id=478 data-nosnippet>478</a>    integrator_weights: <span class="kw-2">&amp;</span>[f64],
+<a href=#479 id=479 data-nosnippet>479</a>    discrete_dims: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ArrayView2&lt;<span class="lifetime">'_</span>, usize&gt;&gt;,
+<a href=#480 id=480 data-nosnippet>480</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Sample&lt;F&lt;f64&gt;&gt;&gt;&gt; {
+<a href=#481 id=481 data-nosnippet>481</a>    (<span class="number">0</span>..points.nrows())
+<a href=#482 id=482 data-nosnippet>482</a>        .map(|sample_index| {
+<a href=#483 id=483 data-nosnippet>483</a>            <span class="kw">let </span>discrete_dim: Vec&lt;usize&gt; = discrete_dims
+<a href=#484 id=484 data-nosnippet>484</a>                .as_ref()
+<a href=#485 id=485 data-nosnippet>485</a>                .map(|dims| dims.row(sample_index).iter().copied().collect())
+<a href=#486 id=486 data-nosnippet>486</a>                .unwrap_or_default();
+<a href=#487 id=487 data-nosnippet>487</a>            build_havana_sample(
+<a href=#488 id=488 data-nosnippet>488</a>                integrand,
+<a href=#489 id=489 data-nosnippet>489</a>                points
+<a href=#490 id=490 data-nosnippet>490</a>                    .row(sample_index)
+<a href=#491 id=491 data-nosnippet>491</a>                    .as_slice()
+<a href=#492 id=492 data-nosnippet>492</a>                    .expect(<span class="string">"point rows are contiguous"</span>),
+<a href=#493 id=493 data-nosnippet>493</a>                <span class="kw-2">&amp;</span>discrete_dim,
+<a href=#494 id=494 data-nosnippet>494</a>                integrator_weights[sample_index],
+<a href=#495 id=495 data-nosnippet>495</a>            )
+<a href=#496 id=496 data-nosnippet>496</a>        })
+<a href=#497 id=497 data-nosnippet>497</a>        .collect()
+<a href=#498 id=498 data-nosnippet>498</a>}
+<a href=#499 id=499 data-nosnippet>499</a>
+<a href=#500 id=500 data-nosnippet>500</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>build_momentum_input(
+<a href=#501 id=501 data-nosnippet>501</a>    integrand: <span class="kw-2">&amp;</span>gammalooprs::integrands::process::ProcessIntegrand,
+<a href=#502 id=502 data-nosnippet>502</a>    point: <span class="kw-2">&amp;</span>[f64],
+<a href=#503 id=503 data-nosnippet>503</a>    integrator_weight: f64,
+<a href=#504 id=504 data-nosnippet>504</a>    discrete_dim: <span class="kw-2">&amp;</span>[usize],
+<a href=#505 id=505 data-nosnippet>505</a>    graph_name: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>str&gt;,
+<a href=#506 id=506 data-nosnippet>506</a>    orientation: <span class="prelude-ty">Option</span>&lt;usize&gt;,
+<a href=#507 id=507 data-nosnippet>507</a>) -&gt; <span class="prelude-ty">Result</span>&lt;MomentumSpaceEvaluationInput&gt; {
+<a href=#508 id=508 data-nosnippet>508</a>    <span class="kw">if </span>!point.len().is_multiple_of(<span class="number">3</span>) {
+<a href=#509 id=509 data-nosnippet>509</a>        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#510 id=510 data-nosnippet>510</a>            <span class="string">"Momentum-space evaluation expects flattened (px, py, pz) triplets, so the coordinate count must be a multiple of 3; got {}."</span>,
+<a href=#511 id=511 data-nosnippet>511</a>            point.len()
+<a href=#512 id=512 data-nosnippet>512</a>        ));
+<a href=#513 id=513 data-nosnippet>513</a>    }
+<a href=#514 id=514 data-nosnippet>514</a>
+<a href=#515 id=515 data-nosnippet>515</a>    <span class="kw">let </span>loop_momenta = point
+<a href=#516 id=516 data-nosnippet>516</a>        .chunks_exact(<span class="number">3</span>)
+<a href=#517 id=517 data-nosnippet>517</a>        .map(|coords| ThreeMomentum {
+<a href=#518 id=518 data-nosnippet>518</a>            px: F(coords[<span class="number">0</span>]),
+<a href=#519 id=519 data-nosnippet>519</a>            py: F(coords[<span class="number">1</span>]),
+<a href=#520 id=520 data-nosnippet>520</a>            pz: F(coords[<span class="number">2</span>]),
+<a href=#521 id=521 data-nosnippet>521</a>        })
+<a href=#522 id=522 data-nosnippet>522</a>        .collect();
+<a href=#523 id=523 data-nosnippet>523</a>
+<a href=#524 id=524 data-nosnippet>524</a>    <span class="kw">match </span><span class="kw-2">&amp;</span>integrand.get_settings().sampling {
+<a href=#525 id=525 data-nosnippet>525</a>        gammalooprs::settings::runtime::SamplingSettings::Default(<span class="kw">_</span>)
+<a href=#526 id=526 data-nosnippet>526</a>        | gammalooprs::settings::runtime::SamplingSettings::MultiChanneling(<span class="kw">_</span>) =&gt; {
+<a href=#527 id=527 data-nosnippet>527</a>            <span class="kw">if </span>!discrete_dim.is_empty() {
+<a href=#528 id=528 data-nosnippet>528</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#529 id=529 data-nosnippet>529</a>                    <span class="string">"This integrand does not use discrete graph sampling; expected no discrete dimensions, got {:?}."</span>,
+<a href=#530 id=530 data-nosnippet>530</a>                    discrete_dim
+<a href=#531 id=531 data-nosnippet>531</a>                ));
+<a href=#532 id=532 data-nosnippet>532</a>            }
+<a href=#533 id=533 data-nosnippet>533</a>
+<a href=#534 id=534 data-nosnippet>534</a>            <span class="kw">if </span>orientation.is_some() &amp;&amp; graph_name.is_none() {
+<a href=#535 id=535 data-nosnippet>535</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#536 id=536 data-nosnippet>536</a>                    <span class="string">"A specific orientation requires a specific graph in momentum-space evaluation."
+<a href=#537 id=537 data-nosnippet>537</a>                </span>));
+<a href=#538 id=538 data-nosnippet>538</a>            }
+<a href=#539 id=539 data-nosnippet>539</a>
+<a href=#540 id=540 data-nosnippet>540</a>            <span class="kw">let </span>graph_id = graph_name
+<a href=#541 id=541 data-nosnippet>541</a>                .map(|graph_name| {
+<a href=#542 id=542 data-nosnippet>542</a>                    integrand.find_graph_id_by_name(graph_name).ok_or_else(|| {
+<a href=#543 id=543 data-nosnippet>543</a>                        <span class="macro">eyre!</span>(
+<a href=#544 id=544 data-nosnippet>544</a>                            <span class="string">"Unknown graph '{}' in momentum-space evaluation."</span>,
+<a href=#545 id=545 data-nosnippet>545</a>                            graph_name
+<a href=#546 id=546 data-nosnippet>546</a>                        )
+<a href=#547 id=547 data-nosnippet>547</a>                    })
+<a href=#548 id=548 data-nosnippet>548</a>                })
+<a href=#549 id=549 data-nosnippet>549</a>                .transpose()<span class="question-mark">?</span>;
+<a href=#550 id=550 data-nosnippet>550</a>
+<a href=#551 id=551 data-nosnippet>551</a>            <span class="kw">if let </span>(<span class="prelude-val">Some</span>(graph_id), <span class="prelude-val">Some</span>(orientation)) = (graph_id, orientation) {
+<a href=#552 id=552 data-nosnippet>552</a>                <span class="kw">let </span>orientation_count =
+<a href=#553 id=553 data-nosnippet>553</a>                    integrand.graph_orientation_count(graph_id).ok_or_else(|| {
+<a href=#554 id=554 data-nosnippet>554</a>                        <span class="macro">eyre!</span>(
+<a href=#555 id=555 data-nosnippet>555</a>                            <span class="string">"Graph id {} is invalid for momentum-space evaluation."</span>,
+<a href=#556 id=556 data-nosnippet>556</a>                            graph_id
+<a href=#557 id=557 data-nosnippet>557</a>                        )
+<a href=#558 id=558 data-nosnippet>558</a>                    })<span class="question-mark">?</span>;
+<a href=#559 id=559 data-nosnippet>559</a>                <span class="kw">if </span>orientation &gt;= orientation_count {
+<a href=#560 id=560 data-nosnippet>560</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#561 id=561 data-nosnippet>561</a>                        <span class="string">"Orientation {} is out of range for graph '{}'; the graph has {} orientations."</span>,
+<a href=#562 id=562 data-nosnippet>562</a>                        orientation,
+<a href=#563 id=563 data-nosnippet>563</a>                        graph_name.expect(<span class="string">"graph name should exist when graph_id exists"</span>),
+<a href=#564 id=564 data-nosnippet>564</a>                        orientation_count
+<a href=#565 id=565 data-nosnippet>565</a>                    ));
+<a href=#566 id=566 data-nosnippet>566</a>                }
+<a href=#567 id=567 data-nosnippet>567</a>            }
+<a href=#568 id=568 data-nosnippet>568</a>
+<a href=#569 id=569 data-nosnippet>569</a>            <span class="prelude-val">Ok</span>(MomentumSpaceEvaluationInput {
+<a href=#570 id=570 data-nosnippet>570</a>                loop_momenta,
+<a href=#571 id=571 data-nosnippet>571</a>                integrator_weight: F(integrator_weight),
+<a href=#572 id=572 data-nosnippet>572</a>                graph_id,
+<a href=#573 id=573 data-nosnippet>573</a>                group_id: <span class="prelude-val">None</span>,
+<a href=#574 id=574 data-nosnippet>574</a>                orientation,
+<a href=#575 id=575 data-nosnippet>575</a>                channel_id: <span class="prelude-val">None</span>,
+<a href=#576 id=576 data-nosnippet>576</a>            })
+<a href=#577 id=577 data-nosnippet>577</a>        }
+<a href=#578 id=578 data-nosnippet>578</a>        gammalooprs::settings::runtime::SamplingSettings::DiscreteGraphs(settings) =&gt; {
+<a href=#579 id=579 data-nosnippet>579</a>            <span class="kw">if </span>!discrete_dim.is_empty() &amp;&amp; (graph_name.is_some() || orientation.is_some()) {
+<a href=#580 id=580 data-nosnippet>580</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#581 id=581 data-nosnippet>581</a>                    <span class="string">"Discrete dimensions are mutually exclusive with explicit graph/orientation selection in momentum-space evaluation."
+<a href=#582 id=582 data-nosnippet>582</a>                </span>));
+<a href=#583 id=583 data-nosnippet>583</a>            }
+<a href=#584 id=584 data-nosnippet>584</a>
+<a href=#585 id=585 data-nosnippet>585</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(graph_name) = graph_name {
+<a href=#586 id=586 data-nosnippet>586</a>                <span class="kw">let </span>graph_id = integrand.find_graph_id_by_name(graph_name).ok_or_else(|| {
+<a href=#587 id=587 data-nosnippet>587</a>                    <span class="macro">eyre!</span>(
+<a href=#588 id=588 data-nosnippet>588</a>                        <span class="string">"Unknown graph '{}' in momentum-space evaluation."</span>,
+<a href=#589 id=589 data-nosnippet>589</a>                        graph_name
+<a href=#590 id=590 data-nosnippet>590</a>                    )
+<a href=#591 id=591 data-nosnippet>591</a>                })<span class="question-mark">?</span>;
+<a href=#592 id=592 data-nosnippet>592</a>
+<a href=#593 id=593 data-nosnippet>593</a>                <span class="kw">if let </span><span class="prelude-val">Some</span>(orientation) = orientation {
+<a href=#594 id=594 data-nosnippet>594</a>                    <span class="kw">let </span>orientation_count =
+<a href=#595 id=595 data-nosnippet>595</a>                        integrand.graph_orientation_count(graph_id).ok_or_else(|| {
+<a href=#596 id=596 data-nosnippet>596</a>                            <span class="macro">eyre!</span>(
+<a href=#597 id=597 data-nosnippet>597</a>                                <span class="string">"Graph id {} is invalid for momentum-space evaluation."</span>,
+<a href=#598 id=598 data-nosnippet>598</a>                                graph_id
+<a href=#599 id=599 data-nosnippet>599</a>                            )
+<a href=#600 id=600 data-nosnippet>600</a>                        })<span class="question-mark">?</span>;
+<a href=#601 id=601 data-nosnippet>601</a>                    <span class="kw">if </span>orientation &gt;= orientation_count {
+<a href=#602 id=602 data-nosnippet>602</a>                        <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#603 id=603 data-nosnippet>603</a>                            <span class="string">"Orientation {} is out of range for graph '{}'; the graph has {} orientations."</span>,
+<a href=#604 id=604 data-nosnippet>604</a>                            orientation,
+<a href=#605 id=605 data-nosnippet>605</a>                            graph_name,
+<a href=#606 id=606 data-nosnippet>606</a>                            orientation_count
+<a href=#607 id=607 data-nosnippet>607</a>                        ));
+<a href=#608 id=608 data-nosnippet>608</a>                    }
+<a href=#609 id=609 data-nosnippet>609</a>                }
+<a href=#610 id=610 data-nosnippet>610</a>
+<a href=#611 id=611 data-nosnippet>611</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(MomentumSpaceEvaluationInput {
+<a href=#612 id=612 data-nosnippet>612</a>                    loop_momenta,
+<a href=#613 id=613 data-nosnippet>613</a>                    integrator_weight: F(integrator_weight),
+<a href=#614 id=614 data-nosnippet>614</a>                    graph_id: <span class="prelude-val">Some</span>(graph_id),
+<a href=#615 id=615 data-nosnippet>615</a>                    group_id: <span class="prelude-val">None</span>,
+<a href=#616 id=616 data-nosnippet>616</a>                    orientation,
+<a href=#617 id=617 data-nosnippet>617</a>                    channel_id: <span class="prelude-val">None</span>,
+<a href=#618 id=618 data-nosnippet>618</a>                });
+<a href=#619 id=619 data-nosnippet>619</a>            }
+<a href=#620 id=620 data-nosnippet>620</a>
+<a href=#621 id=621 data-nosnippet>621</a>            <span class="kw">let </span>(group_from_dims, orientation_from_dims, channel_id) = <span class="kw">if </span>discrete_dim.is_empty() {
+<a href=#622 id=622 data-nosnippet>622</a>                (<span class="prelude-val">None</span>, <span class="prelude-val">None</span>, <span class="prelude-val">None</span>)
+<a href=#623 id=623 data-nosnippet>623</a>            } <span class="kw">else </span>{
+<a href=#624 id=624 data-nosnippet>624</a>                integrand.resolve_discrete_selection(discrete_dim)<span class="question-mark">?
+<a href=#625 id=625 data-nosnippet>625</a>            </span>};
+<a href=#626 id=626 data-nosnippet>626</a>
+<a href=#627 id=627 data-nosnippet>627</a>            <span class="kw">let </span>group_from_name = graph_name
+<a href=#628 id=628 data-nosnippet>628</a>                .map(|graph_name| integrand.resolve_group_id_by_master_name(graph_name))
+<a href=#629 id=629 data-nosnippet>629</a>                .transpose()<span class="question-mark">?</span>;
+<a href=#630 id=630 data-nosnippet>630</a>
+<a href=#631 id=631 data-nosnippet>631</a>            <span class="kw">let </span>group_id = <span class="kw">match </span>(group_from_dims, group_from_name) {
+<a href=#632 id=632 data-nosnippet>632</a>                (<span class="prelude-val">Some</span>(group_id), <span class="prelude-val">Some</span>(group_from_name)) <span class="kw">if </span>group_id != group_from_name =&gt; {
+<a href=#633 id=633 data-nosnippet>633</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#634 id=634 data-nosnippet>634</a>                        <span class="string">"Discrete dimensions select graph group {}, but graph '{}' resolves to group {}."</span>,
+<a href=#635 id=635 data-nosnippet>635</a>                        group_id.<span class="number">0</span>,
+<a href=#636 id=636 data-nosnippet>636</a>                        graph_name.expect(<span class="string">"graph name must exist"</span>),
+<a href=#637 id=637 data-nosnippet>637</a>                        group_from_name.<span class="number">0
+<a href=#638 id=638 data-nosnippet>638</a>                    </span>));
+<a href=#639 id=639 data-nosnippet>639</a>                }
+<a href=#640 id=640 data-nosnippet>640</a>                (<span class="prelude-val">Some</span>(group_id), <span class="kw">_</span>) =&gt; <span class="prelude-val">Some</span>(group_id),
+<a href=#641 id=641 data-nosnippet>641</a>                (<span class="prelude-val">None</span>, <span class="prelude-val">Some</span>(group_id)) =&gt; <span class="prelude-val">Some</span>(group_id),
+<a href=#642 id=642 data-nosnippet>642</a>                (<span class="prelude-val">None</span>, <span class="prelude-val">None</span>) =&gt; <span class="prelude-val">None</span>,
+<a href=#643 id=643 data-nosnippet>643</a>            };
+<a href=#644 id=644 data-nosnippet>644</a>
+<a href=#645 id=645 data-nosnippet>645</a>            <span class="kw">let </span>orientation = <span class="kw">match </span>(orientation_from_dims, orientation) {
+<a href=#646 id=646 data-nosnippet>646</a>                (<span class="prelude-val">Some</span>(from_dims), <span class="prelude-val">Some</span>(from_arg)) <span class="kw">if </span>from_dims != from_arg =&gt; {
+<a href=#647 id=647 data-nosnippet>647</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#648 id=648 data-nosnippet>648</a>                        <span class="string">"Discrete dimensions select orientation {}, but the explicit momentum-space orientation is {}."</span>,
+<a href=#649 id=649 data-nosnippet>649</a>                        from_dims,
+<a href=#650 id=650 data-nosnippet>650</a>                        from_arg
+<a href=#651 id=651 data-nosnippet>651</a>                    ));
+<a href=#652 id=652 data-nosnippet>652</a>                }
+<a href=#653 id=653 data-nosnippet>653</a>                (<span class="prelude-val">Some</span>(from_dims), <span class="kw">_</span>) =&gt; <span class="prelude-val">Some</span>(from_dims),
+<a href=#654 id=654 data-nosnippet>654</a>                (<span class="prelude-val">None</span>, from_arg) =&gt; from_arg,
+<a href=#655 id=655 data-nosnippet>655</a>            };
+<a href=#656 id=656 data-nosnippet>656</a>
+<a href=#657 id=657 data-nosnippet>657</a>            <span class="kw">if </span>group_id.is_none() &amp;&amp; orientation.is_some() {
+<a href=#658 id=658 data-nosnippet>658</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#659 id=659 data-nosnippet>659</a>                    <span class="string">"A specific orientation requires a specific graph group in momentum-space evaluation."
+<a href=#660 id=660 data-nosnippet>660</a>                </span>));
+<a href=#661 id=661 data-nosnippet>661</a>            }
+<a href=#662 id=662 data-nosnippet>662</a>
+<a href=#663 id=663 data-nosnippet>663</a>            <span class="kw">if </span>settings.sample_orientations &amp;&amp; group_id.is_some() &amp;&amp; orientation.is_none() {
+<a href=#664 id=664 data-nosnippet>664</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="macro">eyre!</span>(
+<a href=#665 id=665 data-nosnippet>665</a>                    <span class="string">"Momentum-space evaluation for this integrand requires an orientation selection."
+<a href=#666 id=666 data-nosnippet>666</a>                </span>));
+<a href=#667 id=667 data-nosnippet>667</a>            }
+<a href=#668 id=668 data-nosnippet>668</a>
+<a href=#669 id=669 data-nosnippet>669</a>            <span class="prelude-val">Ok</span>(MomentumSpaceEvaluationInput {
+<a href=#670 id=670 data-nosnippet>670</a>                loop_momenta,
+<a href=#671 id=671 data-nosnippet>671</a>                integrator_weight: F(integrator_weight),
+<a href=#672 id=672 data-nosnippet>672</a>                graph_id: <span class="prelude-val">None</span>,
+<a href=#673 id=673 data-nosnippet>673</a>                group_id,
+<a href=#674 id=674 data-nosnippet>674</a>                orientation,
+<a href=#675 id=675 data-nosnippet>675</a>                channel_id,
+<a href=#676 id=676 data-nosnippet>676</a>            })
+<a href=#677 id=677 data-nosnippet>677</a>        }
+<a href=#678 id=678 data-nosnippet>678</a>    }
+<a href=#679 id=679 data-nosnippet>679</a>}
+<a href=#680 id=680 data-nosnippet>680</a>
+<a href=#681 id=681 data-nosnippet>681</a><span class="kw">fn </span>build_momentum_inputs(
+<a href=#682 id=682 data-nosnippet>682</a>    integrand: <span class="kw-2">&amp;</span>gammalooprs::integrands::process::ProcessIntegrand,
+<a href=#683 id=683 data-nosnippet>683</a>    points: <span class="kw-2">&amp;</span>ArrayView2&lt;<span class="lifetime">'_</span>, f64&gt;,
+<a href=#684 id=684 data-nosnippet>684</a>    integrator_weights: <span class="kw-2">&amp;</span>[f64],
+<a href=#685 id=685 data-nosnippet>685</a>    discrete_dims: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>ArrayView2&lt;<span class="lifetime">'_</span>, usize&gt;&gt;,
+<a href=#686 id=686 data-nosnippet>686</a>    graph_names: <span class="kw-2">&amp;</span>[<span class="prelude-ty">Option</span>&lt;String&gt;],
+<a href=#687 id=687 data-nosnippet>687</a>    orientations: <span class="kw-2">&amp;</span>[<span class="prelude-ty">Option</span>&lt;usize&gt;],
+<a href=#688 id=688 data-nosnippet>688</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;MomentumSpaceEvaluationInput&gt;&gt; {
+<a href=#689 id=689 data-nosnippet>689</a>    (<span class="number">0</span>..points.nrows())
+<a href=#690 id=690 data-nosnippet>690</a>        .map(|sample_index| {
+<a href=#691 id=691 data-nosnippet>691</a>            <span class="kw">let </span>discrete_dim: Vec&lt;usize&gt; = discrete_dims
+<a href=#692 id=692 data-nosnippet>692</a>                .as_ref()
+<a href=#693 id=693 data-nosnippet>693</a>                .map(|dims| dims.row(sample_index).iter().copied().collect())
+<a href=#694 id=694 data-nosnippet>694</a>                .unwrap_or_default();
+<a href=#695 id=695 data-nosnippet>695</a>            build_momentum_input(
+<a href=#696 id=696 data-nosnippet>696</a>                integrand,
+<a href=#697 id=697 data-nosnippet>697</a>                points
+<a href=#698 id=698 data-nosnippet>698</a>                    .row(sample_index)
+<a href=#699 id=699 data-nosnippet>699</a>                    .as_slice()
+<a href=#700 id=700 data-nosnippet>700</a>                    .expect(<span class="string">"point rows are contiguous"</span>),
+<a href=#701 id=701 data-nosnippet>701</a>                integrator_weights[sample_index],
+<a href=#702 id=702 data-nosnippet>702</a>                <span class="kw-2">&amp;</span>discrete_dim,
+<a href=#703 id=703 data-nosnippet>703</a>                graph_names[sample_index].as_deref(),
+<a href=#704 id=704 data-nosnippet>704</a>                orientations[sample_index],
+<a href=#705 id=705 data-nosnippet>705</a>            )
+<a href=#706 id=706 data-nosnippet>706</a>        })
+<a href=#707 id=707 data-nosnippet>707</a>        .collect()
+<a href=#708 id=708 data-nosnippet>708</a>}
+<a href=#709 id=709 data-nosnippet>709</a>
+<a href=#710 id=710 data-nosnippet>710</a><span class="kw">fn </span>clear_precise_event_groups(
+<a href=#711 id=711 data-nosnippet>711</a>    result: <span class="kw-2">&amp;mut </span>gammalooprs::integrands::evaluation::PreciseEvaluationResult,
+<a href=#712 id=712 data-nosnippet>712</a>) {
+<a href=#713 id=713 data-nosnippet>713</a>    <span class="kw">match </span>result {
+<a href=#714 id=714 data-nosnippet>714</a>        gammalooprs::integrands::evaluation::PreciseEvaluationResult::Double(result) =&gt; {
+<a href=#715 id=715 data-nosnippet>715</a>            result.event_groups.clear()
+<a href=#716 id=716 data-nosnippet>716</a>        }
+<a href=#717 id=717 data-nosnippet>717</a>        gammalooprs::integrands::evaluation::PreciseEvaluationResult::Quad(result) =&gt; {
+<a href=#718 id=718 data-nosnippet>718</a>            result.event_groups.clear()
+<a href=#719 id=719 data-nosnippet>719</a>        }
+<a href=#720 id=720 data-nosnippet>720</a>        gammalooprs::integrands::evaluation::PreciseEvaluationResult::Arb(result) =&gt; {
+<a href=#721 id=721 data-nosnippet>721</a>            result.event_groups.clear()
+<a href=#722 id=722 data-nosnippet>722</a>        }
+<a href=#723 id=723 data-nosnippet>723</a>    }
+<a href=#724 id=724 data-nosnippet>724</a>}
+<a href=#725 id=725 data-nosnippet>725</a>
+<a href=#726 id=726 data-nosnippet>726</a><span class="kw">fn </span>merge_precise_observables(
+<a href=#727 id=727 data-nosnippet>727</a>    integrand: <span class="kw-2">&amp;</span>gammalooprs::integrands::process::ProcessIntegrand,
+<a href=#728 id=728 data-nosnippet>728</a>    results: <span class="kw-2">&amp;mut </span>[gammalooprs::integrands::evaluation::PreciseEvaluationResult],
+<a href=#729 id=729 data-nosnippet>729</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ObservableSnapshotBundle&gt; {
+<a href=#730 id=730 data-nosnippet>730</a>    <span class="kw">let </span><span class="kw-2">mut </span>observables = ObservableSnapshotBundle::default();
+<a href=#731 id=731 data-nosnippet>731</a>    <span class="kw">let </span><span class="kw-2">mut </span>have_observables = <span class="bool-val">false</span>;
+<a href=#732 id=732 data-nosnippet>732</a>
+<a href=#733 id=733 data-nosnippet>733</a>    <span class="kw">for </span>evaluation <span class="kw">in </span>results.iter_mut() {
+<a href=#734 id=734 data-nosnippet>734</a>        <span class="kw">let </span>sample_observables = integrand
+<a href=#735 id=735 data-nosnippet>735</a>            .build_observable_snapshots_for_precise_result(evaluation)
+<a href=#736 id=736 data-nosnippet>736</a>            .unwrap_or_default();
+<a href=#737 id=737 data-nosnippet>737</a>        <span class="kw">if </span>!sample_observables.histograms.is_empty() {
+<a href=#738 id=738 data-nosnippet>738</a>            <span class="kw">if </span>have_observables {
+<a href=#739 id=739 data-nosnippet>739</a>                observables.merge_in_place(<span class="kw-2">&amp;</span>sample_observables)<span class="question-mark">?</span>;
+<a href=#740 id=740 data-nosnippet>740</a>            } <span class="kw">else </span>{
+<a href=#741 id=741 data-nosnippet>741</a>                observables = sample_observables;
+<a href=#742 id=742 data-nosnippet>742</a>                have_observables = <span class="bool-val">true</span>;
+<a href=#743 id=743 data-nosnippet>743</a>            }
+<a href=#744 id=744 data-nosnippet>744</a>        }
+<a href=#745 id=745 data-nosnippet>745</a>        <span class="kw">if </span>!integrand.get_settings().general.generate_events {
+<a href=#746 id=746 data-nosnippet>746</a>            clear_precise_event_groups(evaluation);
+<a href=#747 id=747 data-nosnippet>747</a>        }
+<a href=#748 id=748 data-nosnippet>748</a>    }
+<a href=#749 id=749 data-nosnippet>749</a>
+<a href=#750 id=750 data-nosnippet>750</a>    <span class="prelude-val">Ok</span>(observables)
+<a href=#751 id=751 data-nosnippet>751</a>}
+<a href=#752 id=752 data-nosnippet>752</a>
+<a href=#753 id=753 data-nosnippet>753</a><span class="kw">fn </span>set_top_level_sample_weight(sample: <span class="kw-2">&amp;mut </span>Sample&lt;F&lt;f64&gt;&gt;, integrator_weight: F&lt;f64&gt;) {
+<a href=#754 id=754 data-nosnippet>754</a>    <span class="kw">match </span>sample {
+<a href=#755 id=755 data-nosnippet>755</a>        Sample::Continuous(weight, <span class="kw">_</span>)
+<a href=#756 id=756 data-nosnippet>756</a>        | Sample::Discrete(weight, <span class="kw">_</span>, <span class="kw">_</span>)
+<a href=#757 id=757 data-nosnippet>757</a>        | Sample::Uniform(weight, <span class="kw">_</span>, <span class="kw">_</span>) =&gt; <span class="kw-2">*</span>weight = integrator_weight,
+<a href=#758 id=758 data-nosnippet>758</a>    }
+<a href=#759 id=759 data-nosnippet>759</a>}
+<a href=#760 id=760 data-nosnippet>760</a>
+<a href=#761 id=761 data-nosnippet>761</a><span class="kw">fn </span>havana_sample(
+<a href=#762 id=762 data-nosnippet>762</a>    cont: Vec&lt;F&lt;f64&gt;&gt;,
+<a href=#763 id=763 data-nosnippet>763</a>    discrete_dimensions: <span class="kw-2">&amp;</span>[usize],
+<a href=#764 id=764 data-nosnippet>764</a>    integrator_weight: F&lt;f64&gt;,
+<a href=#765 id=765 data-nosnippet>765</a>) -&gt; Sample&lt;F&lt;f64&gt;&gt; {
+<a href=#766 id=766 data-nosnippet>766</a>    <span class="kw">let </span><span class="kw-2">mut </span>sample = Sample::Continuous(F(<span class="number">1.0</span>), cont);
+<a href=#767 id=767 data-nosnippet>767</a>
+<a href=#768 id=768 data-nosnippet>768</a>    <span class="kw">for </span><span class="kw-2">&amp;</span>discrete_dimension <span class="kw">in </span>discrete_dimensions.iter().rev() {
+<a href=#769 id=769 data-nosnippet>769</a>        sample = Sample::Discrete(F(<span class="number">1.0</span>), discrete_dimension, <span class="prelude-val">Some</span>(Box::new(sample)));
+<a href=#770 id=770 data-nosnippet>770</a>    }
+<a href=#771 id=771 data-nosnippet>771</a>
+<a href=#772 id=772 data-nosnippet>772</a>    set_top_level_sample_weight(<span class="kw-2">&amp;mut </span>sample, integrator_weight);
+<a href=#773 id=773 data-nosnippet>773</a>    sample
+<a href=#774 id=774 data-nosnippet>774</a>}
 </code></pre></div></section></main></body></html>

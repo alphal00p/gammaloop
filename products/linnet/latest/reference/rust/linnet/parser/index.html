@@ -1,78 +1,37 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="DOT Language Parser and Serializer"><title>linnet::parser - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="linnet" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0 (2d8144b78 2026-07-07)" data-channel="1.97.0" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="stylesheet" href="../../theme.css"><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="alphal00p-rustdoc-bar" aria-label="αLoop documentation"><a href="https://alphal00p.github.io/gammaloop/">αLoop docs</a><span aria-hidden="true">/</span><span>Linnet · Rust API</span></nav>
-<rustdoc-topbar><h2><a href="#">Module parser</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../linnet/index.html">linnet</a><span class="version">0.17.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module parser</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#dot-language-parser-and-serializer" title="DOT Language Parser and Serializer">DOT Language Parser and Serializer</a><ul><li><a href="#key-features" title="Key Features:">Key Features:</a></li><li><a href="#core-components" title="Core Components:">Core Components:</a></li><li><a href="#usage-example-conceptual" title="Usage Example (Conceptual):">Usage Example (Conceptual):</a></li></ul></li></ul><h3><a href="#reexports">Module Items</a></h3><ul class="block"><li><a href="#reexports" title="Re-exports">Re-exports</a></li><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate linnet</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">linnet</a></div><h1>Module <span>parser</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/linnet/parser/mod.rs.html#1-892">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="dot-language-parser-and-serializer"><a class="doc-anchor" href="#dot-language-parser-and-serializer">§</a>DOT Language Parser and Serializer</h2>
-<p>This module provides the functionality to parse graph descriptions written in the
-<a href="https://graphviz.org/doc/info/lang.html">DOT language</a> and convert them into
-<code>HedgeGraph</code> instances. It also handles the reverse process: serializing
-<code>HedgeGraph</code> instances back into the DOT language format, suitable for use
-with Graphviz tools or for storage.</p>
-<h3 id="key-features"><a class="doc-anchor" href="#key-features">§</a>Key Features:</h3>
-<ul>
-<li><strong>Parsing DOT:</strong>
-<ul>
-<li>Parses DOT files or strings into <code>HedgeGraph&lt;E, V, S&gt;</code> instances.</li>
-<li>Uses the external <code>dot-parser</code> crate for initial AST parsing, then converts
-this AST into the <code>HedgeGraph</code> structure.</li>
-<li>Handles DOT node and edge attributes, storing them in <code>DotVertexData</code> and
-<code>DotEdgeData</code> respectively before they are (optionally) converted into
-the generic <code>V</code> and <code>E</code> types of the <code>HedgeGraph</code>.</li>
-<li>Supports parsing of “flow” attributes for nodes to indicate sources/sinks,
-and “dir” attributes for edges to set orientation.</li>
-</ul>
-</li>
-<li><strong>Serialization to DOT:</strong>
-<ul>
-<li>Converts <code>HedgeGraph</code> instances into DOT language strings.</li>
-<li>Allows custom mapping of generic node and edge data (<code>V</code>, <code>E</code>) to DOT attributes
-via provided closure functions.</li>
-</ul>
-</li>
-</ul>
-<h3 id="core-components"><a class="doc-anchor" href="#core-components">§</a>Core Components:</h3>
-<ul>
-<li><strong><code>DotVertexData</code></strong>: A struct that holds attributes (key-value pairs) parsed from
-a DOT node definition. This includes standard DOT attributes like <code>label</code>, <code>shape</code>,
-<code>color</code>, as well as custom attributes. It can also capture an explicit <code>id</code> and
-a <code>flow</code> (source/sink) for external port representation.</li>
-<li><strong><code>DotEdgeData</code></strong>: Similar to <code>DotVertexData</code>, this struct stores attributes for
-edges parsed from DOT, such as <code>label</code>, <code>color</code>, <code>dir</code> (direction), etc.</li>
-<li><strong><code>HedgeGraph::from_file(path)</code> and <code>HedgeGraph::from_string(dot_string)</code></strong>:
-These are the primary functions for parsing DOT files and strings into a
-<code>HedgeGraph</code>. They require that the target <code>E</code> (edge data) and <code>V</code> (vertex data)
-types implement <code>TryFrom&lt;DotEdgeData&gt;</code> and <code>TryFrom&lt;DotVertexData&gt;</code> respectively.</li>
-<li><strong><code>HedgeGraphSet::from_file(path)</code> and <code>HedgeGraphSet::from_string(dot_string)</code></strong>:
-Similar to the above, but can parse files or strings containing multiple DOT graphs.</li>
-<li><strong><code>HedgeGraph::dot_serialize_io(writer, edge_map, node_map)</code> and <code>HedgeGraph::dot_serialize_fmt(formatter, edge_map, node_map)</code></strong>:
-Methods on <code>HedgeGraph</code> used to serialize the graph to an <code>io::Write</code> or <code>fmt::Write</code>
-target. The <code>edge_map</code> and <code>node_map</code> closures define how to convert the graph’s
-edge and node data into DOT attribute strings.</li>
-<li><strong><code>dot!(...)</code> macro</strong>: A utility macro for conveniently creating a <code>HedgeGraph</code>
-from an inline DOT string literal, typically used in tests or examples.
-The graph created will have <code>DotEdgeData</code> and <code>DotVertexData</code> as its edge and node
-data types.</li>
-<li><strong><code>HedgeParseError</code></strong>: Enum representing potential errors during parsing.</li>
-</ul>
-<h3 id="usage-example-conceptual"><a class="doc-anchor" href="#usage-example-conceptual">§</a>Usage Example (Conceptual):</h3>
-<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">use </span>linnet::half_edge::HedgeGraph;
-<span class="kw">use </span>linnet::dot_parser::{DotEdgeData, DotVertexData};
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="DOT interchange"><title>linnet::parser - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="linnet" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.0 (2d8144b78 2026-07-07)" data-channel="1.97.0" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="stylesheet" href="../../theme.css"><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="alphal00p-rustdoc-bar" aria-label="αLoop documentation"><a href="https://alphal00p.github.io/gammaloop/">αLoop docs</a><span aria-hidden="true">/</span><span>Linnet · Rust API</span></nav>
+<rustdoc-topbar><h2><a href="#">Module parser</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../linnet/index.html">linnet</a><span class="version">0.17.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module parser</a></h2><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#dot-interchange" title="DOT interchange">DOT interchange</a><ul><li><a href="#parse-inspect-and-serialize" title="Parse, inspect, and serialize">Parse, inspect, and serialize</a></li></ul></li></ul><h3><a href="#reexports">Module Items</a></h3><ul class="block"><li><a href="#reexports" title="Re-exports">Re-exports</a></li><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#structs" title="Structs">Structs</a></li><li><a href="#enums" title="Enums">Enums</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate linnet</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">linnet</a></div><h1>Module <span>parser</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/linnet/parser/mod.rs.html#1-860">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><h2 id="dot-interchange"><a class="doc-anchor" href="#dot-interchange">§</a>DOT interchange</h2>
+<p>This module parses the <a href="https://graphviz.org/doc/info/lang.html">DOT language</a>
+into Linnet’s half-edge model and serializes half-edge graphs back to DOT.
+<a href="struct.DotGraph.html#method.from_string" title="associated function linnet::parser::DotGraph::from_string"><code>DotGraph::from_string</code></a> and <a href="struct.DotGraph.html#method.from_file" title="associated function linnet::parser::DotGraph::from_file"><code>DotGraph::from_file</code></a> parse one graph. A
+<a href="struct.DotGraph.html" title="struct linnet::parser::DotGraph"><code>DotGraph</code></a> retains <a href="global/struct.GlobalData.html" title="struct linnet::parser::global::GlobalData"><code>GlobalData</code></a> alongside a <a href="../half_edge/struct.HedgeGraph.html" title="struct linnet::half_edge::HedgeGraph"><code>HedgeGraph</code></a> whose node,
+edge, and half-edge payloads are <a href="vertex/struct.DotVertexData.html" title="struct linnet::parser::vertex::DotVertexData"><code>DotVertexData</code></a>, <a href="edge/struct.DotEdgeData.html" title="struct linnet::parser::edge::DotEdgeData"><code>DotEdgeData</code></a>, and
+<a href="hedge/struct.DotHedgeData.html" title="struct linnet::parser::hedge::DotHedgeData"><code>DotHedgeData</code></a>. Use <a href="set/type.DotGraphSet.html" title="type linnet::parser::set::DotGraphSet"><code>set::DotGraphSet</code></a> for input containing multiple graphs.</p>
+<p>Parsed DOT attributes remain available in those payload types. In particular,
+external-port flow and edge orientation are preserved in the parsed graph
+rather than discarded as drawing-only attributes. <a href="struct.DotGraph.html" title="struct linnet::parser::DotGraph"><code>DotGraph</code></a> dereferences to
+its inner <a href="../half_edge/struct.HedgeGraph.html" title="struct linnet::half_edge::HedgeGraph"><code>HedgeGraph</code></a> for graph algorithms.</p>
+<h3 id="parse-inspect-and-serialize"><a class="doc-anchor" href="#parse-inspect-and-serialize">§</a>Parse, inspect, and serialize</h3>
+<div class="example-wrap"><pre class="rust rust-example-rendered"><code><span class="kw">use </span>linnet::parser::DotGraph;
 
-<span class="comment">// Define how your custom V/E types are created from DOT attributes
-</span><span class="kw">impl </span>TryFrom&lt;DotVertexData&gt; <span class="kw">for </span>MyVertexData { <span class="comment">/* ... */ </span>}
-<span class="kw">impl </span>TryFrom&lt;DotEdgeData&gt; <span class="kw">for </span>MyEdgeData { <span class="comment">/* ... */ </span>}
+<span class="kw">let </span>graph: DotGraph = DotGraph::from_string(
+    <span class="string">r#"digraph example {
+        incoming -&gt; interaction [label="particle"];
+    }"#</span>,
+)
+.unwrap();
 
-<span class="comment">// Parsing a DOT string
-</span><span class="kw">let </span>dot_string = <span class="string">"digraph G { a -&gt; b [label=\"edge1\"]; }"</span>;
-<span class="kw">let </span>graph: <span class="prelude-ty">Result</span>&lt;HedgeGraph&lt;MyEdgeData, MyVertexData, <span class="kw">_</span>&gt;, <span class="kw">_</span>&gt; = HedgeGraph::from_string(dot_string);
+<span class="macro">assert_eq!</span>(graph.n_nodes(), <span class="number">2</span>);
+<span class="macro">assert_eq!</span>(graph.n_edges(), <span class="number">1</span>);
+<span class="macro">assert_eq!</span>(graph.n_hedges(), <span class="number">2</span>);
 
-<span class="comment">// Serializing a graph to DOT
-</span><span class="kw">if let </span><span class="prelude-val">Ok</span>(g) = graph {
-    <span class="kw">let </span><span class="kw-2">mut </span>output = String::new();
-    g.dot_serialize_fmt(
-        <span class="kw-2">&amp;mut </span>output,
-        <span class="kw-2">&amp;</span>|edge_data| <span class="macro">format!</span>(<span class="string">"label=\"{}\""</span>, edge_data.custom_label),
-        <span class="kw-2">&amp;</span>|vertex_data| <span class="macro">format!</span>(<span class="string">"label=\"Node {}\""</span>, vertex_data.id)
-    ).unwrap();
-    <span class="macro">println!</span>(<span class="string">"{}"</span>, output);
-}</code></pre></div>
-<p>This module acts as a bridge between the <code>linnet</code> graph structures and the widely-used
-DOT language, facilitating interoperability and visualization.</p>
+<span class="kw">let </span><span class="kw-2">mut </span>output = String::new();
+graph.write_fmt(<span class="kw-2">&amp;mut </span>output).unwrap();
+<span class="kw">let </span>round_trip: DotGraph = DotGraph::from_string(output).unwrap();
+<span class="macro">assert_eq!</span>(round_trip.n_nodes(), graph.n_nodes());
+<span class="macro">assert_eq!</span>(round_trip.n_edges(), graph.n_edges());</code></pre></div>
+<p>The <a href="../macro.dot.html" title="macro linnet::dot"><code>crate::dot!</code></a> macro is a shorthand for parsing an inline DOT token tree. To
+serialize a graph with application-specific payloads, use
+<a href="../half_edge/struct.HedgeGraph.html#method.dot_serialize_io" title="method linnet::half_edge::HedgeGraph::dot_serialize_io"><code>HedgeGraph::dot_serialize_io</code></a> or <a href="../half_edge/struct.HedgeGraph.html#method.dot_serialize_fmt" title="method linnet::half_edge::HedgeGraph::dot_serialize_fmt"><code>HedgeGraph::dot_serialize_fmt</code></a>. Those
+methods take graph-level metadata plus mappings for half-edge, edge, and node
+payloads; parsing does not implicitly convert DOT payloads into user types.</p>
 </div></details><h2 id="reexports" class="section-header">Re-exports<a href="#reexports" class="anchor">§</a></h2><dl class="item-table reexports"><dt id="reexport.GraphSet"><code>pub use set::<a class="struct" href="set/struct.GraphSet.html" title="struct linnet::parser::set::GraphSet">GraphSet</a>;</code></dt><dt id="reexport.GlobalData"><code>pub use global::<a class="struct" href="global/struct.GlobalData.html" title="struct linnet::parser::global::GlobalData">GlobalData</a>;</code></dt><dt id="reexport.DotVertexData"><code>pub use vertex::<a class="struct" href="vertex/struct.DotVertexData.html" title="struct linnet::parser::vertex::DotVertexData">DotVertexData</a>;</code></dt><dt id="reexport.DotEdgeData"><code>pub use edge::<a class="struct" href="edge/struct.DotEdgeData.html" title="struct linnet::parser::edge::DotEdgeData">DotEdgeData</a>;</code></dt><dt id="reexport.DotHedgeData"><code>pub use hedge::<a class="struct" href="hedge/struct.DotHedgeData.html" title="struct linnet::parser::hedge::DotHedgeData">DotHedgeData</a>;</code></dt><dt id="reexport.HedgeParseError"><code>pub use error::<a class="enum" href="error/enum.HedgeParseError.html" title="enum linnet::parser::error::HedgeParseError">HedgeParseError</a>;</code></dt><dt id="reexport.HedgeParseExt"><code>pub use error::<a class="trait" href="error/trait.HedgeParseExt.html" title="trait linnet::parser::error::HedgeParseExt">HedgeParseExt</a>;</code></dt></dl><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="edge/index.html" title="mod linnet::parser::edge">edge</a></dt><dt><a class="mod" href="error/index.html" title="mod linnet::parser::error">error</a></dt><dt><a class="mod" href="global/index.html" title="mod linnet::parser::global">global</a></dt><dt><a class="mod" href="hedge/index.html" title="mod linnet::parser::hedge">hedge</a></dt><dt><a class="mod" href="set/index.html" title="mod linnet::parser::set">set</a></dt><dt><a class="mod" href="vertex/index.html" title="mod linnet::parser::vertex">vertex</a></dt></dl><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.DotGraph.html" title="struct linnet::parser::DotGraph">DotGraph</a></dt></dl><h2 id="enums" class="section-header">Enums<a href="#enums" class="anchor">§</a></h2><dl class="item-table"><dt><a class="enum" href="enum.NodeIdOrDangling.html" title="enum linnet::parser::NodeIdOrDangling">Node<wbr>IdOr<wbr>Dangling</a></dt></dl></section></div></main></body></html>

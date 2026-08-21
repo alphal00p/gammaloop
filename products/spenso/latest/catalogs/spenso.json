@@ -50,7 +50,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Describes ordered slots, dimensions, representations, and contraction compatibility independently of data."
+              "body": "Ordered structural metadata for a tensor's external coordinates.\n\nEach external slot combines a representation, its dimension, and an\nabstract index. Iterator and coordinate arguments use the same slot order.\nThe default flattening is row-major: for shape `[d0, d1, ..., dn]`, the last\ncoordinate varies fastest. Consequently [`Self::flat_index`] and\n[`Self::expanded_index`] are inverse mappings in that order.\n\nContraction is structural rather than positional. A slot in one operand is\nremoved only when the other operand contains the same abstract index in the\ndual representation and with the same dimension. All other slots remain\nfree and form the output structure. Dummy indices obey the same equality\nrule as named indices; a freshly allocated dummy does not match every other\ndummy.\n\nConstructors such as [`OrderedStructure::new`] may canonicalize an unsorted\nslot list and return a [`PermutedStructure`] recording that permutation.\nComponent data must follow the finalized structure order, not the caller's\noriginal slot order."
             },
             "summary": "Describes ordered slots, dimensions, representations, and contraction compatibility independently of data.",
             "signature": "pub trait TensorStructure {}",
@@ -368,7 +368,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "yields the strides of the tensor in column major order"
+                  "body": "Returns column-major strides for the external dimensions."
                 },
                 "signature": "fn strides_column_major(& self) -> Result < Vec < usize > > { … }",
                 "default": null,
@@ -379,7 +379,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "yields the strides of the tensor in row major order"
+                  "body": "Returns row-major strides for the external dimensions.\n\nThe last external coordinate has stride one."
                 },
                 "signature": "fn strides_row_major(& self) -> Result < Vec < usize > > { … }",
                 "default": null,
@@ -390,7 +390,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "By default, the strides are row major"
+                  "body": "Returns the flat-index strides used by this structure.\n\nThe default is [`Self::strides_row_major`]."
                 },
                 "signature": "fn strides(& self) -> Result < Vec < usize > > { … }",
                 "default": null,
@@ -412,7 +412,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "yields the flat index of the tensor given a list of indices\n\n# Errors\n\nSame as [`Self::verify_indices`]"
+                  "body": "Flattens one concrete coordinate in external-slot order.\n\n# Errors\n\nSame as [`Self::verify_indices`]"
                 },
                 "signature": "fn flat_index < C : AsRef < [ConcreteIndex] > > (& self, indices : C) ->\nResult < FlatIndex > { … }",
                 "default": null,
@@ -423,7 +423,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "yields the expanded index of the tensor given a flat index\n\n# Errors\n\n`Index out of bounds` = if the flat index is out of bounds for the tensor"
+                  "body": "Expands a flat component index into coordinates in external-slot order.\n\n# Errors\n\n`Index out of bounds` = if the flat index is out of bounds for the tensor"
                 },
                 "signature": "fn expanded_index(& self, flat_index : FlatIndex) -> Result < ExpandedIndex > { … }",
                 "default": null,
@@ -488,7 +488,7 @@
             "source": {
               "identifier": "spenso::structure::TensorStructure",
               "file": "crates/spenso/src/structure.rs",
-              "line": 356,
+              "line": 375,
               "column": 1
             }
           },
@@ -501,7 +501,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Stores every tensor component in structure-defined flat order."
+              "body": "Contiguous tensor components paired with their structural coordinate map.\n\n`data` follows [`TensorStructure::strides`], which is row-major by default:\ncoordinates are given in external-slot order and the last coordinate varies\nfastest. [`Self::from_data`] validates the component count but does not\npermute values if the supplied structure was created from an unsorted slot\nlist."
             },
             "summary": "Stores every tensor component in structure-defined flat order.",
             "signature": "pub struct DenseTensor < T, S = OrderedStructure > {}",
@@ -543,7 +543,7 @@
             "source": {
               "identifier": "spenso::tensors::data::dense::DenseTensor",
               "file": "crates/spenso/src/tensors/data/dense.rs",
-              "line": 50,
+              "line": 57,
               "column": 1
             }
           },
@@ -556,7 +556,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Sparse data tensor, generic on storage type `T`, and structure type `I`.\n\nStores data in a hashmap of usize, using ahash's hashmap.\nThe usize key is the flattened index of the corresponding position in the dense tensor"
+              "body": "Sparse tensor components paired with their structural coordinate map.\n\nExplicit components are keyed by [`FlatIndex`] in the same order used by a\ndense tensor with this structure. Missing keys evaluate to `zero`; storing a\ncomponent equal to `zero` is allowed unless a smart setter removes it."
             },
             "summary": "Stores only explicit tensor components keyed by flat index.",
             "signature": "pub struct SparseTensor < T, I = OrderedStructure > {}",
@@ -609,7 +609,7 @@
             "source": {
               "identifier": "spenso::tensors::data::sparse::SparseTensor",
               "file": "crates/spenso/src/tensors/data/sparse.rs",
-              "line": 50,
+              "line": 51,
               "column": 1
             }
           },
@@ -622,7 +622,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Defines pairwise tensor contraction with an explicit settings type and output."
+              "body": "Contracts every matching pair of dual slots between two tensors.\n\nA slot matches only when its representation and dimension match the dual\nrepresentation of the other slot *and* both slots carry the same abstract\nindex. Unmatched slots are free indices and remain in the result. If there\nare no matches, this operation is the exterior product. A dummy index is not\na wildcard: two dummy slots contract only when their complete index values\nare equal and their representations are dual-compatible.\n\nThe output structure is determined by [`StructureContract::merge`], so its\ncoordinate order is the merged structure's canonical external-slot order,\nnot necessarily the order in which the operands were supplied. Dense\ncomponents use that structure's row-major flat indexing (the last external\ncoordinate varies fastest).\n\n`LCM` is the common result type chosen by the coefficient and storage\nimplementations. In particular, contracting two [`DataTensor`] values keeps\na sparse result only for sparse--sparse input; every combination containing\na dense operand produces a dense result.\n\n[`DataTensor`]: crate::tensors::data::DataTensor"
             },
             "summary": "Defines pairwise tensor contraction with an explicit settings type and output.",
             "signature": "pub trait Contract < T = Self, Settings = () > {}",
@@ -643,7 +643,7 @@
                 "kind": "associated-type",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "Result type produced by contracting with `T`."
+                  "body": "Result type produced by contracting with `T`, including any coefficient\ntype promotion required by multiplication and accumulation."
                 },
                 "signature": "type LCM;",
                 "default": null,
@@ -654,7 +654,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "Contracts matching dual slots with `other` and returns the resulting tensor."
+                  "body": "Contracts matching dual slots without mutating either operand.\n\n# Errors\n\nReturns [`ContractionError::StructureError`] when the structures cannot\nbe merged and propagates dimension, sparse-storage, or coefficient\nfailures from the selected backend."
                 },
                 "signature": "fn contract(& self, other : & T) -> Result < Self :: LCM, ContractionError >;",
                 "default": null,
@@ -664,7 +664,7 @@
             "source": {
               "identifier": "spenso::contraction::Contract",
               "file": "crates/spenso/src/contraction.rs",
-              "line": 32,
+              "line": 68,
               "column": 1
             }
           },
@@ -677,7 +677,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Binds symbolic tensor expressions to libraries and an executable contraction graph."
+              "body": "An owned tensor-expression graph together with the values referenced by it.\n\nAlgebraic operators compose networks without evaluating them. Execution is\nin place: [`Self::execute`] merges adjacent operations, traces self-loops,\nasks an [`ExecutionStrategy`] which ready graph operations to run, and asks\na [`ContractionStrategy`] which tensor pair to contract inside each product.\nThese strategy types are zero-sized policies evaluated against the current\ngraph and store. They do not produce or persist a reusable plan.\n\nOn success, the result remains in this network. Use [`Self::result_tensor`]\nfor a tensor-valued calculation or [`Self::result_scalar`] for a scalar.\n[`Self::result`] exposes the lower-level distinction between local values and\nunresolved library keys. A bounded strategy such as [`Steps`] may return\nsuccessfully before the graph has one result node; the result accessors then\nreport the incomplete graph through [`TensorNetworkError`].\n\n# Three-tensor contraction\n\nThis computes `A[i,j] B[j,k] c[k]`. [`MinResultRank`] compares pairs while\nexecuting the product. Here `B c` has one free slot while `A B` has two, so\nthe strategy selects `B c` first. The network stores no plan after making\nthat decision. Component vectors are row-major in each structure's external\nslot order.\n\n```rust\nuse spenso::{\nnetwork::{\nExecutionResult, MinResultRank, Network, Sequential,\nlibrary::{DummyKey, DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},\nstore::NetworkStore,\n},\nstructure::{\nOrderedStructure, TensorStructure,\nabstract_index::AbstractIndex,\nrepresentation::{Euclidean, RepName},\n},\ntensors::data::DenseTensor,\n};\n\ntype Structure = OrderedStructure<Euclidean>;\ntype Tensor = DenseTensor<f64, Structure>;\ntype Store = NetworkStore<Tensor, f64>;\ntype Net = Network<Store, DummyKey, DummyKey>;\ntype LibraryTensor = DummyLibraryTensor<Tensor>;\n\nlet rep = Euclidean {};\nlet a_structure = OrderedStructure::new(vec![\nrep.new_slot(2, 0),\nrep.new_slot(2, 1),\n]).structure;\nlet b_structure = OrderedStructure::new(vec![\nrep.new_slot(2, 1),\nrep.new_slot(2, 2),\n]).structure;\nlet c_structure = OrderedStructure::new(vec![rep.new_slot(2, 2)]).structure;\n\nlet a = DenseTensor::from_data(vec![1.0, 2.0, 3.0, 4.0], a_structure).unwrap();\nlet b = DenseTensor::from_data(vec![5.0, 6.0, 7.0, 8.0], b_structure).unwrap();\nlet c = DenseTensor::from_data(vec![2.0, 3.0], c_structure).unwrap();\nlet tensors = DummyLibrary::new();\nlet functions = ErroringLibrary::new();\n\nlet mut network = Net::from_tensor(a) * Net::from_tensor(b) * Net::from_tensor(c);\nnetwork\n.execute::<Sequential, MinResultRank, LibraryTensor, _, _>(&tensors, &functions)\n.unwrap();\n\nlet ExecutionResult::Val(result) =\nnetwork.result_tensor::<LibraryTensor, _>(&tensors).unwrap()\nelse {\npanic!(\"a nonempty product must produce a concrete value\");\n};\nassert_eq!(result.data, vec![104.0, 236.0]);\nassert_eq!(result.structure.order(), 1);\nassert_eq!(\nresult.structure.external_indices(),\nvec![AbstractIndex::Normal(0)],\n);\n```"
             },
             "summary": "Binds symbolic tensor expressions to libraries and an executable contraction graph.",
             "signature": "pub struct Network < S, LibKey, FunKey, Aind = AbstractIndex > {}",
@@ -686,6 +686,11 @@
             "params": [],
             "returns": null,
             "examples": [
+              {
+                "title": "Example 1",
+                "language": "rust",
+                "code": "use spenso::{\nnetwork::{\nExecutionResult, MinResultRank, Network, Sequential,\nlibrary::{DummyKey, DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},\nstore::NetworkStore,\n},\nstructure::{\nOrderedStructure, TensorStructure,\nabstract_index::AbstractIndex,\nrepresentation::{Euclidean, RepName},\n},\ntensors::data::DenseTensor,\n};\n\ntype Structure = OrderedStructure<Euclidean>;\ntype Tensor = DenseTensor<f64, Structure>;\ntype Store = NetworkStore<Tensor, f64>;\ntype Net = Network<Store, DummyKey, DummyKey>;\ntype LibraryTensor = DummyLibraryTensor<Tensor>;\n\nlet rep = Euclidean {};\nlet a_structure = OrderedStructure::new(vec![\nrep.new_slot(2, 0),\nrep.new_slot(2, 1),\n]).structure;\nlet b_structure = OrderedStructure::new(vec![\nrep.new_slot(2, 1),\nrep.new_slot(2, 2),\n]).structure;\nlet c_structure = OrderedStructure::new(vec![rep.new_slot(2, 2)]).structure;\n\nlet a = DenseTensor::from_data(vec![1.0, 2.0, 3.0, 4.0], a_structure).unwrap();\nlet b = DenseTensor::from_data(vec![5.0, 6.0, 7.0, 8.0], b_structure).unwrap();\nlet c = DenseTensor::from_data(vec![2.0, 3.0], c_structure).unwrap();\nlet tensors = DummyLibrary::new();\nlet functions = ErroringLibrary::new();\n\nlet mut network = Net::from_tensor(a) * Net::from_tensor(b) * Net::from_tensor(c);\nnetwork\n.execute::<Sequential, MinResultRank, LibraryTensor, _, _>(&tensors, &functions)\n.unwrap();\n\nlet ExecutionResult::Val(result) =\nnetwork.result_tensor::<LibraryTensor, _>(&tensors).unwrap()\nelse {\npanic!(\"a nonempty product must produce a concrete value\");\n};\nassert_eq!(result.data, vec![104.0, 236.0]);\nassert_eq!(result.structure.order(), 1);\nassert_eq!(\nresult.structure.external_indices(),\nvec![AbstractIndex::Normal(0)],\n);"
+              },
               {
                 "title": "Supported usage",
                 "language": "rust",
@@ -730,7 +735,7 @@
             "source": {
               "identifier": "spenso::network::Network",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 1660,
+              "line": 1748,
               "column": 1
             }
           },
@@ -743,7 +748,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Defines how a ready network operation is contracted and whether product subgraphs can be rewritten incrementally."
+              "body": "Selects and evaluates tensor pairs inside one ready product operation.\n\nThe execution strategy owns graph scheduling. A contraction strategy sees\nthe current ready operation and mutable value store, and returns the leaf\nthat replaces that operation. Implementations may support incremental graph\nrewriting, but they do not own a persistent plan."
             },
             "summary": "Defines how a ready network operation is contracted and whether product subgraphs can be rewritten incrementally.",
             "signature": "pub trait ContractionStrategy < E, L, K, FK, Aind > : Sized {}",
@@ -796,7 +801,7 @@
             "source": {
               "identifier": "spenso::network::contract::ContractionStrategy",
               "file": "crates/spenso/src/network/contract.rs",
-              "line": 305,
+              "line": 390,
               "column": 1
             }
           },
@@ -809,7 +814,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Defines how an executor repeatedly applies a selected contraction strategy until the strategy's stopping condition is reached."
+              "body": "Schedules ready expression-graph operations during in-place execution.\n\nThis is the graph-level policy. `execute_all` repeatedly discovers\noperations whose children are values, delegates each product's pair choice\nto `C`, and replaces completed subgraphs. It does not create a durable plan:\nscheduling is recomputed from the graph as it is rewritten."
             },
             "summary": "Defines how an executor repeatedly applies a selected contraction strategy until the strategy's stopping condition is reached.",
             "signature": "pub trait ExecutionStrategy < E, FL, L, K, FK, Aind > where E : ExecuteOp <\nFL, L, K, FK, Aind > , {}",
@@ -830,7 +835,7 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "Run the entire contraction to one leaf."
+                  "body": "Rewrites ready operations according to this strategy's stopping rule.\n\nFull strategies normally run until no ready operation remains. Bounded\nstrategies such as [`Steps`] intentionally may leave several nodes."
                 },
                 "signature": "fn execute_all < C : ContractionStrategy < E, L, K, FK, Aind > >\n(executor : & mut E, graph : & mut NetworkGraph < K, FK, Aind > , lib : & L,\nfnlib : & FL,) -> Result < (), TensorNetworkError < K, FK > > where K :\nDisplay, FK : Display;",
                 "default": null,
@@ -840,7 +845,7 @@
             "source": {
               "identifier": "spenso::network::ExecutionStrategy",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 2955,
+              "line": 3142,
               "column": 1
             }
           },
@@ -853,7 +858,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Enumerates sequential, parallel, borrowed-reference, and extracting execution modes."
+              "body": "Names the built-in execution modes for configuration and introspection.\n\n[`Network::execute`] selects the corresponding strategy by its generic type,\nnot by passing this enum at runtime. Parallel execution uses the specialized\n[`Network::execute_parallel`] entry point."
             },
             "summary": "Enumerates sequential, parallel, borrowed-reference, and extracting execution modes.",
             "signature": "pub enum ExecutionMode {}",
@@ -917,7 +922,7 @@
             "source": {
               "identifier": "spenso::network::ExecutionMode",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 3728,
+              "line": 3934,
               "column": 1
             }
           },
@@ -930,7 +935,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Represents a completed network as the multiplicative identity, the additive identity, or a concrete value."
+              "body": "A final value or the formal identity of an empty operation.\n\n`One` and `Zero` are not stored scalar components. They represent an empty\nproduct and empty sum respectively, allowing callers to map them into the\ncoefficient domain they use."
             },
             "summary": "Represents a completed network as the multiplicative identity, the additive identity, or a concrete value.",
             "signature": "pub enum ExecutionResult < T > {}",
@@ -992,7 +997,7 @@
             "source": {
               "identifier": "spenso::network::ExecutionResult",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 2515,
+              "line": 2659,
               "column": 1
             }
           },
@@ -1005,7 +1010,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Classifies invalid topology, contraction, library, structure, I/O, and result-shape failures during network processing."
+              "body": "Error raised while resolving, executing, or extracting a tensor network.\n\nThe variants fall into three practical groups:\n\n- [`Self::LibErr`] and [`Self::FunLibErr`] mean a graph leaf or function\ncould not be resolved by the supplied libraries;\n- [`Self::ContractionError`], [`Self::StructErr`], and related variants mean\nthe requested tensor operation is structurally or numerically invalid;\n- [`Self::NoNodes`], [`Self::MoreThanOneNode`],\n[`Self::InternalEdgePresent`], and result-kind errors mean extraction was\nattempted before the graph represented one compatible final value.\n\nNetwork execution is in place and is not transactional. An error can be\nreturned after independent earlier operations have already rewritten the\ngraph or appended values to its store."
             },
             "summary": "Classifies invalid topology, contraction, library, structure, I/O, and result-shape failures during network processing.",
             "signature": "pub enum TensorNetworkError < K : Display, FK : Display > {}",
@@ -1569,7 +1574,7 @@
             "source": {
               "identifier": "spenso::network::TensorNetworkError",
               "file": "crates/spenso/src/network/mod.rs",
-              "line": 2392,
+              "line": 2519,
               "column": 1
             }
           },

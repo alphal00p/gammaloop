@@ -2267,9 +2267,9 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "A tensor network representing computational graphs of tensor operations.\n\nA tensor network is a graph-based representation of tensor computations where\nnodes represent tensors and operations, edges represent tensor contractions and\ndata flow, and the network can be optimized and executed to compute results.\n\nTensor networks are particularly useful for symbolic manipulation of complex\ntensor expressions, optimization of tensor contraction orders, efficient\nevaluation of large tensor computations, and physics calculations involving\nmany-body systems.\n\nExamples\n--------\n>>> import symbolica as sp\n>>> from symbolica.community.spenso import TensorNetwork, Tensor, TensorIndices\n>>> x = sp.symbol('x')\n>>> expr = x * sp.symbol('T')(sp.symbol('mu'), sp.symbol('nu'))\n>>> network = TensorNetwork(expr)\n>>> network.execute()\n>>> result = network.result_tensor()"
+              "body": "A graph of tensor operations that can be simplified and executed.\n\nNamed tensor expressions are resolved through a `TensorLibrary`. Register concrete data\nbefore constructing and executing a network; an expression alone supplies structure, not\ncomponent values.\n\nExamples\n--------\n>>> from symbolica.community.spenso import (\n...     ExecutionMode,\n...     LibraryTensor,\n...     Representation,\n...     TensorLibrary,\n...     TensorName,\n...     TensorNetwork,\n...     TensorStructure,\n... )\n>>> rep = Representation.euc(2)\n>>> A = TensorName(\"A\")\n>>> structure = TensorStructure(rep, rep, name=A)\n>>> library = TensorLibrary()\n>>> library.register(\n...     LibraryTensor.dense(structure, [1.0, 0.0, 0.0, 1.0])\n... )\n>>> network = TensorNetwork(\n...     A(rep(\"i\"), rep(\"j\")),\n...     library=library,\n... )\n>>> network.execute(library=library, mode=ExecutionMode.All)\n>>> result = network.result_tensor(library=library)\n>>> len(result)\n4"
             },
-            "summary": "A tensor network representing computational graphs of tensor operations.",
+            "summary": "A graph of tensor operations that can be simplified and executed.",
             "signature": "class TensorNetwork:",
             "since": null,
             "keywords": [],
@@ -3025,7 +3025,7 @@
             "source": {
               "identifier": "spynso3::TensorStructure",
               "file": "docs/api/python/spynso3.pyi",
-              "line": 1745,
+              "line": 1757,
               "column": 1
             }
           },
@@ -3087,7 +3087,7 @@
             "source": {
               "identifier": "spynso3::ExecutionMode",
               "file": "docs/api/python/spynso3.pyi",
-              "line": 1939,
+              "line": 1951,
               "column": 1
             }
           },
@@ -3149,7 +3149,7 @@
             "source": {
               "identifier": "spynso3::SymbolicParallelism",
               "file": "docs/api/python/spynso3.pyi",
-              "line": 1956,
+              "line": 1968,
               "column": 1
             }
           },
@@ -3177,7 +3177,7 @@
             "source": {
               "identifier": "spynso3::set_symbolica_rayon_enabled",
               "file": "docs/api/python/spynso3.pyi",
-              "line": 1973,
+              "line": 1985,
               "column": 1
             }
           }
