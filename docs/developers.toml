@@ -401,13 +401,16 @@ anchor = "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {"
 digest = "05983dad9fdb3db00351c9e536a439ce48efd94b"
 
 [[section.note.scope]]
+# Documentation-impact attestation 2026-08-21: malformed DOT endpoint,
+# direction, and ID failures are now explicit parser errors, as documented by
+# the DOT interchange boundary in the architecture note.
 path = "crates/linnet/src/parser/mod.rs"
 symbol = "linnet::parser::DotGraph"
 anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {"
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
 # documented DOT parser path, added a round trip, and qualified its macro link.
 # The 2026-08-26 serializer cleanup only omits empty attribute lists.
-digest = "6278724d41494221e79333e0a15202740280b7f7"
+digest = "ba0ee57dc3811fb79509246b2095cd80f4ec4d71"
 
 [[section.note]]
 id = "vakint-architecture"
@@ -753,7 +756,11 @@ anchor = "pub fn check(&self) -> Result<()> {"
 # registry lifecycle, scope validation, and build ownership are unchanged.
 # Reviewed maintenance advisories: docs-check reports them explicitly; all
 # build paths still enforce registry, scope, catalogue, and link validity.
-digest = "7910571d480869720ff80582d7dc59396d9694ce"
+# No documentation-system architecture impact: the getting-started guides use the
+# existing registry, Typst renderer, example harness, and generated navigation pipeline.
+# No-impact attestation: collision-safe Python symbol routes change generated
+# API navigation only; architecture-note lifecycle enforcement is unchanged.
+digest = "49fe8cfbd2110a567a06ec5c1cd023b57b0efe03"
 
 [[section.note]]
 id = "documentation-improvement-plan"

@@ -24,6 +24,7 @@ use crate::{default_figment, PinConstraint, TypstGraph};
 
 type DotBuilder = HedgeGraphBuilder<DotEdgeData, DotVertexData, DotHedgeData>;
 const TYPST_EDGE_NAME_KEY: &str = "__linnest-edge-name";
+const RENDER_EDGE_NAME_KEY: &str = "linnet_render_edge_name";
 
 fn normalize_statement_key(key: &str) -> String {
     key.trim().trim_matches('"').to_string()
@@ -482,6 +483,7 @@ pub fn graph_set_edge_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<
                 .data
                 .statements
                 .get(TYPST_EDGE_NAME_KEY)
+                .or_else(|| data.data.statements.get(RENDER_EDGE_NAME_KEY))
                 .map(String::as_str)
                 == Some(patch.name.as_str()))
             .then_some(index)
@@ -1038,7 +1040,8 @@ fn graph_info(graph: &ArchivedDotGraphView<'_>) -> TypstDotGraphInfo {
 
 fn archived_edge_name(edge: ArchivedDotEdgeView<'_>) -> Option<String> {
     edge.data.statements.iter().find_map(|(key, value)| {
-        (key.as_str() == TYPST_EDGE_NAME_KEY).then(|| value.as_str().to_string())
+        matches!(key.as_str(), TYPST_EDGE_NAME_KEY | RENDER_EDGE_NAME_KEY)
+            .then(|| value.as_str().to_string())
     })
 }
 
@@ -1080,7 +1083,9 @@ fn graph_from_spec(spec: TypstGraphSpec) -> Result<DotGraph, String> {
         global_data,
         graph: builder.build::<DefaultNodeStore<DotVertexData>>(),
     };
-    graph.apply_explicit_id_ordering();
+    graph
+        .apply_explicit_id_ordering()
+        .map_err(|error| error.to_string())?;
     Ok(graph)
 }
 
@@ -1587,6 +1592,7 @@ fn public_statements(mut statements: BTreeMap<String, String>) -> BTreeMap<Strin
         "pos-mode",
         "pin",
         TYPST_EDGE_NAME_KEY,
+        RENDER_EDGE_NAME_KEY,
     ] {
         statements.remove(key);
     }

@@ -3551,6 +3551,8 @@ dependencies = [
  "pyo3",
  "pyo3-build-config",
  "pyo3-stub-gen",
+ "serde",
+ "serde_json",
  "tempfile",
 ]
 

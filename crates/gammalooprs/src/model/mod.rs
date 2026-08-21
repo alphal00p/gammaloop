@@ -1863,12 +1863,12 @@ n_couplings = format!("{}", self.couplings.len()).green(),
 
         let mut edge_style_content = String::new();
         edge_style_content.push_str(
-            r#"#import "crates/linnest/typst/src/physics-edge-style.typ": mi, massive, massless, dashed, dotted, stroke-style, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag, default-edge, style
+            r#"#import "crates/linnest/typst/src/physics-edge-style.typ": mi, massive, massless, dashed, dotted, stroke-style, source-stroke, sink-stroke, fermion-flow, wave, coil, zigzag, default-edge, default-map, style as physics-style
 
 // Auto-generated particle styles from model (computed in Rust). The reusable
 // physics drawing callbacks live in physics-edge-style.typ; this file only
 // supplies the model-specific particle map and GammaLoop-compatible wrappers.
-#let map = (
+#let generated-map = (
 "#,
         );
 
@@ -1885,18 +1885,29 @@ n_couplings = format!("{}", self.couplings.len()).green(),
         edge_style_content.push_str(
             r#")
 
+#let map = generated-map
+
+// The model map extends Linnest's neutral aliases, while a caller-provided map
+// is merged last. Keeping that merge in one wrapper also prevents a spread
+// `map` argument from colliding with a separately named one.
+#let style(map: (:), typst-fields: "plain", ..options) = physics-style(
+  map: default-map + generated-map + map,
+  typst-fields: typst-fields,
+  ..options.named(),
+)
+
 #let source-style(edge, typst-fields: "plain", ..options) = {
-  let callbacks = style(map: map, typst-fields: typst-fields, ..options.named())
+  let callbacks = style(typst-fields: typst-fields, ..options.named())
   (callbacks.source-style)(edge)
 }
 
 #let sink-style(edge, typst-fields: "plain", ..options) = {
-  let callbacks = style(map: map, typst-fields: typst-fields, ..options.named())
+  let callbacks = style(typst-fields: typst-fields, ..options.named())
   (callbacks.sink-style)(edge)
 }
 
 #let edge-label(edge, typst-fields: "plain", ..options) = {
-  let callbacks = style(map: map, typst-fields: typst-fields, ..options.named())
+  let callbacks = style(typst-fields: typst-fields, ..options.named())
   (callbacks.edge-label)(edge)
 }
 "#,

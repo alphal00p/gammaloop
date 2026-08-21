@@ -55,10 +55,10 @@
   /// Iterations per epoch. In `"force"` mode this is the number of force
   /// integration steps; in `"anneal"` mode this is the number of proposals per
   /// temperature epoch. -> int
-  steps: int(sys.inputs.at("steps", default: "30")),
+  steps: 30,
   /// Seed for deterministic initialization, force-mode jitter, and annealing
   /// proposals. Applies to both modes. -> int
-  seed: int(sys.inputs.at("seed", default: "2")),
+  seed: 2,
   /// Initial movement scale. `"force"` multiplies computed forces by this
   /// value; `"anneal"` uses it as a proposal step size in natural spring-length
   /// units. -> float
