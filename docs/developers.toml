@@ -405,8 +405,8 @@ path = "crates/linnet/src/parser/mod.rs"
 symbol = "linnet::parser::DotGraph"
 anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {"
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
-# documented DOT parser path and added a parse/serialize/reparse example.
-digest = "de73f796b7c5b0a24c8711830783c00a903943f5"
+# documented DOT parser path, added a round trip, and qualified its macro link.
+digest = "1df42cfeb08467f7848a45711b712d1c22c77e20"
 
 [[section.note]]
 id = "vakint-architecture"
@@ -724,9 +724,10 @@ review_triggers = ["docs/developers.toml", "crates/alphal00p-docs-builder/src/li
 path = "crates/alphal00p-docs-builder/src/lib.rs"
 symbol = "alphal00p_docs_builder::SiteBuilder::check"
 anchor = "pub fn check(&self) -> Result<()> {"
-# No documentation-system architecture impact: the 2026-08-21 integrity pass
-# only routes two generated CLI pages to their precise sample-evaluation contract.
-digest = "640feca6e766176706623a332fa7081e4abeea4c"
+# No documentation-system architecture impact: the 2026-08-21 integrity and
+# reference-rendering passes correct links plus Python section and literal-block
+# boundaries without changing the publishing model.
+digest = "382e9779ca3b4fc1d8abd51e5b7c59754cbc193b"
 
 [[section.note]]
 id = "documentation-improvement-plan"
@@ -771,4 +772,4 @@ reviewed_at = "2026-08-21"
 review_ref = "4e77d8804aa3394992572575dab5d3f9dedf65a9"
 products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
 topics = ["documentation", "rustdoc", "python", "api", "examples"]
-review_triggers = ["crates/gammalooprs/src/**", "crates/gammaloop-api/src/**", "crates/linnet/src/**", "crates/linnet-py/src/**", "crates/spenso/src/**", "crates/spenso-hep-lib/src/**", "crates/spynso3/src/**", "crates/idenso/src/**", "crates/vakint/src/**", "docs/api/python/**", "docs/products/**/content/api.typ", "docs/examples.toml", "crates/alphal00p-docs-catalogs/src/**", "crates/alphal00p-docs-python-exporter/src/**"]
+review_triggers = ["flake.nix", "crates/gammalooprs/src/**", "crates/gammaloop-api/src/**", "crates/linnet/src/**", "crates/linnet-py/src/**", "crates/linnest/src/**", "crates/spenso/src/**", "crates/spenso-hep-lib/src/**", "crates/spenso-macros/src/**", "crates/spynso3/src/**", "crates/idenso/src/**", "crates/vakint/src/**", "docs/api/python/**", "docs/products/**", "docs/examples.toml", "crates/alphal00p-docs-catalogs/src/**", "crates/alphal00p-docs-examples/**", "crates/alphal00p-docs-python-exporter/src/**"]

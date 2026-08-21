@@ -83,6 +83,7 @@ struct ManualExamples {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum RustExampleMode {
     Run,
+    RunIsolated,
     CompileOnly,
     ShellSyntax,
     RustdocIgnored,
@@ -112,7 +113,9 @@ fn main() -> Result<()> {
     validate_example_registry(workspace_root, &registry, &example_registry)?;
 
     let output = PathBuf::from(env::var_os("OUT_DIR").context("missing OUT_DIR")?);
-    let mut rust_source = String::new();
+    let mut rust_source = String::from(
+        "static ISOLATED_RUST_EXAMPLE: std::sync::Mutex<()> = std::sync::Mutex::new(());\n",
+    );
     let mut shell_source = String::from("#!/usr/bin/env bash\nset -euo pipefail\n");
     let mut python_source = String::from("EXAMPLES = [\n");
     let mut rust_count = 0;
@@ -132,7 +135,9 @@ fn main() -> Result<()> {
                     let mode = rust_example_mode(&component.id, &item.id, &example.language)?;
                     let case = format!("{}::{item_path}::{example_index}", component.id);
                     match mode {
-                        RustExampleMode::Run | RustExampleMode::CompileOnly => {
+                        RustExampleMode::Run
+                        | RustExampleMode::RunIsolated
+                        | RustExampleMode::CompileOnly => {
                             rust_products.insert(product.id.as_str());
                             let function = rust_identifier(&case);
                             writeln!(
@@ -141,11 +146,21 @@ fn main() -> Result<()> {
                                 indent(&example.code, 4)
                             )?;
                             rust_count += 1;
-                            if mode == RustExampleMode::Run {
-                                writeln!(
+                            match mode {
+                                RustExampleMode::Run => writeln!(
                                     rust_source,
                                     "#[test]\nfn run_{function}() -> eyre::Result<()> {{ {function}() }}"
-                                )?;
+                                )?,
+                                RustExampleMode::RunIsolated => writeln!(
+                                    rust_source,
+                                    "#[test]\nfn run_{function}() -> eyre::Result<()> {{\n    const MARKER: &str = \"{function}\";\n    if std::env::var(\"ALPHAL00P_DOCS_ISOLATED_EXAMPLE\").as_deref() == Ok(MARKER) {{\n        return {function}();\n    }}\n    let _guard = ISOLATED_RUST_EXAMPLE.lock().expect(\"isolated example mutex poisoned\");\n    let status = std::process::Command::new(std::env::current_exe()?)\n        .arg(\"--exact\")\n        .arg(\"catalog_examples::run_{function}\")\n        .env(\"ALPHAL00P_DOCS_ISOLATED_EXAMPLE\", MARKER)\n        .status()?;\n    eyre::ensure!(status.success(), \"isolated documentation example {case} failed\");\n    Ok(())\n}}"
+                                )?,
+                                RustExampleMode::CompileOnly => {}
+                                RustExampleMode::ShellSyntax | RustExampleMode::RustdocIgnored => {
+                                    unreachable!()
+                                }
+                            }
+                            if matches!(mode, RustExampleMode::Run | RustExampleMode::RunIsolated) {
                                 run_count += 1;
                             }
                         }
@@ -203,9 +218,11 @@ fn main() -> Result<()> {
         if syn::parse_file(code).is_ok() {
             let run_test = if mode == "run" {
                 run_count += 1;
-                "\n    #[test]\n    fn run_documented_main() { main() }"
+                format!(
+                    "\n    #[test]\n    fn run_documented_main() -> eyre::Result<()> {{\n        const MARKER: &str = \"{function}\";\n        if std::env::var(\"ALPHAL00P_DOCS_ISOLATED_EXAMPLE\").as_deref() == Ok(MARKER) {{\n            main();\n            return Ok(());\n        }}\n        let _guard = super::ISOLATED_RUST_EXAMPLE.lock().expect(\"isolated example mutex poisoned\");\n        let status = std::process::Command::new(std::env::current_exe()?)\n            .arg(\"--exact\")\n            .arg(\"catalog_examples::{function}::run_documented_main\")\n            .env(\"ALPHAL00P_DOCS_ISOLATED_EXAMPLE\", MARKER)\n            .status()?;\n        eyre::ensure!(status.success(), \"isolated documentation example {function} failed\");\n        Ok(())\n    }}"
+                )
             } else {
-                ""
+                String::new()
             };
             writeln!(
                 rust_source,
@@ -568,6 +585,9 @@ fn rust_example_mode(component: &str, item: &str, language: &str) -> Result<Rust
         language.split(',').next() == Some("rust"),
         "Rust catalog example {component}::{item} uses unsupported language {language}"
     );
+    if (component, item) == ("spenso", "Network") {
+        return Ok(RustExampleMode::RunIsolated);
+    }
     if matches!(
         (component, item),
         (

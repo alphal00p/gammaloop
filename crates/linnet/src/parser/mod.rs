@@ -35,7 +35,7 @@
 //! assert_eq!(round_trip.n_edges(), graph.n_edges());
 //! ```
 //!
-//! The [`dot!`] macro is a shorthand for parsing an inline DOT token tree. To
+//! The [`crate::dot!`] macro is a shorthand for parsing an inline DOT token tree. To
 //! serialize a graph with application-specific payloads, use
 //! [`HedgeGraph::dot_serialize_io`] or [`HedgeGraph::dot_serialize_fmt`]. Those
 //! methods take graph-level metadata plus mappings for half-edge, edge, and node

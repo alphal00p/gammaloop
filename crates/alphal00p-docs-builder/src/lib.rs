@@ -6743,7 +6743,20 @@ fn render_python_example(content: &[&str]) -> String {
         let code_start = (marker + 1..content.len())
             .find(|index| !content[*index].trim().is_empty())
             .unwrap_or(content.len());
-        rendered.push_str(&render_code(&content[code_start..]));
+        let code_indent = content
+            .get(code_start)
+            .map_or(0, |line| line.len() - line.trim_start().len());
+        let code_end = (code_start + 1..content.len())
+            .find(|index| {
+                let line = content[*index];
+                !line.trim().is_empty() && line.len() - line.trim_start().len() < code_indent
+            })
+            .unwrap_or(content.len());
+        rendered.push_str(&render_code(&content[code_start..code_end]));
+        rendered.push_str(&render_prose_blocks(
+            &content[code_end..],
+            DocFormat::PythonDocstring,
+        ));
         return rendered;
     }
 
@@ -8355,11 +8368,21 @@ fn render_cli_command_page(
         } else {
             ("tutorial/", "Create your first state")
         };
+    let related_workflow = match command.path.as_str() {
+        "gammaLoop inspect" => {
+            "<a href=\"guides/events-and-observables/\">Events and observables workflow</a>"
+        }
+        "gammaLoop approach" => {
+            "<a href=\"guides/diagnostics/\">Configuration and diagnostics guide</a>"
+        }
+        _ => "",
+    };
     let mut body = format!(
-        "<span id=\"{}\" aria-hidden=\"true\"></span><p class=\"reference-context\"><a href=\"reference/cli/\">CLI reference</a> <span aria-hidden=\"true\">/</span> Command</p><nav class=\"reference-guide-links\" aria-label=\"CLI reference navigation\"><a href=\"reference/cli/\">All commands</a><a href=\"reference/cli/settings/\">Settings namespaces</a><a href=\"{}\">{}</a></nav>",
+        "<span id=\"{}\" aria-hidden=\"true\"></span><p class=\"reference-context\"><a href=\"reference/cli/\">CLI reference</a> <span aria-hidden=\"true\">/</span> Command</p><nav class=\"reference-guide-links\" aria-label=\"CLI reference navigation\"><a href=\"reference/cli/\">All commands</a><a href=\"reference/cli/settings/\">Settings namespaces</a><a href=\"{}\">{}</a>{}</nav>",
         escape_html(&command_anchor),
         escape_html(workflow_route),
         escape_html(workflow_title),
+        related_workflow,
     );
     if command.about.trim().is_empty() {
         body.push_str(
@@ -9334,6 +9357,9 @@ mod tests {
             2
         );
 
+        let approach = page("gammaLoop approach");
+        assert!(approach.contains("href=\"guides/diagnostics/\""));
+
         let generate = page("gammaLoop generate");
         assert!(generate.contains("href=\"guides/process-generation/\""));
         assert!(generate.contains("<div><dt>Scope</dt><dd>global</dd></div>"));
@@ -9553,6 +9579,23 @@ mod tests {
             "<code data-lang=\"python\">for name, values in groups.items():\n    for value in values:\n        print(name, value)</code>"
         ));
         assert!(!rendered.contains("<code data-lang=\"python\">Iterate over grouped values"));
+    }
+
+    #[test]
+    fn numpy_literal_examples_end_before_dedented_prose() {
+        let rendered = render_doc_text(
+            &alphal00p_docs_schema::DocText::new(
+                DocFormat::PythonDocstring,
+                "Examples\n--------\nEvaluate one value::\n\n    result = evaluate(1)\n    assert result\n\nThe fixture checks API plumbing.",
+            ),
+            3,
+        );
+
+        assert!(
+            rendered
+                .contains("<code data-lang=\"python\">result = evaluate(1)\nassert result</code>")
+        );
+        assert!(rendered.contains("<p>The fixture checks API plumbing.</p>"));
     }
 
     #[test]

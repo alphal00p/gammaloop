@@ -8,9 +8,10 @@
 
   *Reviewed baseline:* `4e77d8804aa3394992572575dab5d3f9dedf65a9`
 
-  *Scope:* Native Rustdoc and generated Python references published for GammaLoop,
-  Linnet, Spenso, Idenso, and Vakint. CLI and settings entries are included only
-  where they contradict an API contract.
+  *Scope:* Native Rustdoc and generated Python reference surfaces for GammaLoop,
+  Linnet, Spenso, Idenso, and Vakint, including adjacent public Rust crates whose
+  support status still needs classification. CLI and settings entries are included
+  only where they contradict an API contract.
 ]
 
 == Purpose
@@ -116,7 +117,8 @@ contract with a checked example.
 
 === APIDOC-002 · Incorrect Linnet Rustdoc claims
 
-*Priority:* P0 · *Status:* Resolved · *Resolved in:* `umvyopkm` · *Surface:* Linnet Rustdoc
+*Priority:* P0 · *Status:* Resolved · *Resolved in:* `umvyopkm`, completed by `rtmnuuuy` ·
+*Surface:* Linnet Rustdoc
 
 #link("../../crates/linnet/src/parser/mod.rs")[The parser module] names a nonexistent
 `HedgeGraphSet`, uses the nonexistent `linnet::dot_parser` path, and hides its example
@@ -126,6 +128,9 @@ traversal although no embedding or rotation-system API supplies that operation.
 The corrected Rustdoc now describes the implemented incidence/involution model, explicitly
 excludes embeddings and face traversal, names `DotGraphSet` and `linnet::parser`, and runs a
 parse → inspect → serialize → reparse example. Linnet check, clippy, and all doctests pass.
+The full all-product Rustdoc build subsequently exposed the exported `dot!` macro link as
+module-relative; follow-up `rtmnuuuy` qualifies it through the crate root, where Rustdoc can
+resolve it under warnings-as-errors.
 
 *Complete when:* the public description matches the implemented half-edge model, all
 named paths and types resolve, and the conceptual parser example runs.
@@ -217,7 +222,8 @@ maintained examples cover both one accepted and one rejected value for each boun
 
 === APIDOC-008 · Spenso example isolation under restricted Symbolica
 
-*Priority:* P1 · *Status:* Open · *Surface:* Spenso Rust examples and verification harness
+*Priority:* P1 · *Status:* Resolved · *Resolved in:* `rtmnuuuy` · *Surface:* Spenso Rust
+examples and verification harness
 
 The new `Network` contraction example compiles and produces `[104, 236]` when run in a fresh
 process. In the combined documentation-example binary, however, the existing direct-contraction
@@ -227,11 +233,14 @@ the outcome. This prevents the aggregate harness from treating both examples as 
 process and may also expose an initialization boundary relevant to unlicensed users of the
 `shadowing` feature.
 
-*Build evidence (2026-08-21):* the complete Nix Pages derivation reaches the documentation-example
-suite and exits with `SIGABRT` at this shared-process boundary. The checked contraction example
-passes alone in a fresh process; skipping it still exposes the same collision between the tutorial
-and the other Spenso network example. This is a harness/runtime-initialization issue, not a failure
-of the new GammaLoop manual or Python examples.
+*Resolution and build evidence (2026-08-21):* the generated harness now runs every executable
+manual example and the Spenso `Network` catalog examples in fresh child processes. Its shared
+libtest path serializes those child launches; every runner lets process-global Symbolica state end
+with each isolated example. With `SYMBOLICA_LICENSE` explicitly absent, both Cargo and Nextest pass
+all 87 examples, including the direct-contraction tutorial and both network cases. The licensed
+suite passes the same assertions. Pages therefore remains a pure, cacheable derivation and the
+credential is not part of its derivation metadata. Restricted single-instance initialization
+remains a runtime constraint, not a documentation-harness defect.
 
 *Complete when:* maintainers determine whether the two API paths should share one idempotent
 Symbolica initialization; otherwise the verification harness isolates the examples in separate
@@ -257,9 +266,28 @@ without learning the execution contract from implementation code.
 
 *Priority:* P1 · *Status:* Open · *Surface:* `gammaloop-api`
 
-The crate has no crate/module orientation or Rustdoc `Examples` sections. Central
-state-load options, loaded-state types, and `cli_session` need contracts for filesystem
-effects, read-only behavior, ownership, errors, and persistence.
+At the reviewed baseline, the crate had no crate/module orientation or Rustdoc
+`Examples` sections. Central state-load options, loaded-state types, and `cli_session`
+needed contracts for filesystem effects, read-only behavior, ownership, errors, and
+persistence.
+
+*Source-audit findings (2026-08-21):* loading initializes process-global GammaLoop/Symbolica and
+tracing state and applies boot commands before returning; it is not pure deserialization. Dropping
+a loaded state does not save it. Read-only mode prevents GammaLoop-managed writes to the active
+state tree but permits explicit exports elsewhere and cannot constrain external processes such as
+the `!` shell command. `model_file` affects only an existing manifested state, and an unmanifested
+directory starts a blank state rather than restoring its contents. A borrowed CLI session prevents
+direct access to the loaded bundle until it is dropped. Most commands expose effects through
+state, settings, logs, or files and return `CommandOutput::None`; only evaluation and integration
+currently return a structured Rust value.
+
+*Progress (`rtmnuuuy`):* crate and command-session orientation now document the load → borrowed
+session → command → typed result lifecycle, ownership, persistence, filesystem effects, read-only
+scope, process-global initialization, history recording, control flow, and error boundaries. A
+compile-checked `no_run` example exercises a blank read-only state and typed command result without
+pretending that licensed global initialization is safe inside the aggregate doctest process. A
+maintained runnable evaluation/integration result and explicit settings-precedence table remain
+open.
 
 *Complete when:* one runnable workflow demonstrates load or create → command or
 generation → evaluation or integration → interpreted output, with license and
@@ -302,9 +330,9 @@ complexity are distributed or absent.
 row-major coordinates, dense/sparse result behavior, strategy ownership, the in-place/no-stored-
 plan lifecycle, result ownership and kinds, bounded execution, and the error taxonomy. A Rustdoc
 three-tensor example contracts $A_(i j) B_(j k) c_k$ to the surviving $i$ slot and asserts
-components `[104, 236]`; it passes in an isolated process, with aggregate-harness isolation tracked
-by APIDOC-008. Sparse/dummy/dual examples, lower-level graph/store/library contracts, feature
-orientation, and broader structure-method coverage remain.
+components `[104, 236]`; it passes in both licensed and restricted aggregate runs, with the
+process-isolation boundary recorded by APIDOC-008. Sparse/dummy/dual examples, lower-level
+graph/store/library contracts, feature orientation, and broader structure-method coverage remain.
 
 *Complete when:* those contracts are local to the relevant items and one checked
 three-tensor example demonstrates contraction order and result structure.
