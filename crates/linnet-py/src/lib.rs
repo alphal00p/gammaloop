@@ -1,6 +1,8 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 
+use clinnet::TypstRenderer;
 use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
 use linnet::half_edge::involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::nodestore::DefaultNodeStore;
@@ -13,9 +15,9 @@ use linnet::half_edge::{HedgeGraphError, NodeIndex};
 use linnet::parser::{
     set::DotGraphSet, DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData,
 };
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyList, PyString, PyTuple, PyType};
+use pyo3::types::{PyAny, PyList, PyMapping, PyMappingMethods, PyString, PyTuple, PyType};
 use pyo3_stub_gen::{
     define_stub_info_gatherer,
     derive::{gen_stub_pyclass, gen_stub_pymethods},
@@ -28,7 +30,7 @@ use pyo3_stub_gen::{
 
 /// Half-edge identifier.
 #[gen_stub_pyclass]
-#[pyclass(from_py_object, name = "Hedge")]
+#[pyclass(from_py_object, frozen, eq, hash, name = "Hedge")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct PyHedge {
     hedge: Hedge,
@@ -64,7 +66,7 @@ impl PyHedge {
 
 /// Node index identifier.
 #[gen_stub_pyclass]
-#[pyclass(from_py_object, name = "NodeIndex")]
+#[pyclass(from_py_object, frozen, eq, hash, name = "NodeIndex")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct PyNodeIndex {
     node: NodeIndex,
@@ -100,7 +102,7 @@ impl PyNodeIndex {
 
 /// Edge index identifier.
 #[gen_stub_pyclass]
-#[pyclass(from_py_object, name = "EdgeIndex")]
+#[pyclass(from_py_object, frozen, eq, hash, name = "EdgeIndex")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct PyEdgeIndex {
     edge: EdgeIndex,
@@ -1860,7 +1862,7 @@ impl PyDotGraph {
 
     /// Parse a DOT file into a graph.
     #[classmethod]
-    fn from_file(_cls: &Bound<'_, PyType>, path: &str) -> PyResult<Self> {
+    fn from_file(_cls: &Bound<'_, PyType>, path: PathBuf) -> PyResult<Self> {
         let graph = DotGraph::from_file(path).map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok(Self { graph })
     }
@@ -1892,6 +1894,90 @@ impl PyDotGraph {
     /// Serialize the full graph to DOT.
     fn dot(&self) -> String {
         self.graph.dot_of(&self.graph.full_filter())
+    }
+
+    /// Render the graph to PDF, SVG, or PNG through Typst.
+    #[gen_stub(override_return_type(
+        type_repr = "pathlib.Path",
+        imports = ("pathlib")
+    ))]
+    #[pyo3(signature = (output, *, template=None, inputs=None, typst="typst"))]
+    fn render(
+        &self,
+        output: PathBuf,
+        template: Option<PathBuf>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[typing.Mapping[builtins.str, builtins.str]]",
+            imports = ("builtins", "typing")
+        ))]
+        inputs: Option<&Bound<'_, PyMapping>>,
+        typst: &str,
+        py: Python<'_>,
+    ) -> PyResult<PathBuf> {
+        let build_dir =
+            tempfile::tempdir().map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        let mut renderer = TypstRenderer::new(build_dir.path()).typst_executable(typst);
+        if !self.graph.global_data.name.is_empty() {
+            renderer = renderer.title(&self.graph.global_data.name);
+        }
+        if let Some(template) = template {
+            renderer = renderer.template(template);
+        }
+        if let Some(inputs) = inputs {
+            let inputs = inputs
+                .items()?
+                .extract::<Vec<(String, String)>>()?
+                .into_iter()
+                .collect::<BTreeMap<_, _>>();
+            renderer = renderer.inputs(inputs);
+        }
+
+        let dot = self.graph.dot_of(&self.graph.full_filter());
+        let rendered_output = output.clone();
+        py.detach(move || renderer.render_dot(&dot, rendered_output))
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        Ok(output)
+    }
+
+    /// Render the graph through Typst and return the resulting SVG document.
+    #[pyo3(signature = (*, template=None, inputs=None, typst="typst"))]
+    fn to_svg(
+        &self,
+        template: Option<PathBuf>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[typing.Mapping[builtins.str, builtins.str]]",
+            imports = ("builtins", "typing")
+        ))]
+        inputs: Option<&Bound<'_, PyMapping>>,
+        typst: &str,
+        py: Python<'_>,
+    ) -> PyResult<String> {
+        let build_dir =
+            tempfile::tempdir().map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        let mut renderer = TypstRenderer::new(build_dir.path()).typst_executable(typst);
+        if !self.graph.global_data.name.is_empty() {
+            renderer = renderer.title(&self.graph.global_data.name);
+        }
+        if let Some(template) = template {
+            renderer = renderer.template(template);
+        }
+        if let Some(inputs) = inputs {
+            let inputs = inputs
+                .items()?
+                .extract::<Vec<(String, String)>>()?
+                .into_iter()
+                .collect::<BTreeMap<_, _>>();
+            renderer = renderer.inputs(inputs);
+        }
+
+        let dot = self.graph.dot_of(&self.graph.full_filter());
+        py.detach(move || renderer.render_dot_to_svg(&dot))
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))
+    }
+
+    /// Render the graph inline in notebook frontends.
+    fn _repr_svg_(&self, py: Python<'_>) -> PyResult<String> {
+        self.to_svg(None, None, "typst", py)
     }
 
     /// Serialize a subgraph to DOT.
@@ -2594,48 +2680,95 @@ impl PyDotGraphBuilder {
         }
     }
 
-    /// Add a node and return its index.
-    #[pyo3(signature = (data=None))]
-    fn add_node(&mut self, data: Option<&PyDotVertexData>) -> PyResult<PyNodeIndex> {
-        let data = match data {
-            Some(obj) => {
-                Python::try_attach(|py| obj.snapshot(py)).unwrap_or_else(DotVertexData::empty)
-            }
-            None => DotVertexData::empty(),
+    /// Add a named node with optional DOT attributes and return its index.
+    #[pyo3(signature = (name=None, statements=None, *, index=None))]
+    fn add_node(
+        &mut self,
+        name: Option<String>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[typing.Mapping[builtins.str, builtins.str]]",
+            imports = ("builtins", "typing")
+        ))]
+        statements: Option<&Bound<'_, PyMapping>>,
+        index: Option<usize>,
+    ) -> PyResult<PyNodeIndex> {
+        let statements = if let Some(statements) = statements {
+            statements
+                .items()?
+                .extract::<Vec<(String, String)>>()?
+                .into_iter()
+                .collect()
+        } else {
+            BTreeMap::new()
         };
-        let node = self.builder.add_node(data);
+        let node = self.builder.add_node(DotVertexData {
+            name,
+            index: index.map(NodeIndex),
+            payload: None,
+            statements,
+        });
         Ok(PyNodeIndex { node })
     }
 
-    /// Add an edge between two nodes.
-    #[pyo3(signature = (source, sink, data=None, orientation=None, source_hedge=None, sink_hedge=None))]
+    /// Add an edge between two nodes with optional DOT attributes.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Python keyword arguments keep graph construction direct"
+    )]
+    #[pyo3(signature = (source, sink, statements=None, orientation=None, *, local_statements=None, edge_id=None, source_hedge=None, sink_hedge=None))]
     fn add_edge(
         &mut self,
         source: &PyNodeIndex,
         sink: &PyNodeIndex,
-        data: Option<&PyDotEdgeData>,
-        orientation: Option<&PyOrientation>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[typing.Mapping[builtins.str, builtins.str]]",
+            imports = ("builtins", "typing")
+        ))]
+        statements: Option<&Bound<'_, PyMapping>>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[typing.Union[builtins.str, Orientation]]",
+            imports = ("builtins", "typing")
+        ))]
+        orientation: Option<&Bound<'_, PyAny>>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[typing.Mapping[builtins.str, builtins.str]]",
+            imports = ("builtins", "typing")
+        ))]
+        local_statements: Option<&Bound<'_, PyMapping>>,
+        edge_id: Option<usize>,
         source_hedge: Option<&PyDotHedgeData>,
         sink_hedge: Option<&PyDotHedgeData>,
     ) -> PyResult<()> {
-        let data = match data {
-            Some(obj) => {
-                Python::try_attach(|py| obj.snapshot(py)).unwrap_or_else(DotEdgeData::empty)
-            }
-            None => DotEdgeData::empty(),
+        let statements = if let Some(statements) = statements {
+            statements
+                .items()?
+                .extract::<Vec<(String, String)>>()?
+                .into_iter()
+                .collect()
+        } else {
+            BTreeMap::new()
         };
-        let orientation = match orientation {
-            Some(obj) => obj.orientation,
-            None => Orientation::Default,
+        let local_statements = if let Some(local_statements) = local_statements {
+            local_statements
+                .items()?
+                .extract::<Vec<(String, String)>>()?
+                .into_iter()
+                .collect()
+        } else {
+            BTreeMap::new()
         };
-        let source_hedge = match source_hedge {
-            Some(obj) => obj.data.clone(),
-            None => DotHedgeData::default(),
+        let data = DotEdgeData {
+            payload: None,
+            statements,
+            local_statements,
+            edge_id: edge_id.map(EdgeIndex::from),
         };
-        let sink_hedge = match sink_hedge {
-            Some(obj) => obj.data.clone(),
-            None => DotHedgeData::default(),
-        };
+        let orientation = orientation
+            .map(extract_orientation)
+            .transpose()?
+            .unwrap_or(Orientation::Default);
+        let source_hedge = source_hedge.map_or_else(DotHedgeData::default, |obj| obj.data.clone());
+        let sink_hedge = sink_hedge.map_or_else(DotHedgeData::default, |obj| obj.data.clone());
 
         self.builder.add_edge(
             HedgeData {
@@ -2655,33 +2788,67 @@ impl PyDotGraphBuilder {
     }
 
     /// Add a dangling (external) edge incident to a node.
-    #[pyo3(signature = (source, data=None, orientation=None, flow=None, hedge=None))]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Python keyword arguments keep graph construction direct"
+    )]
+    #[pyo3(signature = (source, statements=None, orientation=None, flow=None, *, local_statements=None, edge_id=None, hedge=None))]
     fn add_external_edge(
         &mut self,
         source: &PyNodeIndex,
-        data: Option<&PyDotEdgeData>,
-        orientation: Option<&PyOrientation>,
-        flow: Option<&PyFlow>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[typing.Mapping[builtins.str, builtins.str]]",
+            imports = ("builtins", "typing")
+        ))]
+        statements: Option<&Bound<'_, PyMapping>>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[typing.Union[builtins.str, Orientation]]",
+            imports = ("builtins", "typing")
+        ))]
+        orientation: Option<&Bound<'_, PyAny>>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[typing.Union[builtins.str, Flow]]",
+            imports = ("builtins", "typing")
+        ))]
+        flow: Option<&Bound<'_, PyAny>>,
+        #[gen_stub(override_type(
+            type_repr = "typing.Optional[typing.Mapping[builtins.str, builtins.str]]",
+            imports = ("builtins", "typing")
+        ))]
+        local_statements: Option<&Bound<'_, PyMapping>>,
+        edge_id: Option<usize>,
         hedge: Option<&PyDotHedgeData>,
     ) -> PyResult<()> {
-        let data = match data {
-            Some(obj) => {
-                Python::try_attach(|py| obj.snapshot(py)).unwrap_or_else(DotEdgeData::empty)
-            }
-            None => DotEdgeData::empty(),
+        let statements = if let Some(statements) = statements {
+            statements
+                .items()?
+                .extract::<Vec<(String, String)>>()?
+                .into_iter()
+                .collect()
+        } else {
+            BTreeMap::new()
         };
-        let orientation = match orientation {
-            Some(obj) => obj.orientation,
-            None => Orientation::Default,
+        let local_statements = if let Some(local_statements) = local_statements {
+            local_statements
+                .items()?
+                .extract::<Vec<(String, String)>>()?
+                .into_iter()
+                .collect()
+        } else {
+            BTreeMap::new()
         };
-        let flow = match flow {
-            Some(obj) => obj.flow,
-            None => Flow::Source,
+        let data = DotEdgeData {
+            payload: None,
+            statements,
+            local_statements,
+            edge_id: edge_id.map(EdgeIndex::from),
         };
-        let hedge = match hedge {
-            Some(obj) => obj.data.clone(),
-            None => DotHedgeData::default(),
-        };
+        let orientation = orientation
+            .map(extract_orientation)
+            .transpose()?
+            .unwrap_or(Orientation::Default);
+        let flow = flow.map(extract_flow).transpose()?.unwrap_or(Flow::Source);
+        let hedge = hedge.map_or_else(DotHedgeData::default, |obj| obj.data.clone());
 
         self.builder.add_external_edge(
             HedgeData {
@@ -2864,10 +3031,15 @@ fn extract_flow(obj: &Bound<'_, PyAny>) -> PyResult<Flow> {
         match s.to_ascii_lowercase().as_str() {
             "source" => Ok(Flow::Source),
             "sink" => Ok(Flow::Sink),
-            _ => Err(PyValueError::new_err("invalid flow")),
+            _ => Err(PyValueError::new_err(format!(
+                "invalid flow '{s}'; expected 'source' or 'sink'"
+            ))),
         }
     } else {
-        Err(PyValueError::new_err("invalid flow"))
+        Err(PyValueError::new_err(format!(
+            "flow must be 'source', 'sink', or Flow, got {}",
+            obj.get_type().name()?
+        )))
     }
 }
 
@@ -2879,10 +3051,15 @@ fn extract_orientation(obj: &Bound<'_, PyAny>) -> PyResult<Orientation> {
             "default" => Ok(Orientation::Default),
             "reversed" => Ok(Orientation::Reversed),
             "undirected" => Ok(Orientation::Undirected),
-            _ => Err(PyValueError::new_err("invalid orientation")),
+            _ => Err(PyValueError::new_err(format!(
+                "invalid orientation '{s}'; expected 'default', 'reversed', or 'undirected'"
+            ))),
         }
     } else {
-        Err(PyValueError::new_err("invalid orientation"))
+        Err(PyValueError::new_err(format!(
+            "orientation must be 'default', 'reversed', 'undirected', or Orientation, got {}",
+            obj.get_type().name()?
+        )))
     }
 }
 

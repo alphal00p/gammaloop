@@ -2,6 +2,8 @@
 # ruff: noqa: E501, F401
 
 import builtins
+import os
+import pathlib
 import typing
 
 __all__ = [
@@ -104,7 +106,7 @@ class DotGraph:
         Parse a DOT string into multiple graphs.
         """
     @classmethod
-    def from_file(cls, path: builtins.str) -> DotGraph:
+    def from_file(cls, path: builtins.str | os.PathLike | pathlib.Path) -> DotGraph:
         r"""
         Parse a DOT file into a graph.
         """
@@ -115,6 +117,18 @@ class DotGraph:
     def dot(self) -> builtins.str:
         r"""
         Serialize the full graph to DOT.
+        """
+    def render(self, output: builtins.str | os.PathLike | pathlib.Path, *, template: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, inputs: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, typst: builtins.str = 'typst') -> pathlib.Path:
+        r"""
+        Render the graph to PDF, SVG, or PNG through Typst.
+        """
+    def to_svg(self, *, template: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, inputs: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, typst: builtins.str = 'typst') -> builtins.str:
+        r"""
+        Render the graph through Typst and return the resulting SVG document.
+        """
+    def _repr_svg_(self) -> builtins.str:
+        r"""
+        Render the graph inline in notebook frontends.
         """
     def dot_of(self, subgraph: Subgraph) -> builtins.str:
         r"""
@@ -252,15 +266,15 @@ class DotGraphBuilder:
         r"""
         Create a new, empty graph builder.
         """
-    def add_node(self, data: typing.Optional[DotVertexData] = None) -> NodeIndex:
+    def add_node(self, name: typing.Optional[builtins.str] = None, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, *, index: typing.Optional[builtins.int] = None) -> NodeIndex:
         r"""
-        Add a node and return its index.
+        Add a named node with optional DOT attributes and return its index.
         """
-    def add_edge(self, source: NodeIndex, sink: NodeIndex, data: typing.Optional[DotEdgeData] = None, orientation: typing.Optional[Orientation] = None, source_hedge: typing.Optional[DotHedgeData] = None, sink_hedge: typing.Optional[DotHedgeData] = None) -> None:
+    def add_edge(self, source: NodeIndex, sink: NodeIndex, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, orientation: typing.Optional[typing.Union[builtins.str, Orientation]] = None, *, local_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, edge_id: typing.Optional[builtins.int] = None, source_hedge: typing.Optional[DotHedgeData] = None, sink_hedge: typing.Optional[DotHedgeData] = None) -> None:
         r"""
-        Add an edge between two nodes.
+        Add an edge between two nodes with optional DOT attributes.
         """
-    def add_external_edge(self, source: NodeIndex, data: typing.Optional[DotEdgeData] = None, orientation: typing.Optional[Orientation] = None, flow: typing.Optional[Flow] = None, hedge: typing.Optional[DotHedgeData] = None) -> None:
+    def add_external_edge(self, source: NodeIndex, statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, orientation: typing.Optional[typing.Union[builtins.str, Orientation]] = None, flow: typing.Optional[typing.Union[builtins.str, Flow]] = None, *, local_statements: typing.Optional[typing.Mapping[builtins.str, builtins.str]] = None, edge_id: typing.Optional[builtins.int] = None, hedge: typing.Optional[DotHedgeData] = None) -> None:
         r"""
         Add a dangling (external) edge incident to a node.
         """
@@ -370,6 +384,8 @@ class EdgeIndex:
         r"""
         Numeric value of this edge index.
         """
+    def __eq__(self, other: builtins.object) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int: ...
     def __new__(cls, value: builtins.int) -> EdgeIndex:
         r"""
         Create an edge index from a zero-based index.
@@ -511,6 +527,8 @@ class Hedge:
         r"""
         Numeric value of this hedge.
         """
+    def __eq__(self, other: builtins.object) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int: ...
     def __new__(cls, value: builtins.int) -> Hedge:
         r"""
         Create a hedge from a zero-based index.
@@ -598,6 +616,8 @@ class NodeIndex:
         r"""
         Numeric value of this node index.
         """
+    def __eq__(self, other: builtins.object) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int: ...
     def __new__(cls, value: builtins.int) -> NodeIndex:
         r"""
         Create a node index from a zero-based index.
