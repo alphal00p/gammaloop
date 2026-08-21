@@ -273,12 +273,20 @@ way down to boxes.
   digits, and the `gg → h` massive-top triangle where the on-shell massless
   regularization matches an independent computation to `3.4e-7` (numeric
   extrapolation) / `3e-10` (symbolic-δ).
-- **Known gaps** (guarded, clean-error rather than garbage): massless internal
-  propagators (`m² = 0`, IR-divergent) and exactly-singular Gram boxes at
-  all-massless kinematics. On the massless on-shell triangle, scalar / `k²` /
-  `dot(k, q1)` numerators reduce correctly at `det(Y) = 0`, but rank ≥ 2 tensor
-  numerators with two on-shell legs can still hit the degenerate-Cayley wall.
-  See [the frontier](04-frontier.md) for the full map.
+- **On-shell massless legs — handled by `reg_delta`.** Where `det(Y) → 0` from
+  on-shell massless external legs, `reduce()` regularizes the vanishing invariants
+  off-shell and takes the `δ → 0` limit exactly (the `1/δ` inverse-Gram poles
+  cancel in `Σ cᵢ Mᵢ`). This covers the case the bare massive method cannot do —
+  the **multi-on-shell-leg triangle at rank ≥ 2** (unit test
+  `on_shell_massless_triangle_rank2_regularizes`; live across `a→dd̄`,
+  `e⁺e⁻→dd̄`, `z→dd̄` on the deployed app). See [the frontier](04-frontier.md).
+- **Remaining gaps** (guarded — clean panic at `reduce.rs`, never garbage):
+  genuinely singular / **threshold** configurations where different invariants
+  must vanish at *different rates* (the single-shared-δ limit does not cover these;
+  they need the Denner–Dittmaier systematic expansion), and exactly-singular Gram
+  boxes at all-massless kinematics. IR-divergent masters (`B0(0;0,0)`, scaleless
+  `C0`) are reduced *to* but evaluated by the external master library, not
+  `oneloop`. See [the frontier](04-frontier.md) for the full map.
 
 ---
 
