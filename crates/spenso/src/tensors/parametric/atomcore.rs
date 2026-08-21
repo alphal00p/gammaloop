@@ -1330,14 +1330,6 @@ impl<S: TensorStructure> DenseTensor<Atom, S> {
         <Atom as AtomCore>::nsolve_system::<N, Atom>(&self.data, vars, init, prec, max_iterations)
     }
 
-    /// Solve a system that is linear in `vars`, if possible.
-    /// Each expression in `system` is understood to yield 0.
-    pub fn solve_linear_system<E: PositiveExponent, T: AtomCore>(
-        &self,
-        vars: &[T],
-    ) -> Result<Vec<Atom>, SolveError> {
-        <Atom as AtomCore>::solve_linear_system::<E, Atom, T>(&self.data, vars)
-    }
     /// Convert a system of linear equations to a matrix representation, returning the matrix
     /// and the right-hand side.
     #[allow(clippy::type_complexity)]

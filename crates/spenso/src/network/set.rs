@@ -20,6 +20,10 @@ use std::{
 #[cfg(feature = "shadowing")]
 use eyre::eyre;
 
+#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
+use symbolica::evaluate::{
+    CompileOptions, CompiledCode, CompiledNumber, ExportNumber, ExportSettings, ExportedCode,
+};
 #[cfg(feature = "shadowing")]
 use symbolica::{
     atom::{Atom, AtomView},
@@ -29,14 +33,16 @@ use symbolica::{
         rational::Rational,
     },
     evaluate::{
-        CompileOptions, CompiledCode, CompiledNumber, EvalTree, EvaluationDomain, ExportNumber,
-        ExportSettings, ExportedCode, ExpressionEvaluator, FunctionMap, OptimizationSettings,
+        EvalTree, EvaluationDomain, ExpressionEvaluator, FunctionMap, OptimizationSettings,
     },
 };
 
+#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
+use crate::algebra::complex::Complex;
+#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
+use crate::algebra::complex::symbolica_traits::CompiledComplexEvaluatorSpenso;
 #[cfg(feature = "shadowing")]
 use crate::{
-    algebra::complex::{Complex, symbolica_traits::CompiledComplexEvaluatorSpenso},
     tensors::data::{DataIterator, DenseTensor, SetTensorData, SparseTensor},
     tensors::parametric::ParamTensor,
 };
@@ -106,7 +112,7 @@ pub type EvalTreeTensorNetworkSet<T, S, K, FK, Aind, Str> =
 pub type EvalTensorNetworkSet<T, S, K, FK, Aind, Str> =
     SharedTensorNetworkSet<ExpressionEvaluator<T>, S, K, FK, Aind, Str>;
 
-#[cfg(feature = "shadowing")]
+#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
 pub type CompiledTensorNetworkSet<S, K, FK, Aind, Str> =
     SharedTensorNetworkSet<CompiledComplexEvaluatorSpenso, S, K, FK, Aind, Str>;
 
@@ -468,6 +474,7 @@ impl<
     /// evaluation instructions. This often gives better performance than
     /// the `O3` optimization level and results in very fast compilation.
     #[allow(clippy::type_complexity)]
+    #[cfg(feature = "native-code-generation")]
     pub fn export_cpp<F: CompiledNumber>(
         &self,
         path: impl AsRef<std::path::Path>,
@@ -485,7 +492,7 @@ impl<
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
 impl<F: CompiledNumber, S: TensorStructure + Clone, K: Clone, FK: Clone, Aind: AbsInd>
     SharedTensorNetworkSet<ExportedCode<F>, S, K, FK, Aind>
 {
@@ -502,7 +509,7 @@ impl<F: CompiledNumber, S: TensorStructure + Clone, K: Clone, FK: Clone, Aind: A
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
 impl<F: CompiledNumber, S: TensorStructure + Clone, K: Clone, FK: Clone, Aind: AbsInd>
     SharedTensorNetworkSet<CompiledCode<F>, S, K, FK, Aind>
 {
@@ -515,7 +522,7 @@ impl<F: CompiledNumber, S: TensorStructure + Clone, K: Clone, FK: Clone, Aind: A
     }
 }
 
-#[cfg(feature = "shadowing")]
+#[cfg(all(feature = "shadowing", feature = "native-code-generation"))]
 impl<
     S: TensorStructure + Clone,
     K: Clone,

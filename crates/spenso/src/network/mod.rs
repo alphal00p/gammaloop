@@ -3634,7 +3634,7 @@ where
         let mut stream = TermStreamer::<BufWriter<File>>::new(
             TermStreamerConfig::new()
                 .path(std::env::temp_dir().to_string_lossy().into_owned())
-                .max_mem_bytes(4 * 1024 * 1024 * 1024),
+                .max_mem_bytes(usize::try_from(4_u64 * 1024 * 1024 * 1024).unwrap_or(usize::MAX)),
         );
 
         for atom in atoms {
