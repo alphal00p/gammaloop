@@ -233,12 +233,15 @@ masters**. The bridge's tests exercise it directly, e.g. a scalar massless
 bubble reduces to a `B0` master, and a rank-1 bubble numerator `K·P(0)`
 translates to `dot(k, q1)` and reduces through to a `B0` master plus tadpoles.
 
-### Current bridge scope
+### Bridge scope
 
-The bridge currently maps loop `K(0,·)` and externals up to `P(2,·)`
-(`q1..q3`), i.e. **up to four-point** topologies. Pentagons and beyond
-(`P(3,·)`, …) need the external momenta to be built dynamically; that is a noted
-extension. The full graph extraction also depends on gammalooprs exposing the
+The bridge maps loop `K(0,·)` → `k` and externals `P(j,·)` → `q{j+1}`, built
+**dynamically up to `MAX_MOMENTUM_ID` (8)** — so pentagons, hexagons and beyond
+(up to nine-point) are handled, not only four-point topologies (extended
+2026-08-21; unit-tested `maps_high_externals_for_pentagon_and_beyond` and
+`invariants_handle_high_externals`, and the whole app path in
+`reduce_bridge.rs` inherits it since it loops over graph edges dynamically). The
+full graph extraction also depends on gammalooprs exposing the
 contracted numerator atom and per-loop-edge momentum/mass publicly; the pieces
 already public (`Graph::from_string`, edge mass atoms, loop-edge count) cover the
 dot-export path used here. See [the app integration](05-app.md) for how this

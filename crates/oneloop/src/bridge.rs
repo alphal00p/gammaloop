@@ -8,7 +8,8 @@
 //! as a `dot(...)` function. The oneloop reducer instead consumes a polynomial in the symmetric-linear
 //! [`crate::symbols`] `dot(k, q_i)` / `dot(k, k)`.
 //!
-//! Momentum map: loop `K(0,·)` -> `oneloop::k`; externals `P(0/1/2,·)` -> `oneloop::q1/q2/q3`.
+//! Momentum map: loop `K(0,·)` -> `oneloop::k`; externals `P(j,·)` -> `oneloop::q{j+1}` (built
+//! dynamically up to `MAX_MOMENTUM_ID`, so pentagons and beyond are handled).
 
 use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::{function, symbol};
@@ -29,14 +30,21 @@ fn bare_momentum(head: Symbol, id: i64, oneloop_sym: Atom, index: Symbol) -> (At
     (tensor, oneloop_sym)
 }
 
-/// The loop/external momenta in bare form
+/// The external-momentum symbols `oneloop::q1 .. q{MAX_MOMENTUM_ID}` the bridge maps the
+/// gammaloop externals `P(0..)` onto -- built dynamically so pentagons and beyond are handled.
+fn external_syms() -> Vec<Atom> {
+    (0..MAX_MOMENTUM_ID)
+        .map(|j| Atom::var(symbol!(format!("oneloop::q{}", j + 1))))
+        .collect()
+}
+
+/// The loop/external momenta in bare form (loop `K(0)` -> k, externals `P(0..)` -> q1..).
 fn bare_momenta(heads: &GammaloopHeads) -> Vec<(Atom, Atom)> {
-    vec![
-        bare_momentum(heads.loop_mom, 0, Atom::var(S.k), heads.index),
-        bare_momentum(heads.external_mom, 0, Atom::var(S.q1), heads.index),
-        bare_momentum(heads.external_mom, 1, Atom::var(S.q2), heads.index),
-        bare_momentum(heads.external_mom, 2, Atom::var(S.q3), heads.index),
-    ]
+    let mut moms = vec![bare_momentum(heads.loop_mom, 0, Atom::var(S.k), heads.index)];
+    for (j, q) in external_syms().into_iter().enumerate() {
+        moms.push(bare_momentum(heads.external_mom, j as i64, q, heads.index));
+    }
+    moms
 }
 
 /// A gammaloop momentum tensor `head(id, index(4, idx_))`
@@ -46,17 +54,14 @@ fn known_momentum(head: Symbol, id: i64, oneloop_sym: Atom, index: Symbol) -> (A
     (tensor, oneloop_sym)
 }
 
-/// The loop/external momenta the bridge currently recognizes.
-///
-/// TODO: only externals up to `q3` (≤4-point) are mapped; generalize to build `q{j+1}` dynamically
-/// so pentagons and beyond (`P(3,·)`, …) are handled too.
+/// The loop/external momenta the bridge recognizes (loop `K(0)` -> k, externals `P(0..)` -> q1..),
+/// built dynamically up to `MAX_MOMENTUM_ID` so pentagons and beyond (`P(3,·)`, …) are handled.
 fn known_momenta(heads: &GammaloopHeads) -> Vec<(Atom, Atom)> {
-    vec![
-        known_momentum(heads.loop_mom, 0, Atom::var(S.k), heads.index),
-        known_momentum(heads.external_mom, 0, Atom::var(S.q1), heads.index),
-        known_momentum(heads.external_mom, 1, Atom::var(S.q2), heads.index),
-        known_momentum(heads.external_mom, 2, Atom::var(S.q3), heads.index),
-    ]
+    let mut moms = vec![known_momentum(heads.loop_mom, 0, Atom::var(S.k), heads.index)];
+    for (j, q) in external_syms().into_iter().enumerate() {
+        moms.push(known_momentum(heads.external_mom, j as i64, q, heads.index));
+    }
+    moms
 }
 
 /// Rewrite the shared-index momentum contractions of a gammaloop scalar numerator into oneloop
@@ -121,7 +126,7 @@ pub struct GammaloopEdge {
 }
 
 fn square_external_momentum(momentum: &Atom) -> Atom {
-    let qs = [Atom::var(S.q1), Atom::var(S.q2), Atom::var(S.q3)];
+    let qs = external_syms();
     let mut out = (momentum * momentum).expand();
     // `q_a^2 -> dot(q_a, q_a)` (squares) then `q_a*q_b -> dot(q_a, q_b)`
     for qa in &qs {
@@ -262,6 +267,29 @@ mod tests {
         let q1q2 = function!(S.dot, Atom::var(S.q1), Atom::var(S.q2));
         let want = (Atom::num(2) * &kq1 * &kk - &q1q2).expand();
         assert_eq!(got.expand(), want);
+    }
+
+    #[test]
+    fn maps_high_externals_for_pentagon_and_beyond() {
+        crate::ensure_symbolica_license();
+        // A pentagon (5-point) carries externals up to P(3); the bridge must map P(3) -> q4
+        // (and higher). K·P(3) -> dot(k, q4).
+        let input = &function!(symbol!("K"), Atom::num(0), mink4(7))
+            * &function!(symbol!("P"), Atom::num(3), mink4(7));
+        let got = numerator_to_dot_form(&input, &heads());
+        let want = function!(S.dot, Atom::var(S.k), Atom::var(symbol!("oneloop::q4")));
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn invariants_handle_high_externals() {
+        crate::ensure_symbolica_license();
+        // A pentagon edge offset of q4 must square to dot(q4, q4) (exercises the extended
+        // square_external_momentum, not just q1..q3).
+        let q4 = Atom::var(symbol!("oneloop::q4"));
+        let offsets = vec![Atom::Zero, q4.clone()];
+        let got = invariants_from_offsets(&offsets);
+        assert_eq!(got, vec![function!(S.dot, q4.clone(), q4)]);
     }
 
     #[test]
