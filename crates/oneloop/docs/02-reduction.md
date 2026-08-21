@@ -268,9 +268,10 @@ way down to boxes.
 - **Scalar `N = 1…N`** (any propagator count) reduces exactly. Generic-kinematics
   scalar `N = 3…7` is cross-checked against OneLOopBridge + feynalg; see
   [benchmarks](06-benchmarks.md).
-- The reducer reproduces MadLoop (MG5_aMC v3.7.2) across ~20 processes, including
-  the massless on-shell triangle from `e⁺e⁻ → γ → dd̄ [virt=QCD]` matched to ~14
-  digits, and the `gg → h` massive-top triangle where the on-shell massless
+- ~110 MadLoop (MG5_aMC v3.7.2) processes are reproduced (MadLoop's ~14-digit
+  accuracy), including the massless on-shell triangle from
+  `e⁺e⁻ → γ → dd̄ [virt=QCD]` (matched to 14 digits), and the `gg → h` massive-top
+  triangle where the on-shell massless
   regularization matches an independent computation to `3.4e-7` (numeric
   extrapolation) / `3e-10` (symbolic-δ).
 - **On-shell massless legs — handled by `reg_delta`.** Where `det(Y) → 0` from

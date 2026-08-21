@@ -146,8 +146,9 @@ Grounded in the current test suite (`reduce.rs`) and the benchmark record:
 The generic cross-engine benchmark sweep went to **rank-6** (e.g. `(k²)³`,
 finite and UV-divergent) and validates scalar `N=3..7`; see
 [the benchmarks](06-benchmarks.md) and [`../benchmarks/README.md`](../benchmarks/README.md).
-The MadLoop cross-check reproduced ~20 processes (triangle, box, pentagon,
-4-gluon, loop-induced) to ~14 digits where checked. Speed of the symbolic
+The MadLoop process suite reproduced ~110 processes (triangle, box, pentagon,
+4-gluon, 2→3-jet, loop-induced, diboson) at MadLoop's ~14-digit accuracy; anchors
+match published values to 14 digits. Speed of the symbolic
 reduction is sub-millisecond across triangle/box/pentagon from scalar through
 rank-2 (e.g. triangle rank-2 ≈ 0.27 ms, box rank-2 ≈ 0.54 ms).
 

@@ -10,6 +10,22 @@ for the app integration, [the app](05-app.md).
 
 ---
 
+## Completeness + validation expansion (2026-08-21)
+- **Reducer completeness.** `gram_solve` now pseudo-inverts a rank-deficient Gram (solve on a maximal
+  independent sub-Gram, redundant coefficients zero), so **N≥7 tensor numerators** and coincident-momenta
+  cases reduce instead of panicking — the last guarded panic in the tensor path is retired. Rank-3–6
+  mixed tensors validated (box→heptagon, including dotted); the cross-engine suite is now **132/132**.
+- **Bridge N≥5.** The graph→reducer bridge maps externals dynamically (`P(j)→q{j+1}`, up to nine-point),
+  so the **deployed app reduces pentagons and beyond** (validated live on `e+e-→ddg`, `q4` mapped).
+- **MadLoop suite → ~110 processes.** Three MG5_aMC v3.7.2 batches (96 fresh) reproduced, spanning
+  triangle/box/pentagon/4-gluon/2→3-jet/loop-induced/diboson, QED+QCD, massless+massive; the IR/colour
+  pole structure (massive-vs-massless double pole, exact colour factors) comes out textbook. A
+  reproduction record — the direct reducer validation remains the cross-engine suite.
+- **Docs.** Added the one-page [summary & document map](00-summary.md) and the
+  [benchmark report](07-benchmark-report.md).
+
+---
+
 ## gammaloop → family bridge
 
 - Added `bridge.rs`: translates a gammaloop one-loop graph into an `IntegralFamily` the reducer can

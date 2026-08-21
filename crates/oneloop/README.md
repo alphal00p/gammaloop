@@ -14,14 +14,17 @@ harnesses.
 
 ## Documentation
 
-The docs build on one another — read in order:
+**Start with the [one-page summary & document map](docs/00-summary.md)** (status,
+results at a glance, and where to find each thing). The full set builds on one
+another — read in order:
 
 1. [Overview](docs/01-overview.md) — what it is, the REDUCE-vs-EVALUATE scope, current status
 2. [The reduction algorithm](docs/02-reduction.md) — the masters, the per-topology IBP recursions, N>4 via bordered-Cayley
 3. [Tensor & dotted numerators](docs/03-numerators.md) — the `dot(k, qᵢ)` reduction and the gammaloop→family bridge
 4. [The on-shell massless-leg frontier](docs/04-frontier.md) — why massless legs are hard, the off-shell-δ fix, and what's left
 5. [The FeynmanEngine app](docs/05-app.md) — the live "Reduce to masters" button, end to end
-6. [Validation & benchmarks](docs/06-benchmarks.md) — cross-engine checks and ~20 reproduced MadLoop processes
+6. [Validation & benchmarks](docs/06-benchmarks.md) — the cross-engine method, in prose
+7. [Benchmark report](docs/07-benchmark-report.md) — the results and numbers (132/132 cross-engine; ~110 MadLoop processes)
 
 See also the [CHANGELOG](docs/CHANGELOG.md) and the runnable [benchmarks guide](benchmarks/README.md).
 

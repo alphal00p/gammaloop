@@ -17,7 +17,7 @@ re-run fresh on this date; the harnesses live in
 | **High-rank mixed tensors** | box → heptagon, distinct external directions, rank 3–6 (incl. dotted) | **all PASS** (0.0–1.6σ) |
 | **Singular-Gram tensors** | heptagon (N=7) + coincident-momenta case, pseudo-inverse fix | **reduces + validated** (0.4–0.7σ) |
 | **App coverage** | 40 physical SM processes, deployed pipeline | **848 diagrams**, 0 degenerate-Cayley walls |
-| **MadLoop reproduction** | ~20 MG5_aMC processes | matched to ~14 digits |
+| **MadLoop reproduction** | 110+ MG5_aMC processes run (96 fresh, 3 batches) | reproduced at MadLoop's ~14-digit accuracy; anchors match published values (oneloop's *reduction* is validated separately, row 1) |
 | **Unit tests** | crate `cargo test` | **38 passed, 1 ignored, 0 failed** |
 
 The reducer turns any one-loop integral (arbitrary N, tensor numerators, raised
@@ -149,14 +149,48 @@ pentagons, hexagons, and beyond — not just boxes.
 
 ---
 
-## 4. MadLoop reproduction (~14 digits)
+## 4. MadLoop reproduction (~110 processes)
+
+**What this validates (read first).** `oneloop` does the *reduction* of a loop
+integrand to masters — it does **not** build the full amplitude (spinor trace +
+colour + Born interference). So this section is a **MadLoop reproduction record**,
+not a per-process `oneloop`-vs-MadLoop diff: we ran MG5_aMC on ~110 processes and it
+produces self-consistent numbers at its own ~14-digit accuracy, with the published
+anchors (`e⁺e⁻→dd̄`, `gg→gg`, the loop-induced values) matching known/Valentin
+numbers to 14 digits. This demonstrates the *process space* the reducer's reductions
+cover, and that the IR/colour structure is textbook. **The direct validation of
+`oneloop`'s output is §1** (132/132 vs OneLOop — the very master library MadLoop
+links). A full-amplitude `oneloop`-vs-MadLoop comparison per process is a separate
+project (the amplitude assembly, "target B", noted at the end of this section).
 
 From [`../benchmarks/madloop_reference.md`](../benchmarks/madloop_reference.md):
-~20 MG5_aMC v3.7.2 processes reproduced (triangle, box, pentagon, 4-gluon,
+~21 MG5_aMC v3.7.2 processes reproduced (triangle, box, pentagon, 4-gluon,
 loop-induced), anchored on Valentin's benchmark `e⁺e⁻ → γ → dd̄ [virt=QCD]`
-matched to ~14 digits, and the `gg → h` massive-top on-shell triangle where the
+(matched to 14 digits), and the `gg → h` massive-top on-shell triangle where the
 `reg_delta` regularization matches an independent computation to `3.4e-7`
-(numeric extrapolation) / `3.2e-10` (symbolic-δ).
+(numeric extrapolation) / `3.2e-10` (symbolic-δ). A fresh anchor
+**`e⁺e⁻ → tt̄ [virt=QCD]`** (2026-08-21, rel. accuracy 5.1e-15) reproduces the
+massive-quark IR structure — **double pole exactly 0** (massive tops have no
+collinear singularity), the clean contrast with the massless anchor's
+`−8/3 = −2C_F` double pole — validating the massive-configuration regime the
+reducer is built for (Born `3.0630e-2`, virtual finite `+1.8566`, single pole `+6.5419`).
+
+A **35-process batch** (2026-08-21, 5.5 min) then reproduced the full IR structure across
+V→qq̄ triangles, qq̄/gluon-initiated boxes, the 4-gluon amplitude, loop-induced
+(`gg→h`, `H→γγ`, `gg→hh`), and the `e⁺e⁻→ddg` pentagon — all at MadLoop's ~14-digit
+accuracy. The **massive-vs-massless double pole** (0 for massive `b`/`t`, `−8/3 = −2C_F` for light
+quarks) and the **exact colour-factor poles** (`−4C_F`, `−4C_A = −12` for 4-gluon)
+fall out automatically, and `e⁺e⁻→dd̄ = −8.93638` / `gg→gg = −66.63` reproduce prior
+anchors exactly. A **second 40-process batch** (EW/QED — `e⁺e⁻→WW/ZZ/γγ`, `W→ℓν`,
+`z→ℓℓ` — plus new QCD 2→2 and more pentagons) then validated **40/40**, with the
+QED `e⁺e⁻` double pole `−0.1315` constant across the electroweak channels and the
+both-massive `bb̄→tt̄` double pole exactly 0. A **third batch** added QCD 2→3
+jets (double poles `−25/3`, `−35/3`) and quark-initiated diboson (double pole
+scaling with quark charge², `−0.0584` up vs `−0.0146` down). **96 fresh anchors
+across the three batches** (~110+ on record), spanning triangle / box / pentagon /
+4-gluon / 2→3-jet / loop-induced / diboson, QED+QCD, massless+massive — every
+double pole reading out the exact IR/colour structure (full tables in
+`madloop_reference.md`).
 
 **Two tiers of MadLoop validation.** The 14-digit numbers above are the *full
 amplitude* (spinor trace + colour + Born interference); `oneloop` supplies the

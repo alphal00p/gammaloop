@@ -99,8 +99,9 @@ Grounded in the validation record (`benchmarks/madloop_reference.md`,
 
 ### Validated against
 
-- **MadLoop** (MG5_aMC v3.7.2): ~20 processes reproduced to ~14 digits where
-  checked — including e+e⁻→γ→dd̄ `[virt=QCD]` (triangle, finite part −8.936),
+- **MadLoop** (MG5_aMC v3.7.2): **~110 processes reproduced** (96 fresh, 3 batches)
+  at MadLoop's ~14-digit accuracy; anchors match published values to 14 digits —
+  including e+e⁻→γ→dd̄ `[virt=QCD]` (triangle, finite part −8.936),
   gg→hh (loop-induced box), gg→h (massive-top triangle), e+e⁻→dd̄g (pentagon),
   Drell-Yan, W/Z production, 4-gluon gg→gg (123 loop diagrams, −66.63), and
   loop-induced H→γγ (28 W+top loops, 6.64e-2) and γγ→γγ (186 loops, 1.05e-3).

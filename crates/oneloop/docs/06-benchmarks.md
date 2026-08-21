@@ -13,8 +13,10 @@ Two complementary validation tracks are reported:
 1. A **cross-engine harness** that checks the reduction of generic families
    against independent scalar-master libraries, an analytic library, a
    Feynman-parameter integrator, and tensor oracles.
-2. A **MadLoop / MG5_aMC process suite** — ~20 real collider processes
-   reproduced to ~14 digits where checked.
+2. A **MadLoop / MG5_aMC process suite** — ~110 real collider processes
+   reproduced at MadLoop's ~14-digit accuracy (anchors match published values).
+   This is a *reproduction record* of the process space the reductions cover,
+   complementary to the reducer's direct cross-engine validation in (1).
 
 To run the harness yourself, see [`../benchmarks/README.md`](../benchmarks/README.md).
 
@@ -88,8 +90,9 @@ UV-divergent, massless lines, timelike / threshold / near-degenerate** — with
 
 ## 2. MadLoop / MG5_aMC process suite
 
-Independently of the harness, ~20 real one-loop collider processes were generated
-with **MG5_aMC v3.7.2** (python3.11, gfortran 15.2) and reproduced. Where a number
+Independently of the harness, ~110 real one-loop collider processes were generated
+with **MG5_aMC v3.7.2** (python3.11, gfortran 15.2) and reproduced (96 fresh across
+three 2026-08-21 batches). Where a number
 is quoted as checked, it matches Valentin Hirschi's reference / MadLoop output to
 **~14 digits**.
 
