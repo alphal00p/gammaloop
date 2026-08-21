@@ -509,10 +509,26 @@ class GammaLoopAPI:
 
         Examples
         --------
-        Evaluate a point whose dimension matches integrand 0::
+        Evaluate one point from the repository's differential API regression fixture::
 
-            result = api.evaluate_sample(point, process_id=0, minimal_output=True)
-            value = result.integrand_result
+            from pathlib import Path
+
+            from gammaloop import GammaLoopAPI
+
+            example = Path("examples/api/python/epem_a_ddxg_xs_LO")
+            api = GammaLoopAPI(
+                state_folder=example / "state",
+                boot_commands_path=example / "run.toml",
+                clean_state=True,
+            )
+            point = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67]
+            result = api.evaluate_sample(point, return_events=True)
+            assert result.parameterization_jacobian is not None
+            assert result.stability_results
+            assert result.event_groups
+
+        This card verifies API and event plumbing. Its powered coupling selector is not an
+        independently reviewed perturbative-order definition or normalization benchmark.
         """
     def evaluate_samples(self, points: numpy.typing.NDArray[numpy.float64], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = False, minimal_output: builtins.bool = False, return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = False, integrator_weights: typing.Optional[numpy.typing.NDArray[numpy.float64]] = None, discrete_dims: numpy.typing.NDArray[numpy.unsignedinteger] | None = None, graph_names: typing.Optional[typing.Sequence[typing.Optional[builtins.str]]] = None, orientations: typing.Optional[typing.Sequence[typing.Optional[builtins.int]]] = None) -> BatchEvaluationResult:
         r"""
@@ -576,10 +592,31 @@ class GammaLoopAPI:
 
         Examples
         --------
-        Evaluate a caller-provided two-dimensional array::
+        Evaluate two rows and inspect their per-sample events and batch-level histograms::
 
-            points = numpy.asarray(points, dtype=numpy.float64)
-            result = api.evaluate_samples(points, process_id=0, minimal_output=True)
+            from pathlib import Path
+
+            import numpy as np
+            from gammaloop import GammaLoopAPI
+
+            example = Path("examples/api/python/epem_a_ddxg_xs_LO")
+            api = GammaLoopAPI(
+                state_folder=example / "state",
+                boot_commands_path=example / "run.toml",
+                clean_state=True,
+            )
+            points = np.array([
+                [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],
+                [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],
+            ], dtype=float)
+            result = api.evaluate_samples(points, return_events=True)
+            assert len(result.samples) == 2
+            assert all(sample.event_groups for sample in result.samples)
+            assert result.observables["leading_jet_pt_hist"].sample_count == 2
+            assert len(result.observables["leading_jet_pt_hist"].bins) == 8
+
+        The fixture exercises the API surface; its powered coupling selector is not a validated
+        perturbative-order or normalization benchmark.
         """
     def import_graphs(self, graphs: builtins.str, process_name: typing.Optional[builtins.str] = None, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, format: builtins.str = 'dot', overwrite: builtins.bool = False, append: builtins.bool = False) -> None:
         r"""
@@ -721,10 +758,29 @@ class GammaLoopAPI:
 
         Examples
         --------
-        Inspect the active evaluation backend and graph count::
+        Inspect the generated graph groups in the repository's differential API fixture::
 
-            info = api.get_integrand_info(process_id=0)
-            print(info.active_f64_backend, info.graph_count)
+            from pathlib import Path
+
+            from gammaloop import GammaLoopAPI
+
+            example = Path("examples/api/python/epem_a_ddxg_xs_LO")
+            api = GammaLoopAPI(
+                state_folder=example / "state",
+                boot_commands_path=example / "run.toml",
+                clean_state=True,
+            )
+            info = api.get_integrand_info()
+            assert info.kind == "cross section"
+            assert info.graph_count == 2
+            assert info.graph_group_count == len(info.graph_groups)
+            assert all(
+                sum(graph.is_master for graph in group.graphs) == 1
+                for group in info.graph_groups
+            )
+
+        This fixture's powered coupling selector is a regression input, not a reviewed physical
+        perturbative-order definition.
         """
     def get_integrand_settings(self, process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None) -> SettingsValue:
         r"""
@@ -939,6 +995,36 @@ class GammaLoopAPI:
 class HistogramAccumulator:
     r"""
     Mutable continuous or discrete histogram accumulator with sample-level statistics.
+
+    Notes
+    -----
+    The example below deliberately places at most one entry in each bin. If several correlated
+    entries land in one bin, the current helper records their squared weights separately rather
+    than grouping their weights like GammaLoop's native observable pipeline. Do not replay raw
+    event groups through this class until that statistical contract is aligned.
+
+    Examples
+    --------
+    Merge two pending, statistically independent samples before committing them::
+
+        from gammaloop import HistogramAccumulator
+
+        left = HistogramAccumulator.continuous("energy", 0.0, 4.0, 4)
+        right = HistogramAccumulator.continuous("energy", 0.0, 4.0, 4)
+        left.fill_continuous_sample([(0.5, 2.0)])
+        right.fill_continuous_sample([(2.5, 3.0)])
+        left.merge_in_place(right)
+        left.update_results()
+
+        snapshot = left.snapshot()
+        assert snapshot.sample_count == 2
+        assert snapshot.bins[0].sum_weights == 2.0
+        assert snapshot.bins[0].sum_weights_squared == 4.0
+        assert snapshot.bins[0].sum_weights / snapshot.sample_count == 1.0
+        assert snapshot.bins[2].sum_weights == 3.0
+        assert snapshot.bins[2].sum_weights_squared == 9.0
+        assert right.snapshot().sample_count == 0
+        assert len(left.rebin(2).snapshot().bins) == 2
     """
     @staticmethod
     def continuous(title: builtins.str, x_min: builtins.float, x_max: builtins.float, n_bins: builtins.int, type_description: builtins.str = 'AL', phase: builtins.str = 'real', value_transform: builtins.str = 'identity', log_x_axis: builtins.bool = False, log_y_axis: builtins.bool = True) -> HistogramAccumulator:

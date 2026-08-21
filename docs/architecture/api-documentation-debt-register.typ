@@ -200,7 +200,6 @@ error variants render their own conditions, and the result/state/error Rustdoc a
 agree.
 
 === APIDOC-007 · GammaLoop accepted-but-unsupported calculation options
-<apidoc-007>
 
 *Priority:* P0 · *Status:* Open · *Surface:* GammaLoop generation and runtime settings
 
@@ -227,6 +226,12 @@ construction aborts while attempting to start another. Serial test execution doe
 the outcome. This prevents the aggregate harness from treating both examples as runnable in one
 process and may also expose an initialization boundary relevant to unlicensed users of the
 `shadowing` feature.
+
+*Build evidence (2026-08-21):* the complete Nix Pages derivation reaches the documentation-example
+suite and exits with `SIGABRT` at this shared-process boundary. The checked contraction example
+passes alone in a fresh process; skipping it still exposes the same collision between the tutorial
+and the other Spenso network example. This is a harness/runtime-initialization issue, not a failure
+of the new GammaLoop manual or Python examples.
 
 *Complete when:* maintainers determine whether the two API paths should share one idempotent
 Symbolica initialization; otherwise the verification harness isolates the examples in separate
@@ -366,6 +371,13 @@ bin are currently sent to the bin accumulator separately. Their squared weights 
 $w_1^2 + w_2^2$ rather than $(w_1 + w_2)^2$. Native observable processing first groups all
 same-bin contributions from the complete correlated event-group list. The Python helper cannot yet
 faithfully reproduce that path from raw correlated entries.
+
+*Progress (`qtvpkmto`):* `evaluate_sample`, `evaluate_samples`, and `get_integrand_info` now have
+self-contained repository-fixture examples with structural assertions, and the maintained Python
+event script checks graph groups, event groups, histogram shapes, and sample counts. A separate
+distinct-bin accumulator example verifies pending-state merge, raw sums, squared sums, and rebinning
+without overstating the unsafe correlated same-bin path. A discoverable integration-space
+dimension, a scheduled known-value evaluation, and the statistical-contract repair remain open.
 
 *Complete when:* a shipped state supports two verified journeys: open → inspect
 dimension → evaluate known point → interpret value/Jacobian/weight/stability; and batch

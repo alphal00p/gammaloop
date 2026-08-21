@@ -142,7 +142,7 @@ and unresolved-cut selectors and explicitly warns that the repository's current 
 cards are regression fixtures rather than audited order/normalization exemplars. Complete
 phase-space/amplitude normalization and method-author reviews of scheme and threshold conventions
 remain explicitly open. Parser/runtime correction remains tracked by
-#link("api-documentation-debt-register.typ#apidoc-007")[APIDOC-007].
+#link("api-documentation-debt-register.typ#apidoc-007-gammaloop-accepted-but-unsupported-calculation-options")[APIDOC-007].
 
 *Complete when:* the manual states metric and momentum flow, integration and
 phase-space measures, flux, symmetry, color and helicity factors, units, amplitude

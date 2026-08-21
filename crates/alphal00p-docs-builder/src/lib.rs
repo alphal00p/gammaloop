@@ -6119,7 +6119,6 @@ fn render_python_item_page(
             "<p class=\"reference-missing\">No description is available for this export.</p>",
         );
     }
-    body.push_str(&render_python_member_index(&item.members, &anchor));
     if let Some((constructor, constructor_anchor)) = constructor {
         body.push_str(&format!(
             "<section class=\"api-constructor\" id=\"{}\"><header class=\"reference-detail-heading\"><h2>Constructor</h2><a class=\"reference-permalink\" href=\"#{}\" aria-label=\"Permanent link to the constructor\">#</a></header>",
@@ -6181,6 +6180,7 @@ fn render_python_item_page(
             escape_html(&example.code),
         ));
     }
+    body.push_str(&render_python_member_index(&item.members, &anchor));
     if item
         .members
         .iter()
@@ -10925,6 +10925,10 @@ mod tests {
         );
         assert!(engine_page.contains("api-property-setter-signature"));
         assert!(engine_page.contains("<h2>Constructor</h2>"));
+        assert!(
+            engine_page.find("<h2>Constructor</h2>").unwrap()
+                < engine_page.find("Member overview</h2>").unwrap()
+        );
         assert!(engine_page.contains("id=\"engine-new-associatedfunction\""));
         assert!(!engine_page.contains("<code>__new__</code>"));
         assert_eq!(engine_page.matches("Initial state.").count(), 1);
@@ -11005,6 +11009,10 @@ mod tests {
         assert!(css.contains(
             ".reference-coverage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));"
         ));
+        assert!(css.contains("math[display=\"block\"] { display: block math;"));
+        assert!(
+            css.contains(".reference-table-wrap > table { display: table; overflow: visible; }")
+        );
     }
 
     #[test]
