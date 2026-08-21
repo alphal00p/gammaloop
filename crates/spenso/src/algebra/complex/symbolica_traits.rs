@@ -1,16 +1,19 @@
+#[cfg(feature = "native-code-generation")]
 use std::mem::transmute;
 
 use ref_ops::{RefAdd, RefDiv, RefMul, RefSub};
+#[cfg(feature = "native-code-generation")]
+use symbolica::evaluate::{
+    CompileOptions, CompiledComplexEvaluator, CompiledNumber, EvaluatorLoader, ExportNumber,
+    ExportSettings, ExpressionEvaluator,
+};
 use symbolica::{
     coefficient::Coefficient,
     domains::{
         float::{Complex as SymComplex, FixedPrecision, Float, FloatLike, Real, SingleFloat},
         rational::Rational,
     },
-    evaluate::{
-        CompileOptions, CompiledComplexEvaluator, CompiledNumber, EvaluationDomain,
-        EvaluatorLoader, ExportNumber, ExportSettings, ExpressionEvaluator,
-    },
+    evaluate::EvaluationDomain,
 };
 
 use crate::algebra::{
@@ -160,6 +163,7 @@ impl<F: ToFloat> From<RealOrComplexRef<'_, F>> for Coefficient {
     }
 }
 
+#[cfg(feature = "native-code-generation")]
 impl<T: ExportNumber + SingleFloat> ExportNumber for Complex<T> {
     fn export(&self) -> String {
         if self.im.is_zero() {
@@ -504,8 +508,10 @@ where
 }
 
 #[derive(Clone, Debug, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[cfg(feature = "native-code-generation")]
 pub struct CompiledComplexEvaluatorSpenso(CompiledComplexEvaluator);
 
+#[cfg(feature = "native-code-generation")]
 impl CompiledComplexEvaluatorSpenso {
     pub fn evaluate(&mut self, args: &[Complex<f64>], out: &mut [Complex<f64>]) {
         unsafe {
@@ -517,6 +523,7 @@ impl CompiledComplexEvaluatorSpenso {
     }
 }
 
+#[cfg(feature = "native-code-generation")]
 impl EvaluatorLoader<Complex<f64>> for CompiledComplexEvaluatorSpenso {
     fn load_with_settings(
         file: impl AsRef<std::path::Path>,
@@ -529,6 +536,7 @@ impl EvaluatorLoader<Complex<f64>> for CompiledComplexEvaluatorSpenso {
     }
 }
 
+#[cfg(feature = "native-code-generation")]
 impl CompiledNumber for Complex<f64> {
     type Evaluator = CompiledComplexEvaluatorSpenso;
     type Settings = ();
