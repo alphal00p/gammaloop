@@ -200,6 +200,7 @@ error variants render their own conditions, and the result/state/error Rustdoc a
 agree.
 
 === APIDOC-007 · GammaLoop accepted-but-unsupported calculation options
+<apidoc-007>
 
 *Priority:* P0 · *Status:* Open · *Surface:* GammaLoop generation and runtime settings
 
@@ -359,9 +360,18 @@ Current examples rely on an unspecified `./state`, undefined points, and no expe
 values. Events, correlated event groups, histogram accumulators, snapshots, merging,
 and rebinning have no complete examples.
 
+*Statistical-contract finding (2026-08-21):* each call to `fill_continuous_sample` or
+`fill_discrete_sample` increments the sample count once, but multiple entries landing in the same
+bin are currently sent to the bin accumulator separately. Their squared weights therefore add as
+$w_1^2 + w_2^2$ rather than $(w_1 + w_2)^2$. Native observable processing first groups all
+same-bin contributions from the complete correlated event-group list. The Python helper cannot yet
+faithfully reproduce that path from raw correlated entries.
+
 *Complete when:* a shipped state supports two verified journeys: open → inspect
 dimension → evaluate known point → interpret value/Jacobian/weight/stability; and batch
-evaluate → preserve event groups → fill/commit/merge/rebin → assert a bin result.
+evaluate → preserve event groups → fill/commit/merge/rebin → assert a bin result. The manual
+accumulator first matches native same-bin correlation semantics with a regression covering two
+correlated entries in one bin.
 
 === APIDOC-203 · Linnet Python algorithms and proxies
 

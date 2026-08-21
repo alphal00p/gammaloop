@@ -3,10 +3,18 @@
 #let overview = [
 = Overview
 
-GammaLoop computes differential collider cross-sections with the Local Unitarity method.
-It is an application and research codebase rather than a thin numerical library: process
-generation, model import, integrand construction, integration, observables, persistence,
-and diagnostics meet in one stateful workflow.
+GammaLoop is alpha-stage research software that computes numerical amplitude integrands and
+uses Local Unitarity for differential partonic cross sections. Its current
+external-kinematics path uses fixed momenta and a unit PDF factor; it does not yet provide
+hadronic PDF convolution or a factorization scale. Begin with the
+#link("physics/")[physics scope and method] before translating a desired collider observable
+into a run card.
+
+The primary manual path is written for perturbative-QFT and collider physicists. GammaLoop
+is an application rather than a thin numerical library: model import, process generation,
+integrand construction, integration, observables, persistence, and diagnostics meet in one
+stateful workflow. Rust and Python details become relevant only when structured automation
+is needed.
 
 #callout("Primary interface", [
   The command-line interface is the primary user interface. A run card creates a state,
@@ -17,6 +25,10 @@ and diagnostics meet in one stateful workflow.
 
 == Choose a task
 
+- To decide whether an initial state, contribution, mass/spin choice, subtraction, and
+  observable are supported, read #link("physics/")[physics scope and Local Unitarity].
+- To define momentum flow, helicity and color ownership, flux, units, and sample weights,
+  use #link("guides/conventions/")[the scientific conventions].
 - To create and resume a known state, follow the #link("tutorial/")[first-state tutorial].
 - To adapt a process specification or generation filters, use the
   #link("guides/process-generation/")[process-generation guide] with the
@@ -49,6 +61,13 @@ and records the resulting state. Resume that directory explicitly for subsequent
 The persisted `run.toml` records how to replay the run. The settings files describe global and
 default runtime configuration, while `processes/` contains process-specific state. Ordinary
 runs create `gammaloop_state/` unless a different state path is supplied.
+
+#callout("A lifecycle example is not a physics benchmark", [
+  The maintained `gg_hhh` card is useful because it exercises model loading, generation,
+  integration settings, and persistence. It selects a fixed-helicity amplitude contribution
+  with an explicit color projector; running it does not by itself produce an unpolarized,
+  color-averaged cross section or validate a published observable.
+])
 
 == Installation and external tools
 
@@ -92,7 +111,10 @@ together, see the
 == Where to begin
 
 - Use built-in `--help` for the CLI options supported by your installed version.
-- Start with the included `gg_hhh` run card for a complete state lifecycle.
+- Start with the included `gg_hhh` run card for a complete state lifecycle, not as a
+  substitute for a physical normalization and validation plan.
+- Record the method scope and every factor from the
+  #link("guides/conventions/")[normalization checklist] before launching a production run.
 - Use the Rust or Python API only when a program needs structured access to loaded state or
   sample-evaluation results.
 - Check prerequisites before starting an expensive integration; some workflows require a

@@ -8,7 +8,7 @@ the shortest path for inspecting the generated cut events, testing selectors, an
 histograms receive the expected weights. It is an investigative workflow: a few chosen points
 cannot establish convergence or replace the persisted result of an integration.
 
-== Start from the maintained differential example
+== Start from the differential regression example
 
 The repository contains matching Python and Rust journeys for the differential Local Unitarity
 process `e+ e- > d d~ g`. Their run cards generate the real two-graph process and configure:
@@ -17,6 +17,13 @@ process `e+ e- > d d~ g`. Their run cards generate the real two-graph process an
 - jet transverse-momentum, jet-count, and down-quark-energy quantities;
 - a leading-jet selector; and
 - continuous and discrete histogram observables.
+
+#callout("What this example verifies", [
+  This is an API and event-pipeline regression fixture, not a scientifically reviewed
+  perturbative-order or normalization benchmark. Its run card uses a powered coupling selector,
+  but the current filter construction discards that exponent. Keep it for inspecting events and
+  observable plumbing; define and validate production contributions independently.
+])
 
 The run card's `display_named_settings_examples` block lets you inspect each named object before
 evaluation:
@@ -90,6 +97,10 @@ print(batch.observables["leading_jet_pt_hist"].sample_count)
 rewrite the integrand setting. Every `EventGroup` contains correlated accepted events produced by
 one graph group. Each event carries incoming/outgoing momenta, its primary complex weight, cut and
 graph identifiers, and any configured additional weights.
+
+The #link("guides/conventions/")[normalization and weight contract] defines which factors are
+already present in an event weight and why all contributions from one Monte Carlo point must be
+committed as one statistical sample.
 
 #callout("Single and batch results have different aggregation boundaries", [
   `evaluate_sample` returns one `EvaluationResult`: its event groups and observable snapshot

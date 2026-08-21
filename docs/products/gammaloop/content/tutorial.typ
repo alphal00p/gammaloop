@@ -7,6 +7,15 @@ This tutorial builds the GammaLoop command-line interface and uses the included 
 `g g -> h h h` run card to create a state that can be inspected and resumed. Compilation and
 process generation can take longer than a `--help` smoke test.
 
+#callout("What this example establishes", [
+  The card selects one fixed-helicity, one-loop amplitude contribution and supplies an
+  explicit `1/8` color projector. It demonstrates software state creation, inspection, and
+  resumption; it is not an unpolarized, automatically color-averaged cross section. Read the
+  #link("physics/")[method and capability boundary] and
+  #link("guides/conventions/")[normalization conventions] before interpreting either
+  integration block as a physical result.
+])
+
 == Prerequisites
 
 Work from a GammaLoop source checkout. The supported development environment is the repository
@@ -52,9 +61,10 @@ block and persist the result on exit:
   worker cores; make a private copy of the card before changing either value.
 ])
 
-The block imports `sm-default.json`, generates the selected one-loop pentagon contribution,
-builds its integrand, saves DOT data, and writes the state. A successful run exits without an
-error and leaves at least `run.toml`, `global_settings.toml`,
+The block imports `sm-default.json`, generates the selected one-loop pentagon amplitude
+contribution, applies the card's explicit helicity and color choices, builds its integrand,
+saves DOT data, and writes the state. A successful run exits without an error and leaves at
+least `run.toml`, `global_settings.toml`,
 `default_runtime_settings.toml`, and `processes/` in the state folder. `run.toml` records the
 commands and settings needed to replay the run; it is not merely a log file.
 
@@ -71,7 +81,8 @@ Load the saved state and ask the active session to display its processes:
 Success means the display includes the generated `gg_hhh` process and the command exits while
 keeping the same state. You can now run the card's `integrate_euclidean` or
 `integrate_physical` block, but those are deliberately beyond the first-success path because
-they request a substantial Monte Carlo integration.
+they request a substantial Monte Carlo integration and require a separate normalization and
+validation plan.
 
 == Inspect before expensive work
 
