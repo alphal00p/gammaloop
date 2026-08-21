@@ -1,5 +1,20 @@
 use super::*;
 use gammaloop_integration_tests::run_card;
+use gammalooprs::settings::runtime::SamplingSettings;
+
+fn current_sampling_settings(
+    cli: &gammaloop_integration_tests::CLIState,
+) -> Result<SamplingSettings> {
+    let (process_id, integrand_name) = cli.state.find_integrand_ref(None, None)?;
+    Ok(cli
+        .state
+        .process_list
+        .get_integrand(process_id, &integrand_name)?
+        .require_generated()?
+        .get_settings()
+        .sampling
+        .clone())
+}
 
 #[test]
 fn massless_triangle_bulk_profile_passes() -> Result<()> {
@@ -33,12 +48,14 @@ fn massless_triangle_bulk_profile_passes() -> Result<()> {
     cli.default_runtime_settings = run_history.default_runtime_settings.clone();
 
     run_commands(&mut cli, &setup_commands)?;
+    let previous_sampling = current_sampling_settings(&cli)?;
 
     let profile_result = Profile::InfraRed(InfraRedProfile::default())
         .run(&mut cli.state, &cli.cli_settings)?
         .unwrap_ir();
 
     assert!(profile_result.all_passed, "{profile_result}");
+    assert_eq!(current_sampling_settings(&cli)?, previous_sampling);
 
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
@@ -76,12 +93,14 @@ fn dotted_bubble_amp_bulk_profile_passes() -> Result<()> {
     cli.default_runtime_settings = run_history.default_runtime_settings.clone();
 
     run_commands(&mut cli, &setup_commands)?;
+    let previous_sampling = current_sampling_settings(&cli)?;
 
     let profile_result = Profile::InfraRed(InfraRedProfile::default())
         .run(&mut cli.state, &cli.cli_settings)?
         .unwrap_ir();
 
     assert!(profile_result.all_passed, "{profile_result}");
+    assert_eq!(current_sampling_settings(&cli)?, previous_sampling);
 
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
@@ -119,12 +138,14 @@ fn double_dotted_bubble_amp_bulk_profile_passes() -> Result<()> {
     cli.default_runtime_settings = run_history.default_runtime_settings.clone();
 
     run_commands(&mut cli, &setup_commands)?;
+    let previous_sampling = current_sampling_settings(&cli)?;
 
     let profile_result = Profile::InfraRed(InfraRedProfile::default())
         .run(&mut cli.state, &cli.cli_settings)?
         .unwrap_ir();
 
     assert!(profile_result.all_passed, "{profile_result}");
+    assert_eq!(current_sampling_settings(&cli)?, previous_sampling);
 
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
@@ -162,12 +183,14 @@ fn scalar_self_energy_amp_bulk_profile_passes() -> Result<()> {
     cli.default_runtime_settings = run_history.default_runtime_settings.clone();
 
     run_commands(&mut cli, &setup_commands)?;
+    let previous_sampling = current_sampling_settings(&cli)?;
 
     let profile_result = Profile::InfraRed(InfraRedProfile::default())
         .run(&mut cli.state, &cli.cli_settings)?
         .unwrap_ir();
 
     assert!(profile_result.all_passed, "{profile_result}");
+    assert_eq!(current_sampling_settings(&cli)?, previous_sampling);
 
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
