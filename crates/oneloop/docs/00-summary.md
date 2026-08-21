@@ -50,6 +50,7 @@ validation.
 | **tensor / dotted numerators** — RSP rules, PV transverse average, the gammaloop→family bridge | [03-numerators](03-numerators.md) |
 | **the on-shell-massless frontier** — why massless legs are hard, the off-shell-δ fix, literature | [04-frontier](04-frontier.md) |
 | the live app — the "Reduce to masters" button, end-to-end | [05-app](05-app.md) |
+| **chirality-projector traces** — how closed fermion loops (`gg→h`, electroweak) now collapse instead of leaving an inert `Tr(…ℙ…)` (idenso fix) | [08-projector-traces](08-projector-traces.md) |
 | the validation story in prose | [06-benchmarks](06-benchmarks.md) |
 | **the results + numbers** — 132/132, the three MadLoop batches, tables | [07-benchmark-report](07-benchmark-report.md) |
 | the MadLoop reference numbers (~110 processes, 3 batches) | [../benchmarks/madloop_reference.md](../benchmarks/madloop_reference.md) |

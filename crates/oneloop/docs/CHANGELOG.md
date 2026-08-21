@@ -10,6 +10,21 @@ for the app integration, [the app](05-app.md).
 
 ---
 
+## Chirality-projector traces — closed fermion loops collapse (2026-08-21)
+- **idenso fix (the app-numerator win).** Closed fermion loops carrying a chirality
+  projector (`gg→h`, `H→γγ`, all electroweak) left an inert `Tr(γ … ℙ_p … γ)` in the
+  reduced numerator. Root cause: `dirac/simplify.rs`'s trace evaluator bailed on the
+  projector factor. Fix (3 surgical additions, all in `idenso`): expand
+  `ℙ± → ½(δ ± γ5)` at `simplify` entry, close an equal-endpoint `chain(i,i) → trace`,
+  and a `bispinor_rep_of_slot` helper. `spenso` untouched; flows to the app through the
+  existing `simplify_gamma()` in `gammalooprs`; no public API change.
+- **Validated end-to-end.** `Tr(ℙ₊ γμγνγργσ) →` exact metrics + ε (unit test); 21
+  FORM/FeynCalc reference tests pass; real `gg→h` now reduces to
+  `C0(…; MT²,MT²,MT²) + 3·B0` with **zero residual traces**. See
+  [projector traces](08-projector-traces.md).
+
+---
+
 ## Completeness + validation expansion (2026-08-21)
 - **Reducer completeness.** `gram_solve` now pseudo-inverts a rank-deficient Gram (solve on a maximal
   independent sub-Gram, redundant coefficients zero), so **N≥7 tensor numerators** and coincident-momenta
