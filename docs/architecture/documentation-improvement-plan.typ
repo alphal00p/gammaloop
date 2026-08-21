@@ -36,6 +36,14 @@ verified. Generated provenance is a strength, not an excuse for a lower bar:
 Python, CLI, settings, and other generated reference pages should be as
 readable, navigable, and thorough as authored pages.
 
+The concrete content backlogs are maintained separately. The
+#link("manual-content-debt-register.typ")[manual content debt register] owns
+audience, scientific explanation, workflows, terminology, and result
+interpretation. The #link("api-documentation-debt-register.typ")[API
+documentation debt register] owns item contracts, examples, support boundaries,
+and verified reference defects. Both assign stable identifiers and completion
+conditions; this plan retains the cross-product strategy and quality gates.
+
 This review uses the following priorities:
 
 - *P0 — integrity:* a defect can publish stale material, produce a broken

@@ -1,0 +1,370 @@
+= API documentation debt register
+<api-documentation-debt-register>
+
+#quote(block: true)[
+  *Status:* Open register
+
+  *Review date:* 2026-08-21
+
+  *Reviewed baseline:* `4e77d8804aa3394992572575dab5d3f9dedf65a9`
+
+  *Scope:* Native Rustdoc and generated Python references published for GammaLoop,
+  Linnet, Spenso, Idenso, and Vakint. CLI and settings entries are included only
+  where they contradict an API contract.
+]
+
+== Purpose
+
+This is the canonical backlog for known API-reference deficiencies. The broader
+#link("documentation-improvement-plan.typ")[documentation improvement plan]
+sets the audience and product-content strategy; this register records the concrete
+reference surfaces that still lack accurate contracts, useful examples, or an
+explicit support boundary.
+
+The companion #link("manual-content-debt-register.typ")[manual content debt
+register] owns findings about audience, scientific explanation, complete workflows,
+terminology, citations, and result interpretation. API items link those workflows
+without duplicating their prose requirements here.
+
+A generated signature is inventory, not complete documentation. A supported API
+item is complete only when a reader can determine:
+
+- its domain purpose and the conditions under which it is appropriate;
+- parameter meaning, conventions, units, defaults, and related preconditions;
+- return-value structure, ownership or mutation behavior, and interpretation;
+- errors, panics, side effects, feature or license requirements, and stability;
+- at least one minimal, independently runnable example with a checked result; and
+- the conceptual guide to read when correct use requires more than local prose.
+
+Rust references should additionally state important invariants, complexity or
+allocation behavior, feature gates, and safety or panic conditions. Python examples
+must include imports and setup, must not depend on unnamed variables or private
+state, and must distinguish illustrative fragments from verified journeys.
+
+== Maintenance contract
+
+Identifiers in this register are stable. Use `Open`, `In progress`, `Blocked`, or
+`Resolved` as the status. When API work exposes a new deficiency, add or refine an
+entry in the same change. Mark an entry resolved only when its completion condition
+is backed by the source documentation and the relevant example-verification tier.
+Keep resolved entries through the next documentation review with the resolving
+change ID, then remove them from the active register.
+
+The counts below are an audit snapshot, not quality scores or permanent targets.
+They measure whether generated module-index rows have summaries and whether Python
+members have nonempty prose; they do not measure scientific correctness. Future
+automation may regenerate these counts, but the semantic and example-quality gaps
+remain a maintained review responsibility.
+
+== Audit snapshot
+
+=== Native Rustdoc
+
+#table(
+  columns: (1.2fr, 0.8fr, 2.4fr),
+  table.header([*Component*], [*Described index rows*], [*Immediate interpretation*]),
+  [`gammalooprs`], [66 / 884 (7%)], [No crate orientation and very sparse contracts across the scientific core.],
+  [`gammaloop-api`], [11 / 160 (6%)], [The supported state/session facade has no end-to-end Rust workflow.],
+  [Linnet], [94 / 216 (43%)], [Best baseline, but several prominent claims are stale or incorrect.],
+  [Spenso], [113 / 480 (23%)], [Central structure, contraction, and network contracts remain fragmented.],
+  [`spenso-hep-lib`], [4 / 25 (16%)], [Scientifically sensitive conventions and identities are mostly absent.],
+  [`spenso-macros`], [0 / 1], [Macro availability exists without an orienting contract or example.],
+  [Idenso], [43 / 109 (39%)], [Item prose exists unevenly, while crate/module and rewrite-stage orientation is missing.],
+  [Vakint], [0 / 84], [The public Rust engine and result types are effectively an undocumented inventory.],
+)
+
+The curated Rust support catalog attaches an example to each supported item, but
+many examples only import a type. Those examples prove name resolution, not behavior
+or semantics, and do not satisfy the completion standard above.
+
+=== Python
+
+#table(
+  columns: (1.2fr, 1fr, 2.2fr),
+  table.header([*Package*], [*Surface snapshot*], [*Immediate interpretation*]),
+  [`gammaloop-python`], [40 exports; 262 members], [65 member descriptions are blank, chiefly around public integration-result records; core examples depend on an unspecified state and point.],
+  [`linnet-py`], [21 exports; 178 members], [54 member descriptions are blank and the generated reference contains no runnable examples.],
+  [`spynso3`], [14 exports; 119 members], [34 member descriptions are blank; numerous examples are fragments or violate the documented registration workflow.],
+  [`idenso-community`], [16 functions], [All exports have prose, but only nine have examples and none is runtime-verified.],
+  [`vakint-community`], [4 classes; 20 members], [Member prose exists, but examples are non-standalone and exception contracts are absent.],
+)
+
+The Python stub checks currently verify exports and signatures. Docstring examples are
+embedded prose rather than structured examples and are not executed, so example
+presence must not be reported as example validity.
+
+== Integrity defects
+
+=== APIDOC-001 · GammaLoop sample coordinates and precision
+
+*Priority:* P0 · *Status:* Open · *Surface:* GammaLoop CLI, Rust, and Python
+
+`inspect` and `approach` describe momentum input as `(p0 px ...)`, while
+#link("../../crates/gammaloop-api/src/commands/evaluate_samples.rs")[the shared input builder]
+requires flattened `(px, py, pz)` triplets. The same CLI options describe
+`use_arb_prec` as f128 while Python calls it arbitrary precision.
+
+*Complete when:* every interface states the same coordinate layouts and precision
+levels, rejects malformed input consistently, and links to one canonical evaluation
+contract with a checked example.
+
+=== APIDOC-002 · Incorrect Linnet Rustdoc claims
+
+*Priority:* P0 · *Status:* Open · *Surface:* Linnet Rustdoc
+
+#link("../../crates/linnet/src/parser/mod.rs")[The parser module] names a nonexistent
+`HedgeGraphSet`, uses the nonexistent `linnet::dot_parser` path, and hides its example
+behind `ignore`. The half-edge module calls the structure a DCEL and claims face
+traversal although no embedding or rotation-system API supplies that operation.
+
+*Complete when:* the public description matches the implemented half-edge model, all
+named paths and types resolve, and the conceptual parser example runs.
+
+=== APIDOC-003 · Contradictory Spynso network examples
+
+*Priority:* P0 · *Status:* Open · *Surface:* `spynso3` Python reference
+
+The generated `TensorNetwork` example executes named tensor expressions without
+registering their data or supplying a library. The maintained Python guide correctly
+requires registration before execution.
+
+*Complete when:* generated and authored examples share one independently runnable
+registration-to-execution journey with an asserted result.
+
+=== APIDOC-004 · Idenso identity claims require scientific review
+
+*Priority:* P0 · *Status:* Open · *Surface:* `idenso-community` Python reference
+
+The `simplify_color` prose contains index-inconsistent contractions and a Fierz formula
+that is not consistent with the stated normalization. Gamma-trace and gamma-five
+claims also lack the dimensional-scheme qualifications needed to interpret them.
+
+*Complete when:* the identities are checked against the implemented conventions,
+free and dummy indices are consistent, dimensional assumptions are explicit, and
+each advertised identity has a runtime-verified example.
+
+=== APIDOC-005 · Vakint reference examples and public terminology
+
+*Priority:* P0 · *Status:* Open · *Surface:* Vakint Rust and Python references
+
+Python snippets assume undefined expressions, masses, momenta, engines, or Symbolica
+objects. Public prose also contains misspellings such as `susbstitute_masters`,
+`direct_numerical_substition`, “espilon,” and “vaking integral.” The crate example
+named `twoloop_matching` configures an evaluation backend and probes FORM despite the
+matching-only tutorial's stated dependency boundary.
+
+*Complete when:* matching and evaluation examples are separately named, standalone,
+and checked; public terminology is corrected or explicitly preserved as a compatibility
+constraint; and each example declares its external-tool requirements.
+
+== Native Rustdoc gaps
+
+=== APIDOC-101 · GammaLoop scientific-core contract
+
+*Priority:* P1 · *Status:* Open · *Surface:* `gammalooprs`
+
+Add crate-level scope and non-goals, a supported-versus-internal boundary, and module
+orientation. Document the sampling, weighting, precision, merging, and observable
+invariants around `HasIntegrand` and `evaluate_samples_raw`. Explain global/runtime
+settings lifecycle, precedence, units, defaults, errors, and cancellation-context
+semantics.
+
+*Complete when:* a Rust user can evaluate and interpret one maintained integrand
+without learning the execution contract from implementation code.
+
+=== APIDOC-102 · GammaLoop Rust facade workflow
+
+*Priority:* P1 · *Status:* Open · *Surface:* `gammaloop-api`
+
+The crate has no crate/module orientation or Rustdoc `Examples` sections. Central
+state-load options, loaded-state types, and `cli_session` need contracts for filesystem
+effects, read-only behavior, ownership, errors, and persistence.
+
+*Complete when:* one runnable workflow demonstrates load or create → command or
+generation → evaluation or integration → interpreted output, with license and
+side-effect boundaries stated.
+
+=== APIDOC-103 · Vakint native engine and result model
+
+*Priority:* P1 · *Status:* Open · *Surface:* `vakint`
+
+The crate root, exported modules, momentum representations, error type, integral,
+backend options, evaluation order, settings, engine, expression, and numerical result
+types lack native Rustdoc contracts.
+
+*Complete when:* the reference defines mathematical notation and normalization,
+epsilon-order semantics, backend selection and dependencies, stage transitions,
+temporary-file/error behavior, and a checked Laurent-series calculation.
+
+=== APIDOC-104 · Spenso HEP conventions
+
+*Priority:* P1 · *Status:* Open · *Surface:* `spenso-hep-lib`
+
+Dirac and Weyl gamma matrices, gamma five, projectors, sigma tensors, and library
+constructors lack basis, metric, index-order, normalization, and required-structure
+contracts. An implementation comment notes that a required structure shape is not
+checked.
+
+*Complete when:* the public preconditions and failure behavior are explicit and
+checked Clifford, projector, and SU(3) identities demonstrate the chosen conventions.
+
+=== APIDOC-105 · Spenso structure and network invariants
+
+*Priority:* P1 · *Status:* Open · *Surface:* `spenso`
+
+`TensorStructure`, direct contraction, `Network`, execution modes/results/errors, and
+strategy types lack one cohesive contract. Coordinate order, free/dummy matching,
+dense/sparse guarantees, planning versus execution ownership, feature gates, and
+complexity are distributed or absent.
+
+*Complete when:* those contracts are local to the relevant items and one checked
+three-tensor example demonstrates contraction order and result structure.
+
+=== APIDOC-106 · Idenso rewrite-stage contracts
+
+*Priority:* P1 · *Status:* Open · *Surface:* `idenso`
+
+Add crate and exported-module orientation, then document `IndexTooling`, cooking,
+selective expansion, representation setup, dummy-index freshness, termination or
+idempotence expectations, and errors. Distinguish currently implemented FORM-derived
+rules from target specifications.
+
+*Complete when:* one checked Dirac/color workflow makes each stage, invariant, and
+implemented rule boundary visible from Rustdoc.
+
+=== APIDOC-107 · Linnet behavioral Rust examples
+
+*Priority:* P1 · *Status:* Open · *Surface:* `linnet`
+
+After APIDOC-002, document graph, builder, storage, and subgraph invariants; explain
+compound algorithm returns and mutation invalidation; and replace ignored or import-only
+examples with parse → algorithm → serialize and mutation workflows.
+
+*Complete when:* the examples run under the documented features and assert graph
+properties rather than merely resolving names.
+
+=== APIDOC-108 · Linnest Rust support boundary
+
+*Priority:* P1 · *Status:* Open · *Surface:* `linnest`
+
+Linnest is excluded from published Rust components but publicly re-exports byte/archive
+operations and types without crate orientation or examples.
+
+*Complete when:* the surface is explicitly classified as an internal Typst/WASM bridge
+or a supported Rust API. A supported surface must document wire compatibility, schemas,
+determinism, errors/panics, and a checked byte round trip.
+
+== Python reference gaps
+
+=== APIDOC-201 · GammaLoop integration-result boundary
+
+*Priority:* P1 · *Status:* Open · *Surface:* `gammaloop-python`
+
+Integration output, estimates, statistics, and table records are public, unsupported,
+and largely undocumented, while the authored guide says Python has no supported
+structured integration producer.
+
+*Complete when:* either a supported producer and full result contract exist, including
+units and uncertainties, or these records are removed from the curated public surface
+and clearly marked provisional at their source boundary.
+
+=== APIDOC-202 · GammaLoop evaluation and event journeys
+
+*Priority:* P1 · *Status:* Open · *Surface:* `gammaloop-python`
+
+Current examples rely on an unspecified `./state`, undefined points, and no expected
+values. Events, correlated event groups, histogram accumulators, snapshots, merging,
+and rebinning have no complete examples.
+
+*Complete when:* a shipped state supports two verified journeys: open → inspect
+dimension → evaluate known point → interpret value/Jacobian/weight/stability; and batch
+evaluate → preserve event groups → fill/commit/merge/rebin → assert a bin result.
+
+=== APIDOC-203 · Linnet Python algorithms and proxies
+
+*Priority:* P1 · *Status:* Open · *Surface:* `linnet-py`
+
+The reference has no examples. It does not explain the spanning-forest result from
+`cycle_basis`, the left/cut/right parts of `all_cuts`, traversal flags, callback
+signatures, mutation failures, or proxy lifetime and write-through behavior.
+
+*Complete when:* DOT parse/build → indexing → components/cycle basis → checked result
+is runnable, and compound returns, callbacks, proxies, and mutation behavior have
+local semantic contracts.
+
+=== APIDOC-204 · Spynso standalone examples and member semantics
+
+*Priority:* P1 · *Status:* Open · *Surface:* `spynso3`
+
+Many example headings exist, but snippets depend on variables such as `evaluator`,
+`large_input_batch`, `some_expression`, or `expr1`. Important dual, structure,
+naming, bracket, and broadcast members do not state mutation/copy or compatibility
+semantics.
+
+*Complete when:* examples contain imports, setup, operation, and assertion; placeholder
+variables are eliminated; and constructors/evaluators document shape, lookup,
+compilation, mutation, and result-kind errors.
+
+=== APIDOC-205 · Idenso Python transformation coverage
+
+*Priority:* P1 · *Status:* Open · *Surface:* `idenso-community`
+
+`dirac_adjoint`, bispinor/color/metric/Minkowski expansion, initialization, and color
+simplification lack checked examples. Existing authored examples are syntax-compiled
+only.
+
+*Complete when:* a convention-explicit HEP expression passes through color and Dirac
+rewrite stages with asserted free indices and expected identities, and each remaining
+transformation has at least one runtime-verified example.
+
+=== APIDOC-206 · Vakint Python journeys and failures
+
+*Priority:* P1 · *Status:* Open · *Surface:* `vakint-community`
+
+No declaration provides a useful raises contract, and examples are fragments. Parsing,
+unknown topology, missing external tool, backend failure, missing numerical parameters,
+and comparison failure are not distinguished.
+
+*Complete when:* one matching-only journey asserts an exact topology, one configured
+evaluation journey checks Laurent coefficients, and public operations document their
+exception conditions.
+
+== Cross-reference infrastructure gaps
+
+=== APIDOC-301 · Curated support boundaries
+
+*Priority:* P1 · *Status:* Open
+
+GammaLoop and Spynso use curated support lists, while Linnet, Idenso, and Vakint
+currently classify every exported Python item as supported. Some Rust implementation
+surfaces are published without an equivalent stability decision.
+
+*Complete when:* every generated reference item is classified as supported,
+provisional, or internal from implementation-owned metadata, and authored interface
+guides use the same boundary.
+
+=== APIDOC-302 · Structured, verified examples
+
+*Priority:* P1 · *Status:* Open
+
+Python docstring examples render as prose and populate no structured example field.
+Rust catalog examples often prove only imports. Signature checks therefore cannot
+distinguish a runnable journey from a fragment.
+
+*Complete when:* supported items can attach structured examples with a verification
+tier, dependencies, expected result, and source location; publication reports example
+coverage separately from signature coverage; and selected no-license examples execute
+in the pull-request tier.
+
+=== APIDOC-303 · Semantic completeness gate
+
+*Priority:* P2 · *Status:* Open
+
+Current generation rejects some missing descriptions but does not require conventions,
+returns, failures, side effects, or useful examples. Enabling strict missing-docs checks
+across every exposed implementation item immediately would create undifferentiated
+noise.
+
+*Complete when:* the curated supported surface is checked first against the completion
+standard in this register, with actionable reporting by component and gap category.
+Coverage of provisional and internal surfaces may then be expanded deliberately.

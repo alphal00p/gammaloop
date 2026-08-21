@@ -706,3 +706,33 @@ review_ref = "6feaba98e48a2cedb4688d3d0cc9a214716a8677"
 products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
 topics = ["documentation", "quality"]
 review_triggers = ["docs/**", "crates/alphal00p-docs-*/**", ".github/workflows/docs-pages.yml", "flake.nix", "justfile"]
+
+[[section.note]]
+id = "manual-content-debt-register"
+title = "Manual content debt register"
+summary = "A maintained inventory of audience, scientific-explanation, workflow, terminology, result-interpretation, and product-handoff gaps in the authored manuals."
+source = "docs/architecture/manual-content-debt-register.typ"
+kind = "Documentation debt register"
+status = "Open · reviewed 2026-08-21"
+lifecycle = "proposal"
+owner = "unassigned"
+reviewed_at = "2026-08-21"
+review_ref = "4e77d8804aa3394992572575dab5d3f9dedf65a9"
+products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
+topics = ["documentation", "manuals", "physics", "workflows", "examples"]
+review_triggers = ["docs/products/**", "docs/examples.toml", "docs/products/registry.toml", "docs/data/publications.json", "examples/**", "crates/linnest/typst/docs/**", "crates/kurvst/typst/docs/**", "crates/**/CHANGELOG.typ", "crates/**/README.md"]
+
+[[section.note]]
+id = "api-documentation-debt-register"
+title = "API documentation debt register"
+summary = "A maintained inventory of inaccurate, incomplete, provisional, and example-deficient Rust and Python reference surfaces, with stable IDs and completion conditions."
+source = "docs/architecture/api-documentation-debt-register.typ"
+kind = "Documentation debt register"
+status = "Open · reviewed 2026-08-21"
+lifecycle = "proposal"
+owner = "unassigned"
+reviewed_at = "2026-08-21"
+review_ref = "4e77d8804aa3394992572575dab5d3f9dedf65a9"
+products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
+topics = ["documentation", "rustdoc", "python", "api", "examples"]
+review_triggers = ["crates/gammalooprs/src/**", "crates/gammaloop-api/src/**", "crates/linnet/src/**", "crates/linnet-py/src/**", "crates/spenso/src/**", "crates/spenso-hep-lib/src/**", "crates/spynso3/src/**", "crates/idenso/src/**", "crates/vakint/src/**", "docs/api/python/**", "docs/products/**/content/api.typ", "docs/examples.toml", "crates/alphal00p-docs-catalogs/src/**", "crates/alphal00p-docs-python-exporter/src/**"]
