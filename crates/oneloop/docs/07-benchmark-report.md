@@ -135,6 +135,18 @@ reducing an evenly-spaced sample of each process's one-loop diagrams:
 Every master class A0/B0/C0/D0 is exercised on real diagrams, and across 848
 physical numerators the reducer hit **zero** degenerate-Cayley failures.
 
+### Pentagons and beyond — the bridge extended to N ≥ 5 (2026-08-21)
+
+The graph → reducer bridge previously mapped externals only up to `q3`
+(four-point). It now builds the external-momentum symbols dynamically
+(`P(j) → q{j+1}`, up to nine-point), so the deployed pipeline reduces **5+ point**
+physical diagrams. Validated **live** on **`e+e-→ddg`** (Valentin's pentagon
+process): 184 one-loop diagrams; of 15 sampled, **11 reduced, 4 graceful
+zero-numerator, 0 walls, 0 errors**, and **6 reductions reference `q4`** — the
+genuine five-point external momentum the old bridge could not produce. Reductions
+reach `D0` and run to ~10 MB (gzip-compressed on the wire). The app now handles
+pentagons, hexagons, and beyond — not just boxes.
+
 ---
 
 ## 4. MadLoop reproduction (~14 digits)
@@ -145,6 +157,16 @@ loop-induced), anchored on Valentin's benchmark `e⁺e⁻ → γ → dd̄ [virt=
 matched to ~14 digits, and the `gg → h` massive-top on-shell triangle where the
 `reg_delta` regularization matches an independent computation to `3.4e-7`
 (numeric extrapolation) / `3.2e-10` (symbolic-δ).
+
+**Two tiers of MadLoop validation.** The 14-digit numbers above are the *full
+amplitude* (spinor trace + colour + Born interference); `oneloop` supplies the
+**reduction**, which is validated against **OneLOop** — the very master library
+MadLoop links (§1, 132/132 families). At the deployed-app level the reducer
+reduces the MadLoop-listed processes directly: the triangle `e⁺e⁻→dd̄`, the boxes
+`uū→dd̄` / `dd̄→dd̄`, the 4-gluon `gg→gg`, the loop-induced `gg→h` / `h→γγ` /
+`γγ→γγ`, and — newly, via the N≥5 bridge — the **pentagon `e⁺e⁻→ddg`** (§3). A
+fresh *full-amplitude* anchor requires an MG5_aMC run plus the amplitude assembly
+(the app/graph-bridge project), not the reducer in isolation.
 
 ---
 
