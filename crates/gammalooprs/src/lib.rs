@@ -19,6 +19,7 @@ pub mod momentum;
 pub mod numerator;
 pub mod observables;
 pub mod processes;
+mod reduce_bridge;
 pub mod settings;
 pub mod subtraction;
 pub mod tests;
