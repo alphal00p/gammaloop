@@ -592,6 +592,57 @@ fn main() {
         "1",
     );
 
+    // ---- RANK >= 3 MIXED tensor numerators (the open generalization) ----
+    // High-rank numerators with DISTINCT external directions (not just isotropic (k^2)^p).
+    // Chosen UV-finite (rank r < 2(N-2)) so the moment/scipy oracle validates the finite
+    // part directly: box r=3; pentagon r=3,4; hexagon r=3,5.  Two spacelike geometries.
+    // Placed last so any panic in this frontier area cannot truncate the families above.
+    for (off, msq) in [(&OFF_A, &MSQ_A), (&OFF_B, &MSQ_B)] {
+        let q1q2q3 = &(&dot_lq(0) * &dot_lq(1)) * &dot_lq(2);
+        // box (N=4), rank-3
+        emit_num("mix_q1q2q3_N4", off, msq, 4, vec![1; 4], q1q2q3.clone(), "q1q2q3");
+        emit_num(
+            "mix_q1q1q2_N4",
+            off,
+            msq,
+            4,
+            vec![1; 4],
+            &(&dot_lq(0) * &dot_lq(0)) * &dot_lq(1),
+            "q1q1q2",
+        );
+        // pentagon (N=5), rank-3 and rank-4
+        emit_num("mix_q1q2q3_N5", off, msq, 5, vec![1; 5], q1q2q3.clone(), "q1q2q3");
+        emit_num(
+            "mix_q1q2q3q4_N5",
+            off,
+            msq,
+            5,
+            vec![1; 5],
+            &(&(&dot_lq(0) * &dot_lq(1)) * &dot_lq(2)) * &dot_lq(3),
+            "q1q2q3q4",
+        );
+        emit_num(
+            "mix_llq1q2_N5",
+            off,
+            msq,
+            5,
+            vec![1; 5],
+            &(&dot_ll() * &dot_lq(0)) * &dot_lq(1),
+            "llq1q2",
+        );
+        // hexagon (N=6), rank-3 and rank-5
+        emit_num("mix_q1q2q3_N6", off, msq, 6, vec![1; 6], q1q2q3.clone(), "q1q2q3");
+        emit_num(
+            "mix_llq1q2q3_N6",
+            off,
+            msq,
+            6,
+            vec![1; 6],
+            &(&(&dot_ll() * &dot_lq(0)) * &dot_lq(1)) * &dot_lq(2),
+            "llq1q2q3",
+        );
+    }
+
     // (on-shell / SINV scaffolding — ms_/ggh_/ggho_/reg_ — removed: the offset-based
     //  scipy/tensor oracle can't validate SINV kinematics. The regularization fix is
     //  unit-tested in src (on_shell_massless_triangle_rank2_regularizes); results in

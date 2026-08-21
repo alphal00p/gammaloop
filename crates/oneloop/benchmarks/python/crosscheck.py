@@ -46,17 +46,24 @@ SGN_LQ = -1                            # dot(k,q)_Mink = -(k_E . q_E) for spacel
 
 
 def builder_for(num):
-    """Tensor-oracle numerator builder for a dot(k,q_j) label (q<i>, q<i>q<j>, llq<i>), else None."""
-    if _re.fullmatch(r"q\d", num):
-        i = int(num[1]) - 1
-        return lambda qv, LL, LQ: LQ(qv[i], SGN_LQ)
-    if _re.fullmatch(r"q\dq\d", num):
-        i, j = int(num[1]) - 1, int(num[3]) - 1
-        return lambda qv, LL, LQ: LQ(qv[i], SGN_LQ) * LQ(qv[j], SGN_LQ)
-    if _re.fullmatch(r"llq\d", num):
-        i = int(num[3]) - 1
-        return lambda qv, LL, LQ: LL() * LQ(qv[i], SGN_LQ)
-    return None
+    """Tensor-oracle numerator builder for a mixed dot(k,q_j) label: an optional 'll'
+    (= dot(k,k)) prefix followed by one or more q<i> factors -> the product of the
+    matching LQ(q_i) moments (times LL() when 'll'-prefixed). Handles ARBITRARY rank
+    (q1, q1q2, q1q2q3, q1q2q3q4, llq1, llq1q2, llq1q2q3, ...); else None. The moment
+    tensor oracle (`tensor_direct_general`) integrates whatever product this builds."""
+    m = _re.fullmatch(r"(ll)?((?:q\d)+)", num)
+    if not m:
+        return None
+    has_ll = m.group(1) is not None
+    idxs = [int(c) - 1 for c in _re.findall(r"q(\d)", m.group(2))]
+
+    def build(qv, LL, LQ):
+        expr = LL() if has_ll else 1
+        for i in idxs:
+            expr = expr * LQ(qv[i], SGN_LQ)
+        return expr
+
+    return build
 
 
 # oneloop's MasterIntegral stores the pairwise Cayley invariants in LEXicographic order,
