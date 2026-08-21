@@ -81,6 +81,7 @@
       "symbolica-utils"
     ],
     "linnet-py": [
+      "clinnet",
       "linnet"
     ],
     "spenso": [
@@ -241,6 +242,7 @@
       "symbolica-utils": []
     },
     "linnet-py": {
+      "clinnet": [],
       "linnet": []
     },
     "spenso": {
@@ -422,6 +424,7 @@
       "symbolica-utils"
     ],
     "linnet-py": [
+      "clinnet",
       "gammaloop-workspace-hack",
       "linnet"
     ],
@@ -550,6 +553,7 @@
       "symbolica-utils"
     ],
     "linnet-py": [
+      "clinnet",
       "gammaloop-workspace-hack",
       "linnet"
     ],
@@ -706,6 +710,7 @@
       "symbolica-utils"
     ],
     "linnet-py": [
+      "clinnet",
       "linnet"
     ],
     "spenso": [
@@ -872,6 +877,7 @@
       "symbolica-utils": []
     },
     "linnet-py": {
+      "clinnet": [],
       "linnet": []
     },
     "spenso": {

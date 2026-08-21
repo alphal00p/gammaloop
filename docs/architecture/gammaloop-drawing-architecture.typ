@@ -1,7 +1,7 @@
 = GammaLoop Drawing Architecture
 
 #quote(block: true)[
-#strong[Status:] Current contract; audited against the implementation on 2026-08-18
+#strong[Status:] Current contract; audited against the implementation on 2026-08-21
 
 The pipeline, ownership, DOT parser fields, callback data, path styles, and subgraph sections
 describe the implemented drawing stack. The superseded `*-eval` and placeholder-interpolation
@@ -31,9 +31,15 @@ rendering run has these steps:
    its app templates there (`figure.typ`, `grid.typ`, `layout.typ`, `layout-core.typ`), while the
    shared Linnest/Kurvst package files keep their canonical workspace layout
    under `drawings/templates/crates/{linnest,kurvst}/typst/`.
-+ The `linnet` CLI compiles `figure.typ` for each DOT file. The figure
-   template reads the file through `sys.inputs.data-path` and forwards the DOT
-   text to `layout.typ`.
++ Clinnet's shared renderer compiles `figure.typ` for each DOT graph by invoking an external
+   Typst 0.15 or newer executable. The `linnet` CLI and `linnet-py`'s `DotGraph.render` and
+   `DotGraph.to_svg` use this same renderer; it is orchestration around Typst, not a native Rust
+   drawing backend.
++ The generic rendering path materializes Clinnet's embedded figure/layout templates and the
+   embedded Linnest and Kurvst package assets. The GammaLoop path instead supplies its generated
+   figure-template bundle so model-specific `edge-style.typ` callbacks remain available. The
+   figure template reads the DOT data through `sys.inputs.data-path` and forwards it to
+   `layout.typ`.
 + `layout.typ` binds the extracted Linnest package and generated edge styles;
    `layout-core.typ` then calls `graph.parse`, `layout`, and `draw`.
 + `draw` calls the generated callbacks from `edge-style.typ`, draws edges and
@@ -63,8 +69,17 @@ A user can opt into evaluating the recognized `label`, `display-label`,
   curves, builds Hobby curves through edge layout points, and generates wave,
   zigzag, and coil path patterns.
 
-/ `crates/clinnet`: Provides the `linnet` CLI used to batch-render DOT files with Typst and
-  assemble grid PDFs.
+/ `crates/clinnet`: Provides the shared external-Typst renderer, embedded generic Clinnet,
+  Linnest, and Kurvst assets, and the `linnet` CLI used to batch-render DOT files and assemble
+  grid PDFs.
+
+/ `crates/linnet-py`: Provides the Python graph API. Its `DotGraph` rendering methods delegate
+  to Clinnet's shared renderer, and notebook SVG display delegates to the same path rather than
+  implementing a separate renderer.
+
+GammaLoop's particle policy is not part of Clinnet's generic embedded template. Python callers
+that want GammaLoop particle colors, labels, and path decorations must pass the generated
+GammaLoop `figure.typ` entry point with the rest of its template bundle kept in place.
 
 == Data Ownership
 

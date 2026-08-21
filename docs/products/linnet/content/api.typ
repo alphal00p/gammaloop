@@ -40,10 +40,11 @@ Cargo features enable optional capabilities:
 An item shown in an all-features API reference may not be available in a default build. Check
 its required feature and your `Cargo.toml` before using it.
 
-#boundary("Layout is not rendering", [
-  Linnet can compute layout coordinates, but it does not own a supported Rust renderer. Emit DOT
-  for interchange, use #link("guides/clinnet/")[Clinnet] for command-line figure batches, or use
-  #link("guides/linnest/")[Linnest] when a Typst document owns the final drawing.
+#boundary("Rendering runs through Typst", [
+  Linnet can compute layout coordinates, but the supported renderer is not a native Rust drawing
+  backend. Clinnet's shared renderer invokes an external Typst 0.15 or newer executable over
+  Linnest and Kurvst assets. Use #link("guides/clinnet/")[Clinnet] for command-line figure
+  batches, or use #link("guides/linnest/")[Linnest] when a Typst document owns the final drawing.
 ])
 
 == Standalone Python distribution
@@ -55,19 +56,45 @@ its required feature and your `Cargo.toml` before using it.
   diagnosing compatibility between Rust and Python code.
 ])
 
-The Python binding focuses on DOT-backed graphs and mirrors typed identifiers and subgraphs:
+The Python binding focuses on DOT-backed graphs and mirrors typed identifiers and subgraphs. Its
+builder accepts native names and mappings directly; string values are accepted for the common
+orientation and external-flow choices:
 
 ```python
 from linnet_py import DotGraphBuilder
 
 builder = DotGraphBuilder()
-left = builder.add_node()
-right = builder.add_node()
-builder.add_edge(left, right)
+left = builder.add_node("left", {"label": "incoming vertex"})
+right = builder.add_node("right", {"label": "outgoing vertex"})
+builder.add_external_edge(left, {"label": "p0"}, flow="sink")
+builder.add_edge(left, right, {"label": "p1"}, orientation="default")
 graph = builder.build()
 
 print(graph.dot())
 ```
+
+`orientation` accepts `"default"`, `"reversed"`, or `"undirected"`, while `flow` accepts
+`"source"` or `"sink"`; the corresponding `Orientation` and `Flow` objects remain available
+when typed values are preferable.
+
+`DotGraph.render(output, template=None, inputs=None, typst='typst') -> Path` writes a PDF, SVG,
+or PNG according to the output suffix. `DotGraph.to_svg(template=None, inputs=None,
+typst='typst') -> str` returns SVG text without requiring the caller to manage a temporary file.
+In a notebook, displaying a graph calls the same SVG path automatically through `_repr_svg_`:
+
+```python
+output = graph.render("diagram.pdf", inputs={"title": "Example"})
+svg = graph.to_svg()
+graph  # the final expression in a notebook renders inline
+```
+
+These methods invoke the external `typst` command, which must be Typst 0.15 or newer; `typst`
+can name another executable or an absolute path. The default render uses the generic Clinnet
+figure template and the embedded Linnest and Kurvst package assets. Those assets describe generic
+graph layout and drawing, not GammaLoop's model-specific particle decorations. To preserve photon,
+gluon, fermion, and other generated styles, pass the GammaLoop bundle's `figure.typ` as `template`
+and keep its generated `edge-style.typ`, layout files, and package tree together beneath the same
+Typst project root.
 
 `DotGraph` can also parse one graph from a string or file, or a set of graphs from a string.
 The exported classes include `Hedge`, `NodeIndex`, `EdgeIndex`, `Flow`, `Orientation`, graph
