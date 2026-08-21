@@ -333,8 +333,8 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
             subgraph,
             self.global_data.to_string(),
             &|s| s.statement.clone(),
-            &|s| Some(s.to_string()),
-            &|s| Some(s.to_string()),
+            &|s| Some(s.to_string()).filter(|attributes| !attributes.is_empty()),
+            &|s| Some(s.to_string()).filter(|attributes| !attributes.is_empty()),
         )
         .unwrap();
         output
@@ -624,6 +624,16 @@ pub mod test {
         let gg = g.clone().back_and_forth_dot();
         // println!("{g:?}");
         assert_eq!(g, gg);
+    }
+
+    #[test]
+    fn dot_of_omits_empty_attribute_lists() {
+        let graph: DotGraph = DotGraph::from_string("digraph { A -> B; }").unwrap();
+        let serialized = graph.dot_of(&graph.full_filter());
+
+        assert!(!serialized.contains(" []"));
+        let reparsed: Result<DotGraph, _> = DotGraph::from_string(serialized);
+        assert!(reparsed.is_ok());
     }
 
     #[test]

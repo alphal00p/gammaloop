@@ -55,6 +55,7 @@ let
           "symbolica-utils"
         ],
         "linnet-py": [
+          "clinnet",
           "linnet"
         ],
         "spenso": [
@@ -158,6 +159,7 @@ let
           "symbolica-utils": []
         },
         "linnet-py": {
+          "clinnet": [],
           "linnet": []
         },
         "spenso": {
@@ -300,6 +302,7 @@ let
           "symbolica-utils"
         ],
         "linnet-py": [
+          "clinnet",
           "gammaloop-workspace-hack",
           "linnet"
         ],
@@ -399,6 +402,7 @@ let
           "symbolica-utils"
         ],
         "linnet-py": [
+          "clinnet",
           "gammaloop-workspace-hack",
           "linnet"
         ],
@@ -520,6 +524,7 @@ let
           "symbolica-utils"
         ],
         "linnet-py": [
+          "clinnet",
           "linnet"
         ],
         "spenso": [
@@ -627,6 +632,7 @@ let
           "symbolica-utils": []
         },
         "linnet-py": {
+          "clinnet": [],
           "linnet": []
         },
         "spenso": {
@@ -688,11 +694,7 @@ let
   nextestContextualTestBinaryAttr =
     target: package: "packages.${system}.crate-test-binaries-${target}-${package}";
   workspaceHackPackage = "gammaloop-workspace-hack";
-  # clinnet is binary-only: the flake exposes crate-clinnet, but no
-  # crate-deps-clinnet artifact.
-  workspacePackagesWithDependencyArtifacts = builtins.filter (
-    package: package != "clinnet"
-  ) workspacePackages;
+  workspacePackagesWithDependencyArtifacts = workspacePackages;
   nonWorkspaceHackPackages = builtins.filter (
     package: package != workspaceHackPackage
   ) workspacePackages;
