@@ -40,6 +40,41 @@ static TRACE_TERMINALS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
     )]
 });
 
+/// Rewrites chirality projectors into their gamma-basis definition so the
+/// ordinary chain / trace machinery handles them:
+/// `ℙ₊(a,b) = ½(δ(a,b) + γ5(a,b))`, `ℙ₋(a,b) = ½(δ(a,b) − γ5(a,b))`,
+/// where `δ` is the bispinor identity (`id_atom`) linking the endpoints.
+/// Applied before `collect_gamma_chains`, so a closed fermion loop carrying a
+/// projector (e.g. a `gg→h` top loop) collapses to a Lorentz structure instead
+/// of leaving an inert `trace(... projp ...)`.
+static CHIRALITY_PROJECTORS: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
+    let a = || Atom::var(W_.a_);
+    let b = || Atom::var(W_.b_);
+    let projector = |symbol: Symbol| {
+        FunctionBuilder::new(symbol)
+            .add_arg(a())
+            .add_arg(b())
+            .finish()
+            .to_pattern()
+    };
+    let gamma5_ab = || {
+        FunctionBuilder::new(AGS.gamma5)
+            .add_arg(a())
+            .add_arg(b())
+            .finish()
+    };
+    [
+        Replacement::new(
+            projector(AGS.projp),
+            (id_atom(a(), b()) + gamma5_ab()) / Atom::num(2),
+        ),
+        Replacement::new(
+            projector(AGS.projm),
+            (id_atom(a(), b()) - gamma5_ab()) / Atom::num(2),
+        ),
+    ]
+});
+
 /// Controls how open gamma chains are reordered during simplification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GammaChainOrdering {
@@ -357,7 +392,13 @@ impl<'settings> DiracSimplifier<'settings> {
     }
 
     pub(crate) fn simplify(self, expr: AtomView) -> Atom {
-        let mut expr = expr.to_owned().collect_gamma_chains();
+        // Expand chirality projectors into their gamma-basis definition and
+        // contract the identity link, so closed fermion loops carrying a
+        // projector collapse through the ordinary chain / trace machinery.
+        let mut expr = expr
+            .to_owned()
+            .replace_multiple(CHIRALITY_PROJECTORS.as_ref())
+            .collect_gamma_chains();
 
         loop {
             let next = self
@@ -380,6 +421,18 @@ impl<'settings> DiracSimplifier<'settings> {
         let [start, end, factors @ ..] = args.as_slice() else {
             return None;
         };
+
+        // A chain whose endpoints coincide is a closed fermion loop, i.e. a
+        // trace over that bispinor index. Re-express it so the trace evaluator
+        // takes over. (This arises when a chirality projector's identity part
+        // links the loop closed — see `CHIRALITY_PROJECTORS`.)
+        if start == end
+            && !factors.is_empty()
+            && let Some(rep) = bispinor_rep_of_slot(*start)
+        {
+            let factor_atoms = factors.iter().map(|factor| factor.to_owned()).collect::<Vec<_>>();
+            return Some(trace!(rep; factor_atoms));
+        }
 
         let mut factor_kinds = DiracFactorKinds::default();
         let factors = factors
@@ -1062,6 +1115,24 @@ fn bispinor_dimension(atom: AtomView<'_>) -> Option<AtomView<'_>> {
     }
 
     f.iter().next()
+}
+
+/// Recovers the bispinor representation `bis(dim)` from a bispinor slot
+/// `bis(dim, index)`, so a closed chain can be re-expressed as a trace over
+/// that representation.
+fn bispinor_rep_of_slot(slot: AtomView<'_>) -> Option<Atom> {
+    let AtomView::Fun(f) = slot else {
+        return None;
+    };
+    if f.get_symbol() != *BISPINOR_SYMBOL || f.get_nargs() == 0 {
+        return None;
+    }
+    let dimension = f.iter().next()?;
+    Some(
+        FunctionBuilder::new(*BISPINOR_SYMBOL)
+            .add_arg(dimension)
+            .finish(),
+    )
 }
 
 fn endpoint_factor(symbol: Symbol) -> Atom {

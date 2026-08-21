@@ -14,7 +14,7 @@ use spenso::{chain, s, slot, trace};
 
 use crate::representations::Bispinor;
 use crate::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
-use crate::{gamma, gamma0, gamma5, u, v};
+use crate::{bis, gamma, gamma0, gamma5, u, v};
 
 static GG: LazyLock<PermutedStructure<IndexlessNamedStructure<Symbol, ()>>> = LazyLock::new(|| {
     IndexlessNamedStructure::from_iter(
@@ -298,6 +298,30 @@ fn gamma_trace_evaluation_can_be_disabled() {
     let expr = gamma!(mu, a, b) * gamma!(nu, b, a);
 
     assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()).to_bare_ordered_string(), @"trace(bis(4),cyclic(gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu))))");
+}
+
+#[test]
+fn projector_closed_loop_reduces_through_trace() {
+    test_initialize();
+    // Tr(ℙ₊ γ^μ γ^ν γ^ρ γ^σ) as a raw closed fermion loop built from the real
+    // AGS.gamma / AGS.projp symbols — how a gg→h top loop reaches simplify_gamma.
+    // The trace evaluator used to bail on the projector factor, leaving the loop
+    // inert; it must now collapse to a pure Lorentz structure (metrics + ε).
+    let projp = symbolica::atom::FunctionBuilder::new(AGS.projp)
+        .add_arg(bis!(4, 2))
+        .add_arg(bis!(4, 3))
+        .finish();
+    let expr = gamma!(mu, 1, 2)
+        * projp
+        * gamma!(nu, 3, 4)
+        * gamma!(rho, 4, 5)
+        * gamma!(sigma, 5, 1);
+    // Fully reduces to metrics + ε (no residual trace/chain/projp/gamma):
+    //   Tr(ℙ₊ γ^μ γ^ν γ^ρ γ^σ) = 2(g^{μν}g^{ρσ} − g^{μρ}g^{νσ} + g^{μσ}g^{νρ}) − 2 ε^{μνρσ}.
+    assert_snapshot!(
+        expr.simplify_gamma().expand().to_bare_ordered_string(),
+        @"-2*epsilon(mink(4,mu),mink(4,nu),mink(4,rho),mink(4,sigma))+-2*g(mink(4,mu),mink(4,rho))*g(mink(4,nu),mink(4,sigma))+2*g(mink(4,mu),mink(4,nu))*g(mink(4,rho),mink(4,sigma))+2*g(mink(4,mu),mink(4,sigma))*g(mink(4,nu),mink(4,rho))"
+    );
 }
 
 mod form_reference;
