@@ -696,12 +696,46 @@ fn gram_solve(topo: &Topo, rhs: &[Atom]) -> Vec<Atom> {
     let g: Vec<Vec<Atom>> = (0..n)
         .map(|i| (0..n).map(|j| topo.dir_dot(&dirs[i], &dirs[j])).collect())
         .collect();
-    // Solve G c = rhs
+    gram_solve_matrix(&g, rhs)
+}
+
+fn gram_solve_matrix(g: &[Vec<Atom>], rhs: &[Atom]) -> Vec<Atom> {
+    let n = g.len();
     let b: Vec<Vec<Atom>> = rhs.iter().map(|x| vec![x.clone()]).collect();
-    let sol = to_matrix(&g).solve(&to_matrix(&b)).expect(
-        "singular Gram matrix: external momenta linearly dependent (degenerate kinematics)",
-    );
-    (0..n).map(|i| sol[(i as u32, 0)].to_expression()).collect()
+    if let Ok(sol) = to_matrix(g).solve(&to_matrix(&b)) {
+        return (0..n).map(|i| sol[(i as u32, 0)].to_expression()).collect();
+    }
+    let subset = independent_gram_subset(g);
+    let sub_g: Vec<Vec<Atom>> = subset
+        .iter()
+        .map(|&i| subset.iter().map(|&j| g[i][j].clone()).collect())
+        .collect();
+    let sub_b: Vec<Vec<Atom>> = subset.iter().map(|&i| vec![rhs[i].clone()]).collect();
+    let sub_sol = to_matrix(&sub_g)
+        .solve(&to_matrix(&sub_b))
+        .expect("maximal independent sub-Gram is invertible by construction");
+    let mut c = vec![Atom::Zero; n];
+    for (k, &i) in subset.iter().enumerate() {
+        c[i] = sub_sol[(k as u32, 0)].to_expression();
+    }
+    c
+}
+
+// Greedy maximal subset of indices whose principal sub-Gram is non-singular
+fn independent_gram_subset(g: &[Vec<Atom>]) -> Vec<usize> {
+    let n = g.len();
+    let mut chosen: Vec<usize> = Vec::new();
+    for i in 0..n {
+        let cand: Vec<usize> = chosen.iter().copied().chain(std::iter::once(i)).collect();
+        let sub: Vec<Vec<Atom>> = cand
+            .iter()
+            .map(|&a| cand.iter().map(|&b| g[a][b].clone()).collect())
+            .collect();
+        if det(&sub) != Atom::Zero {
+            chosen = cand;
+        }
+    }
+    chosen
 }
 
 // All perfect matchings (pairings) of 0..m (m even).  Each pairing is a Vec of
@@ -2361,6 +2395,26 @@ mod tests {
                 assert_eq!(*p12_sq, Atom::num(2));
             }
             other => panic!("expected a triangle master, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn gram_solve_matrix_handles_singular_gram() {
+        crate::ensure_symbolica_license();
+
+        let g = vec![
+            vec![Atom::num(2), Atom::num(1), Atom::num(2)],
+            vec![Atom::num(1), Atom::num(3), Atom::num(1)],
+            vec![Atom::num(2), Atom::num(1), Atom::num(2)],
+        ];
+        let rhs = vec![Atom::num(5), Atom::num(4), Atom::num(5)];
+        let c = super::gram_solve_matrix(&g, &rhs); // must not panic on the singular Gram
+        for i in 0..3 {
+            let mut lhs = Atom::Zero;
+            for (j, cj) in c.iter().enumerate() {
+                lhs += &g[i][j] * cj;
+            }
+            assert_eq!(lhs, rhs[i], "row {i}: G c != rhs");
         }
     }
 

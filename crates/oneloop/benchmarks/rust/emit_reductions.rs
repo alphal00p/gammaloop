@@ -641,6 +641,39 @@ fn main() {
             &(&(&dot_ll() * &dot_lq(0)) * &dot_lq(1)) * &dot_lq(2),
             "llq1q2q3",
         );
+        // dotted (raised power) x rank-3 mixed: box [2,1,1,1], UV-finite (r < 6).
+        emit_num(
+            "mix_q1q2q3_dotN4",
+            off,
+            msq,
+            4,
+            vec![2, 1, 1, 1],
+            q1q2q3.clone(),
+            "q1q2q3",
+        );
+        emit_num(
+            "mix_llq1q2_dotN4",
+            off,
+            msq,
+            4,
+            vec![2, 1, 1, 1],
+            &(&dot_ll() * &dot_lq(0)) * &dot_lq(1),
+            "llq1q2",
+        );
+        // rank-6 mixed on hexagon: k^2 q1 q2 q3 q4.
+        emit_num(
+            "mix_llq1q2q3q4_N6",
+            off,
+            msq,
+            6,
+            vec![1; 6],
+            &(&(&(&dot_ll() * &dot_lq(0)) * &dot_lq(1)) * &dot_lq(2)) * &dot_lq(3),
+            "llq1q2q3q4",
+        );
+        // heptagon (N=7) MIXED tensor: N=7's 6 external momenta are linearly dependent in 4D,
+        // so the reducible-direction Gram is rank-deficient -> handled by gram_solve's subset
+        // pseudo-inverse (validated here vs the moment oracle). See docs/04-frontier.md.
+        emit_num("mix_q1q2q3_N7", off, msq, 7, vec![1; 7], q1q2q3.clone(), "q1q2q3");
     }
 
     // (on-shell / SINV scaffolding — ms_/ggh_/ggho_/reg_ — removed: the offset-based
