@@ -2,11 +2,12 @@
 
 use idenso::dirac::GammaSimplifier;
 use idenso::shorthands::metric::MetricSimplifier;
-use oneloop::masters::MasterIntegral;
+use oneloop::masters::{MasterBasis, OneLoopMasters};
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::symbol;
 
+use crate::feyngen::diagram_generator::evaluate_overall_factor;
 use crate::graph::Graph;
 use crate::graph::lmb::LMBext;
 use crate::utils::{GS, W_};
@@ -37,6 +38,12 @@ pub(crate) fn reduce_graph_numerator(graph: &Graph, num: &Atom) -> ReduceOutcome
         .simplify_gamma()
         .expand()
         .simplify_metrics();
+
+    // Collapse the graph grouping / symmetry / sign bookkeeping symbols
+    // (`NumeratorDependentGrouping`, `AutG`, `InternalFermionLoopSign`, …) into
+    // their numeric values, so grouped-graph duplicate terms sum instead of each
+    // monomial carrying a ~95-char tag and appearing once per grouped graph.
+    let scalar = evaluate_overall_factor(scalar.as_view());
 
     // Rewrite the edge momenta `Q(edge, ..)` into the loop basis `K(0,..) + P(j,..)`.
     let reps =
@@ -90,60 +97,22 @@ pub(crate) fn reduce_graph_numerator(graph: &Graph, num: &Atom) -> ReduceOutcome
         a.printer(SpensoPrintSettings::typst().typst_symbolica())
             .to_string()
     };
-    let terms: Vec<String> = reduction
+
+    // Fold the reduction into a single atom `Σ coeff · master`, then
+    // `collect_factors` to pull the common coupling / colour / polarization
+    // prefactor out front (so it appears once, not once per master) and collect
+    // like terms in each coefficient. The master heads (`A0`/`B0`/`C0`/`D0`) are
+    // opaque function symbols, so they survive the factoring untouched; strip the
+    // `oneloop::` namespace for display.
+    let basis = OneLoopMasters;
+    let amplitude = reduction
         .terms
         .iter()
-        .map(|(coeff, master)| format!("({}) {}", show(coeff), format_master(master, &show)))
-        .collect();
-    ReduceOutcome::Reduced(terms.join(" + ").replace('"', "\\\""))
-}
-
-/// Format a master integral as `A0/B0/C0/D0(args...)`
-fn format_master(master: &MasterIntegral, show: &dyn Fn(&Atom) -> String) -> String {
-    match master {
-        MasterIntegral::Tadpole { m_sq } => format!("A0({})", show(m_sq)),
-        MasterIntegral::Bubble { p_sq, m1_sq, m2_sq } => {
-            format!("B0({}; {}, {})", show(p_sq), show(m1_sq), show(m2_sq))
-        }
-        MasterIntegral::Triangle {
-            p1_sq,
-            p2_sq,
-            p12_sq,
-            m1_sq,
-            m2_sq,
-            m3_sq,
-        } => format!(
-            "C0({}, {}, {}; {}, {}, {})",
-            show(p1_sq),
-            show(p2_sq),
-            show(p12_sq),
-            show(m1_sq),
-            show(m2_sq),
-            show(m3_sq)
-        ),
-        MasterIntegral::Box {
-            p1_sq,
-            p2_sq,
-            p3_sq,
-            p4_sq,
-            s,
-            t,
-            m1_sq,
-            m2_sq,
-            m3_sq,
-            m4_sq,
-        } => format!(
-            "D0({}, {}, {}, {}, {}, {}; {}, {}, {}, {})",
-            show(p1_sq),
-            show(p2_sq),
-            show(p3_sq),
-            show(p4_sq),
-            show(s),
-            show(t),
-            show(m1_sq),
-            show(m2_sq),
-            show(m3_sq),
-            show(m4_sq)
-        ),
-    }
+        .fold(Atom::Zero, |acc, (coeff, master)| {
+            acc + coeff * basis.symbol(master)
+        });
+    let reduced_num = show(&amplitude.collect_factors())
+        .replace("oneloop::", "")
+        .replace('"', "\\\"");
+    ReduceOutcome::Reduced(reduced_num)
 }

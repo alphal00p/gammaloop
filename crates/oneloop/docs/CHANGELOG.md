@@ -10,6 +10,20 @@ for the app integration, [the app](05-app.md).
 
 ---
 
+## Reduced-numerator display compaction (2026-08-21)
+- **App polish (`reduce_bridge.rs`).** The `reduced_num` was `Σ coeff × master` but each
+  monomial carried a ~95-char graph-grouping/sign bookkeeping tag and was duplicated across
+  grouped graphs. Now: (1) `evaluate_overall_factor` collapses `NumeratorDependentGrouping`,
+  `AutG`, `InternalFermionLoopSign`, … to numbers (grouped-graph duplicates sum); (2) the
+  reduction is folded into one atom and `collect_factors`'d, pulling the common
+  coupling/colour/polarization prefactor out front and collecting like terms. Masters are
+  emitted as opaque `A0/B0/C0/D0` symbols (flat args) so the factoring leaves them intact.
+- **Effect:** `gg→h` `reduced_num` **11,875 → 1,799 chars (6.6×)**, 60 → 0 grouping tags;
+  validated across A0/B0/C0/D0 (a→a, gg→h, light-by-light boxes), renders in Typst, masters
+  unchanged. Worst-case 300 KB box tensor factors in ~8s (debug), well under the app timeout.
+
+---
+
 ## Chirality-projector traces — closed fermion loops collapse (2026-08-21)
 - **idenso fix (the app-numerator win).** Closed fermion loops carrying a chirality
   projector (`gg→h`, `H→γγ`, all electroweak) left an inert `Tr(γ … ℙ_p … γ)` in the
