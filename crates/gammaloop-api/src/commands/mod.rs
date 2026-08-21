@@ -1,3 +1,10 @@
+//! Typed command definitions and command-execution results.
+//!
+//! Commands share the CLI's stateful behavior even when executed through
+//! [`crate::session::CliSession`]. Most communicate through state/settings mutations, logs, or
+//! explicitly requested files. [`CommandOutput`] is reserved for results that the embedded Rust
+//! caller should consume directly.
+
 use std::{ops::ControlFlow, path::PathBuf, str::FromStr};
 
 use clap::{builder::ArgExt, Arg, Subcommand};
@@ -85,17 +92,33 @@ impl CliArgumentMetadataExt for Arg {
     }
 }
 
+/// Structured value returned by a command, when that command has an embedded result.
+///
+/// Most commands return [`None`](CommandOutput::None); this does not mean that they had no effect.
+/// They may have changed the in-memory state or settings, emitted diagnostics, or written an
+/// explicitly requested file.
 #[derive(Debug, Clone, Default)]
 pub enum CommandOutput {
+    /// No direct Rust value; inspect the mutated state, settings, logs, or requested output file.
     #[default]
     None,
+    /// Symbolic result produced by an [`Evaluate`](Commands::Evaluate) command.
     Evaluate(Atom),
+    /// Estimate, uncertainty, and integration metadata produced by an
+    /// [`Integrate`](Commands::Integrate) command.
     Integrate(IntegrationOutput),
 }
 
+/// Control-flow request and optional structured value produced by one command.
+///
+/// Callers must inspect `flow` even when they do not need `output`. A break carries the
+/// [`SaveState`] policy requested by save/quit handling; it does not persist the state merely by
+/// being dropped.
 #[derive(Debug, Clone)]
 pub struct CommandExecution {
+    /// Continue the session or return the requested save/quit policy to the embedding caller.
     pub flow: ControlFlow<SaveState>,
+    /// Embedded result for evaluation/integration, otherwise [`CommandOutput::None`].
     pub output: CommandOutput,
 }
 
