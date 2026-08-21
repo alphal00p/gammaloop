@@ -22,42 +22,78 @@ pub(crate) fn python_declarations(source: &str) -> Result<Vec<PythonDeclaration>
             continue;
         }
         let trimmed = line.trim();
-        let (kind, prefix) = if trimmed.starts_with("class ") {
-            (alphal00p_docs_schema::DocItemKind::PythonClass, "class ")
+        let callable = if trimmed.starts_with("class ") {
+            Some((alphal00p_docs_schema::DocItemKind::PythonClass, "class "))
         } else if trimmed.starts_with("def ") {
-            (alphal00p_docs_schema::DocItemKind::PythonFunction, "def ")
+            Some((alphal00p_docs_schema::DocItemKind::PythonFunction, "def "))
         } else if trimmed.starts_with("async def ") {
-            (
+            Some((
                 alphal00p_docs_schema::DocItemKind::PythonFunction,
                 "async def ",
-            )
+            ))
         } else {
-            continue;
+            None
         };
-        let name = declaration_name(trimmed, prefix);
-        if name.is_empty() || (!exports.is_empty() && !exports.iter().any(|item| item == &name)) {
+
+        if let Some((kind, prefix)) = callable {
+            let name = declaration_name(trimmed, prefix);
+            if name.is_empty() || (!exports.is_empty() && !exports.iter().any(|item| item == &name))
+            {
+                continue;
+            }
+            let (signature, signature_end) = python_signature(&lines, index);
+            let (docs, member_start) = python_docstring(&lines, signature_end + 1, 0);
+            let members = if kind == alphal00p_docs_schema::DocItemKind::PythonClass {
+                python_class_members(
+                    &lines,
+                    member_start,
+                    0,
+                    &docs,
+                    signature.contains("enum.Enum"),
+                )
+            } else {
+                vec![]
+            };
+            declarations.push(PythonDeclaration {
+                name,
+                signature: python_display_signature(&signature),
+                docs,
+                kind,
+                line: index as u32 + 1,
+                members,
+            });
             continue;
         }
-        let (signature, signature_end) = python_signature(&lines, index);
-        let (docs, member_start) = python_docstring(&lines, signature_end + 1, 0);
-        let members = if kind == alphal00p_docs_schema::DocItemKind::PythonClass {
-            python_class_members(
-                &lines,
-                member_start,
-                0,
-                &docs,
-                signature.contains("enum.Enum"),
-            )
-        } else {
-            vec![]
+
+        let Some((name, annotation)) = (!exports.is_empty())
+            .then(|| split_top_level_once(trimmed, ':'))
+            .flatten()
+        else {
+            continue;
         };
+        let name = name.trim();
+        if !is_python_identifier(name)
+            || !exports.iter().any(|exported| exported == name)
+            || declarations
+                .iter()
+                .any(|declaration| declaration.name == name)
+        {
+            continue;
+        }
+        let annotation = split_top_level_once(annotation, '=')
+            .map_or(annotation, |(annotation, _)| annotation)
+            .trim();
+        if annotation.is_empty() {
+            continue;
+        }
+        let annotation = python_display_signature(annotation);
         declarations.push(PythonDeclaration {
-            name,
-            signature: python_display_signature(&signature),
-            docs,
-            kind,
+            name: name.to_owned(),
+            signature: format!("{name}: {annotation}"),
+            docs: format!("Exported constant of type `{annotation}`."),
+            kind: alphal00p_docs_schema::DocItemKind::PythonConstant,
             line: index as u32 + 1,
-            members,
+            members: vec![],
         });
     }
     if !exports.is_empty() {
@@ -625,7 +661,7 @@ fn split_top_level_once(source: &str, delimiter: char) -> Option<(&str, &str)> {
 mod tests {
     use std::path::Path;
 
-    use alphal00p_docs_schema::{ApiLanguage, DocMemberKind};
+    use alphal00p_docs_schema::{ApiLanguage, DocItemKind, DocMemberKind};
 
     use super::*;
     use crate::{CatalogRequest, export_catalog, first_sentence};
@@ -652,6 +688,38 @@ def run(value: int) -> int:
         assert_eq!(declarations[0].name, "run");
         assert_eq!(declarations[1].name, "Engine");
         assert_eq!(first_sentence(&declarations[1].docs), "Runs work.");
+    }
+
+    #[test]
+    fn parses_each_exported_annotated_constant_once() {
+        let stub = r#"
+__all__ = [
+    "AUTO",
+    "Engine",
+]
+
+AUTO: typing.Final[Auto] = ...
+PRIVATE: int = 1
+
+class Engine:
+    """Runs work."""
+
+AUTO: typing.Final[Auto]
+"#;
+        let declarations = python_declarations(stub).unwrap();
+        assert_eq!(
+            declarations
+                .iter()
+                .map(|declaration| declaration.name.as_str())
+                .collect::<Vec<_>>(),
+            ["AUTO", "Engine"]
+        );
+        assert_eq!(declarations[0].kind, DocItemKind::PythonConstant);
+        assert_eq!(declarations[0].signature, "AUTO: Final[Auto]");
+        assert_eq!(
+            declarations[0].docs,
+            "Exported constant of type `Final[Auto]`."
+        );
     }
 
     #[test]
@@ -989,7 +1057,7 @@ class Engine:
         assert_eq!(canonical.members[1].name, "short_form");
         assert_eq!(canonical.members[1].default.as_deref(), Some("None"));
 
-        let linnet = &catalogs["linnet-py"].root.scopes["exports"].items["DotGraph"];
+        let linnet = &catalogs["linnet-py"].root.scopes["exports"].items["Graph"];
         assert!(linnet.members.iter().any(|member| {
             member.name == "global_data" && member.kind == DocMemberKind::Getter
         }));
@@ -997,21 +1065,13 @@ class Engine:
             member.name == "global_data" && member.kind == DocMemberKind::Setter
         }));
         assert!(linnet.members.iter().any(|member| {
-            member.name == "from_string" && member.kind == DocMemberKind::AssociatedFunction
+            member.name == "from_dot" && member.kind == DocMemberKind::AssociatedFunction
         }));
-        let getitem = linnet
-            .members
-            .iter()
-            .filter(|member| member.name == "__getitem__")
-            .collect::<Vec<_>>();
-        assert_eq!(getitem.len(), 1);
+        let auto = &catalogs["linnet-py"].root.scopes["exports"].items["AUTO"];
+        assert_eq!(auto.kind, DocItemKind::PythonConstant);
         assert_eq!(
-            getitem[0]
-                .members
-                .iter()
-                .filter(|member| member.kind == DocMemberKind::Overload)
-                .count(),
-            3
+            auto.docs.as_ref().unwrap().body,
+            "Exported constant of type `Auto`."
         );
 
         let spenso = &catalogs["spynso3"].root.scopes["exports"].items["Tensor"];

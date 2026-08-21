@@ -4,7 +4,7 @@ use itertools::Either;
 
 use crate::half_edge::NodeIndex;
 
-use super::{strip_quotes, GlobalData};
+use super::{dot_id, escape_dot_string, strip_quotes, DotParseError, ExplicitIdKind, GlobalData};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
@@ -95,41 +95,62 @@ impl DotVertexData {
     pub fn from_parser(
         value: dot_parser::canonical::Node<(String, String)>,
         global: &GlobalData,
-    ) -> Either<Self, BTreeMap<String, String>> {
+    ) -> Result<Either<Self, BTreeMap<String, String>>, DotParseError> {
         let mut is_dangling = false;
-        let mut index = None;
-        let node_statements: BTreeMap<String, String> = value
-            .attr
-            .into_iter()
-            .filter_map(|(key, value)| {
-                match key.as_str() {
-                    "style" => {
-                        if value.as_str() == "invis" {
-                            is_dangling = true
-                        }
+        let mut index = global
+            .node_statements
+            .get("id")
+            .map(|value| {
+                value.parse::<usize>().map(NodeIndex).map_err(|source| {
+                    DotParseError::InvalidExplicitId {
+                        kind: ExplicitIdKind::Node,
+                        value: value.clone(),
+                        source,
                     }
-                    "id" => index = Some(NodeIndex(strip_quotes(&value).parse::<usize>().unwrap())),
-                    _ => return Some((key, strip_quotes(&value).to_string())),
-                }
-                None
+                })
             })
-            .collect();
+            .transpose()?;
+        let mut node_statements = BTreeMap::new();
+        for (key, value) in value.attr {
+            let key = strip_quotes(&key);
+            match key.as_str() {
+                "style" => {
+                    if value.as_str() == "invis" {
+                        is_dangling = true
+                    }
+                }
+                "id" => {
+                    let value = strip_quotes(&value);
+                    index = Some(NodeIndex(value.parse::<usize>().map_err(|source| {
+                        DotParseError::InvalidExplicitId {
+                            kind: ExplicitIdKind::Node,
+                            value: value.to_string(),
+                            source,
+                        }
+                    })?));
+                }
+                _ => {
+                    node_statements.insert(key, strip_quotes(&value));
+                }
+            }
+        }
 
         if is_dangling {
-            Either::Right(node_statements)
+            Ok(Either::Right(node_statements))
         } else {
             let mut statements = global.node_statements.clone();
+            statements.remove("id");
             statements.extend(node_statements);
 
             let mut node = DotVertexData {
-                name: Some(value.id),
+                name: Some(strip_quotes(&value.id)),
                 index,
                 payload: None,
                 statements,
             };
 
             node.try_id_from_name();
-            Either::Left(node)
+            Ok(Either::Left(node))
         }
     }
 }
@@ -148,7 +169,7 @@ impl Display for DotVertexData {
             if !first {
                 write!(f, " ")?;
             }
-            write!(f, "{key}=\"{value}\"")?;
+            write!(f, "{}=\"{}\"", dot_id(key), escape_dot_string(value))?;
             first = false;
         }
         Ok(())

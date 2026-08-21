@@ -845,6 +845,7 @@ fn python_scope(request: &CatalogRequest, workspace_root: &Path, stub: &Path) ->
                 "Reachable generated Python {} {}. This export is outside the curated support catalog.",
                 match declaration.kind {
                     DocItemKind::PythonClass => "class",
+                    DocItemKind::PythonConstant => "constant",
                     _ => "function",
                 },
                 declaration.name

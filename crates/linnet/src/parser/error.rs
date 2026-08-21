@@ -3,6 +3,58 @@ use std::fmt::Display;
 use dot_parser::ast::{GraphFromFileError, PestError};
 use thiserror::Error;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExplicitIdKind {
+    Node,
+    Edge,
+    Hedge,
+}
+
+impl Display for ExplicitIdKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Node => write!(f, "node"),
+            Self::Edge => write!(f, "edge"),
+            Self::Hedge => write!(f, "hedge"),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum DotParseError {
+    #[error("invalid edge direction `{value}`; expected `forward`, `back`, or `none`")]
+    InvalidEdgeDirection { value: String },
+
+    #[error("external source endpoint cannot carry half-edge data")]
+    ExternalSourceEndpointData,
+
+    #[error("external sink endpoint cannot carry half-edge data")]
+    ExternalSinkEndpointData,
+
+    #[error("an edge cannot connect two external nodes")]
+    EdgeBetweenExternalNodes,
+
+    #[error("invalid explicit {kind} ID `{value}`: {source}")]
+    InvalidExplicitId {
+        kind: ExplicitIdKind,
+        value: String,
+        source: std::num::ParseIntError,
+    },
+
+    #[error("duplicate explicit {kind} ID {id}")]
+    DuplicateExplicitId { kind: ExplicitIdKind, id: usize },
+
+    #[error("explicit {kind} ID {id} is out of bounds for {len} {kind}s")]
+    ExplicitIdOutOfBounds {
+        kind: ExplicitIdKind,
+        id: usize,
+        len: usize,
+    },
+
+    #[error("failed to construct the explicit {kind} ID permutation")]
+    InvalidExplicitIdPermutation { kind: ExplicitIdKind },
+}
+
 #[derive(Debug, Error)]
 pub enum HedgeParseError<'a, E, V, H, G> {
     DotVertexDataError(V),
@@ -16,6 +68,8 @@ pub enum HedgeParseError<'a, E, V, H, G> {
     HedgeDataFromStringError(H),
 
     GraphDataFromStringError(G),
+
+    DotParseError(#[source] DotParseError),
 }
 
 impl<'a> Display for HedgeParseError<'a, (), (), (), ()> {
@@ -23,9 +77,16 @@ impl<'a> Display for HedgeParseError<'a, (), (), (), ()> {
         match self {
             HedgeParseError::ParseError(a) => write!(f, "{a}")?,
             HedgeParseError::GraphFromFile(a) => write!(f, "{a}")?,
+            HedgeParseError::DotParseError(a) => write!(f, "{a}")?,
             _ => unreachable!(),
         }
         Ok(())
+    }
+}
+
+impl<'a, E, V, H, G> From<DotParseError> for HedgeParseError<'a, E, V, H, G> {
+    fn from(error: DotParseError) -> Self {
+        Self::DotParseError(error)
     }
 }
 
@@ -63,6 +124,7 @@ impl<'a, E, V, H> HedgeParseError<'a, E, V, H, ()> {
             }
             HedgeParseError::GraphFromFile(a) => HedgeParseError::GraphFromFile(a),
             HedgeParseError::ParseError(a) => HedgeParseError::ParseError(a),
+            HedgeParseError::DotParseError(a) => HedgeParseError::DotParseError(a),
         }
     }
 }
