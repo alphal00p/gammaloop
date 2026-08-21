@@ -37,11 +37,13 @@ deeper into the stack:
 
 1. GammaLoop starts from a collider-physics question, states the supported physics
    and conventions, produces a result with an uncertainty, and teaches validation.
-2. Vakint, Idenso, and Spenso start from mathematical or HEP notation, then explain
-   the computational representation and domain workflow.
-3. Linnet and Linnest may foreground graph models, invariants, algorithms, and
+2. Vakint starts from a mathematical integral and Idenso from a convention-explicit
+   tensor identity.
+3. Spenso then maps indexed notation into representations, slots, storage, and
+   networks.
+4. Linnet and Linnest may foreground graph models, invariants, algorithms, and
    programmable interfaces after showing the scientific operation they support.
-4. Native Rustdoc and developer records own detailed types, storage, wire formats,
+5. Native Rustdoc and developer records own detailed types, storage, wire formats,
    logging internals, complexity, and implementation architecture.
 
 Every overview should state its intended reader, primary task and interface,
@@ -54,7 +56,7 @@ complete or assess a calculation.
 #table(
   columns: (1fr, 1.8fr, 2.8fr),
   table.header([*Product*], [*Content to preserve*], [*Critical remaining gap*]),
-  [GammaLoop], [Careful state, persistence, command, and operational boundaries.], [The method, capability envelope, conventions, first result, uncertainty, and validation are missing from the primary physicist path.],
+  [GammaLoop], [Careful state, persistence, command, and operational boundaries; new scope and conventions chapters establish the current scientific boundary.], [The primary path still stops at state creation or point inspection. No maintained cross section or distribution is carried through uncertainty, convergence, normalization, and independent validation.],
   [Vakint], [Clear matching, reduction, evaluation, backend, and citation stages.], [Software notation is not mapped to a mathematical integral; normalization and checked Laurent coefficients are absent.],
   [Idenso], [Deep source-backed rule material and strong rewrite-stage cautions.], [Shipped scientific behavior, target specifications, implementation evidence, and historical validation are mixed in one public reference.],
   [Spenso], [Strong structure/data/execution model and useful failure ownership.], [The bridge from indexed physics to representations, slots, duality, networks, and HEP conventions is missing.],
@@ -80,7 +82,7 @@ concrete manual manifestation.
 
 === MANUAL-101 · Physics scope and Local Unitarity contract
 
-*Priority:* P1 · *Status:* Open
+*Priority:* P1 · *Status:* In progress
 
 The overview names Local Unitarity and immediately switches to software subsystems;
 the process guide gives only one sentence about forward-scattering graphs and cuts.
@@ -92,8 +94,17 @@ model, contribution, backend, tool, or license.
 momenta and a PDF factor of one; no PDF convolution or factorization scale was found. Automatic
 polarization sums cover scalar, spinor, and vector states, while complex masses are unsupported.
 Built-in JSON models, optional UFO import, observables, clustering, and multiple evaluator/UV
-backends have narrower feature and tool boundaries than the overview implies. Compiled loop-count
-ceilings are implementation bounds, not evidence of complete physics coverage at those orders.
+backends have narrower feature and tool boundaries than the overview implies. One evaluation can
+produce multiple correlated event groups which together form a single statistical sample.
+Compiled loop-count ceilings are implementation bounds, not evidence of complete physics coverage
+at those orders.
+
+*Progress (`nlymvowy`):* a new physicist-facing scope chapter now explains the real/virtual
+reorganization at method level, cites the defining Local Unitarity papers, separates their
+all-order formal claim from release capability, explains correlated event groups, and publishes
+a conservative matrix for initial states/PDFs, generated objects, filters, models, spins, masses,
+subtraction, integration components, observables, tools, and licenses. A complete account of the
+supported subtraction envelope and a maintained end-to-end cross-section validation remain open.
 
 *Complete when:* a physicist-facing chapter explains the forward-graph/cut relation,
 real/virtual combination, common integration variables, local cancellation, the role
@@ -104,7 +115,7 @@ observables, external tools, and license requirements, with defining method cita
 
 === MANUAL-102 · Scientific conventions and GammaLoop glossary
 
-*Priority:* P1 · *Status:* Open
+*Priority:* P1 · *Status:* In progress
 
 Settings expose convention-sensitive choices, but no authored chapter assembles the
 scientific contract. Terms such as state, event group, graph group, raised cut,
@@ -112,11 +123,26 @@ orientation, loop-momentum basis, E-surface, integration coordinate, and target 
 introduced without one canonical physical definition.
 
 *Source-audit findings (2026-08-21):* the implemented metric is `diag(+,-,-,-)` and stored external
-momenta are positive-energy four-vectors with separate incoming/final signatures. The one- and
+momenta are positive-energy four-vectors with separate incoming/final signatures. Scalar helicity
+zero is the physical card convention but is not enforced by the evaluator. The one- and
 two-particle flux formulas and the sample × parameterization-Jacobian × integrator-weight relation
-are source-verifiable. A universal phase-space/amplitude normalization, automatic color average,
-complete symmetry-factor contract, powered-coupling meaning, perturbative-order mapping, and the
+are source-verifiable, while reporting-unit conversion is applied only in the two-incoming flux
+branch. Powered and unpowered constraints populate different filter containers; the powered
+exponent is discarded, and existing differential regression cards therefore do not establish a
+reviewed perturbative-order definition. A universal phase-space/amplitude normalization,
+automatic color average, complete symmetry-factor contract, perturbative-order mapping, and the
 energy-unit premise behind picobarn conversion remain unverified and must not be inferred.
+
+*Progress (`nlymvowy`):* a canonical conventions chapter now records four-vector order, metric,
+physical momentum signatures, dependent-momentum conservation, helicity/spin averaging, explicit
+color ownership, one/two-particle flux, reporting units, the $I J w_"MC"$ sample relation,
+correlated event reconstruction, normalization ownership, scale distinctions, and overloaded
+workspace/event terms. The process guide now distinguishes amplitude-side, cross-section-side,
+and unresolved-cut selectors and explicitly warns that the repository's current differential
+cards are regression fixtures rather than audited order/normalization exemplars. Complete
+phase-space/amplitude normalization and method-author reviews of scheme and threshold conventions
+remain explicitly open. Parser/runtime correction remains tracked by
+#link("api-documentation-debt-register.typ#apidoc-007")[APIDOC-007].
 
 *Complete when:* the manual states metric and momentum flow, integration and
 phase-space measures, flux, symmetry, color and helicity factors, units, amplitude
@@ -140,7 +166,9 @@ units, real/imaginary components, Monte Carlo error, bin normalization and
 correlations; target versus stopping accuracy; convergence and chi-squared;
 zero/invalid samples and precision escalation; and seed, parameterization,
 subtraction-parameter, scale, and independent-reference checks with explicit pass/fail
-criteria. Link `APIDOC-201` and `APIDOC-202` for Python result/event contracts.
+criteria. The result-bearing calculation becomes the default continuation from the
+physicist tutorial rather than an advanced audit. Link `APIDOC-201` and `APIDOC-202`
+for Python result/event contracts.
 
 === MANUAL-104 · Public troubleshooting and companion-tool boundary
 
@@ -150,6 +178,11 @@ GammaLoop's public diagnostics chapter becomes a contributor tracing-DSL manual 
 callsite metadata, filter implementation, routing prefixes, and tag-naming guidance.
 The GammaLoop manual also embeds the complete Kurvst geometry API despite drawing
 being a companion workflow.
+
+*Ownership finding (2026-08-21):* the GammaLoop page calls Kurvst its own layer, while Linnest
+links back to that route as canonical. Resolution first requires assigning Kurvst one canonical
+companion-documentation owner and route; GammaLoop and Linnest should then retain task-specific
+handoffs rather than competing or embedded copies.
 
 *Complete when:* public troubleshooting is organized by physicist-facing symptoms,
 diagnoses, safe actions, and useful bug-report evidence. Logging internals and naming
@@ -169,13 +202,21 @@ integral, and the evaluation guide names normalization components without provid
 the convention. The topology inventory cannot be used to compare a mathematical
 integral with entries whose meaning is reduced to a name and counts.
 
+*Result-contract findings (2026-08-21):* the worked evaluation selects
+`LoopNormalizationFactor::MSbar` and then calls the output an “MS-bar Laurent series,” without
+distinguishing a loop-measure normalization from pole subtraction or renormalization. The optional
+backend uncertainty is not classified as absolute or relative, deterministic or statistical, or
+defined coefficient by coefficient. The worked AlphaLoop path is absent from the adjacent methods
+and citations list.
+
 *Complete when:* a representative expression is mapped argument by argument to its
 integral, including dimension/epsilon, metric, loop measure, (+i0), mass and scale,
 momentum routing, propagator power, and external-momentum conventions. Topology
 entries expose denominators or diagrams, routing, masses, active propagators, backend
 support, and epsilon limits. One checked Laurent series records coefficients,
-tolerance, backend/tool versions, and normalization. API-local work remains under
-`APIDOC-103` and `APIDOC-206`.
+tolerance, backend/tool versions, and normalization. It distinguishes normalization from
+renormalization or subtraction, defines every reported uncertainty, and cites every selected
+method. API-local work remains under `APIDOC-103` and `APIDOC-206`.
 
 === MANUAL-202 · Spenso physicist-to-type bridge
 
@@ -191,13 +232,18 @@ as Euclidean linear algebra rather than Lorentz physics, and the network guide a
 describes execution-time strategy selection instead of a cached public plan. The complete
 Einstein-notation-to-type bridge and convention-explicit HEP workflow remain open.
 
+*Example finding (2026-08-21):* the authored “network” example computes the affine combination
+`2 a + 3 b`; it has no shared dummy index and demonstrates no tensor contraction. The Python
+network example checks only result length, so incorrect components or index structure could pass.
+
 *Complete when:* the planning/reuse claim matches the public implementation and the
 toy representation is physically honest. A familiar Einstein-notation expression is
 mapped through free/dummy indices, variance/duality, representations, slots,
 structure/data, storage, contraction, and result structure. A checked network and
 gamma/projector or SU(3) workflow states the relevant metric, basis, index-order, and
-normalization conventions. Link `APIDOC-104`, `APIDOC-105`, and `APIDOC-204` for item
-contracts.
+normalization conventions. The connected multi-tensor contraction checks its free indices and
+components and agrees across at least the Rust and Python paths. Link `APIDOC-104`,
+`APIDOC-105`, and `APIDOC-204` for item contracts.
 
 === MANUAL-203 · Idenso user contract versus implementation evidence
 
@@ -209,18 +255,21 @@ commands, validation logs, and unresolved uncertainties. A public reader cannot
 reliably distinguish current behavior from a proposed implementation contract.
 
 *Progress (`umvyopkm`):* the public page is now a concise shipped-rule contract with explicit
-dimension, gamma-five, epsilon, color-normalization, and partial-normal-form boundaries. FORM
-sources, target patterns, historical commands, and unresolved provenance remain available in a
-separate classified developer source map. The beginner metric example is now explicitly
-four-dimensional Minkowski and checks its free-index rank, but a complete checked Dirac/color
-workflow still remains.
+dimension, color-normalization, and partial-normal-form boundaries. Four-dimensional gating and
+the implemented gamma-five trace relation are explicit, but the gamma-five definition and epsilon
+orientation/index convention remain open. FORM sources, target patterns, historical commands, and
+unresolved provenance remain available in a separate classified developer source map. The
+beginner metric example is explicitly four-dimensional Minkowski, but it checks only free-index
+counts rather than the claimed expression, coefficient, or surviving index.
 
 *Complete when:* every public rule is classified as shipped and scientifically
 reviewed, with conventions and checked identities. Target designs, source maps,
 historical commands, validation mechanics, and unresolved work move to appropriately
 classified developer records without losing provenance. The beginner path uses a
-convention-explicit Minkowski/Dirac/color workflow with expected identity and free
-indices. Link `APIDOC-004`, `APIDOC-106`, and `APIDOC-205` for API-local claims.
+convention-explicit Minkowski/Dirac/color workflow and checks structural equality to an expected
+transformed expression, coefficient, and free indices. Nontrivial public identities cite their
+mathematical sources next to the claim. Link `APIDOC-004`, `APIDOC-106`, and `APIDOC-205` for
+API-local claims.
 
 === MANUAL-204 · Linnest draw-first progression
 
@@ -230,11 +279,34 @@ The Linnest manual explains archived graph bytes and opaque payloads before the 
 useful drawing. Its “minimal” example immediately adds subgraph filtering, DOT export,
 metadata styling, and multiple callbacks, then duplicates much of the construction.
 
+*Output and convention findings (2026-08-21):* the HTML path substitutes prose for the rendered
+drawing, so a site reader cannot compare copied source with its expected visual result. The
+physics-style prose distinguishes graph orientation, fermion flow, and momentum arrows
+mechanically, but does not establish incoming/outgoing conventions or teach readers how to avoid
+a physically misleading arrow.
+
 *Complete when:* one canonical build or parse → layout → draw example produces a
 verified small physics diagram before customization. Physics styling, subgraphs,
 layout constraints, and callbacks are introduced progressively; duplicated source is
 removed; algorithm-selection advice covers every supported layout; and archive,
-plugin, payload, and wire-format details live in an advanced or developer boundary.
+plugin, payload, and wire-format details live in an advanced or developer boundary. The HTML
+path shows the checked diagram, and an annotated example distinguishes topology direction,
+fermion flow, and momentum flow.
+
+=== MANUAL-205 · Linnet physical cuts, flow, and mutation mappings
+
+*Priority:* P1 · *Status:* Open
+
+Linnet explains half-edge storage well but defers source/sink flow and orientation semantics to
+API variants. Its cut example checks only the number of returned partitions, not their members,
+boundary half-edges, directions, or physical interpretation. Storage-changing mutation is
+described without a checked mapping journey.
+
+*Complete when:* an annotated Feynman- or tensor-network example maps physical incoming/outgoing
+legs to half-edges, `Flow`, orientation, subgraphs, and returned cut partitions; distinguishes a
+graph-separating cut from an on-shell/Cutkosky cut; and verifies the actual cut members rather than
+only their count. One extraction, excision, sewing, or contraction journey preserves and checks
+the returned old-to-new mappings instead of reusing stale indices.
 
 == Cross-product findings
 
@@ -269,7 +341,7 @@ finds no conflicting current definitions.
   columns: (auto, 1.8fr, 3fr),
   table.header([*Work item*], [*Existing owner*], [*Concrete manifestation retained by this audit*]),
   [Beginner and real-value paths], [`DOC-002` and `DOC-007`], [Reclassify the selected `gg → hhh` contribution as a state/workspace or benchmark example; make the portal's calculation path reach a bounded checked value or distribution; give the events workflow meaningful cuts and bins; complete the Linnet mutation/drawing, Spenso HEP, Idenso Rust, and Vakint Laurent-series outcomes.],
-  [Canonical scientific examples], [`DOC-008`], [Classify examples as beginner, validated result, regression, benchmark, experiment, or historical; record setup, conventions, prerequisites/license/backend, canonical source, expected result/tolerance, runtime tier, verification command, and last verified revision.],
+  [Canonical scientific examples], [`DOC-008`], [Classify examples as beginner, validated result, regression, benchmark, experiment, or historical; record setup, conventions, prerequisites/license/backend, canonical source, expected result/tolerance, runtime tier, verification command, and last verified revision. Current Vakint matching, Idenso identity, and Spenso network prose exceeds its compile-only evidence, while Linnest HTML omits the rendered result.],
   [Release and reproducibility narrative], [`DOC-011`], [Fill GammaLoop/Vakint histories, current Spenso/Idenso gaps, and Linnet-Python history; distinguish API, physics/numerical/default, and compatibility changes; pin revision-sensitive dependencies and sources.],
   [Methods and citations], [`DOC-017`], [Place defining sources next to Local Unitarity and subtraction, Vakint backends, Idenso identities, Spenso HEP conventions, and nontrivial graph algorithms; a broad publication feed is not a method map.],
 )

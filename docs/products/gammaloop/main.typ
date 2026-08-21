@@ -1,5 +1,7 @@
 #import "../shared.typ": *
 #import "content/overview.typ": overview
+#import "content/physics-scope.typ": physics-scope
+#import "content/conventions.typ": conventions
 #import "content/tutorial.typ": tutorial
 #import "content/process-generation.typ": process-generation
 #import "content/events.typ": events
@@ -15,12 +17,14 @@
   owner: "GammaLoop project",
   body: [
     #overview
+    #physics-scope
+    #conventions
     #tutorial
     #process-generation
     #events
+    #api
     #diagnostics
     #kurvst
-    #api
     #changelog
   ],
 )

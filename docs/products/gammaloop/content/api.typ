@@ -138,6 +138,15 @@ connected workflows rather than forty unrelated entry points:
   exception is `HistogramAccumulator`, whose methods update caller-owned aggregation state.
 ])
 
+#boundary("Caller-owned histogram correlation limit", [
+  Do not yet use `HistogramAccumulator.fill_continuous_sample` or `fill_discrete_sample` to replay
+  raw correlated event entries when more than one entry can land in the same bin. The helper
+  counts the call as one sample but currently accumulates the entries' squared weights separately,
+  unlike the native observable path, which groups their weights before recording one bin sample.
+  Keep production histograms in the configured native observable pipeline until this statistical
+  contract is aligned.
+])
+
 == Inspect and evaluate an existing state
 
 The following workflow assumes that `./state` contains a generated integrand. Evaluation points
@@ -233,6 +242,11 @@ when `use_arb_prec=True` forces arbitrary-precision internal evaluation. Evaluat
 integrand and update in-memory caches or observable snapshots, including in a read-only-state
 session. Rust-only callers that must retain the active precision use `evaluate_sample_precise` and
 `evaluate_samples_precise`.
+
+Point evaluation returns the integrand before the parameterization Jacobian. The
+#link("guides/conventions/")[kinematics, normalization, and weights guide] defines the exact
+$I_"returned" J_"parameterization" w_"MC"$ relation used during integration and the correlated
+event-weight boundary.
 
 For a complete, source-backed run card and scripts that expose event groups, cut metadata,
 selectors, and merged histogram snapshots, follow the

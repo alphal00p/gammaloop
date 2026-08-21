@@ -38,25 +38,47 @@ e+ e- > { Z Z, a a, H H }
 {} > {}
 ```
 
+The empty-initial-state form is generation grammar, not evidence that the default
+cross-section flux evaluator supports a zero-incoming-particle calculation. Its implemented
+flux branches require exactly one or two incoming particles.
+
 A slash vetoes particles and a vertical bar selects an allow-list. The words `veto` and `only`
-are equivalent forms. Amplitude coupling constraints use the coupling name directly; powered
-constraints apply to the complete cross section:
+are equivalent forms. Outside the bracketed perturbative block, coupling constraints use the
+active model's coupling-order name:
 
 // docs-example: syntax
 ```text
 e+ e- > d d~ g / u c QED==2 QCD>=2 QCD<=4
-e+ e- > mu+ mu- | g ghG QED^2==2 QCD^2>=2
+e+ e- > mu+ mu- | g ghG QED==2 QCD>=2
 ```
 
-The bracketed perturbative block is intentionally distinct from ordinary flags. `{n}` fixes the
-amplitude loop count (or the sum across the two cut sides), `{{n}}` fixes the forward-graph loop
-count, and `QCD=n` or the shorthand `QCD` selects a relative perturbative order:
+#callout("Powered and unpowered constraints are not interchangeable", [
+  An unpowered spelling such as `QCD==2` builds an amplitude-side coupling-order filter. A
+  powered spelling such as `QCD^2==2` builds a cross-section-side coupling-order filter, but
+  the parsed exponent is currently discarded. Substituting one spelling for the other changes
+  which filter container is used and still does not define a squared amplitude or a complete
+  cross-section order. Production work therefore needs a scientifically reviewed selector set;
+  do not infer one from the spelling alone.
+])
+
+The bracketed perturbative block is intentionally distinct from ordinary flags. For `amp`,
+`{n}` fixes the amplitude graph's loop count; for `xs`, it fixes the sum of loop counts on the
+two cut sides. `{{n}}` fixes the forward graph's loop count. On a cross-section process,
+bracketed `QCD=n` or the shorthand `QCD` resolves the model's unresolved-particle set and permits
+at most the summed requested count of additional cut particles from those sets; it is not an
+exact graph coupling power. No corresponding amplitude-side selection effect has yet been
+established for that bracketed named-order spelling:
 
 // docs-example: syntax
 ```text
 e+ e- > Z [ {1} {{2}} QCD=2 QED=1 ]
 e+ e- > Z [ QCD ]
 ```
+
+These selectors are generation filters, not universal definitions of LO, NLO, or NNLO. Record
+the amplitude-side loops, forward loops, unresolved-cut allowance, and coupling filters
+explicitly for the chosen generation mode; use the #link("physics/")[physics-scope guide] to
+distinguish that calculation definition from the formal perturbative reach of Local Unitarity.
 
 #callout("Resolve names through the active model", [
   Particle names, antiparticles, coupling-order names, and allowed interactions come from the
@@ -75,8 +97,10 @@ and argument counts.
 
 The generated graph's overall factor keeps separate contributions for automorphisms, internal
 fermion loops, external-fermion ordering, numerator-independent symmetry grouping, and
-numerator-dependent grouping. Persist the state and inspect that factor when auditing diagram
-normalization instead of replacing it with an assumed factorial.
+numerator-dependent grouping. It does not establish a universal incoming-color average.
+Persist the state and inspect that factor together with any explicit projector when auditing
+diagram normalization instead of replacing it with an assumed factorial; the
+#link("guides/conventions/")[normalization checklist] assigns each factor to its owner.
 
 == A maintainable generation card
 
