@@ -3,9 +3,12 @@ extern crate derive_more;
 use std::{
     fmt::{Debug, Display},
     io::Cursor,
-    path::Path,
 };
 
+#[cfg(feature = "native-code-generation")]
+use std::path::Path;
+
+#[cfg(feature = "native-code-generation")]
 use crate::algebra::complex::symbolica_traits::CompiledComplexEvaluatorSpenso;
 use crate::structure::{
     ApplyPendingIndexPermutation, IndexLess, PendingIndexPermutation, Reindexed, SlotIndex,
@@ -56,23 +59,30 @@ use crate::{
 use bincode::{Decode, Encode};
 use symbolica_utils::{IntoArgs, IntoSymbol};
 
+#[cfg(feature = "native-code-generation")]
+use symbolica::evaluate::{
+    CompileOptions, CompiledCode, CompiledComplexEvaluator, CompiledNumber, ExportNumber,
+    ExportSettings, ExportedCode,
+};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Indeterminate, KeyLookup, Symbol},
     domains::{
         InternalOrdering,
-        float::{FixedPrecision, FloatLike, Real, SingleFloat},
+        float::{FixedPrecision, Real},
         rational::Rational,
     },
     evaluate::{
-        CompileOptions, CompiledCode, CompiledComplexEvaluator, CompiledNumber, EvalTree,
-        EvaluationDomain, EvaluationError, ExportNumber, ExportSettings, ExportedCode, Expression,
-        ExpressionEvaluator, FunctionMap, OptimizationSettings,
+        EvalTree, EvaluationDomain, EvaluationError, Expression, ExpressionEvaluator, FunctionMap,
+        OptimizationSettings,
     },
     id::Pattern,
     state::State,
     symbol,
     utils::BorrowedOrOwned,
 };
+
+#[cfg(feature = "native-code-generation")]
+use symbolica::domains::float::{FloatLike, SingleFloat};
 
 #[cfg(feature = "shadowing")]
 fn horner_contract_atom<CStrat: crate::network::AtomComponentOptimizer>(atom: Atom) -> Atom {
@@ -2974,6 +2984,7 @@ impl<T, S> EvalTensor<ExpressionEvaluator<T>, S> {
         }
         // self.map_data_ref(|x| x.map_coeff(f))
     }
+    #[cfg(feature = "native-code-generation")]
     pub fn export_cpp<F: CompiledNumber>(
         &self,
         path: impl AsRef<Path>,
@@ -3014,6 +3025,7 @@ impl<T, S> EvalTensor<ExpressionEvaluator<T>, S> {
     }
 }
 
+#[cfg(feature = "native-code-generation")]
 impl<S: TensorStructure, F: CompiledNumber> EvalTensor<ExportedCode<F>, S> {
     pub fn compile(
         &self,
@@ -3031,6 +3043,7 @@ impl<S: TensorStructure, F: CompiledNumber> EvalTensor<ExportedCode<F>, S> {
     }
 }
 
+#[cfg(feature = "native-code-generation")]
 impl<S: TensorStructure, F: CompiledNumber> EvalTensor<CompiledCode<F>, S> {
     pub fn load(&self) -> Result<EvalTensor<F::Evaluator, S>, String>
     where
@@ -3064,6 +3077,7 @@ impl<T, S: TensorStructure> LinearizedEvalTensorSet<T, S> {
         // self.map_data_ref(|x| x.map_coeff(f))
     }
 
+    #[cfg(feature = "native-code-generation")]
     pub fn export_cpp<F: CompiledNumber>(
         &self,
         path: impl AsRef<Path>,
@@ -3105,6 +3119,7 @@ impl<T, S: TensorStructure> LinearizedEvalTensorSet<T, S> {
     }
 }
 
+#[cfg(feature = "native-code-generation")]
 impl<S: TensorStructure, F: CompiledNumber> EvalTensorSet<ExportedCode<F>, S> {
     pub fn compile(
         &self,
@@ -3122,6 +3137,7 @@ impl<S: TensorStructure, F: CompiledNumber> EvalTensorSet<ExportedCode<F>, S> {
     }
 }
 
+#[cfg(feature = "native-code-generation")]
 impl<S: TensorStructure, F: CompiledNumber> EvalTensorSet<CompiledCode<F>, S> {
     pub fn load(&self) -> Result<EvalTensorSet<F::Evaluator, S>, String>
     where
@@ -3135,8 +3151,10 @@ impl<S: TensorStructure, F: CompiledNumber> EvalTensorSet<CompiledCode<F>, S> {
     }
 }
 
+#[cfg(feature = "native-code-generation")]
 pub type CompiledEvalTensor<S> = EvalTensor<CompiledComplexEvaluatorSpenso, S>;
 
+#[cfg(feature = "native-code-generation")]
 impl<S> EvalTensor<CompiledComplexEvaluatorSpenso, S> {
     pub fn evaluate(&mut self, params: &[Complex<f64>]) -> DataTensor<Complex<f64>, S>
     where
@@ -3159,6 +3177,7 @@ impl<S> EvalTensor<CompiledComplexEvaluatorSpenso, S> {
     }
 }
 
+#[cfg(feature = "native-code-generation")]
 impl<S> EvalTensor<CompiledComplexEvaluator, S> {
     pub fn evaluate(&mut self, params: &[SymComplex<f64>]) -> DataTensor<SymComplex<f64>, S>
     where
@@ -3181,8 +3200,10 @@ impl<S> EvalTensor<CompiledComplexEvaluator, S> {
     }
 }
 
+#[cfg(feature = "native-code-generation")]
 pub type CompiledEvalTensorSet<S> = EvalTensorSet<CompiledComplexEvaluatorSpenso, S>;
 
+#[cfg(feature = "native-code-generation")]
 impl<S: TensorStructure> CompiledEvalTensorSet<S> {
     pub fn evaluate(&mut self, params: &[Complex<f64>]) -> TensorSet<DataTensor<Complex<f64>, S>>
     where
