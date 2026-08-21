@@ -1,3 +1,12 @@
+//! Tensor-expression graphs and their in-place execution.
+//!
+//! A [`Network`] owns an expression [`NetworkGraph`] and the tensor/scalar
+//! values referenced by that graph. Building a network records algebraic
+//! operations; [`Network::execute`] resolves library leaves, chooses contraction
+//! pairs, and rewrites the graph until the selected execution strategy stops.
+//! The public API stores the rewritten graph and values, not a separately
+//! reusable contraction plan.
+
 use graph::{
     NAdd, NMul, NetworkEdge, NetworkGraph, NetworkLeaf, NetworkNode, NetworkOp, NetworkOperation,
     ScaledTensorRef,
@@ -1657,6 +1666,85 @@ fn multiply_atom_by_numeric_coefficient(atom: Atom, coefficient: &Atom) -> Atom 
     feature = "shadowing",
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
+/// An owned tensor-expression graph together with the values referenced by it.
+///
+/// Algebraic operators compose networks without evaluating them. Execution is
+/// in place: [`Self::execute`] merges adjacent operations, traces self-loops,
+/// asks an [`ExecutionStrategy`] which ready graph operations to run, and asks
+/// a [`ContractionStrategy`] which tensor pair to contract inside each product.
+/// These strategy types are zero-sized policies evaluated against the current
+/// graph and store. They do not produce or persist a reusable plan.
+///
+/// On success, the result remains in this network. Use [`Self::result_tensor`]
+/// for a tensor-valued calculation or [`Self::result_scalar`] for a scalar.
+/// [`Self::result`] exposes the lower-level distinction between local values and
+/// unresolved library keys. A bounded strategy such as [`Steps`] may return
+/// successfully before the graph has one result node; the result accessors then
+/// report the incomplete graph through [`TensorNetworkError`].
+///
+/// # Three-tensor contraction
+///
+/// This computes `A[i,j] B[j,k] c[k]`. [`MinResultRank`] compares pairs while
+/// executing the product. Here `B c` has one free slot while `A B` has two, so
+/// the strategy selects `B c` first. The network stores no plan after making
+/// that decision. Component vectors are row-major in each structure's external
+/// slot order.
+///
+/// ```rust
+/// use spenso::{
+///     network::{
+///         ExecutionResult, MinResultRank, Network, Sequential,
+///         library::{DummyKey, DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
+///         store::NetworkStore,
+///     },
+///     structure::{
+///         OrderedStructure, TensorStructure,
+///         abstract_index::AbstractIndex,
+///         representation::{Euclidean, RepName},
+///     },
+///     tensors::data::DenseTensor,
+/// };
+///
+/// type Structure = OrderedStructure<Euclidean>;
+/// type Tensor = DenseTensor<f64, Structure>;
+/// type Store = NetworkStore<Tensor, f64>;
+/// type Net = Network<Store, DummyKey, DummyKey>;
+/// type LibraryTensor = DummyLibraryTensor<Tensor>;
+///
+/// let rep = Euclidean {};
+/// let a_structure = OrderedStructure::new(vec![
+///     rep.new_slot(2, 0),
+///     rep.new_slot(2, 1),
+/// ]).structure;
+/// let b_structure = OrderedStructure::new(vec![
+///     rep.new_slot(2, 1),
+///     rep.new_slot(2, 2),
+/// ]).structure;
+/// let c_structure = OrderedStructure::new(vec![rep.new_slot(2, 2)]).structure;
+///
+/// let a = DenseTensor::from_data(vec![1.0, 2.0, 3.0, 4.0], a_structure).unwrap();
+/// let b = DenseTensor::from_data(vec![5.0, 6.0, 7.0, 8.0], b_structure).unwrap();
+/// let c = DenseTensor::from_data(vec![2.0, 3.0], c_structure).unwrap();
+/// let tensors = DummyLibrary::new();
+/// let functions = ErroringLibrary::new();
+///
+/// let mut network = Net::from_tensor(a) * Net::from_tensor(b) * Net::from_tensor(c);
+/// network
+///     .execute::<Sequential, MinResultRank, LibraryTensor, _, _>(&tensors, &functions)
+///     .unwrap();
+///
+/// let ExecutionResult::Val(result) =
+///     network.result_tensor::<LibraryTensor, _>(&tensors).unwrap()
+/// else {
+///     panic!("a nonempty product must produce a concrete value");
+/// };
+/// assert_eq!(result.data, vec![104.0, 236.0]);
+/// assert_eq!(result.structure.order(), 1);
+/// assert_eq!(
+///     result.structure.external_indices(),
+///     vec![AbstractIndex::Normal(0)],
+/// );
+/// ```
 pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {
     /// Expression and contraction topology whose leaves reference stored values.
     pub graph: NetworkGraph<LibKey, FunKey, Aind>,
@@ -1796,22 +1884,44 @@ impl<T, K: Debug, FK: Debug, Aind: AbsInd> Network<NetworkStore<T, Atom>, K, FK,
     Eq,
     Copy,
 )]
+/// Coarse classification of a network's external tensor structure.
+///
+/// This distinguishes a scalar introduced without tensor structure from a
+/// scalar obtained by tensor operations and distinguishes self-dual from
+/// oriented external slots.
+/// It does not certify that execution has collapsed the graph to one node; use
+/// a result accessor for that check.
 pub enum NetworkState {
+    /// A scalar introduced directly, with no tensor structure involved.
     PureScalar,
+    /// A tensor with at least one non-self-dual external representation.
     Tensor,
+    /// A tensor whose external representations are all self-dual.
     SelfDualTensor,
+    /// A graph with no external slots after tensor operations or contraction.
     Scalar,
 }
 
 impl NetworkState {
+    /// Reports whether the network has no external tensor slots.
     pub fn is_scalar(&self) -> bool {
         matches!(self, NetworkState::Scalar | NetworkState::PureScalar)
     }
 
+    /// Reports whether the network has one or more external tensor slots.
     pub fn is_tensor(&self) -> bool {
         matches!(self, NetworkState::Tensor | NetworkState::SelfDualTensor)
     }
 
+    /// Classifies an integer power of this result kind.
+    ///
+    /// Even powers of a self-dual tensor are scalar; odd powers retain the
+    /// self-dual tensor classification.
+    ///
+    /// # Panics
+    ///
+    /// Panics for [`Self::Tensor`], because integer powers of a tensor with
+    /// oriented external slots are not defined by this state operation.
     pub fn pow(self, pow: i8) -> Self {
         match self {
             NetworkState::PureScalar => NetworkState::PureScalar,
@@ -1827,6 +1937,8 @@ impl NetworkState {
         }
     }
 
+    /// Reports whether two states may be added without changing their external
+    /// tensor kind.
     pub fn is_compatible(&self, other: &Self) -> bool {
         matches!(
             (self, other),
@@ -2388,6 +2500,21 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Network<S, K, FK, 
     }
 }
 
+/// Error raised while resolving, executing, or extracting a tensor network.
+///
+/// The variants fall into three practical groups:
+///
+/// - [`Self::LibErr`] and [`Self::FunLibErr`] mean a graph leaf or function
+///   could not be resolved by the supplied libraries;
+/// - [`Self::ContractionError`], [`Self::StructErr`], and related variants mean
+///   the requested tensor operation is structurally or numerically invalid;
+/// - [`Self::NoNodes`], [`Self::MoreThanOneNode`],
+///   [`Self::InternalEdgePresent`], and result-kind errors mean extraction was
+///   attempted before the graph represented one compatible final value.
+///
+/// Network execution is in place and is not transactional. An error can be
+/// returned after independent earlier operations have already rewritten the
+/// graph or appended values to its store.
 #[derive(Error, Debug)]
 pub enum TensorNetworkError<K: Display, FK: Display> {
     /// A tensor-slot edge terminated at a product operation.
@@ -2500,18 +2627,35 @@ impl<K: Display, FK: Display> From<Infallible> for TensorNetworkError<K, FK> {
     }
 }
 
+/// Low-level value returned by [`Network::result`].
+///
+/// Prefer [`Network::result_tensor`] or [`Network::result_scalar`] when the
+/// expected result kind is known. Those accessors materialize lazy tensor terms
+/// and apply the supplied tensor library where possible.
 pub enum TensorOrScalarOrKey<T, S, K, Aind> {
+    /// A tensor already held in the network store.
     Tensor {
+        /// Stored tensor value.
         tensor: T,
+        /// External slots in the graph-facing order of the result node.
         graph_slots: Vec<LibrarySlot<Aind>>,
     },
+    /// A scalar already held in the network store.
     Scalar(S),
+    /// A library tensor that has not been materialized into the local store.
     Key {
+        /// Permuted library lookup key.
         key: K,
+        /// Result node needed to recover its graph-side indices.
         nodeid: NodeIndex,
     },
 }
 
+/// A final value or the formal identity of an empty operation.
+///
+/// `One` and `Zero` are not stored scalar components. They represent an empty
+/// product and empty sum respectively, allowing callers to map them into the
+/// coefficient domain they use.
 pub enum ExecutionResult<T> {
     /// Multiplicative identity produced by an empty product.
     One,
@@ -2587,6 +2731,20 @@ where
     }
 
     #[allow(clippy::result_large_err, clippy::type_complexity)]
+    /// Inspects the single final graph node without materializing library keys
+    /// or lazy tensor sums.
+    ///
+    /// Local tensors include their graph-facing slot order. Library leaves are
+    /// returned as [`TensorOrScalarOrKey::Key`], while unmaterialized tensor
+    /// sums and scaled tensors are rejected; use [`Self::result_tensor`] to
+    /// materialize those forms.
+    ///
+    /// # Errors
+    ///
+    /// Returns a graph-completeness error when no unique final node exists, an
+    /// internal contraction edge remains, or the final node is not a supported
+    /// value. Calling this after a bounded [`Steps`] execution commonly returns
+    /// such an error.
     pub fn result(
         &self,
     ) -> Result<
@@ -2636,6 +2794,18 @@ where
     }
 
     #[allow(clippy::result_large_err)]
+    /// Extracts the final value as a tensor, materializing it when necessary.
+    ///
+    /// A local tensor is borrowed. Library keys, lazy/scaled tensor terms, and
+    /// scalar promotion produce an owned value inside the returned [`Cow`]. The
+    /// tensor's own structure defines component coordinate order; the last
+    /// coordinate varies fastest for the default row-major structures.
+    ///
+    /// # Errors
+    ///
+    /// Propagates graph-completeness and library-resolution failures. It also
+    /// reports scalar multiplication or summation failures encountered while
+    /// materializing lazy terms.
     pub fn result_tensor<'a, LT, L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>>(
         &'a self,
         lib: &L,
@@ -2727,6 +2897,17 @@ where
     }
 
     #[allow(clippy::result_large_err)]
+    /// Extracts the final value as a scalar.
+    ///
+    /// Stored scalars are borrowed. Scalar tensors and lazy/scaled tensor sums
+    /// are converted to an owned scalar. A remaining library key is not looked
+    /// up by this accessor and returns [`TensorNetworkError::NoScalar`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TensorNetworkError::NoScalar`] for a non-scalar tensor or an
+    /// unresolved library key and propagates graph-completeness or arithmetic
+    /// errors from lazy result materialization.
     pub fn result_scalar<'a>(
         &'a self,
     ) -> Result<ExecutionResult<Cow<'a, S>>, TensorNetworkError<K, FK>>
@@ -2952,11 +3133,20 @@ pub use contract::{
     PAIR_SCORE_SPARSE_ATOM_AWARE, ProductContraction, SingleSmallestDegree, SmallestDegree,
     SmallestDegreeIter,
 };
+/// Schedules ready expression-graph operations during in-place execution.
+///
+/// This is the graph-level policy. `execute_all` repeatedly discovers
+/// operations whose children are values, delegates each product's pair choice
+/// to `C`, and replaces completed subgraphs. It does not create a durable plan:
+/// scheduling is recomputed from the graph as it is rewritten.
 pub trait ExecutionStrategy<E, FL, L, K, FK, Aind>
 where
     E: ExecuteOp<FL, L, K, FK, Aind>,
 {
-    /// Run the entire contraction to one leaf.
+    /// Rewrites ready operations according to this strategy's stopping rule.
+    ///
+    /// Full strategies normally run until no ready operation remains. Bounded
+    /// strategies such as [`Steps`] intentionally may leave several nodes.
     #[allow(clippy::result_large_err)]
     fn execute_all<C: ContractionStrategy<E, L, K, FK, Aind>>(
         executor: &mut E,
@@ -3720,11 +3910,27 @@ where
     Some(NetworkLeaf::Scalar(store.push_scalar(scalar).into()))
 }
 
+/// Executes ready operations on the calling thread and rewrites the graph in
+/// batches until no operation is ready.
 pub struct Sequential;
+/// Executes independent ready operations with Rayon when supported.
+///
+/// Use [`Network::execute_parallel`] for this specialized path. It falls back
+/// to [`Sequential`] when Symbolica's Rayon execution is unavailable or the
+/// contraction strategy requires incremental graph rewrites.
 pub struct Parallel;
+/// Sequential compatibility strategy that discovers work through borrowed
+/// graph views and executes an owned extracted subgraph.
 pub struct SequentialRef;
+/// Sequential compatibility strategy that extracts each ready operation before
+/// executing and splicing it back into the graph.
 pub struct SequentialExtract;
 
+/// Names the built-in execution modes for configuration and introspection.
+///
+/// [`Network::execute`] selects the corresponding strategy by its generic type,
+/// not by passing this enum at runtime. Parallel execution uses the specialized
+/// [`Network::execute_parallel`] entry point.
 pub enum ExecutionMode {
     /// Executes ready operations serially against the original graph.
     Sequential,
@@ -3739,7 +3945,14 @@ pub enum ExecutionMode {
     SequentialExtract,
 }
 
+/// Executes at most `N` scheduling iterations.
+///
+/// This is an inspection or incremental-execution policy, not a guarantee of a
+/// final value. [`Network::result`] can therefore report an incomplete graph
+/// after this strategy returns `Ok(())`.
 pub struct Steps<const N: usize> {}
+/// Diagnostic form of [`Steps`] that prints extracted graphs on its legacy
+/// non-incremental execution path.
 pub struct StepsDebug<const N: usize> {}
 
 impl<const N: usize, E, L, FL, FK: Debug, K: Debug, Aind: AbsInd>
@@ -4343,8 +4556,17 @@ impl Parallel {
     }
 }
 
+/// Storage-side implementation of one ready network operation.
+///
+/// Most callers use [`Network::execute`]. This trait is the extension boundary
+/// for stores that can materialize tensor-library leaves, apply registered
+/// functions, trace self-loops, and evaluate a ready operation selected by the
+/// graph and contraction strategies.
 pub trait ExecuteOp<FL, L, K, FK, Aind>: Sized {
     // type LibStruct;
+    /// Contracts one trace represented by a tensor-leaf self-loop.
+    ///
+    /// Returns `true` when the graph was rewritten and should be scanned again.
     #[allow(clippy::result_large_err)]
     fn execute_self_loop_traces(
         &mut self,
@@ -4355,6 +4577,9 @@ pub trait ExecuteOp<FL, L, K, FK, Aind>: Sized {
         K: Display,
         FK: Display;
 
+    /// Contracts one tensor-leaf self-loop outside `ignored`.
+    ///
+    /// Rewritten self-loop edges are added to `ignored` for deferred deletion.
     #[allow(clippy::result_large_err)]
     fn execute_self_loop_traces_ignoring(
         &mut self,
@@ -4366,6 +4591,11 @@ pub trait ExecuteOp<FL, L, K, FK, Aind>: Sized {
         K: Display,
         FK: Display;
 
+    /// Evaluates one ready operation and returns the leaf that replaces its
+    /// subgraph.
+    ///
+    /// Product operations delegate pair selection to `C`; function operations
+    /// use `fn_lib`, and library tensor leaves are resolved through `lib`.
     #[allow(clippy::result_large_err)]
     fn execute<C: ContractionStrategy<Self, L, K, FK, Aind>>(
         &mut self,
@@ -4384,6 +4614,26 @@ where
     Store::Tensor: HasStructure<Structure = S>,
 {
     #[allow(clippy::result_large_err)]
+    /// Executes this network in place with separate scheduling and contraction
+    /// policies.
+    ///
+    /// `Strat` owns the order in which ready graph operations are processed;
+    /// `C` chooses and evaluates tensor pairs inside a product. The tensor
+    /// library resolves non-local tensor leaves, and the function library
+    /// evaluates registered function nodes. Pair selection is recomputed during
+    /// this call and is not stored as a reusable plan.
+    ///
+    /// On success, this method refreshes [`Self::state`] from the rewritten
+    /// graph. The concrete result stays in `self`; extract it with
+    /// [`Self::result_tensor`], [`Self::result_scalar`], or [`Self::result`]. A
+    /// bounded `Strat` may stop before a unique result exists.
+    ///
+    /// # Errors
+    ///
+    /// Propagates tensor/function-library resolution, structural, contraction,
+    /// arithmetic, and graph-invariant failures as [`TensorNetworkError`]. The
+    /// mutation is not transactional: completed independent operations are not
+    /// rolled back if a later operation fails.
     pub fn execute<
         Strat: ExecutionStrategy<Store, FL, L, K, FK, Aind>,
         C: ContractionStrategy<Store, L, K, FK, Aind>,
@@ -4594,6 +4844,21 @@ where
     T: HasStructure<Structure = S>,
 {
     #[allow(clippy::result_large_err)]
+    /// Executes independent ready operations in parallel when the runtime and
+    /// contraction strategy permit it.
+    ///
+    /// This is the specialized counterpart of [`Self::execute`] for a concrete
+    /// [`NetworkStore`]. It uses [`Parallel`], which falls back to sequential
+    /// execution when Symbolica's Rayon execution is unavailable or the
+    /// strategy needs incremental graph rewrites.
+    ///
+    /// The current specialized path rewrites `graph` and `store` but does not
+    /// refresh the cached [`Self::state`]. Use a result accessor to validate the
+    /// final kind rather than relying on `state` after this call.
+    ///
+    /// # Errors
+    ///
+    /// Has the same non-transactional failure behavior as [`Self::execute`].
     pub fn execute_parallel<C, LT, L, FL>(
         &mut self,
         lib: &L,

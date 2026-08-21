@@ -455,21 +455,24 @@ class GammaLoopAPI:
         point : Sequence[float]
             Coordinates for one sample. In integration space, the length must match
             the selected integrand and ``discrete_dim``. In momentum space, values
-            are grouped as ``(px, py, pz)`` and the length must be a multiple of 3.
+            are grouped as ``(px, py, pz)`` with one triplet per independent loop
+            momentum. Energy components and external momenta are not accepted.
         process_id : int, optional
             Process containing the integrand. Supply this when selection is ambiguous.
         integrand_name : str, optional
             Integrand to evaluate. Supply this when selection is ambiguous.
         use_arb_prec : bool, default=False
-            Request arbitrary-precision internal evaluation.
+            Legacy compatibility option selecting the configured ``f128`` stability
+            level, or arbitrary precision when no ``f128`` level is available.
+            Returned numeric fields remain ``float64``.
         minimal_output : bool, default=False
             Omit the optional evaluation metadata from the returned sample.
         return_events : bool, optional
             Temporarily override event generation for this call. The integrand setting
             is restored afterward.
         momentum_space : bool, default=False
-            Interpret ``point`` as flattened three-momenta instead of integration-space
-            coordinates.
+            Interpret ``point`` as consecutive spatial loop-momentum ``(px, py, pz)``
+            triplets instead of integration-space coordinates.
         integrator_weight : float, optional
             Weight associated with this sample. The default is 1.0.
         discrete_dim : Sequence[int], optional
@@ -492,10 +495,18 @@ class GammaLoopAPI:
 
         Notes
         -----
-        Arbitrary precision affects the internal calculation, but Python-visible
-        numeric fields use the package's ``float64`` output contract. Evaluation may
+        With ``use_arb_prec=False``, evaluation follows the configured ``f64``,
+        ``f128``, and arbitrary-precision stability ladder. Despite its historical
+        name, ``use_arb_prec=True`` selects configured ``f128`` and falls back to
+        arbitrary precision only when that level is absent. Python-visible numeric
+        fields use the package's ``float64`` output contract. Evaluation may
         warm the integrand and update in-memory caches or observable snapshots even in
         a read-only-state session.
+
+        See Also
+        --------
+        GammaLoop's sample-evaluation contract in the interface guide and the
+        maintained events-and-observables example.
 
         Examples
         --------
@@ -513,21 +524,24 @@ class GammaLoopAPI:
         points : numpy.ndarray[numpy.float64]
             Two-dimensional array with one sample per row. Integration-space columns
             must match the selected integrand; momentum-space columns are flattened
-            ``(px, py, pz)`` groups.
+            ``(px, py, pz)`` groups with one triplet per independent loop momentum.
+            Energy components and external momenta are not accepted.
         process_id : int, optional
             Process containing the integrand. Supply this when selection is ambiguous.
         integrand_name : str, optional
             Integrand to evaluate. Supply this when selection is ambiguous.
         use_arb_prec : bool, default=False
-            Request arbitrary-precision internal evaluation.
+            Legacy compatibility option selecting the configured ``f128`` stability
+            level, or arbitrary precision when no ``f128`` level is available.
+            Returned numeric fields remain ``float64``.
         minimal_output : bool, default=False
             Omit the optional evaluation metadata from every returned sample.
         return_events : bool, optional
             Temporarily override event generation for this call. The integrand setting
             is restored afterward.
         momentum_space : bool, default=False
-            Interpret each row as flattened three-momenta instead of integration-space
-            coordinates.
+            Interpret each row as consecutive spatial loop-momentum ``(px, py, pz)``
+            triplets instead of integration-space coordinates.
         integrator_weights : numpy.ndarray[numpy.float64], optional
             One weight per row. Defaults to 1.0 for every sample.
         discrete_dims : numpy.ndarray[numpy.unsignedinteger], optional
@@ -550,9 +564,17 @@ class GammaLoopAPI:
 
         Notes
         -----
-        Arbitrary precision affects the internal calculation, but Python-visible
-        numeric fields use the package's ``float64`` output contract. Evaluation may
+        With ``use_arb_prec=False``, evaluation follows the configured ``f64``,
+        ``f128``, and arbitrary-precision stability ladder. Despite its historical
+        name, ``use_arb_prec=True`` selects configured ``f128`` and falls back to
+        arbitrary precision only when that level is absent. Python-visible numeric
+        fields use the package's ``float64`` output contract. Evaluation may
         update in-memory caches or observable snapshots in a read-only-state session.
+
+        See Also
+        --------
+        GammaLoop's sample-evaluation contract in the interface guide and the
+        maintained events-and-observables example.
 
         Examples
         --------

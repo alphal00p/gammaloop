@@ -1,3 +1,9 @@
+//! Pairwise tensor contraction over structural slot matches.
+//!
+//! [`Contract`](crate::contraction::Contract) is the user-facing operation. The
+//! other traits in this module are storage-backend hooks selected after the two
+//! tensor structures have been merged.
+
 use linnet::half_edge::subgraph::{SubSetLike, subset::SubSet};
 use log::trace;
 
@@ -18,29 +24,71 @@ use crate::{
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+/// Failure to determine or evaluate a pairwise tensor contraction.
+///
+/// Structural and dimension errors are detected before or while mapping
+/// components. [`Self::Other`] preserves backend-specific context that does not
+/// fit either category.
 pub enum ContractionError {
+    /// A sparse kernel requires at least one explicitly stored component.
     #[error("Sparse tensor is empty")]
     EmptySparse,
+    /// The operand structures cannot be merged consistently.
     #[error("Structure Error:{0}")]
     StructureError(#[from] StructureError),
+    /// A symbolic or otherwise invalid dimension could not be used numerically.
     #[error("Dimension Error:{0}")]
     DimensionError(#[from] DimensionError),
+    /// A storage or coefficient operation failed.
     #[error(transparent)]
     Other(#[from] eyre::Error),
 }
 
+/// Contracts every matching pair of dual slots between two tensors.
+///
+/// A slot matches only when its representation and dimension match the dual
+/// representation of the other slot *and* both slots carry the same abstract
+/// index. Unmatched slots are free indices and remain in the result. If there
+/// are no matches, this operation is the exterior product. A dummy index is not
+/// a wildcard: two dummy slots contract only when their complete index values
+/// are equal and their representations are dual-compatible.
+///
+/// The output structure is determined by [`StructureContract::merge`], so its
+/// coordinate order is the merged structure's canonical external-slot order,
+/// not necessarily the order in which the operands were supplied. Dense
+/// components use that structure's row-major flat indexing (the last external
+/// coordinate varies fastest).
+///
+/// `LCM` is the common result type chosen by the coefficient and storage
+/// implementations. In particular, contracting two [`DataTensor`] values keeps
+/// a sparse result only for sparse--sparse input; every combination containing
+/// a dense operand produces a dense result.
+///
+/// [`DataTensor`]: crate::tensors::data::DataTensor
 pub trait Contract<T = Self, Settings = ()> {
-    /// Result type produced by contracting with `T`.
+    /// Result type produced by contracting with `T`, including any coefficient
+    /// type promotion required by multiplication and accumulation.
     type LCM;
-    /// Contracts matching dual slots with `other` and returns the resulting tensor.
+    /// Contracts matching dual slots without mutating either operand.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ContractionError::StructureError`] when the structures cannot
+    /// be merged and propagates dimension, sparse-storage, or coefficient
+    /// failures from the selected backend.
     fn contract(&self, other: &T) -> Result<Self::LCM, ContractionError>;
 }
 
+/// Contracts dual slot pairs that occur within one tensor.
+///
+/// This is the trace counterpart of [`Contract`]. Implementations return a new
+/// value and leave the source tensor unchanged.
 pub trait Trace {
     #[must_use]
     fn internal_contract(&self) -> Self;
 }
 
+/// Storage-backend hook for the zero-match case of [`Contract`].
 pub trait ExteriorProduct<T> {
     type LCM: HasStructure;
     fn exterior_product(
@@ -50,6 +98,7 @@ pub trait ExteriorProduct<T> {
     ) -> Result<Self::LCM, ContractionError>;
 }
 
+/// Storage-backend hook for an exterior product whose output slots interleave.
 pub trait ExteriorProductInterleaved<T> {
     type LCM: HasStructure;
     fn exterior_product_interleaved(
@@ -60,6 +109,7 @@ pub trait ExteriorProductInterleaved<T> {
     ) -> Result<Self::LCM, ContractionError>;
 }
 
+/// Storage-backend hook for a contraction with exactly one matched slot pair.
 pub trait SingleContract<T> {
     type LCM: HasStructure;
     fn single_contract(
@@ -71,6 +121,7 @@ pub trait SingleContract<T> {
     ) -> Result<Self::LCM, ContractionError>;
 }
 
+/// Single-pair contraction hook whose free output slots interleave.
 pub trait SingleContractInterleaved<T> {
     type LCM: HasStructure;
     fn single_contract_interleaved(
@@ -83,6 +134,7 @@ pub trait SingleContractInterleaved<T> {
     ) -> Result<Self::LCM, ContractionError>;
 }
 
+/// Storage-backend hook for a contraction with multiple matched slot pairs.
 pub trait MultiContract<T> {
     type LCM: HasStructure;
     fn multi_contract(
@@ -92,6 +144,7 @@ pub trait MultiContract<T> {
     ) -> Result<Self::LCM, ContractionError>;
 }
 
+/// Multi-pair contraction hook whose free output slots interleave.
 pub trait MultiContractInterleaved<T> {
     type LCM: HasStructure;
     fn multi_contract_interleaved(

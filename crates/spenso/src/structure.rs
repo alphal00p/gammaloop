@@ -353,6 +353,25 @@ impl From<SlotIndex> for usize {
     }
 }
 
+/// Ordered structural metadata for a tensor's external coordinates.
+///
+/// Each external slot combines a representation, its dimension, and an
+/// abstract index. Iterator and coordinate arguments use the same slot order.
+/// The default flattening is row-major: for shape `[d0, d1, ..., dn]`, the last
+/// coordinate varies fastest. Consequently [`Self::flat_index`] and
+/// [`Self::expanded_index`] are inverse mappings in that order.
+///
+/// Contraction is structural rather than positional. A slot in one operand is
+/// removed only when the other operand contains the same abstract index in the
+/// dual representation and with the same dimension. All other slots remain
+/// free and form the output structure. Dummy indices obey the same equality
+/// rule as named indices; a freshly allocated dummy does not match every other
+/// dummy.
+///
+/// Constructors such as [`OrderedStructure::new`] may canonicalize an unsorted
+/// slot list and return a [`PermutedStructure`] recording that permutation.
+/// Component data must follow the finalized structure order, not the caller's
+/// original slot order.
 pub trait TensorStructure {
     /// Abstract slot type used for the structure's external indices.
     type Slot: IsAbstractSlot + DualSlotTo<Dual = Self::Slot>;
@@ -585,7 +604,7 @@ pub trait TensorStructure {
         // Ok(permutation)
     }
 
-    /// yields the strides of the tensor in column major order
+    /// Returns column-major strides for the external dimensions.
     fn strides_column_major(&self) -> Result<Vec<usize>> {
         let mut strides: Vec<usize> = vec![1; self.order()];
 
@@ -600,7 +619,9 @@ pub trait TensorStructure {
         Ok(strides)
     }
 
-    /// yields the strides of the tensor in row major order
+    /// Returns row-major strides for the external dimensions.
+    ///
+    /// The last external coordinate has stride one.
     fn strides_row_major(&self) -> Result<Vec<usize>> {
         let mut strides = vec![1; self.order()];
         if self.order() == 0 {
@@ -614,7 +635,9 @@ pub trait TensorStructure {
         Ok(strides)
     }
 
-    /// By default, the strides are row major
+    /// Returns the flat-index strides used by this structure.
+    ///
+    /// The default is [`Self::strides_row_major`].
     fn strides(&self) -> Result<Vec<usize>> {
         self.strides_row_major()
     }
@@ -653,7 +676,7 @@ pub trait TensorStructure {
         Ok(())
     }
 
-    /// yields the flat index of the tensor given a list of indices
+    /// Flattens one concrete coordinate in external-slot order.
     ///
     /// # Errors
     ///
@@ -669,7 +692,7 @@ pub trait TensorStructure {
         Ok(idx.into())
     }
 
-    /// yields the expanded index of the tensor given a flat index
+    /// Expands a flat component index into coordinates in external-slot order.
     ///
     /// # Errors
     ///

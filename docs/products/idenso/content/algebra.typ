@@ -96,7 +96,7 @@ Concrete syntax and rewrite cases are documented in the
   "spenso-symbolica-syntax-and-rewrites.typ",
   "Spenso/Symbolica syntax note",
 )
-and the rendered #link("reference/form-color-dirac/")[FORM color and Dirac specification].
+and the rendered #link("reference/form-color-dirac/")[shipped color and Dirac convention reference].
 The #developer-link(
   "schoonschip-network",
   "schoonschip-net-parsing.typ",

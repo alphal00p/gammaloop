@@ -55,16 +55,25 @@ from symbolica.community.idenso import (
     list_dangling,
     simplify_metrics,
 )
+from symbolica.community.spenso import Representation, TensorName
 
 initialize()
-# `expr` is a Symbolica Expression written with Spenso-compatible tensor forms.
-external_indices = list_dangling(expr)
-reduced = simplify_metrics(expr)
+minkowski = Representation.mink(4)
+mu = minkowski("mu")
+nu = minkowski("nu")
+metric = TensorName.g()
+momentum = TensorName("p")
+expression = metric(mu, nu) * momentum(mu)
+
+external_indices = list_dangling(expression)
+reduced = simplify_metrics(expression)
+assert len(external_indices) == 1
+assert len(list_dangling(reduced)) == 1
 ```
 
-The example deliberately leaves expression construction to Symbolica and Spenso: Idenso does
-not define a second parser syntax. Apply one transformation at a time while developing a
-pipeline so expression growth and convention changes remain observable.
+Idenso does not define a second parser syntax: the example constructs a Spenso-compatible
+Symbolica expression and then applies one Idenso transformation. Keep transformations separate
+while developing a pipeline so expression growth and convention changes remain observable.
 
 For implementation details, start with
 #source-link("crates/idenso/src/lib.rs", label: "the Rust API") and

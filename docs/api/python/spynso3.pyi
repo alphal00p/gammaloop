@@ -1450,26 +1450,38 @@ class TensorName:
 @typing.final
 class TensorNetwork:
     r"""
-    A tensor network representing computational graphs of tensor operations.
+    A graph of tensor operations that can be simplified and executed.
 
-    A tensor network is a graph-based representation of tensor computations where
-    nodes represent tensors and operations, edges represent tensor contractions and
-    data flow, and the network can be optimized and executed to compute results.
-
-    Tensor networks are particularly useful for symbolic manipulation of complex
-    tensor expressions, optimization of tensor contraction orders, efficient
-    evaluation of large tensor computations, and physics calculations involving
-    many-body systems.
+    Named tensor expressions are resolved through a `TensorLibrary`. Register concrete data
+    before constructing and executing a network; an expression alone supplies structure, not
+    component values.
 
     Examples
     --------
-    >>> import symbolica as sp
-    >>> from symbolica.community.spenso import TensorNetwork, Tensor, TensorIndices
-    >>> x = sp.symbol('x')
-    >>> expr = x * sp.symbol('T')(sp.symbol('mu'), sp.symbol('nu'))
-    >>> network = TensorNetwork(expr)
-    >>> network.execute()
-    >>> result = network.result_tensor()
+    >>> from symbolica.community.spenso import (
+    ...     ExecutionMode,
+    ...     LibraryTensor,
+    ...     Representation,
+    ...     TensorLibrary,
+    ...     TensorName,
+    ...     TensorNetwork,
+    ...     TensorStructure,
+    ... )
+    >>> rep = Representation.euc(2)
+    >>> A = TensorName("A")
+    >>> structure = TensorStructure(rep, rep, name=A)
+    >>> library = TensorLibrary()
+    >>> library.register(
+    ...     LibraryTensor.dense(structure, [1.0, 0.0, 0.0, 1.0])
+    ... )
+    >>> network = TensorNetwork(
+    ...     A(rep("i"), rep("j")),
+    ...     library=library,
+    ... )
+    >>> network.execute(library=library, mode=ExecutionMode.All)
+    >>> result = network.result_tensor(library=library)
+    >>> len(result)
+    4
     """
     def __new__(cls, expr: Expression | int | str | float | builtins.complex | TensorIndices | Expression, library: typing.Optional[TensorLibrary] = None) -> TensorNetwork:
         r"""

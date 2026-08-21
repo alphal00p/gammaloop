@@ -1,4 +1,6 @@
-#let form-color-dirac-content(namespace) = [
+#import "../../shared.typ": callout, developer-link, source-link
+
+#let form-color-dirac-content(namespace) = if namespace == "developer" { [
 #let anchor(name) = label(namespace + "-" + name)
 #set raw(tab-size: 2)
 #set math.equation(numbering: "(1)")
@@ -21,7 +23,7 @@
 #let typst-syntax = "https://typst.app/docs/reference/syntax/"
 #let typst-math = "https://typst.app/docs/reference/math/"
 
-= FORM color and Dirac rules
+== FORM color and Dirac rules
 
 This specification records source-backed replacement rules for FORM gamma-algebra simplification and the FORM `color.h` color-algebra package. The mathematical notation is independent of FORM token names except where a source symbol is documented literally. Open gamma strings always carry explicit bispinor indices; closed gamma traces are written as explicit bispinor contractions, not as a separate trace-index placeholder.
 
@@ -1272,6 +1274,127 @@ cd /tmp/form-color && form -q su-gloop.frm
 - spenso symbolic tensor-library source: #source(spenso-symbolic).
 - Typst syntax: #source(typst-syntax).
 - Typst math: #source(typst-math).
-]
+] } else { [
+= Shipped color and Dirac rules
+
+This page states the conventions implemented by Idenso's public simplifiers. It is deliberately
+shorter than the implementation source map: a physicist should be able to decide whether a rule
+applies without reading FORM internals, proposed patterns, or historical validation commands.
+
+== Input and scope
+
+Idenso rewrites representation-aware Spenso expressions after `initialize()`. A printed function
+that merely resembles `gamma`, `t`, or `f` is not enough: its Lorentz, bispinor, fundamental, and
+adjoint slots must carry the registered representations and compatible dimensions. Unrecognized
+or unsupported structures remain in the expression rather than acquiring tensor meaning from
+their names.
+
+The public Python entry points use the default `GammaSimplifySettings` and
+`ColorSimplifySettings`. Rust callers can choose other settings, so record those settings when a
+normal form is part of a reproducible result.
+
+== Dirac convention
+
+For compatible Lorentz and bispinor representations, Idenso uses the Clifford relation
+
+$ {γ^μ, γ^ν} = 2 η^(μ ν) 1. $
+
+The metric object and its signature belong to the registered Spenso representation; the
+simplifier does not silently replace it by a numerical diagonal metric. Ordinary gamma chains
+support adjacent contractions and odd/even trace recursion in a dimension-compatible form. In
+the explicit four-dimensional representation, the checked trace identities include
+
+$ "tr"(γ^μ γ^ν) = 4 η^(μ ν), $
+
+$ "tr"(γ^μ γ^ν γ^ρ) = 0, $
+
+and
+
+$
+  "tr"(γ^μ γ^ν γ^ρ γ^σ)
+  = 4 (η^(μ ν) η^(ρ σ) - η^(μ ρ) η^(ν σ) + η^(μ σ) η^(ν ρ)).
+$
+
+Chisholm reductions, gamma-zero conjugation, chiral projectors, and gamma-five identities are
+strictly four-dimensional in the implementation. In particular, the shipped gamma-five trace
+convention is
+
+$ "tr"(γ_5 γ^μ γ^ν γ^ρ γ^σ) = 4 ε^(μ ν ρ σ). $
+
+This equation fixes Idenso's internal epsilon normalization: it contains no additional factor of
+$i$. It is not a prescription for gamma five in dimensional regularization. Expressions using a
+specific scheme such as 't Hooft--Veltman or Larin require an explicit scheme-aware conversion
+outside this default simplifier. The optional three-gamma epsilon expansion exists in the Rust
+settings but is disabled by the default Python entry point.
+
+The maintained runtime cases are
+#source-link(
+  "crates/idenso/src/dirac/test/form_reference.rs",
+  label: "the FORM-reference Dirac tests",
+)
+and
+#source-link(
+  "crates/idenso/src/dirac/test/mod.rs",
+  label: "the dimension-gating tests",
+).
+
+== Color convention
+
+Fundamental generators are written $(T^a)_i^j$. Idenso keeps the trace normalization $T_R$ and
+Casimirs symbolic unless an explicit Rust conversion setting specializes them. The implemented
+normalization is
+
+$ "tr"(T^a T^b) = T_R δ^(a b), $
+
+$
+  sum_a (T^a)_i^j (T^a)_k^l
+  = T_R (δ_i^l δ_k^j - N_c^(-1) δ_i^j δ_k^l),
+$
+
+$ sum_a (T^a)_i^j (T^a)_j^k = C_F δ_i^k, $
+
+and
+
+$ sum_(c,d) f^(a c d) f^(b c d) = C_A δ^(a b). $
+
+For the conventional fundamental representation of $"SU"(N_c)$, one may subsequently choose
+$T_R = 1 / 2$, $C_A = N_c$, and $C_F = (N_c^2 - 1) / (2 N_c)$. Those substitutions are a
+specialization, not assumptions imposed on every expression by `simplify_color`.
+
+The default color pass evaluates supported closed traces and expands supported cross-chain
+fundamental Fierz contractions. Open lines, higher invariant tensors, or unsupported structures
+may remain explicit in the result; that is a partial normal form, not an exception. The
+normalization and free/dummy-index placement above are locked by
+#source-link(
+  "crates/idenso/src/color/test/form_reference.rs",
+  label: "the FORM-reference color tests",
+).
+
+== What is shipped
+
+#table(
+  columns: (3.4cm, 2.2cm, 7.3cm),
+  table.header([Rule family], [Status], [Boundary]),
+  [Ordinary Clifford chains and traces], [Shipped], [Compatible dimensions; default Python path.],
+  [Chisholm, gamma zero, projectors, and gamma five], [Shipped], [Explicit four-dimensional representations only.],
+  [Three-gamma epsilon expansion], [Opt-in], [Rust `GammaSimplifySettings`; disabled by the Python default.],
+  [Color traces, Casimirs, structure contractions, and fundamental Fierz], [Shipped], [Registered color representations; invariants remain symbolic by default.],
+  [Every FORM `color.h` identity and high-order invariant], [Not implied], [Only rules represented in the current Idenso implementation and tests are public behavior.],
+)
+
+#callout("Do not mix algebraic and physical assumptions", [
+  Idenso's canonical form records what follows from its registered algebra rules. On-shell
+  relations, gauge choices, external-state sums, dimensional-regularization schemes, and model
+  substitutions are separate assumptions and must be applied explicitly.
+])
+
+The implementation-oriented source mapping, FORM excerpts, target patterns, historical commands,
+and unresolved provenance questions are retained in the
+#developer-link(
+  "idenso-form-color-dirac-source-map",
+  "idenso-form-color-dirac-source-map.typ",
+  "Idenso FORM color/Dirac source map",
+). They are contributor evidence, not additional claims about the public runtime surface.
+] }
 
 #let form-color-dirac = form-color-dirac-content("page")

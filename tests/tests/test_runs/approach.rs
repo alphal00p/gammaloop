@@ -309,6 +309,38 @@ fn approach_cross_section_momentum_space_uses_graph_orientation_selectors() -> R
 }
 
 #[test]
+fn approach_momentum_space_reports_incomplete_triplet_cleanly() -> Result<()> {
+    let test_name = "scalar_box_invalid_momentum_approach";
+    let mut cli = setup_scalar_topologies_cli(test_name)?;
+    let point = vec![0.1, 0.2, 0.3, 0.4];
+    let axis = first_axis(point.len(), 0.001);
+    let output_path = get_tests_workspace_path()
+        .join(test_name)
+        .join("approach_momentum.json");
+
+    let error = run_approach_command(
+        &mut cli,
+        &point,
+        &axis,
+        1,
+        &output_path,
+        "--momentum-space --graph-id 0",
+    )
+    .expect_err("approach should reject an incomplete loop-momentum triplet");
+
+    let rendered = format!("{error:#}");
+    assert!(
+        rendered.contains(
+            "Momentum-space evaluation expects flattened (px, py, pz) triplets, so the coordinate count must be a multiple of 3; got 4."
+        ),
+        "{rendered}"
+    );
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
+}
+
+#[test]
 #[serial]
 fn approach_amplitude_json_has_synthetic_cut_and_threshold_weights() -> Result<()> {
     let test_name = "gg_hhh_approach_amplitude";

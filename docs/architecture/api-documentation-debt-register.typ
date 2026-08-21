@@ -97,12 +97,18 @@ presence must not be reported as example validity.
 
 === APIDOC-001 · GammaLoop sample coordinates and precision
 
-*Priority:* P0 · *Status:* Open · *Surface:* GammaLoop CLI, Rust, and Python
+*Priority:* P0 · *Status:* Resolved · *Resolved in:* `umvyopkm` · *Surface:* GammaLoop CLI, Rust, and Python
 
 `inspect` and `approach` describe momentum input as `(p0 px ...)`, while
 #link("../../crates/gammaloop-api/src/commands/evaluate_samples.rs")[the shared input builder]
 requires flattened `(px, py, pz)` triplets. The same CLI options describe
 `use_arb_prec` as f128 while Python calls it arbitrary precision.
+
+The resolved contract now distinguishes integration coordinates from flattened spatial loop
+momenta and rejects incomplete triplets consistently. It also records the legacy precision
+behavior without changing it: despite its name, `use_arb_prec` selects configured f128 and
+falls back to Arb only when no f128 level exists; ordinary CLI, Python, and Rust results remain
+f64. Source-level regressions cover the help text, malformed shapes, and selected stability level.
 
 *Complete when:* every interface states the same coordinate layouts and precision
 levels, rejects malformed input consistently, and links to one canonical evaluation
@@ -110,34 +116,50 @@ contract with a checked example.
 
 === APIDOC-002 · Incorrect Linnet Rustdoc claims
 
-*Priority:* P0 · *Status:* Open · *Surface:* Linnet Rustdoc
+*Priority:* P0 · *Status:* Resolved · *Resolved in:* `umvyopkm` · *Surface:* Linnet Rustdoc
 
 #link("../../crates/linnet/src/parser/mod.rs")[The parser module] names a nonexistent
 `HedgeGraphSet`, uses the nonexistent `linnet::dot_parser` path, and hides its example
 behind `ignore`. The half-edge module calls the structure a DCEL and claims face
 traversal although no embedding or rotation-system API supplies that operation.
 
+The corrected Rustdoc now describes the implemented incidence/involution model, explicitly
+excludes embeddings and face traversal, names `DotGraphSet` and `linnet::parser`, and runs a
+parse → inspect → serialize → reparse example. Linnet check, clippy, and all doctests pass.
+
 *Complete when:* the public description matches the implemented half-edge model, all
 named paths and types resolve, and the conceptual parser example runs.
 
 === APIDOC-003 · Contradictory Spynso network examples
 
-*Priority:* P0 · *Status:* Open · *Surface:* `spynso3` Python reference
+*Priority:* P0 · *Status:* Resolved · *Resolved in:* `umvyopkm` · *Surface:* `spynso3` Python reference
 
 The generated `TensorNetwork` example executes named tensor expressions without
 registering their data or supplying a library. The maintained Python guide correctly
 requires registration before execution.
+
+The source docstring, generated reference, and authored guide now share the same complete
+Euclidean identity-matrix journey: create the structure and library, register dense data,
+construct and execute the network, retrieve the tensor, and assert its four components.
 
 *Complete when:* generated and authored examples share one independently runnable
 registration-to-execution journey with an asserted result.
 
 === APIDOC-004 · Idenso identity claims require scientific review
 
-*Priority:* P0 · *Status:* Open · *Surface:* `idenso-community` Python reference
+*Priority:* P0 · *Status:* In progress · *Surface:* `idenso-community` Python reference
 
 The `simplify_color` prose contains index-inconsistent contractions and a Fierz formula
 that is not consistent with the stated normalization. Gamma-trace and gamma-five
 claims also lack the dimensional-scheme qualifications needed to interpret them.
+
+*Progress (`umvyopkm`):* the public formulas now use consistent free and dummy indices, keep
+$T_R$, $C_F$, and $C_A$ distinct, state the four-dimensional gamma-five boundary, and explain
+that unsupported open structures form a partial normal form. The public convention page is
+separated from its developer source map. Exact Python-runtime verification of every advertised
+example remains open. Eight exact Rust reference cases covering the advertised ordinary/gamma-five
+traces, generator normalization, Fierz, Casimir, and structure-constant contraction pass when
+run as separate processes under the restricted Symbolica license.
 
 *Complete when:* the identities are checked against the implemented conventions,
 free and dummy indices are consistent, dimensional assumptions are explicit, and
@@ -145,7 +167,7 @@ each advertised identity has a runtime-verified example.
 
 === APIDOC-005 · Vakint reference examples and public terminology
 
-*Priority:* P0 · *Status:* Open · *Surface:* Vakint Rust and Python references
+*Priority:* P0 · *Status:* In progress · *Surface:* Vakint Rust and Python references
 
 Python snippets assume undefined expressions, masses, momenta, engines, or Symbolica
 objects. Public prose also contains misspellings such as `susbstitute_masters`,
@@ -153,9 +175,62 @@ objects. Public prose also contains misspellings such as `susbstitute_masters`,
 named `twoloop_matching` configures an evaluation backend and probes FORM despite the
 matching-only tutorial's stated dependency boundary.
 
+*Progress (`umvyopkm`):* matching/canonicalization now use an empty evaluation order, source
+docstrings contain complete imports and setup, evaluation examples name their FORM or external
+backend requirements, terminology is corrected, and legacy misspelled keyword parameters are
+identified as compatibility constraints. Runtime checks for the matching and Laurent-series
+journeys and a complete exception contract remain open.
+
 *Complete when:* matching and evaluation examples are separately named, standalone,
 and checked; public terminology is corrected or explicitly preserved as a compatibility
 constraint; and each example declares its external-tool requirements.
+
+=== APIDOC-006 · Spenso parallel state and error-label integrity
+
+*Priority:* P1 · *Status:* Open · *Surface:* Spenso Rust API
+
+The Rustdoc review found two API-integrity boundaries that prose alone cannot close.
+`Network::execute` refreshes the cached `Network::state`, whereas `execute_parallel` rewrites
+the graph and store without refreshing that field. In addition, the display messages attached
+to `InvalidDotFunction` and `NonSelfDualTensorPower` are exchanged. The current Rustdoc states
+the parallel-state caveat so callers are not misled, but it remains surprising runtime behavior.
+
+*Complete when:* sequential and parallel execution expose one tested state contract, the two
+error variants render their own conditions, and the result/state/error Rustdoc and regressions
+agree.
+
+=== APIDOC-007 · GammaLoop accepted-but-unsupported calculation options
+
+*Priority:* P0 · *Status:* Open · *Surface:* GammaLoop generation and runtime settings
+
+Several public inputs currently cross the parsing or deserialization boundary without a safe
+implemented meaning. Powered coupling constraints such as `QCD^2==n` retain the coupling name
+and order but discard the parsed power. `integrated_phase = both` is accepted by the settings
+type although both integration branches are unimplemented. Complex particle masses reach an
+explicit panic, and the default flux path implements only one- and two-particle incoming states.
+These are capability limits as well as reference hazards: documenting the general syntax without
+the runtime boundary would invite silently different selections or process termination.
+
+*Complete when:* each unsupported value is rejected with a local actionable error or gains a
+tested implementation; the generated settings/CLI reference states the supported subset; and
+maintained examples cover both one accepted and one rejected value for each boundary.
+
+=== APIDOC-008 · Spenso example isolation under restricted Symbolica
+
+*Priority:* P1 · *Status:* Open · *Surface:* Spenso Rust examples and verification harness
+
+The new `Network` contraction example compiles and produces `[104, 236]` when run in a fresh
+process. In the combined documentation-example binary, however, the existing direct-contraction
+tutorial starts the one permitted restricted Symbolica instance and the later `Network`
+construction aborts while attempting to start another. Serial test execution does not change
+the outcome. This prevents the aggregate harness from treating both examples as runnable in one
+process and may also expose an initialization boundary relevant to unlicensed users of the
+`shadowing` feature.
+
+*Complete when:* maintainers determine whether the two API paths should share one idempotent
+Symbolica initialization; otherwise the verification harness isolates the examples in separate
+processes or explicitly records the network example as compile-only in the aggregate tier. The
+Rustdoc example must remain independently compiled and executed with its asserted result.
 
 == Native Rustdoc gaps
 
@@ -210,12 +285,20 @@ checked Clifford, projector, and SU(3) identities demonstrate the chosen convent
 
 === APIDOC-105 · Spenso structure and network invariants
 
-*Priority:* P1 · *Status:* Open · *Surface:* `spenso`
+*Priority:* P1 · *Status:* In progress · *Surface:* `spenso`
 
 `TensorStructure`, direct contraction, `Network`, execution modes/results/errors, and
 strategy types lack one cohesive contract. Coordinate order, free/dummy matching,
 dense/sparse guarantees, planning versus execution ownership, feature gates, and
 complexity are distributed or absent.
+
+*Progress (`umvyopkm`):* central Rustdoc now defines free/dummy matching, dual compatibility,
+row-major coordinates, dense/sparse result behavior, strategy ownership, the in-place/no-stored-
+plan lifecycle, result ownership and kinds, bounded execution, and the error taxonomy. A Rustdoc
+three-tensor example contracts $A_(i j) B_(j k) c_k$ to the surviving $i$ slot and asserts
+components `[104, 236]`; it passes in an isolated process, with aggregate-harness isolation tracked
+by APIDOC-008. Sparse/dummy/dual examples, lower-level graph/store/library contracts, feature
+orientation, and broader structure-method coverage remain.
 
 *Complete when:* those contracts are local to the relevant items and one checked
 three-tensor example demonstrates contraction order and result structure.
@@ -307,11 +390,16 @@ compilation, mutation, and result-kind errors.
 
 === APIDOC-205 · Idenso Python transformation coverage
 
-*Priority:* P1 · *Status:* Open · *Surface:* `idenso-community`
+*Priority:* P1 · *Status:* In progress · *Surface:* `idenso-community`
 
 `dirac_adjoint`, bispinor/color/metric/Minkowski expansion, initialization, and color
 simplification lack checked examples. Existing authored examples are syntax-compiled
 only.
+
+*Progress (`umvyopkm`):* `dirac_adjoint`, initialization, and all five selective expansion
+families now have self-contained imports, registered representations, operations, and assertions.
+Their prose distinguishes distribution from component substitution and from later metric, Dirac,
+or color simplification. Runtime execution and the combined color → Dirac HEP journey remain.
 
 *Complete when:* a convention-explicit HEP expression passes through color and Dirac
 rewrite stages with asserted free indices and expected identities, and each remaining
