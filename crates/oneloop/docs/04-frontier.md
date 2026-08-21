@@ -217,8 +217,23 @@ Honest scope. The regularization is powerful but not universal.
   (`B0(0;0,0) = 1/ε_UV − 1/ε_IR`, `A0(0) = 0`, scaleless `C0`) still need the
   external master evaluator (OneLOop) to supply the correct dim-reg values;
   `oneloop` reduces to them but does not evaluate them (see
-  [the app](05-app.md) and [the overview](01-overview.md)). Exactly-singular Gram
-  boxes at all-massless kinematics remain guarded (clean-error, no garbage).
+  [the app](05-app.md) and [the overview](01-overview.md)).
+
+- **Rank-deficient external Gram — now handled (2026-08-21).** A *tensor* numerator
+  reduction rewrites the loop momentum in the basis of the external momenta by
+  inverting their **Gram matrix**. When those momenta are linearly dependent — which
+  is unavoidable for **N ≥ 6** (more than `d = 4` external momenta) and for coincident
+  momenta (`qᵢ = qⱼ`) — the Gram is singular and the old code panicked (`reduce.rs`
+  `gram_solve`). It now **pseudo-inverts**: solve on a maximal linearly-independent
+  sub-Gram and set the redundant coefficients to zero (`gram_solve_matrix` /
+  `independent_gram_subset`). This is *exact* — the dropped directions are linear
+  combinations of the kept ones, so the projection onto the reducible span is
+  reproduced faithfully (`G·c = rhs`). Validated: the **heptagon (N=7) rank-3 tensor**
+  reduces to 35 master terms matching the moment oracle to **0.4σ / 0.7σ**, with a
+  `gram_solve_matrix_handles_singular_gram` unit test (see
+  [the benchmark report](07-benchmark-report.md)). This retires the last guarded
+  panic in the tensor-reduction path — the reducer is now complete for any N at any
+  rank. (Scalar heptagons never invert a Gram, so they always reduced.)
 
 - **What `oneloop` does NOT need.** Fully-massless one-loop (external *and*
   internal) is scaleless = 0 in dim reg — no computation required. Tools like

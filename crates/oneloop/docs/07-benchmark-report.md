@@ -1,6 +1,6 @@
 # Benchmark report — one-loop reducer
 
-*Consolidated validation record, 2026-08-20.* This is the results-and-numbers
+*Consolidated validation record, 2026-08-21.* This is the results-and-numbers
 companion to [the benchmarks writeup](06-benchmarks.md) (which explains the
 method in prose) and [the frontier writeup](04-frontier.md). Everything below was
 re-run fresh on this date; the harnesses live in
@@ -12,12 +12,13 @@ re-run fresh on this date; the harnesses live in
 
 | Surface | Scope | Result |
 |---|---|---|
-| **Cross-engine families** | 124 integral families, 2 geometries, vs OneLOop + feynalg + scipy | **124 / 124 PASS** |
-| **Master values** | every A0/B0/C0/D0 emitted, OneLOop vs feynalg | **812 / 812 agree** |
-| **Rank-≥3 mixed tensors** | box/pentagon/hexagon, distinct external directions | **14 / 14 PASS** (0.0–1.6σ) |
+| **Cross-engine families** | 132 integral families, 2 geometries, vs OneLOop + feynalg + scipy | **132 / 132 PASS** |
+| **Master values** | every A0/B0/C0/D0 emitted, OneLOop vs feynalg | **944 / 944 agree** |
+| **High-rank mixed tensors** | box → heptagon, distinct external directions, rank 3–6 (incl. dotted) | **all PASS** (0.0–1.6σ) |
+| **Singular-Gram tensors** | heptagon (N=7) + coincident-momenta case, pseudo-inverse fix | **reduces + validated** (0.4–0.7σ) |
 | **App coverage** | 40 physical SM processes, deployed pipeline | **848 diagrams**, 0 degenerate-Cayley walls |
 | **MadLoop reproduction** | ~20 MG5_aMC processes | matched to ~14 digits |
-| **Unit tests** | crate `cargo test` | **37 passed, 1 ignored, 0 failed** |
+| **Unit tests** | crate `cargo test` | **38 passed, 1 ignored, 0 failed** |
 
 The reducer turns any one-loop integral (arbitrary N, tensor numerators, raised
 powers) into A0/B0/C0/D0 with coefficients rational in `d = 4 − 2ε`. These
@@ -26,7 +27,7 @@ independent engines** and, for tensors, **two independent tensor oracles**.
 
 ---
 
-## 1. Cross-engine family validation (124 / 124)
+## 1. Cross-engine family validation (132 / 132)
 
 Each *family* is an independent integral (topology + masses + kinematics +
 numerator) emitted by [`emit_reductions.rs`](../benchmarks/rust/emit_reductions.rs)
@@ -43,13 +44,14 @@ integral. A running OneLOop-vs-feynalg tally is the third, independent check.
 | Isotropic tensor `(k²)ᵖ` | rank-2, rank-4, **rank-6** `(k²)³` (finite + UV-divergent) | ✓ |
 | Rank-1 external `k·qᵢ` | bubble … heptagon | ✓ |
 | Rank-2 mixed | `k·qᵢ k·qⱼ`, `k² k·qᵢ`, `(k·qᵢ)²` | ✓ |
-| **Rank-3/4/5 mixed** | distinct external directions (see §2) | ✓ **new** |
+| **Rank-3–6 mixed** | distinct external directions, box → heptagon, incl. dotted (see §2) | ✓ |
+| **Singular-Gram tensor** | heptagon: >4 external momenta ⇒ rank-deficient Gram (see §2) | ✓ **new** |
 | Massless internal line | IR-finite off-shell, massless masters | ✓ |
 | Near-degenerate (tiny Gram) | `1/Gram ~ 1e5` catastrophic-cancellation stress | ✓ |
 | Timelike / above-threshold | real below threshold; complex masters via IBP mass-derivative | ✓ |
 
-**Result: 124 / 124 families PASS** — poles cancel to `< 1e-6`, reduced finite
-part within 5σ of the scipy Monte-Carlo (3M samples), and **812 / 812** master
+**Result: 132 / 132 families PASS** — poles cancel to `< 1e-6`, reduced finite
+part within 5σ of the scipy Monte-Carlo (3M samples), and **944 / 944** master
 finite parts agree between OneLOop and feynalg.
 
 ---
@@ -65,18 +67,46 @@ moment/scipy oracle checks the finite part, on two spacelike geometries:
 |---|---|---|---|---|
 | `mix_q1q2q3_N4` | box | `k·q1 · k·q2 · k·q3` | 3 | 1.6, 0.5 |
 | `mix_q1q1q2_N4` | box | `(k·q1)² · k·q2` | 3 | 0.4, 0.1 |
+| `mix_q1q2q3_dotN4` | box `[2,1,1,1]` | `k·q1 · k·q2 · k·q3` (dotted) | 3 | 0.0, 0.7 |
+| `mix_llq1q2_dotN4` | box `[2,1,1,1]` | `k² · k·q1 · k·q2` (dotted) | 4 | 0.2, 0.2 |
 | `mix_q1q2q3_N5` | pentagon | `k·q1 · k·q2 · k·q3` | 3 | 0.6, 0.2 |
 | `mix_q1q2q3q4_N5` | pentagon | `k·q1 · k·q2 · k·q3 · k·q4` | 4 | 0.1, 0.8 |
 | `mix_llq1q2_N5` | pentagon | `k² · k·q1 · k·q2` | 4 | 0.9, 0.4 |
 | `mix_q1q2q3_N6` | hexagon | `k·q1 · k·q2 · k·q3` | 3 | 0.5, 0.1 |
 | `mix_llq1q2q3_N6` | hexagon | `k² · k·q1 · k·q2 · k·q3` | 5 | 0.5, 0.0 |
+| `mix_llq1q2q3q4_N6` | hexagon | `k² · k·q1 · k·q2 · k·q3 · k·q4` | 6 | 0.8, 0.7 |
+| `mix_q1q2q3_N7` | **heptagon** | `k·q1 · k·q2 · k·q3` (singular Gram) | 3 | 0.4, 0.7 |
 
-**14 / 14 PASS.** Every one reduces cleanly (no panic), the `1/ε`, `1/ε²` poles
-cancel to `~1e-17`, and the reduced finite part matches the independent
+**22 / 22 PASS** (11 families × 2 geometries). Every one reduces cleanly, the
+`1/ε`, `1/ε²` poles cancel to `~1e-17`, and the reduced finite part matches the
 moment-tensor oracle + scipy to **0.0–1.6σ**. This exercises the mixed
 transverse/reducible tensor machinery (RSP rules + Passarino–Veltman transverse
-average) at rank up to 5 with distinct external directions — the open
-generalization is now validated, not just structurally rank-agnostic.
+average) at rank up to 6 with distinct external directions, **including raised
+propagator powers** (the dotted box) — the open generalization is validated.
+
+### The singular-Gram case (heptagon, N=7) and its fix
+
+The heptagon (`mix_q1q2q3_N7`) is special, and it exposed a genuine gap. A
+one-loop N-point has N−1 external momenta, and the tensor reduction rewrites the
+loop momentum in the basis of those momenta by inverting their **Gram matrix**.
+But in `d = 4` at most **four** momenta can be linearly independent, so for
+**N ≥ 6** the Gram is rank-deficient — **singular** — and the naive inverse
+crashes. (The same happens for coincident external momenta, `qᵢ = qⱼ`.) This is
+not a physics bug; it is unavoidable geometry, and it only surfaces for tensor
+numerators (scalar heptagons never invert a Gram, so they always reduced).
+
+**The fix — a pseudo-inverse.** You do not need all N−1 directions: only four are
+independent and the rest are their linear combinations. So `gram_solve` now
+solves on a **maximal linearly-independent sub-Gram** and sets the redundant
+coefficients to zero. Because `rhs` lies in the reducible span, this reproduces
+the full system exactly (`G·c = rhs`) and gives the correct projection onto the
+external-momentum span. Implemented in
+[`reduce.rs`](../src/reduce.rs) (`gram_solve` → `gram_solve_matrix` +
+`independent_gram_subset`), unit-tested (`gram_solve_matrix_handles_singular_gram`),
+and validated here: the heptagon rank-3 tensor now reduces to 35 master terms
+matching the oracle to **0.4σ / 0.7σ** on both geometries. With this the reducer
+is complete — **any N, any rank** — and the last guarded panic in the
+tensor-reduction path is retired.
 
 *Note:* rank-≥3 on a **triangle** (N=3) is genuinely UV-divergent (needs
 `r < 2`), so its finite part is not scipy-integrable directly; it is covered by
