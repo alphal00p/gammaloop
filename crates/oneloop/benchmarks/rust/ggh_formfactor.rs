@@ -1,23 +1,4 @@
-//! Emit the gg->h massive-top-triangle reductions for the form-factor benchmark.
-//!
-//! End-to-end validation of the reducer on a *physical* loop amplitude: gluon-fusion
-//! Higgs production through a top loop.  The transverse-projected numerator -- the
-//! g_{mu nu} contraction of the top-loop Dirac trace, which extracts the (gauge-
-//! invariant) form factor -- is, in d dimensions,
-//!
-//!   g_{mu nu} N^{mu nu} = 4m[(4-d) k^2 + (6-2d) (k.q1) + 2 (k.q2) + (2-d) s/2] + 4 m^3 d
-//!
-//! with the on-shell gluons q1^2 = q2^2 = 0 and q1.q2 = s/2 (verified to 14 digits
-//! against explicit Dirac matrices in ggh_formfactor.py).  Here we reduce each
-//! dot(k,.) monomial {1, k.q1, k.q2, k^2} for the on-shell massive triangle and print
-//!     coeff(d)  *  master(numeric args)
-//! for ggh_formfactor.py, which evaluates the masters with OneLOop, assembles
-//! g_{mu nu} M(eps), takes the finite part, and forms
-//!     A_{1/2} = g_{mu nu} M / [(d-1) q1.q2]
-//! to compare against the analytic 2/tau^2 [tau + (tau-1) f(tau)] (= 1.376 at m_t=173).
-//!
-//!   cargo run --release --example ggh_formfactor -p oneloop -- [s] [mtsq]
-//! Defaults: s = 125^2 = 15625 (m_H^2), mtsq = 173^2 = 29929 (m_t^2).
+//! Emit the gg->h massive-top-triangle dot(k,.) monomial reductions for the form-factor benchmark (see docs/09).
 
 use oneloop::masters::MasterIntegral;
 use oneloop::symbols::S;
@@ -25,9 +6,7 @@ use oneloop::{Integral, IntegralFamily, Kinematics, Propagator, reduce};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::function;
 
-// gg->h top triangle: 3 top propagators (mass^2 = mtsq); external legs g(q1), g(q2),
-// H(q1+q2).  Propagator momenta k, k+q1, k+q1+q2, so the lex pairwise invariants are
-//   s_01 = q1^2 = 0,  s_02 = (q1+q2)^2 = s,  s_12 = q2^2 = 0.
+// gg->h top triangle: 3 top propagators (mass^2=mtsq), invariants s_01=q1^2=0, s_02=(q1+q2)^2=s, s_12=q2^2=0.
 fn ggh_family(s: &Atom, mtsq: &Atom, numerator: Atom) -> IntegralFamily {
     IntegralFamily {
         propagators: (0..3)

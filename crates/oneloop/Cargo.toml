@@ -33,6 +33,14 @@ name = "ggh_formfactor"
 path = "benchmarks/rust/ggh_formfactor.rs"
 
 [[example]]
+name = "wloop_reduce"
+path = "benchmarks/rust/wloop_reduce.rs"
+
+[[example]]
+name = "box_reduce"
+path = "benchmarks/rust/box_reduce.rs"
+
+[[example]]
 name = "time_reduce"
 path = "benchmarks/rust/time_reduce.rs"
 

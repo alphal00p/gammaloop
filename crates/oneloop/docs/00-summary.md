@@ -40,9 +40,11 @@ validation.
    structure comes out textbook — mapping the *process space* the reductions cover.
    A per-process `oneloop`-vs-MadLoop *full-amplitude* diff would need the amplitude
    assembly (spinor trace + colour + Born interference) = "target B", a separate
-   project — **now done for one process**: the **gg→h form factor** is assembled
-   reduce→evaluate→project and reproduces the analytic `A_{1/2}(τ)` to 10⁻¹³ and
-   MadLoop's `|M|²` to 0.04 % ([09-ggh-formfactor](09-ggh-formfactor.md)).
+   project — **now done for two processes**: the **gg→h form factor** reproduces the
+   analytic `A_{1/2}(τ)` to 10⁻¹³ and MadLoop's `|M|²` to 0.04 %
+   ([09-ggh-formfactor](09-ggh-formfactor.md)); the **H→γγ W-boson loop** (a rank-6,
+   gauge-invariant spin-1 loop) reproduces `A_1(τ)` to ~10⁻⁵ and the full form factor
+   `−6.489` / `Γ=9.1 keV` ([10-hgammagamma](10-hgammagamma.md)).
 
 ## Document map — where to find what
 | For… | Read |
@@ -56,17 +58,21 @@ validation.
 | the validation story in prose | [06-benchmarks](06-benchmarks.md) |
 | **the results + numbers** — 132/132, the three MadLoop batches, tables | [07-benchmark-report](07-benchmark-report.md) |
 | **the gg→h full-amplitude validation** — form factor to 10⁻¹³, `|M|²` vs MadLoop | [09-ggh-formfactor](09-ggh-formfactor.md) |
+| **the H→γγ W-loop validation** — rank-6 spin-1 loop, `A_1(τ)`, full form factor | [10-hgammagamma](10-hgammagamma.md) |
 | the MadLoop reference numbers (~110 processes, 3 batches) | [../benchmarks/madloop_reference.md](../benchmarks/madloop_reference.md) |
 | how to re-run every benchmark | [../benchmarks/README](../benchmarks/README.md) |
 
 ## What's next / what's not done (honest)
 - **Full amplitudes ("target B").** Assemble the reduced integrand into a full
-  amplitude number (spinor trace + colour + Born interference) to compare `oneloop`
-  end-to-end against MadLoop per process. **First process done:** gg→h reduce→
-  evaluate→project reproduces `A_{1/2}(τ)` to 10⁻¹³ and `|M|²` to 0.04 %
-  ([09-ggh-formfactor](09-ggh-formfactor.md)). Extending to more processes (H→γγ
-  W-loop, gg→hh boxes, uū→dd̄) reuses the same trace→project→reduce→assemble path
-  and is the natural continuation, best scoped with Valentin.
+  amplitude number to compare `oneloop` end-to-end against MadLoop per process.
+  **Two processes done:** gg→h (`A_{1/2}(τ)` to 10⁻¹³, `|M|²` to 0.04 %,
+  [09-ggh-formfactor](09-ggh-formfactor.md)) and the H→γγ W-boson loop (a rank-6
+  gauge-invariant spin-1 loop, `A_1(τ)` to ~10⁻⁵, [10-hgammagamma](10-hgammagamma.md)).
+  Remaining processes (gg→hh boxes, uū→dd̄ with Born interference) reuse the same
+  trace/vertices→project→reduce→assemble path and are the natural continuation — and
+  their **D0 piece is already de-risked**: the on-shell massless box (the box analog of
+  the triangle frontier) reduces with δ-regularization and its rank-2 coefficients match
+  direct integration to ~10⁻⁴ (`benchmarks/python/box_validate.py`).
 - **Independent Mathematica cross-check.** An expression-level check of the
   reductions — the natural next validation, done separately.
 - **The threshold frontier.** Genuinely singular / threshold kinematics (different

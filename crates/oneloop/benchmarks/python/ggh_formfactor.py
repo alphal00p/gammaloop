@@ -1,27 +1,5 @@
 #!/usr/bin/env python3
-"""End-to-end gg->h form-factor benchmark: reduce -> evaluate -> A_{1/2} vs analytic.
-
-The reducer (example `ggh_formfactor`) reduces the four dot(k,.) monomials
-{1, k.q1, k.q2, k^2} of the on-shell massive top triangle.  The transverse-projected
-gg->h numerator (g_{mu nu} contraction of the top-loop Dirac trace, verified to 14
-digits against explicit Dirac matrices) is, in d dimensions,
-
-  g_{mu nu} N^{mu nu} = 4m[(4-d) k^2 + (6-2d) (k.q1) + 2 (k.q2) + (2-d) s/2] + 4 m^3 d
-
-with q1^2=q2^2=0, q1.q2=s/2.  We assemble g_{mu nu} M(eps) = sum_X P_X(d) R_X(eps)
-with the masters from OneLOop, REQUIRE the 1/eps, 1/eps^2 poles cancel (the form
-factor is finite), then
-
-  A_{1/2}^reduced = [g_{mu nu} M]_finite / [(d-1) q1.q2]|_{d=4} = finite / (3 s/2)
-
-and compare, across several (s, m_t), to the analytic 2/tau^2 [tau + (tau-1) f(tau)].
-Only the overall normalization (loop measure + the stripped Higgs-top coupling) is
-convention-dependent; the tau-dependence (the physics) is a parameter-free test of
-the reducer's coefficients.
-
-Run:  python3 ggh_formfactor.py
-Needs oneloop_bridge importable (see benchmarks/README.md).
-"""
+"""End-to-end gg->h form-factor benchmark: reduce -> evaluate -> A_{1/2} vs analytic (see docs/09)."""
 import cmath
 import math
 import os

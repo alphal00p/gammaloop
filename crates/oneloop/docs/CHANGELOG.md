@@ -10,6 +10,31 @@ for the app integration, [the app](05-app.md).
 
 ---
 
+## On-shell massless box — validated at the D0 frontier (2026-08-22)
+- **The box analog of the triangle work (`benchmarks/rust/box_reduce.rs` + `python/box_validate.py`).**
+  Physical box amplitudes (light-by-light, gg→hh) live at on-shell massless external legs
+  (`p_i²=0`) with a massive internal line — the box version of the gg→h / H→γγ frontier. The
+  reducer reduces this box (rank ≤4) with the same δ-regularization (rank ≥3 on-shell hits
+  `0⁻¹`; the `1/δ` poles cancel). Confirmed the coefficients are **correct**, not just finite:
+  every rank-2 box tensor `dot(k,qᵢ)dot(k,qⱼ)` matches a direct Feynman-parameter MC
+  integration to ~10⁻⁴ (Monte-Carlo limited), the scalar box fixes the measure `C=1/6`, and
+  the B0 pole cancels. This is the D0 piece the box amplitudes need.
+
+## H→γγ W-boson loop — spin-1 amplitude through the reducer (2026-08-22)
+- **Second full-amplitude validation, a harder one (`benchmarks/rust/wloop_reduce.rs` +
+  `python/wloop_numerator.py` + `wloop_assemble.py`).** H→γγ's fermion loop is gg→h's
+  `A_{1/2}` (validated 1e-13); the new content is the **W loop**. Unitary gauge needs the
+  full gauge-invariant set — **two W triangles + a γγWW seagull** — at **rank 6**. The
+  explicit-Lorentz numerator (verified structure) is transverse-projected, fit to the
+  `dot(k,·)` monomial basis with `d`-polynomial coefficients, and combined into ONE direct
+  triangle family (crossed via `q₁↔q₂`; seagull bubble embedded via `×D_middle`).
+- **δ-regularization.** On the on-shell triangle the reducer reduces rank ≤2 exactly but
+  hits `0⁻¹` at rank ≥3; regularizing `q₁²=q₂²=δ` makes it finite, and the `1/δ` poles
+  cancel in the physical combination — `A_1` is the `δ→0` limit (residual ∝ δ, confirmed).
+- **Numbers.** `A_1(τ)` reproduced across five τ to ~1e-5 (δ-limited); full H→γγ form
+  factor `= 3·(2/3)²·A_{1/2}(τ_t) + A_1(τ_W) = −6.489` (analytic −6.489), `Γ = 9.10 keV`
+  (SM LO ≈ 9.1). See [10-hgammagamma](10-hgammagamma.md).
+
 ## gg→h form factor — first full-amplitude validation (2026-08-22)
 - **End-to-end on a physical process (`benchmarks/rust/ggh_formfactor.rs` + `python/ggh_formfactor.py`).**
   Closes the "target B" the summary deferred, for gluon-fusion Higgs (top loop). The top-loop

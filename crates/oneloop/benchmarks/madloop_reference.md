@@ -424,3 +424,26 @@ gg→h form factor and compare to the analytic closed form + MadLoop's |M|^2.
 - **Re-run:** `python3 benchmarks/python/ggh_formfactor.py` (needs oneloop_bridge). Rust emitter:
   `cargo run --release --example ggh_formfactor -p oneloop -- <s> <mtsq>`. Full writeup:
   [docs/09-ggh-formfactor.md](../docs/09-ggh-formfactor.md).
+
+---
+
+## H -> gamma gamma W-LOOP (2026-08-22) — spin-1 amplitude through the reducer
+
+Second full-amplitude validation, harder than gg->h (spin-1 loop, historically subtle).
+
+- **Content.** H->gamma gamma = top loop (= gg->h's A_1/2, validated 1e-13) + W loop (new).
+  W loop in unitary gauge needs the gauge-invariant set: TWO W triangles + a gamma-gamma-W-W
+  seagull, at RANK 6. A single triangle is not transverse (q1.N != 0), verified.
+- **Method.** Explicit-Lorentz numerator (vertices: gWW triple, gg WW quartic, HWW; unitary
+  W prop -(g-kk/mW^2)); transverse-project; fit to dot(k,.) monomials with d-polynomial
+  coefficients; combine into ONE direct triangle family (crossed via q1<->q2; seagull bubble
+  [k,k+q1+q2] embedded in the triangle [k,k+q1,k+q1+q2] via *D_middle). Rank-6 on-shell
+  reduction hits 0^-1 at rank>=3, so DELTA-REGULARIZE q1^2=q2^2=delta; 1/delta poles cancel,
+  A_1 = delta->0 limit (residual ~ linear in delta, confirmed at delta=1e-3,1e-4,1e-5).
+- **Numbers.** A_1(tau) reproduced across five tau in [0.2,0.8] to ~1e-5 (delta-limited).
+  tau_W=0.6046: A_1 reduced -8.32428 vs analytic -8.32429. Full H->gamma gamma form factor
+  F = 3*(2/3)^2*A_1/2(tau_t) + A_1(tau_W) = +1.835 + (-8.324) = -6.489 (analytic -6.489);
+  Gamma(H->gamma gamma) = 9.10 keV (SM LO ~9.1). W dominates, destructive vs top.
+- **Re-run:** `python3 benchmarks/python/wloop_assemble.py` (needs oneloop_bridge+numpy+sympy).
+  Rust: `cargo run --release --example wloop_reduce -- s_num s_den mwsq_num mwsq_den d_num d_den`.
+  Full writeup: [docs/10-hgammagamma.md](../docs/10-hgammagamma.md).
