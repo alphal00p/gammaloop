@@ -40,7 +40,9 @@ validation.
    structure comes out textbook — mapping the *process space* the reductions cover.
    A per-process `oneloop`-vs-MadLoop *full-amplitude* diff would need the amplitude
    assembly (spinor trace + colour + Born interference) = "target B", a separate
-   project.
+   project — **now done for one process**: the **gg→h form factor** is assembled
+   reduce→evaluate→project and reproduces the analytic `A_{1/2}(τ)` to 10⁻¹³ and
+   MadLoop's `|M|²` to 0.04 % ([09-ggh-formfactor](09-ggh-formfactor.md)).
 
 ## Document map — where to find what
 | For… | Read |
@@ -53,13 +55,18 @@ validation.
 | **chirality-projector traces** — how closed fermion loops (`gg→h`, electroweak) now collapse instead of leaving an inert `Tr(…ℙ…)` (idenso fix) | [08-projector-traces](08-projector-traces.md) |
 | the validation story in prose | [06-benchmarks](06-benchmarks.md) |
 | **the results + numbers** — 132/132, the three MadLoop batches, tables | [07-benchmark-report](07-benchmark-report.md) |
+| **the gg→h full-amplitude validation** — form factor to 10⁻¹³, `|M|²` vs MadLoop | [09-ggh-formfactor](09-ggh-formfactor.md) |
 | the MadLoop reference numbers (~110 processes, 3 batches) | [../benchmarks/madloop_reference.md](../benchmarks/madloop_reference.md) |
 | how to re-run every benchmark | [../benchmarks/README](../benchmarks/README.md) |
 
 ## What's next / what's not done (honest)
 - **Full amplitudes ("target B").** Assemble the reduced integrand into a full
   amplitude number (spinor trace + colour + Born interference) to compare `oneloop`
-  end-to-end against MadLoop per process. A real project, best scoped with Valentin.
+  end-to-end against MadLoop per process. **First process done:** gg→h reduce→
+  evaluate→project reproduces `A_{1/2}(τ)` to 10⁻¹³ and `|M|²` to 0.04 %
+  ([09-ggh-formfactor](09-ggh-formfactor.md)). Extending to more processes (H→γγ
+  W-loop, gg→hh boxes, uū→dd̄) reuses the same trace→project→reduce→assemble path
+  and is the natural continuation, best scoped with Valentin.
 - **Independent Mathematica cross-check.** An expression-level check of the
   reductions — the natural next validation, done separately.
 - **The threshold frontier.** Genuinely singular / threshold kinematics (different

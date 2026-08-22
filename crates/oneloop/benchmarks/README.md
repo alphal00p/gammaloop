@@ -93,7 +93,11 @@ Set up a Python virtualenv with:
 - **OneLOopBridge** — Python bindings to OneLOop / `avh_olo` (van Hameren),
   imported as `oneloop_bridge`, used for numeric A0/B0/C0/D0 master values
   (Ellis–Zanderighi normalization; this is the same scalar-master library MadLoop
-  links).
+  links). Build with maturin against the local Fortran lib: `make -f Makefile develop`
+  in `OneLOopBridge/`. On macOS the linker needs gfortran's lib dir at build time
+  (`LIBRARY_PATH=$(brew --prefix gcc)/lib/gcc/current`) and the runtime needs it on
+  `DYLD_LIBRARY_PATH` (libgfortran/libgcc_s are not relocatable, so a repaired wheel
+  fails — `maturin develop`, or import the built `.so` directly).
 - **feynalg** — Denner-style analytic closed forms
   (`analytic_A0/B0/C0/D0`), used as a second, independent master engine. Scripts
   degrade gracefully if it is not importable.
@@ -104,6 +108,7 @@ Set up a Python virtualenv with:
 | Script | What it checks |
 |--------|----------------|
 | `crosscheck.py` | The cross-engine driver. Reads the reductions from `emit_reductions` and, for each family, forms the full Laurent series `V(ε) = Σ_i c_i(d=4−2ε)·M_i(ε)` with masters from OneLOop, then requires (a) the 1/ε and 1/ε² poles cancel and (b) the finite part matches a direct scipy integration. A running OneLOop-vs-feynalg tally on the masters is a third independent check. Run: `python3 crosscheck.py /tmp/oneloop_reductions.txt`. |
+| `ggh_formfactor.py` | **Full-amplitude end-to-end** (the first "target B"). Reduces the transverse-projected gg→h top-triangle numerator (via the `ggh_formfactor` example), evaluates the masters with OneLOop, assembles the form factor, and compares to the analytic `A_{1/2}(τ)` (to 10⁻¹³ over six (m_H, m_t) points) and MadLoop's `\|M\|²` (0.04 % at the Higgs-scale α_s). Run: `python3 ggh_formfactor.py`. See [docs/09-ggh-formfactor.md](../docs/09-ggh-formfactor.md). |
 | `verify_pentagon_reduction.py` | Independent numeric check of the van Neerven–Vermaseren / Melrose / FJT reduction of scalar N-point integrals (N≥5) to (N−1)-point ones (pentagon→boxes, hexagon→pentagons, …) using the bordered modified-Cayley coefficients, at d=4 via Feynman-parameter integration. |
 | `verify_dotted_pentagon.py` | Verifies the FJT/Tarasov index-lowering recurrence generalizes verbatim from the box (N=4) to the pentagon (N=5): checks LHS vs RHS at generic `d` by direct Feynman-parameter integration of every (dotted, and pinched) term. |
 | `verify_pentagon_rsp.py` | Derives and verifies the reducible-scalar-product substitution rules for a pentagon numerator (`l.l`, `l.q_i`) as exact algebraic identities in the loop momentum, checked to machine precision at random Euclidean kinematics; confirms the pentagon has no ISP at the top topology. |

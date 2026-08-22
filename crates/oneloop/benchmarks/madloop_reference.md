@@ -399,3 +399,28 @@ Cross-checks (batch 3):
 **TOTAL: 96 fresh MG5_aMC processes validated across the three 2026-08-21 batches (~110+ on record with
 the earlier set), spanning triangle/box/pentagon/4-gluon/2->3-jet/loop-induced/diboson, QED+QCD,
 massless+massive, to ~14 digits. Every double pole reads out the exact IR/colour structure.**
+
+---
+
+## gg → h FORM-FACTOR ASSEMBLY (2026-08-22) — first full-amplitude end-to-end
+
+Beyond the reduction cross-checks: assemble reduce → evaluate → project into the physical
+gg→h form factor and compare to the analytic closed form + MadLoop's |M|^2.
+
+- **Method.** Top-loop Dirac trace `Tr[(k̸+m)γ^μ(k̸+q̸1+m)γ^ν(k̸+q̸1+q̸2+m)]` contracted with the
+  transverse projector `P_{μν}=g_{μν}-(q1q2+q2q1)/(q1.q2)` -> a scalar numerator in
+  {k^2, k.q1, (k.q1)(k.q2)} (verified to 14 digits vs explicit Dirac matrices). The reducer
+  reduces each monomial exactly (on-shell external Gram [[0,s/2],[s/2,0]] is NON-singular,
+  det=-(s/2)^2, so no delta-regularization needed here), OneLOop evaluates the masters, the
+  (4-d)=2eps from the trace cancels the B0 pole, finite part / [(q1.q2)(d-2)] * m_t = A_{1/2}.
+- **A_{1/2}(tau) to 1e-13**, six (m_H,m_t) points, tau in [0.032, 0.75]. Physical point
+  (m_H=125,m_t=173): reduced 1.3762612 == analytic 1.3762612 (2/tau^2[tau+(tau-1)arcsin^2(sqrt tau)]).
+  Heavy-top limit A_{1/2}->4/3 approached (m_t=350 -> 1.3434). Normalization is exactly 1/m_t
+  (confirmed by varying m_t independently of m_H).
+- **|M|^2 vs MadLoop 9.3702613e-3.** |M|^2_avg = alpha_s^2 A_{1/2}^2 s^2/(1024 pi^2 v^2)
+  (8 colours, s^2/2 Lorentz, /256 initial average). alpha_s(m_Z)=0.118 -> 1.0509e-2 (ratio 1.12);
+  alpha_s=0.1114 (Higgs scale) -> 9.3663e-3 (ratio 0.9996, **0.04%**). The loop content is exact;
+  the residual is purely the alpha_s scale/scheme (a MadGraph param_card input, not loop physics).
+- **Re-run:** `python3 benchmarks/python/ggh_formfactor.py` (needs oneloop_bridge). Rust emitter:
+  `cargo run --release --example ggh_formfactor -p oneloop -- <s> <mtsq>`. Full writeup:
+  [docs/09-ggh-formfactor.md](../docs/09-ggh-formfactor.md).

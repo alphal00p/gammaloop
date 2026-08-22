@@ -10,6 +10,23 @@ for the app integration, [the app](05-app.md).
 
 ---
 
+## gg→h form factor — first full-amplitude validation (2026-08-22)
+- **End-to-end on a physical process (`benchmarks/rust/ggh_formfactor.rs` + `python/ggh_formfactor.py`).**
+  Closes the "target B" the summary deferred, for gluon-fusion Higgs (top loop). The top-loop
+  Dirac trace is contracted with the transverse projector `P_{μν}=g_{μν}−(q₁q₂+q₂q₁)/(q₁·q₂)`
+  (the plain `g_{μν}` keeps a non-transverse contamination that drifts the τ-shape ~1 %),
+  giving `P_{μν}N = 4m(6−d)k² + 4m(4−2d)k·q₁ − (64m/s)(k·q₁)(k·q₂) + [2ms(2−d)+4m³(d−2)]`
+  (verified to 14 digits vs explicit Dirac matrices). The reducer reduces each `dot(k,·)`
+  monomial (exact — the on-shell external Gram `[[0,s/2],[s/2,0]]` is non-singular), OneLOop
+  evaluates the masters, the `(4−d)=2ε` from the trace kills the `B0` pole, and the finite part
+  gives `A_{1/2}(τ)`.
+- **Numbers.** `A_{1/2}(τ)` matches the analytic `2/τ²[τ+(τ−1)f(τ)]` to **10⁻¹³** across six
+  (m_H, m_t) points (physical point 1.3762612), with the exact `1/m_t` normalization confirmed
+  by varying m_t. Assembled `|M|²` = `9.3663e-3` vs MadLoop `9.3703e-3` (**0.04 %**) at the
+  Higgs-scale α_s; the ~12 % at α_s(m_Z) is purely the α_s scale, not loop content.
+- **Tooling.** OneLOopBridge wired up for master evaluation (built via maturin against the local
+  `libavh_olo.a`; py3.14 + gfortran runtime path). See [09-ggh-formfactor](09-ggh-formfactor.md).
+
 ## Reduced-numerator display compaction (2026-08-21)
 - **App polish (`reduce_bridge.rs`).** The `reduced_num` was `Σ coeff × master` but each
   monomial carried a ~95-char graph-grouping/sign bookkeeping tag and was duplicated across
