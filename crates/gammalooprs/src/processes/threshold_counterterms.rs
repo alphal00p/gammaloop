@@ -75,6 +75,7 @@ pub struct ResolvedThresholdCountertermAssociation {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct ResolvedThresholdCountertermVariant {
     pub name: String,
+    pub center_group: Option<String>,
     pub cut_group_id: Option<CutGroupId>,
     pub associations: Vec<ResolvedThresholdCountertermAssociation>,
     pub side: ThresholdCountertermSide,
@@ -86,6 +87,17 @@ pub struct ResolvedThresholdCountertermVariant {
     pub subspace: SubspaceData,
     pub subspace_loop_count: usize,
     pub multiplier: Option<ThresholdCountertermMultiplier>,
+}
+
+/// One metadata-selected overlap family. Its common subspace is the union of all member
+/// coordinates in one parent LMB; each member retains its own projected subspace and fixed
+/// complement during the shared SOCP solve.
+#[derive(Clone, Debug, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct ResolvedThresholdCountertermCenterGroup {
+    pub name: String,
+    pub subspace: SubspaceData,
+    pub variant_ids: Vec<ThresholdCountertermVariantId>,
 }
 
 #[derive(Clone, Debug, Default, Encode, Decode)]
@@ -114,6 +126,7 @@ pub struct ResolvedThresholdCounterterms {
     pub legacy_equivalent: bool,
     pub variants: TiVec<ThresholdCountertermVariantId, ResolvedThresholdCountertermVariant>,
     pub cross_section_cut_groups: TiVec<CutGroupId, ResolvedCutGroupThresholdCounterterms>,
+    pub center_groups: Vec<ResolvedThresholdCountertermCenterGroup>,
 }
 
 /// Whether one resolved variant has symbolic content and can be reached by the generated
@@ -160,6 +173,7 @@ pub struct ThresholdCountertermMultiplierMetadata {
 pub struct ThresholdCountertermVariantMetadata {
     pub variant_id: usize,
     pub name: String,
+    pub center_group: Option<String>,
     pub cut_group_id: Option<usize>,
     pub associations: Vec<ThresholdCountertermAssociationMetadata>,
     pub side: ThresholdCountertermSide,
@@ -272,6 +286,7 @@ impl ThresholdCountertermMetadataRegistry {
                 |((variant_id, variant), status)| ThresholdCountertermVariantMetadata {
                     variant_id: variant_id.0,
                     name: variant.name.clone(),
+                    center_group: variant.center_group.clone(),
                     cut_group_id: variant.cut_group_id.map(|id| id.0),
                     associations: variant
                         .associations
@@ -753,6 +768,7 @@ impl ResolvedThresholdCounterterms {
                 if threshold.counterterms.is_empty() {
                     threshold.counterterms.push(ThresholdCountertermVariant {
                         name: Some("default".to_string()),
+                        center_group: None,
                         subspace: Some(resolved_subspace),
                         parent_lmb: resolved_parent_lmb,
                         disable: false,
@@ -869,6 +885,7 @@ mod tests {
         };
         let variant = ResolvedThresholdCountertermVariant {
             name: "default".to_string(),
+            center_group: None,
             cut_group_id: None,
             associations: vec![association],
             side: ThresholdCountertermSide::Amplitude,
@@ -888,6 +905,7 @@ mod tests {
             legacy_equivalent: true,
             variants: TiVec::from(vec![variant]),
             cross_section_cut_groups: TiVec::new(),
+            center_groups: Vec::new(),
         };
 
         let materialized =
@@ -979,6 +997,7 @@ mod tests {
             legacy_equivalent: true,
             variants: TiVec::from(vec![ResolvedThresholdCountertermVariant {
                 name: "default".to_string(),
+                center_group: None,
                 cut_group_id: None,
                 associations: associations.clone(),
                 side: ThresholdCountertermSide::Amplitude,
@@ -1006,6 +1025,7 @@ mod tests {
                 multiplier: None,
             }]),
             cross_section_cut_groups: TiVec::new(),
+            center_groups: Vec::new(),
         };
 
         let materialized =
@@ -1106,6 +1126,7 @@ mod tests {
                        multiplier: Option<ThresholdCountertermMultiplier>| {
             ResolvedThresholdCountertermVariant {
                 name: name.to_string(),
+                center_group: None,
                 cut_group_id: Some(CutGroupId(0)),
                 associations: vec![association.clone()],
                 side,
@@ -1152,6 +1173,7 @@ mod tests {
                     ThresholdCountertermVariantId(3),
                 ],
             }],
+            center_groups: Vec::new(),
         };
         let statuses = vec![
             ThresholdCountertermVariantStatus {

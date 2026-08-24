@@ -197,6 +197,7 @@ fn target_directives_from_legacy(cross_section: &CrossSection) -> ThresholdCount
 
     let counterterm = || ThresholdCountertermVariant {
         name: Some(RAISED_VARIANT_NAME.to_string()),
+        center_group: None,
         subspace: None,
         parent_lmb: None,
         disable: false,

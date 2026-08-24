@@ -80,8 +80,9 @@ use typed_index_collections::{TiVec, ti_vec};
 use super::generation_progress::{self, GenerationProcessKind, GenerationProgressPhase};
 use super::threshold_counterterms::{
     ResolvedCutGroupThresholdCounterterms, ResolvedThresholdCountertermAssociation,
-    ResolvedThresholdCountertermVariant, ResolvedThresholdCounterterms, ThresholdCountertermOrigin,
-    ThresholdCountertermSide, ThresholdCountertermVariantId,
+    ResolvedThresholdCountertermCenterGroup, ResolvedThresholdCountertermVariant,
+    ResolvedThresholdCounterterms, ThresholdCountertermOrigin, ThresholdCountertermSide,
+    ThresholdCountertermVariantId,
 };
 
 use crate::{
@@ -455,6 +456,7 @@ struct TopologicalThresholdCandidate {
 #[derive(Clone)]
 struct ResolvedThresholdCountertermDraft {
     name: String,
+    center_group: Option<String>,
     origin: ThresholdCountertermOrigin,
     disable: bool,
     requested_subspace: Option<Vec<EdgeIndex>>,
@@ -472,6 +474,7 @@ impl ResolvedThresholdCountertermDraft {
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
     ) -> bool {
         self.name == other.name
+            && self.center_group == other.center_group
             && self.disable == other.disable
             && self.multiplier == other.multiplier
             && self
@@ -2970,6 +2973,7 @@ impl CrossSectionGraph {
             None => vec![(
                 ThresholdCountertermVariant {
                     name: Some("default".to_string()),
+                    center_group: None,
                     subspace: None,
                     parent_lmb: None,
                     disable: false,
@@ -3625,6 +3629,7 @@ impl CrossSectionGraph {
                     );
                     variants.push(ResolvedThresholdCountertermDraft {
                         name,
+                        center_group: variant.center_group,
                         origin,
                         disable: variant.disable,
                         requested_subspace: variant.subspace,
@@ -3654,6 +3659,7 @@ impl CrossSectionGraph {
                 if is_eligible(legacy_status)
                     && (variants.len() != 1
                         || variants[0].disable
+                        || variants[0].center_group.is_some()
                         || variants[0].multiplier.is_some()
                         || !Self::threshold_subspaces_are_equivalent(
                             &variants[0].subspace,
@@ -3901,6 +3907,7 @@ impl CrossSectionGraph {
                 let variant_id = ThresholdCountertermVariantId::from(variants.len());
                 variants.push(ResolvedThresholdCountertermVariant {
                     name: representative_variant.name.clone(),
+                    center_group: representative_variant.center_group.clone(),
                     cut_group_id: Some(representative.cut_group_id),
                     associations,
                     side: representative.side,
@@ -3943,6 +3950,7 @@ impl CrossSectionGraph {
             if active_variant_count > 0
                 && (active_variant_count != 1
                     || representative.variants.len() != 1
+                    || representative.variants[0].center_group.is_some()
                     || representative.variants[0].multiplier.is_some()
                     || !Self::threshold_subspaces_are_equivalent(
                         &representative.variants[0].subspace,
@@ -3970,11 +3978,66 @@ impl CrossSectionGraph {
             }
         }
 
+        let mut center_group_members = BTreeMap::<String, Vec<_>>::new();
+        for (variant_id, variant) in variants.iter_enumerated() {
+            if let Some(name) = &variant.center_group {
+                center_group_members
+                    .entry(name.clone())
+                    .or_default()
+                    .push(variant_id);
+            }
+        }
+        let center_groups = center_group_members
+            .into_iter()
+            .map(|(name, mut variant_ids)| {
+                // Keep the SOCP constraint order tied to topology discovery rather than to the
+                // declaration order of an equivalent metadata document.  Clarabel may select
+                // different points from a non-unique feasible-center region when rows are
+                // permuted, so this order is also needed for reproducible counterterms.
+                variant_ids.sort_by_key(|variant_id| {
+                    let variant = &variants[*variant_id];
+                    (
+                        variant
+                            .associations
+                            .iter()
+                            .filter_map(|association| association.cut_id.map(|cut_id| cut_id.0))
+                            .min()
+                            .unwrap_or(usize::MAX),
+                        variant.side,
+                        variant
+                            .threshold_esurface_ids
+                            .first()
+                            .map_or(usize::MAX, |esurface_id| esurface_id.0),
+                        variant_id.0,
+                    )
+                });
+                let subspace = SubspaceData::union_in_common_parent(
+                    variant_ids
+                        .iter()
+                        .map(|variant_id| &variants[*variant_id].subspace),
+                    &self.graph,
+                    all_lmbs,
+                )
+                .with_context(|| {
+                    format!(
+                        "Graph '{}' threshold center_group '{}' cannot place all member subspaces in one parent LMB",
+                        self.graph.name, name,
+                    )
+                })?;
+                Ok(ResolvedThresholdCountertermCenterGroup {
+                    name,
+                    subspace,
+                    variant_ids,
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
         Ok((
             ResolvedThresholdCounterterms {
                 legacy_equivalent,
                 variants,
                 cross_section_cut_groups: cut_groups,
+                center_groups,
             },
             cut_threshold_associations,
         ))
@@ -5005,6 +5068,7 @@ mod tests {
                                 edges: dormant_threshold_edges.clone(),
                                 counterterms: vec![ThresholdCountertermVariant {
                                     name: Some("dormant".to_string()),
+                                    center_group: None,
                                     subspace: None,
                                     parent_lmb: None,
                                     disable: false,
@@ -5231,6 +5295,7 @@ mod tests {
         spec.cuts[0].thresholds[0].counterterms = vec![
             ThresholdCountertermVariant {
                 name: Some("disabled".to_string()),
+                center_group: None,
                 subspace: None,
                 parent_lmb: None,
                 disable: true,
@@ -5238,6 +5303,7 @@ mod tests {
             },
             ThresholdCountertermVariant {
                 name: Some("duplicate".to_string()),
+                center_group: None,
                 subspace: Some(vec![EdgeIndex::from(7)]),
                 parent_lmb: None,
                 disable: false,
@@ -5310,6 +5376,7 @@ mod tests {
         let requested = subspace.iter_basis_edges(&all_lmbs).collect::<Vec<_>>();
         let first = super::ResolvedThresholdCountertermDraft {
             name: "v".to_string(),
+            center_group: None,
             origin: ThresholdCountertermOrigin::Explicit,
             disable: false,
             requested_subspace: Some(requested),

@@ -1,9 +1,9 @@
 use crate::GammaLoopContext;
-use crate::cff::esurface::EsurfaceCollection;
 use crate::cff::esurface::EsurfaceID;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingThresholds;
 use crate::cff::esurface::esurface_value_is_strictly_inside;
+use crate::cff::esurface::{Esurface, EsurfaceCollection};
 use crate::graph::FeynmanGraph;
 use crate::graph::Graph;
 use crate::graph::LmbIndex;
@@ -14,6 +14,7 @@ use crate::momentum::sample::LoopMomenta;
 use crate::momentum::sample::SubspaceData;
 use crate::momentum::signature::LoopExtSignature;
 use crate::momentum::{Rotation, ThreeMomentum};
+use crate::processes::ThresholdCountertermVariantId;
 use crate::settings::RuntimeSettings;
 use crate::utils::F;
 use crate::utils::Length;
@@ -37,6 +38,9 @@ use typed_index_collections::TiVec;
 pub struct OverlapGroup {
     pub existing_esurfaces: Vec<ExistingEsurfaceId>,
     pub complement: Vec<ExistingEsurfaceId>,
+    /// Independent overlap/multichannel family. Metadata-selected shared-center variants must not
+    /// enter the normalization of an unrelated cut-local family.
+    pub partition: usize,
     /// LU overlap centers are stored in the current probe and cut-side LMB frame.
     /// Solver-derived centers therefore require no further rotation at consumption.
     pub center: LoopMomenta<F<f64>>,
@@ -76,13 +80,28 @@ impl Display for OverlapStructure {
 
 impl OverlapStructure {
     pub fn fill_in_complements(&mut self) {
+        let partitions = self
+            .overlap_groups
+            .iter()
+            .map(|group| group.partition)
+            .max()
+            .map_or(0, |maximum| maximum + 1);
+        let partition_esurfaces = (0..partitions)
+            .map(|partition| {
+                self.overlap_groups
+                    .iter()
+                    .filter(|group| group.partition == partition)
+                    .flat_map(|group| group.existing_esurfaces.iter().copied())
+                    .unique()
+                    .collect_vec()
+            })
+            .collect_vec();
         for group in self.overlap_groups.iter_mut() {
-            group.complement = self
-                .existing_esurfaces
-                .iter_enumerated()
-                .map(|(existing_esurface_id, _)| existing_esurface_id)
-                .filter(|&existing_esurface_id| {
-                    !group.existing_esurfaces.contains(&existing_esurface_id)
+            group.complement = partition_esurfaces[group.partition]
+                .iter()
+                .copied()
+                .filter(|existing_esurface_id| {
+                    !group.existing_esurfaces.contains(existing_esurface_id)
                 })
                 .collect();
         }
@@ -455,6 +474,402 @@ impl OverlapInput<'_> {
     }
 }
 
+#[derive(Clone)]
+pub(crate) struct SharedOverlapOwner {
+    pub variant_id: ThresholdCountertermVariantId,
+    pub esurface: Esurface,
+    pub subspace: SubspaceData,
+    /// The owning cut's rescaled momenta, expressed in the shared parent LMB.
+    pub loop_moms: LoopMomenta<F<f64>>,
+    pub external_momenta: ExternalFourMomenta<F<f64>>,
+}
+
+pub(crate) struct SharedOverlapInput<'a> {
+    pub graph: &'a Graph,
+    pub settings: &'a RuntimeSettings,
+    /// Union of every owner's active coordinates in their common parent LMB.
+    pub subspace: &'a SubspaceData,
+    pub lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
+    pub edge_masses: EdgeVec<F<f64>>,
+    pub owners: Vec<SharedOverlapOwner>,
+}
+
+pub(crate) struct SharedOverlapGroup {
+    pub owner_indices: Vec<usize>,
+    pub center: LoopMomenta<F<f64>>,
+}
+
+pub(crate) struct SharedOverlapStructure {
+    pub owners: Vec<SharedOverlapOwner>,
+    pub overlap_groups: Vec<SharedOverlapGroup>,
+}
+
+struct SharedPropagatorConstraint<'a> {
+    owner_index: usize,
+    mass: F<f64>,
+    signature: &'a LoopExtSignature,
+}
+
+impl SharedPropagatorConstraint<'_> {
+    fn get_dimension(&self) -> usize {
+        4 + usize::from(!self.mass.is_zero())
+    }
+}
+
+impl SharedOverlapInput<'_> {
+    fn validate(&self) -> Result<()> {
+        if self.owners.is_empty() {
+            return Err(eyre!(
+                "shared overlap-center input has no existing thresholds"
+            ));
+        }
+        let parent = self.subspace.parent_lmb_index();
+        for owner in &self.owners {
+            if owner.subspace.parent_lmb_index() != parent {
+                return Err(eyre!(
+                    "shared overlap variant {} uses parent LMB {}, while its center group uses parent LMB {}",
+                    owner.variant_id.0,
+                    usize::from(owner.subspace.parent_lmb_index()),
+                    usize::from(parent),
+                ));
+            }
+            if owner
+                .subspace
+                .iter_lmb_indices()
+                .any(|loop_index| !self.subspace.contains_loop_index(loop_index))
+            {
+                return Err(eyre!(
+                    "shared overlap variant {} contains coordinates outside its center-group union subspace",
+                    owner.variant_id.0,
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
+fn check_shared_center(
+    input: &SharedOverlapInput,
+    owner_indices: &[usize],
+    center: &LoopMomenta<F<f64>>,
+) -> bool {
+    owner_indices.iter().all(|&owner_index| {
+        let owner = &input.owners[owner_index];
+        let mut projected_center = owner.loop_moms.clone();
+        for loop_index in owner.subspace.iter_lmb_indices() {
+            projected_center[loop_index] = center[loop_index].clone();
+        }
+        let value = owner.esurface.compute_from_momenta(
+            owner.subspace.get_lmb(input.lmbs),
+            &input.edge_masses,
+            &projected_center,
+            &owner.external_momenta,
+        );
+        esurface_value_is_strictly_inside(&value, &F(input.settings.kinematics.e_cm))
+    })
+}
+
+fn construct_shared_solver(
+    input: &SharedOverlapInput,
+    owner_indices: &[usize],
+    verbose: bool,
+) -> DefaultSolver {
+    let num_loop_vars = 3 * input.subspace.loopcount();
+    let mut propagator_constraints: Vec<SharedPropagatorConstraint> = Vec::new();
+    let mut esurface_constraints = Vec::with_capacity(owner_indices.len());
+
+    for &owner_index in owner_indices {
+        let owner = &input.owners[owner_index];
+        let lmb = owner.subspace.get_lmb(input.lmbs);
+        let mut owner_propagators = Vec::new();
+        for edge_id in owner
+            .subspace
+            .contains(&owner.esurface.energies, input.graph)
+        {
+            let signature = &lmb.edge_signatures[edge_id];
+            let mass = input.edge_masses[edge_id];
+            let propagator_index = propagator_constraints
+                .iter()
+                .position(|constraint| {
+                    constraint.owner_index == owner_index
+                        && constraint.signature == signature
+                        && constraint.mass == mass
+                })
+                .unwrap_or_else(|| {
+                    propagator_constraints.push(SharedPropagatorConstraint {
+                        owner_index,
+                        mass,
+                        signature,
+                    });
+                    propagator_constraints.len() - 1
+                });
+            owner_propagators.push(propagator_index);
+        }
+        esurface_constraints.push(owner_propagators);
+    }
+
+    let propagator_index_offset = 1;
+    let loop_momentum_offset = propagator_index_offset + propagator_constraints.len();
+    let num_primal_variables = loop_momentum_offset + num_loop_vars;
+    let cone_dimension_sum = propagator_constraints
+        .iter()
+        .map(SharedPropagatorConstraint::get_dimension)
+        .sum::<usize>();
+    let num_constraints = 1 + esurface_constraints.len() + cone_dimension_sum;
+
+    let p_matrix = CscMatrix::spalloc((num_primal_variables, num_primal_variables), 0);
+    let mut q_vector = vec![0.0; num_primal_variables];
+    q_vector[0] = 1.0;
+    let mut cones = Vec::with_capacity(2 + propagator_constraints.len());
+    cones.push(NonnegativeConeT(1));
+    cones.push(NonnegativeConeT(esurface_constraints.len()));
+    for constraint in &propagator_constraints {
+        cones.push(SecondOrderConeT(constraint.get_dimension()));
+    }
+
+    let mut a_matrix = vec![vec![0.0; num_primal_variables]; num_constraints];
+    let mut b_vector = vec![0.0; num_constraints];
+    a_matrix[0][0] = 1.0;
+    for (position, owner_propagators) in esurface_constraints.iter().enumerate() {
+        for propagator_index in owner_propagators {
+            a_matrix[position + 1][propagator_index_offset + *propagator_index] = 1.0;
+        }
+        let owner = &input.owners[owner_indices[position]];
+        let shift = owner.esurface.compute_shift_part_from_momenta_in_subspace(
+            &owner.loop_moms,
+            &owner.external_momenta,
+            &owner.subspace,
+            input.lmbs,
+            input.graph,
+            &input.edge_masses,
+        );
+        b_vector[position + 1] = -shift.0;
+        a_matrix[position + 1][0] = -1.0;
+    }
+
+    let mut vertical_offset = esurface_constraints.len() + 1;
+    for (cone_index, constraint) in propagator_constraints.iter().enumerate() {
+        a_matrix[vertical_offset][propagator_index_offset + cone_index] = -1.0;
+        vertical_offset += 1;
+
+        let owner = &input.owners[constraint.owner_index];
+        let spatial_externals = owner
+            .external_momenta
+            .iter()
+            .map(|momentum| momentum.spatial)
+            .collect();
+        let spatial_shift = compute_shift_part_subspace(
+            &constraint.signature.internal,
+            &constraint.signature.external,
+            &owner.loop_moms,
+            &spatial_externals,
+            &owner.subspace,
+        );
+        b_vector[vertical_offset] = spatial_shift.px.0;
+        b_vector[vertical_offset + 1] = spatial_shift.py.0;
+        b_vector[vertical_offset + 2] = spatial_shift.pz.0;
+
+        for (solver_loop_index, parent_loop_index) in input.subspace.iter_lmb_indices().enumerate()
+        {
+            if !owner.subspace.contains_loop_index(parent_loop_index) {
+                continue;
+            }
+            let sign = constraint.signature.internal[parent_loop_index];
+            if sign.is_sign() {
+                let coefficient = -(sign as i8) as f64;
+                a_matrix[vertical_offset][loop_momentum_offset + 3 * solver_loop_index] =
+                    coefficient;
+                a_matrix[vertical_offset + 1][loop_momentum_offset + 3 * solver_loop_index + 1] =
+                    coefficient;
+                a_matrix[vertical_offset + 2][loop_momentum_offset + 3 * solver_loop_index + 2] =
+                    coefficient;
+            }
+        }
+        vertical_offset += 3;
+        if !constraint.mass.is_zero() {
+            b_vector[vertical_offset] = constraint.mass.0;
+            vertical_offset += 1;
+        }
+    }
+
+    let settings = DefaultSettingsBuilder::default()
+        .verbose(verbose)
+        .build()
+        .unwrap();
+    DefaultSolver::new(
+        &p_matrix,
+        &q_vector,
+        &CscMatrix::from(&a_matrix),
+        &b_vector,
+        &cones,
+        settings,
+    )
+    .unwrap()
+}
+
+fn find_shared_center(
+    input: &SharedOverlapInput,
+    owner_indices: &[usize],
+) -> Option<LoopMomenta<F<f64>>> {
+    if input.settings.subtraction.overlap_settings.try_origin {
+        let origin = LoopMomenta::from_iter(
+            (0..input.graph.get_loop_number()).map(|_| ThreeMomentum::new(F(0.0), F(0.0), F(0.0))),
+        );
+        if check_shared_center(input, owner_indices, &origin) {
+            return Some(origin);
+        }
+    }
+
+    let mut solver = construct_shared_solver(input, owner_indices, false);
+    solver.solve();
+    if matches!(
+        solver.solution.status,
+        SolverStatus::Solved | SolverStatus::AlmostSolved | SolverStatus::InsufficientProgress
+    ) {
+        let center = extract_center(
+            input.graph.get_loop_number(),
+            input.subspace,
+            &solver.solution.x,
+        );
+        if check_shared_center(input, owner_indices, &center) {
+            return Some(center);
+        }
+    }
+    None
+}
+
+/// Find maximal compatible center groups for threshold variants owned by different Cutkosky cuts.
+/// Every owner keeps the complementary coordinates of its own cut-rescaled sample fixed.
+pub(crate) fn find_shared_overlap(
+    input: SharedOverlapInput<'_>,
+    probe_rotation: &Rotation,
+) -> Result<SharedOverlapStructure> {
+    input.validate()?;
+    let all_owner_indices = (0..input.owners.len()).collect_vec();
+
+    if let Some(global_center) = &input
+        .settings
+        .subtraction
+        .overlap_settings
+        .force_global_center
+    {
+        let identity_center: LoopMomenta<F<f64>> = global_center
+            .iter()
+            .map(|coordinates| {
+                ThreeMomentum::new(F(coordinates[0]), F(coordinates[1]), F(coordinates[2]))
+            })
+            .collect();
+        let spatial_externals = input.owners[0]
+            .external_momenta
+            .iter()
+            .map(|momentum| momentum.spatial)
+            .collect();
+        let mut center = identity_center.rotate(probe_rotation).lmb_transform(
+            &input.graph.loop_momentum_basis,
+            input.subspace.get_lmb(input.lmbs),
+            &spatial_externals,
+        );
+        for loop_index in (0..center.len()).map(LoopIndex::from) {
+            if !input.subspace.contains_loop_index(loop_index) {
+                center[loop_index] = ThreeMomentum::new(F(0.0), F(0.0), F(0.0));
+            }
+        }
+        if !check_shared_center(&input, &all_owner_indices, &center) {
+            return Err(eyre!(
+                "forced overlap center is not strictly inside all shared thresholds"
+            ));
+        }
+        return Ok(SharedOverlapStructure {
+            owners: input.owners,
+            overlap_groups: vec![SharedOverlapGroup {
+                owner_indices: all_owner_indices,
+                center,
+            }],
+        });
+    }
+
+    if input
+        .settings
+        .subtraction
+        .overlap_settings
+        .try_origin_all_lmbs
+    {
+        return Err(eyre!(
+            "try_origin_all_lmbs is not implemented for shared cross-cut centers"
+        ));
+    }
+
+    if let Some(center) = find_shared_center(&input, &all_owner_indices) {
+        return Ok(SharedOverlapStructure {
+            owners: input.owners,
+            overlap_groups: vec![SharedOverlapGroup {
+                owner_indices: all_owner_indices,
+                center,
+            }],
+        });
+    }
+
+    let mut pair_overlaps = vec![vec![false; input.owners.len()]; input.owners.len()];
+    for left in 0..input.owners.len() {
+        pair_overlaps[left][left] = true;
+        for right in left + 1..input.owners.len() {
+            let overlaps = find_shared_center(&input, &[left, right]).is_some();
+            pair_overlaps[left][right] = overlaps;
+            pair_overlaps[right][left] = overlaps;
+        }
+    }
+
+    let mut overlap_groups: Vec<SharedOverlapGroup> = Vec::new();
+    for subset_size in (1..input.owners.len()).rev() {
+        for owner_indices in (0..input.owners.len()).combinations(subset_size) {
+            if overlap_groups.iter().any(|group| {
+                owner_indices
+                    .iter()
+                    .all(|owner_index| group.owner_indices.contains(owner_index))
+            }) {
+                continue;
+            }
+            if owner_indices
+                .iter()
+                .tuple_combinations()
+                .any(|(&left, &right)| !pair_overlaps[left][right])
+            {
+                continue;
+            }
+            if let Some(center) = find_shared_center(&input, &owner_indices) {
+                overlap_groups.push(SharedOverlapGroup {
+                    owner_indices,
+                    center,
+                });
+            }
+        }
+    }
+
+    let uncovered = all_owner_indices
+        .iter()
+        .copied()
+        .filter(|owner_index| {
+            !overlap_groups
+                .iter()
+                .any(|group| group.owner_indices.contains(owner_index))
+        })
+        .collect_vec();
+    if !uncovered.is_empty() {
+        return Err(eyre!(
+            "could not find centers for shared threshold variants {:?}",
+            uncovered
+                .iter()
+                .map(|owner_index| input.owners[*owner_index].variant_id.0)
+                .collect_vec(),
+        ));
+    }
+
+    Ok(SharedOverlapStructure {
+        owners: input.owners,
+        overlap_groups,
+    })
+}
+
 pub(crate) fn check_global_center(
     overlap_input: &OverlapInput,
     existing_esurfaces: &ExistingThresholds,
@@ -574,6 +989,7 @@ pub(crate) fn find_maximal_overlap(
             existing_esurfaces: all_existing_esurfaces,
             center: global_center_probe,
             complement: vec![],
+            partition: 0,
         };
         res.overlap_groups.push(single_group);
 
@@ -600,6 +1016,7 @@ pub(crate) fn find_maximal_overlap(
                 existing_esurfaces: all_existing_esurfaces,
                 center: origin,
                 complement: vec![],
+                partition: 0,
             };
             res.overlap_groups.push(single_group);
             res.fill_in_complements();
@@ -627,6 +1044,7 @@ pub(crate) fn find_maximal_overlap(
             existing_esurfaces: all_existing_esurfaces,
             center,
             complement: vec![],
+            partition: 0,
         };
         res.overlap_groups.push(single_group);
         res.fill_in_complements();
@@ -680,6 +1098,7 @@ pub(crate) fn find_maximal_overlap(
                 existing_esurfaces: vec![existing_esurface_id],
                 center,
                 complement: vec![],
+                partition: 0,
             });
             num_disconnected_surfaces += 1;
         }
@@ -720,6 +1139,7 @@ pub(crate) fn find_maximal_overlap(
                     existing_esurfaces: subset.clone(),
                     center,
                     complement: vec![],
+                    partition: 0,
                 });
             }
         }
@@ -929,6 +1349,50 @@ mod tests {
     use linnet::half_edge::involution::EdgeIndex;
     use linnet::half_edge::subgraph::{SuBitGraph, SubSetOps};
     use typed_index_collections::ti_vec;
+
+    #[test]
+    fn overlap_complements_do_not_cross_independent_partitions() {
+        let center = LoopMomenta::from_iter([ThreeMomentum::new(F(0.0), F(0.0), F(0.0))]);
+        let mut overlaps = OverlapStructure {
+            overlap_groups: vec![
+                OverlapGroup {
+                    existing_esurfaces: vec![ExistingEsurfaceId::from(0)],
+                    complement: vec![],
+                    partition: 0,
+                    center: center.clone(),
+                },
+                OverlapGroup {
+                    existing_esurfaces: vec![ExistingEsurfaceId::from(1)],
+                    complement: vec![],
+                    partition: 0,
+                    center: center.clone(),
+                },
+                OverlapGroup {
+                    existing_esurfaces: vec![ExistingEsurfaceId::from(2)],
+                    complement: vec![],
+                    partition: 1,
+                    center,
+                },
+            ],
+            existing_esurfaces: ti_vec![
+                EsurfaceID::from(3),
+                EsurfaceID::from(4),
+                EsurfaceID::from(5)
+            ],
+        };
+
+        overlaps.fill_in_complements();
+
+        assert_eq!(
+            overlaps.overlap_groups[0].complement,
+            vec![ExistingEsurfaceId::from(1)]
+        );
+        assert_eq!(
+            overlaps.overlap_groups[1].complement,
+            vec![ExistingEsurfaceId::from(0)]
+        );
+        assert!(overlaps.overlap_groups[2].complement.is_empty());
+    }
 
     #[test]
     fn global_center_check_preserves_fixed_complement_for_multidimensional_subspace() {
@@ -1148,6 +1612,136 @@ mod tests {
             &all_lmbs,
         )
         .unwrap();
+
+        let shared_surface = Esurface {
+            energies: vec![
+                graph.loop_momentum_basis.loop_edges[LoopIndex(0)],
+                complement_edge,
+            ],
+            external_shift: vec![(EdgeIndex::from(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        let shared_externals = ExternalFourMomenta::from_iter([
+            FourMomentum::from_args(F(20.0), F(0.0), F(0.0), F(0.0)),
+            FourMomentum::from_args(F(-20.0), F(0.0), F(0.0), F(0.0)),
+        ]);
+        let second_owner_sample = LoopMomenta::from_iter([
+            ThreeMomentum::new(F(1.0), F(0.0), F(0.0)),
+            ThreeMomentum::new(F(0.0), F(1.0), F(0.0)),
+            ThreeMomentum::new(F(-3.0), F(0.0), F(0.0)),
+        ]);
+        let mut shared_settings = RuntimeSettings::default();
+        shared_settings.subtraction.overlap_settings.try_origin = false;
+        shared_settings
+            .subtraction
+            .overlap_settings
+            .try_origin_all_lmbs = false;
+        let shared_overlap = find_shared_overlap(
+            SharedOverlapInput {
+                graph: &graph,
+                settings: &shared_settings,
+                subspace: &full_parent_subspace,
+                lmbs: &all_lmbs,
+                edge_masses: overlap_input.edge_masses.clone(),
+                owners: vec![
+                    SharedOverlapOwner {
+                        variant_id: ThresholdCountertermVariantId::from(0),
+                        esurface: shared_surface.clone(),
+                        subspace: subspace.clone(),
+                        loop_moms: sampled_momenta.clone(),
+                        external_momenta: shared_externals.clone(),
+                    },
+                    SharedOverlapOwner {
+                        variant_id: ThresholdCountertermVariantId::from(1),
+                        esurface: shared_surface,
+                        subspace: full_parent_subspace.clone(),
+                        loop_moms: second_owner_sample,
+                        external_momenta: shared_externals,
+                    },
+                ],
+            },
+            &Rotation::new(RotationMethod::Identity),
+        )
+        .unwrap();
+        assert_eq!(shared_overlap.overlap_groups.len(), 1);
+        assert_eq!(shared_overlap.overlap_groups[0].owner_indices, vec![0, 1]);
+        assert!(check_shared_center(
+            &SharedOverlapInput {
+                graph: &graph,
+                settings: &shared_settings,
+                subspace: &full_parent_subspace,
+                lmbs: &all_lmbs,
+                edge_masses: overlap_input.edge_masses.clone(),
+                owners: shared_overlap.owners.clone(),
+            },
+            &[0, 1],
+            &shared_overlap.overlap_groups[0].center,
+        ));
+
+        // A projected radial reconstruction must retain this owner's sampled complement. Use an
+        // active edge whose momentum signature itself depends on a complementary loop coordinate;
+        // both that fixed spatial shift and complement energies must survive the projection.
+        let shared_owner = &shared_overlap.owners[0];
+        let mixed_signature_edge = graph
+            .iter_edges_of(&subgraph)
+            .map(|(_, edge, _)| edge)
+            .find(|&edge| {
+                let signature = &graph.loop_momentum_basis.edge_signatures[edge].internal;
+                let has_active = shared_owner
+                    .subspace
+                    .iter_lmb_indices()
+                    .any(|loop_index| signature[loop_index].is_sign());
+                let has_complement = (0..graph.loop_momentum_basis.loop_edges.len())
+                    .map(LoopIndex::from)
+                    .any(|loop_index| {
+                        !shared_owner.subspace.contains_loop_index(loop_index)
+                            && signature[loop_index].is_sign()
+                    });
+                has_active && has_complement
+            })
+            .expect("test graph must contain an active edge with a mixed loop signature");
+        let mixed_signature_surface = Esurface {
+            energies: vec![mixed_signature_edge, complement_edge],
+            external_shift: vec![(EdgeIndex::from(0), -1)],
+            vertex_set: VertexSet::dummy(),
+        };
+        let mut projected_center = shared_owner.loop_moms.clone();
+        for loop_index in shared_owner.subspace.iter_lmb_indices() {
+            projected_center[loop_index] =
+                shared_overlap.overlap_groups[0].center[loop_index].clone();
+        }
+        let mut radial_point = projected_center.clone();
+        let active_loop_index = shared_owner.subspace.iter_lmb_indices().next().unwrap();
+        radial_point[active_loop_index].px += F(3.0);
+        radial_point[active_loop_index].py += F(1.0);
+        let shifted_momenta = &radial_point - &projected_center;
+        let active_indices = shared_owner.subspace.iter_lmb_indices().collect::<Vec<_>>();
+        let radius = shifted_momenta
+            .hyper_radius_squared(Some(&active_indices))
+            .sqrt();
+        let unit_shifted_momenta = shifted_momenta.rescale(&radius.inv(), Some(&active_indices));
+        let (radially_reconstructed, _) = mixed_signature_surface
+            .compute_self_and_r_derivative_subspace(
+                &radius,
+                &unit_shifted_momenta,
+                &projected_center,
+                &shared_owner.external_momenta,
+                &overlap_input.edge_masses,
+                &shared_owner.subspace,
+                &all_lmbs,
+                &graph,
+            );
+        let directly_evaluated = mixed_signature_surface.compute_from_momenta(
+            shared_owner.subspace.get_lmb(&all_lmbs),
+            &overlap_input.edge_masses,
+            &radial_point,
+            &shared_owner.external_momenta,
+        );
+        assert!(
+            (radially_reconstructed - directly_evaluated).abs() < F(1.0e-12),
+            "projected radial reconstruction dropped the sampled fixed complement"
+        );
+
         let common_subspace = SubspaceData::union_in_common_parent(
             [&subspace, &full_parent_subspace],
             &graph,

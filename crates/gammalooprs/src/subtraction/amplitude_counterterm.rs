@@ -35,7 +35,7 @@ use crate::{
     },
     model::Model,
     momentum::{
-        Energy, FourMomentum, Rotation, ThreeMomentum,
+        Energy, FourMomentum, Rotation,
         sample::{
             BareMomentumSample, ExternalFourMomenta, LoopIndex, LoopMomenta, MomentumSample,
             SubspaceData,
@@ -1053,15 +1053,10 @@ impl AmplitudeCountertermData {
                 let subspace = &self.variant_subspaces[variant_id];
                 let esurface = &thresholds[synthetic_esurface_id];
 
-                let mut center = overlap_group.center.cast::<T>();
-                for loop_index in (0..center.0.len()).map(LoopIndex::from) {
-                    if !subspace.contains_loop_index(loop_index) {
-                        center[loop_index] = ThreeMomentum::new(
-                            momentum_sample.zero(),
-                            momentum_sample.zero(),
-                            momentum_sample.zero(),
-                        );
-                    }
+                let mut center = sample_in_common_lmb.loop_moms().clone();
+                let raw_group_center = overlap_group.center.cast::<T>();
+                for loop_index in subspace.iter_lmb_indices() {
+                    center[loop_index] = raw_group_center[loop_index].clone();
                 }
                 let shifted_loop_momenta = sample_in_common_lmb.loop_moms() - &center;
                 let radius = shifted_loop_momenta
@@ -1071,6 +1066,7 @@ impl AmplitudeCountertermData {
                     shifted_loop_momenta.rescale(&radius.inv(), subspace.as_subspace_simple());
                 let (raw_radius_guess, _) = esurface.get_radius_guess_subspace(
                     &unit_shifted_momenta,
+                    &center,
                     sample_in_common_lmb.external_moms(),
                     subspace,
                     &self.lmbs,
@@ -1376,15 +1372,10 @@ impl AmplitudeCountertermData {
                 let subspace = &self.variant_subspaces[variant_id];
                 let esurface = &thresholds[synthetic_esurface_id];
 
-                let mut projected_center = overlap_group.center.cast::<T>();
-                for loop_index in (0..projected_center.0.len()).map(LoopIndex::from) {
-                    if !subspace.contains_loop_index(loop_index) {
-                        projected_center[loop_index] = ThreeMomentum::new(
-                            momentum_sample.zero(),
-                            momentum_sample.zero(),
-                            momentum_sample.zero(),
-                        );
-                    }
+                let mut projected_center = sample_in_common_lmb.loop_moms().clone();
+                let raw_group_center = overlap_group.center.cast::<T>();
+                for loop_index in subspace.iter_lmb_indices() {
+                    projected_center[loop_index] = raw_group_center[loop_index].clone();
                 }
                 let shifted_loop_momenta = sample_in_common_lmb.loop_moms() - &projected_center;
                 let radius = shifted_loop_momenta
@@ -1394,6 +1385,7 @@ impl AmplitudeCountertermData {
                     shifted_loop_momenta.rescale(&radius.inv(), subspace.as_subspace_simple());
                 let (raw_radius_guess, _) = esurface.get_radius_guess_subspace(
                     &unit_shifted_momenta,
+                    &projected_center,
                     sample_in_common_lmb.external_moms(),
                     subspace,
                     &self.lmbs,

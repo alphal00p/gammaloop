@@ -32,7 +32,7 @@ type RationalExpressionTree = (
     ExpressionEvaluator<Complex<Fraction<IntegerRing>>>,
 );
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 11;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 12;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
@@ -98,6 +98,7 @@ pub struct StandaloneThresholdCountertermMultiplierMetadata {
 pub struct StandaloneThresholdCountertermVariantMetadata {
     pub(crate) variant_id: usize,
     pub(crate) name: String,
+    pub(crate) center_group: Option<String>,
     pub(crate) cut_group_id: Option<usize>,
     pub(crate) associations: Vec<StandaloneThresholdCountertermAssociationMetadata>,
     pub(crate) side: StandaloneThresholdCountertermSide,
@@ -1515,6 +1516,7 @@ mod threshold_multiplier_tests {
         let variant = StandaloneThresholdCountertermVariantMetadata {
             variant_id: 0,
             name: "forced_subspace".to_string(),
+            center_group: Some("shared_1l".to_string()),
             cut_group_id: Some(0),
             associations: vec![StandaloneThresholdCountertermAssociationMetadata {
                 cut_id: Some(0),
@@ -1640,7 +1642,7 @@ mod threshold_multiplier_tests {
 
     #[test]
     fn threshold_counterterm_metadata_archive_validates_ids_and_component_coverage() {
-        assert_eq!(STANDALONE_EVALUATORS_VERSION, 11);
+        assert_eq!(STANDALONE_EVALUATORS_VERSION, 12);
         let counterterms = vec![identity_counterterm()];
         let registry = identity_registry();
         validate_threshold_counterterm_metadata_archive(&registry, "graph", &counterterms).unwrap();
@@ -1658,7 +1660,7 @@ mod threshold_multiplier_tests {
     }
 
     #[test]
-    fn threshold_counterterm_metadata_roundtrips_in_v11_archives() {
+    fn threshold_counterterm_metadata_roundtrips_in_v12_archives() {
         let registry = identity_registry();
         let archive = archive_with_metadata(Some(registry.clone()));
 

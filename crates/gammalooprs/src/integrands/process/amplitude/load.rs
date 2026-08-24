@@ -2073,6 +2073,7 @@ mod threshold_variant_archive_tests {
             variants: vec![ThresholdCountertermVariantMetadata {
                 variant_id: 0,
                 name: "default".to_string(),
+                center_group: None,
                 cut_group_id: None,
                 associations: vec![ThresholdCountertermAssociationMetadata {
                     cut_id: None,

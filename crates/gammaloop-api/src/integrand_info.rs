@@ -1,10 +1,11 @@
 use std::fmt;
 
 use color_eyre::Result;
-use eyre::{eyre, Context};
+use eyre::{Context, eyre};
 use gammalooprs::{
+    DependentMomentaConstructor,
     cff::esurface::EsurfaceExistenceStatus,
-    graph::{threshold_counterterms::ThresholdCountertermVariant, FeynmanGraph, Graph},
+    graph::{FeynmanGraph, Graph, threshold_counterterms::ThresholdCountertermVariant},
     integrands::process::{ActiveF64Backend, LmbMultiChannelingSetup, ParamBuilder},
     model::Model,
     processes::{
@@ -12,9 +13,8 @@ use gammalooprs::{
         ThresholdCountertermAssociation, ThresholdCountertermMetadataRegistry,
         ThresholdCountertermMultiplierMetadata, ThresholdCountertermStatus,
     },
-    settings::{global::FrozenCompilationMode, runtime::ParameterizationSettings, RuntimeSettings},
+    settings::{RuntimeSettings, global::FrozenCompilationMode, runtime::ParameterizationSettings},
     utils::F,
-    DependentMomentaConstructor,
 };
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use schemars::JsonSchema;
@@ -80,6 +80,7 @@ impl IntegrandThresholdCountertermDirectiveInfo {
                 cut.thresholds.iter().flat_map(move |threshold| {
                     let implicit_default = ThresholdCountertermVariant {
                         name: Some("default".to_string()),
+                        center_group: None,
                         subspace: None,
                         parent_lmb: None,
                         disable: false,

@@ -20,7 +20,7 @@ use crate::{
     cff::{
         CutCFFIndex,
         esurface::{
-            Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId,
+            Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, ExistingThresholds,
             esurface_value_is_strictly_inside,
         },
         expression::OrientationID,
@@ -963,14 +963,14 @@ fn compute_self_and_r_derivative_subspace_dual<T: FloatLike>(
             if subspace.contains_loop_index(loop_index) {
                 shifted_unit_momenta * radius + &center_in_subspace[loop_index]
             } else {
-                shifted_unit_momenta.clone()
+                center_in_subspace[loop_index].clone()
             }
         })
         .collect();
 
     let shift = compute_shift_part_from_dual_momenta_in_subspace(
         esurface,
-        shifted_unit_loops_in_subspace,
+        center_in_subspace,
         external_moms,
         subspace,
         all_lmbs,
@@ -1368,6 +1368,24 @@ pub(crate) struct LUVariantSubspaces {
     pub right: TiVec<RightThresholdId, SubspaceData>,
     pub left_common: Option<SubspaceData>,
     pub right_common: Option<SubspaceData>,
+    pub left_center_groups: TiVec<LeftThresholdId, Option<usize>>,
+    pub right_center_groups: TiVec<RightThresholdId, Option<usize>>,
+}
+
+#[derive(Clone, Debug, Encode, Decode)]
+pub(crate) struct LUSharedCenterOwner {
+    pub variant_id: ThresholdCountertermVariantId,
+    pub cut_group_id: CutGroupId,
+    pub side: ThresholdCountertermSide,
+    pub threshold_index: usize,
+}
+
+#[derive(Clone, Debug, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub(crate) struct LUSharedCenterGroup {
+    pub name: String,
+    pub subspace: SubspaceData,
+    pub owners: Vec<LUSharedCenterOwner>,
 }
 
 #[derive(Clone, Encode, Decode)]
@@ -1378,6 +1396,8 @@ pub(crate) struct LUCounterTerm {
     pub subspaces: TiVec<CutGroupId, (SubspaceData, SubspaceData)>,
     /// Present only when directives require per-variant projected E-surface instances.
     pub variant_subspaces: Option<TiVec<CutGroupId, LUVariantSubspaces>>,
+    /// Metadata-selected overlap families evaluated jointly across physical cuts.
+    pub shared_center_groups: Vec<LUSharedCenterGroup>,
     /// Stable graph-local static metadata. The absent/no-directive path retains no allocation.
     pub metadata_registry: Option<ThresholdCountertermMetadataRegistry>,
     pub active_cut_groups: TiVec<CutGroupId, bool>,
@@ -1630,6 +1650,200 @@ impl LUCounterTerm {
     }
 
     #[allow(clippy::too_many_arguments)]
+    fn overlap_with_center_partitions(
+        overlap_input: &OverlapInput,
+        existing_esurfaces: &ExistingThresholds,
+        center_group_ids: &[Option<usize>],
+        variant_ids: &[ThresholdCountertermVariantId],
+        shared_overlaps: &[Option<overlap_subspace::SharedOverlapStructure>],
+        loop_moms_by_parent: &BTreeMap<LmbIndex, LoopMomenta<F<f64>>>,
+        external_momenta: &ExternalFourMomenta<F<f64>>,
+        probe_rotation: &Rotation,
+    ) -> Result<OverlapStructure> {
+        if center_group_ids.len() != overlap_input.thresholds.len()
+            || variant_ids.len() != overlap_input.thresholds.len()
+        {
+            return Err(eyre!(
+                "threshold center-group mapping has {} groups/{} variants for {} E-surface instances",
+                center_group_ids.len(),
+                variant_ids.len(),
+                overlap_input.thresholds.len(),
+            ));
+        }
+
+        let threshold_subspace = |esurface_id: EsurfaceID| {
+            overlap_input
+                .threshold_subspaces
+                .map_or(overlap_input.subspace, |subspaces| {
+                    &subspaces[esurface_id.0]
+                })
+        };
+        let mut partitions =
+            BTreeMap::<(Option<usize>, LmbIndex), Vec<EsurfaceID>>::new();
+        for &esurface_id in existing_esurfaces {
+            partitions
+                .entry((
+                    center_group_ids[esurface_id.0],
+                    threshold_subspace(esurface_id).parent_lmb_index(),
+                ))
+                .or_default()
+                .push(esurface_id);
+        }
+        let global_existing_id = |esurface_id: EsurfaceID| {
+            existing_esurfaces
+                .iter_enumerated()
+                .find_map(|(existing_id, &candidate)| {
+                    (candidate == esurface_id).then_some(existing_id)
+                })
+                .expect("partition E-surface came from the global existing collection")
+        };
+        let mut overlap = OverlapStructure {
+            overlap_groups: Vec::new(),
+            existing_esurfaces: existing_esurfaces.clone(),
+        };
+
+        for (partition, ((center_group_id, parent_lmb_index), partition_esurfaces)) in
+            partitions.into_iter().enumerate()
+        {
+            let partition_subspace = SubspaceData::union_in_common_parent(
+                partition_esurfaces
+                    .iter()
+                    .map(|&esurface_id| threshold_subspace(esurface_id)),
+                overlap_input.graph,
+                overlap_input.lmbs,
+            )
+            .with_context(|| {
+                format!(
+                    "threshold overlap partition {} cannot place its projected subspaces in parent LMB {}",
+                    partition,
+                    usize::from(parent_lmb_index),
+                )
+            })?;
+            let partition_threshold_subspaces = overlap_input.threshold_subspaces.map(|subspaces| {
+                subspaces
+                    .iter()
+                    .enumerate()
+                    .map(|(index, subspace)| {
+                        if partition_esurfaces.contains(&EsurfaceID::from(index)) {
+                            subspace.clone()
+                        } else {
+                            partition_subspace.clone()
+                        }
+                    })
+                    .collect_vec()
+            });
+            let partition_input = OverlapInput {
+                graph: overlap_input.graph,
+                settings: overlap_input.settings,
+                subspace: &partition_subspace,
+                threshold_subspaces: partition_threshold_subspaces.as_deref(),
+                lmbs: overlap_input.lmbs,
+                thresholds: overlap_input.thresholds,
+                edge_masses: overlap_input.edge_masses.clone(),
+            };
+            let loop_moms = loop_moms_by_parent.get(&parent_lmb_index).ok_or_else(|| {
+                eyre!(
+                    "threshold overlap partition {} has no sampled momenta in parent LMB {}",
+                    partition,
+                    usize::from(parent_lmb_index),
+                )
+            })?;
+            if let Some(center_group_id) = center_group_id {
+                let shared_overlap = shared_overlaps
+                    .get(center_group_id)
+                    .and_then(Option::as_ref)
+                    .ok_or_else(|| {
+                        eyre!(
+                            "existing threshold variants require shared center group {}, but it has no runtime overlap result",
+                            center_group_id,
+                        )
+                    })?;
+                let mut covered = Vec::new();
+                for shared_group in &shared_overlap.overlap_groups {
+                    let member_variants = shared_group
+                        .owner_indices
+                        .iter()
+                        .map(|owner_index| shared_overlap.owners[*owner_index].variant_id)
+                        .collect_vec();
+                    let local_members = partition_esurfaces
+                        .iter()
+                        .copied()
+                        .filter(|esurface_id| member_variants.contains(&variant_ids[esurface_id.0]))
+                        .collect_vec();
+                    if local_members.is_empty() {
+                        continue;
+                    }
+                    let local_existing: ExistingThresholds =
+                        local_members.iter().copied().collect();
+                    if !overlap_subspace::check_global_center(
+                        &partition_input,
+                        &local_existing,
+                        &shared_group.center,
+                        loop_moms,
+                        external_momenta,
+                    ) {
+                        return Err(eyre!(
+                            "shared center group {} produced a center outside a local projected threshold",
+                            center_group_id,
+                        ));
+                    }
+                    covered.extend(local_members.iter().copied());
+                    overlap.overlap_groups.push(OverlapGroup {
+                        existing_esurfaces: local_members
+                            .into_iter()
+                            .map(global_existing_id)
+                            .collect(),
+                        complement: Vec::new(),
+                        partition,
+                        center: shared_group.center.clone(),
+                    });
+                }
+                let uncovered = partition_esurfaces
+                    .iter()
+                    .filter(|esurface_id| !covered.contains(esurface_id))
+                    .collect_vec();
+                if !uncovered.is_empty() {
+                    return Err(eyre!(
+                        "shared center group {} does not cover local threshold variants {:?}",
+                        center_group_id,
+                        uncovered
+                            .iter()
+                            .map(|esurface_id| variant_ids[esurface_id.0].0)
+                            .collect_vec(),
+                    ));
+                }
+            } else {
+                let local_existing: ExistingThresholds =
+                    partition_esurfaces.iter().copied().collect();
+                let local_overlap = overlap_subspace::find_maximal_overlap(
+                    &partition_input,
+                    &local_existing,
+                    loop_moms,
+                    external_momenta,
+                    probe_rotation,
+                )?;
+                for local_group in local_overlap.overlap_groups {
+                    overlap.overlap_groups.push(OverlapGroup {
+                        existing_esurfaces: local_group
+                            .existing_esurfaces
+                            .iter()
+                            .map(|existing_id| {
+                                global_existing_id(local_overlap.existing_esurfaces[*existing_id])
+                            })
+                            .collect(),
+                        complement: Vec::new(),
+                        partition,
+                        center: local_group.center,
+                    });
+                }
+            }
+        }
+
+        overlap.fill_in_complements();
+        Ok(overlap)
+    }
+
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn evaluate<T: FloatLike>(
         &mut self,
         kinematic_point: &LUCTKinematicPoint<T>,
@@ -1639,6 +1853,7 @@ impl LUCounterTerm {
         graph: &Graph,
         masses: &EdgeVec<F<T>>,
         probe_rotation: &Rotation,
+        shared_overlaps: &[Option<overlap_subspace::SharedOverlapStructure>],
         settings: &RuntimeSettings,
         param_builder: &mut ParamBuilder<f64>,
         orientations: SingleOrAllOrientations<'_, OrientationID>,
@@ -1687,6 +1902,14 @@ impl LUCounterTerm {
             variant_subspaces.map(|subspaces| subspaces.left.raw.as_slice());
         let right_threshold_subspaces =
             variant_subspaces.map(|subspaces| subspaces.right.raw.as_slice());
+        let left_center_groups =
+            variant_subspaces.map(|subspaces| subspaces.left_center_groups.raw.as_slice());
+        let right_center_groups =
+            variant_subspaces.map(|subspaces| subspaces.right_center_groups.raw.as_slice());
+        let left_runtime_variant_ids =
+            variant_subspaces.map(|subspaces| subspaces.left_variant_ids.raw.as_slice());
+        let right_runtime_variant_ids =
+            variant_subspaces.map(|subspaces| subspaces.right_variant_ids.raw.as_slice());
         let detailed_variant_ids = if record_components {
             let registry = self
                 .metadata_registry
@@ -1718,29 +1941,43 @@ impl LUCounterTerm {
         } else {
             None
         };
-        let (sample_left_transformed, sample_right_transformed) = (
-            kinematic_point
-                .lmb_transform(&graph.loop_momentum_basis, left_subspace.get_lmb(all_lmbs)),
-            kinematic_point
-                .lmb_transform(&graph.loop_momentum_basis, right_subspace.get_lmb(all_lmbs)),
-        );
-
         debug!("possible left thresholds: {}", left_thresholds.len());
         debug!("possible right thresholds: {}", right_thresholds.len());
 
+        let mut loop_moms_by_parent = BTreeMap::<LmbIndex, LoopMomenta<F<T>>>::new();
+        for subspace in std::iter::once(left_subspace)
+            .chain(std::iter::once(right_subspace))
+            .chain(left_threshold_subspaces.into_iter().flatten())
+            .chain(right_threshold_subspaces.into_iter().flatten())
+        {
+            let parent_lmb_index = subspace.parent_lmb_index();
+            if loop_moms_by_parent.contains_key(&parent_lmb_index) {
+                continue;
+            }
+            let transformed = kinematic_point.lmb_transform(
+                &graph.loop_momentum_basis,
+                subspace.get_lmb(all_lmbs),
+            );
+            loop_moms_by_parent.insert(
+                parent_lmb_index,
+                transformed.representative_sample().loop_moms().clone(),
+            );
+        }
+        let loop_moms_f64_by_parent = loop_moms_by_parent
+            .iter()
+            .map(|(&parent_lmb_index, loop_moms)| {
+                (
+                    parent_lmb_index,
+                    loop_moms.iter().map(|momentum| momentum.to_f64()).collect(),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
         let masses_f64: EdgeVec<F<f64>> = masses.iter().map(|(_, m)| F(m.to_f64())).collect();
-        let sample_left_transformed_f64 = sample_left_transformed
-            .representative_sample()
-            .loop_moms()
-            .iter()
-            .map(|lm| lm.to_f64())
-            .collect();
-        let sample_right_transformed_f64 = sample_right_transformed
-            .representative_sample()
-            .loop_moms()
-            .iter()
-            .map(|lm| lm.to_f64())
-            .collect();
+        let sample_left_transformed_f64 = &loop_moms_f64_by_parent
+            [&left_subspace.parent_lmb_index()];
+        let sample_right_transformed_f64 = &loop_moms_f64_by_parent
+            [&right_subspace.parent_lmb_index()];
         let external_moms_f64 = kinematic_point
             .representative_sample()
             .external_moms()
@@ -1758,8 +1995,10 @@ impl LUCounterTerm {
             .filter_map(|(left_id, esurface)| {
                 let threshold_subspace = left_threshold_subspaces
                     .map_or(left_subspace, |subspaces| &subspaces[left_id.0]);
+                let threshold_loop_moms =
+                    &loop_moms_by_parent[&threshold_subspace.parent_lmb_index()];
                 let classification = esurface.classify_existence_subspace(
-                    sample_left_transformed.representative_sample().loop_moms(),
+                    threshold_loop_moms,
                     kinematic_point.representative_sample().external_moms(),
                     threshold_subspace,
                     all_lmbs,
@@ -1792,8 +2031,10 @@ impl LUCounterTerm {
             .filter_map(|(right_id, esurface)| {
                 let threshold_subspace = right_threshold_subspaces
                     .map_or(right_subspace, |subspaces| &subspaces[right_id.0]);
+                let threshold_loop_moms =
+                    &loop_moms_by_parent[&threshold_subspace.parent_lmb_index()];
                 let classification = esurface.classify_existence_subspace(
-                    sample_right_transformed.representative_sample().loop_moms(),
+                    threshold_loop_moms,
                     kinematic_point.representative_sample().external_moms(),
                     threshold_subspace,
                     all_lmbs,
@@ -1856,13 +2097,28 @@ impl LUCounterTerm {
             threshold_subspaces: right_threshold_subspaces,
         };
 
-        let left_overlap = match overlap_subspace::find_maximal_overlap(
-            &left_overlap_input,
-            &left_existing_esurfaces,
-            &sample_left_transformed_f64,
-            &external_moms_f64,
-            probe_rotation,
-        ) {
+        let left_overlap_result =
+            if variant_subspaces.is_some() {
+                Self::overlap_with_center_partitions(
+                    &left_overlap_input,
+                    &left_existing_esurfaces,
+                    left_center_groups.unwrap(),
+                    left_runtime_variant_ids.unwrap(),
+                    shared_overlaps,
+                    &loop_moms_f64_by_parent,
+                    &external_moms_f64,
+                    probe_rotation,
+                )
+            } else {
+                overlap_subspace::find_maximal_overlap(
+                    &left_overlap_input,
+                    &left_existing_esurfaces,
+                    sample_left_transformed_f64,
+                    &external_moms_f64,
+                    probe_rotation,
+                )
+            };
+        let left_overlap = match left_overlap_result {
             Ok(left_overlap) => left_overlap,
             Err(error) => {
                 evaluation_meta_data.record_threshold_counterterm_error(format!(
@@ -1879,13 +2135,28 @@ impl LUCounterTerm {
             }
         };
 
-        let right_overlap = match overlap_subspace::find_maximal_overlap(
-            &right_overlap_input,
-            &right_existing_esurfaces,
-            &sample_right_transformed_f64,
-            &external_moms_f64,
-            probe_rotation,
-        ) {
+        let right_overlap_result =
+            if variant_subspaces.is_some() {
+                Self::overlap_with_center_partitions(
+                    &right_overlap_input,
+                    &right_existing_esurfaces,
+                    right_center_groups.unwrap(),
+                    right_runtime_variant_ids.unwrap(),
+                    shared_overlaps,
+                    &loop_moms_f64_by_parent,
+                    &external_moms_f64,
+                    probe_rotation,
+                )
+            } else {
+                overlap_subspace::find_maximal_overlap(
+                    &right_overlap_input,
+                    &right_existing_esurfaces,
+                    sample_right_transformed_f64,
+                    &external_moms_f64,
+                    probe_rotation,
+                )
+            };
+        let right_overlap = match right_overlap_result {
             Ok(right_overlap) => right_overlap,
             Err(error) => {
                 evaluation_meta_data.record_threshold_counterterm_error(format!(
@@ -1910,7 +2181,7 @@ impl LUCounterTerm {
             graph,
             settings,
             left_overlap_input.thresholds,
-            sample_left_transformed,
+            kinematic_point,
             &left_overlap,
             masses,
             all_lmbs,
@@ -2038,7 +2309,7 @@ impl LUCounterTerm {
             graph,
             settings,
             right_overlap_input.thresholds,
-            sample_right_transformed,
+            kinematic_point,
             &right_overlap,
             masses,
             all_lmbs,
@@ -3250,7 +3521,7 @@ struct CounterTermBuilder<'a, T: FloatLike> {
     all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
     settings: &'a RuntimeSettings,
     esurface_collection: &'a EsurfaceCollection,
-    transformed_kinematic_point: LUCTKinematicPoint<T>,
+    generation_kinematic_point: &'a LUCTKinematicPoint<T>,
     probe_rotation: &'a Rotation,
 }
 
@@ -3260,7 +3531,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         graph: &'a Graph,
         settings: &'a RuntimeSettings,
         esurface_collection: &'a EsurfaceCollection,
-        transformed_kinematic_point: LUCTKinematicPoint<T>,
+        generation_kinematic_point: &'a LUCTKinematicPoint<T>,
         overlap_structure: &'a OverlapStructure,
         masses: &'a EdgeVec<F<T>>,
         all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
@@ -3277,7 +3548,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
             settings,
             esurface_collection,
             overlap_structure,
-            transformed_kinematic_point,
+            generation_kinematic_point,
             all_lmbs,
             subspace,
             threshold_subspaces,
@@ -3299,13 +3570,24 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
             .map(|esurface_id| self.threshold_subspace(esurface_id))
             .unwrap_or(self.subspace);
 
-        let center = overlap_group.center.cast();
+        let transformed_kinematic_point = self.generation_kinematic_point.lmb_transform(
+            &self.graph.loop_momentum_basis,
+            subspace.get_lmb(self.all_lmbs),
+        );
 
-        let shifted_loop_momenta = self
-            .transformed_kinematic_point
+        let representative_loop_momenta = transformed_kinematic_point
             .representative_sample()
             .loop_moms()
-            - &center;
+            .clone();
+        let raw_center = overlap_group.center.cast();
+        // A projected threshold varies only its own active coordinates. All complementary
+        // coordinates must stay at this cut's sampled point throughout the radial construction.
+        let mut center = representative_loop_momenta.clone();
+        for loop_index in subspace.iter_lmb_indices() {
+            center[loop_index] = raw_center[loop_index].clone();
+        }
+
+        let shifted_loop_momenta = &representative_loop_momenta - &center;
 
         let radius = shifted_loop_momenta
             .hyper_radius_squared(Some(&subspace.iter_lmb_indices().collect_vec()))
@@ -3322,6 +3604,7 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
             center,
             unit_shifted_momenta,
             radius,
+            transformed_kinematic_point,
         }
     }
 }
@@ -3334,6 +3617,7 @@ struct OverlapBuilder<'a, T: FloatLike> {
     center: LoopMomenta<F<T>>,
     unit_shifted_momenta: LoopMomenta<F<T>>,
     radius: F<T>,
+    transformed_kinematic_point: LUCTKinematicPoint<T>,
 }
 
 enum SideOverlapBuilders<'a, T: FloatLike> {
@@ -3386,7 +3670,6 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
 
         let representative_sample = self
             .overlap_builder
-            .counterterm_builder
             .transformed_kinematic_point
             .representative_sample();
         let mut center_with_fixed_complement = representative_sample.loop_moms().clone();
@@ -3414,9 +3697,11 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                     .threshold_subspace(esurface_id);
                 let mut surface_center_with_fixed_complement =
                     representative_sample.loop_moms().clone();
+                let raw_group_center: LoopMomenta<F<T>> =
+                    self.overlap_builder.overlap_group.center.cast();
                 for loop_index in surface_subspace.iter_lmb_indices() {
                     surface_center_with_fixed_complement[loop_index] =
-                        self.overlap_builder.center[loop_index].clone();
+                        raw_group_center[loop_index].clone();
                 }
                 let value = esurface.compute_from_momenta(
                     surface_subspace.get_lmb(lmbs),
@@ -3479,8 +3764,8 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
 
         let (raw_radius_guess, _) = self.esurface.get_radius_guess_subspace(
             &self.overlap_builder.unit_shifted_momenta,
+            &self.overlap_builder.center,
             self.overlap_builder
-                .counterterm_builder
                 .transformed_kinematic_point
                 .representative_sample()
                 .external_moms(),
@@ -3496,7 +3781,6 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                 &self.overlap_builder.unit_shifted_momenta,
                 &self.overlap_builder.center,
                 self.overlap_builder
-                    .counterterm_builder
                     .transformed_kinematic_point
                     .representative_sample()
                     .external_moms(),
@@ -3556,7 +3840,6 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
         let t_dependent_solution = if rstar_t_dependence_evaluator.supports_t_derivatives() {
             let t_star = match &self
                 .overlap_builder
-                .counterterm_builder
                 .transformed_kinematic_point
                 .non_dual_cut_params()
                 .tstar
@@ -3575,7 +3858,6 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                     subspace,
                     unrescaled_momentum_sample: self
                         .overlap_builder
-                        .counterterm_builder
                         .transformed_kinematic_point
                         .unrescaled_sample(),
                     masses,
@@ -3673,7 +3955,6 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         let source_sample = self
             .esurface_ct_builder
             .overlap_builder
-            .counterterm_builder
             .transformed_kinematic_point
             .sample_for_order(order);
         let dual_loop_momenta = source_sample
@@ -3750,7 +4031,6 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         let source_sample = self
             .esurface_ct_builder
             .overlap_builder
-            .counterterm_builder
             .transformed_kinematic_point
             .sample_for_order(lu_order);
         let target_shape = shape_from_cut_cff_index(cut_cff_index)
@@ -3830,6 +4110,14 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .overlap_structure
             .overlap_groups
             .iter()
+            .filter(|group| {
+                group.partition
+                    == self
+                        .esurface_ct_builder
+                        .overlap_builder
+                        .overlap_group
+                        .partition
+            })
             .map(|group| {
                 group
                     .complement
@@ -3925,6 +4213,14 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             .overlap_structure
             .overlap_groups
             .iter()
+            .filter(|group| {
+                group.partition
+                    == self
+                        .esurface_ct_builder
+                        .overlap_builder
+                        .overlap_group
+                        .partition
+            })
             .map(|group| {
                 group
                     .complement
@@ -4002,7 +4298,6 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
             let mut rstar_sample = self
                 .esurface_ct_builder
                 .overlap_builder
-                .counterterm_builder
                 .transformed_kinematic_point
                 .representative_sample()
                 .clone();
@@ -4078,7 +4373,6 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         let mut rstar_sample = self
             .esurface_ct_builder
             .overlap_builder
-            .counterterm_builder
             .transformed_kinematic_point
             .sample_for_order(order)
             .clone();
@@ -4160,7 +4454,6 @@ impl<'a, T: FloatLike> RstarSolution<'a, T> {
         let mut rstar_sample = self
             .esurface_ct_builder
             .overlap_builder
-            .counterterm_builder
             .transformed_kinematic_point
             .sample_for_order(lu_order)
             .clone();
@@ -4379,6 +4672,7 @@ mod tests {
             thresholds: TiVec::new(),
             subspaces: TiVec::new(),
             variant_subspaces: None,
+            shared_center_groups: Vec::new(),
             metadata_registry: None,
             rstar_dependence_calculator: TiVec::new(),
             active_cut_groups: ti_vec![false],

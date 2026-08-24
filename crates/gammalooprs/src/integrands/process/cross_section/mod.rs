@@ -51,8 +51,10 @@ use crate::{
         generate_rstar_t_dependence_evaluator,
         lu_counterterm::{
             LUCTKinematicPoint, LUCounterTerm, LUCounterTermEvaluators, LUCountertermEvaluation,
-            LUThresholdHelperEvaluators, LUVariantSubspaces,
+            LUSharedCenterGroup, LUSharedCenterOwner, LUThresholdHelperEvaluators,
+            LUVariantSubspaces,
         },
+        overlap_subspace::{self, SharedOverlapInput, SharedOverlapOwner, SharedOverlapStructure},
     },
     utils::{
         F, FloatLike, Length, h, h_dual,
@@ -589,6 +591,162 @@ struct CutEventGenerationContext<'a> {
 impl CrossSectionGraphTerm {
     pub fn threshold_counterterm_metadata(&self) -> Option<&ThresholdCountertermMetadataRegistry> {
         self.counterterm.metadata_registry.as_ref()
+    }
+
+    fn find_shared_threshold_overlaps<T: FloatLike>(
+        &self,
+        momentum_sample: &MomentumSample<T>,
+        masses: &EdgeVec<F<T>>,
+        rotation: &Rotation,
+        settings: &RuntimeSettings,
+    ) -> Result<Vec<Option<SharedOverlapStructure>>> {
+        let Some(variant_subspaces) = self.counterterm.variant_subspaces.as_ref() else {
+            return Ok(Vec::new());
+        };
+        let zero_center =
+            LoopMomenta::from_iter((0..momentum_sample.loop_moms().len()).map(|_| {
+                ThreeMomentum::new(
+                    momentum_sample.zero(),
+                    momentum_sample.zero(),
+                    momentum_sample.zero(),
+                )
+            }));
+        let mut cut_samples: Vec<Option<MomentumSample<T>>> =
+            (0..self.cut_group_data.cut_groups.len())
+                .map(|_| None)
+                .collect();
+        let e_cm = F::from_f64(settings.kinematics.e_cm);
+        let existence_tolerance = F::from_f64(settings.subtraction.esurface_existence_threshold);
+        let edge_masses: EdgeVec<F<f64>> =
+            masses.iter().map(|(_, mass)| F(mass.0.to_f64())).collect();
+
+        self.counterterm
+            .shared_center_groups
+            .iter()
+            .map(|center_group| {
+                let mut existing_owners = Vec::new();
+                for owner in &center_group.owners {
+                    let (active, esurface, owner_subspace) = match owner.side {
+                        processes::ThresholdCountertermSide::Left => {
+                            let threshold_id = LeftThresholdId::from(owner.threshold_index);
+                            (
+                                self.counterterm.active_left_thresholds[owner.cut_group_id]
+                                    [threshold_id],
+                                &self.counterterm.thresholds[owner.cut_group_id].0[threshold_id],
+                                &variant_subspaces[owner.cut_group_id].left[threshold_id],
+                            )
+                        }
+                        processes::ThresholdCountertermSide::Right => {
+                            let threshold_id = RightThresholdId::from(owner.threshold_index);
+                            (
+                                self.counterterm.active_right_thresholds[owner.cut_group_id]
+                                    [threshold_id],
+                                &self.counterterm.thresholds[owner.cut_group_id].1[threshold_id],
+                                &variant_subspaces[owner.cut_group_id].right[threshold_id],
+                            )
+                        }
+                        processes::ThresholdCountertermSide::Amplitude => {
+                            return Err(eyre!(
+                                "shared center group '{}' contains an amplitude owner",
+                                center_group.name,
+                            ));
+                        }
+                    };
+                    if !active || !self.counterterm.cut_group_is_active(owner.cut_group_id) {
+                        continue;
+                    }
+
+                    if cut_samples[owner.cut_group_id.0].is_none() {
+                        let cut_group = &self.cut_group_data.cut_groups[owner.cut_group_id];
+                        let representative_esurface = &self.cut_esurface[cut_group.cuts[0]];
+                        let function = |t: &F<T>| {
+                            representative_esurface.compute_self_and_r_derivative(
+                                t,
+                                momentum_sample.loop_moms(),
+                                &zero_center,
+                                momentum_sample.external_moms(),
+                                masses,
+                                &self.graph.loop_momentum_basis,
+                            )
+                        };
+                        let (guess, _) = representative_esurface.get_radius_guess(
+                            momentum_sample.loop_moms(),
+                            momentum_sample.external_moms(),
+                            &self.graph.loop_momentum_basis,
+                        );
+                        let solution = newton_iteration_and_derivative(
+                            &guess,
+                            function,
+                            &momentum_sample.one(),
+                            2000,
+                            &e_cm,
+                        );
+                        cut_samples[owner.cut_group_id.0] = Some(
+                            momentum_sample
+                                .rescaled_loop_momenta(&solution.solution, Subspace::None),
+                        );
+                    }
+                    let cut_sample = cut_samples[owner.cut_group_id.0]
+                        .as_ref()
+                        .expect("shared-center cut sample was initialized above")
+                        .lmb_transform(
+                            &self.graph.loop_momentum_basis,
+                            center_group.subspace.get_lmb(&self.lmbs),
+                        );
+                    let classification = esurface.classify_existence_subspace(
+                        cut_sample.loop_moms(),
+                        cut_sample.external_moms(),
+                        owner_subspace,
+                        &self.lmbs,
+                        &self.graph,
+                        masses,
+                        &self.reversed_edges[owner.cut_group_id],
+                        &e_cm,
+                        &existence_tolerance,
+                    );
+                    if !classification.is_existing() {
+                        continue;
+                    }
+                    existing_owners.push(SharedOverlapOwner {
+                        variant_id: owner.variant_id,
+                        esurface: esurface.clone(),
+                        subspace: owner_subspace.clone(),
+                        loop_moms: cut_sample
+                            .loop_moms()
+                            .iter()
+                            .map(|momentum| momentum.to_f64())
+                            .collect(),
+                        external_momenta: cut_sample
+                            .external_moms()
+                            .iter()
+                            .map(|momentum| momentum.to_f64())
+                            .collect(),
+                    });
+                }
+
+                if existing_owners.is_empty() {
+                    return Ok(None);
+                }
+                overlap_subspace::find_shared_overlap(
+                    SharedOverlapInput {
+                        graph: &self.graph,
+                        settings,
+                        subspace: &center_group.subspace,
+                        lmbs: &self.lmbs,
+                        edge_masses: edge_masses.clone(),
+                        owners: existing_owners,
+                    },
+                    rotation,
+                )
+                .with_context(|| {
+                    format!(
+                        "graph '{}' center_group '{}' failed shared overlap construction",
+                        self.graph.name, center_group.name,
+                    )
+                })
+                .map(Some)
+            })
+            .collect()
     }
 
     fn build_threshold_multiplier_collection(
@@ -1136,9 +1294,15 @@ impl CrossSectionGraphTerm {
             })
             .collect::<Result<TiVec<CutGroupId, _>>>()?;
 
-        let (variant_subspaces, metadata_registry) = if let Some(resolved) =
+        let (variant_subspaces, metadata_registry, shared_center_groups) = if let Some(resolved) =
             graph.derived_data.resolved_threshold_counterterms.as_ref()
         {
+            let mut variant_center_groups = vec![None; resolved.variants.len()];
+            for (center_group_id, center_group) in resolved.center_groups.iter().enumerate() {
+                for variant_id in &center_group.variant_ids {
+                    variant_center_groups[variant_id.0] = Some(center_group_id);
+                }
+            }
             let variant_subspaces = if resolved.legacy_equivalent {
                 None
             } else {
@@ -1154,24 +1318,26 @@ impl CrossSectionGraphTerm {
                         .threshold_counterterms
                         .iter()
                         .map(|counterterm_data| {
-                            let left_common = if counterterm_data.left_subspaces.is_empty() {
-                                None
-                            } else {
-                                Some(SubspaceData::union_in_common_parent(
-                                    counterterm_data.left_subspaces.iter(),
+                            let common_subspace = |subspaces: &[SubspaceData]| {
+                                let Some(first) = subspaces.first() else {
+                                    return Ok(None);
+                                };
+                                if subspaces.iter().any(|subspace| {
+                                    subspace.parent_lmb_index() != first.parent_lmb_index()
+                                }) {
+                                    return Ok(None);
+                                }
+                                SubspaceData::union_in_common_parent(
+                                    subspaces.iter(),
                                     &graph.graph,
                                     all_lmbs,
-                                )?)
+                                )
+                                .map(Some)
                             };
-                            let right_common = if counterterm_data.right_subspaces.is_empty() {
-                                None
-                            } else {
-                                Some(SubspaceData::union_in_common_parent(
-                                    counterterm_data.right_subspaces.iter(),
-                                    &graph.graph,
-                                    all_lmbs,
-                                )?)
-                            };
+                            let left_common =
+                                common_subspace(counterterm_data.left_subspaces.raw.as_slice())?;
+                            let right_common =
+                                common_subspace(counterterm_data.right_subspaces.raw.as_slice())?;
                             Ok(LUVariantSubspaces {
                                 left_variant_ids: counterterm_data.left_variant_ids.clone(),
                                 right_variant_ids: counterterm_data.right_variant_ids.clone(),
@@ -1179,6 +1345,16 @@ impl CrossSectionGraphTerm {
                                 right: counterterm_data.right_subspaces.clone(),
                                 left_common,
                                 right_common,
+                                left_center_groups: counterterm_data
+                                    .left_variant_ids
+                                    .iter()
+                                    .map(|variant_id| variant_center_groups[variant_id.0])
+                                    .collect(),
+                                right_center_groups: counterterm_data
+                                    .right_variant_ids
+                                    .iter()
+                                    .map(|variant_id| variant_center_groups[variant_id.0])
+                                    .collect(),
                             })
                         })
                         .collect::<Result<TiVec<CutGroupId, _>>>()?,
@@ -1241,7 +1417,60 @@ impl CrossSectionGraphTerm {
             } else {
                 None
             };
-            (variant_subspaces, metadata_registry)
+            let shared_center_groups = resolved
+                .center_groups
+                .iter()
+                .map(|center_group| {
+                    let owners = center_group
+                        .variant_ids
+                        .iter()
+                        .map(|variant_id| {
+                            let variant = &resolved.variants[*variant_id];
+                            let cut_group_id = variant.cut_group_id.ok_or_else(|| {
+                                eyre!(
+                                    "cross-cut center group '{}' contains amplitude variant {}",
+                                    center_group.name,
+                                    variant_id.0,
+                                )
+                            })?;
+                            let threshold_index = match variant.side {
+                                processes::ThresholdCountertermSide::Left => graph.derived_data
+                                    .threshold_counterterms[cut_group_id]
+                                    .left_variant_ids
+                                    .iter()
+                                    .position(|candidate| candidate == variant_id),
+                                processes::ThresholdCountertermSide::Right => graph.derived_data
+                                    .threshold_counterterms[cut_group_id]
+                                    .right_variant_ids
+                                    .iter()
+                                    .position(|candidate| candidate == variant_id),
+                                processes::ThresholdCountertermSide::Amplitude => None,
+                            }
+                            .ok_or_else(|| {
+                                eyre!(
+                                    "cross-cut center group '{}' variant {} is missing from cut group {} {:?} runtime thresholds",
+                                    center_group.name,
+                                    variant_id.0,
+                                    cut_group_id.0,
+                                    variant.side,
+                                )
+                            })?;
+                            Ok(LUSharedCenterOwner {
+                                variant_id: *variant_id,
+                                cut_group_id,
+                                side: variant.side,
+                                threshold_index,
+                            })
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    Ok(LUSharedCenterGroup {
+                        name: center_group.name.clone(),
+                        subspace: center_group.subspace.clone(),
+                        owners,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            (variant_subspaces, metadata_registry, shared_center_groups)
         } else {
             if !graph.derived_data.threshold_counterterms.is_empty()
                 || !ct_evaluators.is_empty()
@@ -1254,7 +1483,7 @@ impl CrossSectionGraphTerm {
             }
             // Threshold generation may be disabled entirely. This is the pre-existing empty LU
             // representation and must not allocate generalized subspace or metadata state.
-            (None, None)
+            (None, None, Vec::new())
         };
 
         let counterterm = LUCounterTerm {
@@ -1262,6 +1491,7 @@ impl CrossSectionGraphTerm {
             thresholds,
             subspaces: graph.derived_data.subspace_data.clone(),
             variant_subspaces,
+            shared_center_groups,
             metadata_registry,
             rstar_dependence_calculator,
             active_cut_groups,
@@ -1733,6 +1963,18 @@ impl GraphTerm for CrossSectionGraphTerm {
             momentum_sample.loop_moms()
         );
 
+        let shared_threshold_overlaps =
+            if context.settings.subtraction.disable_threshold_subtraction {
+                Vec::new()
+            } else {
+                self.find_shared_threshold_overlaps(
+                    &momentum_sample,
+                    &masses,
+                    context.rotation,
+                    context.settings,
+                )?
+            };
+
         for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
             let max_occurrence = cut_group.related_esurface_group.max_occurence;
             if !self.counterterm.cut_group_is_active(cut_group_id) {
@@ -2062,6 +2304,7 @@ impl GraphTerm for CrossSectionGraphTerm {
                         &self.graph,
                         &self.graph.get_real_mass_vector(context.model),
                         context.rotation,
+                        &shared_threshold_overlaps,
                         context.settings,
                         &mut self.param_builder,
                         orientations,

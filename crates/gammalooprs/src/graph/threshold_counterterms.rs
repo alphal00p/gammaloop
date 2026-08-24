@@ -57,6 +57,11 @@ pub struct ThresholdCountertermThreshold {
 pub struct ThresholdCountertermVariant {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// Variants carrying the same name share one sample-dependent overlap-center solve, even when
+    /// they belong to different physical Cutkosky cuts. The group also defines an independent
+    /// overlap multichannel family from ungrouped variants and differently named groups.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub center_group: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub subspace: Option<Vec<EdgeIndex>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -220,6 +225,12 @@ impl ThresholdCountertermSpec {
                     validate_edge(*edge, "threshold")?;
                 }
                 for variant in &threshold.counterterms {
+                    if graph_is_amplitude && variant.center_group.is_some() {
+                        return Err(eyre!(
+                            "amplitude graph '{}' threshold_counterterms cannot request a cross-cut center_group",
+                            graph.name,
+                        ));
+                    }
                     if let Some(subspace) = &variant.subspace {
                         for edge in subspace {
                             validate_edge(*edge, "subspace")?;
@@ -293,6 +304,7 @@ impl ThresholdCountertermSpec {
 impl ThresholdCountertermVariant {
     pub fn is_legacy_equivalent(&self) -> bool {
         !self.disable
+            && self.center_group.is_none()
             && self.subspace.is_none()
             && self.parent_lmb.is_none()
             && self.multiplier.is_none()
@@ -357,6 +369,16 @@ fn normalize_variants(variants: &mut [ThresholdCountertermVariant], context: &st
             ));
         }
 
+        if variant
+            .center_group
+            .as_deref()
+            .is_some_and(|group| group.trim().is_empty())
+        {
+            return Err(eyre!(
+                "threshold_counterterms {variant_context} has a blank center_group",
+            ));
+        }
+
         validate_ordered_edges(&variant.subspace, "subspace", &variant_context)?;
         validate_ordered_edges(&variant.parent_lmb, "parent_lmb", &variant_context)?;
 
@@ -402,6 +424,7 @@ edges = [4, 2]
   edges = [8, 7]
 
     [[cuts.thresholds.counterterms]]
+    center_group = "shared_1l"
     subspace = [7]
 
       [cuts.thresholds.counterterms.multiplier]
@@ -421,12 +444,22 @@ edges = [4, 2]
             spec.cuts[0].thresholds[0].counterterms[0].name.as_deref(),
             Some("default")
         );
+        assert_eq!(
+            spec.cuts[0].thresholds[0].counterterms[0]
+                .center_group
+                .as_deref(),
+            Some("shared_1l")
+        );
         assert!(
             spec.cuts[0].thresholds[0].counterterms[0]
                 .multiplier
                 .as_ref()
                 .unwrap()
                 .symmetrize
+        );
+        assert_eq!(
+            ThresholdCountertermSpec::parse_toml(&spec.to_toml().unwrap()).unwrap(),
+            spec,
         );
     }
 
@@ -486,6 +519,24 @@ subspace = [1, 1]
         )
         .unwrap_err();
         assert!(duplicate_subspace.to_string().contains("duplicate edge 1"));
+
+        let blank_center_group = ThresholdCountertermSpec::parse_toml(
+            r#"
+schema_version = 1
+[[cuts]]
+edges = []
+[[cuts.thresholds]]
+edges = [1, 2]
+[[cuts.thresholds.counterterms]]
+center_group = " "
+"#,
+        )
+        .unwrap_err();
+        assert!(
+            blank_center_group
+                .to_string()
+                .contains("blank center_group")
+        );
     }
 
     #[test]

@@ -337,6 +337,7 @@ mod tests {
                     edges: vec![EdgeIndex(4), EdgeIndex(5)],
                     counterterms: vec![ThresholdCountertermVariant {
                         name: Some("quoted \"variant\" η".to_string()),
+                        center_group: None,
                         subspace: Some(vec![EdgeIndex(3)]),
                         parent_lmb: None,
                         disable: false,

@@ -665,13 +665,13 @@ impl Esurface {
                 if subspace.contains_loop_index(loop_index) {
                     shifted_unit_momenta * radius + &center_in_subspace[loop_index]
                 } else {
-                    shifted_unit_momenta.clone()
+                    center_in_subspace[loop_index].clone()
                 }
             })
             .collect();
 
         let shift = self.compute_shift_part_from_momenta_in_subspace(
-            shifted_unit_loops_in_subspace,
+            center_in_subspace,
             external_moms,
             subspace,
             all_lmbs,
@@ -761,6 +761,7 @@ impl Esurface {
     pub(crate) fn get_radius_guess_subspace<T: FloatLike>(
         &self,
         loops_unit_in_subspace: &LoopMomenta<F<T>>,
+        center_with_fixed_complement: &LoopMomenta<F<T>>,
         external_moms: &ExternalFourMomenta<F<T>>,
         subspace: &SubspaceData,
         all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
@@ -770,7 +771,7 @@ impl Esurface {
         let const_builder = &loops_unit_in_subspace[LoopIndex(0)].px;
 
         let esurface_shift = self.compute_shift_part_from_momenta_in_subspace(
-            loops_unit_in_subspace,
+            center_with_fixed_complement,
             external_moms,
             subspace,
             all_lmbs,
@@ -801,7 +802,7 @@ impl Esurface {
             let three_shift = compute_shift_part_subspace(
                 &signature.internal,
                 &signature.external,
-                loops_unit_in_subspace,
+                center_with_fixed_complement,
                 &external_3_momenta,
                 subspace,
             );

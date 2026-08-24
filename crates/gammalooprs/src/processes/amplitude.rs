@@ -1374,6 +1374,7 @@ impl AmplitudeGraph {
             None => vec![(
                 ThresholdCountertermVariant {
                     name: Some("default".to_string()),
+                    center_group: None,
                     subspace: None,
                     parent_lmb: None,
                     disable: false,
@@ -1830,6 +1831,7 @@ impl AmplitudeGraph {
                 let parent_lmb_index = variant.subspace.parent_lmb_index();
                 variants.push(ResolvedThresholdCountertermVariant {
                     name: variant.name,
+                    center_group: None,
                     cut_group_id: None,
                     associations: group
                         .associations
@@ -1867,6 +1869,7 @@ impl AmplitudeGraph {
                 legacy_equivalent,
                 variants,
                 cross_section_cut_groups: TiVec::new(),
+                center_groups: Vec::new(),
             },
             raised_esurface_ids,
         ))
@@ -2516,6 +2519,7 @@ pub mod test {
         spec.cuts[0].thresholds[0].counterterms = vec![
             ThresholdCountertermVariant {
                 name: Some("disabled".to_string()),
+                center_group: None,
                 subspace: None,
                 parent_lmb: None,
                 disable: true,
@@ -2523,6 +2527,7 @@ pub mod test {
             },
             ThresholdCountertermVariant {
                 name: Some("duplicate".to_string()),
+                center_group: None,
                 subspace: None,
                 parent_lmb: None,
                 disable: false,
@@ -2573,6 +2578,7 @@ pub mod test {
             .resolve_amplitude_threshold_variant_subspace(
                 &ThresholdCountertermVariant {
                     name: Some("explicit_missing_parent".to_string()),
+                    center_group: None,
                     subspace: None,
                     parent_lmb: Some(generation_lmb.iter().copied().collect()),
                     disable: false,
@@ -2720,6 +2726,7 @@ pub mod test {
                     edges: dormant_threshold_edges.clone(),
                     counterterms: vec![ThresholdCountertermVariant {
                         name: Some("dormant".to_string()),
+                        center_group: None,
                         subspace: None,
                         parent_lmb: None,
                         disable: false,
@@ -2807,6 +2814,7 @@ pub mod test {
             .resolve_amplitude_threshold_variant_subspace(
                 &ThresholdCountertermVariant {
                     name: Some("one_loop".to_string()),
+                    center_group: None,
                     subspace: Some(requested_subspace.clone()),
                     parent_lmb: Some(parent_edges),
                     disable: false,
@@ -2870,6 +2878,7 @@ pub mod test {
                             counterterms: vec![
                                 ThresholdCountertermVariant {
                                     name: Some("first".to_string()),
+                                    center_group: None,
                                     subspace: None,
                                     parent_lmb: None,
                                     disable: false,
@@ -2877,6 +2886,7 @@ pub mod test {
                                 },
                                 ThresholdCountertermVariant {
                                     name: Some("disabled".to_string()),
+                                    center_group: None,
                                     subspace: None,
                                     parent_lmb: None,
                                     disable: true,
@@ -2884,6 +2894,7 @@ pub mod test {
                                 },
                                 ThresholdCountertermVariant {
                                     name: Some("second".to_string()),
+                                    center_group: None,
                                     subspace: None,
                                     parent_lmb: None,
                                     disable: false,
@@ -3107,6 +3118,7 @@ pub mod test {
                             counterterms: vec![
                                 ThresholdCountertermVariant {
                                     name: Some("one_loop".to_string()),
+                                    center_group: None,
                                     subspace: Some(vec![parent_edges[0]]),
                                     parent_lmb: Some(parent_edges.clone()),
                                     disable: false,
@@ -3114,6 +3126,7 @@ pub mod test {
                                 },
                                 ThresholdCountertermVariant {
                                     name: Some("two_loop".to_string()),
+                                    center_group: None,
                                     subspace: Some(parent_edges.clone()),
                                     parent_lmb: Some(parent_edges),
                                     disable: false,
@@ -3592,6 +3605,7 @@ pub mod test {
                                 edges: vec![super::EdgeIndex(0), super::EdgeIndex(1)],
                                 counterterms: vec![ThresholdCountertermVariant {
                                     name: Some(name.to_string()),
+                                    center_group: None,
                                     subspace: Some(vec![super::EdgeIndex(subspace_edge)]),
                                     parent_lmb: None,
                                     disable: false,
@@ -3984,6 +3998,7 @@ pub mod test {
 
                 let explicit_variant = ThresholdCountertermVariant {
                     name: Some("raised_one_loop".to_string()),
+                    center_group: None,
                     subspace: Some(vec![super::EdgeIndex(3)]),
                     parent_lmb: None,
                     disable: false,

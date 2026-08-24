@@ -227,6 +227,7 @@ struct ThresholdCountertermMultiplierMetadata {
 struct ThresholdCountertermVariantMetadata {
     variant_id: usize,
     name: String,
+    center_group: Option<String>,
     cut_group_id: Option<usize>,
     associations: Vec<ThresholdCountertermAssociationMetadata>,
     side: ThresholdCountertermSide,
