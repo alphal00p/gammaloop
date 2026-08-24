@@ -180,9 +180,9 @@ and calls `evaluate_sample(...)` / `evaluate_samples(...)`:
 
 ```bash
 source .venv/bin/activate
-NO_SYMBOLICA_OEM_LICENSE=1 SYMBOLICA_LICENSE=... just build-api
+just build-api
 cd examples/api/python/epem_a_ddxg_xs_LO
-SYMBOLICA_LICENSE=... python inspect_events.py
+python inspect_events.py
 ```
 
 That example uses:
@@ -226,8 +226,9 @@ differential LU state and prints the formatted rich result returned by
 `evaluate_sample(...)` / `evaluate_samples(...)`:
 
 ```bash
-NO_SYMBOLICA_OEM_LICENSE=1 EXTRA_MACOS_LIBS_FOR_GNU_GCC=T SYMBOLICA_LICENSE=... \
-rust-script --debug examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs
+SYMBOLICA_OEM_LICENSE=SYMBOLICA_OEM_GAMMALOOP \
+EXTRA_MACOS_LIBS_FOR_GNU_GCC=T \
+rust-script --force --debug examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs
 ```
 
 That example uses:
@@ -274,3 +275,46 @@ Use the built-in help for the current command surface:
 ./gammaloop help
 ./gammaloop help generate
 ```
+
+## License and Symbolica
+
+Code authored for this repository is available under the [MIT License](LICENSE.md).
+Third-party dependencies and bundled third-party material remain subject to
+their own license terms.
+
+Official GammaLoop Python wheels and source distributions, normal Cargo builds
+from the repository root, and the default Nix package activate Symbolica under
+GammaLoop's OEM license, so their users do not need a separate Symbolica license
+key. Because crates.io distributes source and Cargo does not inherit
+configuration from dependencies, consumers of
+`gammalooprs` or `gammaloop-api` must expose GammaLoop's public OEM selector
+while compiling:
+
+```bash
+SYMBOLICA_OEM_LICENSE=SYMBOLICA_OEM_GAMMALOOP cargo build
+```
+
+This selector is public and is not a personal Symbolica license or secret. To
+persist it, put the following in `.cargo/config.toml` in the consuming project:
+
+```toml
+[env]
+SYMBOLICA_OEM_LICENSE = { value = "SYMBOLICA_OEM_GAMMALOOP", force = false }
+```
+
+The selector must be present while compiling; rebuild GammaLoop after adding
+it. Developers intentionally opting out of the OEM path can instead compile
+with `NO_SYMBOLICA_OEM_LICENSE=1` and provide their own Symbolica license.
+
+The OEM grant is specific to GammaLoop and does not transfer to standalone use
+of Symbolica-dependent libraries from this workspace. In particular, users of
+`spenso` with Symbolica integration, `idenso`, or `vakint` must configure their
+own Symbolica license.
+
+## Citation
+
+GammaLoop, the complete monorepo, and the principal library families have
+separate versioned Zenodo records. Cite the version-specific DOI for the source
+used in a calculation. See [`CITATION.cff`](CITATION.cff) and the
+[citation guide](docs/citing.md) for scopes, historical archives, and component
+citations.

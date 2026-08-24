@@ -1539,7 +1539,7 @@ dependencies = [
 
 [[package]]
 name = "gammaloop-api"
-version = "0.1.0"
+version = "0.3.4"
 dependencies = [
  "ahash 0.8.12",
  "bincode 2.0.1",
@@ -1782,6 +1782,7 @@ dependencies = [
  "typed-index-collections",
  "vakint",
  "vectorize",
+ "walkdir",
 ]
 
 [[package]]
@@ -1877,7 +1878,8 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "2.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a511209dce2ca99925fe87f8b18e4bf03"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10b1f5801ef27f815fbfb0f2057a6dfebaf0001304fd8c904e509f8f57b81f73"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -2891,7 +2893,8 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "2.2.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a511209dce2ca99925fe87f8b18e4bf03"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "941849d46564eae737afbb1a7aa59bbc153e5f70c0a0e4079889efa68cc998bf"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -4674,7 +4677,8 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "2.2.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a511209dce2ca99925fe87f8b18e4bf03"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3fd74e1df5139590154bea2ca7e921d976efe7b0da079983d09f54d328edfe63"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",
@@ -4713,6 +4717,7 @@ version = "0.1.0"
 dependencies = [
  "bincode 2.0.1",
  "bincode-trait-derive",
+ "gammaloop-workspace-hack",
  "itertools 0.14.0",
  "serde",
  "symbolica",

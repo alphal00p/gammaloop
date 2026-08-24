@@ -1,0 +1,110 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/alphal00p/gammaloop",
+  "community": "alphaloop",
+  "grant": "10.13039/501100001711::PCEFP2_203335",
+  "families": {
+    "gammaloop-monorepo": {
+      "title": "gammaloop monorepo",
+      "version_source": "release",
+      "tag": "v{version}",
+      "marker": "https://github.com/alphal00p/gammaloop#zenodo-family-gammaloop-monorepo",
+      "concept_recid": null,
+      "production_baseline_version": "0.3.4",
+      "metadata_file": ".zenodo/metadata/gammaloop-monorepo.json",
+      "citation_file": ".zenodo/citation/gammaloop-monorepo.cff",
+      "full_repository": true,
+      "archive_paths": [],
+      "crates": [],
+      "include_sdist": false
+    },
+    "gammaloop": {
+      "title": "gammaloop",
+      "version_source": "crates/gammaloop-api/Cargo.toml",
+      "tag": "v{version}",
+      "marker": "https://github.com/alphal00p/gammaloop#zenodo-family-gammaloop",
+      "concept_recid": null,
+      "production_baseline_version": "0.3.4",
+      "metadata_file": ".zenodo/metadata/gammaloop.json",
+      "citation_file": "CITATION.cff",
+      "full_repository": false,
+      "archive_paths": [
+        "crates/gammalooprs",
+        "crates/gammaloop-api",
+        "pyproject.toml",
+        "README.md",
+        "LICENSE.md"
+      ],
+      "crates": ["gammalooprs", "gammaloop-api"],
+      "include_sdist": true
+    },
+    "spenso": {
+      "title": "spenso",
+      "version_source": "crates/spenso/Cargo.toml",
+      "tag": "spenso-v{version}",
+      "marker": "https://github.com/alphal00p/gammaloop#zenodo-family-spenso",
+      "concept_recid": null,
+      "production_baseline_version": "0.6.0",
+      "metadata_file": ".zenodo/metadata/spenso.json",
+      "citation_file": "crates/spenso/CITATION.cff",
+      "full_repository": false,
+      "archive_paths": [
+        "crates/spenso",
+        "crates/spenso-macros",
+        "crates/spenso-hep-lib",
+        "crates/spynso3"
+      ],
+      "crates": ["spenso", "spenso-macros", "spenso-hep-lib", "spynso3"],
+      "include_sdist": false,
+      "legacy_concept_doi": "10.5281/zenodo.15913113"
+    },
+    "idenso": {
+      "title": "idenso",
+      "version_source": "crates/idenso/Cargo.toml",
+      "tag": "idenso-v{version}",
+      "marker": "https://github.com/alphal00p/gammaloop#zenodo-family-idenso",
+      "concept_recid": null,
+      "production_baseline_version": "0.3.0",
+      "metadata_file": ".zenodo/metadata/idenso.json",
+      "citation_file": "crates/idenso/CITATION.cff",
+      "full_repository": false,
+      "archive_paths": ["crates/idenso"],
+      "crates": ["idenso"],
+      "include_sdist": false,
+      "legacy_concept_doi": "10.5281/zenodo.15913113"
+    },
+    "vakint": {
+      "title": "vakint",
+      "version_source": "crates/vakint/Cargo.toml",
+      "tag": "vakint-v{version}",
+      "marker": "https://github.com/alphal00p/gammaloop#zenodo-family-vakint",
+      "concept_recid": null,
+      "production_baseline_version": "0.1.2",
+      "metadata_file": ".zenodo/metadata/vakint.json",
+      "citation_file": "crates/vakint/CITATION.cff",
+      "full_repository": false,
+      "archive_paths": ["crates/vakint"],
+      "crates": ["vakint"],
+      "include_sdist": false
+    },
+    "linnet": {
+      "title": "linnet",
+      "version_source": "crates/linnet/Cargo.toml",
+      "tag": "linnet-v{version}",
+      "marker": "https://github.com/alphal00p/gammaloop#zenodo-family-linnet",
+      "concept_recid": "15494393",
+      "production_baseline_version": "0.17.0",
+      "metadata_file": ".zenodo/metadata/linnet.json",
+      "citation_file": "crates/linnet/CITATION.cff",
+      "full_repository": false,
+      "archive_paths": [
+        "crates/linnet",
+        "crates/clinnet",
+        "crates/linnet-py",
+        "crates/linnest"
+      ],
+      "crates": ["linnet", "clinnet"],
+      "include_sdist": false
+    }
+  }
+}

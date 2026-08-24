@@ -3,6 +3,9 @@ name = "spenso-hep-lib"
 version = "0.1.7"
 edition = "2024"
 description = "A spenso tensor library for high energy physics"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/alphal00p/spenso"
 
 [dependencies]
 idenso = { workspace = true, features = ["reference-cases"] }

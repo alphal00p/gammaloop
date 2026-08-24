@@ -2,8 +2,12 @@
 name = "linnet-py"
 version = "0.1.0"
 edition = "2021"
+authors = ["Lucien Huber <mail@lcnbr.ch>"]
 description = "Python bindings for linnet"
 license = "MIT"
+repository = "https://github.com/lcnbr/linnet"
+readme = "README.md"
+publish = false
 
 [package.metadata.maturin]
 name = "linnet_py"

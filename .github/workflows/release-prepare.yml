@@ -1,0 +1,55 @@
+name: Prepare release
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - Cargo.lock
+      - Cargo.toml
+      - LICENSE.md
+      - README.md
+      - "assets/**"
+      - pyproject.toml
+      - release-plz.toml
+      - uv.lock
+      - "crates/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-prepare-main
+  cancel-in-progress: false
+
+jobs:
+  release-pr:
+    name: Open or update release PR
+    if: github.repository == 'alphal00p/gammaloop'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out main
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select current stable Rust
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+          cargo --version
+
+      - name: Prepare release pull request
+        uses: release-plz/action@2eb1d8bcb770b4c48ccfaad919734b38b51958c9 # v0.5.131
+        with:
+          command: release-pr
+          version: 0.3.160
+        env:
+          GITHUB_TOKEN: ${{ github.token }}

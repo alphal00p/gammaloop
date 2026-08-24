@@ -1,0 +1,27 @@
+cff-version: 1.2.0
+message: >-
+  If you use linnet, cite the version-specific Zenodo DOI for the version you
+  used.
+title: linnet
+type: software
+authors:
+  - family-names: Huber
+    given-names: Lucien
+    affiliation: University of Bern
+    orcid: "https://orcid.org/0009-0003-5074-7313"
+abstract: >-
+  The complete linnet software family comprises linnet, clinnet, linnet-py, and
+  linnest. It provides half-edge graph data structures and algorithms for
+  subgraphs, tensor networks, and Feynman diagrams.
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.15494393"
+    description: Concept DOI for all linnet versions
+keywords:
+  - graph algorithms
+  - half-edge data structures
+  - Feynman diagrams
+  - tensor networks
+  - Rust
+license: MIT
+repository-code: "https://github.com/alphal00p/gammaloop"

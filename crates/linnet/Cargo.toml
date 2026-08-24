@@ -4,6 +4,8 @@ version = "0.17.0"
 edition = "2021"
 description = "A library for working with half-edge data structures, and subgraphs, and drawing them"
 license = "MIT"
+readme = "README.md"
+repository = "https://github.com/lcnbr/linnet"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -33,6 +35,7 @@ serde_repr = { workspace = true }
 symbolica = { workspace = true, default-features = false, optional = true }
 symbolica-utils = { workspace = true, optional = true }
 thiserror = { workspace = true }
+gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack" }
 
 [dependencies.ahash]
 version = "0.8.11"

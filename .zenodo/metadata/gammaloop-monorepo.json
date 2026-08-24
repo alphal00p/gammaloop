@@ -1,0 +1,45 @@
+{
+  "title": "gammaloop monorepo",
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "mit",
+  "language": "eng",
+  "creators": [
+    {
+      "name": "Fraaije, Mathijs",
+      "affiliation": "University of Bern",
+      "orcid": "0000-0003-2968-8112"
+    },
+    {
+      "name": "Hirschi, Valentin",
+      "affiliation": "University of Bern",
+      "orcid": "0000-0002-8908-6300"
+    },
+    {
+      "name": "Huber, Lucien",
+      "affiliation": "University of Bern",
+      "orcid": "0009-0003-5074-7313"
+    }
+  ],
+  "description": "Source archive of the GammaLoop repository at a tagged release. Modern versions include GammaLoop and the independently versioned spenso, idenso, vakint, and linnet software families; historical records preserve the repository's pre-split layout.",
+  "notes": "Code authored for this repository is available under the MIT License. Modern official GammaLoop Python distributions, normal Cargo builds from the repository root, and the default Nix package activate Symbolica under GammaLoop's OEM license. Consumers compiling modern gammalooprs or gammaloop-api releases from crates.io must set the public compile-time selector SYMBOLICA_OEM_LICENSE=SYMBOLICA_OEM_GAMMALOOP; it is not a personal license or secret. The OEM grant does not transfer to standalone use of Symbolica-dependent libraries: users of spenso with Symbolica integration, idenso, or vakint must configure their own Symbolica license. Linnet's optional Symbolica feature likewise requires a user-provided license. Historical versions preserve their original layout and Symbolica integration behavior; consult the archived source for that version. Symbolica and other third-party software remain governed by their own terms.",
+  "keywords": [
+    "particle physics",
+    "perturbative quantum field theory",
+    "Local Unitarity",
+    "tensor networks",
+    "Rust",
+    "Python"
+  ],
+  "grants": [
+    {
+      "id": "10.13039/501100001711::PCEFP2_203335"
+    }
+  ],
+  "communities": [
+    {
+      "identifier": "alphaloop"
+    }
+  ],
+  "related_identifiers": []
+}

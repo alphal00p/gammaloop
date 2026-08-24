@@ -2,6 +2,10 @@
 name = "gammaloop-tracing-filter"
 version = "0.1.0"
 edition = "2024"
+description = "Structured tracing filters and log formatting for GammaLoop"
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
 
 [dependencies]
 chrono = { workspace = true }

@@ -1,0 +1,40 @@
+{
+  "title": "idenso",
+  "upload_type": "software",
+  "access_right": "open",
+  "license": "mit",
+  "language": "eng",
+  "creators": [
+    {
+      "name": "Huber, Lucien",
+      "affiliation": "University of Bern",
+      "orcid": "0009-0003-5074-7313"
+    }
+  ],
+  "description": "A library for representing and manipulating tensor identities with Symbolica, including Dirac algebra, color algebra, and tensor simplification routines for high-energy physics.",
+  "notes": "Idenso-authored source is available under the MIT License. Library consumers must configure their own Symbolica license; GammaLoop's OEM license does not transfer to standalone idenso use. Symbolica and other third-party software remain governed by their own terms.",
+  "keywords": [
+    "tensor identities",
+    "symbolic computation",
+    "high-energy physics",
+    "Symbolica",
+    "Rust"
+  ],
+  "grants": [
+    {
+      "id": "10.13039/501100001711::PCEFP2_203335"
+    }
+  ],
+  "communities": [
+    {
+      "identifier": "alphaloop"
+    }
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "10.5281/zenodo.15913113",
+      "relation": "isDerivedFrom",
+      "resource_type": "software"
+    }
+  ]
+}

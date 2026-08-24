@@ -3,6 +3,9 @@ name = "spynso3"
 version = "0.1.2"
 edition = "2024"
 description = "Pyo3 bindings for spenso"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/alphal00p/spenso"
 
 [dependencies]
 ahash = { workspace = true, features = ["serde"] }

@@ -1,0 +1,33 @@
+cff-version: 1.2.0
+message: >-
+  If you use the gammaloop monorepo, cite the version-specific Zenodo DOI for
+  the repository version you used.
+title: gammaloop monorepo
+type: software
+authors:
+  - family-names: Fraaije
+    given-names: Mathijs
+    affiliation: University of Bern
+    orcid: "https://orcid.org/0000-0003-2968-8112"
+  - family-names: Hirschi
+    given-names: Valentin
+    affiliation: University of Bern
+    orcid: "https://orcid.org/0000-0002-8908-6300"
+  - family-names: Huber
+    given-names: Lucien
+    affiliation: University of Bern
+    orcid: "https://orcid.org/0009-0003-5074-7313"
+abstract: >-
+  Source archive of the GammaLoop repository at a tagged release. Modern
+  versions include GammaLoop and the independently versioned spenso, idenso,
+  vakint, and linnet software families; historical records preserve the
+  repository's pre-split layout.
+keywords:
+  - particle physics
+  - perturbative quantum field theory
+  - Local Unitarity
+  - tensor networks
+  - Rust
+  - Python
+license: MIT
+repository-code: "https://github.com/alphal00p/gammaloop"

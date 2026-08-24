@@ -6,7 +6,7 @@
 </div>
 
 [![crates.io](https://img.shields.io/crates/v/linnet.svg)](https://crates.io/crates/linnet)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15494394.svg)](https://doi.org/10.5281/zenodo.15494394)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.15494393.svg)](https://doi.org/10.5281/zenodo.15494393)
 
 # Linnet
 
@@ -48,3 +48,12 @@ For AI agents working with this codebase: **See `.agent/README.md` for comprehen
 ## Acknowledgement
 
 This crate was written by [Lucien Huber](https://github.com/lcnbr/)
+
+## Citation
+
+Linnet, `clinnet`, `linnet-py`, and `linnest` are archived as one versioned
+Zenodo family under concept DOI
+[`10.5281/zenodo.15494393`](https://doi.org/10.5281/zenodo.15494393). Cite the
+version-specific DOI for the Linnet version used; see
+[`CITATION.cff`](CITATION.cff) and the repository's
+[citation guide](../../docs/citing.md).

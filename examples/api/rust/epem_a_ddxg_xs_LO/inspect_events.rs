@@ -17,7 +17,7 @@
 //! ```
 //!
 //! Run from the repository root with `rust-script`, for example:
-//! `NO_SYMBOLICA_OEM_LICENSE=1 EXTRA_MACOS_LIBS_FOR_GNU_GCC=T rust-script --debug examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs`
+//! `SYMBOLICA_OEM_LICENSE=SYMBOLICA_OEM_GAMMALOOP EXTRA_MACOS_LIBS_FOR_GNU_GCC=T rust-script --force --debug examples/api/rust/epem_a_ddxg_xs_LO/inspect_events.rs`
 //!
 //! If you change the OEM-license environment at build time, add `--force` so
 //! `rust-script` does not reuse an incompatible cached build.

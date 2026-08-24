@@ -3,6 +3,9 @@ name = "symbolica-utils"
 version = "0.1.0"
 edition = "2024"
 description = "Shared Symbolica atom and pattern utility traits."
+license.workspace = true
+readme.workspace = true
+repository.workspace = true
 
 [dependencies]
 bincode = { workspace = true, features = ["serde"] }
@@ -10,3 +13,4 @@ bincode-trait-derive = { workspace = true }
 itertools = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 symbolica = { workspace = true, default-features = false, features = ["bincode", "serde"] }
+gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack" }

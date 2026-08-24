@@ -1,0 +1,127 @@
+name: Zenodo historical backfill
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type PUBLISH HISTORICAL ZENODO BACKFILL
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Prepare immutable historical payload
+    if: github.repository == 'alphal00p/gammaloop' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Check typed confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          test "${CONFIRMATION}" = "PUBLISH HISTORICAL ZENODO BACKFILL"
+
+      - name: Check out dispatched main commit and historical tags
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Prepare token-free historical payload
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${GITHUB_SHA}"
+          python3 .github/scripts/zenodo_backfill.py prepare \
+            --output-dir zenodo-backfill \
+            --plan zenodo-backfill/plan.json
+          test "$(find zenodo-backfill -type f -name '*.whl' | wc -l)" -eq 0
+
+      - name: Upload immutable historical payload
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: zenodo-backfill-${{ github.run_id }}-${{ github.run_attempt }}
+          path: zenodo-backfill/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  publish:
+    name: Publish and audit historical records
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    concurrency:
+      group: zenodo-production-${{ github.repository }}
+      cancel-in-progress: false
+    environment:
+      name: zenodo
+      url: https://zenodo.org/
+    steps:
+      - name: Check out dispatched main commit
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - name: Download immutable historical payload
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: zenodo-backfill-${{ github.run_id }}-${{ github.run_attempt }}
+          path: zenodo-backfill
+
+      - name: Publish historical records sequentially
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p zenodo-backfill-results
+          python3 .github/scripts/zenodo_backfill.py publish \
+            --plan zenodo-backfill/plan.json \
+            --confirmation "${CONFIRMATION}" \
+            --report zenodo-backfill-results/publish-report.json
+
+      - name: Audit all 20 historical records and baselines
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          ZENODO_TOKEN: ${{ secrets.ZENODO_TOKEN }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/zenodo_backfill.py audit \
+            --plan zenodo-backfill/plan.json \
+            --confirmation "${CONFIRMATION}" \
+            --report zenodo-backfill-results/audit-report.json
+
+      - name: Summarize concept and version records
+        shell: bash
+        run: |
+          set -euo pipefail
+          {
+            echo "## Zenodo historical backfill"
+            echo
+            echo "| Family | Concept recid | Version | Record id | Version DOI |"
+            echo "| --- | ---: | --- | ---: | --- |"
+            jq --raw-output '
+              to_entries[] as $family |
+              $family.value.versions[] |
+              "| \($family.key) | \($family.value.concept_recid) | \(.version) | \(.record_id) | \(.version_doi) |"
+            ' zenodo-backfill-results/audit-report.json
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload DOI and record-id report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: zenodo-backfill-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: zenodo-backfill-results/
+          if-no-files-found: error
+          retention-days: 90

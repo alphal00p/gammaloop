@@ -4,7 +4,9 @@ version = "0.6.0"
 edition = "2024"
 description = "A tensor (n-dim array) network, iterating, and contraction (using automatic abstract index matching) library."
 documentation = "https://docs.rs/spenso/latest/spenso/"
-license = "MIT OR Apache-2.0"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/alphal00p/spenso"
 keywords = ["contraction", "tensors"]
 
 [package.metadata.docs.rs]

@@ -1,11 +1,17 @@
 [package]
 name = "gammaloop-api"
-version = "0.1.0"
+version = "0.3.4"
 edition = "2021"
+authors = [
+  "Valentin Hirschi <valentin.hirschi@gmail.com>",
+  "Mathijs Fraaije <mathijsfraaije@gmail.com>",
+  "Lucien Huber <mail@lcnbr.ch>",
+]
 
 description = "An implementation of the Local Unitarity method for computing differential collider cross-sections."
 repository = "https://github.com/alphal00p/gammaloop"
-license = "MIT OR Apache-2.0"
+license = "MIT"
+readme = "../../README.md"
 keywords = ["cross-section", "loop", "perturbative", "physics"]
 categories = ["science"]
 build = "build.rs"
@@ -115,7 +121,6 @@ tempfile = "3.8"
 
 [build-dependencies]
 pyo3-build-config = { workspace = true, optional = true }
-walkdir = { workspace = true }
 
 [features]
 # Keep Python optional unless explicitly enabled.
@@ -127,7 +132,7 @@ pyo3-extension-module = [
   "gammalooprs/pyo3-extension-module",
   "pyo3/extension-module"
 ]
-python_abi = ["pyo3/abi3", "pyo3/abi3-py37", "python_api"]
+python_abi = ["pyo3/abi3", "pyo3/abi3-py311", "python_api"]
 python_api = [
   "dep:numpy",
   "dep:pyo3-build-config",

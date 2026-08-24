@@ -1,0 +1,23 @@
+cff-version: 1.2.0
+message: >-
+  If you use vakint, cite the version-specific Zenodo DOI for the version you
+  used.
+title: vakint
+type: software
+authors:
+  - family-names: Hirschi
+    given-names: Valentin
+    affiliation: University of Bern
+    orcid: "https://orcid.org/0000-0002-8908-6300"
+abstract: >-
+  Vakint computes single-scale vacuum integrals in high-energy physics through
+  topology matching, tensor reduction, analytical methods, and numerical sector
+  decomposition.
+keywords:
+  - vacuum integrals
+  - Feynman integrals
+  - quantum field theory
+  - high-energy physics
+  - Rust
+license: MIT
+repository-code: "https://github.com/alphal00p/gammaloop"

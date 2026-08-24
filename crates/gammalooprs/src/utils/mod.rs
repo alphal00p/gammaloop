@@ -5117,7 +5117,7 @@ pub(crate) fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
 
 pub mod newton_solver;
 use include_dir::{Dir, include_dir};
-static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../assets/models/json");
+pub static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/assets/models/json");
 
 pub fn load_generic_model(name: &str) -> Model {
     if let Some(file) = BUILTIN_MODELS.get_file(format!("{}/{}.json", name, name)) {
