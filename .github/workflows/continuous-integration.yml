@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - main
+      - feynkit
   merge_group:
 env:
   CARGO_TERM_COLOR: always
@@ -68,6 +69,7 @@ jobs:
               - 'Cargo.toml'
               - 'Cargo.lock'
               - 'justfile'
+              - '.github/scripts/**'
               - '.github/workflows/**'
 
   tydenso:
@@ -231,7 +233,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nextest-junit-${{ matrix.os }}
-          path: target/nextest/ci/junit.xml
+          path: target/nextest/ci_gammaloop/junit.xml
           if-no-files-found: ignore
           retention-days: 7
 
@@ -244,7 +246,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        check: [clippy, fmt, doc]
+        check: [boundaries, clippy, fmt, doc, stubs]
     steps:
       - uses: actions/checkout@v4
 
@@ -274,6 +276,10 @@ jobs:
         if: matrix.check == 'clippy'
         run: just --unstable clippy -- -D warnings
 
+      - name: Check FeynKit dependency boundaries
+        if: matrix.check == 'boundaries'
+        run: python3 .github/scripts/check-feynkit-boundaries.py
+
       - name: Run fmt
         if: matrix.check == 'fmt'
         run: just --unstable fmt -- --check
@@ -281,6 +287,12 @@ jobs:
       - name: Run doc
         if: matrix.check == 'doc'
         run: just --unstable doc
+
+      - name: Check FeynKit Python stubs
+        if: matrix.check == 'stubs'
+        run: |
+          cargo run --locked -p feynkit-py --features python_stubgen --bin feynkit-stubgen
+          test -z "$(git status --porcelain -- crates/feynkit-py/python/symbolica)"
 
   checks:
     name: Checks

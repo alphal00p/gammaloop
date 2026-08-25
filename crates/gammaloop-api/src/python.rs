@@ -6,6 +6,7 @@ use gammalooprs::{
     integrands::evaluation::{
         BatchSampleEvaluationResult, SampleEvaluationResult, SingleSampleEvaluationResult,
     },
+    model::Model,
     observables::{
         AdditionalWeightKey, DiscreteBinOrdering, Event, EventGroup, GenericAdditionalWeightInfo,
         HistogramAccumulatorState, HistogramSnapshot, HistogramStatisticsSnapshot,
@@ -2343,7 +2344,8 @@ fn py_integrand_info_from_info(info: IntegrandInfo) -> PyIntegrandInfo {
     }
 }
 
-#[allow(dead_code)] // Retained with the currently disabled Python `integrate` binding.
+// Rust's cdylib reachability analysis does not see the PyO3-exported `integrate` entry point.
+#[allow(dead_code)]
 fn py_process_ref_from_any(process: &Bound<'_, PyAny>) -> PyResult<ProcessRef> {
     if let Ok(process_id) = process.extract::<usize>() {
         return Ok(ProcessRef::Id(process_id));
@@ -2357,7 +2359,7 @@ fn py_process_ref_from_any(process: &Bound<'_, PyAny>) -> PyResult<ProcessRef> {
     ProcessRef::from_str(&process).map_err(exceptions::PyValueError::new_err)
 }
 
-#[allow(dead_code)] // Retained with the currently disabled Python `integrate` binding.
+#[allow(dead_code)]
 fn py_complex_target_from_any(
     target: &Bound<'_, PyAny>,
 ) -> PyResult<spenso::algebra::complex::Complex<gammalooprs::utils::F<f64>>> {
@@ -2380,7 +2382,7 @@ fn py_complex_target_from_any(
     ))
 }
 
-#[allow(dead_code)] // Retained with the currently disabled Python `integrate` binding.
+#[allow(dead_code)]
 fn resolve_python_slot_key(
     state: &State,
     process: &ProcessRef,
@@ -2400,7 +2402,7 @@ fn resolve_python_slot_key(
     ))
 }
 
-#[allow(dead_code, clippy::too_many_arguments)] // Retained with the disabled Python `integrate` binding.
+#[allow(dead_code)]
 fn build_python_integrate_command(
     state: &State,
     slots: Option<Vec<(ProcessRef, String)>>,
@@ -2788,6 +2790,23 @@ struct GammaLoopAPI {
     run_history: RunHistory,
     default_runtime_settings: RuntimeSettings,
     session_state: CliSessionState,
+}
+
+#[derive(Debug, thiserror::Error)]
+enum CffDotInputError {
+    #[error("could not parse CFF DOT input: {message}")]
+    Parse { message: String },
+    #[error("CFF DOT input does not contain a graph")]
+    EmptyGraph,
+}
+
+fn parse_cff_dot_graph(dot: &str, model: &Model) -> Result<Graph, CffDotInputError> {
+    Graph::from_string(dot, model)
+        .map_err(|error| CffDotInputError::Parse {
+            message: error.to_string(),
+        })?
+        .pop()
+        .ok_or(CffDotInputError::EmptyGraph)
 }
 
 // TODO: Improve error broadcasting to Python everywhere so as to show rust backtrace
@@ -3978,10 +3997,8 @@ impl GammaLoopAPI {
         reverse_dangling: Vec<usize>,
         orientation_pattern: Option<String>,
     ) -> PyResult<Vec<(HashMap<usize, i32>, String)>> {
-        let graph = Graph::from_string(dot_string, &self.gammaloop_state.model)
-            .unwrap()
-            .pop()
-            .unwrap();
+        let graph = parse_cff_dot_graph(&dot_string, &self.gammaloop_state.model)
+            .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
 
         let reverse_dangling = reverse_dangling
             .into_iter()
@@ -4014,7 +4031,7 @@ impl GammaLoopAPI {
             &mut surface_cache,
         )
         .map_err(|e| {
-            exceptions::PyException::new_err(format!("Could not generate CFF expression: {}", e))
+            exceptions::PyValueError::new_err(format!("Could not generate CFF expression: {}", e))
         })?;
 
         let or_pattern = orientation_pattern
@@ -4082,10 +4099,8 @@ impl GammaLoopAPI {
         orientation_pattern: Option<String>,
     ) -> PyResult<String> {
         let _ = orientation_pattern;
-        let graph = Graph::from_string(dot_string, &self.gammaloop_state.model)
-            .unwrap()
-            .pop()
-            .unwrap();
+        let graph = parse_cff_dot_graph(&dot_string, &self.gammaloop_state.model)
+            .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
 
         let reverse_dangling = reverse_dangling
             .into_iter()
@@ -4118,7 +4133,7 @@ impl GammaLoopAPI {
             &mut surface_cache,
         )
         .map_err(|e| {
-            exceptions::PyException::new_err(format!("Could not generate CFF expression: {}", e))
+            exceptions::PyValueError::new_err(format!("Could not generate CFF expression: {}", e))
         })?;
 
         let json_string = serde_json::to_string(&cff).map_err(|e| {
