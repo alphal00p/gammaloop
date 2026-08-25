@@ -1,0 +1,124 @@
+---
+source: crates/gammalooprs/src/cff/feynkit.rs
+expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cache\": graph.surface_cache,\n})"
+---
+{
+  "expression": {
+    "orientations": [
+      {
+        "data": {
+          "orientation": [
+            "Default",
+            "Default",
+            "Undirected",
+            "Undirected"
+          ]
+        },
+        "expression": {
+          "nodes": [
+            {
+              "children": [],
+              "data": {
+                "Esurface": 0
+              },
+              "node_id": 0,
+              "parent": null
+            }
+          ]
+        }
+      },
+      {
+        "data": {
+          "orientation": [
+            "Reversed",
+            "Reversed",
+            "Undirected",
+            "Undirected"
+          ]
+        },
+        "expression": {
+          "nodes": [
+            {
+              "children": [],
+              "data": {
+                "Esurface": 1
+              },
+              "node_id": 0,
+              "parent": null
+            }
+          ]
+        }
+      }
+    ],
+    "surfaces": {
+      "esurface_cache": [
+        {
+          "energies": [
+            0,
+            1
+          ],
+          "external_shift": [
+            [
+              3,
+              -1
+            ]
+          ],
+          "vertex_set": {
+            "vertex_set": 1
+          }
+        },
+        {
+          "energies": [
+            0,
+            1
+          ],
+          "external_shift": [
+            [
+              3,
+              1
+            ]
+          ],
+          "vertex_set": {
+            "vertex_set": 1
+          }
+        }
+      ],
+      "hsurface_cache": []
+    }
+  },
+  "surface_cache": {
+    "esurface_cache": [
+      {
+        "energies": [
+          0,
+          1
+        ],
+        "external_shift": [
+          [
+            3,
+            -1
+          ]
+        ],
+        "vertex_set": {
+          "vertex_set": 1
+        }
+      },
+      {
+        "energies": [
+          0,
+          1
+        ],
+        "external_shift": [
+          [
+            3,
+            1
+          ]
+        ],
+        "vertex_set": {
+          "vertex_set": 1
+        }
+      }
+    ],
+    "hsurface_cache": []
+  }
+}

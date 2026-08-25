@@ -7,6 +7,14 @@ test_gammaloop *args:
 
     enforce_warnings_as_errors=1
     gammaloop_packages=(
+        feynkit
+        feynkit-cff
+        feynkit-generator
+        feynkit-graph
+        feynkit-kinematics
+        feynkit-model
+        feynkit-py
+        feynkit-ufo
         gammaloop-api
         gammalooprs
         idenso
@@ -186,6 +194,14 @@ _test-ci TEST_NAME="" NEXTEST_FILTERSET="":
     #!/usr/bin/env bash
     set -euo pipefail
     gammaloop_packages=(
+        feynkit
+        feynkit-cff
+        feynkit-generator
+        feynkit-graph
+        feynkit-kinematics
+        feynkit-model
+        feynkit-py
+        feynkit-ufo
         gammaloop-api
         gammalooprs
         idenso

@@ -425,6 +425,8 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    "feynkit-model" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-py" = ["crates/feynkit-py/python/symbolica/community/feynkit/__init__.py" "crates/feynkit-py/tests/fixtures"];
     "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
     "alphal00p-docs-python-exporter" = ["crates/linnet-py/linnet_py.pyi" "docs/api/python"];
     clinnet = [
@@ -714,6 +716,7 @@
   };
 
   workspaceFeatureUnificationExcludedPackages = [
+    "feynkit-py"
     "alphal00p-docs-python-exporter"
     "linnet-py"
     "spynso3"

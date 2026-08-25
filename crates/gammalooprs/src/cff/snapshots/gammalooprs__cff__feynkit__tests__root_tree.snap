@@ -1,0 +1,358 @@
+---
+source: crates/gammalooprs/src/cff/feynkit.rs
+expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cache\": graph.surface_cache,\n})"
+---
+{
+  "expression": {
+    "orientations": [
+      {
+        "data": {
+          "orientation": [
+            "Default",
+            "Default",
+            "Default",
+            "Undirected",
+            "Undirected"
+          ]
+        },
+        "expression": {
+          "nodes": [
+            {
+              "children": [
+                1
+              ],
+              "data": {
+                "Esurface": 0
+              },
+              "node_id": 0,
+              "parent": null
+            },
+            {
+              "children": [],
+              "data": {
+                "Esurface": 1
+              },
+              "node_id": 1,
+              "parent": 0
+            }
+          ]
+        }
+      },
+      {
+        "data": {
+          "orientation": [
+            "Default",
+            "Reversed",
+            "Default",
+            "Undirected",
+            "Undirected"
+          ]
+        },
+        "expression": {
+          "nodes": [
+            {
+              "children": [
+                1
+              ],
+              "data": {
+                "Esurface": 0
+              },
+              "node_id": 0,
+              "parent": null
+            },
+            {
+              "children": [],
+              "data": {
+                "Esurface": 2
+              },
+              "node_id": 1,
+              "parent": 0
+            }
+          ]
+        }
+      },
+      {
+        "data": {
+          "orientation": [
+            "Reversed",
+            "Reversed",
+            "Default",
+            "Undirected",
+            "Undirected"
+          ]
+        },
+        "expression": {
+          "nodes": [
+            {
+              "children": [
+                1
+              ],
+              "data": {
+                "Esurface": 2
+              },
+              "node_id": 0,
+              "parent": null
+            },
+            {
+              "children": [],
+              "data": {
+                "Esurface": 3
+              },
+              "node_id": 1,
+              "parent": 0
+            }
+          ]
+        }
+      },
+      {
+        "data": {
+          "orientation": [
+            "Default",
+            "Default",
+            "Reversed",
+            "Undirected",
+            "Undirected"
+          ]
+        },
+        "expression": {
+          "nodes": [
+            {
+              "children": [
+                1
+              ],
+              "data": {
+                "Esurface": 2
+              },
+              "node_id": 0,
+              "parent": null
+            },
+            {
+              "children": [],
+              "data": {
+                "Esurface": 1
+              },
+              "node_id": 1,
+              "parent": 0
+            }
+          ]
+        }
+      },
+      {
+        "data": {
+          "orientation": [
+            "Reversed",
+            "Default",
+            "Reversed",
+            "Undirected",
+            "Undirected"
+          ]
+        },
+        "expression": {
+          "nodes": [
+            {
+              "children": [
+                1
+              ],
+              "data": {
+                "Esurface": 4
+              },
+              "node_id": 0,
+              "parent": null
+            },
+            {
+              "children": [],
+              "data": {
+                "Esurface": 2
+              },
+              "node_id": 1,
+              "parent": 0
+            }
+          ]
+        }
+      },
+      {
+        "data": {
+          "orientation": [
+            "Reversed",
+            "Reversed",
+            "Reversed",
+            "Undirected",
+            "Undirected"
+          ]
+        },
+        "expression": {
+          "nodes": [
+            {
+              "children": [
+                1
+              ],
+              "data": {
+                "Esurface": 4
+              },
+              "node_id": 0,
+              "parent": null
+            },
+            {
+              "children": [],
+              "data": {
+                "Esurface": 3
+              },
+              "node_id": 1,
+              "parent": 0
+            }
+          ]
+        }
+      }
+    ],
+    "surfaces": {
+      "esurface_cache": [
+        {
+          "energies": [
+            0,
+            2
+          ],
+          "external_shift": [
+            [
+              4,
+              -1
+            ]
+          ],
+          "vertex_set": {
+            "vertex_set": 1
+          }
+        },
+        {
+          "energies": [
+            0,
+            1
+          ],
+          "external_shift": [
+            [
+              4,
+              -1
+            ]
+          ],
+          "vertex_set": {
+            "vertex_set": 3
+          }
+        },
+        {
+          "energies": [
+            1,
+            2
+          ],
+          "external_shift": [],
+          "vertex_set": {
+            "vertex_set": 2
+          }
+        },
+        {
+          "energies": [
+            0,
+            1
+          ],
+          "external_shift": [
+            [
+              4,
+              1
+            ]
+          ],
+          "vertex_set": {
+            "vertex_set": 3
+          }
+        },
+        {
+          "energies": [
+            0,
+            2
+          ],
+          "external_shift": [
+            [
+              4,
+              1
+            ]
+          ],
+          "vertex_set": {
+            "vertex_set": 1
+          }
+        }
+      ],
+      "hsurface_cache": []
+    }
+  },
+  "surface_cache": {
+    "esurface_cache": [
+      {
+        "energies": [
+          0,
+          2
+        ],
+        "external_shift": [
+          [
+            4,
+            -1
+          ]
+        ],
+        "vertex_set": {
+          "vertex_set": 1
+        }
+      },
+      {
+        "energies": [
+          0,
+          1
+        ],
+        "external_shift": [
+          [
+            4,
+            -1
+          ]
+        ],
+        "vertex_set": {
+          "vertex_set": 3
+        }
+      },
+      {
+        "energies": [
+          1,
+          2
+        ],
+        "external_shift": [],
+        "vertex_set": {
+          "vertex_set": 2
+        }
+      },
+      {
+        "energies": [
+          0,
+          1
+        ],
+        "external_shift": [
+          [
+            4,
+            1
+          ]
+        ],
+        "vertex_set": {
+          "vertex_set": 3
+        }
+      },
+      {
+        "energies": [
+          0,
+          2
+        ],
+        "external_shift": [
+          [
+            4,
+            1
+          ]
+        ],
+        "vertex_set": {
+          "vertex_set": 1
+        }
+      }
+    ],
+    "hsurface_cache": []
+  }
+}

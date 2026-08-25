@@ -4771,12 +4771,6 @@
             "$ref": "#/$defs/KvPair"
           }
         },
-        "max_multiplicity_for_fast_cut_filter": {
-          "description": "Fast cut filter switch multiplicity",
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
         "max_n_bridges": {
           "description": "Extra filters / constraints",
           "type": [
@@ -4990,8 +4984,7 @@
         "tokens",
         "append",
         "clear_existing_processes",
-        "only_diagrams",
-        "max_multiplicity_for_fast_cut_filter"
+        "only_diagrams"
       ]
     },
     "StabilityLevelSetting": {
