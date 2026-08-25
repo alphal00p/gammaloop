@@ -17,6 +17,14 @@ colored = "3.1.1"
 dirs = "6.0.0"
 dot-parser = "0.5"
 eyre = "0.6.12"
+feynkit = { version = "0.1.0", path = "crates/feynkit/" }
+feynkit-cff = { version = "0.1.0", path = "crates/feynkit-cff/" }
+feynkit-generator = { version = "0.1.0", path = "crates/feynkit-generator/" }
+feynkit-graph = { version = "0.1.0", path = "crates/feynkit-graph/" }
+feynkit-kinematics = { version = "0.1.0", path = "crates/feynkit-kinematics/" }
+feynkit-model = { version = "0.1.0", path = "crates/feynkit-model/" }
+feynkit-py = { version = "0.1.0", path = "crates/feynkit-py/" }
+feynkit-ufo = { version = "0.1.0", path = "crates/feynkit-ufo/" }
 gammaloop-api = { path = "crates/gammaloop-api/" }
 gammaloop-tracing-filter = { path = "crates/gammaloop-tracing-filter/" }
 gammaloop-tracing-filter-macros = { path = "crates/gammaloop-tracing-filter-macros/" }
@@ -29,9 +37,10 @@ insta = "1.46.3"
 itertools = "0.14"
 json5 = "0.4.1"
 linnest = { path = "crates/linnest/" }
-linnet = { path = "crates/linnet/" }
+linnet = { version = "0.17.0", path = "crates/linnet/" }
 momtrop = "0.3.0"
 ndarray = "0.17.2"
+numerica = { version = "2.2.0", default-features = false }
 nu-ansi-term = "0.50.3"
 numpy = "0.28"
 pyo3 = "0.28"

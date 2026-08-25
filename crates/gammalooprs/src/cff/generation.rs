@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use crate::{
     cff::{
-        expression::OrientationData,
         hsurface::{Hsurface, HsurfaceID},
         surface::{HybridSurface, HybridSurfaceID, InfiniteSurface},
         tree::Tree,
@@ -13,17 +12,12 @@ use crate::{
 };
 use ahash::HashSet;
 use bincode::{Decode, Encode};
-use color_eyre::Report;
 use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph,
-    involution::{EdgeVec, HedgePair},
-    subgraph::{OrientedCut, SubGraphLike, SubSetOps},
-};
-use linnet::half_edge::{
-    involution::{EdgeIndex, Orientation},
-    subgraph::InternalSubGraph,
+    involution::{EdgeIndex, EdgeVec, Orientation},
+    subgraph::{SubGraphLike, SubSetOps},
 };
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -32,8 +26,6 @@ use symbolica::{
 use typed_index_collections::TiVec;
 
 use serde::{Deserialize, Serialize};
-
-use tracing::debug;
 
 use super::{
     cff_graph::CFFGenerationGraph,
@@ -65,225 +57,21 @@ impl GenerationData {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
-#[allow(dead_code)]
-struct CFFTreeNodePointer {
-    term_id: usize,
-    node_id: usize,
-}
-
-// Orientation is a bitset that represents the orientation of the edges in a graph.
-// 0 means +, 1 means -, in this representation the original graph is represented by the number 0
-#[derive(Debug, Clone, Copy)]
-struct OrientationGenerator {
-    identifier: usize,
-    num_edges: usize,
-}
-
-impl OrientationGenerator {
-    #[allow(unused)]
-    fn default(num_edges: usize) -> Self {
-        Self {
-            identifier: 0,
-            num_edges,
-        }
-    }
-}
-
-impl IntoIterator for OrientationGenerator {
-    type Item = Orientation;
-    type IntoIter = OrientationIterator;
-
-    fn into_iter(self) -> Self::IntoIter {
-        OrientationIterator {
-            identifier: self.identifier,
-            current_location: 0,
-            num_edges: self.num_edges,
-        }
-    }
-}
-
-// OrientationIterator allows us to iterate over the edges in a graph, and
-// view their orientation as a boolean
-struct OrientationIterator {
-    identifier: usize,
-    current_location: usize,
-    num_edges: usize,
-}
-
-impl Iterator for OrientationIterator {
-    type Item = Orientation;
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current_location < self.num_edges {
-            let result_bool = self.identifier & (1 << self.current_location) == 0;
-            let result = match result_bool {
-                true => Orientation::Default,
-                false => Orientation::Reversed,
-            };
-
-            self.current_location += 1;
-            Some(result)
-        } else {
-            None
-        }
-    }
-}
-
-// This function returns an iterator over all possible orientations of a graph
-fn iterate_possible_orientations(num_edges: usize) -> impl Iterator<Item = OrientationGenerator> {
-    if num_edges > 64 {
-        panic!("Maximum number of edges supported is currently 64")
-    }
-
-    let max_size = 2_usize.pow(num_edges as u32);
-    (0..max_size).map(move |x| OrientationGenerator {
-        identifier: x,
-        num_edges,
-    })
-}
-
-#[cfg(test)]
-fn get_orientations<E, V, H>(
-    graph: &HedgeGraph<E, V, H>,
-    dummy_edges: &[EdgeIndex],
-) -> Vec<CFFGenerationGraph> {
-    let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph);
-    let num_virtual_edges = graph.count_internal_edges(&internal_subgraph);
-    let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
-
-    virtual_possible_orientations
-        .map(|orientation_of_virtuals| {
-            let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
-
-            let global_orientation = graph.new_edgevec(|_, __, hedge_pair| match hedge_pair {
-                HedgePair::Unpaired { .. } => Orientation::Default,
-                HedgePair::Paired { .. } => orientation_of_virtuals
-                    .next()
-                    .expect(" unable to reconstruct orientation"),
-                HedgePair::Split { .. } => todo!(),
-            });
-
-            assert!(
-                orientation_of_virtuals.next().is_none(),
-                "did not saturate virtual orientations when constructing global orientation"
-            );
-
-            CFFGenerationGraph::new(graph, global_orientation, dummy_edges)
-        })
-        .collect_vec()
-}
-
-pub(crate) fn get_orientations_from_subgraph<E, V, H, S: SubGraphLike>(
-    graph: &HedgeGraph<E, V, H>,
-    subgraph: &S,
-    reversed_dangling: &[EdgeIndex],
-) -> Vec<CFFGenerationGraph> {
-    let num_virtual_edges = graph.count_internal_edges(subgraph);
-    let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
-
-    virtual_possible_orientations
-        .map(|orientation_of_virtuals| {
-            let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
-
-            let global_orientation = graph.new_edgevec(|_, edge_id, _| {
-                if let Some((pair, _, _)) = graph
-                    .iter_edges_of(subgraph)
-                    .find(|(_pair, id, _)| *id == edge_id)
-                {
-                    match pair {
-                        HedgePair::Paired { .. } => orientation_of_virtuals
-                            .next()
-                            .expect("orientation generation corrupted, not enough edges"),
-                        HedgePair::Unpaired { .. } => Orientation::Default,
-                        HedgePair::Split { .. } => {
-                            if reversed_dangling.contains(&edge_id) {
-                                Orientation::Reversed
-                            } else {
-                                Orientation::Default
-                            }
-                        }
-                    }
-                } else {
-                    Orientation::Undirected
-                }
-            });
-
-            CFFGenerationGraph::new_from_subgraph(graph, global_orientation, subgraph).unwrap()
-        })
-        .filter(|cff_graph| !cff_graph.has_directed_cycle_initial())
-        .collect()
-}
-
-#[allow(unused)]
-fn get_orientations_with_cut<E, V, H>(
-    graph: &HedgeGraph<E, V, H>,
-    oriented_cut: &OrientedCut,
-) -> Vec<EdgeVec<Orientation>> {
-    let internal_subgraph = InternalSubGraph::cleaned_filter_pessimist(graph.full_filter(), graph);
-    let num_virtual_edges = graph.count_internal_edges(&internal_subgraph);
-
-    let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
-
-    let orientations_consistent_with_cut = virtual_possible_orientations
-        .map(|orientation_of_virtuals| {
-            // pad a virtual orientation with orientations of externals.
-            let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
-
-            let global_orientation = graph.new_edgevec(|_, __, hedge_pair| match hedge_pair {
-                HedgePair::Unpaired { .. } => Orientation::Default,
-                HedgePair::Paired { .. } => orientation_of_virtuals
-                    .next()
-                    .expect(" unable to reconstruct orientation"),
-                HedgePair::Split { .. } => todo!(),
-            });
-
-            assert!(
-                orientation_of_virtuals.next().is_none(),
-                "did not saturate virtual orientations when constructing global orientation"
-            );
-
-            global_orientation
-        })
-        .filter(|global_orientation| {
-            // filter out orientations that are not consistent with the cut
-            let edges_in_cut = graph.iter_edges_of(oriented_cut).map(|(_, id, _)| id);
-            let orientation_of_edges_in_cut = oriented_cut.iter_edges(graph).map(|(or, _)| or);
-
-            edges_in_cut
-                .zip(orientation_of_edges_in_cut)
-                .all(|(edge_id, orientation)| global_orientation[edge_id] == orientation)
-        })
-        .filter(|global_orientation| {
-            // filter out orientations that have a directed cycle
-            let graph = CFFGenerationGraph::new(graph, global_orientation.clone(), &[]);
-            !graph.has_directed_cycle_initial()
-        });
-
-    orientations_consistent_with_cut.collect_vec()
-}
-
 #[cfg(test)]
 fn generate_cff_expression<E, V, H>(
     graph: &HedgeGraph<E, V, H>,
     canonize_esurface: &Option<ShiftRewrite>,
     edges_in_initial_state_cut: &[EdgeIndex],
-    dummy_edges: &[EdgeIndex],
 ) -> Result<CFFExpression<OrientationID>> {
-    let graphs = get_orientations(graph, dummy_edges);
-    debug!("number of orientations: {}", graphs.len());
-    let mut surface_cache = SurfaceCache {
-        esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
-        hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
-    };
-    let graph_cff = generate_cff_from_orientations(
-        graphs,
-        &mut surface_cache,
-        edges_in_initial_state_cut,
+    let mut surface_cache = SurfaceCache::new();
+    generate_cff_expression_from_subgraph(
+        graph,
+        &graph.full_graph(),
         canonize_esurface,
-    )?;
-
-    // patch the surface cache
-    Ok(graph_cff)
+        &[],
+        edges_in_initial_state_cut,
+        &mut surface_cache,
+    )
 }
 
 impl Graph {
@@ -293,54 +81,7 @@ impl Graph {
         canonize_esurface: &Option<ShiftRewrite>,
         orientation_pattern: &OrientationPattern,
     ) -> Result<CFFExpression<OrientationID>> {
-        let mut seed_graph = CFFGenerationGraph::new_from_graph(self);
-
-        for edge in contract_edges {
-            seed_graph = seed_graph.contract_edge(*edge);
-        }
-
-        let edges_in_initial_state_cut = self
-            .iter_edges_of(&self.initial_state_cut)
-            .map(|x| x.1)
-            .collect_vec();
-
-        let virtual_edges_of_contracted_graph = seed_graph.num_virtual_edges();
-
-        let orientations = iterate_possible_orientations(virtual_edges_of_contracted_graph);
-
-        let mut oriented_acyclic_graphs = vec![];
-
-        for orientation in orientations {
-            let mut orientation_iterator = orientation.into_iter();
-
-            let global_orientation = self.new_edgevec(|_, edge_id, hedge_pair| {
-                if hedge_pair.is_unpaired() || contract_edges.contains(&edge_id) {
-                    Orientation::Undirected
-                } else if edges_in_initial_state_cut.contains(&edge_id) {
-                    Orientation::Default
-                } else {
-                    orientation_iterator
-                        .next()
-                        .expect("orientation generation corrupted, not enough edges")
-                }
-            });
-
-            if orientation_pattern.filter(&global_orientation) {
-                let mut cff_graph = seed_graph.clone();
-                cff_graph.apply_orientation(global_orientation)?;
-
-                if !cff_graph.has_directed_cycle_initial() {
-                    oriented_acyclic_graphs.push(cff_graph);
-                }
-            }
-        }
-
-        generate_cff_from_orientations(
-            oriented_acyclic_graphs,
-            &mut self.surface_cache,
-            &edges_in_initial_state_cut,
-            canonize_esurface,
-        )
+        self.generate_cff_with_feynkit(contract_edges, canonize_esurface, orientation_pattern)
     }
 }
 
@@ -352,14 +93,14 @@ pub fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraphLike>(
     edges_in_initial_state_cut: &[EdgeIndex],
     surface_cache: &mut SurfaceCache,
 ) -> Result<CFFExpression<OrientationID>> {
-    let graphs = get_orientations_from_subgraph(graph, subgraph, reversed_dangling);
-    let cff = generate_cff_from_orientations(
-        graphs,
-        surface_cache,
-        edges_in_initial_state_cut,
+    super::feynkit::generate_cff_expression_from_subgraph_with_feynkit(
+        graph,
+        subgraph,
         canonize_esurface,
-    )?;
-    Ok(cff)
+        reversed_dangling,
+        edges_in_initial_state_cut,
+        surface_cache,
+    )
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -670,50 +411,6 @@ fn post_process<S: SubGraphLike>(
 
         tree.map_mut(|surface_id| *surface_id = id_map[surface_id]);
     }
-}
-
-fn generate_cff_from_orientations<O: From<usize> + Into<usize>>(
-    orientations_and_graphs: Vec<CFFGenerationGraph>,
-    generator_cache: &mut SurfaceCache,
-    edges_in_initial_state_cut: &[EdgeIndex],
-    canonize_esurface: &Option<ShiftRewrite>,
-) -> Result<CFFExpression<O>, Report> {
-    // filter cyclic orientations beforehand
-    let acyclic_orientations_and_graphs = orientations_and_graphs
-        .into_iter()
-        .filter(|graph| !graph.has_directed_cycle_initial())
-        .collect_vec();
-
-    debug!(
-        "number of acyclic orientations: {}",
-        acyclic_orientations_and_graphs.len()
-    );
-
-    let terms = acyclic_orientations_and_graphs
-        .into_iter()
-        .map(|graph| {
-            let global_orientation = graph.global_orientation.clone();
-            let tree = generate_tree_for_orientation(
-                graph.clone(),
-                generator_cache,
-                edges_in_initial_state_cut,
-                canonize_esurface,
-            );
-            let expression = tree.map(forget_graphs);
-
-            crate::cff::expression::OrientationExpression {
-                expression,
-                data: OrientationData {
-                    orientation: global_orientation,
-                },
-            }
-        })
-        .collect_vec();
-
-    Ok(CFFExpression {
-        orientations: terms.into(),
-        surfaces: generator_cache.clone(),
-    })
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
@@ -1034,9 +731,7 @@ fn advance_tree(
 
 #[cfg(test)]
 mod tests_cff {
-    use std::{ops::Range, vec};
-
-    use ahash::HashMap;
+    use std::ops::Range;
 
     use linnet::half_edge::{
         builder::HedgeGraphBuilder, involution::Flow, nodestore::NodeStorageVec,
@@ -1048,7 +743,6 @@ mod tests_cff {
     use utils::FloatLike;
 
     use crate::{
-        cff::cff_graph::CFFEdgeType,
         momentum::{FourMomentum, ThreeMomentum},
         settings::global::OrientationPattern,
         utils::{
@@ -1096,44 +790,6 @@ mod tests_cff {
         }
     }
 
-    // helper function to do some quick tests
-    #[allow(unused)]
-    fn generate_orientations_for_testing(
-        edges: Vec<(usize, usize)>,
-        incoming_vertices: Vec<usize>,
-    ) -> Vec<CFFGenerationGraph> {
-        let num_edges = edges.len();
-        let incoming_vertices = incoming_vertices
-            .into_iter()
-            .map(|v| (v, CFFEdgeType::External))
-            .collect_vec();
-
-        iterate_possible_orientations(num_edges)
-            .map(|or| {
-                let orientation_vector = or.into_iter().collect_vec();
-                let mut new_edges = edges.clone();
-                for (edge_id, edge_orientation) in orientation_vector.iter().enumerate() {
-                    match edge_orientation {
-                        Orientation::Default => {
-                            new_edges[edge_id] = edges[edge_id];
-                        }
-                        Orientation::Reversed => {
-                            let rotated_edge = (edges[edge_id].1, edges[edge_id].0);
-                            new_edges[edge_id] = rotated_edge;
-                        }
-                        Orientation::Undirected => {
-                            unreachable!("unexpected orientation")
-                        }
-                    }
-                }
-
-                CFFGenerationGraph::from_vec(new_edges, incoming_vertices.clone(), None)
-            })
-            .filter(|graph| !graph.has_directed_cycle_initial())
-            .collect_vec()
-    }
-
-    #[allow(unused)]
     fn compute_one_loop_energy<T: FloatLike>(
         k: ThreeMomentum<F<T>>,
         p: ThreeMomentum<F<T>>,
@@ -1142,199 +798,8 @@ mod tests_cff {
         ((k + p).norm_squared() + &m * &m).sqrt()
     }
 
-    #[test]
-    fn test_orientation_struct() {
-        let orientations = iterate_possible_orientations(3).collect_vec();
-        assert_eq!(orientations.len(), 8);
-
-        let orientation1 = orientations[0].into_iter().collect_vec();
-        assert_eq!(
-            orientation1,
-            vec![
-                Orientation::Default,
-                Orientation::Default,
-                Orientation::Default
-            ]
-        );
-
-        let orientation2 = orientations[1].into_iter().collect_vec();
-        assert_eq!(
-            orientation2,
-            vec![
-                Orientation::Reversed,
-                Orientation::Default,
-                Orientation::Default
-            ]
-        );
-
-        let orientation3 = orientations[2].into_iter().collect_vec();
-        assert_eq!(
-            orientation3,
-            vec![
-                Orientation::Default,
-                Orientation::Reversed,
-                Orientation::Default
-            ]
-        );
-
-        let orientation4 = orientations[3].into_iter().collect_vec();
-        assert_eq!(
-            orientation4,
-            vec![
-                Orientation::Reversed,
-                Orientation::Reversed,
-                Orientation::Default
-            ]
-        );
-
-        let orientation5 = orientations[4].into_iter().collect_vec();
-        assert_eq!(
-            orientation5,
-            vec![
-                Orientation::Default,
-                Orientation::Default,
-                Orientation::Reversed
-            ]
-        );
-
-        let orientation6 = orientations[5].into_iter().collect_vec();
-        assert_eq!(
-            orientation6,
-            vec![
-                Orientation::Reversed,
-                Orientation::Default,
-                Orientation::Reversed
-            ]
-        );
-
-        let orientation7 = orientations[6].into_iter().collect_vec();
-        assert_eq!(
-            orientation7,
-            vec![
-                Orientation::Default,
-                Orientation::Reversed,
-                Orientation::Reversed
-            ]
-        );
-
-        let orientation8 = orientations[7].into_iter().collect_vec();
-        assert_eq!(
-            orientation8,
-            vec![
-                Orientation::Reversed,
-                Orientation::Reversed,
-                Orientation::Reversed
-            ]
-        );
-    }
-
-    #[test]
-    fn fishnet2b2() {
-        let edges = vec![
-            (0, 1),
-            (1, 2),
-            (3, 4),
-            (4, 5),
-            (6, 7),
-            (7, 8),
-            (0, 3),
-            (1, 4),
-            (2, 5),
-            (3, 6),
-            (4, 7),
-            (5, 8),
-        ];
-
-        let incoming_vertices = vec![0, 2, 6, 8];
-
-        let dep_mom = EdgeIndex::from(3);
-        let dep_mom_expr = vec![
-            (EdgeIndex::from(0), -1),
-            (EdgeIndex::from(1), -1),
-            (EdgeIndex::from(2), -1),
-        ];
-
-        let shift_rewrite = ShiftRewrite {
-            dependent_momentum: dep_mom,
-            dependent_momentum_expr: dep_mom_expr,
-        };
-
-        let orientations = generate_orientations_for_testing(edges, incoming_vertices);
-
-        // get time before cff generation
-        let start = std::time::Instant::now();
-
-        let mut surface_cache = SurfaceCache::new();
-
-        let _cff = generate_cff_from_orientations::<OrientationID>(
-            orientations,
-            &mut surface_cache,
-            &[],
-            &Some(shift_rewrite),
-        )
-        .unwrap();
-
-        let finish = std::time::Instant::now();
-        println!("time to generate cff: {:?}", finish - start);
-    }
-
-    #[test]
-    fn cube() {
-        let edges = vec![
-            (0, 1),
-            (1, 3),
-            (3, 2),
-            (2, 0),
-            (4, 5),
-            (5, 7),
-            (7, 6),
-            (6, 4),
-            (0, 4),
-            (1, 5),
-            (2, 6),
-            (3, 7),
-        ];
-
-        let mut external_data = HashMap::default();
-        for v in 0..8 {
-            external_data.insert(v, vec![12 + v]);
-        }
-
-        let mut position_map = HashMap::default();
-        for i in 0..edges.len() {
-            position_map.insert(i, i);
-        }
-
-        let dep_mom = EdgeIndex::from(7);
-        let dep_mom_expr = (0..7).map(|i| (EdgeIndex::from(i), -1)).collect();
-
-        let shift_rewrite = ShiftRewrite {
-            dependent_momentum: dep_mom,
-            dependent_momentum_expr: dep_mom_expr,
-        };
-
-        let incoming_vertices = vec![0, 1, 2, 3, 4, 5, 6, 7];
-
-        let orientations = generate_orientations_for_testing(edges, incoming_vertices);
-
-        // get time before cff generation
-        let _start = std::time::Instant::now();
-
-        let mut surface_cache = SurfaceCache::new();
-
-        let _cff = generate_cff_from_orientations::<OrientationID>(
-            orientations,
-            &mut surface_cache,
-            &[],
-            &Some(shift_rewrite),
-        )
-        .unwrap();
-
-        let _finish = std::time::Instant::now();
-    }
-
     fn proper_atom(graph: &HedgeGraph<(), ()>) -> Atom {
-        let cff = generate_cff_expression(graph, &None, &[], &[]).unwrap();
+        let cff = generate_cff_expression(graph, &None, &[]).unwrap();
 
         let mut cff_atom = cff.to_atom(OrientationPattern::default());
         cff_atom = cff.surfaces.substitute_energies(&cff_atom, &[]);
@@ -1430,12 +895,6 @@ mod tests_cff {
 
     #[test]
     fn test_cff_generation_triangle() {
-        let triangle = vec![(2, 0), (0, 1), (1, 2)];
-
-        let incoming_vertices = vec![0, 1, 2];
-        let orientations = generate_orientations_for_testing(triangle, incoming_vertices);
-        assert_eq!(orientations.len(), 6);
-
         let dep_mom = EdgeIndex::from(2);
         let dep_mom_expr = vec![(EdgeIndex::from(0), -1), (EdgeIndex::from(1), -1)];
 
@@ -1443,22 +902,6 @@ mod tests_cff {
             dependent_momentum: dep_mom,
             dependent_momentum_expr: dep_mom_expr,
         });
-
-        let mut surface_cache = SurfaceCache::new();
-
-        let cff = generate_cff_from_orientations(
-            orientations,
-            &mut surface_cache,
-            &[],
-            &shift_rewrite.clone(),
-        )
-        .unwrap();
-        assert_eq!(
-            cff.surfaces.esurface_cache.len(),
-            6,
-            "too many esurfaces: {:#?}",
-            cff.surfaces.esurface_cache,
-        );
 
         let p1 = FourMomentum::from_args(F(1.), F(3.), F(4.), F(5.));
         let p2 = FourMomentum::from_args(F(1.), F(6.), F(7.), F(8.));
@@ -1490,25 +933,7 @@ mod tests_cff {
             .reduce(|acc, x| acc * x)
             .unwrap();
 
-        let mut evaluator = cff.quick_symbolica_evaluator(0..3, 3..6);
-
-        let cff_res: F<f64> = energy_prefactor
-            * evaluator.evaluate_single(energy_cache.clone().as_ref())
-            * F((2. * std::f64::consts::PI).powi(-3));
-
-        let target_res = F(6.333_549_225_536_17e-9_f64);
-        let absolute_error = cff_res - target_res;
-        let relative_error = absolute_error.abs() / cff_res.abs();
-
-        assert!(
-            relative_error.abs() < F(1.0e-15),
-            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
-            relative_error,
-            target_res,
-            cff_res
-        );
-
-        // test cff from hedge graph
+        // Test the production adapter from a hedge graph.
         let mut triangle_hedge_graph_builder = HedgeGraphBuilder::new();
 
         let nodes = (0..3)
@@ -1532,7 +957,13 @@ mod tests_cff {
             triangle_hedge_graph_builder.build::<NodeStorageVec<()>>();
 
         let cff_hedge =
-            generate_cff_expression(&triangle_hedge_graph, &shift_rewrite, &[], &[]).unwrap();
+            generate_cff_expression(&triangle_hedge_graph, &shift_rewrite, &[]).unwrap();
+        assert_eq!(
+            cff_hedge.surfaces.esurface_cache.len(),
+            6,
+            "too many esurfaces: {:#?}",
+            cff_hedge.surfaces.esurface_cache,
+        );
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..3, 3..6);
 
         let cff_res: F<f64> = energy_prefactor
@@ -1557,12 +988,6 @@ mod tests_cff {
 
         #[test]
         fn test_cff_test_double_triangle() {
-            let double_triangle_edges = vec![(0, 1), (0, 2), (1, 2), (1, 3), (2, 3)];
-            let incoming_vertices = vec![0, 3];
-
-            let orientations =
-                generate_orientations_for_testing(double_triangle_edges, incoming_vertices);
-
             let dep_mom = EdgeIndex::from(1);
             let dep_mom_expr = vec![(EdgeIndex::from(0), -1)];
 
@@ -1570,16 +995,6 @@ mod tests_cff {
                 dependent_momentum: dep_mom,
                 dependent_momentum_expr: dep_mom_expr,
             });
-
-            let mut surface_cache = SurfaceCache::new();
-
-            let cff = generate_cff_from_orientations(
-                orientations,
-                &mut surface_cache,
-                &[],
-                &shift_rewrite,
-            )
-            .unwrap();
 
             let q = FourMomentum::from_args(F(1.), F(2.), F(3.), F(4.));
             let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
@@ -1612,23 +1027,6 @@ mod tests_cff {
                 .reduce(|acc, x| acc * x)
                 .unwrap();
 
-            let mut evaluator = cff.quick_symbolica_evaluator(0..2, 2..7);
-
-            let cff_res =
-                energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
-
-            let target = F(1.0794792137096797e-13);
-            let absolute_error = cff_res - target;
-            let relative_error = absolute_error / cff_res;
-
-            assert!(
-                relative_error.abs() < F(1.0e-15),
-                "relative error: {:+e}, target: {:+e}, result: {:+e}",
-                relative_error,
-                target,
-                cff_res
-            );
-
             let mut hedge_double_triangle_builder = HedgeGraphBuilder::new();
             let nodes = (0..4)
                 .map(|_| hedge_double_triangle_builder.add_node(()))
@@ -1656,7 +1054,7 @@ mod tests_cff {
             let hedge_double_traingle: HedgeGraph<(), (), ()> =
                 hedge_double_triangle_builder.build::<NodeStorageVec<()>>();
             let cff_hedge =
-                generate_cff_expression(&hedge_double_traingle, &shift_rewrite, &[], &[]).unwrap();
+                generate_cff_expression(&hedge_double_traingle, &shift_rewrite, &[]).unwrap();
             let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..7);
             let cff_res =
                 energy_prefactor * cff_hedge_evaluator.evaluate_single(energy_cache.as_ref());
@@ -1672,42 +1070,10 @@ mod tests_cff {
                 target,
                 cff_res
             );
-
-            let node_3 = hedge_double_traingle.iter_crown(nodes[3]).into();
-            let node_0 = hedge_double_traingle.iter_crown(nodes[0]).into();
-
-            let cuts = hedge_double_traingle.all_cuts(node_3, node_0);
-            let mut num_with_6_ors = 0;
-            let mut num_with_4_ors = 0;
-            assert_eq!(cuts.len(), 4);
-            for (_, cut, _) in &cuts {
-                let orientations = get_orientations_with_cut(&hedge_double_traingle, cut);
-                if orientations.len() == 4 {
-                    num_with_4_ors += 1
-                } else if orientations.len() == 6 {
-                    num_with_6_ors += 1
-                }
-            }
-
-            assert_eq!(num_with_4_ors, 2);
-            assert_eq!(num_with_6_ors, 2);
         }
 
         #[test]
         fn test_cff_tbt() {
-            let tbt_edges = vec![
-                (0, 1),
-                (2, 0),
-                (1, 2),
-                (1, 3),
-                (2, 4),
-                (3, 4),
-                (3, 5),
-                (5, 4),
-            ];
-
-            let incoming_vertices = vec![0, 5];
-
             let dep_mom = EdgeIndex::from(1);
             let dep_mom_expr = vec![(EdgeIndex::from(0), -1)];
 
@@ -1715,15 +1081,6 @@ mod tests_cff {
                 dependent_momentum: dep_mom,
                 dependent_momentum_expr: dep_mom_expr,
             });
-            let mut surface_cache = SurfaceCache::new();
-            let orientataions = generate_orientations_for_testing(tbt_edges, incoming_vertices);
-            let cff = generate_cff_from_orientations(
-                orientataions,
-                &mut surface_cache,
-                &[],
-                &shift_rewrite,
-            )
-            .unwrap();
 
             let q = FourMomentum::from_args(F(1.0), F(2.0), F(3.0), F(4.0));
             let zero_vector = q.default();
@@ -1762,18 +1119,6 @@ mod tests_cff {
                 .new_edgevec_from_iter(energies_cache)
                 .unwrap();
 
-            let mut evaluator = cff.quick_symbolica_evaluator(0..2, 2..10);
-
-            let res = evaluator.evaluate_single(energies_cache.clone().as_ref()) * energy_prefactor;
-
-            let absolute_error = res - F(1.2625322619777278e-21);
-            let relative_error = absolute_error / res;
-            assert!(
-                relative_error.abs() < F(1.0e-15),
-                "relative error: {:+e}",
-                relative_error
-            );
-
             let mut tbt_hedge_builder = HedgeGraphBuilder::new();
             let nodes = (0..6).map(|_| tbt_hedge_builder.add_node(())).collect_vec();
             tbt_hedge_builder.add_external_edge(nodes[0], (), Orientation::Undirected, Flow::Sink);
@@ -1789,7 +1134,7 @@ mod tests_cff {
             tbt_hedge_builder.add_edge(nodes[5], nodes[4], (), Orientation::Undirected);
 
             let tbt_hedge: HedgeGraph<(), (), ()> = tbt_hedge_builder.build::<NodeStorageVec<()>>();
-            let cff_hedge = generate_cff_expression(&tbt_hedge, &shift_rewrite, &[], &[]).unwrap();
+            let cff_hedge = generate_cff_expression(&tbt_hedge, &shift_rewrite, &[]).unwrap();
 
             let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..10);
             let res =
@@ -1802,36 +1147,6 @@ mod tests_cff {
                 "relative error: {:+e}",
                 relative_error
             );
-
-            let node_0 = tbt_hedge.iter_crown(nodes[0]).into();
-            let node_5 = tbt_hedge.iter_crown(nodes[5]).into();
-
-            let cuts = tbt_hedge.all_cuts(node_0, node_5).clone();
-            assert_eq!(cuts.len(), 9);
-            let mut num_with_24 = 0;
-            let mut num_with_16 = 0;
-            let mut num_with_42 = 0;
-            let mut num_with_36 = 0;
-            for (_, cut, _) in cuts.iter() {
-                let orientations = get_orientations_with_cut(&tbt_hedge, cut);
-                if orientations.len() == 24 {
-                    num_with_24 += 1;
-                }
-                if orientations.len() == 16 {
-                    num_with_16 += 1;
-                }
-                if orientations.len() == 42 {
-                    num_with_42 += 1
-                }
-                if orientations.len() == 36 {
-                    num_with_36 += 1;
-                }
-            }
-
-            assert_eq!(num_with_24, 4);
-            assert_eq!(num_with_16, 2);
-            assert_eq!(num_with_42, 2);
-            assert_eq!(num_with_36, 1);
         }
     }
 }

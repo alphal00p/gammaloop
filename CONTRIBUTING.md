@@ -164,7 +164,10 @@ from the rendered PDF.
 
 ## Repository Map
 
-- `crates/gammalooprs/src/` holds the core Rust implementation.
+- `crates/feynkit/` and `crates/feynkit-*/` hold the standalone model, graph,
+  generation, CFF, kinematics, UFO, and Python-binding toolkits.
+- `crates/gammalooprs/src/` holds GammaLoop-specific runtime, evaluation, and
+  application integration code.
 - `crates/gammaloop-api/` is the workspace member for the Rust API and Python
   bindings (`crates/gammaloop-api/src` and
   `crates/gammaloop-api/python/gammaloop`).

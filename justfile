@@ -514,6 +514,14 @@ _test-ci TEST_NAME="" NEXTEST_FILTERSET="":
     #!/usr/bin/env bash
     set -euo pipefail
     gammaloop_packages=(
+        feynkit
+        feynkit-cff
+        feynkit-generator
+        feynkit-graph
+        feynkit-kinematics
+        feynkit-model
+        feynkit-py
+        feynkit-ufo
         gammaloop-api
         gammalooprs
         idenso

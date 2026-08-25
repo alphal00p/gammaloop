@@ -452,6 +452,13 @@
       };
 
       workspacePackageTestCompileTimeExtraSourceRoots = {
+        "feynkit-model" = [
+          "crates/feynkit-model/tests/fixtures"
+        ];
+        "feynkit-py" = [
+          "crates/feynkit-py/python/symbolica/community/feynkit/__init__.py"
+          "crates/feynkit-py/tests/fixtures"
+        ];
         gammalooprs = [
           "tests/resources/graphs/scalar/dod2_bubble.dot"
         ];
@@ -774,6 +781,7 @@
       };
 
       workspaceFeatureUnificationExcludedPackages = [
+        "feynkit-py"
         "linnet-py"
         "spynso3"
       ];
@@ -2690,6 +2698,19 @@
         {
           name = "integration";
           packages = ["gammaloop-integration-tests"];
+        }
+        {
+          name = "feynkit";
+          packages = [
+            "feynkit"
+            "feynkit-cff"
+            "feynkit-generator"
+            "feynkit-graph"
+            "feynkit-kinematics"
+            "feynkit-model"
+            "feynkit-py"
+            "feynkit-ufo"
+          ];
         }
         {
           name = "python-api";

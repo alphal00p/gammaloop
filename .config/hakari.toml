@@ -28,6 +28,7 @@ platforms = [
 [traversal-excludes]
 workspace-members = [
     "clinnet",
+    "feynkit-py",
     "idenso",
     "linnest",
     "linnet-py",
@@ -40,10 +41,18 @@ third-party = [
     { name = "pyo3-ffi" },
 ]
 
-# Proc-macro crates build on the host side and should not carry the workspace
-# hack into normal target-side artifact archives.
+# Publishable FeynKit crates must not depend on the private workspace hack.
+# Proc-macro crates also build on the host side and should not carry the hack
+# into normal target-side artifact archives.
 [final-excludes]
 workspace-members = [
+    "feynkit",
+    "feynkit-cff",
+    "feynkit-generator",
+    "feynkit-graph",
+    "feynkit-kinematics",
+    "feynkit-model",
+    "feynkit-ufo",
     "gammaloop-tracing-filter-macros",
     "spenso-macros",
 ]

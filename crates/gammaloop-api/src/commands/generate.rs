@@ -316,14 +316,6 @@ pub struct SpecArgs {
     )]
     pub global_prefactor_num: Option<String>,
 
-    /// Fast cut filter switch multiplicity
-    #[arg(
-        long = "max-multiplicity-for-fast-cut-filter",
-        short = 'M',
-        default_value_t = 6usize
-    )]
-    pub max_multiplicity_for_fast_cut_filter: usize,
-
     /// Filter self-loop (explicit; default false)
     #[arg(long = "filter-self-loop")]
     pub filter_self_loop: Option<bool>,
@@ -1761,7 +1753,6 @@ fn feyngen_from_spec_args(
         symmetrize_final_states: sym_final,
         symmetrize_left_right_states: sym_left_right,
         allow_symmetrization_of_external_fermions_in_amplitudes: allow_symferm,
-        max_multiplicity_for_fast_cut_filter: a.max_multiplicity_for_fast_cut_filter,
         amplitude_filters: FeynGenFilters(vec![]),
         cross_section_filters: FeynGenFilters(vec![]),
         ..Default::default()
@@ -2263,7 +2254,6 @@ mod tests {
             select_graphs: None,
             veto_graphs: None,
             graph_prefix: None,
-            max_multiplicity_for_fast_cut_filter: 6,
             filter_self_loop: None,
             filter_zero_flow_edges: None,
             process_name: None,

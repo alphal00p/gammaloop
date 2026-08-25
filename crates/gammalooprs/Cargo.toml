@@ -32,6 +32,11 @@ dirs = { workspace = true }
 dot-parser = { workspace = true }
 enum_dispatch = "*"
 eyre = { workspace = true }
+feynkit-cff = { workspace = true }
+feynkit-generator = { workspace = true }
+feynkit-graph = { workspace = true }
+feynkit-kinematics = { workspace = true }
+feynkit-model = { workspace = true }
 gammaloop-tracing-filter = { workspace = true, features = ["symbolica"] }
 idenso = { workspace = true, features = ["bincode"] }
 include_dir = { workspace = true }

@@ -1,7 +1,44 @@
 {
   "normal_dependencies": {
     "clinnet": [],
+    "feynkit": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-ufo"
+    ],
+    "feynkit-cff": [
+      "feynkit-graph"
+    ],
+    "feynkit-generator": [
+      "feynkit-graph",
+      "feynkit-model",
+      "linnet"
+    ],
+    "feynkit-graph": [
+      "feynkit-kinematics",
+      "feynkit-model",
+      "linnet"
+    ],
+    "feynkit-kinematics": [
+      "linnet"
+    ],
+    "feynkit-model": [],
+    "feynkit-py": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-ufo"
+    ],
+    "feynkit-ufo": [
+      "feynkit-model"
+    ],
     "gammaloop-api": [
+      "feynkit-ufo",
       "gammaloop-tracing-filter",
       "gammaloop-workspace-hack",
       "gammalooprs",
@@ -11,6 +48,8 @@
       "symbolica-utils"
     ],
     "gammaloop-integration-tests": [
+      "feynkit-generator",
+      "feynkit-model",
       "gammaloop-api",
       "gammaloop-workspace-hack",
       "gammalooprs",
@@ -26,6 +65,11 @@
     "gammaloop-tracing-filter-macros": [],
     "gammaloop-workspace-hack": [],
     "gammalooprs": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
       "gammaloop-tracing-filter",
       "gammaloop-workspace-hack",
       "idenso",
@@ -76,7 +120,48 @@
   },
   "normal_dependency_features": {
     "clinnet": {},
+    "feynkit": {
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "feynkit-ufo": []
+    },
+    "feynkit-cff": {
+      "feynkit-graph": []
+    },
+    "feynkit-generator": {
+      "feynkit-graph": [],
+      "feynkit-model": [],
+      "linnet": [
+        "symbolica"
+      ]
+    },
+    "feynkit-graph": {
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "linnet": [
+        "serde"
+      ]
+    },
+    "feynkit-kinematics": {
+      "linnet": []
+    },
+    "feynkit-model": {},
+    "feynkit-py": {
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "feynkit-ufo": []
+    },
+    "feynkit-ufo": {
+      "feynkit-model": []
+    },
     "gammaloop-api": {
+      "feynkit-ufo": [],
       "gammaloop-tracing-filter": [
         "clap"
       ],
@@ -94,6 +179,8 @@
       "symbolica-utils": []
     },
     "gammaloop-integration-tests": {
+      "feynkit-generator": [],
+      "feynkit-model": [],
       "gammaloop-api": [],
       "gammaloop-workspace-hack": [],
       "gammalooprs": [],
@@ -113,6 +200,11 @@
     "gammaloop-tracing-filter-macros": {},
     "gammaloop-workspace-hack": {},
     "gammalooprs": {
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
       "gammaloop-tracing-filter": [
         "symbolica"
       ],
@@ -189,6 +281,14 @@
   },
   "package_dirs": {
     "clinnet": "crates/clinnet",
+    "feynkit": "crates/feynkit",
+    "feynkit-cff": "crates/feynkit-cff",
+    "feynkit-generator": "crates/feynkit-generator",
+    "feynkit-graph": "crates/feynkit-graph",
+    "feynkit-kinematics": "crates/feynkit-kinematics",
+    "feynkit-model": "crates/feynkit-model",
+    "feynkit-py": "crates/feynkit-py",
+    "feynkit-ufo": "crates/feynkit-ufo",
     "gammaloop-api": "crates/gammaloop-api",
     "gammaloop-integration-tests": "tests",
     "gammaloop-tracing-filter": "crates/gammaloop-tracing-filter",
@@ -209,6 +309,14 @@
   },
   "packages": [
     "clinnet",
+    "feynkit",
+    "feynkit-cff",
+    "feynkit-generator",
+    "feynkit-graph",
+    "feynkit-kinematics",
+    "feynkit-model",
+    "feynkit-py",
+    "feynkit-ufo",
     "gammaloop-api",
     "gammaloop-integration-tests",
     "gammaloop-tracing-filter",
@@ -229,7 +337,62 @@
   ],
   "resolved_normal_dependencies": {
     "clinnet": [],
+    "feynkit": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "linnet",
+      "symbolica-utils"
+    ],
+    "feynkit-cff": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "linnet"
+    ],
+    "feynkit-generator": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "linnet",
+      "symbolica-utils"
+    ],
+    "feynkit-graph": [
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "linnet"
+    ],
+    "feynkit-kinematics": [
+      "gammaloop-workspace-hack",
+      "linnet"
+    ],
+    "feynkit-model": [],
+    "feynkit-py": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-ufo",
+      "gammaloop-workspace-hack",
+      "linnet",
+      "symbolica-utils"
+    ],
+    "feynkit-ufo": [
+      "feynkit-model"
+    ],
     "gammaloop-api": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -243,6 +406,11 @@
       "vakint"
     ],
     "gammaloop-integration-tests": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
       "gammaloop-api",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
@@ -267,6 +435,11 @@
     "gammaloop-tracing-filter-macros": [],
     "gammaloop-workspace-hack": [],
     "gammalooprs": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -327,7 +500,67 @@
   },
   "resolved_test_dependencies": {
     "clinnet": [],
+    "feynkit": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "linnet",
+      "symbolica-utils"
+    ],
+    "feynkit-cff": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "linnet"
+    ],
+    "feynkit-generator": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "linnet",
+      "symbolica-utils"
+    ],
+    "feynkit-graph": [
+      "feynkit-kinematics",
+      "feynkit-model",
+      "gammaloop-workspace-hack",
+      "linnet"
+    ],
+    "feynkit-kinematics": [
+      "gammaloop-workspace-hack",
+      "linnet"
+    ],
+    "feynkit-model": [],
+    "feynkit-py": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-ufo",
+      "gammaloop-workspace-hack",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
+      "spynso3",
+      "symbolica-utils"
+    ],
+    "feynkit-ufo": [
+      "feynkit-model"
+    ],
     "gammaloop-api": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -341,6 +574,11 @@
       "vakint"
     ],
     "gammaloop-integration-tests": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
       "gammaloop-api",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
@@ -365,6 +603,11 @@
     "gammaloop-tracing-filter-macros": [],
     "gammaloop-workspace-hack": [],
     "gammalooprs": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
       "gammaloop-tracing-filter",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
@@ -430,6 +673,12 @@
     "vakint": []
   },
   "symbolica_normal_packages": [
+    "feynkit",
+    "feynkit-cff",
+    "feynkit-generator",
+    "feynkit-graph",
+    "feynkit-kinematics",
+    "feynkit-py",
     "gammaloop-api",
     "gammaloop-integration-tests",
     "gammaloop-tracing-filter",
@@ -447,6 +696,12 @@
     "vakint"
   ],
   "symbolica_test_packages": [
+    "feynkit",
+    "feynkit-cff",
+    "feynkit-generator",
+    "feynkit-graph",
+    "feynkit-kinematics",
+    "feynkit-py",
     "gammaloop-api",
     "gammaloop-integration-tests",
     "gammaloop-tracing-filter",
@@ -465,7 +720,45 @@
   ],
   "test_dependencies": {
     "clinnet": [],
+    "feynkit": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-ufo"
+    ],
+    "feynkit-cff": [
+      "feynkit-graph"
+    ],
+    "feynkit-generator": [
+      "feynkit-graph",
+      "feynkit-model",
+      "linnet"
+    ],
+    "feynkit-graph": [
+      "feynkit-kinematics",
+      "feynkit-model",
+      "linnet"
+    ],
+    "feynkit-kinematics": [
+      "linnet"
+    ],
+    "feynkit-model": [],
+    "feynkit-py": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "feynkit-ufo",
+      "spynso3"
+    ],
+    "feynkit-ufo": [
+      "feynkit-model"
+    ],
     "gammaloop-api": [
+      "feynkit-ufo",
       "gammaloop-tracing-filter",
       "gammaloop-workspace-hack",
       "gammalooprs",
@@ -475,6 +768,8 @@
       "symbolica-utils"
     ],
     "gammaloop-integration-tests": [
+      "feynkit-generator",
+      "feynkit-model",
       "gammaloop-api",
       "gammaloop-workspace-hack",
       "gammalooprs",
@@ -490,6 +785,11 @@
     "gammaloop-tracing-filter-macros": [],
     "gammaloop-workspace-hack": [],
     "gammalooprs": [
+      "feynkit-cff",
+      "feynkit-generator",
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
       "gammaloop-tracing-filter",
       "gammaloop-workspace-hack",
       "idenso",
@@ -544,7 +844,49 @@
   },
   "test_dependency_features": {
     "clinnet": {},
+    "feynkit": {
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "feynkit-ufo": []
+    },
+    "feynkit-cff": {
+      "feynkit-graph": []
+    },
+    "feynkit-generator": {
+      "feynkit-graph": [],
+      "feynkit-model": [],
+      "linnet": [
+        "symbolica"
+      ]
+    },
+    "feynkit-graph": {
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "linnet": [
+        "serde"
+      ]
+    },
+    "feynkit-kinematics": {
+      "linnet": []
+    },
+    "feynkit-model": {},
+    "feynkit-py": {
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
+      "feynkit-ufo": [],
+      "spynso3": []
+    },
+    "feynkit-ufo": {
+      "feynkit-model": []
+    },
     "gammaloop-api": {
+      "feynkit-ufo": [],
       "gammaloop-tracing-filter": [
         "clap"
       ],
@@ -562,6 +904,8 @@
       "symbolica-utils": []
     },
     "gammaloop-integration-tests": {
+      "feynkit-generator": [],
+      "feynkit-model": [],
       "gammaloop-api": [],
       "gammaloop-workspace-hack": [],
       "gammalooprs": [],
@@ -581,6 +925,11 @@
     "gammaloop-tracing-filter-macros": {},
     "gammaloop-workspace-hack": {},
     "gammalooprs": {
+      "feynkit-cff": [],
+      "feynkit-generator": [],
+      "feynkit-graph": [],
+      "feynkit-kinematics": [],
+      "feynkit-model": [],
       "gammaloop-tracing-filter": [
         "symbolica"
       ],

@@ -1436,6 +1436,102 @@ dependencies = [
 ]
 
 [[package]]
+name = "feynkit"
+version = "0.1.0"
+dependencies = [
+ "feynkit-cff",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-kinematics",
+ "feynkit-model",
+ "feynkit-ufo",
+]
+
+[[package]]
+name = "feynkit-cff"
+version = "0.1.0"
+dependencies = [
+ "feynkit-graph",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "feynkit-generator"
+version = "0.1.0"
+dependencies = [
+ "feynkit-graph",
+ "feynkit-model",
+ "linnet",
+ "rayon",
+ "serde",
+ "serde_json",
+ "symbolica",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "feynkit-graph"
+version = "0.1.0"
+dependencies = [
+ "feynkit-kinematics",
+ "feynkit-model",
+ "linnet",
+ "serde",
+ "serde_json",
+ "symbolica",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "feynkit-kinematics"
+version = "0.1.0"
+dependencies = [
+ "linnet",
+ "numerica",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "feynkit-model"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "vectorize",
+]
+
+[[package]]
+name = "feynkit-py"
+version = "0.1.0"
+dependencies = [
+ "feynkit-cff",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-kinematics",
+ "feynkit-model",
+ "feynkit-ufo",
+ "pyo3",
+ "pyo3-stub-gen",
+ "pyo3-stub-gen-derive",
+ "spynso3",
+ "symbolica",
+]
+
+[[package]]
+name = "feynkit-ufo"
+version = "0.1.0"
+dependencies = [
+ "feynkit-model",
+ "pyo3",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "figment"
 version = "0.10.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1553,6 +1649,7 @@ dependencies = [
  "crossterm 0.28.1",
  "dirs",
  "eyre",
+ "feynkit-ufo",
  "figment",
  "gammaloop-tracing-filter",
  "gammaloop-workspace-hack",
@@ -1604,6 +1701,8 @@ dependencies = [
  "color-eyre",
  "colored 3.1.1",
  "eyre",
+ "feynkit-generator",
+ "feynkit-model",
  "gammaloop-api",
  "gammaloop-workspace-hack",
  "gammalooprs",
@@ -1659,6 +1758,7 @@ name = "gammaloop-workspace-hack"
 version = "0.1.0"
 dependencies = [
  "ahash 0.8.12",
+ "aho-corasick",
  "anstream",
  "arrayvec",
  "bincode 2.0.1",
@@ -1694,6 +1794,7 @@ dependencies = [
  "regex-automata",
  "regex-syntax",
  "rug",
+ "rust-embed-utils",
  "rustix 1.1.4",
  "serde",
  "serde_core",
@@ -1740,6 +1841,11 @@ dependencies = [
  "dot-parser",
  "enum_dispatch",
  "eyre",
+ "feynkit-cff",
+ "feynkit-generator",
+ "feynkit-graph",
+ "feynkit-kinematics",
+ "feynkit-model",
  "gammaloop-tracing-filter",
  "gammaloop-workspace-hack",
  "idenso",

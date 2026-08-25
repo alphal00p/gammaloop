@@ -142,6 +142,85 @@ In particular, `run.toml` is intended to be replayable: running
 
 should rerun the recorded commands and rebuild the current state from scratch to the same point.
 
+## Standalone FeynKit toolkit
+
+FeynKit packages the reusable, state-independent physics tools separately from
+GammaLoop. Third-party code can load a normalized model, generate typed Feynman
+diagrams, inspect graph data, construct CFF expressions, and work with
+relativistic kinematics without importing `gammalooprs` or `gammaloop-api`.
+
+| Crate | Responsibility |
+|---|---|
+| `feynkit-model` | Validated QFT model and parameter-card representation, JSON I/O, indexed lookups, and atomic parameter-card application |
+| `feynkit-ufo` | Opt-in adapter from Python's `ufo_model_loader` to `feynkit-model` |
+| `feynkit-kinematics` | Generic three- and four-momenta, boosts, rotations, signatures, and generalized-\(k_T\) jet clustering |
+| `feynkit-graph` | Linnet-backed `FeynmanDiagram` IR, JSON/DOT I/O, model validation, and loop-momentum bases |
+| `feynkit-generator` | Typed amplitude/cross-section definitions, diagram generation, filters, factors, numerator construction, and grouping |
+| `feynkit-cff` | Topological Cross-Free Family orientations, surfaces, expression trees, and generation-local caches |
+| `feynkit` | Zero-logic Rust facade over the standalone crates |
+| `feynkit-py` | `symbolica.community.feynkit` bindings with native Symbolica expression exchange and generated stubs |
+
+The dependency graph is downward-only: model and kinematics types feed graph
+construction, model and graph types feed generation, graphs feed CFF
+construction, and the model also feeds optional UFO loading. GammaLoop is a
+consumer of these crates; application state, settings, integrands, evaluators,
+events, observables, and UV subtraction remain in GammaLoop.
+
+FeynKit owns structural grouping over symbolic numerator annotations. The
+GammaLoop adapter retains tensor-evaluated numerator comparisons,
+symmetric-polarization sampling, and gamma-closure validation because those
+operations depend on GammaLoop's tensor-evaluation machinery.
+
+The default `feynkit` features provide model, graph, generator, CFF, and
+kinematics APIs. Raw UFO loading is deliberately opt-in because it requires an
+attached Python interpreter and the `ufo-model-loader` package. A normalized
+JSON model needs no Python linkage:
+
+```rust
+use feynkit::{GenerationOptions, Generator, Model, Process};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let model = Model::from_path("model.json")?;
+    let process = Process::amplitude(["e-", "e+"], ["mu-", "mu+"]);
+    let result = Generator::new(model).generate(&process, &GenerationOptions::default())?;
+
+    for diagram in &result.diagrams {
+        println!("{}", diagram.to_dot()?);
+    }
+    Ok(())
+}
+```
+
+With the `ufo` feature enabled, the host remains responsible for the Python
+interpreter; the loader never initializes it or replaces global logging and
+output streams:
+
+```rust
+let loaded = pyo3::Python::attach(|py| {
+    feynkit::UfoLoader::new().load(py, "/opt/ufo-models/sm")
+})?;
+```
+
+`feynkit-py` is a community-module library, not an independently linked Python
+extension. A Symbolica community distribution links it into the same
+`symbolica.core` extension as Symbolica and the other community modules, so all
+modules exchange expressions through one kernel. Model file I/O, generation,
+CFF construction, and other heavy operations release the GIL:
+
+```python
+from symbolica.community.feynkit import CffGenerator, Generator, Process, UfoLoader
+
+loaded = UfoLoader().load("/opt/ufo-models/sm")
+result = Generator(loaded.model).generate(
+    Process.amplitude(["e-", "e+"], ["mu-", "mu+"])
+)
+
+for diagram in result.diagrams:
+    print(diagram.to_dot())
+    cff = CffGenerator().generate(diagram)
+    symbolica_expression = cff.to_expression()
+```
+
 ## Rust and Python API
 
 The CLI remains the primary interface, but the same state-loading entry point is also exposed from Rust and Python. In both cases the entry point only handles static load-time options such as:

@@ -6,7 +6,44 @@ let
     {
       "normal_dependencies": {
         "clinnet": [],
+        "feynkit": [
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
+          "feynkit-ufo"
+        ],
+        "feynkit-cff": [
+          "feynkit-graph"
+        ],
+        "feynkit-generator": [
+          "feynkit-graph",
+          "feynkit-model",
+          "linnet"
+        ],
+        "feynkit-graph": [
+          "feynkit-kinematics",
+          "feynkit-model",
+          "linnet"
+        ],
+        "feynkit-kinematics": [
+          "linnet"
+        ],
+        "feynkit-model": [],
+        "feynkit-py": [
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
+          "feynkit-ufo"
+        ],
+        "feynkit-ufo": [
+          "feynkit-model"
+        ],
         "gammaloop-api": [
+          "feynkit-ufo",
           "gammaloop-tracing-filter",
           "gammaloop-workspace-hack",
           "gammalooprs",
@@ -16,6 +53,8 @@ let
           "symbolica-utils"
         ],
         "gammaloop-integration-tests": [
+          "feynkit-generator",
+          "feynkit-model",
           "gammaloop-api",
           "gammaloop-workspace-hack",
           "gammalooprs",
@@ -31,6 +70,11 @@ let
         "gammaloop-tracing-filter-macros": [],
         "gammaloop-workspace-hack": [],
         "gammalooprs": [
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
           "gammaloop-tracing-filter",
           "gammaloop-workspace-hack",
           "idenso",
@@ -81,7 +125,48 @@ let
       },
       "normal_dependency_features": {
         "clinnet": {},
+        "feynkit": {
+          "feynkit-cff": [],
+          "feynkit-generator": [],
+          "feynkit-graph": [],
+          "feynkit-kinematics": [],
+          "feynkit-model": [],
+          "feynkit-ufo": []
+        },
+        "feynkit-cff": {
+          "feynkit-graph": []
+        },
+        "feynkit-generator": {
+          "feynkit-graph": [],
+          "feynkit-model": [],
+          "linnet": [
+            "symbolica"
+          ]
+        },
+        "feynkit-graph": {
+          "feynkit-kinematics": [],
+          "feynkit-model": [],
+          "linnet": [
+            "serde"
+          ]
+        },
+        "feynkit-kinematics": {
+          "linnet": []
+        },
+        "feynkit-model": {},
+        "feynkit-py": {
+          "feynkit-cff": [],
+          "feynkit-generator": [],
+          "feynkit-graph": [],
+          "feynkit-kinematics": [],
+          "feynkit-model": [],
+          "feynkit-ufo": []
+        },
+        "feynkit-ufo": {
+          "feynkit-model": []
+        },
         "gammaloop-api": {
+          "feynkit-ufo": [],
           "gammaloop-tracing-filter": [
             "clap"
           ],
@@ -99,6 +184,8 @@ let
           "symbolica-utils": []
         },
         "gammaloop-integration-tests": {
+          "feynkit-generator": [],
+          "feynkit-model": [],
           "gammaloop-api": [],
           "gammaloop-workspace-hack": [],
           "gammalooprs": [],
@@ -118,6 +205,11 @@ let
         "gammaloop-tracing-filter-macros": {},
         "gammaloop-workspace-hack": {},
         "gammalooprs": {
+          "feynkit-cff": [],
+          "feynkit-generator": [],
+          "feynkit-graph": [],
+          "feynkit-kinematics": [],
+          "feynkit-model": [],
           "gammaloop-tracing-filter": [
             "symbolica"
           ],
@@ -194,6 +286,14 @@ let
       },
       "package_dirs": {
         "clinnet": "crates/clinnet",
+        "feynkit": "crates/feynkit",
+        "feynkit-cff": "crates/feynkit-cff",
+        "feynkit-generator": "crates/feynkit-generator",
+        "feynkit-graph": "crates/feynkit-graph",
+        "feynkit-kinematics": "crates/feynkit-kinematics",
+        "feynkit-model": "crates/feynkit-model",
+        "feynkit-py": "crates/feynkit-py",
+        "feynkit-ufo": "crates/feynkit-ufo",
         "gammaloop-api": "crates/gammaloop-api",
         "gammaloop-integration-tests": "tests",
         "gammaloop-tracing-filter": "crates/gammaloop-tracing-filter",
@@ -214,6 +314,14 @@ let
       },
       "packages": [
         "clinnet",
+        "feynkit",
+        "feynkit-cff",
+        "feynkit-generator",
+        "feynkit-graph",
+        "feynkit-kinematics",
+        "feynkit-model",
+        "feynkit-py",
+        "feynkit-ufo",
         "gammaloop-api",
         "gammaloop-integration-tests",
         "gammaloop-tracing-filter",
@@ -234,7 +342,62 @@ let
       ],
       "resolved_normal_dependencies": {
         "clinnet": [],
+        "feynkit": [
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
+          "gammaloop-workspace-hack",
+          "linnet",
+          "symbolica-utils"
+        ],
+        "feynkit-cff": [
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
+          "gammaloop-workspace-hack",
+          "linnet"
+        ],
+        "feynkit-generator": [
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
+          "gammaloop-workspace-hack",
+          "linnet",
+          "symbolica-utils"
+        ],
+        "feynkit-graph": [
+          "feynkit-kinematics",
+          "feynkit-model",
+          "gammaloop-workspace-hack",
+          "linnet"
+        ],
+        "feynkit-kinematics": [
+          "gammaloop-workspace-hack",
+          "linnet"
+        ],
+        "feynkit-model": [],
+        "feynkit-py": [
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
+          "feynkit-ufo",
+          "gammaloop-workspace-hack",
+          "linnet",
+          "symbolica-utils"
+        ],
+        "feynkit-ufo": [
+          "feynkit-model"
+        ],
         "gammaloop-api": [
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
           "gammaloop-tracing-filter",
           "gammaloop-tracing-filter-macros",
           "gammaloop-workspace-hack",
@@ -248,6 +411,11 @@ let
           "vakint"
         ],
         "gammaloop-integration-tests": [
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
           "gammaloop-api",
           "gammaloop-tracing-filter",
           "gammaloop-tracing-filter-macros",
@@ -272,6 +440,11 @@ let
         "gammaloop-tracing-filter-macros": [],
         "gammaloop-workspace-hack": [],
         "gammalooprs": [
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
           "gammaloop-tracing-filter",
           "gammaloop-tracing-filter-macros",
           "gammaloop-workspace-hack",
@@ -332,7 +505,67 @@ let
       },
       "resolved_test_dependencies": {
         "clinnet": [],
+        "feynkit": [
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
+          "gammaloop-workspace-hack",
+          "linnet",
+          "symbolica-utils"
+        ],
+        "feynkit-cff": [
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
+          "gammaloop-workspace-hack",
+          "linnet"
+        ],
+        "feynkit-generator": [
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
+          "gammaloop-workspace-hack",
+          "linnet",
+          "symbolica-utils"
+        ],
+        "feynkit-graph": [
+          "feynkit-kinematics",
+          "feynkit-model",
+          "gammaloop-workspace-hack",
+          "linnet"
+        ],
+        "feynkit-kinematics": [
+          "gammaloop-workspace-hack",
+          "linnet"
+        ],
+        "feynkit-model": [],
+        "feynkit-py": [
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
+          "feynkit-ufo",
+          "gammaloop-workspace-hack",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-hep-lib",
+          "spenso-macros",
+          "spynso3",
+          "symbolica-utils"
+        ],
+        "feynkit-ufo": [
+          "feynkit-model"
+        ],
         "gammaloop-api": [
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
           "gammaloop-tracing-filter",
           "gammaloop-tracing-filter-macros",
           "gammaloop-workspace-hack",
@@ -346,6 +579,11 @@ let
           "vakint"
         ],
         "gammaloop-integration-tests": [
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
           "gammaloop-api",
           "gammaloop-tracing-filter",
           "gammaloop-tracing-filter-macros",
@@ -370,6 +608,11 @@ let
         "gammaloop-tracing-filter-macros": [],
         "gammaloop-workspace-hack": [],
         "gammalooprs": [
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
           "gammaloop-tracing-filter",
           "gammaloop-tracing-filter-macros",
           "gammaloop-workspace-hack",
@@ -435,6 +678,12 @@ let
         "vakint": []
       },
       "symbolica_normal_packages": [
+        "feynkit",
+        "feynkit-cff",
+        "feynkit-generator",
+        "feynkit-graph",
+        "feynkit-kinematics",
+        "feynkit-py",
         "gammaloop-api",
         "gammaloop-integration-tests",
         "gammaloop-tracing-filter",
@@ -452,6 +701,12 @@ let
         "vakint"
       ],
       "symbolica_test_packages": [
+        "feynkit",
+        "feynkit-cff",
+        "feynkit-generator",
+        "feynkit-graph",
+        "feynkit-kinematics",
+        "feynkit-py",
         "gammaloop-api",
         "gammaloop-integration-tests",
         "gammaloop-tracing-filter",
@@ -470,7 +725,45 @@ let
       ],
       "test_dependencies": {
         "clinnet": [],
+        "feynkit": [
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
+          "feynkit-ufo"
+        ],
+        "feynkit-cff": [
+          "feynkit-graph"
+        ],
+        "feynkit-generator": [
+          "feynkit-graph",
+          "feynkit-model",
+          "linnet"
+        ],
+        "feynkit-graph": [
+          "feynkit-kinematics",
+          "feynkit-model",
+          "linnet"
+        ],
+        "feynkit-kinematics": [
+          "linnet"
+        ],
+        "feynkit-model": [],
+        "feynkit-py": [
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
+          "feynkit-ufo",
+          "spynso3"
+        ],
+        "feynkit-ufo": [
+          "feynkit-model"
+        ],
         "gammaloop-api": [
+          "feynkit-ufo",
           "gammaloop-tracing-filter",
           "gammaloop-workspace-hack",
           "gammalooprs",
@@ -480,6 +773,8 @@ let
           "symbolica-utils"
         ],
         "gammaloop-integration-tests": [
+          "feynkit-generator",
+          "feynkit-model",
           "gammaloop-api",
           "gammaloop-workspace-hack",
           "gammalooprs",
@@ -495,6 +790,11 @@ let
         "gammaloop-tracing-filter-macros": [],
         "gammaloop-workspace-hack": [],
         "gammalooprs": [
+          "feynkit-cff",
+          "feynkit-generator",
+          "feynkit-graph",
+          "feynkit-kinematics",
+          "feynkit-model",
           "gammaloop-tracing-filter",
           "gammaloop-workspace-hack",
           "idenso",
@@ -549,7 +849,49 @@ let
       },
       "test_dependency_features": {
         "clinnet": {},
+        "feynkit": {
+          "feynkit-cff": [],
+          "feynkit-generator": [],
+          "feynkit-graph": [],
+          "feynkit-kinematics": [],
+          "feynkit-model": [],
+          "feynkit-ufo": []
+        },
+        "feynkit-cff": {
+          "feynkit-graph": []
+        },
+        "feynkit-generator": {
+          "feynkit-graph": [],
+          "feynkit-model": [],
+          "linnet": [
+            "symbolica"
+          ]
+        },
+        "feynkit-graph": {
+          "feynkit-kinematics": [],
+          "feynkit-model": [],
+          "linnet": [
+            "serde"
+          ]
+        },
+        "feynkit-kinematics": {
+          "linnet": []
+        },
+        "feynkit-model": {},
+        "feynkit-py": {
+          "feynkit-cff": [],
+          "feynkit-generator": [],
+          "feynkit-graph": [],
+          "feynkit-kinematics": [],
+          "feynkit-model": [],
+          "feynkit-ufo": [],
+          "spynso3": []
+        },
+        "feynkit-ufo": {
+          "feynkit-model": []
+        },
         "gammaloop-api": {
+          "feynkit-ufo": [],
           "gammaloop-tracing-filter": [
             "clap"
           ],
@@ -567,6 +909,8 @@ let
           "symbolica-utils": []
         },
         "gammaloop-integration-tests": {
+          "feynkit-generator": [],
+          "feynkit-model": [],
           "gammaloop-api": [],
           "gammaloop-workspace-hack": [],
           "gammalooprs": [],
@@ -586,6 +930,11 @@ let
         "gammaloop-tracing-filter-macros": {},
         "gammaloop-workspace-hack": {},
         "gammalooprs": {
+          "feynkit-cff": [],
+          "feynkit-generator": [],
+          "feynkit-graph": [],
+          "feynkit-kinematics": [],
+          "feynkit-model": [],
           "gammaloop-tracing-filter": [
             "symbolica"
           ],
@@ -804,6 +1153,16 @@ let
       "gammalooprs"
     ];
     integration = ["gammaloop-integration-tests"];
+    feynkit = [
+      "feynkit"
+      "feynkit-cff"
+      "feynkit-generator"
+      "feynkit-graph"
+      "feynkit-kinematics"
+      "feynkit-model"
+      "feynkit-py"
+      "feynkit-ufo"
+    ];
     "python-api" = ["gammaloop-integration-tests"];
     clinnet = ["clinnet"];
     linnet = [
@@ -869,6 +1228,7 @@ let
       "packages.${system}.workspaceBuildArtifacts" = ["packages.${system}.cargoArtifacts"];
       "checks.${system}.gammaloop-nextest-binaries-core" = nextestArchiveDependenciesFor "core";
       "checks.${system}.gammaloop-nextest-binaries-clinnet" = nextestArchiveDependenciesFor "clinnet";
+      "checks.${system}.gammaloop-nextest-binaries-feynkit" = nextestArchiveDependenciesFor "feynkit";
       "checks.${system}.gammaloop-nextest-binaries-integration" = nextestArchiveDependenciesFor "integration";
       "checks.${system}.gammaloop-nextest-binaries-python-api" = nextestArchiveDependenciesFor "python-api";
       "checks.${system}.gammaloop-nextest-binaries-linnet" = nextestArchiveDependenciesFor "linnet";
@@ -884,6 +1244,7 @@ let
         ++ ["packages.${system}.gammaloop-python-module"];
       "packages.${system}.nix-ci-check-gammaloop-nextest-clinnet" = ["checks.${system}.gammaloop-nextest-binaries-clinnet"];
       "packages.${system}.nix-ci-check-gammaloop-nextest-core" = ["checks.${system}.gammaloop-nextest-binaries-core"];
+      "packages.${system}.nix-ci-check-gammaloop-nextest-feynkit" = ["checks.${system}.gammaloop-nextest-binaries-feynkit"];
       "packages.${system}.nix-ci-check-gammaloop-nextest-integration" = [
         "checks.${system}.gammaloop-nextest-binaries-integration"
       ];
@@ -935,6 +1296,7 @@ let
       "checks.${system}.gammaloop-nextest-binaries"
       "checks.${system}.gammaloop-nextest-clinnet"
       "checks.${system}.gammaloop-nextest-core"
+      "checks.${system}.gammaloop-nextest-feynkit"
       "checks.${system}.gammaloop-nextest-integration"
       "checks.${system}.gammaloop-nextest-python-api"
       "checks.${system}.gammaloop-nextest-linnet"
@@ -1043,6 +1405,13 @@ in {
 
     gammaloop-nextest-clinnet = {
       package = "packages.${system}.nix-ci-check-gammaloop-nextest-clinnet";
+      system = system;
+      in-repo = true;
+      secrets = ["SYMBOLICA_LICENSE"];
+    };
+
+    gammaloop-nextest-feynkit = {
+      package = "packages.${system}.nix-ci-check-gammaloop-nextest-feynkit";
       system = system;
       in-repo = true;
       secrets = ["SYMBOLICA_LICENSE"];

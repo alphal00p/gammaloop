@@ -3,14 +3,26 @@
 ## Scope
 This document describes the current, implemented architecture of this repository.
 
-The workspace is organized around two main Rust crates:
-- `gammalooprs` (`crates/gammalooprs`): core physics/domain logic, graph processing, integrand construction, evaluation, and integration.
-- `gammaloop-api` (`crates/gammaloop-api`): CLI, REPL, Python bindings, command parsing, and persisted state orchestration.
+The workspace has a standalone physics-toolkit layer beneath GammaLoop's two
+stateful application crates:
+
+- the `feynkit-*` family owns reusable model, graph-generation, combinatoric,
+  and kinematic APIs
+- `gammalooprs` (`crates/gammalooprs`) owns GammaLoop-specific graph
+  enrichment, integrands, evaluators, events, observables, and integration
+- `gammaloop-api` (`crates/gammaloop-api`) owns the CLI, REPL, GammaLoop Python
+  bindings, command parsing, and persisted state orchestration
 
 ## High-Level Architecture
 At a high level, gammaLoop uses a layered architecture with a stateful application shell.
 
 ```text
+Third-party Rust
+  -> `feynkit` facade -> standalone `feynkit-*` crates
+
+Third-party Python
+  -> `symbolica.community.feynkit` -> standalone `feynkit-*` crates
+
 User / Automation
   -> CLI binary (`gammaloop`) and REPL
   -> Python module (`_gammaloop` via pyo3)
@@ -22,12 +34,17 @@ Application Layer (`gammaloop-api`)
   -> state/load/save and logging control
 
 Domain Layer (`gammalooprs`)
-  -> model + parameter cards
-  -> graph and process representations (amplitude/cross-section)
+  -> adapters from standalone models and generated diagrams
+  -> GammaLoop computation graphs and process representations
   -> preprocessing and CFF generation
   -> GL integrand construction + evaluator stacks
   -> differential event generation, selectors, and observables
   -> Monte Carlo integration and stability checks
+
+Standalone Physics Toolkit (`feynkit-*`)
+  -> normalized models + parameter cards + optional UFO loading
+  -> graph IR + amplitude/cross-section generation + CFF combinatorics
+  -> precision-generic kinematics + generalized-kT jet clustering
 
 Infrastructure
   -> filesystem persistence (`gammaloop_state/`)
@@ -68,7 +85,56 @@ Infrastructure
 
 The command model is stateful by design: commands mutate a long-lived `State` that can be saved and resumed.
 
-### 3. Domain Core (gammalooprs)
+### 3. Standalone Physics Toolkit (FeynKit)
+
+FeynKit exposes reusable physics operations through focused crates rather than
+through GammaLoop's application state:
+
+| Crate | Owned boundary |
+|---|---|
+| `feynkit-model` | Validated normalized model schema, particles, parameters, interactions, parameter cards, JSON I/O, and indexed lookup |
+| `feynkit-ufo` | Attached-interpreter adapter for `ufo_model_loader`; it returns normalized model data and never owns Python process initialization or global stream/logging configuration |
+| `feynkit-kinematics` | Generic three-/four-momenta, boosts, rotations, momentum signatures, and generalized-\(k_T\) clustering |
+| `feynkit-graph` | Linnet-backed diagram IR, external legs, flow and factors, symbolic numerator annotations, DOT/serde support, model validation, and loop-momentum bases |
+| `feynkit-generator` | Typed processes and generation options, topology expansion, interaction assignment, filters, canonicalization, fermion signs/flow, numerator construction, and grouping |
+| `feynkit-cff` | Topology-level CFF orientations, surfaces, typed expression forests, and per-generation caches |
+| `feynkit` | Feature-gated, zero-logic Rust facade; core generation is enabled by default and raw UFO loading uses the opt-in `ufo` feature |
+| `feynkit-py` | Symbolica community binding for `symbolica.community.feynkit`, including generated type stubs and direct Symbolica expression conversion |
+
+Within this family, dependencies point from foundations to consumers:
+
+```text
+feynkit-model ------> feynkit-graph, feynkit-generator, feynkit-ufo
+feynkit-kinematics -> feynkit-graph
+feynkit-graph ------> feynkit-generator, feynkit-cff
+
+focused crates -> feynkit / feynkit-py
+```
+
+No FeynKit crate depends on `gammalooprs`, `gammaloop-api`, `GlobalSettings`,
+or GammaLoop `State`. Generation receives explicit `GenerationOptions`, and
+progress/cancellation are callback- and token-based. The CI metadata guard also
+checks this direction transitively and rejects source references that bypass a
+Cargo dependency.
+
+Rust clients can load normalized JSON through `Model::from_path`, construct a
+`Process`, and call `Generator::generate`; enabling `feynkit/ufo` additionally
+exposes `UfoLoader` for hosts that attach Python. Python clients use the same
+ownership flow through `symbolica.community.feynkit`: a shared immutable model
+is passed to `Generator`, generation returns typed `FeynmanDiagram` objects, and
+`CffResult::to_expression` returns a native Symbolica expression. Blocking file
+I/O, loop-momentum-basis enumeration, graph generation, CFF construction, and
+jet clustering release the GIL.
+
+GammaLoop remains responsible for enriching standalone diagrams with evaluator
+caches, cuts, runtime surfaces, integrand state, and application persistence.
+Likewise, LU residues, runtime threshold classification, UV/subtraction
+machinery, events, observables, and histogramming do not cross into FeynKit.
+FeynKit's numerator grouping is structural and operates on symbolic annotations;
+the GammaLoop adapter retains tensor-evaluated comparisons,
+symmetric-polarization sampling, and gamma-closure validation.
+
+### 4. Domain Core (gammalooprs)
 - Root module wiring: `crates/gammalooprs/src/lib.rs`.
 - Model and parameters: `crates/gammalooprs/src/model/mod.rs`.
 - Graph domain: `crates/gammalooprs/src/graph/mod.rs` and submodules.
@@ -89,7 +155,7 @@ The command model is stateful by design: commands mutate a long-lived `State` th
   - `crates/gammalooprs/src/observables/clustering/*`
   - `crates/gammalooprs/src/integrands/evaluation.rs`
 
-### 3.1 UV renormalization
+### 4.1 UV renormalization
 
 UV generation defaults to the disconnected-capable hedge-poset backend and
 also supports a legacy DAG-forest backend and a comparison mode. Scheme policy
@@ -388,10 +454,13 @@ For the differential pipeline:
 
 ## Testing Architecture
 Testing is organized into layers:
+- Unit and API tests in each focused `feynkit-*` crate.
 - Unit tests in modules across `crates/gammalooprs/src/`.
 - Integration test crate: `tests/` with reusable harness (`tests/src/lib.rs`).
 - Additional Rust integration tests in `crates/gammalooprs/tests/`.
 - Snapshot-heavy coverage for symbolic outputs and numerics.
+- A Cargo-metadata CI guard that prevents any `feynkit*` package from acquiring
+  a direct or transitive dependency on `gammalooprs` or `gammaloop-api`.
 
 Differential coverage is currently split into:
 
@@ -427,6 +496,8 @@ Differential coverage is currently split into:
 
 
 ## Architectural Strengths
+- Reusable model, graph generation, CFF, and kinematics APIs have a CI-enforced,
+  downward-only boundary independent of GammaLoop application state.
 - Clear separation between application shell (`gammaloop-api`) and domain core (`gammalooprs`).
 - Rich, serializable settings model with schema generation hooks.
 - Strong process abstraction (`Process`, `ProcessCollection`, `ProcessIntegrand`) that supports amplitude and cross-section workflows.

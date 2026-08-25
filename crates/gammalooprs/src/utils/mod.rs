@@ -4390,10 +4390,6 @@ pub(crate) fn format_wdhms(seconds: usize) -> String {
     compound_duration.join(" ")
 }
 
-pub(crate) fn format_wdhms_from_duration(duration: Duration) -> String {
-    format_wdhms(duration.as_secs() as usize)
-}
-
 #[allow(unused)]
 pub(crate) fn inverse_gamma_lr(a: f64, p: f64, n_iter: usize) -> f64 {
     // this algorithm is taken from https://dl.acm.org/doi/pdf/10.1145/22721.23109

@@ -4,8 +4,6 @@ use colored::Colorize;
 use eyre::{eyre, Context};
 use gammalooprs::utils::F;
 
-#[cfg(feature = "ufo_support")]
-use pyo3::sync::PyOnceLock;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -51,111 +49,29 @@ pub(crate) fn load_ufo_model(
 }
 
 #[cfg(feature = "ufo_support")]
-#[pyclass]
-struct PyLogStream;
-
-#[cfg(feature = "ufo_support")]
-#[pymethods]
-impl PyLogStream {
-    #[new]
-    fn new() -> Self {
-        Self
-    }
-    fn write(&self, s: &str) {
-        for line in s.lines() {
-            info!("{}", line);
-        }
-    }
-    fn flush(&self) {}
-}
-
-#[cfg(feature = "ufo_support")]
-static PY_LOG_BRIDGE_INIT: PyOnceLock<()> = PyOnceLock::new();
-
-#[cfg(feature = "ufo_support")]
-fn ensure_py_log_bridge(py: Python<'_>) -> PyResult<()> {
-    PY_LOG_BRIDGE_INIT.get_or_try_init(py, || -> PyResult<()> {
-        bridge_py_logging(py)?;
-        Ok(())
-    })?;
-    Ok(())
-}
-
-#[cfg(feature = "ufo_support")]
-fn bridge_py_logging(py: Python<'_>) -> PyResult<()> {
-    let logging = py.import("logging")?;
-    let stream = Py::new(py, PyLogStream {})?;
-
-    // Handler that sends logging records to Rust
-    let handler = logging
-        .getattr("StreamHandler")?
-        .call1((stream.clone_ref(py),))?;
-    handler.call_method1("setLevel", ("DEBUG",))?;
-    // handler.call_method1(
-    //     "setFormatter",
-    //     (logging
-    //         .getattr("Formatter")?
-    //         .call1(("%(levelname)s %(name)s: %(message)s",))?,),
-    // )?;
-
-    let root = logging.call_method0("getLogger")?;
-    root.call_method1("addHandler", (handler,))?;
-    root.call_method1("setLevel", ("DEBUG",))?;
-
-    // Also capture plain prints
-    let sys = py.import("sys")?;
-    sys.setattr("stdout", stream.clone_ref(py))?;
-    sys.setattr("stderr", stream)?;
-    Ok(())
-}
-
-#[cfg(feature = "ufo_support")]
 pub(crate) fn load_ufo_model(
     path: &std::path::Path,
     restriction_name: Option<String>,
     simplify_model: bool,
 ) -> eyre::Result<(Model, InputParamCard<F<f64>>)> {
-    use pyo3::{prelude::*, types::PyDict};
-    Python::initialize(); // safe if auto-init is also on
+    use feynkit_ufo::UfoLoader;
+
+    // Interpreter initialization belongs to GammaLoop's application boundary;
+    // the reusable UFO adapter only attaches to an interpreter supplied by its caller.
+    Python::initialize();
 
     Python::attach(|py| {
-        // helpful diag if import fails
-        let sys = py.import("sys")?;
-        let exe: String = sys.getattr("prefix")?.extract()?;
-        let ver: String = sys.getattr("version")?.extract()?;
-
-        ensure_py_log_bridge(py)
-            .map_err(|e| eyre::eyre!("Failed to bridge python logging to rust. Error: {}", e))?;
-
-        let commands = py.import("ufo_model_loader.commands").map_err(|e| {
-            eyre::eyre!("Failed to import ufo_model_loader: {e}\nPython: {exe}\nVersion: {ver}")
-        })?;
-
-        let load_model = commands.getattr("load_model")?;
-
-        // kwargs: input_model_path, restriction_name, simplify_model
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("input_model_path", path.to_string_lossy().as_ref())?;
-        match restriction_name.as_deref() {
-            Some(name) => kwargs.set_item("restriction_name", name)?,
-            None => kwargs.set_item("restriction_name", py.None())?,
+        let mut loader = UfoLoader::new().simplify_model(simplify_model);
+        if let Some(name) = restriction_name {
+            loader = loader.restriction_name(name);
         }
-        kwargs.set_item("simplify_model", simplify_model)?;
-        kwargs.set_item("wrap_indices_in_lorentz_structures", true)?;
+        let loaded = loader
+            .load(py, path)
+            .wrap_err_with(|| format!("Failed to load UFO model from {}", path.display()))?;
 
-        // call loader.load(...)
-        let out = load_model
-            .call((), Some(&kwargs))
-            .map_err(|e| eyre::eyre!("ufo_model_loader.load failed: {e}"))?;
-
-        // expect a 2-tuple: (model, input_param_card)
-        let (py_model, py_card): (Py<PyAny>, Py<PyAny>) = out.extract()?;
-
-        // to_json() -> String
-        let model_json: String = py_model.call_method0(py, "to_json")?.extract(py)?;
-        let card_json: String = py_card.call_method0(py, "to_json")?.extract(py)?;
-
-        // deserialize into your Rust types
+        // GammaLoop enriches the neutral schema with its application-specific model state.
+        let model_json = loaded.model.to_json()?;
+        let card_json = loaded.parameters.to_json()?;
         let model: Model = Model::from_str(model_json, "json")
             .map_err(|e| eyre::eyre!("Failed to deserialize JSON Model: {e}"))?;
         let card: InputParamCard<F<f64>> = InputParamCard::<F<f64>>::from_str(card_json, "json")

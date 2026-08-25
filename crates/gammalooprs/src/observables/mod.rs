@@ -475,6 +475,11 @@ struct ResolvedJetClusteringSettings {
 
 impl JetClusteringSettings {
     fn resolve(&self, model: Option<&Model>) -> Result<ResolvedJetClusteringSettings> {
+        if !self.min_jpt.is_finite() || self.min_jpt < 0.0 {
+            return Err(eyre!(
+                "minimum jet transverse momentum must be finite and nonnegative"
+            ));
+        }
         Ok(ResolvedJetClusteringSettings {
             algorithm: self.algorithm,
             d_r: self.dR,
@@ -4436,6 +4441,20 @@ mod tests {
                 .to_string()
                 .contains("Cannot resolve default clustered_pdgs without a model")
         );
+    }
+
+    #[test]
+    fn jet_clustering_settings_reject_invalid_minimum_pt() {
+        for min_jpt in [-1.0, f64::NAN, f64::INFINITY] {
+            let error = JetClusteringSettings {
+                min_jpt,
+                clustered_pdgs: Some(Vec::new()),
+                ..JetClusteringSettings::default()
+            }
+            .resolve(None)
+            .expect_err("invalid minimum jet transverse momentum must be rejected");
+            assert!(error.to_string().contains("finite and nonnegative"));
+        }
     }
 
     #[test]
