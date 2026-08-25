@@ -9,6 +9,10 @@
   testFeatures."three-dimensional-reps" = ["eval"];
   groups = [
     {
+      name = "feynkit";
+      packages = ["feynkit" "feynkit-cff" "feynkit-generator" "feynkit-graph" "feynkit-kinematics" "feynkit-model" "feynkit-py" "feynkit-ufo"];
+    }
+    {
       name = "core";
       packages = [
         "gammaloop-api"

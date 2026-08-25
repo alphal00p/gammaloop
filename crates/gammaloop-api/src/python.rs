@@ -5,6 +5,7 @@ use gammalooprs::{
     integrands::evaluation::{
         BatchSampleEvaluationResult, SampleEvaluationResult, SingleSampleEvaluationResult,
     },
+    model::Model,
     observables::{
         AdditionalWeightKey, DiscreteBinOrdering, Event, EventGroup, GenericAdditionalWeightInfo,
         HistogramAccumulatorState, HistogramSnapshot, HistogramStatisticsSnapshot,
@@ -2798,6 +2799,23 @@ struct GammaLoopAPI {
     run_history: RunHistory,
     default_runtime_settings: RuntimeSettings,
     session_state: CliSessionState,
+}
+
+#[derive(Debug, thiserror::Error)]
+enum CffDotInputError {
+    #[error("could not parse CFF DOT input: {message}")]
+    Parse { message: String },
+    #[error("CFF DOT input does not contain a graph")]
+    EmptyGraph,
+}
+
+fn parse_cff_dot_graph(dot: &str, model: &Model) -> Result<Graph, CffDotInputError> {
+    Graph::from_string(dot, model)
+        .map_err(|error| CffDotInputError::Parse {
+            message: error.to_string(),
+        })?
+        .pop()
+        .ok_or(CffDotInputError::EmptyGraph)
 }
 
 // TODO: Improve error broadcasting to Python everywhere so as to show rust backtrace

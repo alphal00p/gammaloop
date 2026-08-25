@@ -1,23 +1,14 @@
 pub mod diagram_generator;
+pub mod feynkit;
 
-use ahash::{AHashMap, HashMap};
+use ahash::HashMap;
 use bincode_trait_derive::Decode;
 use bincode_trait_derive::Encode;
-use diagram_generator::EdgeColor;
-use indicatif::{ParallelProgressIterator, ProgressBar, ProgressStyle};
-
-use rayon::iter::IntoParallelRefMutIterator;
-use rayon::iter::ParallelIterator;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use smartstring::{LazyCompact, SmartString};
 use std::ops::RangeInclusive;
 use std::{fmt, str::FromStr};
-use symbolica::atom::Atom;
-use symbolica::graph::Graph as SymbolicaGraph;
 use thiserror::Error;
-
-use crate::{graph::LmbError, model::Model};
 
 #[derive(Error, Debug)]
 pub enum FeynGenError {
@@ -25,16 +16,8 @@ pub enum FeynGenError {
     Interrupted,
     #[error("{0}")]
     GenericError(String),
-    #[error("failed to build loop momentum basis for graph '{graph_name}'")]
-    LoopMomentumBasisError {
-        graph_name: String,
-        #[source]
-        source: LmbError,
-    },
-    #[error("Could not convert symbolica graph symmetry factor to an integer: {0}")]
-    SymmetryFactorError(String),
-    #[error("Could not numerically evaluate numerator: {0}")]
-    NumeratorEvaluationError(String),
+    #[error(transparent)]
+    Feynkit(#[from] feynkit::FeynkitAdapterError),
     #[error(transparent)]
     Eyre(#[from] color_eyre::Report),
 }
@@ -68,10 +51,10 @@ impl fmt::Display for GraphGroupingOptions {
         write!(
             f,
             "differentiate_masses_only={}, test_canonized_numerator={}, #samples={}, seed={}, fully_numerical_substitution={}, symmetric_polarizations={}",
-            self.numerical_sample_seed,
-            self.number_of_numerical_samples,
             self.differentiate_particle_masses_only,
             self.test_canonized_numerator,
+            self.number_of_numerical_samples,
+            self.numerical_sample_seed,
             self.fully_numerical_substitution_when_comparing_numerators,
             self.symmetric_polarizations
         )
@@ -157,80 +140,10 @@ impl FromStr for GenerationType {
     }
 }
 
-pub(crate) fn get_coupling_orders<NodeColor: diagram_generator::NodeColorFunctions>(
-    graph: &SymbolicaGraph<NodeColor, EdgeColor>,
-    model: &Model,
-) -> AHashMap<SmartString<LazyCompact>, usize> {
-    let mut coupling_orders = AHashMap::default();
-    for node in graph.nodes() {
-        for (k, v) in node.data.coupling_orders(model) {
-            *coupling_orders.entry(k).or_insert(0) += v;
-        }
-    }
-    coupling_orders
-}
-
 #[derive(Debug, Clone, Encode, Decode, Serialize, Deserialize, JsonSchema, PartialEq)]
 pub struct FeynGenFilters(pub Vec<FeynGenFilter>);
 
 impl FeynGenFilters {
-    pub(crate) fn get_max_bridge(&self) -> Option<usize> {
-        self.0.iter().find_map(|f| match f {
-            FeynGenFilter::MaxNumberOfBridges(n) => Some(*n),
-            _ => None,
-        })
-    }
-
-    pub(crate) fn get_blob_range(&self) -> Option<&RangeInclusive<usize>> {
-        self.0.iter().find_map(|f| {
-            if let FeynGenFilter::BlobRange(v) = f {
-                Some(v)
-            } else {
-                None
-            }
-        })
-    }
-
-    pub(crate) fn get_spectator_range(&self) -> Option<&RangeInclusive<usize>> {
-        self.0.iter().find_map(|f| {
-            if let FeynGenFilter::SpectatorRange(v) = f {
-                Some(v)
-            } else {
-                None
-            }
-        })
-    }
-
-    #[allow(dead_code)]
-    pub fn allow_tadpoles(&self) -> bool {
-        !self
-            .0
-            .iter()
-            .any(|f| matches!(f, FeynGenFilter::TadpolesFilter(_)))
-    }
-
-    pub(crate) fn filter_cross_section_tadpoles(&self) -> bool {
-        self.0.iter().any(|f| {
-            matches!(
-                f,
-                FeynGenFilter::SewedFilter(SewedFilterOptions {
-                    filter_tadpoles: true,
-                    ..
-                })
-            )
-        })
-    }
-
-    pub(crate) fn get_particle_vetos(&self) -> Option<&[i64]> {
-        self.0.iter().find_map(|f| {
-            if let FeynGenFilter::ParticleVeto(v) = f {
-                Some(v.as_slice())
-            } else {
-                None
-            }
-        })
-    }
-
     pub(crate) fn get_coupling_orders(&self) -> Option<&HashMap<String, (usize, Option<usize>)>> {
         self.0.iter().find_map(|f| {
             if let FeynGenFilter::CouplingOrders(o) = f {
@@ -259,83 +172,6 @@ impl FeynGenFilters {
                 None
             }
         })
-    }
-
-    pub(crate) fn get_fermion_loop_count_range(&self) -> Option<(usize, usize)> {
-        self.0.iter().find_map(|f: &FeynGenFilter| {
-            if let FeynGenFilter::FermionLoopCountRange(o) = f {
-                Some(*o)
-            } else {
-                None
-            }
-        })
-    }
-
-    #[allow(clippy::type_complexity)]
-    pub(crate) fn apply_filters<
-        NodeColor: diagram_generator::NodeColorFunctions + Send + Sync + Clone,
-    >(
-        &self,
-        graphs: &mut Vec<(SymbolicaGraph<NodeColor, EdgeColor>, Atom)>,
-        model: &Model,
-        pool: &rayon::ThreadPool,
-        progress_bar_style: &ProgressStyle,
-    ) -> Result<(), FeynGenError> {
-        for filter in self.0.iter() {
-            match filter {
-                FeynGenFilter::CouplingOrders(orders) => {
-                    let bar = ProgressBar::new(graphs.len() as u64);
-                    bar.set_style(progress_bar_style.clone());
-                    bar.set_message("Applying coupling orders constraints...");
-                    pool.install(|| {
-                        *graphs = graphs
-                            .par_iter_mut()
-                            .progress_with(bar.clone())
-                            .filter(|(g, _)| {
-                                let graph_coupling_orders = get_coupling_orders(g, model);
-
-                                // if a {
-                                //     info!(
-                                //         "Coupling orders constraints satisfied for graph {}",
-                                //         g.to_dot()
-                                //     );
-                                //     info!("{:?}", graph_coupling_orders);
-                                // }
-                                orders.iter().all(|(k, (v_min, v_max))| {
-                                    graph_coupling_orders
-                                        .get(&SmartString::from(k))
-                                        .map_or(0 == *v_min, |o| {
-                                            *o >= *v_min && (*v_max).is_none_or(|max| *o <= max)
-                                        })
-                                })
-                            })
-                            .map(|(g, sf)| (g.clone(), sf.clone()))
-                            .collect::<Vec<_>>()
-                    });
-                    bar.finish_and_clear();
-                }
-                FeynGenFilter::LoopCountRange((loop_count_min, loop_count_max)) => {
-                    graphs.retain(|(g, _)| {
-                        g.num_loops() >= *loop_count_min && g.num_loops() <= *loop_count_max
-                    });
-                }
-                FeynGenFilter::PerturbativeOrders(_)
-                | FeynGenFilter::MaxNumberOfBridges(_)
-                | FeynGenFilter::SelfEnergyFilter(_)
-                | FeynGenFilter::TadpolesFilter(_)
-                | FeynGenFilter::ZeroSnailsFilter(_)
-                | FeynGenFilter::FermionLoopCountRange(_)
-                | FeynGenFilter::SewedFilter(_)
-                | FeynGenFilter::FactorizedLoopTopologiesCountRange(_)
-                | FeynGenFilter::BlobRange(_)
-                | FeynGenFilter::SpectatorRange(_)
-                | FeynGenFilter::VertexAllow(_)
-                | FeynGenFilter::VertexVeto(_)
-                | FeynGenFilter::ParticleVeto(_) => {} // These other filters are implemented directly during diagram generation
-            }
-        }
-
-        Ok(())
     }
 }
 

@@ -38,6 +38,7 @@ figment = { version = "0.10.19", features = ["json", "toml"] }
 gammaloop-tracing-filter = { workspace = true, features = ["clap"] }
 gammalooprs = { workspace = true }
 three-dimensional-reps = { workspace = true, features = ["display"] }
+feynkit-ufo = { workspace = true, optional = true }
 idenso = { workspace = true, features = ["native"] }
 include_dir = { workspace = true }
 indicatif = { workspace = true }
@@ -149,4 +150,4 @@ python_stubgen = [
   "gammalooprs/python_stubgen",
   "python_api",
 ]
-ufo_support = ["dep:pyo3", "pyo3/auto-initialize"]
+ufo_support = ["dep:feynkit-ufo", "dep:pyo3", "pyo3/auto-initialize"]

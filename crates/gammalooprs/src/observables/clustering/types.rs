@@ -1,6 +1,7 @@
 use crate::momentum::FourMomentum;
 use crate::utils::{F, FloatLike};
 use smallvec::{SmallVec, smallvec};
+use std::cmp::Ordering;
 use symbolica::domains::float::Real;
 
 #[derive(Debug, Clone)]
@@ -76,6 +77,27 @@ pub struct ClusteringResult<T: FloatLike> {
 }
 
 impl<T: FloatLike> ClusteringResult<T> {
+    pub(crate) fn from_feynkit(result: feynkit_kinematics::ClusteringResult<F<T>>) -> Self {
+        Self {
+            jets: result.jets.into_iter().map(Jet::from_feynkit).collect(),
+        }
+    }
+
+    pub(crate) fn sort_by_pt(&mut self) {
+        self.jets.sort_unstable_by(|lhs, rhs| {
+            rhs.pt()
+                .partial_cmp(&lhs.pt())
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| {
+                    lhs.rapidity()
+                        .partial_cmp(&rhs.rapidity())
+                        .unwrap_or(Ordering::Equal)
+                })
+                .then_with(|| lhs.phi().partial_cmp(&rhs.phi()).unwrap_or(Ordering::Equal))
+                .then_with(|| lhs.constituents.cmp(&rhs.constituents))
+        });
+    }
+
     pub fn len(&self) -> usize {
         self.jets.len()
     }
@@ -132,13 +154,6 @@ impl<T: FloatLike> PseudoJet<T> {
         jet
     }
 
-    pub(crate) fn merged(lhs: &Self, rhs: &Self) -> Self {
-        let mut constituents = lhs.constituents.clone();
-        constituents.extend_from_slice(&rhs.constituents);
-        constituents.sort_unstable();
-        Self::new(lhs.momentum.clone() + rhs.momentum.clone(), constituents)
-    }
-
     pub(crate) fn jet(self) -> Jet<T> {
         Jet::from_parts(
             self.momentum,
@@ -153,22 +168,44 @@ impl<T: FloatLike> PseudoJet<T> {
         self.pt2.clone().sqrt()
     }
 
-    pub(crate) fn pt2(&self) -> F<T> {
-        self.pt2.clone()
-    }
-
-    pub(crate) fn rapidity(&self) -> F<T> {
-        self.rapidity.clone()
-    }
-
-    pub(crate) fn phi(&self) -> F<T> {
-        self.phi.clone()
+    pub(crate) fn into_feynkit(self) -> (usize, feynkit_kinematics::FourMomentum<F<T>>) {
+        debug_assert_eq!(self.constituents.len(), 1);
+        let index = self.constituents[0];
+        (
+            index,
+            feynkit_kinematics::FourMomentum::from_args(
+                self.momentum.temporal.value,
+                self.momentum.spatial.px,
+                self.momentum.spatial.py,
+                self.momentum.spatial.pz,
+            ),
+        )
     }
 
     fn recompute_kinematics(&mut self) {
         self.pt2 = transverse_momentum_squared(&self.momentum);
         self.phi = phi(&self.momentum);
         self.rapidity = rapidity(&self.momentum, &self.pt2);
+    }
+}
+
+impl<T: FloatLike> Jet<T> {
+    fn from_feynkit(jet: feynkit_kinematics::Jet<F<T>>) -> Self {
+        let pt2 = jet.pt_squared();
+        let rapidity = jet.rapidity();
+        let phi = jet.phi();
+        let constituents = SmallVec::from_slice(jet.constituent_indices());
+        let momentum = FourMomentum {
+            temporal: crate::momentum::Energy {
+                value: jet.momentum.temporal.value,
+            },
+            spatial: crate::momentum::ThreeMomentum {
+                px: jet.momentum.spatial.px,
+                py: jet.momentum.spatial.py,
+                pz: jet.momentum.spatial.pz,
+            },
+        };
+        Self::from_parts(momentum, constituents, pt2, rapidity, phi)
     }
 }
 
