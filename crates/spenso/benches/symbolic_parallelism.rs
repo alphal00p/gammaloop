@@ -111,7 +111,7 @@ fn fast_sum_fixture(
     atom_terms: usize,
     fixture_index: usize,
 ) -> FastSumFixture {
-    let structure = OrderedStructure::new(vec![Euclidean {}.new_slot(entries, 1)]).structure;
+    let structure = OrderedStructure::new(vec![Euclidean {}.new_slot(entries, 1)]).into_canonical();
     let mut atom_bytes = 0;
     let mut max_atom_bytes = 0;
     let inputs = (0..input_count)
@@ -148,12 +148,12 @@ fn contract_fixture(
                 Euclidean {}.new_slot(dimension, 1),
                 Euclidean {}.new_slot(dimension, 2),
             ])
-            .structure,
+            .into_canonical(),
             OrderedStructure::new(vec![
                 Euclidean {}.new_slot(dimension, 2),
                 Euclidean {}.new_slot(dimension, 3),
             ])
-            .structure,
+            .into_canonical(),
             dimension.pow(2),
             dimension.pow(2),
             dimension.pow(3),
@@ -164,13 +164,13 @@ fn contract_fixture(
                 Euclidean {}.new_slot(dimension, 2),
                 Euclidean {}.new_slot(dimension, 3),
             ])
-            .structure,
+            .into_canonical(),
             OrderedStructure::new(vec![
                 Euclidean {}.new_slot(dimension, 2),
                 Euclidean {}.new_slot(dimension, 3),
                 Euclidean {}.new_slot(dimension, 4),
             ])
-            .structure,
+            .into_canonical(),
             dimension.pow(3),
             dimension.pow(2),
             dimension.pow(4),

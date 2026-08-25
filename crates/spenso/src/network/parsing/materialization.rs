@@ -288,7 +288,7 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
 
         value
             .infer_structure::<OrderedStructure<LibraryRep, Aind>>(StructureInferenceMode::Fast)
-            .is_ok_and(|structure| structure.structure.is_scalar())
+            .is_ok_and(|structure| structure.canonical().is_scalar())
     }
 
     fn compact_scalar_product_parts(
@@ -998,8 +998,9 @@ pub(super) struct ChainExpansion;
 impl ChainExpansion {
     /// Replace `in` and `out` placeholders recursively.
     ///
-    /// Nested chain-like heads form independent scopes. Other expressions are
-    /// traversed syntactically without allocating dummies.
+    /// Nested chain/trace heads are rejected before lowering, so the complete
+    /// factor belongs to the current placeholder consumer. This walk only
+    /// substitutes its selected endpoints and never allocates dummies.
     pub(super) fn replace_placeholders(
         value: AtomView<'_>,
         chain_in: &Atom,
@@ -1008,25 +1009,6 @@ impl ChainExpansion {
         match value {
             AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_in => chain_in.clone(),
             AtomView::Var(var) if var.get_symbol() == SPENSO_TAG.chain_out => chain_out.clone(),
-            // Nested chain-like heads normally own their placeholders. A
-            // transparent wrapper around the selected chain is distinguished
-            // by placeholders in the nested chain's two endpoint arguments:
-            // rewrite those endpoints, but never enter its scoped factors.
-            AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.chain => {
-                let arguments = fun.iter().collect::<Vec<_>>();
-                if matches!(arguments.first(), Some(AtomView::Var(var)) if var.get_symbol() == SPENSO_TAG.chain_in)
-                    && matches!(arguments.get(1), Some(AtomView::Var(var)) if var.get_symbol() == SPENSO_TAG.chain_out)
-                {
-                    FunctionBuilder::new(fun.get_symbol())
-                        .add_arg(chain_in)
-                        .add_arg(chain_out)
-                        .add_args(&arguments[2..])
-                        .finish()
-                } else {
-                    value.to_owned()
-                }
-            }
-            AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.trace => value.to_owned(),
             AtomView::Fun(fun) => {
                 let mut rebuilt = FunctionBuilder::new(fun.get_symbol());
                 for arg in fun.iter() {
@@ -1171,60 +1153,58 @@ mod tests {
     }
 
     #[test]
-    fn placeholder_replacement_stops_at_nested_chain_scope() {
+    fn placeholder_replacement_descends_through_factor_wrappers() {
         let representation = mink4();
-        let start = representation
-            .slot::<AbstractIndex, _>(AbstractIndex::Normal(41))
-            .to_atom();
-        let end = representation
-            .slot::<AbstractIndex, _>(AbstractIndex::Normal(43))
-            .to_atom();
         let factor = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("nested_scope_factor"))
             .add_arg(Atom::var(SPENSO_TAG.chain_in))
             .add_arg(Atom::var(SPENSO_TAG.chain_out))
             .finish();
-        let nested = SPENSO_TAG.chain(&start, &end, [factor]);
+        let wrapped = FunctionBuilder::new(broadcast_symbol!("factor_scope_broadcast"))
+            .add_arg(factor)
+            .finish();
         let outer_input = representation
             .slot::<AbstractIndex, _>(AbstractIndex::Normal(47))
             .to_atom();
         let outer_output = representation
             .slot::<AbstractIndex, _>(AbstractIndex::Normal(53))
             .to_atom();
+        let expected_factor = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("nested_scope_factor"))
+            .add_arg(&outer_input)
+            .add_arg(&outer_output)
+            .finish();
+        let expected = FunctionBuilder::new(broadcast_symbol!("factor_scope_broadcast"))
+            .add_arg(expected_factor)
+            .finish();
 
         assert_eq!(
-            ChainExpansion::replace_placeholders(nested.as_view(), &outer_input, &outer_output),
-            nested
+            ChainExpansion::replace_placeholders(wrapped.as_view(), &outer_input, &outer_output),
+            expected
         );
     }
 
     #[test]
-    fn placeholder_replacement_connects_selected_wrapped_chain_endpoints() {
+    fn placeholder_replacement_descends_through_factor_products() {
         let representation = mink4();
         let factor = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("wrapped_scope_factor"))
             .add_arg(Atom::var(SPENSO_TAG.chain_in))
             .add_arg(Atom::var(SPENSO_TAG.chain_out))
             .finish();
-        let nested = SPENSO_TAG.chain(
-            Atom::var(SPENSO_TAG.chain_in),
-            Atom::var(SPENSO_TAG.chain_out),
-            [factor.clone()],
-        );
-        let wrapped = FunctionBuilder::new(broadcast_symbol!("wrapped_scope_broadcast"))
-            .add_arg(nested)
-            .finish();
+        let product = Atom::num(3) * factor;
         let outer_input = representation
             .slot::<AbstractIndex, _>(AbstractIndex::Normal(47))
             .to_atom();
         let outer_output = representation
             .slot::<AbstractIndex, _>(AbstractIndex::Normal(53))
             .to_atom();
-        let expected_nested = SPENSO_TAG.chain(&outer_input, &outer_output, [factor]);
-        let expected = FunctionBuilder::new(broadcast_symbol!("wrapped_scope_broadcast"))
-            .add_arg(expected_nested)
-            .finish();
+        let expected_factor =
+            FunctionBuilder::new(SPENSO_TAG.tensor_symbol("wrapped_scope_factor"))
+                .add_arg(&outer_input)
+                .add_arg(&outer_output)
+                .finish();
+        let expected = Atom::num(3) * expected_factor;
 
         assert_eq!(
-            ChainExpansion::replace_placeholders(wrapped.as_view(), &outer_input, &outer_output),
+            ChainExpansion::replace_placeholders(product.as_view(), &outer_input, &outer_output),
             expected
         );
     }

@@ -1,9 +1,10 @@
 use std::{collections::HashMap, ops::Deref};
 
 use pyo3::{
+    Borrowed,
     exceptions::{self, PyRuntimeError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyDict, PyTuple},
+    types::PyTuple,
 };
 
 use spenso::{
@@ -18,10 +19,9 @@ use spenso::{
         tags::SPENSO_TAG,
     },
     structure::{
-        HasStructure, PermutedStructure, ScalarTensor, TensorStructure,
+        HasStructure, ScalarTensor, TensorStructure,
         abstract_index::AbstractIndex,
         partial::{PartialIndex, PartialStructure, PartialStructureExt},
-        permuted::Perm,
         slot::IsAbstractSlot,
     },
     tensors::data::SparseTensor,
@@ -32,11 +32,12 @@ use spenso::{
 use spenso_hep_lib::{FUN_LIB, HEP_LIB};
 use symbolica::{
     api::python::{
-        ConvertibleToPatternRestriction, ConvertibleToReplaceWith, PythonExpression,
-        PythonFormattedOutput,
+        ConvertibleToReplaceWith, PythonCondition, PythonExpression, PythonFormattedOutput,
+        PythonPatternRestriction,
     },
     atom::FunctionBuilder,
     domains::float::Complex as SymComplex,
+    id::{Condition, PatternRestriction},
     prelude::*,
 };
 
@@ -49,7 +50,7 @@ use crate::{
     library::SpensorFunctionLibrary,
 };
 
-use super::{Spensor, library::SpensorLibrary, structure::ArithmeticStructure};
+use super::{Spensor, fresh_open_owner, library::SpensorLibrary, structure::ArithmeticStructure};
 
 use super::ModuleInit;
 
@@ -66,6 +67,11 @@ use pyo3_stub_gen::{PyStubType, derive::*};
 /// tensor expressions, optimization of tensor contraction orders, efficient
 /// evaluation of large tensor computations, and physics calculations involving
 /// many-body systems.
+///
+/// A network retains the semantic source expression and its public tensor interface
+/// separately from the executable graph and its stored values. Value specialization
+/// and graph execution therefore do not rewrite the source expression returned by
+/// `structure()` or used by the semantic display methods.
 ///
 /// Examples
 /// --------
@@ -90,9 +96,9 @@ pub struct SpensoNet {
         ExplicitKey<AbstractIndex>,
         Symbol,
     >,
-    /// Exact public tensor semantics, including unresolved ports.
+    /// Semantic source expression and public interface, including unresolved ports.
     pub(crate) structure: StructuredAtom,
-    /// The fully explicit counterpart represented by the execution graph.
+    /// The source expression with all graph-facing ports made explicit.
     pub(crate) materialized: StructuredAtom,
     /// Optional stored-data identity. Composite results deliberately remain unnamed.
     pub(crate) descriptor: Option<(Symbol, Vec<Atom>)>,
@@ -182,6 +188,32 @@ pub type ParsingNet = Network<
     Symbol,
 >;
 
+/// A Symbolica pattern restriction accepted by tensor-network replacement.
+pub struct ReplacementCondition(Condition<PatternRestriction>);
+
+impl<'a, 'py> FromPyObject<'a, 'py> for ReplacementCondition {
+    type Error = PyErr;
+
+    fn extract(value: Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
+        if let Ok(restriction) = value.extract::<PythonPatternRestriction>() {
+            Ok(Self(restriction.condition))
+        } else if let Ok(condition) = value.extract::<PythonCondition>() {
+            condition
+                .condition
+                .try_into()
+                .map(Self)
+                .map_err(|error: &'static str| PyValueError::new_err(error))
+        } else {
+            Err(PyTypeError::new_err(
+                "expected a Symbolica PatternRestriction or Condition",
+            ))
+        }
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+pyo3_stub_gen::impl_stub_type!(ReplacementCondition = PythonPatternRestriction | PythonCondition);
+
 fn non_scalar_zero_network(value: &StructuredAtom) -> Option<ParsingNet> {
     if !value.atom.as_view().is_zero() || value.is_scalar() {
         return None;
@@ -202,7 +234,7 @@ fn non_scalar_zero_network(value: &StructuredAtom) -> Option<ParsingNet> {
     let structure: ShadowedStructure<AbstractIndex> = value
         .interface
         .materialize_open_ports(&replacements)
-        .structure
+        .into_canonical()
         .into();
     let zero = SparseTensor::empty(structure, 0.0);
     Some(Network::from_tensor(MixedTensor::from(zero)))
@@ -241,16 +273,20 @@ fn network_from_arithmetic(
         }),
         expression => {
             let atom = expression.to_expression()?.expr;
-            let value = StructuredAtom::new(
+            let network =
+                ParsingNet::try_from_view(atom.as_view(), library, &ParseSettings::default())?;
+            let value = composition::normalize_closed_root_chain(StructuredAtom::new(
                 atom.clone(),
-                PartialStructure::from_logical_slots(std::iter::empty()),
-            );
+                PartialStructure::from_logical_slots(
+                    network
+                        .graph
+                        .dangling_indices()
+                        .into_iter()
+                        .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind()))),
+                ),
+            ))?;
             Ok(SpensoNet {
-                network: ParsingNet::try_from_view(
-                    atom.as_view(),
-                    library,
-                    &ParseSettings::default(),
-                )?,
+                network,
                 structure: value.clone(),
                 materialized: value,
                 descriptor: None,
@@ -269,12 +305,12 @@ impl ConvertibleToSpensoNet {
 
 impl SpensoNet {
     pub(crate) fn from_tensor(value: Spensor) -> PyResult<Self> {
-        let canonical = value.tensor.structure.external_structure();
-        let representation_sorted = value.tensor.index_permutation.apply_slice_inv(&canonical);
+        let canonical = value.tensor.external_structure();
         let logical = value
-            .tensor
-            .rep_permutation
-            .apply_slice_inv(&representation_sorted);
+            .descriptor
+            .interface
+            .layout()
+            .canonical_to_logical(&canonical);
         let replacements = logical
             .into_iter()
             .enumerate()
@@ -283,7 +319,7 @@ impl SpensoNet {
         let materialized = composition::reindex_interface_ports(&value.descriptor, &replacements)
             .map_err(composition_error)?;
         let mut network = Self {
-            network: Network::from_tensor(value.tensor.structure),
+            network: Network::from_tensor(value.tensor),
             materialized,
             structure: value.descriptor,
             descriptor: value
@@ -324,10 +360,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToSpensoNet {
         } else if let Ok(num) = ob.extract::<Spensor>() {
             Ok(ConvertibleToSpensoNet(SpensoNet::from_tensor(num)?))
         } else if let Ok(a) = ob.extract::<ArithmeticStructure>() {
-            let library = SpensorLibrary::construct();
-            network_from_arithmetic(a, &library.library)
-                .map(ConvertibleToSpensoNet)
-                .map_err(|a| PyRuntimeError::new_err(a.to_string()))
+            SpensoNet::from_arithmetic(a, None).map(ConvertibleToSpensoNet)
         } else {
             Err(exceptions::PyTypeError::new_err(
                 "Cannot convert to expression",
@@ -355,8 +388,12 @@ fn composition_error(error: composition::TensorCompositionError) -> PyErr {
     PyValueError::new_err(error.to_string())
 }
 
-fn exact_interface(left: &PartialStructure, right: &PartialStructure) -> bool {
+fn additive_interfaces_match(left: &PartialStructure, right: &PartialStructure) -> bool {
+    // Unresolved ports remain positional; only explicit indices identify ports across terms.
     left.logical_slots() == right.logical_slots()
+        || (left.open_positions().is_empty()
+            && right.open_positions().is_empty()
+            && left.canonical() == right.canonical())
 }
 
 fn product_plan(
@@ -433,10 +470,9 @@ impl SpensoNet {
                 .collect::<Vec<_>>();
             let tensor = tensor
                 .clone()
-                .reindex(&indices)
+                .reindex_storage(&indices)
                 .map_err(|error| PyRuntimeError::new_err(error.to_string()))?
-                .permute_reps_wrapped()
-                .permute_inds();
+                .apply();
             reindexed.push((tensor_index, tensor));
         }
         if !self.network.graph.relabel_dangling_slot(from, to) {
@@ -453,12 +489,15 @@ impl SpensoNet {
     }
 
     fn freshen_open_ports(&mut self) -> PyResult<()> {
-        for position in self.structure.interface.open_positions() {
-            let index = composition::fresh_dummy_index(
-                [&self.structure.atom, &self.materialized.atom],
-                [&self.structure.interface, &self.materialized.interface],
-            );
-            self.relabel_port(position, index)?;
+        let owner = fresh_open_owner();
+        for (axis, position) in self
+            .structure
+            .interface
+            .open_positions()
+            .into_iter()
+            .enumerate()
+        {
+            self.relabel_port(position, AbstractIndex::Open { owner, axis })?;
         }
         Ok(())
     }
@@ -551,10 +590,15 @@ impl SpensoNet {
     }
 
     fn finish(
-        network: ParsingNet,
+        mut network: ParsingNet,
         structure: StructuredAtom,
         materialized: StructuredAtom,
     ) -> PyResult<Self> {
+        let structure =
+            composition::normalize_closed_root_chain(structure).map_err(composition_error)?;
+        let materialized =
+            composition::normalize_closed_root_chain(materialized).map_err(composition_error)?;
+        network.state = network.graph.state();
         let value = Self {
             network,
             structure,
@@ -566,11 +610,11 @@ impl SpensoNet {
     }
 
     pub(crate) fn add_network(mut self, mut right: Self, subtract: bool) -> PyResult<Self> {
-        if !exact_interface(&self.structure.interface, &right.structure.interface) {
+        if !additive_interfaces_match(&self.structure.interface, &right.structure.interface) {
             return Err(PyValueError::new_err(if subtract {
-                "subtraction requires identical ordered tensor interfaces"
+                "subtraction requires compatible tensor interfaces"
             } else {
-                "addition requires identical ordered tensor interfaces"
+                "addition requires compatible tensor interfaces"
             }));
         }
         self.freshen_open_ports()?;
@@ -677,40 +721,12 @@ impl SpensoNet {
 
     pub(crate) fn index_network(
         &self,
-        py: Python<'_>,
         indices: &Bound<'_, PyTuple>,
         cook_indices: bool,
     ) -> PyResult<Self> {
-        let expression = TensorExpression::from_atom_interface_descriptor(
-            py,
-            self.structure.atom.clone(),
-            self.structure.interface.clone(),
-            self.descriptor.as_ref().map(|(name, _)| *name),
-            self.descriptor
-                .as_ref()
-                .map(|(_, args)| args.clone())
-                .unwrap_or_default(),
-        )?;
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("cook_indices", cook_indices)?;
-        let indexed = expression
-            .bind(py)
-            .call_method("index", indices, Some(&kwargs))?;
-        let indexed = indexed.cast::<TensorExpression>()?.borrow();
-        let structure = TensorExpression::structured(&indexed);
-
-        let mut network = self.clone();
-        network.freshen_open_ports()?;
-        let old_open = self.structure.interface.open_positions();
-        let new_slots = structure.interface.logical_slots();
-        for position in old_open {
-            if let PartialIndex::Explicit(index) = new_slots[position].aind {
-                network.relabel_port(position, index)?;
-            }
-        }
-        network.structure = structure;
-        network.validate_graph_interface()?;
-        Ok(network)
+        let replacements =
+            TensorExpression::index_replacements(&self.structure.interface, indices, cook_indices)?;
+        self.set_port_indices(&replacements)
     }
 
     pub(crate) fn set_port_indices(
@@ -721,11 +737,66 @@ impl SpensoNet {
             .map_err(composition_error)?;
         let mut network = self.clone();
         network.freshen_open_ports()?;
+        let owner = fresh_open_owner();
+        for (axis, &position) in replacements.keys().enumerate() {
+            network.relabel_port(position, AbstractIndex::Open { owner, axis })?;
+        }
         for (&position, &index) in replacements {
             network.relabel_port(position, index)?;
         }
-        network.structure = structure;
-        network.descriptor = None;
+        network.network.graph.sew_dangling_slots();
+        network.network.state = network.network.graph.state();
+
+        let structure_slots = structure.interface.logical_slots();
+        let materialized_slots = network.materialized.interface.logical_slots();
+        if structure_slots.len() != materialized_slots.len() {
+            return Err(PyRuntimeError::new_err(
+                "semantic and materialized network interfaces have different ranks",
+            ));
+        }
+
+        // The graph decides which assigned ports became contractions. Match its
+        // dangling slots back to original logical positions to retain their order.
+        let mut dangling = network.network.graph.dangling_indices();
+        let mut retained = Vec::new();
+        for (position, slot) in materialized_slots.iter().enumerate() {
+            let PartialIndex::Explicit(index) = slot.aind else {
+                return Err(PyRuntimeError::new_err(
+                    "materialized network interface contains an unresolved port",
+                ));
+            };
+            let slot = slot.rep().slot(index).to_lib();
+            if let Some(found) = dangling.iter().position(|candidate| *candidate == slot) {
+                dangling.swap_remove(found);
+                retained.push(position);
+            }
+        }
+        if !dangling.is_empty() {
+            return Err(PyRuntimeError::new_err(format!(
+                "tensor-network topology has dangling slots absent from its materialized interface: {dangling:?}"
+            )));
+        }
+
+        let contracted = retained.len() < structure_slots.len();
+        network.structure = composition::normalize_closed_root_chain(StructuredAtom::new(
+            structure.atom,
+            PartialStructure::from_logical_slots(
+                retained.iter().map(|&position| structure_slots[position]),
+            ),
+        ))
+        .map_err(composition_error)?;
+        network.materialized = composition::normalize_closed_root_chain(StructuredAtom::new(
+            network.materialized.atom.clone(),
+            PartialStructure::from_logical_slots(
+                retained
+                    .iter()
+                    .map(|&position| materialized_slots[position]),
+            ),
+        ))
+        .map_err(composition_error)?;
+        if contracted {
+            network.descriptor = None;
+        }
         network.validate_graph_interface()?;
         Ok(network)
     }
@@ -795,7 +866,8 @@ impl SpensoNet {
     /// expr : ArithmeticStructure
     ///     The arithmetic expression or tensor structure to parse
     /// library : TensorLibrary, optional
-    ///     Optional tensor library for resolving named tensor references
+    ///     Tensor library for resolving named tensor references. Defaults to the built-in
+    ///     four-dimensional HEP and SU(3) library returned by `TensorLibrary.hep_lib()`.
     ///
     /// Returns
     /// -------
@@ -847,6 +919,7 @@ impl SpensoNet {
     }
 
     #[staticmethod]
+    /// Return the symbolic head used for structured product brackets.
     pub fn bracket() -> PythonExpression {
         PythonExpression {
             expr: Atom::var(SPENSO_TAG.bracket),
@@ -854,6 +927,7 @@ impl SpensoNet {
     }
 
     #[staticmethod]
+    /// Create a Symbolica function symbol tagged for elementwise tensor broadcasting.
     pub fn broadcast(str: &str) -> PythonExpression {
         PythonExpression {
             expr: Atom::var(symbol!(str, tag = SPENSO_TAG.broadcast)),
@@ -885,17 +959,22 @@ impl SpensoNet {
         }
     }
 
-    /// Replace patterns in the tensor network using symbolic pattern matching.
+    /// Replace patterns in stored symbolic network values.
     ///
-    /// Applies pattern-based transformations to the network structure, allowing for
-    /// symbolic simplifications, substitutions, and algebraic manipulations.
+    /// Rewrites scalar coefficients and symbolic elements of parametric tensors in
+    /// the execution store. Tensor identities, graph topology, the public interface,
+    /// and the semantic source expression returned by `structure()` are unchanged.
+    /// Rewrite a `TensorExpression` before constructing the network when the source
+    /// tensor expression itself should change.
     ///
     /// Parameters
     /// ----------
     /// pattern : Expression
-    ///     The symbolic pattern to match against
+    ///     The symbolic pattern to match within stored values
     /// rhs : Expression
     ///     The replacement expression or pattern
+    /// cond : PatternRestriction or Condition, optional
+    ///     Additional restriction that each match must satisfy
     /// non_greedy_wildcards : list of Expression, optional
     ///     List of wildcard symbols to match non-greedily
     /// level_range : tuple of int, optional
@@ -912,14 +991,15 @@ impl SpensoNet {
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A new TensorNetwork with the replacements applied
-    #[pyo3(signature = (pattern, rhs, _cond = None, non_greedy_wildcards = None, level_range = None, level_is_tree_depth = None, allow_new_wildcards_on_rhs = None, rhs_cache_size = None, repeat = None))]
+    ///     A new TensorNetwork with matching stored values replaced and the same
+    ///     semantic source structure
+    #[pyo3(signature = (pattern, rhs, cond = None, non_greedy_wildcards = None, level_range = None, level_is_tree_depth = None, allow_new_wildcards_on_rhs = None, rhs_cache_size = None, repeat = None))]
     #[allow(clippy::too_many_arguments)]
     pub fn replace(
         &self,
         pattern: ConvertibleToExpression,
         rhs: ConvertibleToReplaceWith,
-        _cond: Option<ConvertibleToPatternRestriction>,
+        cond: Option<ReplacementCondition>,
         non_greedy_wildcards: Option<Vec<PythonExpression>>,
         level_range: Option<(usize, Option<usize>)>,
         level_is_tree_depth: Option<bool>,
@@ -972,7 +1052,7 @@ impl SpensoNet {
             setting_rhs_cache_size = rhs_cache_size;
         }
 
-        let cond = None;
+        let cond = cond.map(|condition| condition.0);
 
         Ok(SpensoNet {
             network: self.network.map_ref(
@@ -1028,10 +1108,12 @@ impl SpensoNet {
         })
     }
 
-    /// Evaluate symbolic expressions in the network with numerical values.
+    /// Evaluate symbolic tensor values in the execution store.
     ///
-    /// Substitutes symbolic constants and functions with numerical values,
-    /// converting symbolic parts of the network to concrete numerical tensors.
+    /// Substitutes symbolic constants and functions in stored parametric tensor
+    /// elements, converting them to concrete numerical tensors. Tensor identities,
+    /// graph topology, the public interface, and the semantic source expression are
+    /// retained.
     ///
     /// Parameters
     /// ----------
@@ -1043,7 +1125,8 @@ impl SpensoNet {
     /// Returns
     /// -------
     /// TensorNetwork
-    ///     A new TensorNetwork with symbolic expressions evaluated
+    ///     A new TensorNetwork with stored tensor values evaluated and the same
+    ///     semantic source structure
     pub fn evaluate(
         &self,
         constants: HashMap<PythonExpression, f64>,
@@ -1234,12 +1317,7 @@ impl SpensoNet {
                     // Network tensors are already stored in canonical Spenso axis
                     // order. The descriptor permutations only record how that
                     // storage maps back to the public logical interface.
-                    let tensor = PermutedStructure {
-                        structure: value,
-                        rep_permutation: descriptor.interface.rep_permutation.clone(),
-                        index_permutation: descriptor.interface.index_permutation.clone(),
-                    };
-                    Spensor::from_storage_with_descriptor(tensor, descriptor, name, args)
+                    Spensor::from_storage_with_descriptor(value, descriptor, name, args)
                 }
             },
         )
@@ -1280,7 +1358,7 @@ impl SpensoNet {
         )
     }
 
-    /// Return a string representation of the network structure.
+    /// Return a DOT representation of the executable network graph.
     ///
     /// Generates a DOT format representation of the computational graph that can be
     /// visualized using graphviz or similar tools.
@@ -1288,25 +1366,30 @@ impl SpensoNet {
         Ok(self.network.dot_pretty())
     }
 
-    /// Format the exact semantic structure using compact Spenso notation.
+    /// Format the semantic source structure using compact Spenso notation.
     #[pyo3(signature = (show_dimensions = false))]
     fn format_tensor(&self, show_dimensions: bool) -> String {
         display::format_structured(&self.structure, show_dimensions)
     }
 
-    /// Format the exact semantic structure as Typst math source.
+    /// Format the semantic source structure as Typst math source.
     #[pyo3(signature = (show_dimensions = false))]
     fn to_typst(&self, show_dimensions: bool) -> String {
         display::structured_to_typst(&self.structure, show_dimensions)
     }
 
-    /// Build Symbolica's rich display wrapper for the semantic structure.
+    /// Build Symbolica's rich display wrapper for the semantic source structure.
     #[pyo3(signature = (show_dimensions = false))]
     fn formatted(&self, show_dimensions: bool) -> PythonFormattedOutput {
         display::format_structured_output(&self.structure, show_dimensions)
     }
 
-    /// Return the exact structured expression represented by this network.
+    /// Return the semantic source expression and its public tensor interface.
+    ///
+    /// This expression records the tensor-aware structure used for composition and
+    /// provenance. It is not reconstructed from the current execution store, so
+    /// `replace()`, `evaluate()`, and `execute()` leave it unchanged. Use
+    /// `result_scalar()` or `result_tensor()` to inspect the current computed value.
     fn structure(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
         TensorExpression::from_atom_interface_descriptor(
             py,
@@ -1320,24 +1403,19 @@ impl SpensoNet {
         )
     }
 
+    /// Fill the unresolved external ports with `indices` in interface order.
+    ///
+    /// Pass `AUTO` to leave a port unresolved. Set `cook_indices=True` to flatten nested
+    /// symbolic index payloads before insertion.
     #[pyo3(signature = (*indices, cook_indices = false))]
-    fn index(
-        &self,
-        py: Python<'_>,
-        indices: &Bound<'_, PyTuple>,
-        cook_indices: bool,
-    ) -> PyResult<Self> {
-        self.index_network(py, indices, cook_indices)
+    fn index(&self, indices: &Bound<'_, PyTuple>, cook_indices: bool) -> PyResult<Self> {
+        self.index_network(indices, cook_indices)
     }
 
+    /// Fill the unresolved external ports with `indices` in interface order.
     #[pyo3(signature = (*indices, cook_indices = false))]
-    fn __call__(
-        &self,
-        py: Python<'_>,
-        indices: &Bound<'_, PyTuple>,
-        cook_indices: bool,
-    ) -> PyResult<Self> {
-        self.index_network(py, indices, cook_indices)
+    fn __call__(&self, indices: &Bound<'_, PyTuple>, cook_indices: bool) -> PyResult<Self> {
+        self.index_network(indices, cook_indices)
     }
 
     pub fn __neg__(&self) -> PyResult<Self> {
@@ -1582,7 +1660,7 @@ pyo3_stub_gen::define_stub_info_gatherer!(stub_info);
 
 #[cfg(test)]
 mod tests {
-    use idenso::representations::initialize;
+    use idenso::{dirac::AGS, representations::initialize};
     use spenso::network::parsing::ParseSettings;
     use spenso::structure::{
         OrderedStructure, TensorStructure,
@@ -1596,21 +1674,23 @@ mod tests {
     use super::*;
 
     fn data_tensor(descriptor: StructuredAtom, name: Symbol) -> Spensor {
+        let owner = fresh_open_owner();
         let storage = OrderedStructure::new(
             descriptor
                 .interface
                 .logical_slots()
                 .into_iter()
                 .enumerate()
-                .map(|(position, slot)| slot.rep().slot(AbstractIndex::Normal(position)))
+                .map(|(axis, slot)| slot.rep().slot(AbstractIndex::Open { owner, axis }))
                 .collect(),
         )
-        .map_structure(|structure| ShadowedStructure {
+        .map_canonical(|structure| ShadowedStructure {
             structure,
             global_name: Some(name),
             additional_args: None,
         })
-        .map_structure(|structure| SparseTensor::<f64, _>::empty(structure, 0.0).into());
+        .map_canonical(|structure| SparseTensor::<f64, _>::empty(structure, 0.0).into())
+        .into_canonical();
         Spensor::from_storage_with_descriptor(storage, descriptor, Some(name), Vec::new())
     }
 
@@ -1629,6 +1709,450 @@ mod tests {
             )
             .finish();
         (StructuredAtom::new(atom, interface), name)
+    }
+
+    #[test]
+    fn ordinary_tensor_expression_infers_interface_from_graph() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+            let slot: spenso::structure::representation::LibrarySlot<AbstractIndex> =
+                representation.slot(AbstractIndex::Normal(71));
+            let atom = FunctionBuilder::new(
+                SPENSO_TAG.tensor_symbol("ordinary_network_interface_inference"),
+            )
+            .add_arg(slot.to_atom())
+            .finish();
+            let expression = PythonExpression { expr: atom }.into_pyobject(py)?;
+
+            let network = SpensoNet::from_expression(expression.as_any(), None)?;
+
+            assert_eq!(network.structure.rank(), 1);
+            assert_eq!(
+                network.structure.interface.logical_slots()[0].aind,
+                PartialIndex::Explicit(slot.aind)
+            );
+            assert_eq!(network.network.graph.dangling_indices(), vec![slot]);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn implicit_network_conversion_uses_default_hep_library() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let gamma5 = AGS.gamma5_strct::<AbstractIndex>(4);
+            let expression = TensorExpression::from_structure(py, &gamma5)?;
+
+            let mut network = expression
+                .bind(py)
+                .as_any()
+                .extract::<ConvertibleToSpensoNet>()?
+                .to_net();
+
+            network.execute(None, None, None, ExecutionMode::All)?;
+            let result = network.result_tensor(None)?;
+            assert!(matches!(&result.tensor, ParamOrConcrete::Concrete(_)));
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn repeated_indices_contract_tensor_and_network_ports() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+            let (descriptor, name) = tensor_descriptor(
+                "network_repeated_index_trace",
+                [
+                    representation.slot(PartialIndex::open(0)),
+                    representation.slot(PartialIndex::open(1)),
+                ],
+            );
+            let expression = TensorExpression::from_atom_interface_descriptor(
+                py,
+                descriptor.atom,
+                descriptor.interface,
+                Some(name),
+                Vec::new(),
+            )?;
+
+            let indexed_expression = expression.bind(py).call1(("i", "i"))?;
+            let indexed_expression = indexed_expression.extract::<PyRef<'_, TensorExpression>>()?;
+            assert!(indexed_expression.interface.canonical().is_scalar());
+            drop(indexed_expression);
+
+            let tensor = Spensor::dense(
+                expression.bind(py).as_any().extract()?,
+                crate::AtomsOrFloats::Floats(vec![1.0, 2.0, 3.0, 4.0]),
+            )?;
+            let relabeled_tensor = Py::new(py, tensor.clone())?
+                .bind(py)
+                .call1(("i", "j"))?
+                .extract::<SpensoNet>()?;
+            assert_eq!(relabeled_tensor.structure.rank(), 2);
+            assert_eq!(relabeled_tensor.materialized.rank(), 2);
+            assert_eq!(relabeled_tensor.network.graph.dangling_indices().len(), 2);
+            assert!(relabeled_tensor.descriptor.is_some());
+
+            let indexed_tensor = Py::new(py, tensor.clone())?
+                .bind(py)
+                .call1(("i", "i"))?
+                .extract::<SpensoNet>()?;
+            let indexed_network = Py::new(py, SpensoNet::from_tensor(tensor)?)?
+                .bind(py)
+                .call1(("i", "i"))?
+                .extract::<SpensoNet>()?;
+
+            for mut network in [indexed_tensor, indexed_network] {
+                assert!(network.structure.is_scalar());
+                assert!(network.materialized.is_scalar());
+                assert!(network.network.graph.dangling_indices().is_empty());
+                assert!(network.network.state.is_scalar());
+                assert!(network.descriptor.is_none());
+
+                network.execute(None, None, None, ExecutionMode::All)?;
+                let result = SymComplex::<f64>::try_from(&network.result_scalar()?.expr).unwrap();
+                assert_eq!(result.re, 5.0);
+                assert_eq!(result.im, 0.0);
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn equal_network_chain_endpoints_normalize_to_a_root_trace() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+            let factor = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("network_chain_factor"))
+                .add_arg(Atom::var(SPENSO_TAG.chain_in))
+                .add_arg(Atom::var(SPENSO_TAG.chain_out))
+                .finish();
+            let expression = TensorExpression::from_structured(
+                py,
+                StructuredAtom::new(
+                    SPENSO_TAG.chain(
+                        representation.to_symbolic([]),
+                        representation.to_symbolic([]),
+                        [factor],
+                    ),
+                    PartialStructure::from_logical_slots([
+                        representation.slot(PartialIndex::open(0)),
+                        representation.slot(PartialIndex::open(1)),
+                    ]),
+                ),
+            )?;
+            let network = SpensoNet::from_arithmetic(
+                ArithmeticStructure::Tensor(expression),
+                None,
+            )?;
+            let index = AbstractIndex::Normal(73);
+            let closed = network.set_port_indices(&HashMap::from([(0, index), (1, index)]))?;
+
+            assert!(closed.structure.is_scalar());
+            assert!(closed.materialized.is_scalar());
+            assert!(
+                matches!(closed.structure.atom.as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.trace)
+            );
+            assert!(
+                matches!(closed.materialized.atom.as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.trace)
+            );
+            assert!(closed.network.graph.dangling_indices().is_empty());
+            assert!(closed.network.state.is_scalar());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn lazy_library_indices_follow_network_port_relabeling() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+            let (descriptor, name) = tensor_descriptor(
+                "lazy_library_relabeling",
+                [
+                    representation.slot(PartialIndex::open(0)),
+                    representation.slot(PartialIndex::open(1)),
+                ],
+            );
+            let expression = TensorExpression::from_atom_interface_descriptor(
+                py,
+                descriptor.atom,
+                descriptor.interface,
+                Some(name),
+                Vec::new(),
+            )?;
+            let tensor = Py::new(
+                py,
+                Spensor::dense(
+                    expression.bind(py).as_any().extract()?,
+                    crate::AtomsOrFloats::Floats(vec![1., 2., 3., 4.]),
+                )?,
+            )?;
+            let mut library = SpensorLibrary::new();
+            library.register(tensor.bind(py).borrow())?;
+
+            let network = SpensoNet::from_expression(expression.bind(py).as_any(), Some(&library))?;
+            assert!(network.network.store.tensors.is_empty());
+            let mut network = Py::new(py, network)?
+                .bind(py)
+                .call1(("i", "i"))?
+                .extract::<SpensoNet>()?;
+            assert!(network.network.graph.dangling_indices().is_empty());
+            assert!(network.network.state.is_scalar());
+
+            network.execute(Some(&library), None, None, ExecutionMode::All)?;
+            let result = SymComplex::<f64>::try_from(&network.result_scalar()?.expr).unwrap();
+            assert_eq!(result.re, 5.);
+            assert_eq!(result.im, 0.);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn lazy_library_indices_follow_cross_node_alignment() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+            let (matrix_descriptor, matrix_name) = tensor_descriptor(
+                "lazy_library_matrix",
+                [
+                    representation.slot(PartialIndex::open(0)),
+                    representation.slot(PartialIndex::open(1)),
+                ],
+            );
+            let (vector_descriptor, vector_name) = tensor_descriptor(
+                "lazy_library_vector",
+                [representation.slot(PartialIndex::open(0))],
+            );
+            let matrix = TensorExpression::from_atom_interface_descriptor(
+                py,
+                matrix_descriptor.atom,
+                matrix_descriptor.interface,
+                Some(matrix_name),
+                Vec::new(),
+            )?;
+            let vector = TensorExpression::from_atom_interface_descriptor(
+                py,
+                vector_descriptor.atom,
+                vector_descriptor.interface,
+                Some(vector_name),
+                Vec::new(),
+            )?;
+            let matrix_data = Py::new(
+                py,
+                Spensor::dense(
+                    matrix.bind(py).as_any().extract()?,
+                    crate::AtomsOrFloats::Floats(vec![1., 2., 3., 4.]),
+                )?,
+            )?;
+            let vector_data = Py::new(
+                py,
+                Spensor::dense(
+                    vector.bind(py).as_any().extract()?,
+                    crate::AtomsOrFloats::Floats(vec![10., 100.]),
+                )?,
+            )?;
+            let mut library = SpensorLibrary::new();
+            library.register(matrix_data.bind(py).borrow())?;
+            library.register(vector_data.bind(py).borrow())?;
+
+            let matrix = SpensoNet::from_expression(matrix.bind(py).as_any(), Some(&library))?;
+            let vector = SpensoNet::from_expression(vector.bind(py).as_any(), Some(&library))?;
+            assert!(matrix.network.store.tensors.is_empty());
+            assert!(vector.network.store.tensors.is_empty());
+            let mut product = matrix.contract(ConvertibleToSpensoNet(vector), 1, 0)?;
+
+            product.execute(Some(&library), None, None, ExecutionMode::All)?;
+            let result = Py::new(py, product.result_tensor(Some(&library))?)?;
+            assert_eq!(result.bind(py).get_item(0)?.extract::<f64>()?, 210.);
+            assert_eq!(result.bind(py).get_item(1)?.extract::<f64>()?, 430.);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn repeated_indices_preserve_remaining_port_order() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+            let (descriptor, name) = tensor_descriptor(
+                "network_partial_repeated_index_trace",
+                [
+                    representation.slot(PartialIndex::open(0)),
+                    representation.slot(PartialIndex::open(1)),
+                    representation.slot(PartialIndex::open(2)),
+                ],
+            );
+            let expression = TensorExpression::from_atom_interface_descriptor(
+                py,
+                descriptor.atom,
+                descriptor.interface,
+                Some(name),
+                Vec::new(),
+            )?;
+            let tensor = Spensor::dense(
+                expression.bind(py).as_any().extract()?,
+                crate::AtomsOrFloats::Floats((1..=8).map(f64::from).collect()),
+            )?;
+            let mut network = Py::new(py, tensor)?
+                .bind(py)
+                .call1(("i", "i", "j"))?
+                .extract::<SpensoNet>()?;
+
+            assert_eq!(network.structure.rank(), 1);
+            assert_eq!(network.materialized.rank(), 1);
+            assert_eq!(network.network.graph.dangling_indices().len(), 1);
+
+            network.execute(None, None, None, ExecutionMode::All)?;
+            let result = Py::new(py, network.result_tensor(None)?)?;
+            assert_eq!(result.bind(py).get_item(0)?.extract::<f64>()?, 8.0);
+            assert_eq!(result.bind(py).get_item(1)?.extract::<f64>()?, 10.0);
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn additive_operations_materialize_permuted_library_occurrences_in_canonical_slot_order() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+            let (descriptor, name) = tensor_descriptor(
+                "network_canonical_interface_addition",
+                [
+                    representation.slot(PartialIndex::open(0)),
+                    representation.slot(PartialIndex::open(1)),
+                ],
+            );
+            let expression = TensorExpression::from_atom_interface_descriptor(
+                py,
+                descriptor.atom,
+                descriptor.interface,
+                Some(name),
+                Vec::new(),
+            )?;
+            let tensor = Py::new(
+                py,
+                Spensor::dense(
+                    expression.bind(py).as_any().extract()?,
+                    crate::AtomsOrFloats::Floats(vec![1., 2., 3., 4.]),
+                )?,
+            )?;
+            let mut library = SpensorLibrary::new();
+            library.register(tensor.bind(py).borrow())?;
+
+            let left = expression
+                .bind(py)
+                .call1(("i", "j"))?
+                .extract::<Py<TensorExpression>>()?;
+            let right = expression
+                .bind(py)
+                .call1(("j", "i"))?
+                .extract::<Py<TensorExpression>>()?;
+            let expected_interface = left.bind(py).borrow().interface.logical_slots();
+
+            let sum = left
+                .bind(py)
+                .call_method1("__add__", (right.clone_ref(py),))?;
+            let difference = left
+                .bind(py)
+                .call_method1("__sub__", (right.clone_ref(py),))?;
+            for value in [&sum, &difference] {
+                let expression = value.extract::<PyRef<'_, TensorExpression>>()?;
+                assert_eq!(expression.interface.logical_slots(), expected_interface);
+            }
+
+            let assert_result = |mut network: SpensoNet, expected: &[f64]| -> PyResult<()> {
+                assert_eq!(
+                    network.structure.interface.logical_slots(),
+                    expected_interface
+                );
+                network.execute(Some(&library), None, None, ExecutionMode::All)?;
+                let result = Py::new(py, network.result_tensor(Some(&library))?)?;
+                let values = (0..4)
+                    .map(|index| result.bind(py).get_item(index)?.extract::<f64>())
+                    .collect::<PyResult<Vec<_>>>()?;
+                assert_eq!(values, expected);
+                Ok(())
+            };
+
+            assert_result(
+                SpensoNet::from_expression(sum.as_any(), Some(&library))?,
+                &[2., 5., 5., 8.],
+            )?;
+            assert_result(
+                SpensoNet::from_expression(difference.as_any(), Some(&library))?,
+                &[0., -1., 1., 0.],
+            )?;
+            assert_result(
+                SpensoNet::from_expression(left.bind(py).as_any(), Some(&library))?.add_network(
+                    SpensoNet::from_expression(right.bind(py).as_any(), Some(&library))?,
+                    false,
+                )?,
+                &[2., 5., 5., 8.],
+            )?;
+            assert_result(
+                SpensoNet::from_expression(left.bind(py).as_any(), Some(&library))?.add_network(
+                    SpensoNet::from_expression(right.bind(py).as_any(), Some(&library))?,
+                    true,
+                )?,
+                &[0., -1., 1., 0.],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn replace_honors_pattern_restrictions() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let function = symbol!("network_conditional_replace_f");
+            let wildcard = symbol!("network_conditional_replace_x_");
+            let retained = function!(function, Atom::num(1));
+            let replaced = function!(function, Atom::num(2));
+            let expression = PythonExpression {
+                expr: &retained + replaced,
+            }
+            .into_pyobject(py)?;
+            let network = Py::new(py, SpensoNet::from_expression(expression.as_any(), None)?)?;
+            let pattern = PythonExpression {
+                expr: function!(function, Atom::var(wildcard)),
+            }
+            .into_pyobject(py)?;
+            let wildcard = PythonExpression {
+                expr: Atom::var(wildcard),
+            }
+            .into_pyobject(py)?;
+            let condition = wildcard.call_method1("req_gt", (1,))?;
+
+            let replaced = network
+                .bind(py)
+                .call_method1("replace", (pattern.as_any(), 0, condition.as_any()))?;
+            let mut replaced = replaced.extract::<SpensoNet>()?;
+            replaced.execute(None, None, None, ExecutionMode::All)?;
+
+            assert_eq!(replaced.result_scalar()?.expr, retained);
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
@@ -1711,6 +2235,97 @@ mod tests {
         assert_eq!(
             product.structure.interface.logical_slots()[0].aind,
             PartialIndex::Explicit(AbstractIndex::Normal(41))
+        );
+    }
+
+    #[test]
+    fn sequential_explicit_relabels_do_not_alias_storage_ports() {
+        initialize();
+        let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+        let first = AbstractIndex::Normal(1);
+        let second = AbstractIndex::Normal(2);
+        let (descriptor, name) = tensor_descriptor(
+            "network_sequential_explicit_relabels",
+            [
+                representation.slot(PartialIndex::Explicit(first)),
+                representation.slot(PartialIndex::Explicit(second)),
+            ],
+        );
+
+        let network = SpensoNet::from_tensor(data_tensor(descriptor, name)).unwrap();
+        let mut dangling = network.network.graph.dangling_indices();
+        dangling.sort();
+
+        assert_eq!(
+            dangling
+                .into_iter()
+                .map(|slot| slot.aind())
+                .collect::<Vec<_>>(),
+            [first, second]
+        );
+    }
+
+    #[test]
+    fn explicit_port_swaps_use_collision_free_relabeling() {
+        initialize();
+        let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+        let first = AbstractIndex::Normal(61);
+        let second = AbstractIndex::Normal(62);
+        let (descriptor, name) = tensor_descriptor(
+            "network_explicit_port_swap",
+            [
+                representation.slot(PartialIndex::Explicit(first)),
+                representation.slot(PartialIndex::Explicit(second)),
+            ],
+        );
+        let network = SpensoNet::from_tensor(data_tensor(descriptor, name)).unwrap();
+
+        let swapped = network
+            .set_port_indices(&HashMap::from([(0, second), (1, first)]))
+            .unwrap();
+        assert_eq!(
+            swapped
+                .structure
+                .interface
+                .logical_slots()
+                .into_iter()
+                .map(|slot| slot.aind)
+                .collect::<Vec<_>>(),
+            [
+                PartialIndex::Explicit(second),
+                PartialIndex::Explicit(first),
+            ]
+        );
+        assert_eq!(swapped.network.graph.dangling_indices().len(), 2);
+        assert!(swapped.descriptor.is_some());
+    }
+
+    #[test]
+    fn open_outer_product_does_not_alias_explicit_dummy_symbol() {
+        initialize();
+        let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+        let explicit = AbstractIndex::Symbol(symbol!("d_0").into());
+        let (left, left_name) = tensor_descriptor(
+            "network_open_outer_left",
+            [representation.slot(PartialIndex::open(0))],
+        );
+        let (right, right_name) = tensor_descriptor(
+            "network_explicit_dummy_outer_right",
+            [representation.slot(PartialIndex::Explicit(explicit))],
+        );
+        let left = SpensoNet::from_tensor(data_tensor(left, left_name)).unwrap();
+        let right = SpensoNet::from_tensor(data_tensor(right, right_name)).unwrap();
+
+        let product = left.outer(ConvertibleToSpensoNet(right)).unwrap();
+        let dangling = product.network.graph.dangling_indices();
+
+        assert_eq!(product.structure.rank(), 2);
+        assert_eq!(dangling.len(), 2);
+        assert!(dangling.iter().any(|slot| slot.aind() == explicit));
+        assert!(
+            dangling
+                .iter()
+                .any(|slot| matches!(slot.aind(), AbstractIndex::Open { .. }))
         );
     }
 

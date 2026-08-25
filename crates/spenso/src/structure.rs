@@ -38,13 +38,18 @@ use std::collections::HashSet;
 
 pub mod abstract_index;
 pub mod concrete_index;
+pub mod data_layout;
+pub use data_layout::{TensorDataLayout, TensorDataLayoutError};
 pub mod dimension;
 pub mod indexless;
 pub use indexless::{IndexLess, IndexlessNamedStructure};
 pub mod named;
 pub use named::NamedStructure;
 pub mod permuted;
-pub use permuted::PermutedStructure;
+pub use permuted::{
+    ApplyPendingIndexPermutation, CanonicalLayout, Canonicalized, IndexOrder,
+    PendingIndexPermutation, Reindexed, RepresentationOrder, TensorIdentity,
+};
 pub mod ordered;
 pub mod partial;
 pub mod representation;
@@ -109,27 +114,27 @@ pub trait CastStructure<O: HasStructure<Structure: From<Self::Structure>>>: HasS
 }
 
 #[cfg(feature = "shadowing")]
-impl<T: HasName> ToSymbolic for PermutedStructure<T>
+impl<T> ToSymbolic for Canonicalized<T>
 where
-    T: TensorStructure,
-    T::Name: IntoSymbol,
+    T: TensorStructure + ToSymbolic,
     <T::Slot as IsAbstractSlot>::Aind: ParseableAind,
-    T::Args: IntoArgs,
 {
     fn concrete_atom(&self, id: FlatIndex) -> ExpandedCoefficent<()> {
-        ExpandedCoefficent {
-            name: self.structure.name().map(|n| n.ref_into_symbol()),
-            index: self.structure.co_expanded_index(id).unwrap(),
-            args: None,
-        }
+        let mut coefficient = self.canonical().concrete_atom(id);
+        let canonical_index: Vec<DualConciousIndex> = coefficient.index.into();
+        coefficient.index = self.layout().canonical_to_logical(&canonical_index).into();
+        coefficient
     }
 
     fn flat_atom(&self, id: FlatIndex) -> FlatCoefficent<()> {
-        FlatCoefficent {
-            name: self.structure.name().map(|n| n.ref_into_symbol()),
-            index: id,
-            args: None,
-        }
+        let layout = TensorDataLayout::from_canonicalized(self)
+            .expect("flat symbolic labels require concrete tensor dimensions");
+        let storage_flat: usize = id.into();
+        let index = layout
+            .storage_flat_to_logical_flat(storage_flat)
+            .expect("flat symbolic label must be within tensor storage")
+            .into();
+        self.canonical().flat_atom(index)
     }
 
     fn to_dense_labeled<R>(
@@ -141,7 +146,7 @@ where
         R: TensorCoefficient,
     {
         let mut data = vec![];
-        for index in 0..self.structure.size()? {
+        for index in 0..self.canonical().size()? {
             data.push(index_to_atom(&self, index.into()).to_atom().unwrap());
         }
 
@@ -160,7 +165,7 @@ where
         R: TensorCoefficient,
     {
         let mut data = vec![];
-        for index in 0..self.structure.size()? {
+        for index in 0..self.canonical().size()? {
             let re = index_to_atom(&self, index.into()).to_atom_re().unwrap();
             let im = index_to_atom(&self, index.into()).to_atom_im().unwrap();
             let i = Atom::i();
@@ -179,11 +184,8 @@ where
         args: &[Atom],
         permutation: Option<Permutation>,
     ) -> Atom {
-        let mut slots = self
-            .structure
-            .external_structure_iter()
-            .map(|slot| slot.to_atom())
-            .collect::<Vec<_>>();
+        let canonical_slots = self.canonical().symbolic_external_args();
+        let mut slots = self.layout().canonical_to_logical(&canonical_slots);
         if let Some(perm) = permutation {
             perm.apply_slice_in_place(&mut slots);
         }
@@ -260,10 +262,7 @@ where
     }
 
     fn to_symbolic_with(&self, name: Symbol, args: &[Atom], perm: Option<Permutation>) -> Atom {
-        let mut slots = self
-            .external_structure_iter()
-            .map(|slot| slot.to_atom())
-            .collect::<Vec<_>>();
+        let mut slots = self.symbolic_external_args();
         if let Some(perm) = perm {
             perm.apply_slice_in_place(&mut slots);
         }
@@ -360,10 +359,10 @@ pub trait TensorStructure {
     // type R: Rep;
     //
 
-    fn reindex(
+    fn reindex_storage(
         self,
         indices: &[<Self::Slot as IsAbstractSlot>::Aind],
-    ) -> Result<PermutedStructure<Self::Indexed>, StructureError>;
+    ) -> Result<Reindexed<Self::Indexed>, StructureError>;
     fn dual(self) -> Self;
 
     fn string_rep(&self) -> String {
@@ -380,6 +379,18 @@ pub trait TensorStructure {
     ) -> impl Iterator<Item = Representation<<Self::Slot as IsAbstractSlot>::R>>;
 
     fn external_indices_iter(&self) -> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
+
+    /// Returns the symbolic arguments for external tensor ports in storage order.
+    #[cfg(feature = "shadowing")]
+    fn symbolic_external_args(&self) -> Vec<Atom>
+    where
+        <Self::Slot as IsAbstractSlot>::Aind: ParseableAind,
+    {
+        self.external_structure_iter()
+            .map(|slot| slot.to_atom())
+            .collect()
+    }
+
     fn get_aind(&self, i: impl Into<SlotIndex>) -> Option<<Self::Slot as IsAbstractSlot>::Aind>;
     fn get_rep(
         &self,
@@ -799,6 +810,8 @@ pub enum StructureError {
     EmptyStructure(SlotError),
     #[error("wrong number of arguments {0}, expected {1}")]
     WrongNumberOfArguments(usize, usize),
+    #[error("invalid pending index permutation: {0}")]
+    InvalidIndexPermutation(String),
     // #[error("Non traced out indices before merger {0}")]
     // NonTracedOut(#[from] DuplicateItemError),
     #[error("Parsing error: expected function view found {0}")]
@@ -834,26 +847,6 @@ pub trait HasName {
             args: self.args(),
         }
     }
-    #[cfg(feature = "shadowing")]
-    fn expanded_coef_perm(
-        &self,
-        id: FlatIndex,
-        permutation: &Permutation,
-    ) -> ExpandedCoefficent<Self::Args>
-    where
-        Self: TensorStructure,
-        Self::Name: IntoSymbol,
-        Self::Args: IntoArgs,
-    {
-        let mut index = self.co_expanded_index(id).unwrap();
-        index.permute(permutation);
-        ExpandedCoefficent {
-            name: self.name().map(|n| n.ref_into_symbol()),
-            index,
-            args: self.args(),
-        }
-    }
-
     #[cfg(feature = "shadowing")]
     fn flat_coef(&self, id: FlatIndex) -> FlatCoefficent<Self::Args>
     where
@@ -891,6 +884,14 @@ impl<S: TensorStructure + ScalarStructure> ScalarTensor for TensorShell<S> {
     }
 }
 
+impl<S> ApplyPendingIndexPermutation for TensorShell<S> {
+    type Output = Self;
+
+    fn apply_pending_index_permutation(self, _pending: &PendingIndexPermutation) -> Self::Output {
+        self
+    }
+}
+
 impl<T> TensorStructure for TensorShell<T>
 where
     T: TensorStructure,
@@ -899,18 +900,13 @@ where
     type Indexed = TensorShell<T::Indexed>;
     type Slot = T::Slot;
 
-    fn reindex(
+    fn reindex_storage(
         self,
         indices: &[<Self::Slot as IsAbstractSlot>::Aind],
-    ) -> Result<PermutedStructure<Self::Indexed>, StructureError> {
-        let res = self.structure.reindex(indices)?;
-        Ok(PermutedStructure {
-            structure: TensorShell {
-                structure: res.structure,
-            },
-            index_permutation: res.index_permutation,
-            rep_permutation: res.rep_permutation,
-        })
+    ) -> Result<Reindexed<Self::Indexed>, StructureError> {
+        self.structure
+            .reindex_storage(indices)
+            .map(|reindexed| reindexed.map_target(|structure| TensorShell { structure }))
     }
 
     fn dual(self) -> Self {

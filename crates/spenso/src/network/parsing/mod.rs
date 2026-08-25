@@ -13,7 +13,7 @@ use crate::structure::abstract_index::AbstractIndex;
 use crate::structure::representation::Representation;
 use crate::structure::slot::{DummyAind, ParseableAind, Slot};
 use crate::structure::{
-    NamedStructure, PermutedStructure, ScalarStructure, StructureError, TensorShell,
+    Canonicalized, NamedStructure, ScalarStructure, StructureError, TensorShell,
 };
 use crate::tensors::parametric::ParamTensor;
 
@@ -31,7 +31,9 @@ use crate::structure::representation::LibraryRep;
 pub type ShadowedStructure<Aind> = NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>;
 
 pub(crate) mod structure_inference;
-pub use structure_inference::{AtomStructureExt, StructureFromAtom, StructureInferenceMode};
+pub use structure_inference::{
+    AtomStructureExt, ChainNestingError, StructureFromAtom, StructureInferenceMode,
+};
 mod materialization;
 mod tensor_from_expression;
 pub use tensor_from_expression::{TensorFromExpression, TensorLibraryFor};
@@ -354,6 +356,7 @@ where
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
     {
+        value.validate_chain_like_nesting()?;
         let state = ParseState::<Aind>::default();
         Self::try_from_view_impl(value, state, library, function_library, settings)
     }
@@ -458,7 +461,7 @@ where
             }
             Err(StructureError::EmptyStructure(_)) => {
                 profile::bump(Counter::ParseStructureErr, 1);
-                PermutedStructure::identity(S::scalar_structure())
+                Canonicalized::identity(S::scalar_structure())
             }
             Err(err) => {
                 profile::bump(Counter::ParseStructureErr, 1);
@@ -598,7 +601,7 @@ where
         T: TensorFromExpression<S, Sc, K, Symbol, Aind, Lib, FunLib>,
         Lib: TensorLibraryFor<S, T, Key = K>,
         FunLib: FunctionLibrary<T, Sc, Key = Symbol>,
-        // <PermutedStructure<S>>::Error: Debug,
+        // <Canonicalized<S>>::Error: Debug,
     {
         let _span = profile::span(Timer::ParseFun);
         let symbol = value.get_symbol();
@@ -770,23 +773,22 @@ where
         };
 
         match library.key_for_structure(&structure) {
-            Ok(key) => Ok(Self::library_tensor(
-                &structure.structure,
-                PermutedStructure {
-                    structure: key,
-                    rep_permutation: structure.rep_permutation,
-                    index_permutation: structure.index_permutation,
-                },
-            )),
-            Err(_) if structure.structure.is_scalar() => {
+            Ok(key) => {
+                let tensor_structure = structure.canonical().clone();
+                Ok(Self::library_tensor(
+                    &tensor_structure,
+                    structure.map_canonical(|_| key),
+                ))
+            }
+            Err(_) if structure.canonical().is_scalar() => {
                 Ok(Self::from_scalar(value.as_view().try_into()?))
             }
-            Err(_) => Ok(Self::from_tensor(
-                structure
-                    .structure
-                    .to_shell()
-                    .concretize(Some(structure.index_permutation.inverse())),
-            )),
+            Err(_) => {
+                let (canonical, layout) = structure.into_parts();
+                Ok(Self::from_tensor(
+                    canonical.to_shell().concretize_logical(&layout),
+                ))
+            }
         }
     }
 

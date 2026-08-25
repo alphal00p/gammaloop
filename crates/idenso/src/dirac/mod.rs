@@ -8,6 +8,7 @@ use spenso::{
     },
     shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings},
     structure::{
+        Canonicalized,
         dimension::Dimension,
         representation::{LibraryRep, Minkowski, RepName},
         slot::{AbsInd, DummyAind, ParseableAind},
@@ -353,20 +354,19 @@ impl GammaLibrary {
 fn spinor_matrix_structure<Aind: AbsInd>(
     symbol: Symbol,
     dim: impl Into<Dimension>,
-) -> ExplicitKey<Aind> {
+) -> Canonicalized<ExplicitKey<Aind>> {
     let dim = dim.into();
     ExplicitKey::from_iter(
         [Bispinor {}.new_rep(dim), Bispinor {}.new_rep(dim)],
         symbol,
         None,
     )
-    .structure
 }
 
 fn gamma_matrix_structure<Aind: AbsInd>(
     symbol: Symbol,
     dim: impl Into<Dimension>,
-) -> ExplicitKey<Aind> {
+) -> Canonicalized<ExplicitKey<Aind>> {
     ExplicitKey::from_iter(
         [
             LibraryRep::from(Minkowski {}).new_rep(dim),
@@ -376,13 +376,15 @@ fn gamma_matrix_structure<Aind: AbsInd>(
         symbol,
         None,
     )
-    .structure
 }
 
 macro_rules! gamma_matrix_structure_methods {
     ($($structure:ident, $field:ident;)*) => {
         $(
-            pub fn $structure<Aind: AbsInd>(&self, dim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+            pub fn $structure<Aind: AbsInd>(
+                &self,
+                dim: impl Into<Dimension>,
+            ) -> Canonicalized<ExplicitKey<Aind>> {
                 gamma_matrix_structure(self.$field, dim)
             }
         )*
@@ -396,19 +398,31 @@ impl GammaLibrary {
         gamma_adj_strct, gammaadj;
     }
 
-    pub fn gamma0_strct<Aind: AbsInd>(&self, dim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+    pub fn gamma0_strct<Aind: AbsInd>(
+        &self,
+        dim: impl Into<Dimension>,
+    ) -> Canonicalized<ExplicitKey<Aind>> {
         spinor_matrix_structure(self.gamma0, dim)
     }
 
-    pub fn projm_strct<Aind: AbsInd>(&self, dim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+    pub fn projm_strct<Aind: AbsInd>(
+        &self,
+        dim: impl Into<Dimension>,
+    ) -> Canonicalized<ExplicitKey<Aind>> {
         spinor_matrix_structure(self.projm, dim)
     }
 
-    pub fn projp_strct<Aind: AbsInd>(&self, dim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+    pub fn projp_strct<Aind: AbsInd>(
+        &self,
+        dim: impl Into<Dimension>,
+    ) -> Canonicalized<ExplicitKey<Aind>> {
         spinor_matrix_structure(self.projp, dim)
     }
 
-    pub fn gamma5_strct<Aind: AbsInd>(&self, dim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+    pub fn gamma5_strct<Aind: AbsInd>(
+        &self,
+        dim: impl Into<Dimension>,
+    ) -> Canonicalized<ExplicitKey<Aind>> {
         spinor_matrix_structure(self.gamma5, dim)
     }
 }

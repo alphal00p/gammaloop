@@ -322,6 +322,7 @@ fn color_simplification_does_not_canonicalize_lorentz_tensors() {
     assert!(
         odd_lorentz
             .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
             .is_zero()
     );
 }
@@ -337,6 +338,7 @@ fn two_f_even_automorphism_survives_canonicalization() {
     assert!(
         !contraction
             .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
             .is_zero()
     );
 }

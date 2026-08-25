@@ -2,7 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use spenso::{
     network::{
-        parsing::{AtomStructureExt, StrictTensorFilter, StructureInferenceMode},
+        parsing::{
+            AtomStructureExt, ChainNestingError, StrictTensorFilter, StructureInferenceMode,
+        },
         tags::SPENSO_TAG,
     },
     shadowing,
@@ -33,7 +35,7 @@ impl StructuredAtom {
     }
 
     pub fn rank(&self) -> usize {
-        self.interface.structure.order()
+        self.interface.canonical().order()
     }
 
     pub fn is_scalar(&self) -> bool {
@@ -46,7 +48,7 @@ impl StructuredAtom {
     pub(crate) fn presentation_atom(&self) -> Atom {
         let slots = self.interface.logical_slots();
         let mut state = PortRewriteState::new(slots.len());
-        reorder_presentation_ports(self.atom.as_view(), &slots, &mut state)
+        reorder_presentation_ports(self.atom.as_view(), &slots, &mut state, false)
     }
 }
 
@@ -85,6 +87,12 @@ pub enum TensorCompositionError {
         index: AbstractIndex,
         occurrences: usize,
     },
+    #[error(transparent)]
+    InvalidChainNesting(#[from] ChainNestingError),
+    #[error(
+        "composition would nest an existing chain or trace; only the primary channel of a root chain can be extended"
+    )]
+    NestedChainLike,
 }
 
 fn representation(slot: &PartialSlot) -> Representation<LibraryRep> {
@@ -124,10 +132,6 @@ pub fn compatible_pairs(left: &PartialStructure, right: &PartialStructure) -> Ve
         .collect()
 }
 
-fn is_chain(atom: &Atom) -> bool {
-    matches!(atom.as_view(), AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.chain)
-}
-
 fn is_structured_scalar(value: AtomView<'_>) -> bool {
     if matches!(value, AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.dot) {
         return true;
@@ -137,14 +141,41 @@ fn is_structured_scalar(value: AtomView<'_>) -> bool {
         .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>(
             StructureInferenceMode::Fast,
         )
-        .is_ok_and(|structure| structure.structure.is_scalar())
+        .is_ok_and(|structure| structure.canonical().is_scalar())
 }
 
-fn has_transparent_chain_channel(value: AtomView<'_>) -> bool {
+fn port_matches(value: AtomView<'_>, expected: PartialSlot) -> bool {
+    match expected.aind {
+        PartialIndex::Explicit(index) => Slot::<LibraryRep, AbstractIndex>::try_from(value)
+            .is_ok_and(|slot| slot.rep() == expected.rep() && slot.aind() == index),
+        PartialIndex::Open(_) => Representation::<LibraryRep>::try_from(value)
+            .is_ok_and(|representation| representation == expected.rep()),
+    }
+}
+
+fn chain_endpoints_match(value: AtomView<'_>, input: PartialSlot, output: PartialSlot) -> bool {
+    let AtomView::Fun(function) = value else {
+        return false;
+    };
+    if function.get_symbol() != SPENSO_TAG.chain {
+        return false;
+    }
+    let mut arguments = function.iter();
+    matches!(arguments.next(), Some(value) if port_matches(value, input))
+        && matches!(arguments.next(), Some(value) if port_matches(value, output))
+}
+
+fn has_transparent_chain_channel(
+    value: AtomView<'_>,
+    input: PartialSlot,
+    output: PartialSlot,
+) -> bool {
     match value {
-        AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.chain => true,
+        AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.chain => {
+            chain_endpoints_match(value, input, output)
+        }
         AtomView::Fun(function) if function.get_symbol().has_tag(&SPENSO_TAG.broadcast) => {
-            matches!(function.iter().collect::<Vec<_>>().as_slice(), [argument] if has_transparent_chain_channel(*argument))
+            matches!(function.iter().collect::<Vec<_>>().as_slice(), [argument] if has_transparent_chain_channel(*argument, input, output))
         }
         AtomView::Fun(function)
             if function.get_symbol() == *shadowing::SYM
@@ -155,10 +186,10 @@ fn has_transparent_chain_channel(value: AtomView<'_>) -> bool {
                 .iter()
                 .filter(|argument| {
                     argument.is_tensorial(StrictTensorFilter::Tagged)
-                        || has_transparent_chain_channel(*argument)
+                        || has_transparent_chain_channel(*argument, input, output)
                 })
                 .collect::<Vec<_>>();
-            matches!(tensor_arguments.as_slice(), [argument] if has_transparent_chain_channel(*argument))
+            matches!(tensor_arguments.as_slice(), [argument] if has_transparent_chain_channel(*argument, input, output))
         }
         AtomView::Mul(product) => {
             let tensor_factors = product
@@ -175,25 +206,58 @@ fn has_transparent_chain_channel(value: AtomView<'_>) -> bool {
                         && !is_structured_scalar(*factor)
                 })
                 .collect::<Vec<_>>();
-            matches!(tensor_factors.as_slice(), [factor] if has_transparent_chain_channel(*factor))
+            matches!(tensor_factors.as_slice(), [factor] if has_transparent_chain_channel(*factor, input, output))
         }
         AtomView::Add(sum) => {
             let terms = sum.iter().collect::<Vec<_>>();
-            !terms.is_empty() && terms.into_iter().all(has_transparent_chain_channel)
+            !terms.is_empty()
+                && terms
+                    .into_iter()
+                    .all(|term| has_transparent_chain_channel(term, input, output))
         }
         _ => false,
     }
 }
 
+fn contains_chain_like(value: AtomView<'_>) -> bool {
+    match value {
+        AtomView::Add(sum) => sum.iter().any(contains_chain_like),
+        AtomView::Mul(product) => product.iter().any(contains_chain_like),
+        AtomView::Pow(power) => {
+            let (base, exponent) = power.get_base_exp();
+            contains_chain_like(base) || contains_chain_like(exponent)
+        }
+        AtomView::Fun(function) => {
+            function.get_symbol() == SPENSO_TAG.chain
+                || function.get_symbol() == SPENSO_TAG.trace
+                || function.iter().any(contains_chain_like)
+        }
+        _ => false,
+    }
+}
+
+fn root_chain_channel_is_live(value: &StructuredAtom, channel: MatrixChannel) -> bool {
+    if channel
+        != (MatrixChannel {
+            input: 0,
+            output: 1,
+        })
+    {
+        return false;
+    }
+    let slots = value.interface.logical_slots();
+    slots.len() >= 2 && chain_endpoints_match(value.atom.as_view(), slots[0], slots[1])
+}
+
 pub fn matrix_channel(value: &StructuredAtom) -> Option<MatrixChannel> {
-    if has_transparent_chain_channel(value.atom.as_view()) && value.rank() >= 2 {
+    let slots = value.interface.logical_slots();
+    if slots.len() >= 2 && has_transparent_chain_channel(value.atom.as_view(), slots[0], slots[1]) {
         return Some(MatrixChannel {
             input: 0,
             output: 1,
         });
     }
 
-    let slots = value.interface.logical_slots();
     let pairs = (0..slots.len())
         .flat_map(|left| ((left + 1)..slots.len()).map(move |right| (left, right)))
         .filter(|&(left, right)| representations_match(&slots[left], &slots[right]))
@@ -432,6 +496,7 @@ fn reorder_presentation_ports(
     value: AtomView<'_>,
     slots: &[PartialSlot],
     state: &mut PortRewriteState,
+    preserve_additive_order: bool,
 ) -> Atom {
     match value {
         AtomView::Add(add) => {
@@ -439,7 +504,7 @@ fn reorder_presentation_ports(
             let mut common = None::<PortRewriteState>;
             let sum = add.iter().fold(Atom::Zero, |sum, term| {
                 let mut local = initial.clone();
-                let term = reorder_presentation_ports(term, slots, &mut local);
+                let term = reorder_presentation_ports(term, slots, &mut local, true);
                 if let Some(common) = &mut common {
                     for (common, local) in common.claimed.iter_mut().zip(&local.claimed) {
                         *common &= local;
@@ -463,14 +528,15 @@ fn reorder_presentation_ports(
                 );
             product
                 * if tensorial {
-                    reorder_presentation_ports(factor, slots, state)
+                    reorder_presentation_ports(factor, slots, state, preserve_additive_order)
                 } else {
                     factor.to_owned()
                 }
         }),
         AtomView::Pow(pow) => {
             let (base, exponent) = pow.get_base_exp();
-            reorder_presentation_ports(base, slots, state).pow(exponent.to_owned())
+            reorder_presentation_ports(base, slots, state, preserve_additive_order)
+                .pow(exponent.to_owned())
         }
         // A compact dot has no public ports of its own.
         AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.dot => value.to_owned(),
@@ -489,10 +555,16 @@ fn reorder_presentation_ports(
                     Some((argument_position, interface_position, argument.clone()))
                 })
                 .collect::<Vec<_>>();
-            let mut ordered = matched.clone();
-            ordered.sort_by_key(|(_, interface_position, _)| *interface_position);
-            for ((argument_position, _, _), (_, _, argument)) in matched.into_iter().zip(ordered) {
-                arguments[argument_position] = argument;
+            // Within a sum, each term's explicit argument order records its map to the
+            // shared interface; normalizing it would turn A(i,j) + A(j,i) into A(i,j) + A(i,j).
+            if !preserve_additive_order {
+                let mut ordered = matched.clone();
+                ordered.sort_by_key(|(_, interface_position, _)| *interface_position);
+                for ((argument_position, _, _), (_, _, argument)) in
+                    matched.into_iter().zip(ordered)
+                {
+                    arguments[argument_position] = argument;
+                }
             }
             FunctionBuilder::new(fun.get_symbol())
                 .add_args(arguments)
@@ -505,7 +577,12 @@ fn reorder_presentation_ports(
                 rebuilt = rebuilt.add_arg(representation);
             }
             for argument in arguments {
-                rebuilt = rebuilt.add_arg(reorder_presentation_ports(argument, slots, state));
+                rebuilt = rebuilt.add_arg(reorder_presentation_ports(
+                    argument,
+                    slots,
+                    state,
+                    preserve_additive_order,
+                ));
             }
             rebuilt.finish()
         }
@@ -530,7 +607,12 @@ fn reorder_presentation_ports(
                                     || nested.get_symbol() == *shadowing::CYCLIC
                         ))
                 {
-                    rebuilt = rebuilt.add_arg(reorder_presentation_ports(argument, slots, state));
+                    rebuilt = rebuilt.add_arg(reorder_presentation_ports(
+                        argument,
+                        slots,
+                        state,
+                        preserve_additive_order,
+                    ));
                 } else {
                     rebuilt = rebuilt.add_arg(argument);
                 }
@@ -780,7 +862,7 @@ pub(crate) fn materialize_interface_ports(
             };
             Ok((position, atom))
         })
-        .collect::<Result<HashMap<_, _>, _>>()?;
+        .collect::<Result<HashMap<_, _>, TensorCompositionError>>()?;
     let atom = rewrite_interface_ports(value, &replacements)?;
     validate_explicit_index_occurrences(&atom)?;
     Ok(atom)
@@ -806,7 +888,7 @@ pub(crate) fn reindex_interface_ports(
                 slot.rep().slot::<AbstractIndex, _>(index).to_atom(),
             ))
         })
-        .collect::<Result<HashMap<_, _>, _>>()?;
+        .collect::<Result<HashMap<_, _>, TensorCompositionError>>()?;
     let atom = rewrite_interface_ports(value, &replacements)?;
     validate_explicit_index_occurrences(&atom)?;
     Ok(StructuredAtom::new(
@@ -824,6 +906,52 @@ fn without_positions(interface: &PartialStructure, positions: &[usize]) -> Parti
             .filter(|(position, _)| !positions.contains(position))
             .map(|(_, slot)| slot),
     )
+}
+
+/// Canonicalize a root chain whose two explicit endpoints have become one contraction.
+pub(crate) fn normalize_closed_root_chain(
+    value: StructuredAtom,
+) -> Result<StructuredAtom, TensorCompositionError> {
+    let AtomView::Fun(function) = value.atom.as_view() else {
+        return Ok(value);
+    };
+    if function.get_symbol() != SPENSO_TAG.chain {
+        return Ok(value);
+    }
+    let arguments = function.iter().collect::<Vec<_>>();
+    let [start, end, factors @ ..] = arguments.as_slice() else {
+        return Ok(value);
+    };
+    let (Ok(start), Ok(end)) = (
+        Slot::<LibraryRep, AbstractIndex>::try_from(*start),
+        Slot::<LibraryRep, AbstractIndex>::try_from(*end),
+    ) else {
+        return Ok(value);
+    };
+    let start_rep = start.rep();
+    let end_rep = end.rep();
+    if start.aind() != end.aind()
+        || !start_rep.matches(&end_rep)
+        || (!start_rep.rep.is_self_dual() && !(start_rep.rep.is_base() && end_rep.rep.is_dual()))
+    {
+        return Ok(value);
+    }
+
+    let channel = MatrixChannel {
+        input: 0,
+        output: 1,
+    };
+    let interface = if root_chain_channel_is_live(&value, channel) {
+        without_positions(&value.interface, &[channel.input, channel.output])
+    } else {
+        value.interface.clone()
+    };
+    let atom = shadowing::trace(
+        start_rep.to_symbolic([]),
+        factors.iter().map(|factor| factor.to_owned()),
+    );
+    let interface = interface_in_atom_order(&atom, &interface)?;
+    Ok(StructuredAtom::new(atom, interface))
 }
 
 fn concatenate_interfaces(
@@ -976,20 +1104,21 @@ pub(crate) fn chain_factors(
     value: &StructuredAtom,
     channel: MatrixChannel,
 ) -> Result<Vec<Atom>, TensorCompositionError> {
-    let AtomView::Fun(fun) = value.atom.as_view() else {
-        return Ok(vec![channel_factor(value, channel)?]);
-    };
-    if fun.get_symbol() != SPENSO_TAG.chain
-        || channel
-            != (MatrixChannel {
-                input: 0,
-                output: 1,
-            })
-    {
-        return Ok(vec![channel_factor(value, channel)?]);
+    value.atom.validate_chain_like_nesting()?;
+    if root_chain_channel_is_live(value, channel) {
+        let AtomView::Fun(function) = value.atom.as_view() else {
+            unreachable!("a live root chain channel requires a chain function")
+        };
+        return Ok(function
+            .iter()
+            .skip(2)
+            .map(|factor| factor.to_owned())
+            .collect());
     }
-
-    Ok(fun.iter().skip(2).map(|factor| factor.to_owned()).collect())
+    if contains_chain_like(value.atom.as_view()) {
+        return Err(TensorCompositionError::NestedChainLike);
+    }
+    Ok(vec![channel_factor(value, channel)?])
 }
 
 pub fn compose(
@@ -1148,7 +1277,7 @@ pub fn compose(
         .chain(chain_factors(right, right_channel)?);
     let atom = SPENSO_TAG.chain(port_atom(left_input), port_atom(right_output), factors);
     validate_explicit_index_occurrences(&atom)?;
-    Ok(StructuredAtom::new(atom, interface))
+    normalize_closed_root_chain(StructuredAtom::new(atom, interface))
 }
 
 pub fn multiply(
@@ -1190,6 +1319,7 @@ pub fn trace(
     value: &StructuredAtom,
     channel: MatrixChannel,
 ) -> Result<StructuredAtom, TensorCompositionError> {
+    value.atom.validate_chain_like_nesting()?;
     if channel.input == channel.output {
         return Err(TensorCompositionError::DegenerateChannel {
             input: channel.input,
@@ -1226,26 +1356,26 @@ pub fn trace(
         return Ok(StructuredAtom::new(Atom::Zero, interface));
     }
 
-    let nested_chain_like = matches!(value.atom.as_view(), AtomView::Fun(fun)
-        if fun.get_symbol() == SPENSO_TAG.chain || fun.get_symbol() == SPENSO_TAG.trace);
-    let factors = if nested_chain_like
-        && !(is_chain(&value.atom)
-            && channel
-                == (MatrixChannel {
-                    input: 0,
-                    output: 1,
-                })) {
-        // A nested chain or trace owns its `in`/`out` markers. Close the
-        // selected spectator channel explicitly so the outer trace never has
-        // to reuse those globally named placeholders in the inner scope.
+    if !root_chain_channel_is_live(value, channel)
+        && matches!(value.atom.as_view(), AtomView::Fun(function)
+            if function.get_symbol() == SPENSO_TAG.chain
+                || function.get_symbol() == SPENSO_TAG.trace)
+    {
+        // The root shorthand already owns the global `in`/`out` placeholders.
+        // Close a spectator pair in place instead of adding a second consumer.
         let index = shared.unwrap_or_else(|| fresh_dummy_index([&value.atom], [&value.interface]));
-        vec![materialize_interface_ports(
+        let atom = materialize_interface_ports(
             value,
             &HashMap::from([(channel.input, index), (channel.output, index)]),
-        )?]
-    } else {
-        chain_factors(value, channel)?
-    };
+        )?;
+        let interface = interface_in_atom_order(&atom, &interface)?;
+        return Ok(StructuredAtom::new(atom, interface));
+    }
+    if contains_chain_like(value.atom.as_view()) && !root_chain_channel_is_live(value, channel) {
+        return Err(TensorCompositionError::NestedChainLike);
+    }
+
+    let factors = chain_factors(value, channel)?;
     let atom = shadowing::trace(input.rep().to_symbolic([]), factors);
     let interface = interface_in_atom_order(&atom, &interface)?;
     Ok(StructuredAtom::new(atom, interface))
@@ -1408,7 +1538,7 @@ mod tests {
     }
 
     #[test]
-    fn transparent_chain_wrappers_preserve_composition_channel() {
+    fn transparent_chain_wrappers_expose_but_cannot_extend_the_chain_channel() {
         let first = tensor("wrapped_chain_first", &[rep(), rep()]);
         let second = tensor("wrapped_chain_second", &[rep(), rep()]);
         let third = tensor("wrapped_chain_third", &[rep(), rep()]);
@@ -1428,21 +1558,48 @@ mod tests {
                 })
             );
 
-            let extended = multiply(&wrapped, &third).unwrap();
-            assert_eq!(extended.rank(), 2);
-            let materialized = materialize_interface_ports(
-                &extended,
-                &HashMap::from([
-                    (0, AbstractIndex::Normal(53)),
-                    (1, AbstractIndex::Normal(59)),
-                ]),
-            )
-            .unwrap();
-            let network = materialized
-                .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
-                .unwrap();
-            assert_eq!(network.graph.dangling_indices().len(), 2);
+            assert!(matches!(
+                multiply(&wrapped, &third),
+                Err(TensorCompositionError::NestedChainLike)
+            ));
+            assert!(matches!(
+                trace(
+                    &wrapped,
+                    MatrixChannel {
+                        input: 0,
+                        output: 1,
+                    },
+                ),
+                Err(TensorCompositionError::NestedChainLike)
+            ));
         }
+    }
+
+    #[test]
+    fn contracted_chain_endpoints_are_not_treated_as_the_public_channel() {
+        let channel = rep();
+        let endpoint = channel
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(61))
+            .to_atom();
+        let spectators = [
+            ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4)),
+            ColorAdjoint {}.new_rep(8).cast(),
+            Bispinor {}.new_rep(4).cast(),
+        ];
+        let factor = spectators.iter().fold(
+            FunctionBuilder::new(SPENSO_TAG.tensor_symbol("closed_chain_spectators"))
+                .add_arg(Atom::var(SPENSO_TAG.chain_in))
+                .add_arg(Atom::var(SPENSO_TAG.chain_out)),
+            |builder, representation| builder.add_arg(representation.to_symbolic([])),
+        );
+        let value = StructuredAtom::new(
+            SPENSO_TAG.chain(&endpoint, &endpoint, [factor.finish()]),
+            PartialStructure::from_logical_slots(spectators.into_iter().enumerate().map(
+                |(position, representation)| representation.slot(PartialIndex::open(position)),
+            )),
+        );
+
+        assert_eq!(matrix_channel(&value), None);
     }
 
     #[test]
@@ -2147,6 +2304,10 @@ mod tests {
         .unwrap();
 
         assert_eq!(traced.rank(), 2);
+        assert!(
+            matches!(traced.atom.as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.chain)
+        );
+        traced.atom.validate_chain_like_nesting().unwrap();
         let materialized = materialize_interface_ports(
             &traced,
             &HashMap::from([
@@ -2160,6 +2321,62 @@ mod tests {
             .unwrap();
 
         assert_eq!(network.graph.dangling_indices().len(), 2);
+    }
+
+    #[test]
+    fn tracing_chain_endpoints_then_spectators_keeps_one_root_trace() {
+        let channel_rep = rep();
+        let spectator = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+        let ports = [
+            channel_rep.slot(PartialIndex::open(0)),
+            channel_rep.slot(PartialIndex::open(1)),
+            spectator.slot(PartialIndex::open(2)),
+        ];
+        let left = partial_tensor(
+            SPENSO_TAG.tensor_symbol("double_trace_left"),
+            &ports,
+            &ports,
+        );
+        let right = partial_tensor(
+            SPENSO_TAG.tensor_symbol("double_trace_right"),
+            &ports,
+            &ports,
+        );
+        let chain = compose(
+            &left,
+            &right,
+            MatrixChannel {
+                input: 0,
+                output: 1,
+            },
+            MatrixChannel {
+                input: 0,
+                output: 1,
+            },
+        )
+        .unwrap();
+
+        let primary = trace(
+            &chain,
+            MatrixChannel {
+                input: 0,
+                output: 1,
+            },
+        )
+        .unwrap();
+        let traced = trace_unique(&primary).unwrap();
+
+        assert!(traced.is_scalar());
+        assert!(
+            matches!(traced.atom.as_view(), AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.trace)
+        );
+        traced.atom.validate_chain_like_nesting().unwrap();
+        let network = traced
+            .atom
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .unwrap();
+        assert!(network.state.is_scalar());
+        assert!(network.graph.dangling_indices().is_empty());
     }
 
     #[test]

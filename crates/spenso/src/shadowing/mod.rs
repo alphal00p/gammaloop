@@ -3,7 +3,7 @@ use std::env;
 use crate::{
     network::{library::function_lib::INBUILTS, library::symbolic::ETS, tags::SPENSO_TAG},
     structure::{
-        HasName, HasStructure, TensorShell, TensorStructure, ToSymbolic,
+        CanonicalLayout, HasName, HasStructure, TensorShell, TensorStructure, ToSymbolic,
         abstract_index::AIND_SYMBOLS,
         concrete_index::FlatIndex,
         slot::{IsAbstractSlot, ParseableAind},
@@ -11,13 +11,12 @@ use crate::{
     symbolica_init::in_symbolica_initializer,
     tensors::{
         data::{DataTensor, DenseTensor},
-        parametric::{MixedTensor, ParamTensor, TensorCoefficient},
+        parametric::{ExpandedCoefficent, MixedTensor, ParamTensor, TensorCoefficient},
         // symbolic::SymbolicTensor,
     },
 };
 use ::symbolica_utils::{IntoArgs, IntoSymbol};
 use eyre::Result;
-use linnet::permutation::Permutation;
 use symbolica::{atom::Atom, evaluate::FunctionMap, initialize};
 
 mod atom_conversion;
@@ -65,11 +64,19 @@ where
     fn expanded_shadow(&self) -> Result<DenseTensor<Atom, Self::Structure>> {
         self.shadow(Self::Structure::expanded_coef)
     }
-    fn expanded_shadow_perm(
+    fn expanded_shadow_logical(
         &self,
-        perm: &Permutation,
+        layout: &CanonicalLayout,
     ) -> Result<DenseTensor<Atom, Self::Structure>> {
-        self.shadow(|a, id| Self::Structure::expanded_coef_perm(a, id, perm))
+        self.shadow(|structure, id| {
+            let index = structure.co_expanded_index(id).unwrap();
+            let index = layout.canonical_to_logical(&index).into();
+            ExpandedCoefficent {
+                name: structure.name().map(|name| name.ref_into_symbol()),
+                index,
+                args: structure.args(),
+            }
+        })
     }
 
     fn flat_shadow(&self) -> Result<DenseTensor<Atom, Self::Structure>> {
@@ -88,7 +95,8 @@ where
 }
 
 pub trait Concretize<T> {
-    fn concretize(self, perm: Option<Permutation>) -> T;
+    fn concretize(self) -> T;
+    fn concretize_logical(self, layout: &CanonicalLayout) -> T;
 }
 
 fn sparse_shadow_tensors() -> bool {
@@ -99,14 +107,14 @@ impl<S: Shadowable> Concretize<DenseTensor<Atom, S::Structure>> for S
 where
     <<S::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
-    fn concretize(self, perm: Option<Permutation>) -> DenseTensor<Atom, S::Structure> {
+    fn concretize(self) -> DenseTensor<Atom, S::Structure> {
         // self.flat_s
         // todo!()
-        if let Some(perm) = perm {
-            self.expanded_shadow_perm(&perm).unwrap()
-        } else {
-            self.expanded_shadow().unwrap()
-        }
+        self.expanded_shadow().unwrap()
+    }
+
+    fn concretize_logical(self, layout: &CanonicalLayout) -> DenseTensor<Atom, S::Structure> {
+        self.expanded_shadow_logical(layout).unwrap()
     }
 }
 
@@ -114,10 +122,20 @@ impl<S: Shadowable> Concretize<DataTensor<Atom, S::Structure>> for S
 where
     <<S::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
-    fn concretize(self, perm: Option<Permutation>) -> DataTensor<Atom, S::Structure> {
+    fn concretize(self) -> DataTensor<Atom, S::Structure> {
         // self.flat_s
         // todo!()
-        let dense = <S as Concretize<DenseTensor<Atom, S::Structure>>>::concretize(self, perm);
+        let dense = <S as Concretize<DenseTensor<Atom, S::Structure>>>::concretize(self);
+        if sparse_shadow_tensors() {
+            dense.to_sparse().into()
+        } else {
+            dense.into()
+        }
+    }
+
+    fn concretize_logical(self, layout: &CanonicalLayout) -> DataTensor<Atom, S::Structure> {
+        let dense =
+            <S as Concretize<DenseTensor<Atom, S::Structure>>>::concretize_logical(self, layout);
         if sparse_shadow_tensors() {
             dense.to_sparse().into()
         } else {
@@ -130,11 +148,15 @@ impl<S: Shadowable> Concretize<ParamTensor<S::Structure>> for S
 where
     <<S::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
-    fn concretize(self, perm: Option<Permutation>) -> ParamTensor<S::Structure> {
+    fn concretize(self) -> ParamTensor<S::Structure> {
         // self.flat_s
         // todo!()
+        ParamTensor::param(<S as Concretize<DataTensor<Atom, S::Structure>>>::concretize(self))
+    }
+
+    fn concretize_logical(self, layout: &CanonicalLayout) -> ParamTensor<S::Structure> {
         ParamTensor::param(
-            <S as Concretize<DataTensor<Atom, S::Structure>>>::concretize(self, perm),
+            <S as Concretize<DataTensor<Atom, S::Structure>>>::concretize_logical(self, layout),
         )
     }
 }
@@ -143,11 +165,17 @@ impl<T: Clone, S: Shadowable> Concretize<MixedTensor<T, S::Structure>> for S
 where
     <<S::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind: ParseableAind,
 {
-    fn concretize(self, perm: Option<Permutation>) -> MixedTensor<T, S::Structure> {
+    fn concretize(self) -> MixedTensor<T, S::Structure> {
         // self.flat_s
         // todo!()
         MixedTensor::<T, S::Structure>::param(
-            <S as Concretize<DataTensor<Atom, S::Structure>>>::concretize(self, perm),
+            <S as Concretize<DataTensor<Atom, S::Structure>>>::concretize(self),
+        )
+    }
+
+    fn concretize_logical(self, layout: &CanonicalLayout) -> MixedTensor<T, S::Structure> {
+        MixedTensor::<T, S::Structure>::param(
+            <S as Concretize<DataTensor<Atom, S::Structure>>>::concretize_logical(self, layout),
         )
     }
 }
@@ -558,13 +586,13 @@ where
 
 //     pub fn insert_explicit_real(&mut self, key: ExplicitKey, data: Vec<Data>) {
 //         let tensor: MixedTensor<Data, ExplicitKey> =
-//             DenseTensor::from_data(data, key.clone()).unwrap().into();
+//             DenseTensor::from_storage_data(data, key.clone()).unwrap().into();
 //         self.explicit_dimension.insert(key, tensor);
 //     }
 
 //     pub fn insert_explicit_complex(&mut self, key: ExplicitKey, data: Vec<Complex<Data>>) {
 //         let tensor: MixedTensor<Data, ExplicitKey> =
-//             DenseTensor::from_data(data, key.clone()).unwrap().into();
+//             DenseTensor::from_storage_data(data, key.clone()).unwrap().into();
 //         self.explicit_dimension.insert(key, tensor);
 //     }
 
@@ -574,7 +602,7 @@ where
 //         data: impl IntoIterator<Item = (Vec<ConcreteIndex>, Data)>,
 //     ) {
 //         let tensor: MixedTensor<Data, ExplicitKey> =
-//             SparseTensor::from_data(data, key.clone()).unwrap().into();
+//             SparseTensor::from_storage_data(data, key.clone()).unwrap().into();
 //         self.explicit_dimension.insert(key, tensor);
 //     }
 
@@ -584,7 +612,7 @@ where
 //         data: impl IntoIterator<Item = (Vec<ConcreteIndex>, Complex<Data>)>,
 //     ) {
 //         let tensor: MixedTensor<Data, ExplicitKey> =
-//             SparseTensor::from_data(data, key.clone()).unwrap().into();
+//             SparseTensor::from_storage_data(data, key.clone()).unwrap().into();
 //         self.explicit_dimension.insert(key, tensor);
 //     }
 
@@ -707,7 +735,7 @@ pub mod test {
     });
 
     use crate::structure::abstract_index::AbstractIndex;
-    use crate::structure::{OrderedStructure, PermutedStructure};
+    use crate::structure::{Canonicalized, OrderedStructure};
     use crate::{
         contraction::Contract,
         structure::{
@@ -729,18 +757,20 @@ pub mod test {
         for rep in LibraryRep::all_representations() {
             let structure = [rep.new_rep(4), rep.new_rep(4).dual()];
 
-            let idstructure: PermutedStructure<IndexlessNamedStructure<Symbol, (), LibraryRep>> =
+            let idstructure: Canonicalized<IndexlessNamedStructure<Symbol, (), LibraryRep>> =
                 IndexlessNamedStructure::from_iter(structure, ETS.metric, None);
 
             let idkey = ExplicitKey::from_structure(&idstructure).unwrap();
 
-            let id = tensor_library.get(&idkey).unwrap().into_owned();
+            let id = tensor_library
+                .get(&idkey)
+                .unwrap()
+                .into_owned()
+                .into_canonical();
 
-            let trace_structure: OrderedStructure = PermutedStructure::from_iter([
-                rep.new_rep(4).slot(3),
-                rep.new_rep(4).dual().slot(4),
-            ])
-            .structure;
+            let trace_structure: OrderedStructure =
+                Canonicalized::from_iter([rep.new_rep(4).slot(3), rep.new_rep(4).dual().slot(4)])
+                    .into_canonical();
             let id1 = id.map_structure(|_| trace_structure.clone());
             let id2 = id1
                 .clone()

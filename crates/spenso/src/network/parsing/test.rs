@@ -1,8 +1,9 @@
 use super::*;
 use crate::network::NetworkState;
 use crate::network::library::symbolic::ETS;
+use crate::structure::OrderedStructure;
 use crate::structure::representation::{Lorentz, Minkowski, RepName};
-use crate::{chain, mink, p, q, slot, tensor, tensor_symbol, trace, vector};
+use crate::{broadcast_symbol, chain, mink, p, q, slot, tensor, tensor_symbol, trace, vector};
 use symbolica::{atom::FunctionBuilder, function, symbol};
 
 fn mink4() -> Representation<Minkowski> {
@@ -61,6 +62,110 @@ fn schoonschip_without_inner_products_settings() -> ParseSettings {
             chain: true,
         },
         ..Default::default()
+    }
+}
+
+#[test]
+fn nested_chain_and_trace_scopes_are_rejected_before_parsing() {
+    let rep = mink4();
+    let factor = chain_factor(tensor_symbol!(nested_scope_factor));
+    let inner_chain = SPENSO_TAG.chain(
+        rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(31))
+            .to_atom(),
+        rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(37))
+            .to_atom(),
+        [factor.clone()],
+    );
+    let inner_trace = SPENSO_TAG.trace(rep.to_symbolic([]), [factor]);
+    let outer_chain = |inner: Atom| {
+        SPENSO_TAG.chain(
+            rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(41))
+                .to_atom(),
+            rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(43))
+                .to_atom(),
+            [inner],
+        )
+    };
+    let outer_trace = |inner: Atom| SPENSO_TAG.trace(rep.to_symbolic([]), [inner]);
+    let wrapped_inner = FunctionBuilder::new(broadcast_symbol!("nested_scope_wrapper"))
+        .add_arg(Atom::num(2) * inner_trace.clone())
+        .finish();
+
+    for expression in [
+        outer_chain(inner_chain.clone()),
+        outer_chain(inner_trace.clone()),
+        outer_trace(inner_chain.clone()),
+        outer_trace(inner_trace),
+        outer_chain(wrapped_inner.clone()),
+    ] {
+        assert!(matches!(
+            expression.parse_to_atom_net::<AbstractIndex>(&ParseSettings::default()),
+            Err(TensorNetworkError::ChainNesting(_))
+        ));
+    }
+    assert!(matches!(
+        outer_chain(wrapped_inner).parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings()),
+        Err(TensorNetworkError::ChainNesting(_))
+    ));
+}
+
+#[test]
+fn sibling_and_singly_wrapped_chain_scopes_remain_valid() {
+    let rep = mink4();
+    let make_chain = |name, start, end| {
+        SPENSO_TAG.chain(
+            rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(start))
+                .to_atom(),
+            rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(end))
+                .to_atom(),
+            [chain_factor(SPENSO_TAG.tensor_symbol(name))],
+        )
+    };
+    let first = make_chain("sibling_chain_first", 61, 67);
+    let second = make_chain("sibling_chain_second", 71, 73);
+    let wrapped = FunctionBuilder::new(broadcast_symbol!("single_chain_wrapper"))
+        .add_arg(first.clone())
+        .finish();
+
+    assert!(
+        (first * second)
+            .parse_to_atom_net::<AbstractIndex>(&ParseSettings::default())
+            .is_ok()
+    );
+    assert!(
+        wrapped
+            .parse_to_atom_net::<AbstractIndex>(&opaque_fast_settings())
+            .is_ok()
+    );
+}
+
+#[test]
+fn direct_structure_inference_rejects_nested_chain_scopes() {
+    let rep = mink4();
+    let inner = SPENSO_TAG.trace(
+        rep.to_symbolic([]),
+        [chain_factor(tensor_symbol!(nested_inference_factor))],
+    );
+    let expression = SPENSO_TAG.chain(
+        rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(47))
+            .to_atom(),
+        rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(53))
+            .to_atom(),
+        [inner],
+    );
+
+    for mode in [
+        StructureInferenceMode::Fast,
+        StructureInferenceMode::Expanded,
+    ] {
+        assert!(matches!(
+            OrderedStructure::<LibraryRep, AbstractIndex>::structure_from_atom(
+                expression.as_view(),
+                mode,
+            ),
+            Err(StructureError::ParsingError(message))
+                if message.contains("cannot be nested")
+        ));
     }
 }
 

@@ -19,7 +19,7 @@ use spenso::network::{MinResultRank, Sequential};
 
 // use symbolica_utils::AtomPrintExt;
 use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
-use spenso::structure::{PermutedStructure, TensorStructure};
+use spenso::structure::{Canonicalized, TensorStructure};
 use spenso::tensors::data::DataTensor;
 use spenso::tensors::parametric::ParamTensor;
 use spenso_hep_lib::{gamma_data_weyl, gamma5_weyl_data, proj_m_data_weyl, proj_p_data_weyl};
@@ -1185,29 +1185,37 @@ impl ProcessDefinition {
         let mut weyl = TensorLibrary::new();
         weyl.update_ids();
 
-        let gamma_key = PermutedStructure::identity(ParamTensor::composite(DataTensor::Sparse(
-            gamma_data_weyl(AGS.gamma_strct::<Aind>(4), Atom::num(1), Atom::num(0))
-                .map_data(|a| a.re + Atom::i() * a.im),
-        )));
-        // println!("permutation{}", gamma_key.rep_permutation);
+        let gamma_key = gamma_data_weyl(AGS.gamma_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+            .map_canonical(|tensor| {
+                ParamTensor::composite(DataTensor::Sparse(
+                    tensor.map_data(|a| a.re + Atom::i() * a.im),
+                ))
+            });
+        // println!("layout{:?}", gamma_key.layout());
         weyl.insert_explicit(gamma_key);
 
-        let gamma5_key = PermutedStructure::identity(ParamTensor::composite(DataTensor::Sparse(
-            gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), Atom::num(1), Atom::num(0))
-                .map_data(|a| a.re + Atom::i() * a.im),
-        )));
+        let gamma5_key = gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+            .map_canonical(|tensor| {
+                ParamTensor::composite(DataTensor::Sparse(
+                    tensor.map_data(|a| a.re + Atom::i() * a.im),
+                ))
+            });
         weyl.insert_explicit(gamma5_key);
 
-        let projm_key = PermutedStructure::identity(ParamTensor::composite(DataTensor::Sparse(
-            proj_m_data_weyl(AGS.projm_strct::<Aind>(4), Atom::num(1), Atom::num(0))
-                .map_data(|a| a.re + Atom::i() * a.im),
-        )));
+        let projm_key = proj_m_data_weyl(AGS.projm_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+            .map_canonical(|tensor| {
+                ParamTensor::composite(DataTensor::Sparse(
+                    tensor.map_data(|a| a.re + Atom::i() * a.im),
+                ))
+            });
         weyl.insert_explicit(projm_key);
 
-        let projp_key = PermutedStructure::identity(ParamTensor::composite(DataTensor::Sparse(
-            proj_p_data_weyl(AGS.projp_strct::<Aind>(4), Atom::num(1), Atom::num(0))
-                .map_data(|a| a.re + Atom::i() * a.im),
-        )));
+        let projp_key = proj_p_data_weyl(AGS.projp_strct::<Aind>(4), Atom::num(1), Atom::num(0))
+            .map_canonical(|tensor| {
+                ParamTensor::composite(DataTensor::Sparse(
+                    tensor.map_data(|a| a.re + Atom::i() * a.im),
+                ))
+            });
         weyl.insert_explicit(projp_key);
         let mut lib = weyl;
 
@@ -1218,16 +1226,18 @@ impl ProcessDefinition {
                 Some(vec![Atom::num(i)]),
             );
 
-            //debug!("lib_loop:{}", key.clone().permute_with_metric());
-            let key = ParamTensor::from_dense(
-                key.structure,
-                (0..4)
-                    .map(|_| Atom::prime_generate_rat(sample_iterator))
-                    .collect(),
-            )
-            .unwrap();
+            //debug!("lib_loop:{}", idenso::tensor::SymbolicTensor::from_canonicalized(&key).unwrap());
+            let key = key.map_canonical(|structure| {
+                ParamTensor::from_dense(
+                    structure,
+                    (0..4)
+                        .map(|_| Atom::prime_generate_rat(sample_iterator))
+                        .collect(),
+                )
+                .unwrap()
+            });
 
-            lib.insert_explicit(PermutedStructure::identity(key));
+            lib.insert_explicit(key);
         }
 
         let mut pol_vals = vec![];
@@ -1239,17 +1249,19 @@ impl ProcessDefinition {
                 additional_args.clone(),
             );
 
-            //debug!("lib_ext:{}", key.clone().permute_with_metric());
+            //debug!("lib_ext:{}", idenso::tensor::SymbolicTensor::from_canonicalized(&key).unwrap());
 
-            let key = ParamTensor::from_dense(
-                key.structure,
-                (0..4)
-                    .map(|_| Atom::prime_generate_rat(sample_iterator))
-                    .collect(),
-            )
-            .unwrap();
+            let key = key.map_canonical(|structure| {
+                ParamTensor::from_dense(
+                    structure,
+                    (0..4)
+                        .map(|_| Atom::prime_generate_rat(sample_iterator))
+                        .collect(),
+                )
+                .unwrap()
+            });
 
-            lib.insert_explicit(PermutedStructure::identity(key));
+            lib.insert_explicit(key);
 
             let p = model.get_particle_from_pdg(*pdg as isize);
 
@@ -1258,7 +1270,7 @@ impl ProcessDefinition {
 
             let len = structure.size().unwrap();
 
-            let key = PermutedStructure::identity(ExplicitKey {
+            let key = Canonicalized::identity(ExplicitKey {
                 structure,
                 global_name,
                 additional_args,
@@ -1270,11 +1282,12 @@ impl ProcessDefinition {
                     .collect::<Vec<_>>(),
             );
 
-            //debug!("lib_pol:{}", key.clone().permute_with_metric());
-            let key =
-                ParamTensor::from_dense(key.structure, pol_vals.last().unwrap().clone()).unwrap();
+            //debug!("lib_pol:{}", idenso::tensor::SymbolicTensor::from_canonicalized(&key).unwrap());
+            let key = key.map_canonical(|structure| {
+                ParamTensor::from_dense(structure, pol_vals.last().unwrap().clone()).unwrap()
+            });
 
-            lib.insert_explicit(PermutedStructure::identity(key));
+            lib.insert_explicit(key);
         }
         match self.generation_type {
             GenerationType::Amplitude => {
@@ -1287,15 +1300,17 @@ impl ProcessDefinition {
                         additional_args.clone(),
                     );
 
-                    let key = ParamTensor::from_dense(
-                        key.structure,
-                        (0..4)
-                            .map(|_| Atom::prime_generate_rat(sample_iterator))
-                            .collect(),
-                    )
-                    .unwrap();
+                    let key = key.map_canonical(|structure| {
+                        ParamTensor::from_dense(
+                            structure,
+                            (0..4)
+                                .map(|_| Atom::prime_generate_rat(sample_iterator))
+                                .collect(),
+                        )
+                        .unwrap()
+                    });
 
-                    lib.insert_explicit(PermutedStructure::identity(key));
+                    lib.insert_explicit(key);
 
                     let p = model.get_particle_from_pdg(*pdg as isize);
 
@@ -1318,7 +1333,7 @@ impl ProcessDefinition {
                     )
                     .unwrap();
 
-                    lib.insert_explicit(PermutedStructure::identity(key));
+                    lib.insert_explicit(Canonicalized::identity(key));
                 }
             }
             GenerationType::CrossSection => {
@@ -1333,29 +1348,31 @@ impl ProcessDefinition {
 
                     // let len = structure.size().unwrap();
 
-                    let key = PermutedStructure::identity(ExplicitKey {
+                    let key = Canonicalized::identity(ExplicitKey {
                         structure,
                         global_name,
                         additional_args,
                     });
 
-                    //debug!("lib_pol:{}", key.clone().permute_with_metric());
-                    let key = ParamTensor::from_dense(
-                        key.structure,
-                        pol_vals[i]
-                            .iter()
-                            .map(|a| {
-                                if symmetric_polarizations {
-                                    a.clone()
-                                } else {
-                                    Atom::prime_generate_rat_complex(sample_iterator)
-                                }
-                            })
-                            .collect(),
-                    )
-                    .unwrap();
+                    //debug!("lib_pol:{}", idenso::tensor::SymbolicTensor::from_canonicalized(&key).unwrap());
+                    let key = key.map_canonical(|structure| {
+                        ParamTensor::from_dense(
+                            structure,
+                            pol_vals[i]
+                                .iter()
+                                .map(|a| {
+                                    if symmetric_polarizations {
+                                        a.clone()
+                                    } else {
+                                        Atom::prime_generate_rat_complex(sample_iterator)
+                                    }
+                                })
+                                .collect(),
+                        )
+                        .unwrap()
+                    });
 
-                    lib.insert_explicit(PermutedStructure::identity(key));
+                    lib.insert_explicit(key);
                 }
             }
         }
@@ -5049,7 +5066,13 @@ impl ProcessedNumeratorForComparison {
                 debug!(numerator=%numerator.to_ordered_simple(),diagram_id=%diagram_id,debug_dot=%graph.debug_dot(),"Initial Numerator");
 
                 let canonized_numerator = if group_options.test_canonized_numerator {
-                    let mut canonized_numerator_to_consider = numerator.canonize(Aind::Dummy);
+                    let mut canonized_numerator_to_consider =
+                        numerator.canonize(Aind::Dummy).map_err(|source| {
+                            FeynGenError::Eyre(eyre!(source).wrap_err(format!(
+                                "failed to canonicalize numerator for diagram {diagram_id}\n{}",
+                                graph.debug_dot()
+                            )))
+                        })?;
                     if group_options.fully_numerical_substitution_when_comparing_numerators {
                         canonized_numerator_to_consider =
                             ProcessDefinition::substitute_color_factors(
@@ -5178,7 +5201,16 @@ impl ProcessedNumeratorForComparison {
                                     .into();
 
                                 // println!("Trying to canonize:{c}");
-                                let canonized_color = c.canonize::<Aind>(Aind::Dummy);
+                                let canonized_color = c
+                                    .canonize::<Aind>(Aind::Dummy)
+                                    .map_err(|source| {
+                                        FeynGenError::Eyre(
+                                            eyre!(source).wrap_err(format!(
+                                                "{}; failed to canonicalize color factor",
+                                                context()
+                                            )),
+                                        )
+                                    })?;
                                 debug!("canonizing \n{c}\n gives\n{canonized_color}");
                                 let a = ProcessDefinition::substitute_color_factors(
                                     (canonized_color * scalar).as_view(),

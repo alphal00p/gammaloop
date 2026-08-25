@@ -44,6 +44,9 @@ impl ModuleInit for SpensoBroadcastFunction {}
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl SpensoBroadcastFunction {
+    /// Register a Symbolica function for elementwise application to tensor entries.
+    ///
+    /// The function is always tagged as a Spenso broadcast and cannot also be a tensor head.
     #[new]
     #[pyo3(signature = (name, *, is_symmetric=None, is_antisymmetric=None, is_cyclesymmetric=None, is_linear=None, is_flat=None, is_scalar=None, is_real=None, is_integer=None, is_positive=None, tags=None, aliases=None, normalization=None, print=None, derivative=None, series=None, eval=None, data=None))]
     #[allow(clippy::too_many_arguments)]
@@ -163,10 +166,14 @@ impl SpensoBroadcastFunction {
         self.name.to_string()
     }
 
+    /// Return the registered function as a Symbolica variable expression.
     fn to_expression(&self) -> PythonExpression {
         PythonExpression::from(Atom::var(self.name))
     }
 
+    /// Whether the registered function carries `tag`.
+    ///
+    /// Unqualified names also match tags registered in Symbolica's Python namespace.
     fn has_tag(&self, tag: &str) -> bool {
         self.name.has_tag(tag)
             || (!tag.contains("::")
@@ -177,6 +184,7 @@ impl SpensoBroadcastFunction {
                     .any(|candidate| candidate.strip_prefix("python::") == Some(tag)))
     }
 
+    /// Return the fully qualified tags attached to the registered function.
     fn get_tags(&self) -> Vec<String> {
         self.name.get_tags().to_vec()
     }

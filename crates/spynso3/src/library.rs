@@ -1,6 +1,7 @@
-use std::collections::HashMap;
+use std::{cell::Cell, collections::HashMap};
 
 use eyre::eyre;
+use idenso::IndexTooling;
 use pyo3::{
     FromPyObject, PyErr, exceptions,
     prelude::*,
@@ -13,7 +14,7 @@ use pyo3_stub_gen::{
     derive::{gen_stub_pyclass, gen_stub_pymethods},
 };
 
-use spenso::algebra::complex::Complex;
+use spenso::algebra::complex::{Complex, RealOrComplex};
 use spenso::network::library::function_lib::{PanicMissingConcrete, SymbolLib};
 use spenso::network::library::{FunctionLibraryError, function_lib::INBUILTS};
 use spenso::network::parsing::ShadowedStructure;
@@ -22,7 +23,7 @@ use spenso::tensors::data::StorageTensor;
 use spenso::{
     network::library::symbolic::{ExplicitKey, TensorLibrary},
     structure::{
-        HasStructure, PermutedStructure, TensorStructure,
+        Canonicalized, HasStructure, TensorStructure,
         abstract_index::AbstractIndex,
         partial::{PartialStructure, PartialStructureExt},
         slot::IsAbstractSlot,
@@ -68,6 +69,7 @@ pub struct SpensorLibrary {
     references: HashMap<ExplicitKey<AbstractIndex>, PartialStructure>,
 }
 
+/// A registry of elementwise tensor functions used during network evaluation.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(name = "TensorFunctionLibrary", module = "symbolica.community.spenso")]
 pub struct SpensorFunctionLibrary {
@@ -156,18 +158,17 @@ impl SpensorFunctionLibrary {
             }
             RealOrComplexTensor::Real(r) => RealOrComplexTensor::Real(r),
         });
-        a.library.insert_scalar_fallible(INBUILTS.conj, |scalar| {
-            let Ok(value) = symbolica::domains::float::Complex::<f64>::try_from(scalar.as_view())
-            else {
-                return Ok(INBUILTS.conj(scalar));
-            };
-            Ok(Atom::num(value.re) - Atom::num(value.im) * Atom::i())
-        });
+        a.library
+            .insert_scalar_fallible(INBUILTS.conj, |scalar| Ok(scalar.spenso_conj()));
 
         a
     }
 
     /// Register an elementwise callback for concrete tensor execution.
+    ///
+    /// The callback receives a Python `float` or `complex` matching each input value and
+    /// must return either type. The result uses complex storage if any returned value is
+    /// complex; otherwise it uses real storage.
     pub fn register(&mut self, function: &SpensoBroadcastFunction, callback: Py<PyAny>) {
         let name = function.name;
         let scalar_callback = Python::attach(|py| callback.clone_ref(py));
@@ -197,16 +198,48 @@ impl SpensorFunctionLibrary {
             })
         });
         self.library.insert_fallible(name, move |tensor| {
-            Python::attach(|py| match tensor {
-                RealOrComplexTensor::Real(tensor) => tensor
-                    .map_data_ref_result(|value| callback.call1(py, (*value,))?.extract::<f64>(py))
-                    .map(RealOrComplexTensor::Real),
-                RealOrComplexTensor::Complex(tensor) => tensor
-                    .map_data_ref_result(|value| {
-                        let value = PyComplex::from_doubles(py, value.re, value.im);
-                        callback.call1(py, (value,))?.extract::<Complex<f64>>(py)
-                    })
-                    .map(RealOrComplexTensor::Complex),
+            Python::attach(|py| -> PyResult<_> {
+                let saw_output = Cell::new(false);
+                let output_is_complex = Cell::new(false);
+                let extract = |result: Py<PyAny>| -> PyResult<RealOrComplex<f64>> {
+                    saw_output.set(true);
+                    if let Ok(value) = result.extract::<f64>(py) {
+                        Ok(RealOrComplex::Real(value))
+                    } else {
+                        let value = result.extract::<Complex<f64>>(py)?;
+                        output_is_complex.set(true);
+                        Ok(RealOrComplex::Complex(value))
+                    }
+                };
+                let (tensor, input_is_complex) = match tensor {
+                    RealOrComplexTensor::Real(tensor) => (
+                        tensor.map_data_ref_result(|value| extract(callback.call1(py, (*value,))?)),
+                        false,
+                    ),
+                    RealOrComplexTensor::Complex(tensor) => (
+                        tensor.map_data_ref_result(|value| {
+                            let value = PyComplex::from_doubles(py, value.re, value.im);
+                            extract(callback.call1(py, (value,))?)
+                        }),
+                        true,
+                    ),
+                };
+                let tensor = tensor?;
+                let output_is_complex =
+                    output_is_complex.get() || (!saw_output.get() && input_is_complex);
+
+                if output_is_complex {
+                    Ok(RealOrComplexTensor::Complex(
+                        tensor.map_data(RealOrComplex::to_complex),
+                    ))
+                } else {
+                    Ok(RealOrComplexTensor::Real(tensor.map_data(|value| {
+                        let RealOrComplex::Real(value) = value else {
+                            unreachable!("complex callback output was detected before conversion")
+                        };
+                        value
+                    })))
+                }
             })
             .map_err(|error| {
                 FunctionLibraryError::Other(eyre!(
@@ -225,7 +258,7 @@ impl PyStubType for ConvertibleToSymbol {
 }
 
 struct ExactLibraryReference {
-    key: PermutedStructure<ExplicitKey<AbstractIndex>>,
+    key: Canonicalized<ExplicitKey<AbstractIndex>>,
     interface: PartialStructure,
     name: Symbol,
     args: Vec<Atom>,
@@ -242,7 +275,7 @@ impl ExactLibraryReference {
     }
 
     fn new(interface: PartialStructure, name: Symbol, args: Vec<Atom>) -> PyResult<Self> {
-        let rank = interface.structure.order();
+        let rank = interface.canonical().order();
         let open = interface.open_positions();
         if rank != 0 && open.len() != rank {
             let explicit = (0..rank)
@@ -418,16 +451,12 @@ impl SpensorLibrary {
         )?;
         let storage = tensor
             .tensor
-            .structure
             .clone()
-            .map_structure(|_| reference.key.structure.clone());
-        self.library.insert_explicit(PermutedStructure {
-            structure: storage,
-            rep_permutation: reference.key.rep_permutation.clone(),
-            index_permutation: reference.key.index_permutation.clone(),
-        });
+            .map_structure(|_| reference.key.canonical().clone());
+        self.library
+            .insert_explicit(reference.key.clone().map_canonical(|_| storage));
         self.references
-            .insert(reference.key.structure, reference.interface);
+            .insert(reference.key.into_canonical(), reference.interface);
         Ok(())
     }
 
@@ -444,7 +473,8 @@ impl SpensorLibrary {
     /// Returns
     /// -------
     /// TensorExpression
-    ///     An atomic reference with the registered tensor's logical interface
+    ///     An atomic reference with the requested exact interface, or the registered
+    ///     logical interface for a symbol-only lookup
     ///
     /// Raises
     /// ------
@@ -463,14 +493,9 @@ impl SpensorLibrary {
         match key.0 {
             LibraryReference::Exact(reference) => {
                 self.library
-                    .get(&reference.key.structure)
+                    .get(reference.key.canonical())
                     .map_err(|error| exceptions::PyKeyError::new_err(error.to_string()))?;
-                let interface = self
-                    .references
-                    .get(&reference.key.structure)
-                    .cloned()
-                    .unwrap_or(reference.interface);
-                tensor_reference(py, reference.name, reference.args, interface)
+                tensor_reference(py, reference.name, reference.args, reference.interface)
             }
             LibraryReference::Symbol(symbol) => {
                 let key = self.library.get_key_from_name(symbol).map_err(|error| {
@@ -479,7 +504,7 @@ impl SpensorLibrary {
                         .iter()
                         .filter(|(key, _)| key.global_name == Some(symbol))
                         .map(|(key, interface)| ExactLibraryReference {
-                            key: PermutedStructure::identity(key.clone()),
+                            key: Canonicalized::identity(key.clone()),
                             interface: interface.clone(),
                             name: symbol,
                             args: key.additional_args.clone().unwrap_or_default(),
@@ -505,7 +530,13 @@ impl SpensorLibrary {
                         interface.clone(),
                     );
                 }
-                TensorExpression::from_structure(py, &PermutedStructure::identity(key))
+                let structure = self
+                    .library
+                    .get(&key)
+                    .map_err(|error| exceptions::PyKeyError::new_err(error.to_string()))?
+                    .into_owned()
+                    .map_canonical(|tensor| tensor.structure().clone());
+                TensorExpression::from_structure(py, &structure)
             }
         }
     }
@@ -563,13 +594,110 @@ impl SpensorLibrary {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::CString;
+
     use super::*;
+    use idenso::representations::initialize;
+    use spenso::network::{ExecutionResult, Sequential, SmallestDegree};
     use spenso::structure::{
+        OrderedStructure,
         dimension::Dimension,
         partial::{OpenPortId, PartialIndex},
         representation::{ExtendibleReps, RepName},
     };
-    use symbolica::symbol;
+    use spenso::tensors::data::{DataTensor, DenseTensor, SparseTensor};
+    use spenso_hep_lib::HEP_LIB;
+    use symbolica::{parse, symbol};
+
+    #[test]
+    fn builtin_scalar_conjugation_execution_preserves_exact_coefficients() {
+        initialize();
+        let library = SpensorFunctionLibrary::new();
+        let mut network =
+            crate::network::ParsingNet::from_scalar(parse!("1/3 + 2i/7")).fun(INBUILTS.conj);
+        network
+            .execute::<Sequential, SmallestDegree, _, _, _>(&*HEP_LIB, &library.library)
+            .unwrap();
+        let ExecutionResult::Val(conjugated) = network.result_scalar().unwrap() else {
+            panic!("conjugation should produce a scalar value")
+        };
+
+        assert_eq!(conjugated.into_owned(), parse!("1/3 - 2i/7"));
+    }
+
+    #[test]
+    fn tensor_callbacks_choose_numeric_kind_from_their_outputs() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let structure = OrderedStructure::new(vec![
+                ExtendibleReps::EUCLIDEAN
+                    .new_rep(Dimension::Concrete(2))
+                    .slot(AbstractIndex::Normal(0)),
+            ])
+            .map_canonical(|structure| ShadowedStructure {
+                structure,
+                global_name: None,
+                additional_args: None,
+            })
+            .into_canonical();
+            let mut library = SpensorFunctionLibrary::new();
+
+            let promote = SpensoBroadcastFunction {
+                name: symbol!("spynso_callback_promote"),
+            };
+            let callback = CString::new("lambda value: 1j * value").unwrap();
+            library.register(&promote, py.eval(callback.as_c_str(), None, None)?.unbind());
+            let input = RealOrComplexTensor::Real(DataTensor::Dense(DenseTensor {
+                data: vec![1.0, 2.0],
+                structure: structure.clone(),
+            }));
+            let output = library.library.functions[&promote.name](input).unwrap();
+            let RealOrComplexTensor::Complex(DataTensor::Dense(output)) = output else {
+                panic!("a complex callback result must promote real tensor storage")
+            };
+            assert_eq!(
+                output.data,
+                vec![Complex::new(0.0, 1.0), Complex::new(0.0, 2.0)]
+            );
+
+            let demote = SpensoBroadcastFunction {
+                name: symbol!("spynso_callback_demote"),
+            };
+            let callback = CString::new("lambda value: abs(value)").unwrap();
+            library.register(&demote, py.eval(callback.as_c_str(), None, None)?.unbind());
+            let input = RealOrComplexTensor::Complex(DataTensor::Dense(DenseTensor {
+                data: vec![Complex::new(3.0, 4.0), Complex::new(-5.0, 12.0)],
+                structure: structure.clone(),
+            }));
+            let output = library.library.functions[&demote.name](input).unwrap();
+            let RealOrComplexTensor::Real(DataTensor::Dense(output)) = output else {
+                panic!("real callback results must demote complex tensor storage")
+            };
+            assert_eq!(output.data, vec![5.0, 13.0]);
+
+            let map_default = SpensoBroadcastFunction {
+                name: symbol!("spynso_callback_map_sparse_default"),
+            };
+            let callback = CString::new("lambda value: 1j * (value + 1)").unwrap();
+            library.register(
+                &map_default,
+                py.eval(callback.as_c_str(), None, None)?.unbind(),
+            );
+            let input = RealOrComplexTensor::Real(DataTensor::Sparse(SparseTensor {
+                elements: HashMap::new(),
+                zero: 2.0,
+                structure,
+            }));
+            let output = library.library.functions[&map_default.name](input).unwrap();
+            let RealOrComplexTensor::Complex(DataTensor::Sparse(output)) = output else {
+                panic!("a complex sparse default must promote tensor storage")
+            };
+            assert_eq!(output.zero, Complex::new(0.0, 3.0));
+            Ok(())
+        })
+        .unwrap();
+    }
 
     #[test]
     fn exact_library_reference_preserves_full_signature_and_logical_reps() {
@@ -582,17 +710,97 @@ mod tests {
         ]);
         let reference = ExactLibraryReference::new(interface, name, vec![Atom::num(7)]).unwrap();
 
-        assert_eq!(reference.key.structure.global_name, Some(name));
+        assert_eq!(reference.key.canonical().global_name, Some(name));
         assert_eq!(
-            reference.key.structure.additional_args,
+            reference.key.canonical().additional_args,
             Some(vec![Atom::num(7)])
         );
-        let canonical = reference.key.structure.reps();
+        let canonical = reference.key.canonical().reps();
         assert_eq!(
-            reference.key.rep_permutation.apply_slice_inv(&canonical),
+            reference.key.layout().canonical_to_logical(&canonical),
             vec![mink, euc]
         );
         assert!(reference.signature().contains("7"));
+    }
+
+    #[test]
+    fn exact_lookup_materializes_data_in_the_requested_logical_order() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let mink = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(2));
+            let euc = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+            let name = spenso::network::tags::SPENSO_TAG
+                .tensor_symbol("spynso_exact_lookup_logical_order");
+            let registered = tensor_reference(
+                py,
+                name,
+                Vec::new(),
+                PartialStructure::from_logical_slots([
+                    mink.slot(PartialIndex::Open(OpenPortId(0))),
+                    euc.slot(PartialIndex::Open(OpenPortId(1))),
+                ]),
+            )?;
+            let tensor = Py::new(
+                py,
+                Spensor::dense(
+                    registered.bind(py).as_any().extract()?,
+                    crate::AtomsOrFloats::Floats(vec![0., 1., 2., 3., 4., 5.]),
+                )?,
+            )?;
+            let mut library = SpensorLibrary::new();
+            library.register(tensor.bind(py).borrow())?;
+
+            let requested = tensor_reference(
+                py,
+                name,
+                Vec::new(),
+                PartialStructure::from_logical_slots([
+                    euc.slot(PartialIndex::Open(OpenPortId(0))),
+                    mink.slot(PartialIndex::Open(OpenPortId(1))),
+                ]),
+            )?;
+            let exact = library.__getitem__(py, requested.bind(py).extract()?)?;
+            assert_eq!(
+                exact
+                    .bind(py)
+                    .borrow()
+                    .interface
+                    .logical_slots()
+                    .into_iter()
+                    .map(|slot| slot.rep())
+                    .collect::<Vec<_>>(),
+                vec![euc, mink]
+            );
+
+            let by_name = library.__getitem__(
+                py,
+                ConvertibleToLibraryReference(LibraryReference::Symbol(name)),
+            )?;
+            assert_eq!(
+                by_name
+                    .bind(py)
+                    .borrow()
+                    .interface
+                    .logical_slots()
+                    .into_iter()
+                    .map(|slot| slot.rep())
+                    .collect::<Vec<_>>(),
+                vec![mink, euc]
+            );
+
+            let library = Py::new(py, library)?;
+            let indexed = exact.bind(py).call1(("i", "j"))?;
+            let network = indexed.call_method1("to_network", (library.clone_ref(py),))?;
+            network.call_method1("execute", (library.clone_ref(py),))?;
+            let result = network.call_method1("result_tensor", (library,))?;
+            let values = (0..6)
+                .map(|index| result.get_item(index)?.extract::<f64>())
+                .collect::<PyResult<Vec<_>>>()?;
+            assert_eq!(values, vec![0., 3., 1., 4., 2., 5.]);
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]

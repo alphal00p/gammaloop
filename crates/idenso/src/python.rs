@@ -5,7 +5,9 @@ use crate::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
 
 use crate::{Cookable, IndexTooling};
 use pyo3::{
-    Bound, PyResult, Python, pyfunction,
+    Bound, PyResult, Python,
+    exceptions::PyValueError,
+    pyfunction,
     types::{PyAnyMethods, PyDictMethods, PyListMethods, PyModule, PyModuleMethods},
     wrap_pyfunction,
 };
@@ -28,8 +30,8 @@ pub use algebra::{
 };
 pub use expansion::{PythonTerm, expand_in_patterns};
 pub use tooling::{
-    CanonicalizationError, CookingError, DiracAdjointError, DotExpansionError, PyCookMode,
-    PyCookSettings, PyCookSourceFilter, PyCookTagFilter, PySchoonschipContractionOrder,
+    CanonicalizationError, CookingError, DiracAdjointError, DotExpansionError, NetworkToolingError,
+    PyCookMode, PyCookSettings, PyCookSourceFilter, PyCookTagFilter, PySchoonschipContractionOrder,
     PySchoonschipMode, PySchoonschipSettings, PySchoonschipTraversal, RegisteredRepresentation,
     alias_subtensors, canonize, chainify, collect_chains, conjugate_transpose, cook, expand_dots,
     metric_shorthand_to_dot, normalize_chains, normalize_dots, schoonschip, schoonschip_net,
@@ -42,8 +44,13 @@ pub use tooling::{
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
-pub fn dirac_adjoint(self_: &PythonExpression) -> PyResult<PythonExpression> {
-    self_
+/// Construct the physics-aware Dirac adjoint of a tensor expression.
+///
+/// This conjugates coefficients and spinor structures, reverses fermion lines, and inserts
+/// the gamma-zero factors required by the Dirac adjoint. Raises `DiracAdjointError` when the
+/// tensor network does not define a consistent adjoint.
+pub fn dirac_adjoint(expression: &PythonExpression) -> PyResult<PythonExpression> {
+    expression
         .expr
         .dirac_adjoint::<AbstractIndex>()
         .map(Into::into)
@@ -74,7 +81,7 @@ pub fn dirac_adjoint(self_: &PythonExpression) -> PyResult<PythonExpression> {
 /// - Algebraic manipulation of relativistic expressions
 ///
 /// # Arguments
-/// - `self_`: expression containing factorized terms with Minkowski indices
+/// - `expression`: expression containing factorized terms with Minkowski indices
 ///
 /// # Returns
 /// `(structure, coefficient)` pairs with factorizations unfolded.
@@ -83,12 +90,13 @@ pub fn dirac_adjoint(self_: &PythonExpression) -> PyResult<PythonExpression> {
 /// ```python
 /// import symbolica as sp
 /// from symbolica.community.idenso import expand_mink
+/// from symbolica.community.spenso import Representation, TensorName
 ///
 /// # Expand factorized vector expression
-/// p = sp.S('p')
-/// q = sp.S('q')
-/// r = sp.S('r')
-/// mu = sp.S('mu')
+/// p = TensorName("p")
+/// q = TensorName("q")
+/// r = TensorName("r")
+/// mu = Representation.mink(4)("mu")
 /// factorized = p(mu) * (q(mu) + r(mu))
 /// terms = expand_mink(factorized)
 /// for structure, coefficient in terms:
@@ -99,8 +107,8 @@ pub fn dirac_adjoint(self_: &PythonExpression) -> PyResult<PythonExpression> {
 /// expr = A * (p(mu) * q(mu) + r(mu))
 /// terms = expand_mink(expr)
 /// ```
-pub fn expand_mink(self_: &PythonExpression) -> Vec<PythonTerm> {
-    expansion::python_terms(self_.expr.expand_mink())
+pub fn expand_mink(expression: &PythonExpression) -> Vec<PythonTerm> {
+    expansion::python_terms(expression.expr.expand_mink())
 }
 
 /// Expands factorized terms containing Dirac bispinor indices.
@@ -117,7 +125,7 @@ pub fn expand_mink(self_: &PythonExpression) -> Vec<PythonTerm> {
 ///
 ///
 /// # Arguments
-/// - `self_`: expression containing factorized terms with bispinor indices
+/// - `expression`: expression containing factorized terms with bispinor indices
 ///
 /// # Returns
 /// `(structure, coefficient)` pairs with factorizations unfolded.
@@ -127,8 +135,8 @@ pub fn expand_mink(self_: &PythonExpression) -> Vec<PythonTerm> {
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
-pub fn expand_bis(self_: &PythonExpression) -> Vec<PythonTerm> {
-    expansion::python_terms(self_.expr.expand_bis())
+pub fn expand_bis(expression: &PythonExpression) -> Vec<PythonTerm> {
+    expansion::python_terms(expression.expr.expand_bis())
 }
 
 /// Expands factorized terms containing both Minkowski and bispinor indices.
@@ -138,7 +146,7 @@ pub fn expand_bis(self_: &PythonExpression) -> Vec<PythonTerm> {
 /// and spinor indices.
 ///
 /// # Arguments
-/// - `self_`: expression containing factorized terms with both index types
+/// - `expression`: expression containing factorized terms with both index types
 ///
 /// # Returns
 /// `(structure, coefficient)` pairs with all factorizations unfolded.
@@ -148,8 +156,8 @@ pub fn expand_bis(self_: &PythonExpression) -> Vec<PythonTerm> {
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
-pub fn expand_mink_bis(self_: &PythonExpression) -> Vec<PythonTerm> {
-    expansion::python_terms(self_.expr.expand_mink_bis())
+pub fn expand_mink_bis(expression: &PythonExpression) -> Vec<PythonTerm> {
+    expansion::python_terms(expression.expr.expand_mink_bis())
 }
 
 /// Expands factorized terms containing SU(N) color indices.
@@ -171,7 +179,7 @@ pub fn expand_mink_bis(self_: &PythonExpression) -> Vec<PythonTerm> {
 /// - Algebraic manipulation of color structures
 ///
 /// # Arguments
-/// - `self_`: expression containing factorized terms with color indices
+/// - `expression`: expression containing factorized terms with color indices
 ///
 /// # Returns
 /// `(structure, coefficient)` pairs with factorizations unfolded.
@@ -181,8 +189,8 @@ pub fn expand_mink_bis(self_: &PythonExpression) -> Vec<PythonTerm> {
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
-pub fn expand_color(self_: &PythonExpression) -> Vec<PythonTerm> {
-    expansion::python_terms(ColorSimplifier::expand_color(&self_.expr))
+pub fn expand_color(expression: &PythonExpression) -> Vec<PythonTerm> {
+    expansion::python_terms(ColorSimplifier::expand_color(&expression.expr))
 }
 
 #[cfg_attr(
@@ -196,12 +204,12 @@ pub fn expand_color(self_: &PythonExpression) -> Vec<PythonTerm> {
 /// geometric objects, unfolding multiplicative structures for subsequent simplification.
 ///
 /// # Arguments
-/// - `self_`: expression containing factorized metric terms
+/// - `expression`: expression containing factorized metric terms
 ///
 /// # Returns
 /// `(structure, coefficient)` pairs with metric factorizations unfolded.
-pub fn expand_metrics(self_: &PythonExpression) -> Vec<PythonTerm> {
-    expansion::python_terms(self_.expr.expand_metrics())
+pub fn expand_metrics(expression: &PythonExpression) -> Vec<PythonTerm> {
+    expansion::python_terms(expression.expr.expand_metrics())
 }
 
 #[cfg_attr(
@@ -212,7 +220,7 @@ pub fn expand_metrics(self_: &PythonExpression) -> Vec<PythonTerm> {
 /// Wrap all abstract indices with a header symbol
 ///
 /// # Arguments
-/// - `self_`: input expression containing tensor indices
+/// - `expression`: input expression containing tensor indices
 /// - `header`: symbol to use as the wrapper function for all indices
 ///
 /// # Returns
@@ -235,15 +243,15 @@ pub fn expand_metrics(self_: &PythonExpression) -> Vec<PythonTerm> {
 /// print(wrap_indices(tensor_with_args.to_expression(), sp.S("wrap")))
 ///
 /// ```
-pub fn wrap_indices(self_: &PythonExpression, header: Symbol) -> PythonExpression {
-    self_.expr.wrap_indices(header).into()
+pub fn wrap_indices(expression: &PythonExpression, header: Symbol) -> PythonExpression {
+    expression.expr.wrap_indices(header).into()
 }
 
 #[cfg_attr(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
-#[pyfunction(signature = (self_, settings = None))]
+#[pyfunction(signature = (expression, settings = None))]
 /// Convert complex nested index structures into flattened symbolic names.
 ///
 /// Transforms hierarchical index expressions within tensor function arguments
@@ -260,7 +268,7 @@ pub fn wrap_indices(self_: &PythonExpression, header: Symbol) -> PythonExpressio
 /// - Only affects indices appearing as function arguments
 /// - Preserves top-level function structure
 /// # Arguments
-/// - `self_`: expression containing complex nested index structures
+/// - `expression`: expression containing complex nested index structures
 ///
 /// # Returns
 /// Expression with flattened, simplified index names.
@@ -284,12 +292,12 @@ pub fn wrap_indices(self_: &PythonExpression, header: Symbol) -> PythonExpressio
 /// )
 /// ```
 pub fn cook_indices(
-    self_: &PythonExpression,
+    expression: &PythonExpression,
     settings: Option<&tooling::PyCookSettings>,
 ) -> PyResult<PythonExpression> {
     let settings = tooling::PyCookSettings::indices_or(settings);
     settings
-        .try_cook_indices(self_.expr.as_view())
+        .try_cook_indices(expression.expr.as_view())
         .map(Into::into)
         .map_err(|error| tooling::CookingError::new_err(format!("cannot cook indices: {error:?}")))
 }
@@ -298,7 +306,7 @@ pub fn cook_indices(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
-#[pyfunction(signature = (self_, settings = None))]
+#[pyfunction(signature = (expression, settings = None))]
 /// Convert a single function call into a flattened variable symbol.
 ///
 /// Transforms a function expression with arguments into a single symbolic variable
@@ -319,7 +327,7 @@ pub fn cook_indices(
 /// - Cannot cook expressions containing polynomials or complex structures
 ///
 /// # Arguments
-/// - `self_`: expression representing a single function call to cook
+/// - `expression`: expression representing a single function call to cook
 ///
 /// # Returns
 /// Expression containing the flattened variable symbol.
@@ -340,11 +348,11 @@ pub fn cook_indices(
 /// print(cooked)  # Outputs: f_a_b
 /// ```
 pub fn cook_function(
-    self_: &PythonExpression,
+    expression: &PythonExpression,
     settings: Option<&tooling::PyCookSettings>,
 ) -> PyResult<PythonExpression> {
     let settings = tooling::PyCookSettings::flattened_or(settings);
-    self_
+    expression
         .expr
         .cook_function_with_settings(&settings)
         .map_err(|error| tooling::CookingError::new_err(format!("cannot cook: {error:?}")))
@@ -369,11 +377,14 @@ pub fn cook_function(
 /// - Are summed over (Einstein summation convention)
 ///
 /// # Arguments
-/// - `self_`: input expression containing both dummy and free indices
+/// - `expression`: input expression containing both dummy and free indices
 /// - `header`: symbol to use as wrapper function name for dummy indices only
 ///
 /// # Returns
 /// A new expression with only contracted indices wrapped.
+///
+/// # Raises
+/// `ValueError` when the expression cannot be parsed as a tensor network.
 ///
 /// # Examples:
 /// ```python
@@ -392,8 +403,12 @@ pub fn cook_function(
 /// print(wrap_dummies(tensor_with_args.to_expression(), sp.S("wrap")))
 ///
 /// ```
-pub fn wrap_dummies(self_: &PythonExpression, header: Symbol) -> PythonExpression {
-    self_.expr.wrap_dummies::<AbstractIndex>(header).into()
+pub fn wrap_dummies(expression: &PythonExpression, header: Symbol) -> PyResult<PythonExpression> {
+    expression
+        .expr
+        .wrap_dummies::<AbstractIndex>(header)
+        .map(Into::into)
+        .map_err(|error| PyValueError::new_err(error.to_string()))
 }
 
 #[cfg_attr(
@@ -414,10 +429,13 @@ pub fn wrap_dummies(self_: &PythonExpression, header: Symbol) -> PythonExpressio
 /// - Debugging index contractions
 ///
 /// # Arguments
-/// - `self_`: tensor expression to analyze
+/// - `expression`: tensor expression to analyze
 ///
 /// # Returns
 /// A list of expressions, each representing a free (dangling) index.
+///
+/// # Raises
+/// `ValueError` when the expression cannot be parsed as a tensor network.
 ///
 /// # Examples:
 /// ```python
@@ -437,20 +455,19 @@ pub fn wrap_dummies(self_: &PythonExpression, header: Symbol) -> PythonExpressio
 /// # print(tensor_with_args)
 /// print(list_dangling(tensor_with_args.to_expression()))
 /// ```
-pub fn list_dangling(self_: &PythonExpression) -> Vec<PythonExpression> {
-    self_
+pub fn list_dangling(expression: &PythonExpression) -> PyResult<Vec<PythonExpression>> {
+    expression
         .expr
         .list_dangling::<AbstractIndex>()
-        .into_iter()
-        .map(|a| a.into())
-        .collect()
+        .map(|indices| indices.into_iter().map(Into::into).collect())
+        .map_err(|error| PyValueError::new_err(error.to_string()))
 }
 
 #[cfg_attr(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
-#[pyfunction(signature = (self_, settings = None))]
+#[pyfunction(signature = (expression, settings = None))]
 /// Applies Clifford algebra rules and trace identities to simplify gamma matrix expressions.
 ///
 /// Performs comprehensive simplifications of Dirac gamma matrix algebra including:
@@ -465,7 +482,7 @@ pub fn list_dangling(self_: &PythonExpression) -> Vec<PythonExpression> {
 /// These can be easily created using the hep_lib.
 ///
 /// # Arguments
-/// - `self_`: expression containing gamma matrix products and traces
+/// - `expression`: expression containing gamma matrix products and traces
 ///
 /// # Returns
 /// The simplified expression with gamma algebra applied.
@@ -483,12 +500,12 @@ pub fn list_dangling(self_: &PythonExpression) -> Vec<PythonExpression> {
 /// print(simplify_gamma(gamma_structure(7, 3, 4) * gamma_structure(3, 7, 4)))
 /// ```
 pub fn simplify_gamma(
-    self_: &PythonExpression,
+    expression: &PythonExpression,
     settings: Option<&algebra::PyGammaSimplifySettings>,
 ) -> PythonExpression {
     match settings {
-        Some(settings) => self_.expr.simplify_gamma_with(settings.rust()),
-        None => self_.expr.simplify_gamma(),
+        Some(settings) => expression.expr.simplify_gamma_with(settings.rust()),
+        None => expression.expr.simplify_gamma(),
     }
     .into()
 }
@@ -510,7 +527,7 @@ pub fn simplify_gamma(
 /// - Self-contractions: `pᵘpᵤ → p²`
 ///
 /// # Arguments
-/// - `self_`: expression containing contracted Minkowski vector indices
+/// - `expression`: expression containing contracted Minkowski vector indices
 ///
 /// # Returns
 /// The expression with vector contractions converted to dot products.
@@ -528,8 +545,8 @@ pub fn simplify_gamma(
 ///
 /// print(to_dots( p(mu)*q(mu)))
 /// ```
-pub fn to_dots(self_: &PythonExpression) -> PythonExpression {
-    self_.expr.to_dots().into()
+pub fn to_dots(expression: &PythonExpression) -> PythonExpression {
+    expression.expr.to_dots().into()
 }
 
 #[cfg_attr(
@@ -554,7 +571,7 @@ pub fn to_dots(self_: &PythonExpression) -> PythonExpression {
 /// The function recognizes metrics as `spenso::g(...)`
 ///
 /// # Arguments
-/// - `self_`: expression containing metric/identity tensor contractions
+/// - `expression`: expression containing metric/identity tensor contractions
 ///
 /// # Returns
 /// The simplified expression with metric rules applied.
@@ -571,15 +588,15 @@ pub fn to_dots(self_: &PythonExpression) -> PythonExpression {
 /// nu = rep("nu")
 /// print(simplify_metrics(g(mu, nu) * q(mu)))
 /// ```
-pub fn simplify_metrics(self_: &PythonExpression) -> PythonExpression {
-    self_.expr.simplify_metrics().into()
+pub fn simplify_metrics(expression: &PythonExpression) -> PythonExpression {
+    expression.expr.simplify_metrics().into()
 }
 
 #[cfg_attr(
     feature = "python_stubgen",
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
-#[pyfunction(signature = (self_, settings = None))]
+#[pyfunction(signature = (expression, settings = None))]
 /// Applies SU(N) color algebra rules to simplify color group structures.
 ///
 /// Performs comprehensive simplifications of SU(N) color algebra including:
@@ -599,7 +616,7 @@ pub fn simplify_metrics(self_: &PythonExpression) -> PythonExpression {
 /// to construct the scalar invariants associated with explicitly typed color structures.
 ///
 /// # Arguments
-/// - `self_`: expression containing SU(N) color structures
+/// - `expression`: expression containing SU(N) color structures
 ///
 /// # Returns
 /// Simplified expression with color algebra reduced to representation-owned scalar
@@ -610,12 +627,12 @@ pub fn simplify_metrics(self_: &PythonExpression) -> PythonExpression {
 /// could not be fully reduced to color-scalar form.
 ///
 pub fn simplify_color(
-    self_: &PythonExpression,
+    expression: &PythonExpression,
     settings: Option<&algebra::PyColorSimplifySettings>,
 ) -> PythonExpression {
     match settings {
-        Some(settings) => self_.expr.simplify_color_with(settings.rust()),
-        None => self_.expr.simplify_color(),
+        Some(settings) => expression.expr.simplify_color_with(settings.rust()),
+        None => expression.expr.simplify_color(),
     }
     .into()
 }
@@ -673,7 +690,13 @@ pub(crate) fn initialize_alg_simp(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
 #[cfg(test)]
 mod tests {
+    use pyo3::IntoPyObject;
     use pyo3::types::{PyAnyMethods, PyList};
+    use spenso::network::tags::SPENSO_TAG;
+    use symbolica::{
+        atom::{Atom, FunctionBuilder},
+        symbol,
+    };
 
     use super::*;
 
@@ -691,6 +714,7 @@ mod tests {
         "GammaChainOrdering",
         "GammaConjugationError",
         "GammaSimplifySettings",
+        "NetworkToolingError",
         "SchoonschipContractionOrder",
         "SchoonschipMode",
         "SchoonschipSettings",
@@ -765,6 +789,151 @@ mod tests {
             assert_eq!(actual, expected);
             assert!(module.getattr("initialize").is_err());
             assert!(module.getattr("initialize_module").is_err());
+        });
+    }
+
+    #[test]
+    fn network_tooling_failures_are_python_value_errors() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let module = PyModule::new(py, "idenso")?;
+            initialize_alg_simp(&module)?;
+            let malformed = PythonExpression {
+                expr: FunctionBuilder::new(SPENSO_TAG.dot)
+                    .add_arg(Atom::var(symbol!("malformed_dot_operand")))
+                    .finish(),
+            }
+            .into_pyobject(py)?;
+
+            for name in ["undo_dots", "schoonschip_net"] {
+                let error = module
+                    .getattr(name)?
+                    .call1((&malformed,))
+                    .expect_err("malformed dot notation should return an error");
+                assert!(error.is_instance_of::<NetworkToolingError>(py));
+                assert!(error.is_instance_of::<PyValueError>(py));
+                assert!(error.to_string().contains("cannot parse tensor network"));
+                assert!(error.to_string().contains("Invalid dot function"));
+            }
+
+            let error = module
+                .getattr("canonize")?
+                .call1((&malformed,))
+                .expect_err("malformed dot notation should not canonicalize");
+            assert!(error.is_instance_of::<CanonicalizationError>(py));
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert!(error.to_string().contains("cannot parse tensor network"));
+            assert!(error.to_string().contains("Invalid dot function"));
+
+            let error = module
+                .getattr("dirac_adjoint")?
+                .call1((&malformed,))
+                .expect_err("malformed dot notation should not have a Dirac adjoint");
+            assert!(error.is_instance_of::<DiracAdjointError>(py));
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert!(error.to_string().contains("cannot parse tensor network"));
+            assert!(error.to_string().contains("Invalid dot function"));
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn public_python_surface_has_runtime_docstrings() {
+        Python::initialize();
+        Python::attach(|py| {
+            let module = PyModule::new(py, "idenso").unwrap();
+            initialize_alg_simp(&module).unwrap();
+
+            for name in PUBLIC_API {
+                let documentation = module
+                    .getattr(*name)
+                    .unwrap()
+                    .getattr("__doc__")
+                    .unwrap()
+                    .extract::<Option<String>>()
+                    .unwrap();
+                assert!(
+                    documentation.is_some_and(|documentation| !documentation.trim().is_empty()),
+                    "{name} is missing its Python docstring"
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn python_signatures_use_public_names_and_concrete_defaults() {
+        Python::initialize();
+        Python::attach(|py| {
+            let module = PyModule::new(py, "idenso").unwrap();
+            initialize_alg_simp(&module).unwrap();
+            let inspect_signature = PyModule::import(py, "inspect")
+                .unwrap()
+                .getattr("signature")
+                .unwrap();
+
+            for (name, expected) in [
+                (
+                    "GammaSimplifySettings",
+                    "(*, chain_ordering=None, evaluate_traces=True, expand_three_gamma_epsilon=False)",
+                ),
+                (
+                    "CookSettings",
+                    "(*, mode=None, source=None, output_tags=None, preserve_tags=False)",
+                ),
+                (
+                    "SchoonschipSettings",
+                    "(*, depth_limit=1, mode=None, traversal=None, expand_contracted_sums=False, simplify_chain_like_functions=False, schoonschip_rank1_tensors=True, contraction_order=None)",
+                ),
+            ] {
+                let class = module.getattr(name).unwrap();
+                let signature = class
+                    .getattr("__text_signature__")
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap();
+                assert_eq!(signature, expected, "unexpected signature for {name}");
+                let inspected = inspect_signature
+                    .call1((&class,))
+                    .unwrap()
+                    .str()
+                    .unwrap()
+                    .to_string();
+                assert!(
+                    !inspected.contains("..."),
+                    "inspect.signature retained an ellipsis for {name}: {inspected}"
+                );
+            }
+
+            for name in [
+                "cook_function",
+                "cook_indices",
+                "dirac_adjoint",
+                "expand_bis",
+                "expand_color",
+                "expand_metrics",
+                "expand_mink",
+                "expand_mink_bis",
+                "list_dangling",
+                "simplify_color",
+                "simplify_gamma",
+                "simplify_metrics",
+                "to_dots",
+                "wrap_dummies",
+                "wrap_indices",
+            ] {
+                let signature = module
+                    .getattr(name)
+                    .unwrap()
+                    .getattr("__text_signature__")
+                    .unwrap()
+                    .extract::<String>()
+                    .unwrap();
+                assert!(
+                    signature.contains("expression") && !signature.contains("self_"),
+                    "unexpected signature for {name}: {signature}"
+                );
+            }
         });
     }
 }

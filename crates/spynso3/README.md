@@ -65,8 +65,12 @@ momentum = p(1, mink)              # rank-one TensorExpression
 
 ## Tensor-aware algebra
 
-Addition and subtraction require identical ordered interfaces. Multiplication
-uses the interface to choose one unambiguous operation:
+Addition and subtraction align fully indexed interfaces by abstract index, so
+permuted terms such as `A(i, j) + A(j, i)` are valid. Interfaces containing
+unresolved ports must have the same logical order. Scalar zero is an additive
+identity, including the initial zero used by Python's `sum()`; other scalar
+addends remain invalid for non-scalar tensors. Multiplication uses the interface
+to choose one unambiguous operation:
 
 1. Compose unique two-ended propagation channels into an ordered chain.
 2. Otherwise contract the unique compatible port pair (rank one by rank one is

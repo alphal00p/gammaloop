@@ -1,6 +1,6 @@
 use std::ops::AddAssign;
 
-use linnet::{half_edge::subgraph::subset::SubSet, permutation::Permutation};
+use linnet::half_edge::subgraph::subset::SubSet;
 use spenso::{
     algebra::ScalarMul,
     contraction::{Contract, ContractionError, Trace},
@@ -20,14 +20,14 @@ use spenso::{
     },
     shadowing::{Concretize, symbolica_utils::SpensoPrintSettings},
     structure::{
-        HasName, HasStructure, MergeInfo, NamedStructure, OrderedStructure, PermutedStructure,
-        ScalarStructure, ScalarTensor, SlotIndex, StructureContract, TensorShell, TensorStructure,
-        ToSymbolic,
+        ApplyPendingIndexPermutation, CanonicalLayout, Canonicalized, HasName, HasStructure,
+        MergeInfo, NamedStructure, OrderedStructure, PendingIndexPermutation, Reindexed,
+        ScalarStructure, ScalarTensor, SlotIndex, StructureContract, TensorIdentity, TensorShell,
+        TensorStructure, ToSymbolic,
         abstract_index::AIND_SYMBOLS,
         concrete_index::{ExpandedIndex, FlatIndex},
-        permuted::PermuteTensor,
         representation::{LibraryRep, LibrarySlot},
-        slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind},
+        slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
     },
     tensors::parametric::MixedTensor,
 };
@@ -40,9 +40,11 @@ use spenso::structure::dimension::Dimension;
 use spenso::structure::representation::Representation;
 
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     function,
 };
+
+use crate::NetworkToolingError;
 
 mod canonicalize;
 pub(crate) use canonicalize::remove_antisymmetric_zero_terms;
@@ -78,9 +80,9 @@ impl<Aind: ParseableAind + AbsInd + DummyAind> StructureFromAtom for SymbolicTen
     fn structure_from_atom(
         value: AtomView<'_>,
         mode: StructureInferenceMode,
-    ) -> Result<PermutedStructure<Self>, StructureError> {
+    ) -> Result<Canonicalized<Self>, StructureError> {
         let structure = OrderedStructure::<LibraryRep, Aind>::structure_from_atom(value, mode)?;
-        Ok(structure.map_structure(|structure| {
+        Ok(structure.map_canonical(|structure| {
             let (is_composite, is_metric) = if let AtomView::Fun(f) = value {
                 (false, f.get_symbol() == ETS.metric)
             } else {
@@ -107,7 +109,7 @@ where
 {
     fn tensor_from_expression(
         expression: AtomView<'_>,
-        structure: PermutedStructure<SymbolicTensor<Aind>>,
+        structure: Canonicalized<SymbolicTensor<Aind>>,
         _tensor_library: &Lib,
         _function_library: &FunLib,
         _settings: &ParseSettings,
@@ -116,13 +118,7 @@ where
         K: std::fmt::Display,
         Symbol: std::fmt::Display,
     {
-        let mut tensor = structure.structure;
-        if !structure.rep_permutation.is_identity() {
-            tensor = tensor.permute_reps(&structure.rep_permutation.inverse());
-        }
-        if !structure.index_permutation.is_identity() {
-            tensor = tensor.permute_inds(&structure.index_permutation.inverse());
-        }
+        let mut tensor = structure.into_canonical();
 
         let (is_composite, is_metric) = if let AtomView::Fun(fun) = expression {
             (false, fun.get_symbol() == ETS.metric)
@@ -187,17 +183,40 @@ impl<Aind: AbsInd> ScalarStructure for SymbolicTensor<Aind> {
     }
 }
 
-impl<Aind: AbsInd + DummyAind + ParseableAind> PermuteTensor for SymbolicTensor<Aind> {
+impl<Aind: AbsInd + DummyAind + ParseableAind> TensorIdentity for SymbolicTensor<Aind> {
     type Id = SymbolicTensor<Aind>;
     type IdSlot = LibrarySlot<Aind>;
-    type Permuted = SymbolicTensor<Aind>;
 
     fn id(i: Self::IdSlot, j: Self::IdSlot) -> Self::Id {
         Self::from_named(&NamedStructure::<Symbol, (), LibraryRep, Aind>::id(i, j)).unwrap()
     }
+}
 
-    fn permute_inds(mut self, permutation: &linnet::permutation::Permutation) -> Self::Permuted {
-        let (new_structure, idstructures) = self.structure.clone().permute_inds(permutation);
+impl<Aind: AbsInd + DummyAind + ParseableAind> ApplyPendingIndexPermutation
+    for SymbolicTensor<Aind>
+{
+    type Output = SymbolicTensor<Aind>;
+
+    fn apply_pending_index_permutation(
+        mut self,
+        pending: &PendingIndexPermutation,
+    ) -> Self::Output {
+        if pending.is_identity() {
+            return self;
+        }
+
+        let target_slots = self.structure.external_structure();
+        let mut dummy_structure = Vec::with_capacity(target_slots.len());
+        let mut ids = Atom::one();
+        for slot in pending.apply_slice_inverse(&target_slots) {
+            let dummy = slot.to_dummy_ind();
+            dummy_structure.push(dummy);
+            ids *= Self::id(dummy.dual(), slot.to_lib()).expression;
+        }
+
+        let new_structure =
+            Canonicalized::<OrderedStructure<LibraryRep, Aind>>::from_iter(dummy_structure)
+                .into_canonical();
 
         for (o, n) in self
             .structure
@@ -207,35 +226,7 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> PermuteTensor for SymbolicTensor<
             self.expression = self.expression.replace(o.to_atom()).with(n.to_atom());
         }
 
-        let mut ids = Atom::one();
-        for s in idstructures.iter() {
-            let o = s.external_structure();
-            ids *= Self::id(o[0], o[1]).expression;
-        }
         self.expression *= ids;
-
-        self
-    }
-
-    fn permute_reps(mut self, rep_perm: &linnet::permutation::Permutation) -> Self::Permuted {
-        let (new_structure, idstructures) = self.structure.clone().permute_reps(rep_perm);
-
-        for (o, n) in self
-            .structure
-            .external_structure_iter()
-            .zip(new_structure.external_structure_iter())
-        {
-            self.expression = self.expression.replace(o.to_atom()).with(n.to_atom());
-        }
-
-        let mut ids = Atom::one();
-        for s in idstructures.iter() {
-            let o = s.external_structure();
-            ids *= Self::id(o[0], o[1]).expression;
-        }
-
-        self.expression *= ids;
-
         self
     }
 }
@@ -245,18 +236,21 @@ impl<Aind: AbsInd> TensorStructure for SymbolicTensor<Aind> {
     type Indexed = SymbolicTensor<Aind>;
     type Slot = LibrarySlot<Aind>;
 
-    fn reindex(self, indices: &[Aind]) -> Result<PermutedStructure<Self::Indexed>, StructureError> {
-        let res = self.structure.reindex(indices)?;
-        Ok(PermutedStructure {
-            structure: Self {
-                structure: res.structure,
-                is_metric: self.is_metric,
-                is_composite: self.is_composite,
-                expression: self.expression,
-            },
-            rep_permutation: res.rep_permutation,
-            index_permutation: res.index_permutation,
-        })
+    fn reindex_storage(self, indices: &[Aind]) -> Result<Reindexed<Self::Indexed>, StructureError> {
+        let Self {
+            structure,
+            is_metric,
+            is_composite,
+            expression,
+        } = self;
+        Ok(structure
+            .reindex_storage(indices)?
+            .map_target(|structure| Self {
+                structure,
+                is_metric,
+                is_composite,
+                expression,
+            }))
     }
 
     fn dual(self) -> Self {
@@ -413,31 +407,31 @@ impl<Aind: AbsInd> SymbolicTensor<Aind> {
         N::Name: IntoSymbol + Clone,
         N::Args: IntoArgs,
     {
-        let permuted_structure = PermutedStructure::from(structure.external_structure());
+        let canonicalized = Canonicalized::from(structure.external_structure());
         let is_metric = structure.name()?.ref_into_symbol() == ETS.metric;
         Some(SymbolicTensor {
-            expression: structure.to_symbolic(Some(permuted_structure.index_permutation))?,
+            expression: structure.to_symbolic(None)?,
             is_metric,
             is_composite: false,
-            structure: permuted_structure.structure,
+            structure: canonicalized.into_canonical(),
         })
     }
 
-    pub fn from_permuted<N>(structure: &PermutedStructure<N>) -> Option<Self>
+    pub fn from_canonicalized<N>(structure: &Canonicalized<N>) -> Option<Self>
     where
+        Aind: ParseableAind,
         N: ToSymbolic + HasName + TensorStructure<Slot = LibrarySlot<Aind>>,
         N::Name: IntoSymbol + Clone,
         N::Args: IntoArgs,
     {
-        let permuted_structure = PermutedStructure::from(structure.structure.external_structure());
-        let is_metric = structure.structure.name()?.ref_into_symbol() == ETS.metric;
+        let canonical = structure.canonical();
+        let canonicalized = Canonicalized::from(canonical.external_structure());
+        let is_metric = canonical.name()?.ref_into_symbol() == ETS.metric;
         Some(SymbolicTensor {
-            expression: structure
-                .structure
-                .to_symbolic(Some(structure.index_permutation.clone()))?,
+            expression: structure.to_symbolic(None)?,
             is_composite: false,
             is_metric,
-            structure: permuted_structure.structure,
+            structure: canonicalized.into_canonical(),
         })
     }
 
@@ -561,7 +555,7 @@ pub type SymbolicNet<Aind> =
 //     Network<NetworkStore<ParamTensor<SymbolicTensor<Aind>, Atom>, DummyKey, Symbol, Aind>;
 pub trait SymbolicNetExt<Aind: AbsInd + DummyAind + ParseableAind + 'static> {
     fn snapshot_dot(&self) -> String;
-    fn simple_execute<CStrat>(self) -> Atom
+    fn simple_execute<CStrat>(self) -> Result<Atom, NetworkToolingError>
     where
         SymbolicTensor<Aind>: Contract<SymbolicTensor<Aind>, CStrat, LCM = SymbolicTensor<Aind>>;
 }
@@ -578,20 +572,28 @@ impl<Aind: AbsInd + DummyAind + ParseableAind + 'static> SymbolicNetExt<Aind>
         )
     }
 
-    fn simple_execute<CStrat>(mut self) -> Atom
+    fn simple_execute<CStrat>(mut self) -> Result<Atom, NetworkToolingError>
     where
         SymbolicTensor<Aind>: Contract<SymbolicTensor<Aind>, CStrat, LCM = SymbolicTensor<Aind>>,
     {
         let lib = DummyLibrary::<SymbolicTensor<Aind>>::new();
 
         self.execute::<Sequential, SmallestDegree<CStrat>, _, _, _>(&lib, &Wrap {})
-            .unwrap();
+            .map_err(|error| NetworkToolingError::Execute {
+                reason: error.to_string(),
+            })?;
 
-        match self.result_tensor(&lib).unwrap() {
-            ExecutionResult::One => Atom::num(1),
-            ExecutionResult::Zero => Atom::Zero,
-            ExecutionResult::Val(tensor) => tensor.expression.clone(),
-        }
+        Ok(
+            match self
+                .result_tensor(&lib)
+                .map_err(|error| NetworkToolingError::Result {
+                    reason: error.to_string(),
+                })? {
+                ExecutionResult::One => Atom::num(1),
+                ExecutionResult::Zero => Atom::Zero,
+                ExecutionResult::Val(tensor) => tensor.expression.clone(),
+            },
+        )
     }
 }
 
@@ -629,10 +631,25 @@ impl SymbolicNetParse for AtomView<'_> {
 pub mod contract;
 
 impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<Aind>> for ShadowedStructure<Aind> {
-    fn concretize(self, perm: Option<Permutation>) -> SymbolicTensor<Aind> {
+    fn concretize(self) -> SymbolicTensor<Aind> {
         let is_metric = self.name().unwrap() == ETS.metric;
         SymbolicTensor {
-            expression: self.to_symbolic(perm).unwrap(),
+            expression: self.to_symbolic(None).unwrap(),
+            is_composite: false,
+            is_metric,
+            structure: self.structure,
+        }
+    }
+
+    fn concretize_logical(self, layout: &CanonicalLayout) -> SymbolicTensor<Aind> {
+        let is_metric = self.name().unwrap() == ETS.metric;
+        let logical_slots = layout.canonical_to_logical(&self.external_structure());
+        let expression = FunctionBuilder::new(self.name().unwrap())
+            .add_args(self.args().unwrap_or_default())
+            .add_args(logical_slots.into_iter().map(|slot| slot.to_atom()))
+            .finish();
+        SymbolicTensor {
+            expression,
             is_composite: false,
             is_metric,
             structure: self.structure,
@@ -643,30 +660,28 @@ impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<Aind>> for Shadowed
 impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<Aind>>
     for TensorShell<ShadowedStructure<Aind>>
 {
-    fn concretize(self, perm: Option<Permutation>) -> SymbolicTensor<Aind> {
-        let is_metric = self.name().unwrap() == ETS.metric;
-        SymbolicTensor {
-            expression: self.to_symbolic(perm).unwrap(),
-            is_composite: false,
-            is_metric,
-            structure: self.structure.structure,
-        }
+    fn concretize(self) -> SymbolicTensor<Aind> {
+        self.structure.concretize()
+    }
+
+    fn concretize_logical(self, layout: &CanonicalLayout) -> SymbolicTensor<Aind> {
+        self.structure.concretize_logical(layout)
     }
 }
 
 impl<Aind: AbsInd + ParseableAind> Concretize<SymbolicTensor<Aind>>
     for TensorShell<SymbolicTensor<Aind>>
 {
-    fn concretize(self, perm: Option<Permutation>) -> SymbolicTensor<Aind> {
-        if let Some(p) = perm {
-            if p.is_identity() {
-                self.structure
-            } else {
-                panic!("Cannot concretize with a permuation")
-            }
-        } else {
-            self.structure
+    fn concretize(self) -> SymbolicTensor<Aind> {
+        self.structure
+    }
+
+    fn concretize_logical(self, layout: &CanonicalLayout) -> SymbolicTensor<Aind> {
+        let positions = (0..self.structure.order()).collect::<Vec<_>>();
+        if layout.logical_to_canonical(&positions) != positions {
+            panic!("cannot apply a logical layout to an already concrete symbolic tensor")
         }
+        self.structure
     }
 }
 

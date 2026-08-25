@@ -5,7 +5,7 @@ use spenso::{
     network::{library::symbolic::ExplicitKey, tags::SPENSO_TAG as T},
     shadowing::{Collectable, IntoAtom, TensorCollectExt, symbolica_utils::SpensoPrintSettings},
     structure::{
-        TensorStructure,
+        Canonicalized, TensorStructure,
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         dimension::Dimension,
         representation::RepName,
@@ -173,9 +173,9 @@ impl ColorSymbols {
         &self,
         fundimd: impl Into<Dimension>,
         adim: impl Into<Dimension>,
-    ) -> ExplicitKey<Aind> {
+    ) -> Canonicalized<ExplicitKey<Aind>> {
         let nc = fundimd.into();
-        let res = ExplicitKey::from_iter(
+        ExplicitKey::from_iter(
             [
                 ColorAdjoint {}.new_rep(adim).cast(),
                 ColorFundamental {}.new_rep(nc).to_lib(),
@@ -183,9 +183,7 @@ impl ColorSymbols {
             ],
             self.t,
             None,
-        );
-        debug_assert!(res.rep_permutation.is_identity());
-        res.structure
+        )
     }
     pub fn t_pattern(
         &self,
@@ -195,15 +193,22 @@ impl ColorSymbols {
         i: impl Into<AbstractIndex>,
         j: impl Into<AbstractIndex>,
     ) -> Atom {
-        self.t_strct(fundimd, adim)
-            .reindex(&[a.into(), i.into(), j.into()])
+        let structure = self.t_strct::<AbstractIndex>(fundimd, adim);
+        let logical_indices = [a.into(), i.into(), j.into()];
+        let storage_indices = structure.layout().logical_to_canonical(&logical_indices);
+        structure
+            .into_canonical()
+            .reindex_storage(&storage_indices)
             .unwrap()
             .permute_with_metric()
     }
 
-    pub fn f_strct<Aind: AbsInd>(&self, adim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+    pub fn f_strct<Aind: AbsInd>(
+        &self,
+        adim: impl Into<Dimension>,
+    ) -> Canonicalized<ExplicitKey<Aind>> {
         let adim = adim.into();
-        let res = ExplicitKey::from_iter(
+        ExplicitKey::from_iter(
             [
                 ColorAdjoint {}.new_rep(adim),
                 ColorAdjoint {}.new_rep(adim),
@@ -211,9 +216,7 @@ impl ColorSymbols {
             ],
             self.f,
             None,
-        );
-        debug_assert!(res.rep_permutation.is_identity());
-        res.structure
+        )
     }
 
     pub fn f_pattern(
@@ -223,8 +226,12 @@ impl ColorSymbols {
         b: impl Into<AbstractIndex>,
         c: impl Into<AbstractIndex>,
     ) -> Atom {
-        self.f_strct(adim)
-            .reindex(&[a.into(), b.into(), c.into()])
+        let structure = self.f_strct::<AbstractIndex>(adim);
+        let logical_indices = [a.into(), b.into(), c.into()];
+        let storage_indices = structure.layout().logical_to_canonical(&logical_indices);
+        structure
+            .into_canonical()
+            .reindex_storage(&storage_indices)
             .unwrap()
             .permute_with_metric()
     }

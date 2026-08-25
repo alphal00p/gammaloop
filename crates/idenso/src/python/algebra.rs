@@ -26,10 +26,14 @@ use crate::{
 create_exception!(
     symbolica.community.idenso,
     GammaConjugationError,
-    PyValueError
+    PyValueError,
+    "Raised when conjugated gamma matrices cannot be rewritten consistently."
 );
 
 /// Controls how open gamma chains are reordered during simplification.
+///
+/// Available values are `RepeatedPairs`, which only moves matching matrices together, and
+/// `Canonical`, which canonically orders the complete open chain.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     frozen,
@@ -41,7 +45,9 @@ create_exception!(
 )]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PyGammaChainOrdering {
+    /// Move repeated gamma matrices toward each other without reordering unrelated factors.
     RepeatedPairs,
+    /// Canonically order open chains using adjacent Clifford-algebra swaps.
     Canonical,
 }
 
@@ -77,21 +83,7 @@ pub struct PyGammaSimplifySettings {
 }
 
 impl PyGammaSimplifySettings {
-    pub fn rust(&self) -> GammaSimplifySettings {
-        self.inner
-    }
-}
-
-#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
-#[pymethods]
-impl PyGammaSimplifySettings {
-    #[new]
-    #[pyo3(signature = (
-        *,
-        chain_ordering = PyGammaChainOrdering::RepeatedPairs,
-        evaluate_traces = true,
-        expand_three_gamma_epsilon = false
-    ))]
+    /// Construct settings from explicit Rust-side values.
     pub fn new(
         chain_ordering: PyGammaChainOrdering,
         evaluate_traces: bool,
@@ -106,6 +98,40 @@ impl PyGammaSimplifySettings {
         }
     }
 
+    pub fn rust(&self) -> GammaSimplifySettings {
+        self.inner
+    }
+}
+
+#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[pymethods]
+impl PyGammaSimplifySettings {
+    /// Configure gamma-chain ordering, trace evaluation, and the optional 4D three-gamma identity.
+    ///
+    /// `chain_ordering=None` selects `GammaChainOrdering.RepeatedPairs`.
+    #[new]
+    #[pyo3(
+        signature = (
+            *,
+            chain_ordering = None,
+            evaluate_traces = true,
+            expand_three_gamma_epsilon = false
+        ),
+        text_signature = "(*, chain_ordering=None, evaluate_traces=True, expand_three_gamma_epsilon=False)"
+    )]
+    pub fn py_new(
+        chain_ordering: Option<PyGammaChainOrdering>,
+        evaluate_traces: bool,
+        expand_three_gamma_epsilon: bool,
+    ) -> Self {
+        Self::new(
+            chain_ordering.unwrap_or(PyGammaChainOrdering::RepeatedPairs),
+            evaluate_traces,
+            expand_three_gamma_epsilon,
+        )
+    }
+
+    /// Use FORM-like repeated-pair ordering and evaluate closed traces.
     #[staticmethod]
     pub fn repeated_pairs() -> Self {
         Self {
@@ -113,6 +139,7 @@ impl PyGammaSimplifySettings {
         }
     }
 
+    /// Canonically order open gamma chains and evaluate closed traces.
     #[staticmethod]
     pub fn canonical() -> Self {
         Self {
@@ -120,16 +147,19 @@ impl PyGammaSimplifySettings {
         }
     }
 
+    /// Ordering strategy used for open gamma chains.
     #[getter]
     pub fn chain_ordering(&self) -> PyGammaChainOrdering {
         self.inner.chain_ordering.into()
     }
 
+    /// Whether closed gamma chains are evaluated as traces.
     #[getter]
     pub fn evaluate_traces(&self) -> bool {
         self.inner.evaluate_traces
     }
 
+    /// Whether three four-dimensional gammas expand into a gamma5-epsilon basis.
     #[getter]
     pub fn expand_three_gamma_epsilon(&self) -> bool {
         self.inner.expand_three_gamma_epsilon
@@ -158,6 +188,7 @@ impl PyColorSimplifySettings {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyColorSimplifySettings {
+    /// Configure color-trace evaluation, cross-chain Fierz expansion, and invariant substitution.
     #[new]
     #[pyo3(signature = (
         *,
@@ -179,16 +210,19 @@ impl PyColorSimplifySettings {
         }
     }
 
+    /// Whether closed color chains are evaluated as traces.
     #[getter]
     pub fn evaluate_traces(&self) -> bool {
         self.inner.evaluate_traces
     }
 
+    /// Whether generators on different open chains are expanded with the Fierz identity.
     #[getter]
     pub fn expand_cross_chain_fierz(&self) -> bool {
         self.inner.expand_cross_chain_fierz
     }
 
+    /// Whether supported `cof(N)` invariants are replaced by explicit dimension formulas.
     #[getter]
     pub fn substitute_cof_dimension_invariants(&self) -> bool {
         self.inner.substitute_cof_dimension_invariants
@@ -217,6 +251,7 @@ impl PyColorCasimirSettings {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyColorCasimirSettings {
+    /// Configure the SU(N) dimension and fundamental-index normalizations used by Casimir rewriting.
     #[new]
     #[pyo3(signature = (
         *,
@@ -232,11 +267,13 @@ impl PyColorCasimirSettings {
         }
     }
 
+    /// Whether the fundamental dimension is rewritten with the SU(N) relation `d_F = C_A`.
     #[getter]
     pub fn rewrite_fundamental_dimension(&self) -> bool {
         self.inner.rewrite_fundamental_dimension
     }
 
+    /// Whether the fundamental Dynkin index is replaced by `T_F = 1/2`.
     #[getter]
     pub fn substitute_fundamental_index(&self) -> bool {
         self.inner.substitute_fundamental_index
@@ -248,6 +285,7 @@ impl PyColorCasimirSettings {
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
+/// Convert bispinor tensors into chain/trace shorthands and join adjacent gamma chains.
 pub fn collect_gamma_chains(expression: &PythonExpression) -> PythonExpression {
     expression.expr.collect_gamma_chains().into()
 }
@@ -257,6 +295,7 @@ pub fn collect_gamma_chains(expression: &PythonExpression) -> PythonExpression {
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
+/// Simplify products and linear combinations involving the time-like gamma matrix `gamma0`.
 pub fn simplify_gamma0(expression: &PythonExpression) -> PythonExpression {
     expression.expr.simplify_gamma0().into()
 }
@@ -266,6 +305,9 @@ pub fn simplify_gamma0(expression: &PythonExpression) -> PythonExpression {
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
+/// Rewrite conjugated gamma matrices as gamma0-sandwiched matrices with fresh spinor indices.
+///
+/// Raises `GammaConjugationError` when the expression cannot be rewritten consistently.
 pub fn simplify_gamma_conjugate(expression: &PythonExpression) -> PyResult<PythonExpression> {
     expression
         .expr
@@ -279,6 +321,7 @@ pub fn simplify_gamma_conjugate(expression: &PythonExpression) -> PyResult<Pytho
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
+/// Simplify Levi-Civita/metric contractions and pairs of Levi-Civita tensors to a fixed point.
 pub fn simplify_epsilon(expression: &PythonExpression) -> PythonExpression {
     expression.expr.simplify_epsilon().into()
 }
@@ -288,6 +331,10 @@ pub fn simplify_epsilon(expression: &PythonExpression) -> PythonExpression {
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction(signature = (expression, *, fundamental, adjoint, settings = None))]
+/// Rewrite the supplied color-representation dimensions and invariants into a Casimir basis.
+///
+/// `fundamental` and `adjoint` accept Spynso `Representation` objects or their symbolic
+/// expressions. Only scalar coefficient positions are rewritten.
 pub fn to_color_casimir(
     expression: &PythonExpression,
     fundamental: RegisteredRepresentation,
@@ -311,6 +358,7 @@ pub fn to_color_casimir(
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
+/// Replace supported `cof(N)` Casimir, Dynkin-index, and Gram invariants by dimension formulas.
 pub fn to_cof_dimension_invariants(expression: &PythonExpression) -> PythonExpression {
     expression.expr.to_cof_dimension_invariants().into()
 }
@@ -320,6 +368,7 @@ pub fn to_cof_dimension_invariants(expression: &PythonExpression) -> PythonExpre
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
+/// Factor an expression around tensors carrying fundamental, antifundamental, or adjoint color.
 pub fn collect_color(expression: &PythonExpression) -> PythonExpression {
     expression.expr.collect_color().into()
 }
@@ -329,6 +378,7 @@ pub fn collect_color(expression: &PythonExpression) -> PythonExpression {
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
+/// Factor an expression around recognized scalar color invariants such as Casimirs and indices.
 pub fn collect_color_constants(expression: &PythonExpression) -> PythonExpression {
     expression.expr.collect_color_constants().into()
 }
@@ -338,6 +388,7 @@ pub fn collect_color_constants(expression: &PythonExpression) -> PythonExpressio
     gen_stub_pyfunction(module = "symbolica.community.idenso")
 )]
 #[pyfunction]
+/// Expand around color structures and wrap each resulting scalar coefficient with `symbol`.
 pub fn wrap_color(expression: &PythonExpression, symbol: Symbol) -> PythonExpression {
     expression.expr.wrap_color(symbol).into()
 }
@@ -371,7 +422,7 @@ mod tests {
     #[test]
     fn python_settings_match_rust_defaults() {
         assert_eq!(
-            PyGammaSimplifySettings::new(PyGammaChainOrdering::RepeatedPairs, true, false,).rust(),
+            PyGammaSimplifySettings::new(PyGammaChainOrdering::RepeatedPairs, true, false).rust(),
             GammaSimplifySettings::default()
         );
         assert_eq!(

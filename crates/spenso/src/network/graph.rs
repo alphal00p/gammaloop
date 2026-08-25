@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{Debug, Display},
+    marker::PhantomData,
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
     time::Instant,
 };
@@ -24,9 +25,8 @@ use thiserror::Error;
 use crate::{
     network::NetworkState,
     structure::{
-        HasStructure, PermutedStructure, TensorStructure,
+        ApplyPendingIndexPermutation, Canonicalized, HasStructure, TensorStructure,
         abstract_index::AbstractIndex,
-        permuted::{Perm, PermuteTensor},
         representation::{LibrarySlot, RepName},
         slot::{AbsInd, DualSlotTo, IsAbstractSlot},
     },
@@ -408,13 +408,21 @@ pub enum NetworkLeaf<K, Aind = AbstractIndex> {
     ScaledTensor(ScaledTensorRef),
     ScaledTensorSum(Vec<ScaledTensorRef>),
     LibraryKey {
-        key: PermutedStructure<K>,
-        indices: Vec<Aind>,
+        key: Canonicalized<K>,
+        /// Index values live on graph edges; this retains only the leaf's index type.
+        _aind: PhantomData<Aind>,
     },
     Scalar(ScalarRef),
 }
 
 impl<K, Aind> NetworkLeaf<K, Aind> {
+    pub(crate) fn library_key(key: Canonicalized<K>) -> Self {
+        Self::LibraryKey {
+            key,
+            _aind: PhantomData,
+        }
+    }
+
     pub fn is_scalar(&self) -> bool {
         matches!(self, NetworkLeaf::Scalar(_))
     }
@@ -630,26 +638,16 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     }
 
     pub fn inds(&self, nodeid: NodeIndex) -> Vec<Aind> {
-        let mut slots = Vec::new();
-        let mut ord = Vec::new();
-        if let NetworkNode::Leaf(_) = &self.graph[nodeid] {
-            for n in self.graph.iter_crown(nodeid) {
-                if let NetworkEdge::Slot(s) = self.graph[[&n]] {
-                    slots.push(s.aind);
-                    ord.push(self.slot_order[n.0]);
-                }
-            }
-        }
-
-        let perm = Permutation::sort(&ord);
-        perm.apply_slice_in_place(&mut slots);
-        slots
+        self.slots(nodeid)
+            .into_iter()
+            .map(|slot| slot.aind)
+            .collect()
     }
 
     pub fn get_lib_data<
         S,
         LT: LibraryTensor + Clone,
-        L: Library<S, Key = K, Value = PermutedStructure<LT>>,
+        L: Library<S, Key = K, Value = Canonicalized<LT>>,
     >(
         &self,
         lib: &L,
@@ -658,22 +656,26 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     where
         K: Display + Debug,
         FK: Display,
-        LT::WithIndices: PermuteTensor<Permuted = LT::WithIndices>,
+        LT::WithIndices: ApplyPendingIndexPermutation<Output = LT::WithIndices>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
     {
-        if let NetworkNode::Leaf(NetworkLeaf::LibraryKey { key, indices }) = &self.graph[nodeid] {
-            let libt = lib.get(&key.structure)?;
-            let mappingperm = &key.index_permutation;
-            let mut inds = indices.clone();
-
-            // println!("Mapping perm: {mappingperm}");
-            mappingperm.apply_slice_in_place_inv(&mut inds);
-            // println!("Inds: {inds:?}");
-            let libt_with_indices = libt.structure.with_indices(&inds)?;
-            // libt_with_indices.index_permutation = k.index_permutation.clone();
-
-            Ok(libt_with_indices.permute_inds())
+        if let NetworkNode::Leaf(NetworkLeaf::LibraryKey { key, .. }) = &self.graph[nodeid] {
+            let indices = self.inds(nodeid);
+            let expected = key.layout().order();
+            if indices.len() != expected {
+                return Err(TensorNetworkError::LibraryIndexRankMismatch {
+                    expected,
+                    actual: indices.len(),
+                });
+            }
+            // Slot order keeps each live label attached to the same canonical leaf axis. Map
+            // those labels back to representation-grouped storage order before attaching them
+            // to the library tensor; applying the pending transition recanonicalizes its data.
+            let storage_indices = key.layout().canonical_to_representation(&indices);
+            let libt = lib.get(key.canonical())?;
+            let libt_with_indices = libt.canonical().with_indices(&storage_indices)?;
+            Ok(libt_with_indices.apply())
         } else {
             Err(TensorNetworkError::Other(eyre::eyre!(
                 "expected library key node while materializing library data, found {}",
@@ -1417,6 +1419,8 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             }
         }
         self.graph.delete_hedges(subgraph);
+        self.slot_order.truncate(left.0);
+        debug_assert_eq!(self.slot_order.len(), self.graph.n_hedges());
     }
     pub fn identify_nodes_without_self_edges(
         &mut self,
@@ -1605,7 +1609,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             &|n| match n {
                 NetworkNode::Leaf(l) => match l {
                     NetworkLeaf::LibraryKey { key, .. } => {
-                        Some(format!("label= \"L:{}\"", library_disp(&key.structure)))
+                        Some(format!("label= \"L:{}\"", library_disp(key.canonical())))
                     }
                     NetworkLeaf::LocalTensor(l) => {
                         Some(format!("label = \"T:{}\"", tensor_disp(*l)))
@@ -1659,7 +1663,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             &|n| match n {
                 NetworkNode::Leaf(l) => match l {
                     NetworkLeaf::LibraryKey { key, .. } => {
-                        Some(format!("label= \"L:{}\"", library_disp(&key.structure)))
+                        Some(format!("label= \"L:{}\"", library_disp(key.canonical())))
                     }
                     NetworkLeaf::LocalTensor(l) => {
                         Some(format!("label = \"T:{}\"", tensor_disp(*l)))
@@ -1773,20 +1777,19 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         graph.into()
     }
 
-    pub fn key(key: PermutedStructure<K>) -> Self
+    pub fn key(key: Canonicalized<K>) -> Self
     where
         K: TensorStructure,
         K::Slot: IsAbstractSlot<Aind = Aind>,
     {
         let slots = key
-            .structure
+            .canonical()
             .external_structure_iter()
             .map(|a| a.to_lib())
             .collect::<Vec<_>>();
 
-        let indices = slots.iter().map(|slot| slot.aind()).collect::<Vec<_>>();
         let (mut graph, head) =
-            Self::head_builder(NetworkNode::Leaf(NetworkLeaf::LibraryKey { key, indices }));
+            Self::head_builder(NetworkNode::Leaf(NetworkLeaf::library_key(key)));
 
         for lib in &slots {
             let orientation = lib.rep_name().orientation();
@@ -2142,7 +2145,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         if profile::enabled() {
             eprintln!("spenso_profile merge_ops.after_forget");
         }
-        self.graph.delete_hedges(&to_del);
+        self.delete(&to_del);
         if profile::enabled() {
             eprintln!(
                 "spenso_profile merge_ops.end nodes={} hedges={}",
@@ -2715,16 +2718,105 @@ pub mod test {
         tree::child_vec::ChildVecStore,
     };
 
+    #[cfg(feature = "shadowing")]
+    use crate::network::TensorNetworkError;
     use crate::{
         network::graph::NetworkLeaf,
         structure::{
-            OrderedStructure, PermutedStructure,
+            Canonicalized, OrderedStructure,
             representation::{Euclidean, Lorentz, Minkowski, RepName},
             slot::IsAbstractSlot,
         },
     };
 
     use super::{NetworkGraph, NetworkNode, NetworkOp};
+
+    #[cfg(feature = "shadowing")]
+    #[test]
+    fn library_materialization_preserves_repeated_representation_axis_order() {
+        use crate::{
+            network::library::symbolic::{ExplicitKey, TensorLibrary},
+            structure::{
+                NamedStructure, TensorStructure, abstract_index::AbstractIndex,
+                representation::LibraryRep,
+            },
+            tensors::data::{DataTensor, DenseTensor},
+        };
+        use symbolica::{atom::Symbol, symbol};
+
+        let name = symbol!("library_materialization_axis_order_test");
+        let stored_key = ExplicitKey::from_iter(
+            [
+                Euclidean {}.new_rep(2).to_lib(),
+                Euclidean {}.new_rep(2).to_lib(),
+                Minkowski {}.new_rep(1).to_lib(),
+            ],
+            name,
+            None,
+        );
+        let stored = stored_key.map_canonical(|key| {
+            DataTensor::Dense(DenseTensor::from_storage_data(vec![0, 1, 2, 3], key).unwrap())
+        });
+        let mut library = TensorLibrary::new();
+        library.insert_explicit(stored);
+
+        let parsed = NamedStructure::<Symbol, (), LibraryRep, AbstractIndex>::from_iter(
+            [
+                Euclidean {}.new_slot(2, 2).to_lib(),
+                Euclidean {}.new_slot(2, 1).to_lib(),
+                Minkowski {}.new_slot(1, 0).to_lib(),
+            ],
+            name,
+            None,
+        );
+        let key = ExplicitKey::from_structure(&parsed).unwrap();
+        let library_key = parsed.clone().map_canonical(|_| key);
+        let graph = NetworkGraph::<_, Symbol, AbstractIndex>::tensor(
+            parsed.canonical(),
+            NetworkLeaf::library_key(library_key.clone()),
+        );
+        let node = graph.graph.node_id(graph.head());
+        let materialized = graph
+            .get_lib_data::<NamedStructure<Symbol, (), LibraryRep, AbstractIndex>, _, _>(
+                &library, node,
+            )
+            .unwrap();
+        let DataTensor::Dense(materialized) = materialized else {
+            panic!("inserted dense library data materialized as sparse");
+        };
+
+        assert_eq!(materialized.data, vec![0, 2, 1, 3]);
+        assert_eq!(
+            materialized.external_indices_iter().collect::<Vec<_>>(),
+            graph.inds(node)
+        );
+
+        let lower_rank = NamedStructure::<Symbol, (), LibraryRep, AbstractIndex>::from_iter(
+            [
+                Euclidean {}.new_slot(2, 3).to_lib(),
+                Euclidean {}.new_slot(2, 4).to_lib(),
+            ],
+            name,
+            None,
+        );
+        let mismatched = NetworkGraph::<_, Symbol, AbstractIndex>::tensor(
+            lower_rank.canonical(),
+            NetworkLeaf::library_key(library_key),
+        );
+        let node = mismatched.graph.node_id(mismatched.head());
+        let error = mismatched
+            .get_lib_data::<NamedStructure<Symbol, (), LibraryRep, AbstractIndex>, _, _>(
+                &library, node,
+            )
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            TensorNetworkError::LibraryIndexRankMismatch {
+                expected: 3,
+                actual: 2
+            }
+        ));
+    }
 
     #[test]
     fn addition() {
@@ -2734,38 +2826,38 @@ pub mod test {
         let s = NetworkGraph::<i8>::scalar(2);
 
         let t = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Minkowski {}.new_slot(1, 2),
                 Minkowski {}.new_slot(2, 2),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(1),
         );
 
         let t2 = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Minkowski {}.new_slot(1, 2),
                 Minkowski {}.new_slot(2, 2),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(2),
         );
 
         let t3 = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Lorentz {}.new_slot(1, 2).to_lib(),
                 Euclidean {}.new_slot(2, 2).to_lib(),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(2),
         );
 
         let t3b = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Lorentz {}.dual().new_slot(1, 2).to_lib(),
                 Euclidean {}.new_slot(2, 1).to_lib(),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(2),
         );
         let s2 = NetworkGraph::<i8>::scalar(3);
@@ -2774,6 +2866,7 @@ pub mod test {
 
         // println!("{}", expr.dot());
         expr.merge_ops();
+        assert_eq!(expr.slot_order.len(), expr.graph.n_hedges());
         println!("{}", expr.dot());
 
         // expr.extract_next_ready_op();
@@ -2787,19 +2880,19 @@ pub mod test {
         let scalar = NetworkGraph::<i8>::scalar(2);
         let scalar_b = NetworkGraph::<i8>::scalar(3);
         let tensor_a = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Minkowski {}.new_slot(1, 2),
                 Minkowski {}.new_slot(2, 2),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(1),
         );
         let tensor_b = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Minkowski {}.new_slot(1, 2),
                 Minkowski {}.new_slot(2, 2),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(2),
         );
 
@@ -2825,19 +2918,19 @@ pub mod test {
         let scalar = NetworkGraph::<i8>::scalar(2);
         let scalar_b = NetworkGraph::<i8>::scalar(3);
         let tensor_a = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Minkowski {}.new_slot(1, 2),
                 Minkowski {}.new_slot(2, 2),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(1),
         );
         let tensor_b = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Minkowski {}.new_slot(1, 2),
                 Minkowski {}.new_slot(2, 2),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(2),
         );
 
@@ -2874,19 +2967,19 @@ pub mod test {
         let scalar = NetworkGraph::<i8>::scalar(2);
         let scalar_b = NetworkGraph::<i8>::scalar(3);
         let tensor_a = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Minkowski {}.new_slot(1, 2),
                 Minkowski {}.new_slot(2, 2),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(1),
         );
         let tensor_b = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Minkowski {}.new_slot(1, 2),
                 Minkowski {}.new_slot(2, 2),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(2),
         );
 
@@ -2920,19 +3013,19 @@ pub mod test {
         let scalar = NetworkGraph::<i8>::scalar(2);
         let scalar_b = NetworkGraph::<i8>::scalar(3);
         let tensor_a = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Minkowski {}.new_slot(1, 2),
                 Minkowski {}.new_slot(2, 2),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(1),
         );
         let tensor_b = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Minkowski {}.new_slot(1, 2),
                 Minkowski {}.new_slot(2, 2),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(2),
         );
 
@@ -2962,19 +3055,19 @@ pub mod test {
         let scalar = NetworkGraph::<i8>::scalar(2);
         let scalar_b = NetworkGraph::<i8>::scalar(3);
         let tensor_a = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Minkowski {}.new_slot(1, 2),
                 Minkowski {}.new_slot(2, 2),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(1),
         );
         let tensor_b = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Minkowski {}.new_slot(1, 2),
                 Minkowski {}.new_slot(2, 2),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(2),
         );
 
@@ -3010,19 +3103,19 @@ pub mod test {
         let scalar = NetworkGraph::<i8>::scalar(2);
         let scalar_b = NetworkGraph::<i8>::scalar(3);
         let tensor_a = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Minkowski {}.new_slot(1, 2),
                 Minkowski {}.new_slot(2, 2),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(1),
         );
         let tensor_b = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Minkowski {}.new_slot(1, 2),
                 Minkowski {}.new_slot(2, 2),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(2),
         );
 
@@ -3049,19 +3142,19 @@ pub mod test {
         let scalar = NetworkGraph::<i8>::scalar(2);
         let scalar_b = NetworkGraph::<i8>::scalar(3);
         let tensor_a = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Minkowski {}.new_slot(1, 2),
                 Minkowski {}.new_slot(2, 2),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(1),
         );
         let tensor_b = NetworkGraph::<i8>::tensor(
-            &PermutedStructure::<OrderedStructure>::from_iter([
+            &Canonicalized::<OrderedStructure>::from_iter([
                 Minkowski {}.new_slot(1, 2),
                 Minkowski {}.new_slot(2, 2),
             ])
-            .structure,
+            .into_canonical(),
             NetworkLeaf::LocalTensor(2),
         );
 

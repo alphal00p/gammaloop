@@ -83,8 +83,8 @@ and what to use when matching it in a replacement rule.
 | `F(..., slot, ...)` | ordinary tensor leaf; direct slots define structure | `tensor!(F, args...)` | head tagged `tensor` | `tensor_!(N; W_.a___)` or `function!(W_.f_, args...)` |
 | `p(..., rep(dim))` | compact rank-one tensor shorthand | `vector!(p, args...)`, `p!(args...)`, `q!(args...)` | head tagged `tensor` and `rank1` | `rank1_!(N; W_.a___, rep_!(M; W_.d_))` |
 | `g(slot_a, slot_b)` | metric tensor syntax | `g!(a, b)` or `metric!(a, b)` | `ETS.metric` symbol | `function!(ETS.metric, a, b)` |
-| `g(p(rep), q(rep))` | compact scalar product shorthand | `g!(p, q)` or `metric!(p, q)` | `ETS.metric` plus rank-one compact arguments | `function!(ETS.metric, rank1_!(0; ...), rank1_!(1; ...))` |
-| `dot(p(rep), q(rep))` | two-argument compact dot shorthand | `dot!(p, q)` | `SPENSO_TAG.dot` symbol | `function!(T.dot, a, b)` |
+| `g(p(rep), q(rep.dual()))` | compact scalar product shorthand | `g!(p, q)` or `metric!(p, q)` | `ETS.metric` plus rank-one compact arguments | `function!(ETS.metric, rank1_!(0; ...), rank1_!(1; ...))` |
+| `dot(p(rep), q(rep.dual()))` | two-argument compact dot shorthand | `dot!(p, q)` | `SPENSO_TAG.dot` symbol | `function!(T.dot, a, b)` |
 | `chain(start, end, factors...)` | ordered open chain | `chain!(start, end, factors...)` | `SPENSO_TAG.chain` symbol; ordered arguments | `chain!(start, end, factors...)` |
 | `trace(rep)` | empty closed trace | `trace!(rep)` | `SPENSO_TAG.trace` symbol | `trace!(rep)` |
 | `trace(rep, cyclic(factors...))` | ordinary closed trace with cyclic factor order | `trace!(rep, factors...)` or `trace!(rep, cyclic!(factors...))` | `SPENSO_TAG.trace` plus `CYCLIC` with `Cyclesymmetric` attribute | `trace!(rep, cyclic!(args...))` |
@@ -97,12 +97,14 @@ and what to use when matching it in a replacement rule.
 `dot` is a two-argument shorthand. A three-argument spelling such as
 `dot(rep, p, q)` is not parser syntax.
 
-For compact vector arguments, `g(p(rep), q(rep))` and `dot(p(rep), q(rep))`
-materialize to the same expanded tensor product:
+For compact vector arguments, `g(p(rep), q(rep.dual()))` and
+`dot(p(rep), q(rep.dual()))` materialize to the same expanded tensor product:
 
 ```text
-p(rep(d)) * q(rep(d))
+p(rep(d)) * q(rep.dual()(d))
 ```
+
+For a self-dual representation, `rep.dual()` is equal to `rep`.
 
 The difference is the Symbolica head. `g` is the actual metric tensor head
 (`ETS.metric`), so it is also the spelling for explicit slot metrics such as

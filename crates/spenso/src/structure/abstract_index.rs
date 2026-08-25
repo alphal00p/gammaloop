@@ -48,11 +48,15 @@ pub const DOWNIND: &str = "dind";
 pub const SELFDUALIND: &str = "sind";
 
 #[cfg(feature = "shadowing")]
+const OPENIND: &str = "spenso::open_index";
+
+#[cfg(feature = "shadowing")]
 pub struct AindSymbols {
     pub aind: Symbol,
     pub uind: Symbol,
     pub dind: Symbol,
     pub selfdualind: Symbol,
+    pub openind: Symbol,
     pub cind: Symbol,
     pub find: Symbol,
 }
@@ -60,6 +64,7 @@ pub struct AindSymbols {
 #[cfg(feature = "shadowing")]
 #[cfg(test)]
 mod test {
+    use std::collections::{BTreeSet, HashSet};
 
     use symbolica::{atom::AtomCore, function, id::Replacement};
 
@@ -145,6 +150,53 @@ mod test {
         let mut compact = SpensoPrintSettings::compact().nice_symbolica();
         compact.color_builtin_symbols = false;
         assert_eq!(index.printer(compact).to_string(), "_1");
+    }
+
+    #[test]
+    fn open_index_atom_round_trips() {
+        let index = AbstractIndex::Open { owner: 17, axis: 3 };
+        let atom = index.to_atom();
+
+        assert_eq!(AbstractIndex::try_from(atom.as_view()).unwrap(), index);
+        assert_eq!(atom.to_plain_string(), "spenso::open_index(17,3)");
+
+        let large = AbstractIndex::Open {
+            owner: usize::MAX,
+            axis: usize::MAX - 1,
+        };
+        assert_eq!(
+            AbstractIndex::try_from(large.to_atom().as_view()).unwrap(),
+            large
+        );
+    }
+
+    #[test]
+    fn open_indices_use_ordinary_value_semantics() {
+        let first = AbstractIndex::Open { owner: 1, axis: 2 };
+        let same = AbstractIndex::Open { owner: 1, axis: 2 };
+        let other_axis = AbstractIndex::Open { owner: 1, axis: 3 };
+        let other_owner = AbstractIndex::Open { owner: 2, axis: 2 };
+
+        assert_eq!(first, same);
+        assert_ne!(first, other_axis);
+        assert_ne!(first, other_owner);
+        assert_eq!(HashSet::from([first, same, other_axis]).len(), 2);
+        assert_eq!(
+            BTreeSet::from([other_owner, other_axis, first])
+                .into_iter()
+                .collect::<Vec<_>>(),
+            vec![first, other_axis, other_owner]
+        );
+    }
+
+    #[test]
+    fn malformed_open_index_atom_is_rejected() {
+        let atom = function!(AIND_SYMBOLS.openind, Atom::num(1));
+
+        assert!(matches!(
+            AbstractIndex::try_from(atom.as_view()),
+            Err(AbstractIndexError::NotIndex(_))
+        ));
     }
 }
 
@@ -314,6 +366,7 @@ let args = arg.pos().map(to-eq).join("")
                 }
             }
         ),
+        openind: symbol!(OPENIND),
         selfdualind: symbol!(
             SELFDUALIND,
             norm = |view, out| {
@@ -356,6 +409,14 @@ pub enum AbstractIndex {
     Added(usize),
     #[cfg(feature = "shadowing")]
     Symbol(SerializableSymbol),
+    /// An unresolved concrete storage port.
+    ///
+    /// `owner` separates tensor occurrences, while `axis` identifies a port within an
+    /// occurrence. Network operations refresh owners before combining their graphs.
+    Open {
+        owner: usize,
+        axis: usize,
+    },
 }
 
 impl AbsInd for AbstractIndex {}
@@ -398,6 +459,7 @@ impl std::ops::Add<AbstractIndex> for AbstractIndex {
                 AbstractIndex::Double(_, _) => panic!("cannot add double"),
                 #[cfg(feature = "shadowing")]
                 AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
+                AbstractIndex::Open { .. } => panic!("cannot add open index"),
             },
             AbstractIndex::Dualize(l) => match rhs {
                 AbstractIndex::Normal(r) => AbstractIndex::Added(l + r),
@@ -407,6 +469,7 @@ impl std::ops::Add<AbstractIndex> for AbstractIndex {
                 AbstractIndex::Double(_, _) => panic!("cannot add double"),
                 #[cfg(feature = "shadowing")]
                 AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
+                AbstractIndex::Open { .. } => panic!("cannot add open index"),
             },
             AbstractIndex::Added(l) => match rhs {
                 AbstractIndex::Normal(r) => AbstractIndex::Added(l + r),
@@ -416,6 +479,7 @@ impl std::ops::Add<AbstractIndex> for AbstractIndex {
                 AbstractIndex::Double(_, _) => panic!("cannot add double"),
                 #[cfg(feature = "shadowing")]
                 AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
+                AbstractIndex::Open { .. } => panic!("cannot add open index"),
             },
             AbstractIndex::Dummy(l) => match rhs {
                 AbstractIndex::Normal(r) => AbstractIndex::Added(l + r),
@@ -425,6 +489,7 @@ impl std::ops::Add<AbstractIndex> for AbstractIndex {
                 AbstractIndex::Double(_, _) => panic!("cannot add double"),
                 #[cfg(feature = "shadowing")]
                 AbstractIndex::Symbol(r) => AbstractIndex::Added(l + r.get_id() as usize),
+                AbstractIndex::Open { .. } => panic!("cannot add open index"),
             },
             AbstractIndex::Double(_, _) => panic!("cannot add double"),
 
@@ -438,7 +503,9 @@ impl std::ops::Add<AbstractIndex> for AbstractIndex {
                 AbstractIndex::Symbol(r) => {
                     AbstractIndex::Added(l.get_id() as usize + r.get_id() as usize)
                 }
+                AbstractIndex::Open { .. } => panic!("cannot add open index"),
             },
+            AbstractIndex::Open { .. } => panic!("cannot add open index"),
         }
     }
 }
@@ -509,6 +576,7 @@ impl std::fmt::Display for AbstractIndex {
                     write!(f, "{}", v)
                 }
             }
+            AbstractIndex::Open { owner, axis } => write!(f, "open({owner},{axis})"),
         }
     }
 }
@@ -529,6 +597,9 @@ impl From<AbstractIndex> for Atom {
             AbstractIndex::Added(v) => Atom::num(v as i64),
             AbstractIndex::Dummy(v) => Atom::var(symbol!(format!("d_{}", v))),
             AbstractIndex::Symbol(v) => Atom::var(v.into()),
+            AbstractIndex::Open { owner, axis } => {
+                symbolica::function!(AIND_SYMBOLS.openind, Atom::num(owner), Atom::num(axis))
+            }
         }
     }
 }
@@ -562,6 +633,7 @@ impl From<AbstractIndex> for usize {
             AbstractIndex::Dummy(v) => v,
             #[cfg(feature = "shadowing")]
             AbstractIndex::Symbol(v) => v.get_id() as usize,
+            AbstractIndex::Open { axis, .. } => axis,
         }
     }
 }
@@ -610,6 +682,18 @@ impl TryFrom<AtomView<'_>> for AbstractIndex {
                 _ => Err(AbstractIndexError::NotNatural),
             },
             AtomView::Var(v) => Ok(AbstractIndex::Symbol(v.get_symbol().into())),
+            AtomView::Fun(function) if function.get_symbol() == AIND_SYMBOLS.openind => {
+                let args = function.iter().collect::<Vec<_>>();
+                let [owner, axis] = args.as_slice() else {
+                    return Err(AbstractIndexError::NotIndex(view.to_string()));
+                };
+                Ok(AbstractIndex::Open {
+                    owner: usize::try_from(*owner)
+                        .map_err(|_| AbstractIndexError::NotIndex(view.to_string()))?,
+                    axis: usize::try_from(*axis)
+                        .map_err(|_| AbstractIndexError::NotIndex(view.to_string()))?,
+                })
+            }
             _ => Err(AbstractIndexError::NotIndex(view.to_string())),
         }
     }

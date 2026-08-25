@@ -5,7 +5,7 @@ use linnet::{
 };
 use serde::{Deserialize, Serialize};
 use spenso::structure::{
-    OrderedStructure, PermutedStructure, TensorStructure,
+    Canonicalized, OrderedStructure, TensorStructure,
     representation::{LibraryRep, LibrarySlot},
     slot::IsAbstractSlot,
 };
@@ -47,7 +47,7 @@ impl NumIndices {
 
         let mut init = 0;
         let mut last = None;
-        let color_structure: PermutedStructure<_> = creps
+        let color_structure: Canonicalized<_> = creps
             .external_reps_iter()
             .map(|r| {
                 if let Some(l) = last {
@@ -65,7 +65,7 @@ impl NumIndices {
             })
             .collect();
 
-        let spin_structure: PermutedStructure<_> = sreps
+        let spin_structure: Canonicalized<_> = sreps
             .external_reps_iter()
             .map(|r| {
                 if let Some(l) = last {
@@ -84,8 +84,8 @@ impl NumIndices {
             .collect();
 
         NumIndices {
-            color_indices: HedgeIndices::new(color_structure.structure),
-            spin_indices: HedgeIndices::new(spin_structure.structure),
+            color_indices: HedgeIndices::new(color_structure.into_canonical()),
+            spin_indices: HedgeIndices::new(spin_structure.into_canonical()),
         }
     }
 

@@ -5,10 +5,10 @@ use crate::{
     },
     iterators::IteratableTensor,
     structure::{
-        CastStructure, HasName, HasStructure, IndexLess, OrderedStructure, PermutedStructure,
-        ScalarStructure, ScalarTensor, SlotIndex, TensorStructure, TracksCount,
+        ApplyPendingIndexPermutation, CastStructure, HasName, HasStructure, IndexLess,
+        OrderedStructure, PendingIndexPermutation, Reindexed, ScalarStructure, ScalarTensor,
+        SlotIndex, TensorIdentity, TensorStructure, TracksCount,
         concrete_index::{ConcreteIndex, ExpandedIndex, FlatIndex},
-        permuted::PermuteTensor,
         representation::RepName,
         slot::{AbsInd, Slot},
     },
@@ -69,14 +69,12 @@ impl<T: RefZero, S: TensorStructure> DenseTensor<T, S> {
     }
 }
 
-impl<Aind: AbsInd, T: Clone, S: Clone + Into<IndexLess<R, Aind>>, R: RepName<Dual = R>>
-    PermuteTensor for DenseTensor<T, S>
+impl<Aind: AbsInd, T: Clone, S, R: RepName<Dual = R>> TensorIdentity for DenseTensor<T, S>
 where
-    S: TensorStructure<Slot = Slot<R, Aind>> + PermuteTensor<IdSlot = Slot<R, Aind>, Id = S>,
+    S: TensorStructure<Slot = Slot<R, Aind>> + TensorIdentity<IdSlot = Slot<R, Aind>, Id = S>,
 {
     type Id = DenseTensor<T, S>;
     type IdSlot = (T, Slot<R, Aind>);
-    type Permuted = DenseTensor<T, S>;
 
     fn id(i: Self::IdSlot, j: Self::IdSlot) -> Self::Id {
         let (zero, i) = i;
@@ -88,27 +86,33 @@ where
         }
         DenseTensor { data, structure: s }
     }
+}
 
-    fn permute_inds(self, permutation: &linnet::permutation::Permutation) -> Self::Permuted {
-        let mut permuteds: IndexLess<R, Aind> = self.structure.clone().into();
-        permutation.apply_slice_in_place(&mut permuteds.structure);
+impl<Aind: AbsInd, T: Clone, S: Clone + Into<IndexLess<R, Aind>>, R: RepName<Dual = R>>
+    ApplyPendingIndexPermutation for DenseTensor<T, S>
+where
+    S: TensorStructure<Slot = Slot<R, Aind>>,
+{
+    type Output = Self;
 
-        let mut permuted = self.clone();
-        for (i, d) in self.iter_expanded() {
-            permuted
-                .set_flat(
-                    permuteds
-                        .flat_index(i.apply_permutation(permutation))
-                        .unwrap(),
-                    d.clone(),
-                )
-                .unwrap();
+    fn apply_pending_index_permutation(self, pending: &PendingIndexPermutation) -> Self::Output {
+        let target: IndexLess<R, Aind> = self.structure.clone().into();
+        let mut source = target.clone();
+        source.structure = pending.apply_slice_inverse(&source.structure);
+
+        let source_data = self.data;
+        let mut target_data = source_data.clone();
+        for (flat, value) in source_data.into_iter().enumerate() {
+            let source_index = source.expanded_index(flat.into()).unwrap();
+            let target_index = source_index.apply_permutation(pending.permutation());
+            let target_flat = target.flat_index(target_index).unwrap();
+            target_data[usize::from(target_flat)] = value;
         }
-        permuted
-    }
 
-    fn permute_reps(self, rep_perm: &linnet::permutation::Permutation) -> Self::Permuted {
-        self.permute_inds(rep_perm)
+        DenseTensor {
+            data: target_data,
+            structure: self.structure,
+        }
     }
 }
 
@@ -120,19 +124,15 @@ where
     type Indexed = DenseTensor<T, S::Indexed>;
     type Slot = S::Slot;
 
-    fn reindex(
+    fn reindex_storage(
         self,
         indices: &[<Self::Slot as IsAbstractSlot>::Aind],
-    ) -> Result<PermutedStructure<Self::Indexed>, StructureError> {
-        let res = self.structure.reindex(indices)?;
-
-        Ok(PermutedStructure {
-            structure: DenseTensor {
-                structure: res.structure,
+    ) -> Result<Reindexed<Self::Indexed>, StructureError> {
+        self.structure.reindex_storage(indices).map(|reindexed| {
+            reindexed.map_target(|structure| DenseTensor {
+                structure,
                 data: self.data,
-            },
-            rep_permutation: res.rep_permutation,
-            index_permutation: res.index_permutation,
+            })
         })
     }
 
@@ -471,8 +471,8 @@ impl<T: Clone, I> DenseTensor<T, I>
 where
     I: TensorStructure,
 {
-    /// Generates a new dense tensor from the given data and structure
-    pub fn from_data(data: Vec<T>, structure: I) -> Result<Self> {
+    /// Builds a dense tensor from data already ordered like its storage structure.
+    pub fn from_storage_data(data: Vec<T>, structure: I) -> Result<Self> {
         if data.len() != structure.size()? && !(data.len() == 1 && structure.is_scalar()) {
             return Err(eyre!("Data length does not match shape"));
         }
@@ -491,8 +491,8 @@ where
         }
     }
 
-    /// Generates a new dense tensor from the given data and structure, truncating the data if it is too long with respect to the structure
-    pub fn from_data_coerced(data: &[T], structure: I) -> Result<Self> {
+    /// Builds a dense tensor from storage-ordered data, truncating excess values.
+    pub fn from_storage_data_coerced(data: &[T], structure: I) -> Result<Self> {
         if data.len() < structure.size()? {
             return Err(eyre!("Data length is too small"));
         }
@@ -746,5 +746,38 @@ impl<S: TensorStructure + Clone, D> StorageTensor for DenseTensor<D, S> {
             data,
             structure: self.structure,
         }
+    }
+}
+
+#[cfg(test)]
+mod pending_index_tests {
+    use super::DenseTensor;
+    use crate::structure::{
+        TensorStructure,
+        abstract_index::AbstractIndex,
+        ordered::OrderedStructure,
+        representation::{Euclidean, RepName},
+    };
+
+    #[test]
+    fn rank_three_cycle_moves_source_storage_into_target_order() {
+        let structure = OrderedStructure::new(vec![
+            Euclidean {}.new_slot(2, AbstractIndex::Normal(0)),
+            Euclidean {}.new_slot(2, AbstractIndex::Normal(1)),
+            Euclidean {}.new_slot(2, AbstractIndex::Normal(2)),
+        ])
+        .into_canonical();
+        let tensor = DenseTensor::from_storage_data((0..8).collect(), structure).unwrap();
+
+        let reordered = tensor
+            .reindex_storage(&[
+                AbstractIndex::Normal(2),
+                AbstractIndex::Normal(0),
+                AbstractIndex::Normal(1),
+            ])
+            .unwrap()
+            .apply();
+
+        assert_eq!(reordered.data, vec![0, 4, 1, 5, 2, 6, 3, 7]);
     }
 }

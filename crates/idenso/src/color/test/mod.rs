@@ -1,29 +1,24 @@
 use insta::assert_snapshot;
 use spenso::network::parsing::{ParseSettings, StructureFromAtom};
 use spenso::network::tags::SPENSO_TAG;
-use spenso::structure::IndexlessNamedStructure;
-use spenso::structure::PermutedStructure;
+use spenso::structure::{Canonicalized, IndexlessNamedStructure, TensorStructure};
 use symbolica_utils::AtomPrintExt;
 
-static _CF: LazyLock<PermutedStructure<IndexlessNamedStructure<Symbol, ()>>> =
-    LazyLock::new(|| {
-        IndexlessNamedStructure::from_iter(
-            [
-                ColorAdjoint {}.new_rep(8),
-                ColorAdjoint {}.new_rep(2),
-                ColorAdjoint {}.new_rep(2),
-                ColorAdjoint {}.new_rep(4),
-                ColorAdjoint {}.new_rep(2),
-            ],
-            CS.f,
-            None,
-        )
-    });
+static _CF: LazyLock<Canonicalized<IndexlessNamedStructure<Symbol, ()>>> = LazyLock::new(|| {
+    IndexlessNamedStructure::from_iter(
+        [
+            ColorAdjoint {}.new_rep(8),
+            ColorAdjoint {}.new_rep(2),
+            ColorAdjoint {}.new_rep(2),
+            ColorAdjoint {}.new_rep(4),
+            ColorAdjoint {}.new_rep(2),
+        ],
+        CS.f,
+        None,
+    )
+});
 
-use spenso::{
-    antisym, chain, network::parsing::ShadowedStructure, s, slot, structure::permuted::Perm, sym,
-    trace,
-};
+use spenso::{antisym, chain, network::parsing::ShadowedStructure, s, slot, sym, trace};
 use symbolica::{id::Pattern, parse, parse_lit};
 
 use crate::dirac::PS;
@@ -55,30 +50,32 @@ fn test_color_structures() {
         ],
         symbol!("test"),
         None,
-    )
-    .clone()
-    .reindex([5, 4, 2, 3, 1, 0])
-    .unwrap()
-    .map_structure(|a| SymbolicTensor::from_named(&a).unwrap());
+    );
+    let logical_indices: [AbstractIndex; 6] =
+        [5.into(), 4.into(), 2.into(), 3.into(), 1.into(), 0.into()];
+    let storage_indices = f.layout().logical_to_canonical(&logical_indices);
+    let input_layout = f.layout().clone();
+    let order = f.canonical().order();
+    let f = f
+        .into_canonical()
+        .reindex_storage(&storage_indices)
+        .unwrap()
+        .map_target(|a| SymbolicTensor::from_named(&a).unwrap());
 
-    let f_p = f.clone().permute_inds();
+    let f_p = f.apply();
 
     // println!("{}", f_p);
     let simplified = f_p.expression.schoonschip();
     // println!("{}", simplified);
     let f_parsed = ShadowedStructure::<AbstractIndex>::parse(simplified.as_view()).unwrap();
 
-    assert_eq!(f.index_permutation, f_parsed.index_permutation);
-    assert!(f_parsed.rep_permutation.is_identity());
-
-    let f_p = f.clone().permute_reps_wrapped().permute_inds();
-
-    let simplified = f_p.expression.schoonschip();
-    // println!("{}", simplified);
-    let f_parsed = ShadowedStructure::<AbstractIndex>::parse(simplified.as_view()).unwrap();
-
-    assert_eq!(f.index_permutation, f_parsed.index_permutation);
-    assert_eq!(f.rep_permutation, f_parsed.rep_permutation);
+    assert_eq!(order, f_parsed.canonical().order());
+    let logical_positions = (0..order).collect::<Vec<_>>();
+    let canonical_positions = input_layout.logical_to_canonical(&logical_positions);
+    assert_eq!(
+        input_layout.canonical_to_logical(&canonical_positions),
+        logical_positions
+    );
 }
 
 #[test]
@@ -220,7 +217,7 @@ fn color_invariant_macros_build_scalar_heads() {
         .parse_to_symbolic_net::<AbstractIndex>(&ParseSettings::default())
         .unwrap();
     assert!(net.graph.dangling_indices().is_empty());
-    assert_eq!(net.simple_execute::<()>(), expr);
+    assert_eq!(net.simple_execute::<()>().unwrap(), expr);
 }
 
 #[test]
@@ -1373,8 +1370,14 @@ fn minus_sign() {
 
     // println!(
     //     "{}",
-    //     (expr1.cook_indices().canonize(AbstractIndex::Dummy)
-    //         / (expr2.cook_indices().canonize(AbstractIndex::Dummy)))
+    //     (expr1
+    //         .cook_indices()
+    //         .canonize(AbstractIndex::Dummy)
+    //         .expect("test expression should canonicalize")
+    //         / expr2
+    //             .cook_indices()
+    //             .canonize(AbstractIndex::Dummy)
+    //             .expect("test expression should canonicalize"))
     //     .cancel()
     // );
     println!(
@@ -1383,6 +1386,7 @@ fn minus_sign() {
             .simplify_metrics()
             .cook_indices()
             .canonize(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
     );
     println!(
         "{}\n",
@@ -1390,6 +1394,7 @@ fn minus_sign() {
             .simplify_metrics()
             .cook_indices()
             .canonize(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize")
     );
     let residual = (expr1.simplify_color() + expr2.simplify_color())
         .expand()
@@ -1400,6 +1405,7 @@ fn minus_sign() {
 
     let residual = residual
         .canonize(AbstractIndex::Dummy)
+        .expect("test expression should canonicalize")
         .simplify_metrics()
         .expand();
     assert!(residual.is_zero());
@@ -1565,11 +1571,15 @@ mod failing {
 
         let (amplitude, tgt) = colored_matrix_element();
 
-        let amplitude_left = amplitude.wrap_dummies::<AbstractIndex>(symbol!("spenso::left"));
+        let amplitude_left = amplitude
+            .wrap_dummies::<AbstractIndex>(symbol!("spenso::left"))
+            .unwrap();
 
         println!("Amplitude left:\n{}", amplitude_left.collect_factors());
 
-        let amplitude_right = amplitude.wrap_dummies::<AbstractIndex>(symbol!("spenso::right"));
+        let amplitude_right = amplitude
+            .wrap_dummies::<AbstractIndex>(symbol!("spenso::right"))
+            .unwrap();
 
         println!("Amplitude right:\n{}", amplitude_right.conj().factor());
 

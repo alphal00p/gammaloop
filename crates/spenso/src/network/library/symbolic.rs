@@ -1,7 +1,6 @@
 use super::*;
 use ahash::AHashMap;
 use eyre::eyre;
-use linnet::permutation::Permutation;
 
 use symbolica::atom::{AtomOrView, FunctionBuilder};
 use symbolica::printer::{PrintState, PrintUserData};
@@ -15,10 +14,10 @@ use crate::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings}
 use crate::tensor_symbol;
 use crate::{
     structure::{
-        HasName, IndexlessNamedStructure,
+        CanonicalLayout, Canonicalized, HasName, IndexlessNamedStructure, Reindexed,
+        TensorDataLayout,
         abstract_index::AIND_SYMBOLS,
         named::IdentityName,
-        permuted::{Perm, PermuteTensor},
         representation::{LibraryRep, RepName, initialize},
         slot::AbsInd,
     },
@@ -27,13 +26,13 @@ use crate::{
 use symbolica_utils::{IntoArgs, IntoSymbol};
 
 pub type ExplicitKey<Aind> = IndexlessNamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind>;
-pub type LibraryKey<Aind> = PermutedStructure<ExplicitKey<Aind>>;
+pub type LibraryKey<Aind> = Canonicalized<ExplicitKey<Aind>>;
 impl<Aind> ExplicitKey<Aind> {
     pub fn from_structure<S: TensorStructure + HasName<Name: IntoSymbol, Args: IntoArgs>>(
-        structure: &PermutedStructure<S>,
+        structure: &Canonicalized<S>,
     ) -> Option<Self> {
         let rep_structure: Vec<_> = structure
-            .structure
+            .canonical()
             .reps()
             .into_iter()
             .map(|r| r.to_lib())
@@ -42,10 +41,10 @@ impl<Aind> ExplicitKey<Aind> {
         Some(
             IndexlessNamedStructure::from_iter(
                 rep_structure,
-                structure.structure.name()?.ref_into_symbol(),
-                structure.structure.args().map(|a| a.args()),
+                structure.canonical().name()?.ref_into_symbol(),
+                structure.canonical().args().map(|a| a.args()),
             )
-            .structure,
+            .into_canonical(),
         )
     }
 }
@@ -81,17 +80,13 @@ impl<S: TensorStructure + Clone> LibraryTensor for ParamTensor<S> {
     fn with_indices(
         &self,
         indices: &[<<<Self::WithIndices as HasStructure>::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind],
-    ) -> Result<PermutedStructure<Self::WithIndices>, StructureError> {
+    ) -> Result<Reindexed<Self::WithIndices>, StructureError> {
         let new_tensor =
             <DataTensor<Atom, S> as LibraryTensor>::with_indices(&self.tensor, indices)?;
-        Ok(PermutedStructure {
-            structure: ParamTensor {
-                tensor: new_tensor.structure,
-                param_type: self.param_type,
-            },
-            rep_permutation: new_tensor.rep_permutation,
-            index_permutation: new_tensor.index_permutation,
-        })
+        Ok(new_tensor.map_target(|tensor| ParamTensor {
+            tensor,
+            param_type: self.param_type,
+        }))
     }
 }
 
@@ -151,25 +146,17 @@ impl<D: Default + Clone, S: TensorStructure + Clone> LibraryTensor for MixedTens
     fn with_indices(
         &self,
         indices: &[<<<Self::WithIndices as HasStructure>::Structure as TensorStructure>::Slot as IsAbstractSlot>::Aind],
-    ) -> Result<PermutedStructure<Self::WithIndices>, StructureError> {
-        Ok(match self {
+    ) -> Result<Reindexed<Self::WithIndices>, StructureError> {
+        match self {
             ParamOrConcrete::Concrete(c) => {
                 let strct = <RealOrComplexTensor<D, S> as LibraryTensor>::with_indices(c, indices)?;
-                PermutedStructure {
-                    structure: ParamOrConcrete::Concrete(strct.structure),
-                    rep_permutation: strct.rep_permutation,
-                    index_permutation: strct.index_permutation,
-                }
+                Ok(strct.map_target(ParamOrConcrete::Concrete))
             }
             ParamOrConcrete::Param(p) => {
                 let strct = <ParamTensor<S> as LibraryTensor>::with_indices(p, indices)?;
-                PermutedStructure {
-                    structure: ParamOrConcrete::Param(strct.structure),
-                    rep_permutation: strct.rep_permutation,
-                    index_permutation: strct.index_permutation,
-                }
+                Ok(strct.map_target(ParamOrConcrete::Param))
             }
-        })
+        }
     }
 }
 
@@ -202,7 +189,7 @@ impl<Aind: AbsInd> From<ExplicitKey<Aind>> for GenericKey {
 
 #[allow(clippy::type_complexity)]
 pub struct TensorLibrary<T: HasStructure<Structure = ExplicitKey<Aind>>, Aind> {
-    explicit_dimension: AHashMap<ExplicitKey<Aind>, PermutedStructure<T>>,
+    explicit_dimension: AHashMap<ExplicitKey<Aind>, Canonicalized<T>>,
     generic_dimension: AHashMap<GenericKey, fn(ExplicitKey<Aind>) -> T>,
 }
 
@@ -572,7 +559,7 @@ impl<
 > Library<S> for TensorLibrary<T, Aind>
 {
     type Key = ExplicitKey<Aind>;
-    type Value = PermutedStructure<T>;
+    type Value = Canonicalized<T>;
     // type Structure = ExplicitKey;
 
     fn get<'a>(&'a self, key: &Self::Key) -> Result<Cow<'a, Self::Value>, LibraryError<Self::Key>> {
@@ -581,11 +568,10 @@ impl<
             // println!("found explicit");
             Ok(Cow::Borrowed(tensor))
         } else if let Some(builder) = self.generic_dimension.get(&key.clone().into()) {
-            let permutation = PermutedStructure {
-                structure: builder(key.clone()),
-                rep_permutation: Permutation::id(key.order()),
-                index_permutation: Permutation::id(key.order()),
-            };
+            let permutation = Canonicalized::from_parts(
+                builder(key.clone()),
+                CanonicalLayout::identity(key.order()),
+            );
             // println!("found generic");
             Ok(Cow::Owned(permutation))
         } else {
@@ -595,7 +581,7 @@ impl<
 
     fn key_for_structure(
         &self,
-        structure: &PermutedStructure<S>,
+        structure: &Canonicalized<S>,
     ) -> Result<Self::Key, LibraryError<Self::Key>>
     where
         S: TensorStructure,
@@ -618,8 +604,7 @@ impl<
     T: HasStructure<Structure = ExplicitKey<Aind>>
         + SetTensorData<SetData = <T as LibraryTensor>::Data>
         + Clone
-        + LibraryTensor
-        + PermuteTensor<Permuted = T>,
+        + LibraryTensor,
 > TensorLibrary<T, Aind>
 {
     pub fn get_key_from_name(
@@ -639,7 +624,7 @@ impl<
         }
     }
     pub fn metric_key(rep: LibraryRep) -> ExplicitKey<Aind> {
-        ExplicitKey::from_iter([rep.new_rep(4), rep.new_rep(4)], ETS.metric, None).structure
+        ExplicitKey::from_iter([rep.new_rep(4), rep.new_rep(4)], ETS.metric, None).into_canonical()
     }
 
     pub fn generic_mink_metric(key: ExplicitKey<Aind>) -> T
@@ -728,44 +713,48 @@ impl<
         tensor
     }
 
-    pub fn insert_explicit(&mut self, data: PermutedStructure<T>) {
-        let key = data.structure.structure().clone();
+    pub fn insert_explicit(&mut self, data: Canonicalized<T>) {
+        let key = data.canonical().structure().clone();
         self.explicit_dimension.insert(key, data);
     }
 
     pub fn insert_explicit_dense(
         &mut self,
-        key: PermutedStructure<ExplicitKey<Aind>>,
+        key: Canonicalized<ExplicitKey<Aind>>,
         data: Vec<T::Data>,
     ) -> Result<()> {
-        let tensor = T::from_dense(key.structure.clone(), data)?;
-        let perm_tensor = PermutedStructure {
-            rep_permutation: key.rep_permutation,
-            index_permutation: key.index_permutation,
-            structure: tensor,
-        };
-
-        self.explicit_dimension
-            .insert(key.structure, perm_tensor.permute_inds_wrapped());
+        let layout = TensorDataLayout::from_canonicalized(&key)?;
+        let storage_data = layout.reorder_to_storage(data)?;
+        let (storage_key, canonical_layout) = key.into_parts();
+        let tensor = T::from_dense(storage_key.clone(), storage_data)?;
+        self.explicit_dimension.insert(
+            storage_key,
+            Canonicalized::from_parts(tensor, canonical_layout),
+        );
         Ok(())
     }
 
     pub fn insert_explicit_sparse(
         &mut self,
-        key: PermutedStructure<ExplicitKey<Aind>>,
+        key: Canonicalized<ExplicitKey<Aind>>,
         data: impl IntoIterator<Item = (Vec<ConcreteIndex>, T::Data)>,
         zero: T::Data,
     ) -> Result<()> {
-        let tensor = T::from_sparse(key.structure.clone(), data, zero)?;
-
-        let perm_tensor = PermutedStructure {
-            rep_permutation: key.rep_permutation.clone(),
-            index_permutation: key.index_permutation.clone(),
-            structure: tensor,
-        };
-
-        self.explicit_dimension
-            .insert(key.structure, perm_tensor.permute_inds_wrapped());
+        let layout = TensorDataLayout::from_canonicalized(&key)?;
+        let storage_data = data
+            .into_iter()
+            .map(|(indices, value)| {
+                layout
+                    .logical_expanded_to_storage_expanded(&indices)
+                    .map(|indices| (indices, value))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        let (storage_key, canonical_layout) = key.into_parts();
+        let tensor = T::from_sparse(storage_key.clone(), storage_data, zero)?;
+        self.explicit_dimension.insert(
+            storage_key,
+            Canonicalized::from_parts(tensor, canonical_layout),
+        );
         Ok(())
     }
 
@@ -773,7 +762,8 @@ impl<
         self.generic_dimension.insert(key, data);
     }
 
-    pub fn get(&self, key: &ExplicitKey<Aind>) -> Result<Cow<'_, T>>
+    /// Look up a tensor together with the layout that relates its logical input to storage.
+    pub fn get(&self, key: &ExplicitKey<Aind>) -> Result<Cow<'_, Canonicalized<T>>>
     where
         T: Clone,
         LibraryError<ExplicitKey<Aind>>: Into<eyre::Error>,
@@ -781,12 +771,27 @@ impl<
         // println!("Trying:{}", key);
 
         if let Some(tensor) = self.explicit_dimension.get(key) {
-            Ok(Cow::Borrowed(&tensor.structure))
+            Ok(Cow::Borrowed(tensor))
         } else if let Some(builder) = self.generic_dimension.get(&key.clone().into()) {
-            Ok(Cow::Owned(builder(key.clone())))
+            Ok(Cow::Owned(Canonicalized::from_parts(
+                builder(key.clone()),
+                CanonicalLayout::identity(key.order()),
+            )))
         } else {
             Err(LibraryError::NotFound(key.clone()).into())
         }
+    }
+
+    /// Look up only the canonical storage payload, explicitly discarding layout history.
+    pub fn get_storage(&self, key: &ExplicitKey<Aind>) -> Result<Cow<'_, T>>
+    where
+        T: Clone,
+        LibraryError<ExplicitKey<Aind>>: Into<eyre::Error>,
+    {
+        Ok(match self.get(key)? {
+            Cow::Borrowed(tensor) => Cow::Borrowed(tensor.canonical()),
+            Cow::Owned(tensor) => Cow::Owned(tensor.into_canonical()),
+        })
     }
 }
 
@@ -810,7 +815,6 @@ mod test {
             abstract_index::{AIND_SYMBOLS, AbstractIndex},
             representation::{Euclidean, Minkowski, Representation},
         },
-        tensors::data::SparseOrDense,
     };
 
     use super::*;
@@ -871,8 +875,8 @@ mod test {
             None,
         );
 
-        println!("{}", key.structure);
-        println!("{}", key.rep_permutation);
+        println!("{}", key.canonical());
+        println!("{:?}", key.layout());
 
         let one = ConcreteOrParam::Concrete(RealOrComplex::Real(1.));
         lib.insert_explicit_sparse(
@@ -882,8 +886,15 @@ mod test {
         )
         .unwrap();
 
-        lib.get(&key.structure).unwrap();
-        let indexed = key.clone().reindex([0, 1, 2]).unwrap().structure;
+        lib.get(key.canonical()).unwrap();
+        let logical_indices = [0.into(), 1.into(), 2.into()];
+        let storage_indices = key.layout().logical_to_canonical(&logical_indices);
+        let indexed = key
+            .canonical()
+            .clone()
+            .reindex_storage(&storage_indices)
+            .unwrap()
+            .apply();
         let expr = indexed.to_symbolic(None).unwrap();
         let mut net = Network::<
             NetworkStore<
@@ -921,7 +932,7 @@ mod test {
     #[test]
     fn libperm() {
         let mut lib =
-            TensorLibrary::<MixedTensor<f64, ExplicitKey<AbstractIndex>>, AbstractIndex>::new();
+            TensorLibrary::<ParamTensor<ExplicitKey<AbstractIndex>>, AbstractIndex>::new();
         let key = ExplicitKey::from_iter(
             [
                 Euclidean {}.new_rep(2).cast(),
@@ -932,40 +943,28 @@ mod test {
             None,
         );
 
-        println!("{}", key.structure);
-        println!("{}", key.rep_permutation);
+        println!("{}", key.canonical());
+        println!("{:?}", key.layout());
 
-        let tensor = MixedTensor::Param(
-            ParamTensor::from_sparse(
-                key.structure.clone(),
-                [
-                    (vec![0, 0, 0], parse!("a")),
-                    (vec![0, 0, 1], parse!("b")),
-                    (vec![0, 1, 0], parse!("c")),
-                    (vec![0, 1, 1], parse!("d")),
-                    (vec![1, 0, 0], parse!("e")),
-                    (vec![1, 0, 1], parse!("f")),
-                    (vec![1, 1, 0], parse!("g")),
-                    (vec![1, 1, 1], parse!("h")),
-                ],
-                Atom::Zero,
-            )
-            .unwrap()
-            .to_dense(),
-        );
+        lib.insert_explicit_sparse(
+            key.clone(),
+            [
+                (vec![0, 0, 0], parse!("a")),
+                (vec![0, 0, 1], parse!("b")),
+                (vec![0, 1, 0], parse!("c")),
+                (vec![0, 1, 1], parse!("d")),
+                (vec![1, 0, 0], parse!("e")),
+                (vec![1, 0, 1], parse!("f")),
+                (vec![1, 1, 0], parse!("g")),
+                (vec![1, 1, 1], parse!("h")),
+            ],
+            Atom::Zero,
+        )
+        .unwrap();
 
-        lib.insert_explicit(PermutedStructure {
-            structure: tensor,
-            rep_permutation: key.rep_permutation.clone(),
-            index_permutation: key.index_permutation.clone(),
-        });
-
-        lib.get(&key.structure).unwrap();
+        lib.get(key.canonical()).unwrap();
         let mut net = Network::<
-            NetworkStore<
-                MixedTensor<f64, ShadowedStructure<AbstractIndex>>,
-                ConcreteOrParam<RealOrComplex<f64>>,
-            >,
+            NetworkStore<ParamTensor<ShadowedStructure<AbstractIndex>>, Atom>,
             _,
             Symbol,
         >::try_from_view(
@@ -984,10 +983,7 @@ mod test {
 
         print!("One {}", net.result_tensor(&lib).unwrap());
         let mut net = Network::<
-            NetworkStore<
-                MixedTensor<f64, ShadowedStructure<AbstractIndex>>,
-                ConcreteOrParam<RealOrComplex<f64>>,
-            >,
+            NetworkStore<ParamTensor<ShadowedStructure<AbstractIndex>>, Atom>,
             _,
             Symbol,
         >::try_from_view(
@@ -1018,7 +1014,13 @@ mod test {
             None,
         );
 
-        let indexed = key.reindex([0, 1, 2]).unwrap().structure;
+        let logical_indices = [0.into(), 1.into(), 2.into()];
+        let storage_indices = key.layout().logical_to_canonical(&logical_indices);
+        let indexed = key
+            .into_canonical()
+            .reindex_storage(&storage_indices)
+            .unwrap()
+            .apply();
         let expr = indexed.to_symbolic(None).unwrap();
         let settings = ParseSettings {
             strict_tensor_filter: StrictTensorFilter::ContainsReps,
@@ -1062,7 +1064,7 @@ mod test {
         {
             // println!("YaY:{a}");
             println!("{tensor}");
-            assert_eq!(tensor, &indexed.to_shell().concretize(None));
+            assert_eq!(tensor, &indexed.to_shell().concretize());
         } else {
             panic!("Not Key")
         }
@@ -1243,7 +1245,7 @@ mod test {
         lib.update_ids();
 
         let expr = parse!(
-            " -G^2*(-g(mink(4,5),mink(4,6))*Q(2,mink(4,7))+g(mink(4,5),mink(4,6))*Q(3,mink(4,7))+g(mink(4,5),mink(4,7))*Q(2,mink(4,6))+g(mink(4,5),mink(4,7))*Q(4,mink(4,6))-g(mink(4,6),mink(4,7))*Q(3,mink(4,5))-g(mink(4,6),mink(4,7))*Q(4,mink(4,5)))*g(mink(4,2),mink(4,5))*g(mink(4,3),mink(4,6))*g(euc(4,0),euc(4,5))*g(euc(4,1),euc(4,4))*g(mink(4,4),mink(4,7))*symbolic_lib_test_vbar(1,euc(4,1))*symbolic_lib_test_u(0,euc(4,0))*symbolic_lib_test_epsbar(2,mink(4,2))*symbolic_lib_test_epsbar(3,mink(4,3))*symbolic_lib_test_gamma(euc(4,5),euc(4,4),mink(4,4))"
+            " -G^2*(-g(mink(4,5),mink(4,6))*symbolic_lib_test_q(2,mink(4,7))+g(mink(4,5),mink(4,6))*symbolic_lib_test_q(3,mink(4,7))+g(mink(4,5),mink(4,7))*symbolic_lib_test_q(2,mink(4,6))+g(mink(4,5),mink(4,7))*symbolic_lib_test_q(4,mink(4,6))-g(mink(4,6),mink(4,7))*symbolic_lib_test_q(3,mink(4,5))-g(mink(4,6),mink(4,7))*symbolic_lib_test_q(4,mink(4,5)))*g(mink(4,2),mink(4,5))*g(mink(4,3),mink(4,6))*g(euc(4,0),euc(4,5))*g(euc(4,1),euc(4,4))*g(mink(4,4),mink(4,7))*symbolic_lib_test_vbar(1,euc(4,1))*symbolic_lib_test_u(0,euc(4,0))*symbolic_lib_test_epsbar(2,mink(4,2))*symbolic_lib_test_epsbar(3,mink(4,3))*symbolic_lib_test_gamma(euc(4,5),euc(4,4),mink(4,4))"
         );
         let settings = ParseSettings {
             strict_tensor_filter: StrictTensorFilter::ContainsReps,
@@ -1372,12 +1374,11 @@ mod test {
             symbol!("A"),
             None,
         )
-        .structure;
+        .into_canonical();
 
         let mut a: DataTensor<_, _> = DenseTensor::fill(key.clone(), Atom::num(1)).into();
         a.set(&[3, 0], parse!("a")).unwrap();
-        let a =
-            PermutedStructure::identity(MixedTensor::<f64, ExplicitKey<AbstractIndex>>::param(a));
+        let a = Canonicalized::identity(MixedTensor::<f64, ExplicitKey<AbstractIndex>>::param(a));
 
         lib.insert_explicit(a);
         #[allow(non_snake_case)]

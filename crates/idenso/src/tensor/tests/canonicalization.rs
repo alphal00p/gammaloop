@@ -8,7 +8,9 @@ use symbolica::{
 use spenso::structure::abstract_index::AbstractIndex;
 
 fn canonicalize(expression: &Atom) -> Atom {
-    expression.canonize::<AbstractIndex>(AbstractIndex::Dummy)
+    expression
+        .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+        .expect("test expression should canonicalize")
 }
 
 fn odd_cycle() -> Atom {

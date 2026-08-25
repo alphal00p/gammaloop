@@ -18,6 +18,7 @@ pyo3 = { workspace = true, features = ["eyre"] }
 itertools = "0.14.0"
 pyo3-stub-gen = { workspace = true, default-features = false, optional = true }
 pyo3-stub-gen-derive = { workspace = true }
+tabled = { workspace = true }
 thiserror = { workspace = true }
 
 [dependencies.symbolica]

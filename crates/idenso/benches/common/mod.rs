@@ -53,6 +53,7 @@ pub fn nested_dot_expression() -> Atom {
 
 pub fn run_schoonschip(expr: Atom, settings: &SchoonschipSettings) -> Atom {
     expr.schoonschip_with_net::<false, AbstractIndex>(settings)
+        .expect("benchmark expression should be a valid tensor network")
 }
 
 pub fn assert_benchmark_outputs_match() {
@@ -331,11 +332,13 @@ pub fn network_schoonschip_substituted_with_order(
     expr: Atom,
     order: SchoonschipContractionOrder,
 ) -> Atom {
-    let mut result = expr.schoonschip_with_net::<false, AbstractIndex>(
-        &SchoonschipSettings::partial()
-            .with_expanded_contracted_sums()
-            .with_contraction_order(order),
-    );
+    let mut result = expr
+        .schoonschip_with_net::<false, AbstractIndex>(
+            &SchoonschipSettings::partial()
+                .with_expanded_contracted_sums()
+                .with_contraction_order(order),
+        )
+        .expect("benchmark expression should be a valid tensor network");
 
     let needs_cleanup = matches!(
         order,
@@ -350,7 +353,9 @@ pub fn network_schoonschip_substituted_with_order(
             .with_expanded_contracted_sums()
             .with_contraction_order(SchoonschipContractionOrder::SmallestDegree);
         for _ in 0..4 {
-            let next = result.schoonschip_with_net::<false, AbstractIndex>(&cleanup_settings);
+            let next = result
+                .schoonschip_with_net::<false, AbstractIndex>(&cleanup_settings)
+                .expect("benchmark cleanup should produce a valid tensor network");
             if next == result {
                 break;
             }

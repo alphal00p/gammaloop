@@ -21,7 +21,7 @@ use spenso::structure::slot::DualSlotTo;
 use spenso::{
     network::{library::symbolic::ETS, parsing::ShadowedStructure, tags::SPENSO_TAG},
     structure::{
-        PermutedStructure, TensorStructure,
+        Canonicalized, TensorStructure,
         abstract_index::AbstractIndex,
         dimension::Dimension,
         partial::{PartialIndex, PartialStructure, PartialStructureExt},
@@ -55,7 +55,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for ConvertibleToSpensoName {
         if let Ok(structure) = structure.extract::<SpensoName>() {
             Ok(ConvertibleToSpensoName(structure, Vec::new()))
         } else if let Ok(expression) = structure.extract::<PyRef<'_, TensorExpression>>() {
-            if !expression.interface.structure.is_scalar() {
+            if !expression.interface.canonical().is_scalar() {
                 return Err(PyTypeError::new_err(
                     "a TensorExpression used as a name must have rank zero",
                 ));
@@ -156,7 +156,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for SpensoSlotOrArgOrRep {
         } else if let Ok(s) = structure.extract::<SpensoRepresentation>() {
             Ok(SpensoSlotOrArgOrRep::Rep(s))
         } else if let Ok(s) = structure.extract::<PyRef<'_, TensorExpression>>() {
-            if !s.interface.structure.is_scalar() {
+            if !s.interface.canonical().is_scalar() {
                 return Err(PyTypeError::new_err(
                     "tensor key arguments must be scalar expressions",
                 ));
@@ -577,7 +577,7 @@ impl SpensoName {
 /// Internal indexed structure used while constructing a `TensorExpression`.
 #[derive(Clone)]
 pub(crate) struct SpensoIndices {
-    pub(crate) structure: PermutedStructure<ShadowedStructure<AbstractIndex>>,
+    pub(crate) structure: Canonicalized<ShadowedStructure<AbstractIndex>>,
 }
 
 pub enum ArithmeticStructure {
@@ -842,6 +842,7 @@ impl SpensoRepresentation {
         })
     }
 
+    /// Return the representation paired with this one under index contraction.
     fn dual(&self) -> Self {
         Self {
             representation: self.representation.dual(),
@@ -1166,6 +1167,7 @@ impl SpensoSlot {
         format!("{}", self.slot.to_atom())
     }
 
+    /// Return this slot with its representation replaced by the dual representation.
     fn dual(&self) -> Self {
         SpensoSlot {
             slot: self.slot.dual(),
@@ -1337,7 +1339,7 @@ mod tests {
             )?;
             let expression = name.__call__(py, &arguments)?;
             let expression_ref = expression.bind(py).borrow();
-            assert_eq!(expression_ref.interface.structure.order(), 2);
+            assert_eq!(expression_ref.interface.canonical().order(), 2);
             assert!(matches!(
                 expression_ref.interface.logical_slots()[0].aind,
                 PartialIndex::Explicit(AbstractIndex::Normal(41))
@@ -1357,7 +1359,7 @@ mod tests {
                     .into_any()],
             )?;
             let scalar = name.__call__(py, &scalar_arguments)?;
-            assert!(scalar.bind(py).borrow().interface.structure.is_scalar());
+            assert!(scalar.bind(py).borrow().interface.canonical().is_scalar());
             let descriptor = scalar
                 .bind(py)
                 .as_any()

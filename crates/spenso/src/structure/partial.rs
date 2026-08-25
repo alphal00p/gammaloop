@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 use super::abstract_index::AbstractIndex;
 use super::representation::LibraryRep;
 use super::slot::{AbsInd, DummyAind, IsAbstractSlot, Slot};
-use super::{OrderedStructure, PermutedStructure, TensorStructure};
+use super::{Canonicalized, OrderedStructure, TensorStructure};
 
 /// An occurrence-local identifier for an unresolved tensor port.
 ///
@@ -39,7 +39,7 @@ impl<A: AbsInd> AbsInd for PartialIndex<A> {}
 
 pub type PartialSlot = Slot<LibraryRep, PartialIndex<AbstractIndex>>;
 pub type PartialStructure =
-    PermutedStructure<OrderedStructure<LibraryRep, PartialIndex<AbstractIndex>>>;
+    Canonicalized<OrderedStructure<LibraryRep, PartialIndex<AbstractIndex>>>;
 
 /// Operations that preserve the logical order hidden by `OrderedStructure`'s
 /// canonical sorting permutations.
@@ -51,11 +51,11 @@ pub trait PartialStructureExt: Sized {
     fn materialize_open_ports(
         &self,
         replacements: &HashMap<OpenPortId, AbstractIndex>,
-    ) -> PermutedStructure<OrderedStructure<LibraryRep, AbstractIndex>>;
+    ) -> Canonicalized<OrderedStructure<LibraryRep, AbstractIndex>>;
     fn materialize_all_open_ports(
         &self,
     ) -> (
-        PermutedStructure<OrderedStructure<LibraryRep, AbstractIndex>>,
+        Canonicalized<OrderedStructure<LibraryRep, AbstractIndex>>,
         HashMap<OpenPortId, AbstractIndex>,
     );
 }
@@ -75,9 +75,8 @@ impl PartialStructureExt for PartialStructure {
     }
 
     fn logical_slots(&self) -> Vec<PartialSlot> {
-        let canonical = self.structure.external_structure();
-        let representation_sorted = self.index_permutation.apply_slice_inv(&canonical);
-        self.rep_permutation.apply_slice_inv(&representation_sorted)
+        let canonical = self.canonical().external_structure();
+        self.layout().canonical_to_logical(&canonical)
     }
 
     fn canonicalize_open_ports(&self) -> Self {
@@ -97,7 +96,7 @@ impl PartialStructureExt for PartialStructure {
     fn materialize_open_ports(
         &self,
         replacements: &HashMap<OpenPortId, AbstractIndex>,
-    ) -> PermutedStructure<OrderedStructure<LibraryRep, AbstractIndex>> {
+    ) -> Canonicalized<OrderedStructure<LibraryRep, AbstractIndex>> {
         let logical = self.logical_slots().into_iter().map(|slot| {
             let index = match slot.aind {
                 PartialIndex::Explicit(index) => index,
@@ -111,7 +110,7 @@ impl PartialStructureExt for PartialStructure {
     fn materialize_all_open_ports(
         &self,
     ) -> (
-        PermutedStructure<OrderedStructure<LibraryRep, AbstractIndex>>,
+        Canonicalized<OrderedStructure<LibraryRep, AbstractIndex>>,
         HashMap<OpenPortId, AbstractIndex>,
     ) {
         let replacements = self
