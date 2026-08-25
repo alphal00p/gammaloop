@@ -1,0 +1,39 @@
+[package]
+name = "feynkit-py"
+version = "0.1.0"
+edition.workspace = true
+description = "Symbolica community Python bindings for FeynKit"
+repository = "https://github.com/alphal00p/gammaloop"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["feynman", "hep", "physics", "python"]
+categories = ["science"]
+
+[[bin]]
+name = "feynkit-stubgen"
+path = "src/bin/stubgen.rs"
+required-features = ["python_stubgen"]
+
+[dependencies]
+feynkit-cff = { version = "0.1.0", path = "../feynkit-cff" }
+feynkit-generator = { version = "0.1.0", path = "../feynkit-generator" }
+feynkit-graph = { version = "0.1.0", path = "../feynkit-graph" }
+feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics" }
+feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
+feynkit-ufo = { version = "0.1.0", path = "../feynkit-ufo", optional = true }
+pyo3 = { workspace = true }
+pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
+pyo3-stub-gen-derive = { workspace = true }
+
+[dev-dependencies]
+spynso3 = { path = "../spynso3" }
+
+[dependencies.symbolica]
+workspace = true
+default-features = false
+features = ["python_export"]
+
+[features]
+default = ["ufo"]
+python_stubgen = ["dep:pyo3-stub-gen", "symbolica/python_stubgen"]
+ufo = ["dep:feynkit-ufo"]
