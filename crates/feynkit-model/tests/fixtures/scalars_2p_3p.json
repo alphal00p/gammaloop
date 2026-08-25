@@ -1,0 +1,580 @@
+{
+  "name": "scalars",
+  "restriction": "default",
+  "orders": [
+    {
+      "name": "QCD",
+      "expansion_order": 99,
+      "hierarchy": 1
+    },
+    {
+      "name": "QED",
+      "expansion_order": 99,
+      "hierarchy": 2
+    }
+  ],
+  "parameters": [
+    {
+      "name": "ZERO",
+      "lhablock": null,
+      "lhacode": null,
+      "nature": "internal",
+      "parameter_type": "real",
+      "value": [
+        0.0,
+        0.0
+      ],
+      "expression": null
+    },
+    {
+      "name": "lam",
+      "lhablock": "SCALARS",
+      "lhacode": [
+        1337
+      ],
+      "nature": "external",
+      "parameter_type": "real",
+      "value": [
+        1.0,
+        0.0
+      ],
+      "expression": null
+    },
+    {
+      "name": "mass_scalar_1",
+      "lhablock": "SCALARS",
+      "lhacode": [
+        2002
+      ],
+      "nature": "external",
+      "parameter_type": "real",
+      "value": [
+        1.0,
+        0.0
+      ],
+      "expression": null
+    },
+    {
+      "name": "width_scalar_1",
+      "lhablock": "SCALARS",
+      "lhacode": [
+        3002
+      ],
+      "nature": "internal",
+      "parameter_type": "real",
+      "value": [
+        0.0,
+        0.0
+      ],
+      "expression": "UFO::{}::ZERO"
+    },
+    {
+      "name": "mass_scalar_2",
+      "lhablock": "SCALARS",
+      "lhacode": [
+        2003
+      ],
+      "nature": "external",
+      "parameter_type": "real",
+      "value": [
+        2.0,
+        0.0
+      ],
+      "expression": null
+    },
+    {
+      "name": "width_scalar_2",
+      "lhablock": "SCALARS",
+      "lhacode": [
+        3003
+      ],
+      "nature": "internal",
+      "parameter_type": "real",
+      "value": [
+        0.0,
+        0.0
+      ],
+      "expression": "UFO::{}::ZERO"
+    },
+    {
+      "name": "aEWM1",
+      "lhablock": "SMINPUTS",
+      "lhacode": [
+        1
+      ],
+      "nature": "external",
+      "parameter_type": "real",
+      "value": [
+        132.507,
+        0.0
+      ],
+      "expression": null
+    },
+    {
+      "name": "Gf",
+      "lhablock": "SMINPUTS",
+      "lhacode": [
+        2
+      ],
+      "nature": "external",
+      "parameter_type": "real",
+      "value": [
+        0.0000116639,
+        0.0
+      ],
+      "expression": null
+    },
+    {
+      "name": "aS",
+      "lhablock": "SMINPUTS",
+      "lhacode": [
+        3
+      ],
+      "nature": "external",
+      "parameter_type": "real",
+      "value": [
+        0.118,
+        0.0
+      ],
+      "expression": null
+    },
+    {
+      "name": "aEW",
+      "lhablock": null,
+      "lhacode": null,
+      "nature": "internal",
+      "parameter_type": "real",
+      "value": [
+        0.0075467711139788835,
+        -0.0
+      ],
+      "expression": "UFO::{}::aEWM1^(-1)"
+    },
+    {
+      "name": "G",
+      "lhablock": null,
+      "lhacode": null,
+      "nature": "internal",
+      "parameter_type": "real",
+      "value": [
+        1.2177157847767195,
+        0.0
+      ],
+      "expression": "2*UFO::{}::aS^(1/2)*𝜋^(1/2)"
+    },
+    {
+      "name": "ee",
+      "lhablock": null,
+      "lhacode": null,
+      "nature": "internal",
+      "parameter_type": "real",
+      "value": [
+        0.3079537672443688,
+        0.0
+      ],
+      "expression": "2*UFO::{}::aEW^(1/2)*𝜋^(1/2)"
+    }
+  ],
+  "particles": [
+    {
+      "pdg_code": 1000,
+      "name": "scalar_0",
+      "antiname": "scalar_0",
+      "spin": 1,
+      "color": 1,
+      "mass": "ZERO",
+      "width": "ZERO",
+      "texname": "\\phi_0",
+      "antitexname": "\\phi_0",
+      "charge": 0.0,
+      "ghost_number": 0,
+      "lepton_number": 0,
+      "y_charge": 0
+    },
+    {
+      "pdg_code": 1001,
+      "name": "scalar_1",
+      "antiname": "scalar_1",
+      "spin": 1,
+      "color": 1,
+      "mass": "mass_scalar_1",
+      "width": "width_scalar_1",
+      "texname": "\\phi_1",
+      "antitexname": "\\phi_1",
+      "charge": 0.0,
+      "ghost_number": 0,
+      "lepton_number": 0,
+      "y_charge": 0
+    },
+    {
+      "pdg_code": 1002,
+      "name": "scalar_2",
+      "antiname": "scalar_2",
+      "spin": 1,
+      "color": 1,
+      "mass": "mass_scalar_2",
+      "width": "width_scalar_2",
+      "texname": "\\phi_2",
+      "antitexname": "\\phi_2",
+      "charge": 0.0,
+      "ghost_number": 0,
+      "lepton_number": 0,
+      "y_charge": 0
+    }
+  ],
+  "propagators": [
+    {
+      "name": "scalar_0_propFeynman",
+      "particle": "scalar_0",
+      "numerator": "1",
+      "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2"
+    },
+    {
+      "name": "scalar_1_propFeynman",
+      "particle": "scalar_1",
+      "numerator": "1",
+      "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::mass_scalar_1^2"
+    },
+    {
+      "name": "scalar_2_propFeynman",
+      "particle": "scalar_2",
+      "numerator": "1",
+      "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::mass_scalar_2^2"
+    }
+  ],
+  "lorentz_structures": [
+    {
+      "name": "SCALAR_2_LORENTZ_STRUCTURE",
+      "spins": [
+        1,
+        1
+      ],
+      "structure": "1"
+    },
+    {
+      "name": "SCALAR_3_LORENTZ_STRUCTURE",
+      "spins": [
+        1,
+        1,
+        1
+      ],
+      "structure": "1"
+    }
+  ],
+  "couplings": [
+    {
+      "name": "SCALAR_COUPLING",
+      "expression": "1𝑖*UFO::{}::lam",
+      "orders": [
+        [
+          "QCD",
+          1
+        ]
+      ],
+      "value": [
+        0.0,
+        1.0
+      ]
+    }
+  ],
+  "vertex_rules": [
+    {
+      "name": "V_2_SCALAR_00",
+      "particles": [
+        "scalar_0",
+        "scalar_0"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_2_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_2_SCALAR_01",
+      "particles": [
+        "scalar_0",
+        "scalar_1"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_2_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_2_SCALAR_02",
+      "particles": [
+        "scalar_0",
+        "scalar_2"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_2_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_2_SCALAR_11",
+      "particles": [
+        "scalar_1",
+        "scalar_1"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_2_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_2_SCALAR_12",
+      "particles": [
+        "scalar_1",
+        "scalar_2"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_2_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_2_SCALAR_22",
+      "particles": [
+        "scalar_2",
+        "scalar_2"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_2_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_3_SCALAR_000",
+      "particles": [
+        "scalar_0",
+        "scalar_0",
+        "scalar_0"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_3_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_3_SCALAR_001",
+      "particles": [
+        "scalar_0",
+        "scalar_0",
+        "scalar_1"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_3_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_3_SCALAR_002",
+      "particles": [
+        "scalar_0",
+        "scalar_0",
+        "scalar_2"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_3_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_3_SCALAR_011",
+      "particles": [
+        "scalar_0",
+        "scalar_1",
+        "scalar_1"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_3_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_3_SCALAR_012",
+      "particles": [
+        "scalar_0",
+        "scalar_1",
+        "scalar_2"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_3_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_3_SCALAR_022",
+      "particles": [
+        "scalar_0",
+        "scalar_2",
+        "scalar_2"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_3_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_3_SCALAR_111",
+      "particles": [
+        "scalar_1",
+        "scalar_1",
+        "scalar_1"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_3_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_3_SCALAR_112",
+      "particles": [
+        "scalar_1",
+        "scalar_1",
+        "scalar_2"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_3_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_3_SCALAR_122",
+      "particles": [
+        "scalar_1",
+        "scalar_2",
+        "scalar_2"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_3_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    },
+    {
+      "name": "V_3_SCALAR_222",
+      "particles": [
+        "scalar_2",
+        "scalar_2",
+        "scalar_2"
+      ],
+      "color_structures": [
+        "1"
+      ],
+      "lorentz_structures": [
+        "SCALAR_3_LORENTZ_STRUCTURE"
+      ],
+      "couplings": [
+        [
+          "SCALAR_COUPLING"
+        ]
+      ]
+    }
+  ]
+}
