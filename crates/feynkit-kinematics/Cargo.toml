@@ -1,0 +1,18 @@
+[package]
+name = "feynkit-kinematics"
+version = "0.1.0"
+edition.workspace = true
+description = "Precision-generic relativistic kinematics and jet clustering"
+repository = "https://github.com/alphal00p/gammaloop"
+license = "MIT OR Apache-2.0"
+keywords = ["feynman", "hep", "kinematics", "physics"]
+categories = ["science"]
+
+[dependencies]
+linnet = { workspace = true }
+numerica = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
