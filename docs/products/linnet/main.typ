@@ -1,5 +1,9 @@
 #import "../shared.typ": *
 #import "content/overview.typ": overview
+#import "content/quickstart.typ": quickstart
+#import "content/quickstart-rust.typ": quickstart-rust
+#import "content/quickstart-python.typ": quickstart-python
+#import "content/quickstart-typst.typ": quickstart-typst
 #import "content/tutorial.typ": tutorial
 #import "content/algorithms.typ": algorithms
 #import "content/clinnet.typ": clinnet
@@ -22,6 +26,10 @@
   owner: "Linnet project",
   body: [
     #overview
+    #quickstart
+    #quickstart-rust
+    #quickstart-python
+    #quickstart-typst
     #tutorial
     #algorithms
     #clinnet

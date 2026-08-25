@@ -18,16 +18,21 @@ than a detached copy of the graph.
 
 == Choose a task
 
-- To construct and validate a graph with a boundary, follow the
-  #link("tutorial/")[first-graph tutorial] and the exact
+- To add Linnet to a Rust project and validate a graph with a boundary, follow the
+  #link("quickstart/rust/")[Rust guide] and the exact
   #link("reference/rust/linnet/half_edge/builder/struct.HedgeGraphBuilder.html")[`HedgeGraphBuilder`
   reference].
+- To parse and inspect a DOT graph from Python, follow the source-built
+  #link("quickstart/python/")[Python guide].
+- To select an internal subgraph and compute a cycle basis, continue with the
+  #link("tutorial/")[first-graph tutorial].
 - To enumerate cycles, cuts, or connected regions, use the
   #link("guides/algorithms/")[graph-algorithms guide] with the
   #link("reference/rust/linnet/half_edge/struct.HedgeGraph.html")[`HedgeGraph` reference].
 - To render a tree of existing DOT files and rebuild only changed figures, use the
   #link("guides/clinnet/")[Clinnet command-line guide].
-- To lay out or render a graph, continue to the #link("guides/linnest/")[Linnest Typst guide];
+- To draw an editable graph in Typst, begin with the #link("quickstart/typst/")[Typst guide],
+  then continue to the #link("guides/linnest/")[Linnest Typst guide];
   layout coordinates are deliberately separate from graph identity.
 
 == A working model

@@ -1,5 +1,8 @@
 #import "../shared.typ": *
 #import "content/overview.typ": overview
+#import "content/quickstart.typ": quickstart
+#import "content/quickstart-python.typ": quickstart-python
+#import "content/quickstart-rust.typ": quickstart-rust
 #import "content/tutorial.typ": tutorial
 #import "content/algebra.typ": algebra
 #import "content/form-symbolica-color-and-dirac.typ": form-color-dirac-content
@@ -14,6 +17,9 @@
   owner: "Idenso project",
   body: [
     #overview
+    #quickstart
+    #quickstart-python
+    #quickstart-rust
     #tutorial
     #algebra
     #form-color-dirac-content("manual")

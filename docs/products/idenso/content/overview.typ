@@ -17,7 +17,11 @@ metric, epsilon, and color algebra.
 
 == Choose a task
 
-- To initialize representations and verify one metric contraction, follow the
+- To install Symbolica and simplify one metric contraction with its bundled community modules,
+  follow the #link("quickstart/python/")[Python guide].
+- To apply the same identity through the native API, use the
+  #link("quickstart/rust/")[Rust guide].
+- To verify the rewrite as a controlled, observable pass, follow the
   #link("tutorial/")[controlled identity tutorial] and the
   #link("reference/python/idenso-community/simplify_metrics/")[Python function reference].
 - To isolate dummy-index namespaces or cook a large expression, use the
@@ -46,8 +50,8 @@ expressions: equal printed index names can otherwise acquire an unintended contr
 == Representations and cooking
 
 The representation layer defines spin-fundamental, color-fundamental, color-sextet, bispinor,
-and color-adjoint types together with their duality. `initialize()` forces the related
-Symbolica symbols and Spenso tags to be registered before parsing or rewriting expressions.
+and color-adjoint types together with their duality. Importing the published Idenso community
+module registers the related Symbolica symbols and Spenso tags before expressions are built.
 
 The `Cookable` API can replace selected function-like subexpressions or index payloads with
 compact symbols and later reverse the operation. Use reversible settings when the original

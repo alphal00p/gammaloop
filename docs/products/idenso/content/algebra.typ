@@ -4,9 +4,9 @@
 = Syntax, indices, and algebra passes
 
 Idenso consumes the Symbolica function form emitted for Spenso structures. Function heads carry
-representation meaning and their arguments carry abstract indices or tensor data. Initialize
-Idenso before parsing so Symbolica attributes, Spenso tags, and dual representations are all
-registered in one deterministic order.
+representation meaning and their arguments carry abstract indices or tensor data. Import the
+Idenso community module before parsing so Symbolica attributes, Spenso tags, and dual
+representations are registered in one deterministic order.
 
 == Indices and cooking
 
@@ -28,10 +28,9 @@ each factor with a distinct header first, while leaving its external indices unt
 // docs-example: compile idenso-dummy-namespaces
 ```python
 import symbolica as sp
-from symbolica.community.idenso import initialize, list_dangling, wrap_dummies
+from symbolica.community.idenso import list_dangling, wrap_dummies
 from symbolica.community.spenso import Representation, TensorName
 
-initialize()
 rep = Representation.euc(3)
 mu = rep("mu")
 nu = rep("nu")
@@ -57,7 +56,8 @@ the underlying Rust boundary.
 #callout("Interpret index failures before simplifying", [
   More or fewer than two dangling indices means a name collided or a slot's representation or
   duality differs from the intended one. An unchanged plain Symbolica function means it was not
-  constructed through Spenso tensor names/representations, or `initialize()` ran after parsing.
+  constructed through Spenso tensor names/representations, or the Idenso module was imported
+  only after parsing.
   Correct those structural issues before metric, Dirac, or color simplification.
 ])
 

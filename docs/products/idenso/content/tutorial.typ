@@ -10,20 +10,18 @@ tensor syntax and observe one algebra pass before composing a larger Dirac or co
 == Prerequisites
 
 Idenso is mounted at `symbolica.community.idenso`; it is not installed by `pip install idenso`.
-Use a Symbolica Python distribution whose release includes the Idenso and Spenso community
-modules, or build those modules through the `symbolica-community` assembly. Verify the actual
-environment first:
-
-The assembly and installation instructions live in
-#link("https://github.com/benruijl/symbolica-community")[`symbolica-community`].
+Install the published Symbolica distribution, which bundles the Idenso and Spenso community
+modules, and verify the actual environment first:
 
 // docs-example: syntax
 ```sh
+python -m pip install --upgrade symbolica
 python -c "import symbolica.community.idenso; import symbolica.community.spenso"
 ```
 
-If that fails, install or rebuild the community assembly before continuing. Generating a `.pyi`
-file does not mount the native module.
+If that fails, check the installed Symbolica version before continuing. Generating a `.pyi`
+file does not mount the native module. Source embedders can build a custom
+#link("https://github.com/symbolica-dev/symbolica-community")[community assembly].
 
 == Simplify one metric contraction
 
@@ -31,10 +29,9 @@ Save the following as `metric_first.py`:
 
 // docs-example: compile idenso-controlled-identity
 ```python
-from symbolica.community.idenso import initialize, list_dangling, simplify_metrics
+from symbolica.community.idenso import list_dangling, simplify_metrics
 from symbolica.community.spenso import Representation, TensorName
 
-initialize()
 rep = Representation.mink(4)
 mu = rep("mu")
 nu = rep("nu")
@@ -66,10 +63,10 @@ version; inspect the expression structure instead of comparing exact text.
   substantially longer.
 ])
 
-#callout("Initialize before parsing or rewriting", [
-  `initialize()` installs Idenso's representation and tensor symbols. Calling it explicitly at
-  the start of a standalone script makes registration order clear and keeps expressions in the
-  Spenso-compatible form that Idenso's matchers expect.
+#callout("Import before constructing expressions", [
+  Importing `symbolica.community.idenso` registers Idenso's representation and tensor symbols.
+  Construct the Spenso-compatible expression after that import so Idenso's matchers see the
+  intended slots and tensor names.
 ])
 
 == Grow this into an algebra pipeline

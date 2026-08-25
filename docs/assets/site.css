@@ -345,6 +345,7 @@ body[data-has-toc="false"] .docs-shell { grid-template-columns: var(--sidebar-wi
   border-bottom: 1px solid var(--hairline);
   background: transparent;
 }
+.docs-article > div:not([class]):has(+ div:not([class])) { border-bottom: 0; }
 .docs-article > div:not([class]) p:first-child { margin-top: 0; color: var(--ink-strong); font-weight: 700; }
 .docs-article > div:not([class]) p:last-child { margin-bottom: 0; }
 

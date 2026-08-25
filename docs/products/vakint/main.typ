@@ -1,5 +1,8 @@
 #import "../shared.typ": *
 #import "content/overview.typ": overview
+#import "content/quickstart.typ": quickstart
+#import "content/quickstart-python.typ": quickstart-python
+#import "content/quickstart-rust.typ": quickstart-rust
 #import "content/tutorial.typ": tutorial
 #import "content/evaluation.typ": evaluation
 #import "content/api.typ": api
@@ -12,6 +15,9 @@
   owner: "Vakint project",
   body: [
     #overview
+    #quickstart
+    #quickstart-python
+    #quickstart-rust
     #tutorial
     #evaluation
     #api

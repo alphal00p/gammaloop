@@ -29,11 +29,10 @@ only when the matching Cargo feature is enabled.
   and is not included in the GammaLoop wheel merely because the crates share a repository.
 ])
 
-Install a Symbolica Python distribution only if its release manifest says it includes Idenso,
-then verify the actual assembly with
-`python -c "import symbolica.community.idenso"`. There is no `pip install idenso` fallback.
+Install the published assembly with `python -m pip install --upgrade symbolica`, then verify it
+with `python -c "import symbolica.community.idenso"`. There is no `pip install idenso` fallback.
 For a source build, add this crate to the external
-#link("https://github.com/benruijl/symbolica-community")[symbolica-community] assembly with the
+#link("https://github.com/symbolica-dev/symbolica-community")[symbolica-community] assembly with the
 `python` feature and call `IdensoModule`'s `SymbolicaCommunityModule` registration when that
 extension is assembled. Building the Rust crate alone does not add the community module to an
 already installed Symbolica package.
@@ -41,7 +40,7 @@ already installed Symbolica package.
 The generated #link("reference/python/")[Python API] records exact signatures and defaults. Its
 operations group naturally into four phases:
 
-- setup: `initialize`;
+- setup: importing the community module registers its symbols;
 - expansion: `expand_bis`, `expand_mink`, `expand_mink_bis`, `expand_metrics`, and
   `expand_color`;
 - index preparation: `wrap_indices`, `wrap_dummies`, `list_dangling`, `cook_indices`, and
@@ -50,14 +49,9 @@ operations group naturally into four phases:
   `simplify_color`.
 
 ```python
-from symbolica.community.idenso import (
-    initialize,
-    list_dangling,
-    simplify_metrics,
-)
+from symbolica.community.idenso import list_dangling, simplify_metrics
 from symbolica.community.spenso import Representation, TensorName
 
-initialize()
 minkowski = Representation.mink(4)
 mu = minkowski("mu")
 nu = minkowski("nu")

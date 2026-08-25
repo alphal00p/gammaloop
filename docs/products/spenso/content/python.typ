@@ -11,22 +11,23 @@ guide for the object boundaries and execution sequence that those signatures do 
 
 #boundary("A Symbolica community module", [
   Import Spenso as `symbolica.community.spenso`; there is no standalone `spenso` wheel. The
-  installed Symbolica assembly determines whether the module is present and which Spenso API it
-  contains. A source checkout or generated `.pyi` file does not add the native module to an
-  existing Python environment.
+  published Symbolica wheel bundles this community module. Its Symbolica version determines
+  which Spenso API it contains. A source checkout or generated `.pyi` file does not add the
+  native module to an existing Python environment.
 ])
 
-Check the environment before building a workflow:
+Install the current assembly and check the environment before building a workflow:
 
 // docs-example: syntax
 ```sh
+python -m pip install --upgrade symbolica
 python -c "import symbolica.community.spenso as spenso; print(spenso.__name__)"
 ```
 
-When a provider's Symbolica package does not include Spenso, build it through the
-#link("https://github.com/benruijl/symbolica-community")[community-module assembly]. Record the
-Symbolica assembly version with reproducible results; it is a more useful Python compatibility
-fact than the version of an unrelated local Rust checkout.
+Source embedders can build a custom
+#link("https://github.com/symbolica-dev/symbolica-community")[community-module assembly]. Record
+the Symbolica assembly version with reproducible results; it is a more useful Python
+compatibility fact than the version of an unrelated local Rust checkout.
 
 == Choose the right object
 

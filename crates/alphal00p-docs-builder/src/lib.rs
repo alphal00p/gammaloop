@@ -593,6 +593,16 @@ pub struct SiteBuilder {
     publications: PublicationCache,
 }
 
+fn interface_guide_title(product_title: &str, surface: &str) -> String {
+    match surface {
+        "cli" => format!("Using {product_title} from the command line"),
+        "python" => format!("Using {product_title} from Python"),
+        "rust" => format!("Using {product_title} from Rust"),
+        "typst" => format!("Using {product_title} from Typst"),
+        _ => format!("Using {product_title}"),
+    }
+}
+
 impl SiteBuilder {
     pub fn discover() -> Result<Self> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -1365,6 +1375,53 @@ impl SiteBuilder {
                 "{} must have at least one tutorial page",
                 product.id
             );
+            let quickstart = product
+                .pages
+                .iter()
+                .find(|page| page.id == "quickstart")
+                .wrap_err_with(|| format!("{} has no quickstart page", product.id))?;
+            ensure!(
+                quickstart.title != "Quickstart"
+                    && quickstart.route == "quickstart/"
+                    && quickstart.group == "Start here"
+                    && quickstart.symbol == "quickstart",
+                "{} quickstart chooser must use an outcome-specific title and the shared route, navigation group, and Typst symbol",
+                product.id
+            );
+            let mut quickstart_surfaces = Vec::new();
+            if product.id == "gammaloop" {
+                quickstart_surfaces.push(("cli", "CLI"));
+            }
+            if !product.python_components.is_empty() {
+                quickstart_surfaces.push(("python", "Python"));
+            }
+            if !product.rust_components.is_empty() {
+                quickstart_surfaces.push(("rust", "Rust"));
+            }
+            if product
+                .pages
+                .iter()
+                .any(|page| page.route == "reference/typst/")
+            {
+                quickstart_surfaces.push(("typst", "Typst"));
+            }
+            for (surface, label) in quickstart_surfaces {
+                let id = format!("quickstart-{surface}");
+                let title = interface_guide_title(&product.title, surface);
+                let page = product
+                    .pages
+                    .iter()
+                    .find(|page| page.id == id)
+                    .wrap_err_with(|| format!("{} has no {label} quickstart", product.id))?;
+                ensure!(
+                    page.title == title
+                        && page.route == format!("quickstart/{surface}/")
+                        && page.group == "Getting started"
+                        && page.symbol == id,
+                    "{} {label} getting-started guide must use the shared title, route, navigation group, and Typst symbol",
+                    product.id
+                );
+            }
             ensure!(
                 guide_pages >= 1,
                 "{} must have at least one task-oriented guide",
@@ -2552,7 +2609,8 @@ impl SiteBuilder {
                 &product.title,
                 "Rust API",
                 &format!(
-                    "<p>Rustdoc is the canonical Rust API reference. It already provides the familiar crate hierarchy, exact signatures, trait implementations, feature-gated items, source links, and native symbol search without translating those structures into a second UI.</p><p>Use the authored interface guide for product-level boundaries and choose a crate below when you need item-level detail. Presence in Rustdoc describes the compiled public surface; it is not by itself a compatibility promise. The structured catalogs remain build artifacts for coverage and consistency checks, not a competing public reference.</p><nav class=\"reference-guide-links\" aria-label=\"Related Rust documentation\"><a href=\"reference/interfaces/\">Understand the Rust interfaces</a><a href=\"tutorial/\">Start from a product workflow</a></nav><div class=\"api-component-grid\">{cards}</div>"
+                    "<p>Rustdoc is the canonical Rust API reference. It already provides the familiar crate hierarchy, exact signatures, trait implementations, feature-gated items, source links, and native symbol search without translating those structures into a second UI.</p><p>Use the authored interface guide for product-level boundaries and choose a crate below when you need item-level detail. Presence in Rustdoc describes the compiled public surface; it is not by itself a compatibility promise. The structured catalogs remain build artifacts for coverage and consistency checks, not a competing public reference.</p><nav class=\"reference-guide-links\" aria-label=\"Related Rust documentation\"><a href=\"reference/interfaces/\">Understand the Rust interfaces</a><a href=\"quickstart/rust/\">{}</a></nav><div class=\"api-component-grid\">{cards}</div>",
+                    escape_html(&interface_guide_title(&product.title, "rust")),
                 ),
             ),
         )?;
@@ -4170,17 +4228,17 @@ impl SiteBuilder {
                     .iter()
                     .find(|product| product.id == *product_id)
                     .wrap_err_with(|| format!("portal task {task} references unknown product {product_id}"))?;
-                let tutorial = product
+                let quickstart = product
                     .pages
                     .iter()
-                    .find(|page| page.group == "Tutorial")
-                    .wrap_err_with(|| format!("{} has no tutorial route", product.id))?;
+                    .find(|page| page.id == "quickstart")
+                    .wrap_err_with(|| format!("{} has no quickstart route", product.id))?;
                 Ok(format!(
                     r#"<a class="portal-task-link" data-product="{}" href="products/{}/{}/{}"><span class="portal-task-order">{:02}</span><span class="portal-task-copy"><strong>{}</strong><span>{} · {}</span><small>{}</small></span><span class="portal-task-arrow" aria-hidden="true">→</span></a>"#,
                     escape_html(&product.id),
                     escape_html(&product.id),
                     escape_html(&channel_route),
-                    escape_html(&tutorial.route),
+                    escape_html(&quickstart.route),
                     index + 1,
                     escape_html(task),
                     escape_html(&product.title),
@@ -4221,8 +4279,14 @@ impl SiteBuilder {
                     .find(|page| page.group == "Guides")
                     .map(|page| page.route.as_str())
                     .wrap_err_with(|| format!("{} has no portal guide", product.id))?;
+                let quickstart_route = product
+                    .pages
+                    .iter()
+                    .find(|page| page.id == "quickstart")
+                    .map(|page| page.route.as_str())
+                    .wrap_err_with(|| format!("{} has no portal quickstart", product.id))?;
                 Ok(format!(
-                    r#"<article class="portal-project-card" data-product="{}"><div class="portal-project-meta"><span>{:02}</span><span>{}</span></div><h3><a href="products/{}/{}/">{}</a></h3><p class="portal-project-summary">{}</p><div class="portal-packages" aria-label="{} crates and modules"><span class="portal-packages-label">Crates &amp; modules</span>{}</div><nav class="portal-card-links" aria-label="{} documentation"><a class="portal-card-primary" href="products/{}/{}/">Overview <span aria-hidden="true">↗</span></a><a href="products/{}/{}/tutorial/">Tutorial</a><a href="products/{}/{}/{}">Guides</a><a href="products/{}/{}/reference/">Reference</a><a class="portal-card-cite" href="citations/#{}">Cite</a></nav></article>"#,
+                    r#"<article class="portal-project-card" data-product="{}"><div class="portal-project-meta"><span>{:02}</span><span>{}</span></div><h3><a href="products/{}/{}/">{}</a></h3><p class="portal-project-summary">{}</p><div class="portal-packages" aria-label="{} crates and modules"><span class="portal-packages-label">Crates &amp; modules</span>{}</div><nav class="portal-card-links" aria-label="{} documentation"><a class="portal-card-primary" href="products/{}/{}/">Overview <span aria-hidden="true">↗</span></a><a href="products/{}/{}/{}">Get started</a><a href="products/{}/{}/{}">Guides</a><a href="products/{}/{}/reference/">Reference</a><a class="portal-card-cite" href="citations/#{}">Cite</a></nav></article>"#,
                     escape_html(&product.id),
                     index + 1,
                     escape_html(role),
@@ -4237,6 +4301,7 @@ impl SiteBuilder {
                     escape_html(&channel_route),
                     escape_html(&product.id),
                     escape_html(&channel_route),
+                    escape_html(quickstart_route),
                     escape_html(&product.id),
                     escape_html(&channel_route),
                     escape_html(guide_route),
@@ -4262,7 +4327,7 @@ impl SiteBuilder {
         );
         let favicon = favicon_links("assets/");
         let html = format!(
-            r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{}"><meta name="theme-color" content="#f9f6f0">{favicon}<title>αLoop · Research software for collider physics</title><link rel="stylesheet" href="assets/site.css"><script defer src="assets/site.js"></script></head><body class="portal-body" data-search-index="search-index.json" data-search-root=""><a class="skip-link" href="#main-content">Skip to content</a><header class="portal-header"><a class="portal-brand" href="#overview" aria-label="αLoop home"><span class="portal-brand-logo" aria-hidden="true"></span><span class="portal-brand-copy"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class="portal-nav" aria-label="Primary"><a href="#tasks">Tasks</a><a href="people/">People</a><a href="publications/">Publications</a><a href="developers/">Developers</a></nav><div class="portal-header-actions"><button class="portal-search-button" type="button" data-search-open>Search <span class="header-button-label">⌘K</span></button><a class="portal-source-link" href="https://github.com/alphal00p/gammaloop">GitHub <span aria-hidden="true">↗</span></a><button class="portal-theme-button" type="button" data-theme-toggle aria-label="Toggle color theme"><span aria-hidden="true">◐</span></button></div></header><main class="portal-main" id="main-content"><section class="portal-hero portal-section" id="overview"><div class="portal-hero-copy"><p class="portal-kicker">{}</p><h1>{}</h1><p class="portal-lede">{}</p><div class="portal-hero-actions"><a class="portal-button portal-button-primary" href="#tasks">Choose a task <span aria-hidden="true">↓</span></a><a class="portal-button" href="products/gammaloop/{}/tutorial/">Start with GammaLoop <span aria-hidden="true">↗</span></a><a class="portal-button" href="citations/">Cite the software <span aria-hidden="true">↗</span></a></div></div><div class="portal-hero-art"><div class="portal-wordmark" aria-label="αLoop collaboration mark" role="img"></div><div class="portal-graph-field" role="img" aria-label="A jumble of Feynman graphs rendered by GammaLoop from real process and test data">{process_graphs}</div><p>Local cancellation.<br>Global precision.</p></div></section><section class="portal-section portal-task-chooser" id="tasks" aria-labelledby="tasks-title"><header class="portal-task-heading"><div><p class="portal-kicker">Choose by task · 01—05</p><h2 id="tasks-title">What do you want to work on?</h2></div><p>Start with the scientific object or operation you have in hand. Each route opens the maintained first workflow for the component that owns it.</p></header><nav class="portal-task-grid" aria-label="Documentation by task">{tasks}</nav></section><section class="portal-section portal-projects" id="projects" aria-labelledby="projects-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research software · 01—05</p><h2 id="projects-title">Projects &amp; crates</h2></div><p>Five connected codebases spanning numerical cross-sections, graph algorithms, tensor networks, symbolic identities, and integral evaluation.</p></div><div class="portal-project-grid">{projects}</div></section>{funding}</main><footer class="portal-footer"><div><span class="portal-footer-mark" aria-hidden="true"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label="Footer"><a href="#tasks">Tasks</a><a href="#projects">Projects</a><a href="people/">People</a><a href="publications/">Publications</a><a href="citations/">Cite</a><a href="developers/">Developers</a><a href="https://github.com/alphal00p/gammaloop">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer><dialog class="search-dialog" data-search-dialog><form class="search-form" method="dialog"><input class="search-input" type="search" data-search-input placeholder="Search all projects and developer notes" aria-label="Search all documentation"><button class="header-button" value="close">Close</button></form><ul class="search-results" data-search-results aria-live="polite"></ul></dialog></body></html>"##,
+            r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{}"><meta name="theme-color" content="#f9f6f0">{favicon}<title>αLoop · Research software for collider physics</title><link rel="stylesheet" href="assets/site.css"><script defer src="assets/site.js"></script></head><body class="portal-body" data-search-index="search-index.json" data-search-root=""><a class="skip-link" href="#main-content">Skip to content</a><header class="portal-header"><a class="portal-brand" href="#overview" aria-label="αLoop home"><span class="portal-brand-logo" aria-hidden="true"></span><span class="portal-brand-copy"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class="portal-nav" aria-label="Primary"><a href="#tasks">Tasks</a><a href="people/">People</a><a href="publications/">Publications</a><a href="developers/">Developers</a></nav><div class="portal-header-actions"><button class="portal-search-button" type="button" data-search-open>Search <span class="header-button-label">⌘K</span></button><a class="portal-source-link" href="https://github.com/alphal00p/gammaloop">GitHub <span aria-hidden="true">↗</span></a><button class="portal-theme-button" type="button" data-theme-toggle aria-label="Toggle color theme"><span aria-hidden="true">◐</span></button></div></header><main class="portal-main" id="main-content"><section class="portal-hero portal-section" id="overview"><div class="portal-hero-copy"><p class="portal-kicker">{}</p><h1>{}</h1><p class="portal-lede">{}</p><div class="portal-hero-actions"><a class="portal-button portal-button-primary" href="#tasks">Choose a task <span aria-hidden="true">↓</span></a><a class="portal-button" href="products/gammaloop/{}/quickstart/">Start with GammaLoop <span aria-hidden="true">↗</span></a><a class="portal-button" href="citations/">Cite the software <span aria-hidden="true">↗</span></a></div></div><div class="portal-hero-art"><div class="portal-wordmark" aria-label="αLoop collaboration mark" role="img"></div><div class="portal-graph-field" role="img" aria-label="A jumble of Feynman graphs rendered by GammaLoop from real process and test data">{process_graphs}</div><p>Local cancellation.<br>Global precision.</p></div></section><section class="portal-section portal-task-chooser" id="tasks" aria-labelledby="tasks-title"><header class="portal-task-heading"><div><p class="portal-kicker">Choose by task · 01—05</p><h2 id="tasks-title">What do you want to work on?</h2></div><p>Start with the scientific object or operation you have in hand. Each route opens the maintained first workflow for the component that owns it.</p></header><nav class="portal-task-grid" aria-label="Documentation by task">{tasks}</nav></section><section class="portal-section portal-projects" id="projects" aria-labelledby="projects-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research software · 01—05</p><h2 id="projects-title">Projects &amp; crates</h2></div><p>Five connected codebases spanning numerical cross-sections, graph algorithms, tensor networks, symbolic identities, and integral evaluation.</p></div><div class="portal-project-grid">{projects}</div></section>{funding}</main><footer class="portal-footer"><div><span class="portal-footer-mark" aria-hidden="true"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label="Footer"><a href="#tasks">Tasks</a><a href="#projects">Projects</a><a href="people/">People</a><a href="publications/">Publications</a><a href="citations/">Cite</a><a href="developers/">Developers</a><a href="https://github.com/alphal00p/gammaloop">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer><dialog class="search-dialog" data-search-dialog><form class="search-form" method="dialog"><input class="search-input" type="search" data-search-input placeholder="Search all projects and developer notes" aria-label="Search all documentation"><button class="header-button" value="close">Close</button></form><ul class="search-results" data-search-results aria-live="polite"></ul></dialog></body></html>"##,
             escape_html(&self.portal.summary),
             escape_html(&self.portal.eyebrow),
             escape_html(&self.portal.title),
@@ -4318,7 +4383,7 @@ impl SiteBuilder {
             })
             .collect::<String>();
         let body = format!(
-            r#"<header class="portal-page-hero about-page-hero"><p class="portal-kicker">About the collaboration</p><h1>Precision through local cancellation.</h1><p>{}</p></header><section class="about-origin"><div class="about-origin-copy"><p class="portal-kicker">Why αLoop</p><h2>Precision is another path to discovery.</h2><p>The lack of obvious sign of new physics phenomenon in collider experiments is an opportunity to take a step back and reflect on the amazing theory we have discovered so far: the Standard Model. In particular, we must now strive to make ever more precise predictions so as to hunt for indirect evidence of new physics in small departure from expectations.</p><p>For this reason, our collaboration is dedicated to theoretical and algorithmic research for the automated computation of cross-sections in Quantum Field Theories at arbitrary perturbative orders. In particular, we develop a new theoretical framework called <em>Local Unitarity</em> (LU) which approaches this problem from an unorthodox way, particularly suited to numerical computations.</p><nav aria-label="Learn about Local Unitarity"><a class="portal-button portal-button-primary" href="https://arxiv.org/abs/2110.15662">Read the introduction <span aria-hidden="true">↗</span></a><a class="portal-button" href="../publications/">Explore publications <span aria-hidden="true">→</span></a></nav></div><aside class="about-equation" aria-label="Schematic Local Unitarity cross-section"><div class="about-equation-illustration"><img src="../assets/about-double-triangle-light.svg" alt="" class="about-equation-graph portal-graph-theme-light"><img src="../assets/about-double-triangle-dark.svg" alt="" class="about-equation-graph portal-graph-theme-dark"></div><div class="about-equation-formula" role="img" aria-label="The differential cross section is a sum over graphs of loop-momentum integrals and a sum over cuts of the Local Unitarity integrand, constrained by the observable."><img src="../assets/about-local-unitarity-equation-light.svg" alt="" class="portal-graph-theme-light"><img src="../assets/about-local-unitarity-equation-dark.svg" alt="" class="portal-graph-theme-dark"></div><small>Real and virtual contributions share one numerical representation.</small></aside></section><section class="about-pillars" aria-labelledby="about-pillars-title"><header><p class="portal-kicker">From method to software</p><h2 id="about-pillars-title">One research programme, connected structures.</h2></header><div>{pillars}</div></section><section class="about-affiliations" aria-labelledby="about-affiliations-title"><header><p class="portal-kicker">Affiliations</p><h2 id="about-affiliations-title">Research across institutions.</h2><p>αLoop connects collider-physics research, mathematical structures, and open scientific-software development.</p></header><div>{affiliations}</div></section><aside class="portal-funding about-funding" aria-labelledby="about-funding-title"><span class="portal-funding-mark" aria-hidden="true">α</span><div class="portal-funding-copy"><p class="portal-kicker">Funding</p><h2 id="about-funding-title">Publicly funded research</h2><p>{}</p></div><a class="portal-text-link" href="{}">Funding record <span aria-hidden="true">↗</span></a></aside><section class="about-next"><p class="portal-kicker">The collaboration</p><h2>Meet the people doing the work.</h2><nav><a class="portal-button portal-button-primary" href="../people/">People <span aria-hidden="true">→</span></a><a class="portal-button" href="../talks/">Talks <span aria-hidden="true">→</span></a></nav></section>"#,
+            r#"<header class="portal-page-hero about-page-hero"><p class="portal-kicker">About the collaboration</p><h1>Precision through local cancellation.</h1><p>{}</p></header><section class="about-origin"><div class="about-origin-copy"><p class="portal-kicker">Why αLoop</p><h2>Precision is another path to discovery.</h2><p>The lack of obvious sign of new physics phenomenon in collider experiments is an opportunity to take a step back and reflect on the amazing theory we have discovered so far: the Standard Model. In particular, we must now strive to make ever more precise predictions so as to hunt for indirect evidence of new physics in small departure from expectations.</p><p>For this reason, our collaboration is dedicated to theoretical and algorithmic research for the automated computation of cross-sections in Quantum Field Theories at arbitrary perturbative orders. In particular, we develop a new theoretical framework called <em>Local Unitarity</em> (LU) which approaches this problem from an unorthodox way, particularly suited to numerical computations.</p><nav aria-label="Learn about Local Unitarity"><a class="portal-button portal-button-primary" href="https://arxiv.org/abs/2110.15662">Read the introduction <span aria-hidden="true">↗</span></a><a class="portal-button" href="../publications/">Explore publications <span aria-hidden="true">→</span></a></nav></div><aside class="about-equation" aria-label="Schematic Local Unitarity cross-section"><div class="about-equation-illustration"><img src="../assets/about-double-triangle-light.svg" alt="" class="about-equation-graph portal-graph-theme-light"><img src="../assets/about-double-triangle-dark.svg" alt="" class="about-equation-graph portal-graph-theme-dark"></div><div class="about-equation-formula" role="img" aria-label="The differential cross section is a sum over graphs of loop-momentum integrals and a sum over cuts of the Local Unitarity integrand, constrained by the observable."><img src="../assets/about-local-unitarity-equation-light.svg" alt="" class="portal-graph-theme-light"><img src="../assets/about-local-unitarity-equation-dark.svg" alt="" class="portal-graph-theme-dark"></div><small>Real and virtual contributions share one numerical representation.</small></aside></section><section class="about-pillars" aria-labelledby="about-pillars-title"><header><p class="portal-kicker">From method to software</p><h2 id="about-pillars-title">One research programme, connected structures.</h2></header><div>{pillars}</div></section><section class="about-affiliations" aria-labelledby="about-affiliations-title"><header><p class="portal-kicker">Affiliations</p><h2 id="about-affiliations-title">Research across institutions.</h2><p>αLoop connects collider-physics research, mathematical structures, and open scientific-software development.</p></header><div>{affiliations}</div></section><aside class="portal-funding about-funding" aria-labelledby="about-funding-title"><span class="portal-funding-mark" aria-hidden="true">α</span><div class="portal-funding-copy"><p class="portal-kicker">Funding</p><h2 id="about-funding-title">Publicly funded research</h2><p>{}</p></div><a class="portal-text-link" href="{}">Funding record <span aria-hidden="true">↗</span></a></aside><section class="about-next"><p class="portal-kicker">The collaboration</p><h2>Meet the people doing the work.</h2><nav aria-label="Explore the collaboration"><a class="portal-button portal-button-primary" href="../people/">People <span aria-hidden="true">→</span></a><a class="portal-button" href="../talks/">Talks <span aria-hidden="true">→</span></a></nav></section>"#,
             escape_html(&self.portal.summary),
             escape_html(&self.portal.funding),
             escape_html(&self.portal.funding_url),
@@ -5522,6 +5587,11 @@ fn page_root_prefix(route: &str) -> String {
 }
 
 fn product_hero(product: &ProductConfig) -> String {
+    let quickstart = product
+        .pages
+        .iter()
+        .find(|page| page.id == "quickstart")
+        .expect("product quickstart was validated before rendering");
     let first_guide = product
         .pages
         .iter()
@@ -5536,9 +5606,10 @@ fn product_hero(product: &ProductConfig) -> String {
         )
     });
     format!(
-        "<header class=\"product-hero\">{logo}<p class=\"product-eyebrow\">Research software documentation</p><h1>{}</h1><p>{}</p><div class=\"hero-actions\"><a class=\"hero-action primary\" href=\"tutorial/\">Start the tutorial</a><a class=\"hero-action\" href=\"{}\">Read the guides</a><a class=\"hero-action\" href=\"reference/\">Browse reference</a></div></header>",
+        "<header class=\"product-hero\">{logo}<p class=\"product-eyebrow\">Research software documentation</p><h1>{}</h1><p>{}</p><div class=\"hero-actions\"><a class=\"hero-action primary\" href=\"{}\">Get started</a><a class=\"hero-action\" href=\"{}\">Read the guides</a><a class=\"hero-action\" href=\"reference/\">Browse reference</a></div></header>",
         escape_html(&product.title),
         escape_html(&product.tagline),
+        escape_html(&quickstart.route),
         escape_html(first_guide),
     )
 }
@@ -6116,7 +6187,10 @@ fn render_python_catalog_for_module(
     if let Some(docs) = &catalog.root.docs {
         body.push_str(&render_doc_text(docs, 2));
     }
-    body.push_str("<nav class=\"reference-guide-links\" aria-label=\"Related Python guides\"><a href=\"tutorial/\">Start with the tutorial</a><a href=\"reference/interfaces/\">Python interface guide</a><a href=\"reference/python/\">All Python modules</a></nav>");
+    body.push_str(&format!(
+        "<nav class=\"reference-guide-links\" aria-label=\"Related Python guides\"><a href=\"quickstart/python/\">{}</a><a href=\"reference/interfaces/\">Python interface guide</a><a href=\"reference/python/\">All Python modules</a></nav>",
+        escape_html(&interface_guide_title(&catalog.product.title, "python")),
+    ));
     let filter_id = format!("{}-symbol-filter", slug(&catalog.component.id));
     body.push_str(&format!(
         "<div data-reference-filter-root><div class=\"reference-tools\"><label for=\"{}\">Filter public classes and functions</label><input id=\"{}\" type=\"search\" data-reference-filter placeholder=\"Try a class or function name\"><output data-reference-filter-count aria-live=\"polite\"></output></div><div class=\"api-symbol-list\" data-reference-filter-scope>",
@@ -6338,7 +6412,7 @@ fn render_python_item_page(
         "spenso" => ("guides/python/", "Python tensor workflow"),
         "idenso" => ("guides/algebra/", "Algebra and rewrites workflow"),
         "vakint" => ("guides/evaluation/", "Matching and evaluation workflow"),
-        _ => ("tutorial/", "Product tutorial"),
+        _ => ("quickstart/", "Getting started"),
     };
     let mut body = format!(
         "<span id=\"{}\" aria-hidden=\"true\"></span><p class=\"reference-context\"><a href=\"{}\"><code>{}</code></a> <span aria-hidden=\"true\">/</span> {kind}</p><nav class=\"reference-guide-links\" aria-label=\"Python reference navigation\"><a href=\"{}\">All module symbols</a><a href=\"reference/interfaces/\">Python interface guide</a><a href=\"{}\">{}</a></nav>",
@@ -8256,11 +8330,12 @@ fn render_gammaloop_reference_index(product: &str, reference: &GammaLoopReferenc
         .count();
     let namespaces = cli_setting_namespaces(reference);
     let mut body = format!(
-        "<p>This version-specific reference is generated from the compiled Clap parser and serialized settings schemas. Commands use one manpage-style page each; settings follow their native namespace hierarchy. <a href=\"reference/generated/gammaloop-reference.json\">Download the schema-v{} JSON</a>.</p><p class=\"reference-summary\">{} public commands · {argument_count} public arguments · {} settings · {} settings namespaces</p><nav class=\"reference-guide-links\" aria-label=\"Related task guides\"><a href=\"tutorial/\">Create your first state</a><a href=\"guides/process-generation/\">Generate a process</a><a href=\"guides/diagnostics/\">Diagnose a run</a><a href=\"reference/cli/settings/\">Browse settings namespaces</a></nav><div data-reference-filter-root><div class=\"reference-tools\"><label for=\"cli-reference-filter\">Filter commands, aliases, and options</label><input id=\"cli-reference-filter\" type=\"search\" data-reference-filter placeholder=\"Try generate, integrate, or --help\"><output data-reference-filter-count aria-live=\"polite\"></output></div><div data-reference-filter-scope>",
+        "<p>This version-specific reference is generated from the compiled Clap parser and serialized settings schemas. Commands use one manpage-style page each; settings follow their native namespace hierarchy. <a href=\"reference/generated/gammaloop-reference.json\">Download the schema-v{} JSON</a>.</p><p class=\"reference-summary\">{} public commands · {argument_count} public arguments · {} settings · {} settings namespaces</p><nav class=\"reference-guide-links\" aria-label=\"Related task guides\"><a href=\"quickstart/cli/\">{}</a><a href=\"guides/process-generation/\">Generate a process</a><a href=\"guides/diagnostics/\">Diagnose a run</a><a href=\"reference/cli/settings/\">Browse settings namespaces</a></nav><div data-reference-filter-root><div class=\"reference-tools\"><label for=\"cli-reference-filter\">Filter commands, aliases, and options</label><input id=\"cli-reference-filter\" type=\"search\" data-reference-filter placeholder=\"Try generate, integrate, or --help\"><output data-reference-filter-count aria-live=\"polite\"></output></div><div data-reference-filter-scope>",
         reference.schema_version,
         commands.len(),
         reference.settings.len(),
         namespaces.len(),
+        escape_html(&interface_guide_title(product, "cli")),
     );
     let mut families = BTreeMap::<String, Vec<&CliCommand>>::new();
     for command in &commands {
@@ -8609,6 +8684,7 @@ fn render_cli_command_page(
     command: &CliCommand,
 ) -> String {
     let command_anchor = generated_anchor("command", &command.path);
+    let command_line_guide = interface_guide_title(product, "cli");
     let (workflow_route, workflow_title) =
         if command.path == "gammaLoop inspect" || command.path == "gammaLoop approach" {
             (
@@ -8642,7 +8718,7 @@ fn render_cli_command_page(
         {
             ("guides/diagnostics/", "Configuration and diagnostics guide")
         } else {
-            ("tutorial/", "Create your first state")
+            ("quickstart/cli/", command_line_guide.as_str())
         };
     let related_workflow = match command.path.as_str() {
         "gammaLoop inspect" => {
@@ -9540,6 +9616,14 @@ mod tests {
         let argument_anchor =
             generated_anchor("argument", &format!("{}::{}", command.path, argument.id));
         let command_page = render_cli_command_page("GammaLoop", &reference, command);
+        let quit_page = render_cli_command_page(
+            "GammaLoop",
+            &reference,
+            commands
+                .iter()
+                .find(|command| command.path == "gammaLoop quit")
+                .expect("the CLI exposes quit"),
+        );
         let all_command_pages = commands
             .iter()
             .map(|command| render_cli_command_page("GammaLoop", &reference, command))
@@ -9553,6 +9637,9 @@ mod tests {
         );
         assert!(!index.contains("gammaLoop help"));
         assert!(!index.contains("<details"));
+        assert!(
+            index.contains("href=\"quickstart/cli/\">Using GammaLoop from the command line</a>")
+        );
         assert!(index.contains(&format!(
             "id=\"{}\" href=\"{route}#{argument_anchor}\" data-reference-redirect tabindex=\"-1\" aria-hidden=\"true\"",
             argument_anchor,
@@ -9568,6 +9655,10 @@ mod tests {
         assert!(!command_page.contains("<details"));
         assert!(!command_page.contains("data-reference-entry"));
         assert!(!command_page.contains("data-reference-search"));
+        assert!(
+            quit_page
+                .contains("href=\"quickstart/cli/\">Using GammaLoop from the command line</a>")
+        );
         assert!(all_command_pages.contains(
             "Process reference: <code>#&lt;id&gt;</code>, <code>name:&lt;name&gt;</code>"
         ));
@@ -11155,7 +11246,7 @@ mod tests {
         assert!(module_page.contains(&format!("href=\"{late_route}\"")));
         assert!(!module_page.contains("InternalEngine"));
         assert!(!module_page.contains("<details"));
-        assert!(module_page.contains("href=\"tutorial/\""));
+        assert!(module_page.contains("href=\"quickstart/python/\""));
         assert!(module_page.contains("href=\"reference/interfaces/\""));
         assert!(module_page.contains("href=\"reference/python/example-python.pyi\""));
         assert!(module_page.contains(
@@ -11177,6 +11268,7 @@ mod tests {
         assert!(!engine_page.contains("data-reference-entry"));
         assert!(!engine_page.contains("data-reference-search"));
         assert!(engine_page.contains("Construct one engine and reuse it."));
+        assert!(engine_page.contains("href=\"quickstart/\">Getting started</a>"));
         assert_eq!(
             engine_page.matches("Runs the documented workflow.").count(),
             1
@@ -11377,6 +11469,44 @@ mod tests {
     }
 
     #[test]
+    fn every_product_requires_a_task_chooser_and_each_supported_interface() {
+        let mut builder = SiteBuilder::discover().unwrap();
+        let quickstart = builder.registry.product[0]
+            .pages
+            .iter_mut()
+            .find(|page| page.id == "quickstart")
+            .unwrap();
+        quickstart.id = "getting-started".to_owned();
+
+        let error = builder.check().unwrap_err();
+        assert!(format!("{error:#}").contains("has no quickstart page"));
+
+        let mut builder = SiteBuilder::discover().unwrap();
+        let quickstart = builder.registry.product[0]
+            .pages
+            .iter_mut()
+            .find(|page| page.id == "quickstart")
+            .unwrap();
+        quickstart.route = "start/".to_owned();
+
+        let error = builder.check().unwrap_err();
+        assert!(
+            format!("{error:#}").contains("quickstart chooser must use an outcome-specific title")
+        );
+
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.registry.product[0]
+            .pages
+            .iter_mut()
+            .find(|page| page.id == "quickstart-cli")
+            .unwrap()
+            .id = "getting-started-cli".to_owned();
+
+        let error = builder.check().unwrap_err();
+        assert!(format!("{error:#}").contains("gammaloop has no CLI quickstart"));
+    }
+
+    #[test]
     fn site_assets_replace_read_only_generated_files() {
         let builder = SiteBuilder::discover().unwrap();
         let output = tempfile::tempdir().unwrap();
@@ -11437,6 +11567,9 @@ mod tests {
         assert!(html.contains("href=\"talks/\""));
         assert!(html.contains("href=\"developers/\""));
         assert!(html.contains("href=\"publications/\""));
+        assert!(
+            html.contains("href=\"products/gammaloop/latest/quickstart/\">Start with GammaLoop")
+        );
         assert!(html.contains(
             "class=\"portal-graph-field\" role=\"img\" aria-label=\"A jumble of Feynman graphs rendered by GammaLoop from real process and test data\""
         ));
@@ -11706,7 +11839,7 @@ mod tests {
             );
         }
         assert!(portal_layout.contains("diagram-options: ("));
-        assert!(portal_layout.contains("node-stroke: palette.ink + 1.1pt"));
+        assert!(portal_layout.contains("node-stroke: palette.ink + 1.45pt"));
 
         let publications =
             fs::read_to_string(output.path().join("publications/index.html")).unwrap();
@@ -11730,7 +11863,7 @@ mod tests {
     }
 
     #[test]
-    fn portal_task_chooser_routes_each_goal_to_the_registered_tutorial() {
+    fn portal_task_chooser_routes_each_goal_to_the_registered_quickstart() {
         let builder = SiteBuilder::discover().unwrap();
         for (channel, tag, channel_route) in [
             (BuildChannel::Latest, None, "latest"),
@@ -11749,14 +11882,14 @@ mod tests {
                     .iter()
                     .find(|product| product.id == product_id)
                     .unwrap();
-                let tutorial = product
+                let quickstart = product
                     .pages
                     .iter()
-                    .find(|page| page.group == "Tutorial")
+                    .find(|page| page.id == "quickstart")
                     .unwrap();
                 assert!(html.contains(&format!(
                     "class=\"portal-task-link\" data-product=\"{product_id}\" href=\"products/{product_id}/{channel_route}/{}\"",
-                    tutorial.route
+                    quickstart.route
                 )));
                 assert!(html.contains(&format!("<strong>{task}</strong>")));
                 assert!(html.contains(&format!("{} · {role}", product.title)));
@@ -11779,6 +11912,9 @@ mod tests {
                 "<article class=\"portal-project-card\" data-product=\"{product_id}\"><div class=\"portal-project-meta\"><span>"
             )));
             assert!(html.contains(&format!("</span><span>{role}</span></div>")));
+            assert!(html.contains(&format!(
+                "products/{product_id}/latest/quickstart/\">Get started</a>"
+            )));
         }
     }
 
@@ -11817,6 +11953,11 @@ mod tests {
             let rust_index = fs::read_to_string(site.join("reference/rust/index.html")).unwrap();
             assert!(
                 rust_index.contains("Rustdoc is the canonical Rust API reference"),
+                "{}",
+                product.id
+            );
+            assert!(
+                rust_index.contains("href=\"quickstart/rust/\""),
                 "{}",
                 product.id
             );
@@ -11905,6 +12046,11 @@ mod tests {
         );
         assert!(product_hero(&builder.registry.product[0]).contains("product-logo-gammaloop"));
         assert!(product_hero(&builder.registry.product[2]).contains("product-logo-spenso"));
+        for product in &builder.registry.product {
+            let hero = product_hero(product);
+            assert!(hero.contains("href=\"quickstart/\""), "{}", product.id);
+            assert!(hero.contains("Get started"), "{}", product.id);
+        }
     }
 
     #[test]
@@ -12096,7 +12242,10 @@ mod tests {
             &fs::read(output.path().join("search-index.json")).unwrap(),
         )
         .unwrap();
-        assert_eq!(search.len(), PRODUCT_IDS.len() * 2 + 1);
+        assert_eq!(
+            search.len(),
+            PRODUCT_IDS.len() * 2 + builder.talks.talk.len() + 3
+        );
         for product in &builder.registry.product {
             assert!(search.iter().any(|entry| {
                 entry.href == format!("products/{}/latest/tutorial/#first-result", product.id)
