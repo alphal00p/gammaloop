@@ -6,6 +6,7 @@ use gammalooprs::{
     integrands::evaluation::{
         BatchSampleEvaluationResult, SampleEvaluationResult, SingleSampleEvaluationResult,
     },
+    model::Model,
     observables::{
         AdditionalWeightKey, DiscreteBinOrdering, Event, EventGroup, GenericAdditionalWeightInfo,
         HistogramAccumulatorState, HistogramSnapshot, HistogramStatisticsSnapshot,
@@ -2790,6 +2791,23 @@ struct GammaLoopAPI {
     session_state: CliSessionState,
 }
 
+#[derive(Debug, thiserror::Error)]
+enum CffDotInputError {
+    #[error("could not parse CFF DOT input: {message}")]
+    Parse { message: String },
+    #[error("CFF DOT input does not contain a graph")]
+    EmptyGraph,
+}
+
+fn parse_cff_dot_graph(dot: &str, model: &Model) -> Result<Graph, CffDotInputError> {
+    Graph::from_string(dot, model)
+        .map_err(|error| CffDotInputError::Parse {
+            message: error.to_string(),
+        })?
+        .pop()
+        .ok_or(CffDotInputError::EmptyGraph)
+}
+
 // TODO: Improve error broadcasting to Python everywhere so as to show rust backtrace
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
@@ -3978,10 +3996,8 @@ impl GammaLoopAPI {
         reverse_dangling: Vec<usize>,
         orientation_pattern: Option<String>,
     ) -> PyResult<Vec<(HashMap<usize, i32>, String)>> {
-        let graph = Graph::from_string(dot_string, &self.gammaloop_state.model)
-            .unwrap()
-            .pop()
-            .unwrap();
+        let graph = parse_cff_dot_graph(&dot_string, &self.gammaloop_state.model)
+            .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
 
         let reverse_dangling = reverse_dangling
             .into_iter()
@@ -4014,7 +4030,7 @@ impl GammaLoopAPI {
             &mut surface_cache,
         )
         .map_err(|e| {
-            exceptions::PyException::new_err(format!("Could not generate CFF expression: {}", e))
+            exceptions::PyValueError::new_err(format!("Could not generate CFF expression: {}", e))
         })?;
 
         let or_pattern = orientation_pattern
@@ -4082,10 +4098,8 @@ impl GammaLoopAPI {
         orientation_pattern: Option<String>,
     ) -> PyResult<String> {
         let _ = orientation_pattern;
-        let graph = Graph::from_string(dot_string, &self.gammaloop_state.model)
-            .unwrap()
-            .pop()
-            .unwrap();
+        let graph = parse_cff_dot_graph(&dot_string, &self.gammaloop_state.model)
+            .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
 
         let reverse_dangling = reverse_dangling
             .into_iter()
@@ -4118,7 +4132,7 @@ impl GammaLoopAPI {
             &mut surface_cache,
         )
         .map_err(|e| {
-            exceptions::PyException::new_err(format!("Could not generate CFF expression: {}", e))
+            exceptions::PyValueError::new_err(format!("Could not generate CFF expression: {}", e))
         })?;
 
         let json_string = serde_json::to_string(&cff).map_err(|e| {
