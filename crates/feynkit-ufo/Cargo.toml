@@ -1,0 +1,14 @@
+[package]
+name = "feynkit-ufo"
+version = "0.1.0"
+edition.workspace = true
+description = "UFO model-loader adapter for the feynkit ecosystem"
+repository = "https://github.com/alphal00p/gammaloop"
+license = "MIT OR Apache-2.0"
+keywords = ["feynman", "hep", "physics", "ufo"]
+categories = ["science"]
+
+[dependencies]
+feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
+pyo3 = { workspace = true }
+thiserror = { workspace = true }
