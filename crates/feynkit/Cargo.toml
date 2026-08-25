@@ -1,0 +1,26 @@
+[package]
+name = "feynkit"
+version = "0.1.0"
+edition.workspace = true
+description = "Facade for the standalone feynkit particle-physics toolkit"
+repository = "https://github.com/alphal00p/gammaloop"
+license = "MIT OR Apache-2.0"
+keywords = ["feynman", "hep", "physics"]
+categories = ["science"]
+
+[dependencies]
+feynkit-cff = { version = "0.1.0", path = "../feynkit-cff", optional = true }
+feynkit-generator = { version = "0.1.0", path = "../feynkit-generator", optional = true }
+feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", optional = true }
+feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics", optional = true }
+feynkit-model = { version = "0.1.0", path = "../feynkit-model", optional = true }
+feynkit-ufo = { version = "0.1.0", path = "../feynkit-ufo", optional = true }
+
+[features]
+default = ["cff", "generator", "graph", "kinematics", "model"]
+cff = ["graph", "dep:feynkit-cff"]
+generator = ["graph", "model", "dep:feynkit-generator"]
+graph = ["model", "dep:feynkit-graph"]
+kinematics = ["dep:feynkit-kinematics"]
+model = ["dep:feynkit-model"]
+ufo = ["model", "dep:feynkit-ufo"]
