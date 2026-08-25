@@ -1,4 +1,4 @@
-#import "layout.typ": layout
+#import "layout.typ": layout, layout-with-cut-curves
 #import "../theme.typ": palette
 
 // Portal variant of GammaLoop's generated figure template. The graph source,
@@ -9,11 +9,14 @@
   amplitude-mode: false,
   cross-section-mode: false,
   momentum-arrows: false,
+  cut-curves: false,
 ) = {
   set page(width: auto, height: auto, margin: (x: 2mm, y: 2mm), fill: none)
   set text(fill: palette.ink)
 
-  context layout(
+  let draw-layout = if cut-curves { layout-with-cut-curves } else { layout }
+
+  context draw-layout(
     input,
     columns: 1,
     unit: 1.5,
@@ -24,9 +27,10 @@
       show-particle: false,
       momentum-arrow-stroke: (
         paint: palette.ink,
-        thickness: 0.70pt,
+        thickness: 1.0pt,
         cap: "round",
       ),
+      momentum-arrow-mark: (end: "straight", scale: 1.1),
     ),
     amplitude-mode: amplitude-mode,
     cross-section-mode: cross-section-mode,

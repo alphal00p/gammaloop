@@ -3108,19 +3108,21 @@
           svg_assets="$TMPDIR/alphal00p-svg-assets"
           bash scripts/render-docs-svg-assets.sh "$svg_assets"
           checked_assets=(
+            docs/assets/about-*.svg
             docs/assets/graphs/portal-*.svg
             docs/assets/local-unitarity-*.svg
             docs/assets/spensologo.svg
             assets/gammalooplogo*.svg
           )
           generated_assets=(
+            "$svg_assets"/docs/assets/about-*.svg
             "$svg_assets"/docs/assets/graphs/portal-*.svg
             "$svg_assets"/docs/assets/local-unitarity-*.svg
             "$svg_assets"/docs/assets/spensologo.svg
             "$svg_assets"/assets/gammalooplogo*.svg
           )
-          test "''${#checked_assets[@]}" -eq 28
-          test "''${#generated_assets[@]}" -eq 28
+          test "''${#checked_assets[@]}" -eq 32
+          test "''${#generated_assets[@]}" -eq 32
           for checked_asset in "''${checked_assets[@]}"; do
             cmp "$checked_asset" "$svg_assets/$checked_asset"
           done

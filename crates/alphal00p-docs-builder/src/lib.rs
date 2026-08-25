@@ -53,6 +53,7 @@ const PORTAL_GRAPH_IDS: [&str; 11] = [
     "epem-ttbar-cut",
 ];
 const PORTAL_SCHEMA_VERSION: u32 = 2;
+const TALKS_SCHEMA_VERSION: u32 = 1;
 const DEVELOPER_SCHEMA_VERSION: u32 = 3;
 const LEGACY_PROSE_SCHEMA_VERSION: u32 = 1;
 const PUBLICATION_SCHEMA_VERSION: u32 = 1;
@@ -66,6 +67,16 @@ fn portal_graph_assets() -> impl Iterator<Item = String> {
             .into_iter()
             .map(move |theme| format!("portal-graph-{graph}-{theme}.svg"))
     })
+}
+
+fn about_assets() -> impl Iterator<Item = String> {
+    ["double-triangle", "local-unitarity-equation"]
+        .into_iter()
+        .flat_map(|asset| {
+            ["light", "dark"]
+                .into_iter()
+                .map(move |theme| format!("about-{asset}-{theme}.svg"))
+        })
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, ValueEnum)]
@@ -288,6 +299,26 @@ struct PortalAffiliation {
     location: String,
     summary: String,
     url: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct TalksConfig {
+    schema: u32,
+    #[serde(default)]
+    talk: Vec<TalkConfig>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct TalkConfig {
+    id: String,
+    date: String,
+    speaker: String,
+    title: String,
+    event: String,
+    location: String,
+    event_url: String,
+    slides_url: Option<String>,
+    recording_url: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -556,6 +587,7 @@ pub struct SiteBuilder {
     api_root: PathBuf,
     registry: ProductRegistry,
     portal: PortalConfig,
+    talks: TalksConfig,
     developers: DeveloperConfig,
     legacy_prose: LegacyProseConfig,
     publications: PublicationCache,
@@ -582,6 +614,11 @@ impl SiteBuilder {
             .wrap_err_with(|| format!("failed to read {}", portal_path.display()))?;
         let portal = toml::from_str(&source)
             .wrap_err_with(|| format!("failed to parse {}", portal_path.display()))?;
+        let talks_path = root.join("docs/talks.toml");
+        let source = fs::read_to_string(&talks_path)
+            .wrap_err_with(|| format!("failed to read {}", talks_path.display()))?;
+        let talks = toml::from_str(&source)
+            .wrap_err_with(|| format!("failed to parse {}", talks_path.display()))?;
         let developers_path = root.join("docs/developers.toml");
         let source = fs::read_to_string(&developers_path)
             .wrap_err_with(|| format!("failed to read {}", developers_path.display()))?;
@@ -606,6 +643,7 @@ impl SiteBuilder {
             api_root,
             registry,
             portal,
+            talks,
             developers,
             legacy_prose,
             publications,
@@ -636,6 +674,12 @@ impl SiteBuilder {
             "portal schema {} does not match renderer schema {}",
             self.portal.schema,
             PORTAL_SCHEMA_VERSION
+        );
+        ensure!(
+            self.talks.schema == TALKS_SCHEMA_VERSION,
+            "talks schema {} does not match renderer schema {}",
+            self.talks.schema,
+            TALKS_SCHEMA_VERSION
         );
         ensure!(
             self.developers.schema == DEVELOPER_SCHEMA_VERSION,
@@ -990,6 +1034,40 @@ impl SiteBuilder {
                 scholarly_people.insert(person.id.as_str());
             }
         }
+        ensure!(
+            !self.talks.talk.is_empty(),
+            "talk catalogue must not be empty"
+        );
+        let mut talk_ids = BTreeSet::new();
+        for talk in &self.talks.talk {
+            validate_route_segment(&talk.id)?;
+            ensure!(talk_ids.insert(&talk.id), "duplicate talk {}", talk.id);
+            NaiveDate::parse_from_str(&talk.date, "%Y-%m-%d")
+                .wrap_err_with(|| format!("talk {} has invalid date {}", talk.id, talk.date))?;
+            ensure!(
+                person_ids.contains(&talk.speaker),
+                "talk {} references unknown speaker {}",
+                talk.id,
+                talk.speaker
+            );
+            ensure!(
+                !talk.title.trim().is_empty()
+                    && !talk.event.trim().is_empty()
+                    && !talk.location.trim().is_empty(),
+                "talk {} is incomplete",
+                talk.id
+            );
+            for url in std::iter::once(&talk.event_url)
+                .chain(talk.slides_url.iter())
+                .chain(talk.recording_url.iter())
+            {
+                ensure!(
+                    url.starts_with("https://"),
+                    "talk {} URL must use HTTPS: {url}",
+                    talk.id
+                );
+            }
+        }
         let cached_authors = self
             .publications
             .authors
@@ -1058,6 +1136,8 @@ impl SiteBuilder {
             "docs/assets/typst/portal-graphs/figure.typ",
             "docs/assets/typst/portal-graphs/layout.typ",
             "docs/assets/typst/portal-graphs/edge-style.typ",
+            "docs/assets/typst/about/double-triangle.typ",
+            "docs/assets/typst/about/local-unitarity-equation.typ",
         ] {
             self.require_file(Path::new(source))?;
         }
@@ -1071,6 +1151,9 @@ impl SiteBuilder {
         }
         for graph in portal_graph_assets() {
             self.require_file(&Path::new("docs/assets/graphs").join(&graph))?;
+        }
+        for asset in about_assets() {
+            self.require_file(&Path::new("docs/assets").join(&asset))?;
         }
         self.require_file(Path::new("docs/assets/spensologo.svg"))?;
         self.require_file(Path::new("assets/gammalooplogo-light.svg"))?;
@@ -1774,6 +1857,16 @@ impl SiteBuilder {
             }
             fs::copy(self.root.join(source), target)
                 .wrap_err_with(|| format!("failed to copy documentation asset {source}"))?;
+        }
+        for asset in about_assets() {
+            let target = assets.join(&asset);
+            match fs::remove_file(&target) {
+                Ok(()) => {}
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.into()),
+            }
+            fs::copy(self.root.join("docs/assets").join(&asset), target)
+                .wrap_err_with(|| format!("failed to copy About asset {asset}"))?;
         }
         Ok(())
     }
@@ -3563,6 +3656,41 @@ impl SiteBuilder {
                 ),
             }
         }));
+        entries.push(SearchEntry {
+            title: "About the αLoop collaboration".to_owned(),
+            summary: self.portal.summary.clone(),
+            href: "about/".to_owned(),
+            kind: "collaboration".to_owned(),
+            text: self
+                .portal
+                .pillar
+                .iter()
+                .map(|pillar| format!("{} {}", pillar.title, pillar.summary))
+                .collect::<Vec<_>>()
+                .join(" "),
+        });
+        entries.push(SearchEntry {
+            title: "Talks".to_owned(),
+            summary: "Seminars and conference presentations by αLoop collaborators.".to_owned(),
+            href: "talks/".to_owned(),
+            kind: "collaboration".to_owned(),
+            text: "Local Unitarity GammaLoop numerical perturbation theory".to_owned(),
+        });
+        entries.extend(self.talks.talk.iter().map(|talk| {
+            let speaker = self
+                .portal
+                .people
+                .iter()
+                .find(|person| person.id == talk.speaker)
+                .expect("talk speaker was validated");
+            SearchEntry {
+                title: talk.title.clone(),
+                summary: format!("{} · {} · {}", speaker.name, talk.event, talk.date),
+                href: format!("talks/#{}", talk.id),
+                kind: "talk".to_owned(),
+                text: format!("{} {} {}", talk.location, speaker.name, talk.event),
+            }
+        }));
 
         let mut seen = BTreeSet::new();
         entries.retain(|entry| seen.insert((entry.href.clone(), entry.title.clone())));
@@ -4133,21 +4261,167 @@ impl SiteBuilder {
             escape_html(&self.portal.funding_url),
         );
         let favicon = favicon_links("assets/");
-        fs::write(
-            output.join("index.html"),
-            format!(
-                r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{}"><meta name="theme-color" content="#f9f6f0">{favicon}<title>αLoop · Research software for collider physics</title><link rel="stylesheet" href="assets/site.css"><script defer src="assets/site.js"></script></head><body class="portal-body" data-search-index="search-index.json" data-search-root=""><a class="skip-link" href="#main-content">Skip to content</a><header class="portal-header"><a class="portal-brand" href="#overview" aria-label="αLoop home"><span class="portal-brand-logo" aria-hidden="true"></span><span class="portal-brand-copy"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class="portal-nav" aria-label="Primary"><a href="#tasks">Tasks</a><a href="people/">People</a><a href="publications/">Publications</a><a href="developers/">Developers</a></nav><div class="portal-header-actions"><button class="portal-search-button" type="button" data-search-open>Search <span class="header-button-label">⌘K</span></button><a class="portal-source-link" href="https://github.com/alphal00p/gammaloop">GitHub <span aria-hidden="true">↗</span></a><button class="portal-theme-button" type="button" data-theme-toggle aria-label="Toggle color theme"><span aria-hidden="true">◐</span></button></div></header><main class="portal-main" id="main-content"><section class="portal-hero portal-section" id="overview"><div class="portal-hero-copy"><p class="portal-kicker">{}</p><h1>{}</h1><p class="portal-lede">{}</p><div class="portal-hero-actions"><a class="portal-button portal-button-primary" href="#tasks">Choose a task <span aria-hidden="true">↓</span></a><a class="portal-button" href="products/gammaloop/{}/tutorial/">Start with GammaLoop <span aria-hidden="true">↗</span></a><a class="portal-button" href="citations/">Cite the software <span aria-hidden="true">↗</span></a></div></div><div class="portal-hero-art"><div class="portal-wordmark" aria-label="αLoop collaboration mark" role="img"></div><div class="portal-graph-field" role="img" aria-label="A jumble of Feynman graphs rendered by GammaLoop from real process and test data">{process_graphs}</div><p>Local cancellation.<br>Global precision.</p></div></section><section class="portal-section portal-task-chooser" id="tasks" aria-labelledby="tasks-title"><header class="portal-task-heading"><div><p class="portal-kicker">Choose by task · 01—05</p><h2 id="tasks-title">What do you want to work on?</h2></div><p>Start with the scientific object or operation you have in hand. Each route opens the maintained first workflow for the component that owns it.</p></header><nav class="portal-task-grid" aria-label="Documentation by task">{tasks}</nav></section><section class="portal-section portal-projects" id="projects" aria-labelledby="projects-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research software · 01—05</p><h2 id="projects-title">Projects &amp; crates</h2></div><p>Five connected codebases spanning numerical cross-sections, graph algorithms, tensor networks, symbolic identities, and integral evaluation.</p></div><div class="portal-project-grid">{projects}</div></section>{funding}</main><footer class="portal-footer"><div><span class="portal-footer-mark" aria-hidden="true"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label="Footer"><a href="#tasks">Tasks</a><a href="#projects">Projects</a><a href="people/">People</a><a href="publications/">Publications</a><a href="citations/">Cite</a><a href="developers/">Developers</a><a href="https://github.com/alphal00p/gammaloop">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer><dialog class="search-dialog" data-search-dialog><form class="search-form" method="dialog"><input class="search-input" type="search" data-search-input placeholder="Search all projects and developer notes" aria-label="Search all documentation"><button class="header-button" value="close">Close</button></form><ul class="search-results" data-search-results aria-live="polite"></ul></dialog></body></html>"##,
-                escape_html(&self.portal.summary),
-                escape_html(&self.portal.eyebrow),
-                escape_html(&self.portal.title),
-                escape_html(&self.portal.summary),
-                escape_html(&channel_route),
-            ),
-        )?;
+        let html = format!(
+            r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{}"><meta name="theme-color" content="#f9f6f0">{favicon}<title>αLoop · Research software for collider physics</title><link rel="stylesheet" href="assets/site.css"><script defer src="assets/site.js"></script></head><body class="portal-body" data-search-index="search-index.json" data-search-root=""><a class="skip-link" href="#main-content">Skip to content</a><header class="portal-header"><a class="portal-brand" href="#overview" aria-label="αLoop home"><span class="portal-brand-logo" aria-hidden="true"></span><span class="portal-brand-copy"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class="portal-nav" aria-label="Primary"><a href="#tasks">Tasks</a><a href="people/">People</a><a href="publications/">Publications</a><a href="developers/">Developers</a></nav><div class="portal-header-actions"><button class="portal-search-button" type="button" data-search-open>Search <span class="header-button-label">⌘K</span></button><a class="portal-source-link" href="https://github.com/alphal00p/gammaloop">GitHub <span aria-hidden="true">↗</span></a><button class="portal-theme-button" type="button" data-theme-toggle aria-label="Toggle color theme"><span aria-hidden="true">◐</span></button></div></header><main class="portal-main" id="main-content"><section class="portal-hero portal-section" id="overview"><div class="portal-hero-copy"><p class="portal-kicker">{}</p><h1>{}</h1><p class="portal-lede">{}</p><div class="portal-hero-actions"><a class="portal-button portal-button-primary" href="#tasks">Choose a task <span aria-hidden="true">↓</span></a><a class="portal-button" href="products/gammaloop/{}/tutorial/">Start with GammaLoop <span aria-hidden="true">↗</span></a><a class="portal-button" href="citations/">Cite the software <span aria-hidden="true">↗</span></a></div></div><div class="portal-hero-art"><div class="portal-wordmark" aria-label="αLoop collaboration mark" role="img"></div><div class="portal-graph-field" role="img" aria-label="A jumble of Feynman graphs rendered by GammaLoop from real process and test data">{process_graphs}</div><p>Local cancellation.<br>Global precision.</p></div></section><section class="portal-section portal-task-chooser" id="tasks" aria-labelledby="tasks-title"><header class="portal-task-heading"><div><p class="portal-kicker">Choose by task · 01—05</p><h2 id="tasks-title">What do you want to work on?</h2></div><p>Start with the scientific object or operation you have in hand. Each route opens the maintained first workflow for the component that owns it.</p></header><nav class="portal-task-grid" aria-label="Documentation by task">{tasks}</nav></section><section class="portal-section portal-projects" id="projects" aria-labelledby="projects-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research software · 01—05</p><h2 id="projects-title">Projects &amp; crates</h2></div><p>Five connected codebases spanning numerical cross-sections, graph algorithms, tensor networks, symbolic identities, and integral evaluation.</p></div><div class="portal-project-grid">{projects}</div></section>{funding}</main><footer class="portal-footer"><div><span class="portal-footer-mark" aria-hidden="true"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label="Footer"><a href="#tasks">Tasks</a><a href="#projects">Projects</a><a href="people/">People</a><a href="publications/">Publications</a><a href="citations/">Cite</a><a href="developers/">Developers</a><a href="https://github.com/alphal00p/gammaloop">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer><dialog class="search-dialog" data-search-dialog><form class="search-form" method="dialog"><input class="search-input" type="search" data-search-input placeholder="Search all projects and developer notes" aria-label="Search all documentation"><button class="header-button" value="close">Close</button></form><ul class="search-results" data-search-results aria-live="polite"></ul></dialog></body></html>"##,
+            escape_html(&self.portal.summary),
+            escape_html(&self.portal.eyebrow),
+            escape_html(&self.portal.title),
+            escape_html(&self.portal.summary),
+            escape_html(&channel_route),
+        );
+        let html = html
+            .replace(
+                "<nav class=\"portal-nav\" aria-label=\"Primary\"><a href=\"#tasks\">Tasks</a><a href=\"people/\">People</a><a href=\"publications/\">Publications</a><a href=\"developers/\">Developers</a></nav>",
+                "<nav class=\"portal-nav\" aria-label=\"Primary\"><a href=\"about/\">About</a><a href=\"#projects\">Projects</a><a href=\"people/\">People</a><a href=\"talks/\">Talks</a><a href=\"publications/\">Publications</a><a href=\"developers/\">Developers</a></nav>",
+            )
+            .replace(
+                "<nav aria-label=\"Footer\"><a href=\"#tasks\">Tasks</a><a href=\"#projects\">Projects</a><a href=\"people/\">People</a><a href=\"publications/\">Publications</a><a href=\"citations/\">Cite</a><a href=\"developers/\">Developers</a><a href=\"https://github.com/alphal00p/gammaloop\">Source</a></nav>",
+                "<nav aria-label=\"Footer\"><a href=\"about/\">About</a><a href=\"#projects\">Projects</a><a href=\"people/\">People</a><a href=\"talks/\">Talks</a><a href=\"publications/\">Publications</a><a href=\"citations/\">Cite</a><a href=\"developers/\">Developers</a><a href=\"https://github.com/alphal00p/gammaloop\">Source</a></nav>",
+            );
+        fs::write(output.join("index.html"), html)?;
         self.write_people_page(output)?;
+        self.write_about_page(output)?;
+        self.write_talks_page(output)?;
         self.write_publications_page(output)?;
         self.write_citations_page(output)?;
         fs::write(output.join(".nojekyll"), b"")?;
+        Ok(())
+    }
+
+    fn write_about_page(&self, output: &Path) -> Result<()> {
+        let pillars = self
+            .portal
+            .pillar
+            .iter()
+            .map(|pillar| {
+                format!(
+                    "<article class=\"about-pillar\"><p class=\"portal-kicker\">{}</p><h2>{}</h2><p>{}</p></article>",
+                    escape_html(&pillar.label),
+                    escape_html(&pillar.title),
+                    escape_html(&pillar.summary),
+                )
+            })
+            .collect::<String>();
+        let affiliations = self
+            .portal
+            .affiliation
+            .iter()
+            .map(|affiliation| {
+                format!(
+                    "<a class=\"about-affiliation\" href=\"{}\"><span>{}</span><strong>{}</strong><small>{}</small><p>{}</p><b aria-hidden=\"true\">↗</b></a>",
+                    escape_html(&affiliation.url),
+                    escape_html(&affiliation.location),
+                    escape_html(&affiliation.name),
+                    escape_html(&affiliation.location),
+                    escape_html(&affiliation.summary),
+                )
+            })
+            .collect::<String>();
+        let body = format!(
+            r#"<header class="portal-page-hero about-page-hero"><p class="portal-kicker">About the collaboration</p><h1>Precision through local cancellation.</h1><p>{}</p></header><section class="about-origin"><div class="about-origin-copy"><p class="portal-kicker">Why αLoop</p><h2>Precision is another path to discovery.</h2><p>The lack of obvious sign of new physics phenomenon in collider experiments is an opportunity to take a step back and reflect on the amazing theory we have discovered so far: the Standard Model. In particular, we must now strive to make ever more precise predictions so as to hunt for indirect evidence of new physics in small departure from expectations.</p><p>For this reason, our collaboration is dedicated to theoretical and algorithmic research for the automated computation of cross-sections in Quantum Field Theories at arbitrary perturbative orders. In particular, we develop a new theoretical framework called <em>Local Unitarity</em> (LU) which approaches this problem from an unorthodox way, particularly suited to numerical computations.</p><nav aria-label="Learn about Local Unitarity"><a class="portal-button portal-button-primary" href="https://arxiv.org/abs/2110.15662">Read the introduction <span aria-hidden="true">↗</span></a><a class="portal-button" href="../publications/">Explore publications <span aria-hidden="true">→</span></a></nav></div><aside class="about-equation" aria-label="Schematic Local Unitarity cross-section"><div class="about-equation-illustration"><img src="../assets/about-double-triangle-light.svg" alt="" class="about-equation-graph portal-graph-theme-light"><img src="../assets/about-double-triangle-dark.svg" alt="" class="about-equation-graph portal-graph-theme-dark"></div><div class="about-equation-formula" role="img" aria-label="The differential cross section is a sum over graphs of loop-momentum integrals and a sum over cuts of the Local Unitarity integrand, constrained by the observable."><img src="../assets/about-local-unitarity-equation-light.svg" alt="" class="portal-graph-theme-light"><img src="../assets/about-local-unitarity-equation-dark.svg" alt="" class="portal-graph-theme-dark"></div><small>Real and virtual contributions share one numerical representation.</small></aside></section><section class="about-pillars" aria-labelledby="about-pillars-title"><header><p class="portal-kicker">From method to software</p><h2 id="about-pillars-title">One research programme, connected structures.</h2></header><div>{pillars}</div></section><section class="about-affiliations" aria-labelledby="about-affiliations-title"><header><p class="portal-kicker">Affiliations</p><h2 id="about-affiliations-title">Research across institutions.</h2><p>αLoop connects collider-physics research, mathematical structures, and open scientific-software development.</p></header><div>{affiliations}</div></section><aside class="portal-funding about-funding" aria-labelledby="about-funding-title"><span class="portal-funding-mark" aria-hidden="true">α</span><div class="portal-funding-copy"><p class="portal-kicker">Funding</p><h2 id="about-funding-title">Publicly funded research</h2><p>{}</p></div><a class="portal-text-link" href="{}">Funding record <span aria-hidden="true">↗</span></a></aside><section class="about-next"><p class="portal-kicker">The collaboration</p><h2>Meet the people doing the work.</h2><nav><a class="portal-button portal-button-primary" href="../people/">People <span aria-hidden="true">→</span></a><a class="portal-button" href="../talks/">Talks <span aria-hidden="true">→</span></a></nav></section>"#,
+            escape_html(&self.portal.summary),
+            escape_html(&self.portal.funding),
+            escape_html(&self.portal.funding_url),
+        );
+        let directory = output.join("about");
+        fs::create_dir_all(&directory)?;
+        fs::write(
+            directory.join("index.html"),
+            portal_subpage_document(
+                "About",
+                "The αLoop collaboration develops Local Unitarity methods and open research software for precision collider physics.",
+                "about",
+                &body,
+            ),
+        )?;
+        Ok(())
+    }
+
+    fn write_talks_page(&self, output: &Path) -> Result<()> {
+        let people = self
+            .portal
+            .people
+            .iter()
+            .map(|person| (person.id.as_str(), person))
+            .collect::<BTreeMap<_, _>>();
+        let mut talks = self.talks.talk.iter().collect::<Vec<_>>();
+        talks.sort_by(|left, right| {
+            right
+                .date
+                .cmp(&left.date)
+                .then(left.title.cmp(&right.title))
+        });
+        let mut years = BTreeMap::<i32, Vec<&TalkConfig>>::new();
+        for talk in talks {
+            let date = NaiveDate::parse_from_str(&talk.date, "%Y-%m-%d")?;
+            years
+                .entry(date.format("%Y").to_string().parse()?)
+                .or_default()
+                .push(talk);
+        }
+        let timeline = years
+            .into_iter()
+            .rev()
+            .map(|(year, talks)| {
+                let cards = talks
+                    .into_iter()
+                    .map(|talk| {
+                        let person = people
+                            .get(talk.speaker.as_str())
+                            .expect("talk speaker was validated");
+                        let date = NaiveDate::parse_from_str(&talk.date, "%Y-%m-%d")
+                            .expect("talk date was validated");
+                        let mut links = format!(
+                            "<a href=\"{}\">Event record <span aria-hidden=\"true\">↗</span></a>",
+                            escape_html(&talk.event_url),
+                        );
+                        if let Some(url) = &talk.slides_url {
+                            links.push_str(&format!(
+                                "<a href=\"{}\">Slides <span aria-hidden=\"true\">↗</span></a>",
+                                escape_html(url),
+                            ));
+                        }
+                        if let Some(url) = &talk.recording_url {
+                            links.push_str(&format!(
+                                "<a href=\"{}\">Recording <span aria-hidden=\"true\">↗</span></a>",
+                                escape_html(url),
+                            ));
+                        }
+                        format!(
+                            "<article class=\"talk-card\" id=\"{}\"><div class=\"talk-card-date\"><time datetime=\"{}\">{}</time><span>{}</span></div><div class=\"talk-card-copy\"><p class=\"portal-kicker\"><a href=\"../people/#{}\">{}</a></p><h3>{}</h3><p><strong>{}</strong><br>{}</p><nav aria-label=\"Resources for {}\">{links}</nav></div></article>",
+                            escape_html(&talk.id),
+                            escape_html(&talk.date),
+                            date.format("%d %b"),
+                            year,
+                            escape_html(&person.id),
+                            escape_html(&person.name),
+                            escape_html(&talk.title),
+                            escape_html(&talk.event),
+                            escape_html(&talk.location),
+                            escape_html(&talk.title),
+                        )
+                    })
+                    .collect::<String>();
+                format!(
+                    "<section class=\"talk-year\" aria-labelledby=\"talk-year-{year}\"><h2 id=\"talk-year-{year}\">{year}</h2><div>{cards}</div></section>"
+                )
+            })
+            .collect::<String>();
+        let body = format!(
+            "<header class=\"portal-page-hero talks-page-hero\"><p class=\"portal-kicker\">Seminars &amp; conferences</p><h1>Talks</h1><p>Selected presentations on Local Unitarity, numerical perturbation theory, GammaLoop, and the scientific software surrounding them.</p><p class=\"talks-provenance\">{} talks · linked to public conference records, slides, and recordings where available.</p></header><div class=\"talk-timeline\">{timeline}</div>",
+            self.talks.talk.len(),
+        );
+        let directory = output.join("talks");
+        fs::create_dir_all(&directory)?;
+        fs::write(
+            directory.join("index.html"),
+            portal_subpage_document(
+                "Talks",
+                "Talks by αLoop collaborators on Local Unitarity, numerical methods, GammaLoop, and related research software.",
+                "talks",
+                &body,
+            ),
+        )?;
         Ok(())
     }
 
@@ -4818,10 +5092,12 @@ fn portal_subpage_document(title: &str, description: &str, active: &str, body: &
     };
     let favicon = favicon_links("../assets/");
     format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\"><meta name=\"theme-color\" content=\"#f9f6f0\">{favicon}<title>{} · αLoop</title><link rel=\"stylesheet\" href=\"../assets/site.css\"><script defer src=\"../assets/site.js\"></script></head><body class=\"portal-body portal-subpage-body\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"portal-header\"><a class=\"portal-brand\" href=\"../\" aria-label=\"αLoop home\"><span class=\"portal-brand-logo\" aria-hidden=\"true\"></span><span class=\"portal-brand-copy\"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class=\"portal-nav\" aria-label=\"Primary\"><a href=\"../#projects\">Projects</a><a href=\"../people/\"{}>People</a><a href=\"../publications/\"{}>Publications</a><a href=\"../developers/\">Developers</a></nav><div class=\"portal-header-actions\"><a class=\"portal-source-link\" href=\"https://github.com/alphal00p/gammaloop\">GitHub <span aria-hidden=\"true\">↗</span></a><button class=\"portal-theme-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\"><span aria-hidden=\"true\">◐</span></button></div></header><main class=\"portal-main portal-subpage-main\" id=\"main-content\">{body}</main><footer class=\"portal-footer\"><div><span class=\"portal-footer-mark\" aria-hidden=\"true\"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label=\"Footer\"><a href=\"../#projects\">Projects</a><a href=\"../people/\">People</a><a href=\"../publications/\">Publications</a><a href=\"../citations/\">Cite</a><a href=\"../developers/\">Developers</a><a href=\"https://github.com/alphal00p/gammaloop\">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer></body></html>",
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\"><meta name=\"theme-color\" content=\"#f9f6f0\">{favicon}<title>{} · αLoop</title><link rel=\"stylesheet\" href=\"../assets/site.css\"><script defer src=\"../assets/site.js\"></script></head><body class=\"portal-body portal-subpage-body\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"portal-header\"><a class=\"portal-brand\" href=\"../\" aria-label=\"αLoop home\"><span class=\"portal-brand-logo\" aria-hidden=\"true\"></span><span class=\"portal-brand-copy\"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class=\"portal-nav\" aria-label=\"Primary\"><a href=\"../#projects\">Projects</a><a href=\"../about/\"{}>About</a><a href=\"../people/\"{}>People</a><a href=\"../talks/\"{}>Talks</a><a href=\"../publications/\"{}>Publications</a><a href=\"../developers/\">Developers</a></nav><div class=\"portal-header-actions\"><a class=\"portal-source-link\" href=\"https://github.com/alphal00p/gammaloop\">GitHub <span aria-hidden=\"true\">↗</span></a><button class=\"portal-theme-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\"><span aria-hidden=\"true\">◐</span></button></div></header><main class=\"portal-main portal-subpage-main\" id=\"main-content\">{body}</main><footer class=\"portal-footer\"><div><span class=\"portal-footer-mark\" aria-hidden=\"true\"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label=\"Footer\"><a href=\"../about/\">About</a><a href=\"../#projects\">Projects</a><a href=\"../people/\">People</a><a href=\"../talks/\">Talks</a><a href=\"../publications/\">Publications</a><a href=\"../citations/\">Cite</a><a href=\"../developers/\">Developers</a><a href=\"https://github.com/alphal00p/gammaloop\">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer></body></html>",
         escape_html(description),
         escape_html(title),
+        current("about"),
         current("people"),
+        current("talks"),
         current("publications"),
     )
 }
@@ -11157,6 +11433,8 @@ mod tests {
         assert!(html.contains("Projects &amp; crates"));
         assert!(html.contains("αLoop"));
         assert!(html.contains("href=\"people/\""));
+        assert!(html.contains("href=\"about/\""));
+        assert!(html.contains("href=\"talks/\""));
         assert!(html.contains("href=\"developers/\""));
         assert!(html.contains("href=\"publications/\""));
         assert!(html.contains(
@@ -11207,6 +11485,10 @@ mod tests {
         assert!(!html.contains("scientific-computing products"));
 
         for asset in [
+            "about-double-triangle-light.svg",
+            "about-double-triangle-dark.svg",
+            "about-local-unitarity-equation-light.svg",
+            "about-local-unitarity-equation-dark.svg",
             "local-unitarity-light.svg",
             "local-unitarity-dark.svg",
             "gammalooplogo-light.svg",
@@ -11223,6 +11505,10 @@ mod tests {
             .collect::<Vec<_>>();
         svg_assets.extend(
             [
+                "about-double-triangle-light.svg",
+                "about-double-triangle-dark.svg",
+                "about-local-unitarity-equation-light.svg",
+                "about-local-unitarity-equation-dark.svg",
                 "local-unitarity-light.svg",
                 "local-unitarity-dark.svg",
                 "gammalooplogo-light.svg",
@@ -11275,6 +11561,34 @@ mod tests {
             );
         }
 
+        let about = fs::read_to_string(output.path().join("about/index.html")).unwrap();
+        assert!(about.contains("Precision is another path to discovery"));
+        assert!(about.contains("Schematic Local Unitarity cross-section"));
+        assert!(about.contains("../assets/about-double-triangle-light.svg"));
+        assert!(about.contains("../assets/about-double-triangle-dark.svg"));
+        assert!(about.contains("../assets/about-local-unitarity-equation-light.svg"));
+        assert!(about.contains("../assets/about-local-unitarity-equation-dark.svg"));
+        assert!(about.contains("class=\"about-equation-formula\" role=\"img\""));
+        assert!(!about.contains("<span>dσ/d𝒪</span>"));
+        assert_eq!(
+            about.matches("class=\"about-pillar\"").count(),
+            builder.portal.pillar.len()
+        );
+        assert_eq!(
+            about.matches("class=\"about-affiliation\"").count(),
+            builder.portal.affiliation.len()
+        );
+        assert!(about.contains(&builder.portal.funding));
+
+        let talks = fs::read_to_string(output.path().join("talks/index.html")).unwrap();
+        assert_eq!(
+            talks.matches("class=\"talk-card\"").count(),
+            builder.talks.talk.len()
+        );
+        assert!(talks.contains("The GammaLoop ecosystem"));
+        assert!(talks.contains("href=\"../people/#lucien-huber\""));
+        assert!(talks.contains("aria-current=\"page\">Talks"));
+
         let css = fs::read_to_string(output.path().join("assets/site.css")).unwrap();
         assert!(css.contains(".publication-card:nth-child(2n of :not([hidden]))"));
         assert!(!css.contains(".publication-card:nth-child(2n) {"));
@@ -11285,6 +11599,7 @@ mod tests {
         assert!(!css.contains("background-size: 137.2% auto;"));
         assert!(css.contains(".product-logo-spenso { aspect-ratio: 637 / 189;"));
         assert!(css.contains(".portal-graph-field"));
+        assert!(css.contains("grid-template-columns: clamp(15rem, 20vw, 18rem)"));
         assert!(css.contains(".portal-process-graph:nth-child(11)"));
         assert!(css.contains(":root[data-theme=\"dark\"] .portal-graph-theme-light"));
         assert!(css.contains(":root:not([data-theme]) {"));
@@ -11310,6 +11625,33 @@ mod tests {
                 typst.contains("#render(") && typst.contains("read(") && typst.contains(".dot\""),
                 "missing editable Linnest source for {graph}"
             );
+        }
+        let about_graph = fs::read_to_string(
+            builder
+                .root
+                .join("docs/assets/typst/about/double-triangle.typ"),
+        )
+        .unwrap();
+        assert!(about_graph.contains("tests/resources/graphs/double_triangle.dot"));
+        assert!(about_graph.contains("#render(input"));
+        assert!(about_graph.contains("cut_curve=blue"));
+        assert!(about_graph.contains("cut_curve=red"));
+        assert!(about_graph.contains("cut-curves: true"));
+        assert!(!about_graph.contains("cut_marker"));
+        assert!(about_graph.contains("v3 [label=\\\"\\\", pos="));
+        let about_equation = fs::read_to_string(
+            builder
+                .root
+                .join("docs/assets/typst/about/local-unitarity-equation.typ"),
+        )
+        .unwrap();
+        for term in [
+            "frac(dif sigma, dif cal(O))",
+            "product_(i = 1)^(n_\"loop\") dif^3 bold(k)_i",
+            "I_(Gamma,c)^upright(\"LU\")",
+            "delta(cal(O)(c, bold(k)_i))",
+        ] {
+            assert!(about_equation.contains(term), "About equation lost {term}");
         }
 
         let shared_layout = fs::read_to_string(
@@ -11349,6 +11691,7 @@ mod tests {
         assert!(portal_layout.contains(
             "#import \"../../../../assets/embedded/drawing/templates/layout-core.typ\": ("
         ));
+        assert!(portal_layout.contains("cetz.draw.bezier("));
         for (name, adapter) in [
             ("save-dot", canonical_layout.as_str()),
             ("website", portal_layout.as_str()),

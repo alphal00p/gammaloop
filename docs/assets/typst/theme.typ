@@ -8,6 +8,8 @@
     ink: rgb("#3d2645"),
     accent: rgb("#6f4d85"),
     soft: rgb("#d8b9e3"),
+    cut-blue: rgb("#0072b2"),
+    cut-red: rgb("#d94f3d"),
   )
 } else if theme == "dark" {
   (
@@ -15,6 +17,8 @@
     ink: rgb("#f8effa"),
     accent: rgb("#d8b9e3"),
     soft: rgb("#6f4d85"),
+    cut-blue: rgb("#62b7e8"),
+    cut-red: rgb("#ff8372"),
   )
 } else {
   panic("website SVG theme must be light or dark")

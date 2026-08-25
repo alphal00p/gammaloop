@@ -698,7 +698,9 @@ review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/*
 path = "flake.nix"
 symbol = "alphal00pDocsCargoArtifacts"
 anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
-digest = "25c62a12dc6bd1ff694522e19f7507a107f20947"
+# No cache-architecture impact: documentation validation now includes the four
+# additional deterministic About-page SVG outputs.
+digest = "e1f0cd565c7952dccecedeb4ba3d6083a025aa21"
 
 [[section]]
 id = "documentation"
@@ -724,10 +726,9 @@ review_triggers = ["docs/developers.toml", "crates/alphal00p-docs-builder/src/li
 path = "crates/alphal00p-docs-builder/src/lib.rs"
 symbol = "alphal00p_docs_builder::SiteBuilder::check"
 anchor = "pub fn check(&self) -> Result<()> {"
-# No documentation-system architecture impact: the 2026-08-21 integrity and
-# reference-rendering passes correct links plus Python section and literal-block
-# boundaries without changing the publishing model.
-digest = "382e9779ca3b4fc1d8abd51e5b7c59754cbc193b"
+# No documentation-system architecture impact: the About and Talks routes reuse
+# the portal renderer, validated metadata, and deterministic Typst asset pipeline.
+digest = "2c2b4fd65cd336bf05fb16baa71e56d717da4f82"
 
 [[section.note]]
 id = "documentation-improvement-plan"
