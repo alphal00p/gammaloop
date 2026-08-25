@@ -17,7 +17,10 @@ network execution build on that separation.
 
 == Choose a task
 
-- To verify slot duality with one numerical contraction, follow the
+- To install Symbolica and construct a typed tensor with the bundled Python module, use the
+  #link("quickstart/python/")[Python guide].
+- To verify slot duality with one numerical Rust contraction, follow the
+  #link("quickstart/rust/")[Rust guide], then continue with the
   #link("tutorial/")[first-contraction tutorial] and the exact
   #link("reference/rust/spenso/contraction/trait.Contract.html")[`Contract` reference].
 - To assemble and execute several tensor/scalar nodes, use the

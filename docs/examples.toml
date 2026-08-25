@@ -5,6 +5,51 @@ schema = 2
 # cases must be added here as they are promoted to maintained user journeys.
 
 [[example]]
+id = "gammaloop-quickstart-scalar-bubble"
+marker = "gammaloop-quickstart-scalar-bubble"
+product = "gammaloop"
+task = "Generate, persist, and inspect one scalar one-loop topology"
+audience = "beginner"
+source = "docs/products/gammaloop/content/quickstart-cli.typ"
+route = "quickstart/cli/"
+prerequisites = ["Built or installed GammaLoop CLI", "A Symbolica license mode appropriate for the user"]
+expected = "The CLI lists process bubble and integrand one_loop, writes state_manifest.toml, and can evaluate one finite point from the saved state."
+verification = "syntax"
+tier = "pull-request"
+owner = "GammaLoop maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "gammaloop-python-quickstart"
+marker = "gammaloop-python-quickstart"
+product = "gammaloop"
+task = "Generate and evaluate a scalar one-loop topology through the Python API"
+audience = "beginner"
+source = "docs/products/gammaloop/content/quickstart-python.typ"
+route = "quickstart/python/"
+prerequisites = ["Python 3.11 or newer", "GammaLoop Python package", "A Symbolica license mode appropriate for the user"]
+expected = "The stateful Python session generates integrand one_loop and returns a finite structured evaluation result for one point."
+verification = "compile"
+tier = "pull-request"
+owner = "GammaLoop maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "gammaloop-rust-quickstart"
+marker = "gammaloop-rust-quickstart"
+product = "gammaloop"
+task = "Embed GammaLoop and evaluate a scalar one-loop topology from Rust"
+audience = "beginner"
+source = "docs/products/gammaloop/content/quickstart-rust.typ"
+route = "quickstart/rust/"
+prerequisites = ["Rust toolchain", "GammaLoop API dependencies", "A Symbolica license mode appropriate for the user"]
+expected = "The embedded command session generates integrand one_loop and its typed evaluation request produces one result."
+verification = "compile"
+tier = "pull-request"
+owner = "GammaLoop maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
 id = "gammaloop-first-state"
 marker = "gammaloop-first-state"
 product = "gammaloop"
@@ -65,6 +110,51 @@ owner = "GammaLoop maintainers"
 test_command = "cargo test --locked -p alphal00p-docs-examples"
 
 [[example]]
+id = "linnet-quickstart-boundary"
+marker = "linnet-quickstart-boundary"
+product = "linnet"
+task = "Build and validate a boundary-aware half-edge graph"
+audience = "beginner"
+source = "docs/products/linnet/content/quickstart-rust.typ"
+route = "quickstart/rust/"
+prerequisites = ["Rust toolchain", "Linnet workspace dependencies"]
+expected = "The graph involution is valid and DOT output contains the two named endpoint nodes."
+verification = "run"
+tier = "pull-request"
+owner = "Linnet maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "linnet-python-quickstart"
+marker = "linnet-python-quickstart"
+product = "linnet"
+task = "Parse and inspect a DOT-backed Linnet graph from Python"
+audience = "beginner"
+source = "docs/products/linnet/content/quickstart-python.typ"
+route = "quickstart/python/"
+prerequisites = ["Python 3.10 or newer", "Source-built linnet_py extension"]
+expected = "The graph has two nodes and one edge, and round-trips to DOT text."
+verification = "compile"
+tier = "pull-request"
+owner = "Linnet maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "linnet-typst-quickstart"
+marker = "linnet-typst-quickstart"
+product = "linnet"
+task = "Construct, lay out, and draw a Linnest graph in Typst"
+audience = "beginner"
+source = "docs/products/linnet/content/quickstart-typst.typ"
+route = "quickstart/typst/"
+prerequisites = ["Typst 0.15.0 or newer", "GammaLoop checkout containing the bundled Linnest package"]
+expected = "The compiled document contains two labeled nodes joined by one labeled edge."
+verification = "syntax"
+tier = "pull-request"
+owner = "Linnet maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
 id = "linnet-first-graph"
 marker = "linnet-first-graph"
 product = "linnet"
@@ -110,6 +200,36 @@ owner = "Linnet maintainers"
 test_command = "cargo test --locked -p alphal00p-docs-examples"
 
 [[example]]
+id = "spenso-community-quickstart"
+marker = "spenso-community-quickstart"
+product = "spenso"
+task = "Construct and inspect a typed dense tensor in Python"
+audience = "beginner"
+source = "docs/products/spenso/content/quickstart-python.typ"
+route = "quickstart/python/"
+prerequisites = ["Python 3", "Published Symbolica distribution containing the Spenso community module"]
+expected = "The rank-two tensor has the asserted diagonal entries and converts to sparse storage without changing its structure."
+verification = "compile"
+tier = "pull-request"
+owner = "Spenso maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "spenso-rust-quickstart"
+marker = "spenso-rust-quickstart"
+product = "spenso"
+task = "Contract one pair of dual Spenso tensor indices in Rust"
+audience = "beginner"
+source = "docs/products/spenso/content/quickstart-rust.typ"
+route = "quickstart/rust/"
+prerequisites = ["Rust 1.85 or newer", "Published Spenso crate"]
+expected = "The contraction preserves two free indices and produces the asserted component value 10."
+verification = "run"
+tier = "pull-request"
+owner = "Spenso maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
 id = "spenso-first-contraction"
 marker = "spenso-first-contraction"
 product = "spenso"
@@ -140,6 +260,36 @@ owner = "Spenso maintainers"
 test_command = "cargo test --locked -p alphal00p-docs-examples"
 
 [[example]]
+id = "idenso-community-quickstart"
+marker = "idenso-community-quickstart"
+product = "idenso"
+task = "Simplify one representation-aware metric contraction in Python"
+audience = "beginner"
+source = "docs/products/idenso/content/quickstart-python.typ"
+route = "quickstart/python/"
+prerequisites = ["Python 3", "Published Symbolica distribution containing the Idenso and Spenso community modules"]
+expected = "Metric simplification preserves exactly one dangling index while removing the explicit metric contraction."
+verification = "compile"
+tier = "pull-request"
+owner = "Idenso maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "idenso-rust-quickstart"
+marker = "idenso-rust-quickstart"
+product = "idenso"
+task = "Simplify one representation-aware metric contraction in Rust"
+audience = "beginner"
+source = "docs/products/idenso/content/quickstart-rust.typ"
+route = "quickstart/rust/"
+prerequisites = ["Rust 1.85 or newer", "Current Git revision of Idenso", "Symbolica 2.2.0"]
+expected = "Metric simplification returns exactly the vector with the remaining free Minkowski index."
+verification = "compile"
+tier = "pull-request"
+owner = "Idenso maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
 id = "idenso-controlled-identity"
 marker = "idenso-controlled-identity"
 product = "idenso"
@@ -167,6 +317,36 @@ expected = "Wrapping the two local dummy namespaces preserves exactly the two in
 verification = "compile"
 tier = "pull-request"
 owner = "Idenso maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "vakint-community-quickstart"
+marker = "vakint-community-quickstart"
+product = "vakint"
+task = "Canonicalize a one-loop vacuum integral in Python without external backends"
+audience = "beginner"
+source = "docs/products/vakint/content/quickstart-python.typ"
+route = "quickstart/python/"
+prerequisites = ["Python 3", "Published Symbolica distribution containing the Vakint community module"]
+expected = "The matching-only engine recognizes the integral as the canonical one-loop I1L topology without invoking FORM or pySecDec."
+verification = "compile"
+tier = "pull-request"
+owner = "Vakint maintainers"
+test_command = "cargo test --locked -p alphal00p-docs-examples"
+
+[[example]]
+id = "vakint-rust-quickstart"
+marker = "vakint-rust-quickstart"
+product = "vakint"
+task = "Canonicalize a one-loop vacuum integral through the current Rust API"
+audience = "beginner"
+source = "docs/products/vakint/content/quickstart-rust.typ"
+route = "quickstart/rust/"
+prerequisites = ["Rust 1.85 or newer", "Current Git revision of Vakint", "Symbolica 2.2.0"]
+expected = "The matching-only engine recognizes the input as Vakint's canonical I1L topology without probing an external backend."
+verification = "compile"
+tier = "pull-request"
+owner = "Vakint maintainers"
 test_command = "cargo test --locked -p alphal00p-docs-examples"
 
 [[example]]

@@ -25,11 +25,14 @@ is needed.
 
 == Choose a task
 
+- To build or install the CLI and evaluate a compact one-loop scalar graph, follow the
+  #link("quickstart/cli/")[command-line guide].
 - To decide whether an initial state, contribution, mass/spin choice, subtraction, and
   observable are supported, read #link("physics/")[physics scope and Local Unitarity].
 - To define momentum flow, helicity and color ownership, flux, units, and sample weights,
   use #link("guides/conventions/")[the scientific conventions].
-- To create and resume a known state, follow the #link("tutorial/")[first-state tutorial].
+- To follow a maintained run card through the complete persistence lifecycle, use the
+  #link("tutorial/")[first-state tutorial].
 - To adapt a process specification or generation filters, use the
   #link("guides/process-generation/")[process-generation guide] with the
   #link("reference/cli/commands/gammaloop/generate/#command-gammaloop-generate-9dcc9f488fe75777")[generated `generate` reference].
@@ -71,18 +74,15 @@ runs create `gammaloop_state/` unless a different state path is supplied.
 
 == Installation and external tools
 
-GammaLoop is currently developed primarily from source. The supported development path is
-the repository's Nix shell, or a local Rust toolchain together with `just`, a recent GNU
-toolchain, and Python 3.11 or newer when building bindings. FORM 4.2.1 or newer is needed
-for analytical integration of integrated UV counterterms. UFO model import also needs the
-Python `ufo-model-loader` package.
+For ordinary CLI use, begin with #link("quickstart/cli/")[using GammaLoop from the command line]. It recommends the packaged
+Nix application when Nix is available, but does not require it: a copy-and-paste Cargo route is
+provided for a standard Rust toolchain. Neither installation path requires a source checkout.
 
-// docs-example: syntax
-```sh
-nix develop
-just build-cli
-just build-api
-```
+A source checkout is still needed to change GammaLoop or to work through repository-owned run
+cards. Its supported development path is the repository's Nix shell, or a local Rust toolchain
+together with `just`, a recent GNU toolchain, and Python 3.11 or newer when building bindings.
+FORM 4.2.1 or newer is needed for analytical integration of integrated UV counterterms. UFO
+model import also needs the Python `ufo-model-loader` package.
 
 Diagram rendering is a separate concern and uses Clinnet and Typst. Building the CLI does
 not imply that these drawing tools are installed. Use

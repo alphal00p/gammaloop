@@ -17,9 +17,12 @@ a `topo(...)` structure built from propagators.
 
 == Choose a task
 
-- To recognize and canonicalize an integral without external tools, follow the
-  #link("tutorial/")[matching-only tutorial] and compare with the
+- To install Symbolica and canonicalize an integral without external tools, follow the
+  #link("quickstart/python/")[Python guide] and compare with the
   #link("reference/topologies/")[generated topology table].
+- To compile the same matching-only workflow in Rust, use the
+  #link("quickstart/rust/")[Rust guide], then continue with the
+  #link("tutorial/")[matching tutorial].
 - To tensor-reduce and evaluate with an explicit backend policy, use the
   #link("guides/evaluation/")[evaluation guide] with the exact
   #link("reference/rust/vakint/struct.EvaluationOrder.html")[`EvaluationOrder`]

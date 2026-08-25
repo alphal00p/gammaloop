@@ -1,5 +1,9 @@
 #import "../shared.typ": *
 #import "content/overview.typ": overview
+#import "content/quickstart.typ": quickstart
+#import "content/quickstart-cli.typ": quickstart-cli
+#import "content/quickstart-python.typ": quickstart-python
+#import "content/quickstart-rust.typ": quickstart-rust
 #import "content/physics-scope.typ": physics-scope
 #import "content/conventions.typ": conventions
 #import "content/tutorial.typ": tutorial
@@ -17,6 +21,10 @@
   owner: "GammaLoop project",
   body: [
     #overview
+    #quickstart
+    #quickstart-cli
+    #quickstart-python
+    #quickstart-rust
     #physics-scope
     #conventions
     #tutorial

@@ -52,12 +52,11 @@ projectors add that package; generic Spenso users do not inherit those conventio
   standalone importable `spenso` Python distribution.
 ])
 
-For a released Python assembly that includes Spenso, install the provider's Symbolica
-distribution with `python -m pip install symbolica`, then verify
+Install the published Symbolica assembly with `python -m pip install --upgrade symbolica`, then verify
 `python -c "import symbolica.community.spenso"`. Module availability follows the Symbolica
 assembly version; a local Spenso source checkout does not add the module to an installed wheel.
 Source embedders must add `spynso3`
-to the external #link("https://github.com/benruijl/symbolica-community")[symbolica-community]
+to the external #link("https://github.com/symbolica-dev/symbolica-community")[symbolica-community]
 assembly and invoke its `SymbolicaCommunityModule` registration while building that extension;
 building the Rust crate alone does not inject the module into another Symbolica wheel.
 
