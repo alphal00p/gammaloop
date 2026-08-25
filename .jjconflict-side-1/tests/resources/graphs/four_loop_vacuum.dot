@@ -1,0 +1,23 @@
+digraph four_loop_vacuum_0 {
+overall_factor=1;
+multiplicity_factor=1;
+v1;
+v2;
+v3 [int_id="V_4_SCALAR_0111"];
+v4 [int_id="V_4_SCALAR_0111"];
+v5 [int_id="V_3_SCALAR_111"];
+v6 [int_id="V_3_SCALAR_111"];
+v7 [int_id="V_3_SCALAR_111"];
+v8 [int_id="V_3_SCALAR_111"];
+v1 -> v3 [pdg=1000, name=p1, mom=p1];
+v4 -> v2 [pdg=1000, name=p2, mom=p2];
+v3 -> v5 [pdg=1001, name=q1];
+v5 -> v4 [pdg=1001, name=q2];
+v4 -> v6 [pdg=1001, name=q3, lmb_index=0];
+v6 -> v3 [pdg=1001, name=q4];
+v5 -> v7 [pdg=1001, name=q5, lmb_index=1];
+v4 -> v8 [pdg=1001, name=q6];
+v6 -> v8 [pdg=1001, name=q7, lmb_index=2];
+v8 -> v7 [pdg=1001, name=q8, lmb_index=3];
+v7 -> v3 [pdg=1001, name=q9];
+}

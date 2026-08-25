@@ -1,0 +1,5 @@
+---
+source: spenso/src/tests.rs
+expression: structa.to_string()
+---
+102 (mink4)

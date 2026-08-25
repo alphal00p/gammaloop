@@ -1,0 +1,52 @@
+symbolica_parse	elapsed_ms=0.143	terms=8	bytes=2791
+input_log_print_120
+2[35m𝑖[0m·GC_2·GC_11²·MT·[90mb[0m₂₅[[35mγ[0m([35mq₁₃[0m(mink(dim)))[35mγ[0m([90mα[0m₆)][90mb[0m₁₂
+    ·[35mt[0m([90mc[0m₂₄ [90mг[0m₁₂)([90mг[0m₁₄)
+    ·[35mt[0m([90mc[0m₂₄ [90mг[0m₁₄)([90mг[0m₂₅)
++2[35m𝑖[0m·GC_2·GC_11²·MT·[90mb[0m₂₅[[35mγ[0m([90mα[0m₆)[35mγ[0m([35mq₁₄[0m(mink(dim)))][90mb[0m₁₂
+        ·[35mt[0m([90mc[0m₂₄ [90mг[0m₁₂)([90mг[0m₁₄)
+        ·[35mt[0m([90mc[0m₂₄ [90mг[0m₁₄)([90mг[0m₂₅)
++2[35m𝑖[0m·GC_2·GC_11²
+        ·[90mb[0m₂₅[[35mγ[0m([35mq₁₃[0m(mink(dim)))[35mγ[0m([35mq₁₄[0m(mink(dim)))[35mγ[0m([90mα[0m₆)][90mb[0m₁₂·[35mt[0m([90mc[0m₂₄ [90mг[0m₁₂)([90mг[0m₁₄)
+        ·[35mt[0m([90mc[0m₂₄ [90mг[0m₁₄)([90mг[0m₂₅)
+-2[35m𝑖[0m·GC_2·GC_11²
+        ·[90mb[0m₂₅[[35mγ[0m([90mα[0m₆)[35mγ[0m([35mq₁₄[0m(mink(dim)))[35mγ[0m([35mq₁₃[0m(mink(dim)))][90mb[0m₁₂·[35mt[0m([90mc[0m₂₄ [90mг[0m₁₂)([90mг[0m₁₄)
+        ·[35mt[0m([90mc[0m₂₄ [90mг[0m₁₄)([90mг[0m₂₅)
++(-1[35m𝑖[0m·dim·GC_2·GC_11²+2[35m𝑖[0m·GC_2·GC_11²)
+        ·[90mb[0m₂₅[[35mγ[0m([35mq₁₄[0m(mink(dim)))[35mγ[0m([90mα[0m₆)[35mγ[0m([35mq₁₃[0m(mink(dim)))][90mb[0m₁₂·[35mt[0m([90mc[0m₂₄ [90mг[0m₁₂)([90mг[0m₁₄)
+        ·[35mt[0m([90mc[0m₂₄ [90mг[0m₁₄)([90mг[0m₂₅)
++(1[35m𝑖[0m·dim·GC_2·GC_11²·MT-2[35m𝑖[0m·GC_2·GC_11²·MT)
+        ·[90mb[0m₂₅[[35mγ[0m([35mq₁₄[0m(mink(dim)))[35mγ[0m([90mα[0m₆)][90mb[0m₁₂
+        ·[35mt[0m([90mc[0m₂₄ [90mг[0m₁₂)([90mг[0m₁₄)
+        ·[35mt[0m([90mc[0m₂₄ [90mг[0m₁₄)([90mг[0m₂₅)
++(1[35m𝑖[0m·dim·GC_2·GC_11²·MT-2[35m𝑖[0m·GC_2·GC_11²·MT)
+        ·[90mb[0m₂₅[[35mγ[0m([90mα[0m₆)[35mγ[0m([35mq₁₃[0m(mink(dim)))][90mb[0m₁₂
+        ·[35mt[0m([90mc[0m₂₄ [90mг[0m₁₂)([90mг[0m₁₄)
+        ·[35mt[0m([90mc[0m₂₄ [90mг[0m₁₄)([90mг[0m₂₅)
++(-1[35m𝑖[0m·dim·GC_2·GC_11²·MT²+2[35m𝑖[0m·GC_2·GC_11²·MT²)
+        ·[90mb[0m₂₅[[35mγ[0m([90mα[0m₆)][90mb[0m₁₂
+        ·[35mt[0m([90mc[0m₂₄ [90mг[0m₁₂)([90mг[0m₁₄)
+        ·[35mt[0m([90mc[0m₂₄ [90mг[0m₁₄)([90mг[0m₂₅)
+raw_network_parse	skipped=symbolic_gammalooprs_dim_not_concrete
+dim4_raw_network_parse	elapsed_ms=3.687	nodes=41	edges=102	tensors=8
+dim4_raw_network_execute	elapsed_ms=3.903
+evaluator_algebra	elapsed_ms=34.014	terms=1	bytes=1542
+evaluator_algebra_log_print_120
+(2[35m𝑖[0m·CF·GC_2·GC_11²·MT·[90mb[0m₂₅[[35mγ[0m([35mq₁₃[0m(mink(dim)))[35mγ[0m([90mα[0m₆)][90mb[0m₁₂
+    +2[35m𝑖[0m·CF·GC_2·GC_11²·MT
+        ·[90mb[0m₂₅[[35mγ[0m([90mα[0m₆)[35mγ[0m([35mq₁₄[0m(mink(dim)))][90mb[0m₁₂
+    +2[35m𝑖[0m·CF·GC_2·GC_11²
+        ·[90mb[0m₂₅[[35mγ[0m([35mq₁₃[0m(mink(dim)))[35mγ[0m([35mq₁₄[0m(mink(dim)))[35mγ[0m([90mα[0m₆)][90mb[0m₁₂
+    -2[35m𝑖[0m·CF·GC_2·GC_11²
+        ·[90mb[0m₂₅[[35mγ[0m([90mα[0m₆)[35mγ[0m([35mq₁₄[0m(mink(dim)))[35mγ[0m([35mq₁₃[0m(mink(dim)))][90mb[0m₁₂
+    +CF·(-1[35m𝑖[0m·dim·GC_2·GC_11²+2[35m𝑖[0m·GC_2·GC_11²)
+        ·[90mb[0m₂₅[[35mγ[0m([35mq₁₄[0m(mink(dim)))[35mγ[0m([90mα[0m₆)[35mγ[0m([35mq₁₃[0m(mink(dim)))][90mb[0m₁₂
+    +CF·(1[35m𝑖[0m·dim·GC_2·GC_11²·MT-2[35m𝑖[0m·GC_2·GC_11²·MT)
+        ·[90mb[0m₂₅[[35mγ[0m([35mq₁₄[0m(mink(dim)))[35mγ[0m([90mα[0m₆)][90mb[0m₁₂
+    +CF·(1[35m𝑖[0m·dim·GC_2·GC_11²·MT-2[35m𝑖[0m·GC_2·GC_11²·MT)
+        ·[90mb[0m₂₅[[35mγ[0m([90mα[0m₆)[35mγ[0m([35mq₁₃[0m(mink(dim)))][90mb[0m₁₂
+    +CF·(-1[35m𝑖[0m·dim·GC_2·GC_11²·MT²+2[35m𝑖[0m·GC_2·GC_11²·MT²)
+        ·[90mb[0m₂₅[[35mγ[0m([90mα[0m₆)][90mb[0m₁₂
+)·[35mδ_[0m([90mг[0m₂₅)[35m^[0m([90mг[0m₁₂)
+dim4_evaluator_algebra_network_parse	elapsed_ms=3.006	nodes=27	edges=54	tensors=8
+dim4_evaluator_algebra_network_execute	elapsed_ms=0.417

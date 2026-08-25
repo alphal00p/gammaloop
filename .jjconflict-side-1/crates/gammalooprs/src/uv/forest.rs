@@ -1,0 +1,560 @@
+use crate::{
+    GammaLoopContext, debug_tags,
+    graph::{Graph, LMBext, cuts::CutSet, parse::string_utils::dot_attr_value},
+    utils::{GS, W_},
+    uv::{
+        ApproximationType, Integrands,
+        approx::{
+            CutStructure, ForestNodeLike, OrientationProjection, final_integrand::FinalIntegrands,
+            local_3d::Localizer, projected_4d::Local4dProjectionContext,
+        },
+        marker::UvMarker,
+        settings::FinalIntegrandDimension,
+    },
+};
+use bincode_trait_derive::{Decode, Encode};
+use color_eyre::Result;
+use eyre::{WrapErr, eyre};
+use gammaloop_tracing_filter::{LogMessage, debug_instrument};
+use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
+use spenso::shadowing::symbolica_utils::LogPrint;
+
+use symbolica::atom::{Atom, AtomCore};
+
+use linnet::half_edge::{
+    involution::HedgePair,
+    subgraph::{SubSetLike, SubSetOps},
+};
+use vakint::Vakint;
+
+use super::{
+    RenormalizationPart, UVgenerationSettings,
+    approx::Approximation,
+    export::UVForestNodeExpression,
+    poset::{DAG, DagNode},
+};
+
+pub struct CutForests {
+    pub cuts: CutStructure,
+    pub forests: Vec<Forest>,
+    pub settings: Vec<vakint::VakintSettings>,
+}
+
+#[derive(Clone, Encode, Decode)]
+#[trait_decode(trait = GammaLoopContext)]
+pub struct ParametricIntegrands {
+    pub integrands: Integrands,
+    pub cuts: CutSet,
+}
+
+impl ParametricIntegrands {
+    pub(crate) fn from_final(integrands: FinalIntegrands, cuts: CutSet) -> Self {
+        Self {
+            integrands: integrands.into_integrands(),
+            cuts,
+        }
+    }
+
+    pub fn map<F: FnMut(Atom) -> Atom>(self, mut map: F) -> Self {
+        Self {
+            integrands: self.integrands.map(|atom| map(atom.clone())),
+            cuts: self.cuts,
+        }
+    }
+
+    /// Apply a semantic substitution to roots and each retained body once.
+    /// Multiplicative cut prefactors continue to use the root-only `map`.
+    pub(crate) fn map_expressions(
+        self,
+        mut map: impl FnMut(&Atom) -> Result<Atom>,
+    ) -> Result<Self> {
+        Ok(Self {
+            integrands: self
+                .integrands
+                .fallible_map(&mut map)?
+                .map_numerators(map)?,
+            cuts: self.cuts,
+        })
+    }
+
+    pub fn zero_like(&self) -> Self {
+        Self {
+            integrands: self.integrands.zero_like(),
+            cuts: self.cuts.clone(),
+        }
+    }
+}
+
+impl CutForests {
+    #[debug_instrument(graph = %graph.log_display())]
+    pub(crate) fn compute(
+        &mut self,
+        graph: &mut Graph,
+        vakint: &Vakint,
+        orientation: OrientationProjection<'_>,
+        settings: &UVgenerationSettings,
+    ) -> Result<()> {
+        let mut projection_context = Local4dProjectionContext::default();
+        for ((forest, cuts), vakint_settings) in &mut self
+            .forests
+            .iter_mut()
+            .zip(self.cuts.cuts.iter())
+            .zip(self.settings.iter())
+        {
+            let localizer = Localizer::new(cuts, orientation);
+            debug_tags!(#forest,#uv;
+                n_terms = %forest.n_terms(),
+                "Computing cut forest");
+            forest.compute(
+                graph,
+                (vakint, vakint_settings),
+                localizer,
+                settings,
+                &mut projection_context,
+            )?;
+        }
+        Ok(())
+    }
+    #[debug_instrument(graph = %graph.log_display())]
+    pub(crate) fn orientation_parametric_exprs(
+        self,
+        graph: &Graph,
+        _settings: &UVgenerationSettings,
+    ) -> Result<Vec<ParametricIntegrands>> {
+        let started = std::time::Instant::now();
+        let CutForests {
+            cuts,
+            forests,
+            settings: _vakint_settings,
+        } = self;
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "orientation_parametric_exprs_start",
+            forest_count = forests.len(),
+            "Building orientation parametric integrands"
+        );
+        let mut exprs = vec![];
+
+        for (forest, cuts) in forests.iter().zip(cuts.cuts.into_iter()) {
+            exprs.push(ParametricIntegrands::from_final(
+                forest.orientation_parametric_expr(graph)?,
+                cuts,
+            ));
+        }
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "orientation_parametric_exprs_done",
+            result_count = exprs.len(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Built orientation parametric integrands"
+        );
+
+        Ok(exprs)
+    }
+}
+
+pub struct Forest {
+    pub dag: DAG<Approximation, DagNode, ()>,
+}
+
+impl Forest {
+    pub(crate) fn n_terms(&self) -> usize {
+        self.dag.nodes.len()
+    }
+
+    pub(crate) fn dot_serialize_for_export(&mut self, name: &str) -> String {
+        self.dag.compute_topological_order();
+        self.dag
+            .to_dot_impl(&|node| {
+                let order = node.order.unwrap_or_default() as usize;
+                format!(
+                    "label={}",
+                    dot_attr_value(&Self::export_node_key(order, &node.data))
+                )
+            })
+            .replacen("digraph Poset {", &format!("digraph {name} {{"), 1)
+    }
+
+    pub(crate) fn export_node_expressions(
+        &self,
+        graph: &Graph,
+        forest_index: usize,
+        post_process: &mut impl FnMut(Atom) -> Atom,
+    ) -> Result<Vec<UVForestNodeExpression>> {
+        let mut nodes = self.dag.nodes.values().collect::<Vec<_>>();
+        nodes.sort_by_key(|node| node.data.topo_order);
+
+        let mut terms = Vec::new();
+        for node in nodes {
+            let node_index = node.data.topo_order;
+            let node_key = Self::export_node_key(node_index, &node.data);
+            let final_integrand = node
+                .data
+                .final_integrand(graph)?
+                .clone()
+                .into_integrands()
+                .resolved()?
+                .map(|numerator| post_process(numerator.clone()));
+            for (term_index, (&residue_index, numerator)) in final_integrand.iter().enumerate() {
+                terms.push(UVForestNodeExpression {
+                    forest_index,
+                    node_index,
+                    node_key: node_key.clone(),
+                    term_index,
+                    residue_index,
+                    numerator: numerator.clone(),
+                });
+            }
+        }
+
+        Ok(terms)
+    }
+
+    fn export_node_key(node_index: usize, approximation: &Approximation) -> String {
+        format!(
+            "legacy:{node_index}:S_{}",
+            approximation.spinney.filter().string_label()
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[debug_instrument(graph = %graph.log_display(), forest_terms = self.n_terms())]
+    pub(crate) fn compute(
+        &mut self,
+        graph: &mut Graph,
+        vakint: (&Vakint, &vakint::VakintSettings),
+        localizer: Localizer<'_>,
+        settings: &UVgenerationSettings,
+        projection_context: &mut Local4dProjectionContext,
+    ) -> Result<()> {
+        let started = std::time::Instant::now();
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "forest_compute_start",
+            generate_integrated = settings.generate_integrated,
+            final_integrand = %settings.final_integrand,
+            "Computing UV forest"
+        );
+        let order = self.dag.compute_topological_order();
+
+        for (i, n) in order.into_iter().enumerate() {
+            let node_started = std::time::Instant::now();
+            let parent_count = self.dag.nodes[n].parents.len();
+            let dod = self.dag.nodes[n].data.spinney.dod;
+            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                stage = "forest_node_start",
+                node = ?n,
+                topo_index = i,
+                parent_count,
+                dod,
+                "Computing UV forest node"
+            );
+            match self.dag.nodes[n].parents.len() {
+                0 => {
+                    self.dag.nodes[n].data.topo_order = i;
+                    let root_started = std::time::Instant::now();
+                    self.dag.nodes[n].data.root(graph, localizer, settings)?;
+                    debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                        stage = "forest_node_root_done",
+                        elapsed_ms = root_started.elapsed().as_secs_f64() * 1000.0,
+                        "Computed root UV forest node"
+                    );
+                }
+                1 => {
+                    // debug!("")
+                    let parent_id = self.dag.nodes[n].parents[0];
+                    let [current, parent] =
+                        &mut self.dag.nodes.get_disjoint_mut([n, parent_id]).unwrap();
+
+                    let Some(a) = &parent.data.simple_approx else {
+                        panic!("Should have computed the simple approx");
+                    };
+                    current.data.simple_approx =
+                        Some(a.dependent(current.data.spinney.subgraph.clone()));
+
+                    debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                        stage = "computing forest node",
+                        simple = %current.data.simple_approx.as_ref().map(|a| a.expr(&graph.full_filter()).to_string()).unwrap(),
+                        log.current = current.data.spinney,
+                        log.given = parent.data.spinney,
+                        "Computing UV forest node single"
+                    );
+
+                    current.data.topo_order = i;
+                    current
+                        .data
+                        .compute_4d(graph, vakint, &parent.data, settings)?;
+
+                    match settings.final_integrand {
+                        FinalIntegrandDimension::FourD => {
+                            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                                "Skipping local UV forest node"
+                            );
+                            continue;
+                        }
+                        FinalIntegrandDimension::ThreeD => {
+                            current.data.compute_3d(
+                                &parent.data,
+                                graph,
+                                localizer,
+                                settings,
+                                projection_context,
+                            )?;
+                        }
+                    }
+                }
+                _ => {
+                    unimplemented!(
+                        "Union not implemented for UV forest node {n:?} with {parent_count} parents in diagram '{}'",
+                        graph.name,
+                    );
+                }
+            }
+            debug_tags!(#generation, #profile, #uv, #graph, #term, #summary;
+                stage = "forest_node_done",
+                elapsed_ms = node_started.elapsed().as_secs_f64() * 1000.0,
+                "Computed UV forest node"
+            );
+        }
+        debug_tags!(#generation, #profile, #uv, #graph, #summary;
+            stage = "forest_compute_done",
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            "Computed UV forest"
+        );
+        Ok(())
+    }
+
+    pub(crate) fn renormalization_part_of_ends(
+        &self,
+        graph: &Graph,
+        settings: &UVgenerationSettings,
+    ) -> Result<RenormalizationPart> {
+        let mut sum = Atom::Zero;
+        let marker = UvMarker::new(settings);
+
+        let wild = Atom::var(W_.x___);
+
+        let replacements =
+            graph.integrand_replacement(&graph.full_filter(), &graph.loop_momentum_basis, &[wild]);
+        for (_, n) in &self.dag.nodes {
+            if !n.children.is_empty() {
+                continue;
+            }
+
+            let integrated = n.data.integrated(graph)?;
+            let physical = match n.data.renormalization_scheme() {
+                ApproximationType::MUV => integrated.physical_finite_counterterm_atom(),
+                ApproximationType::PolePart => integrated.physical_pole_atom(),
+                scheme => return Err(eyre!("No terminal counterterm projection for {scheme}")),
+            };
+            let atom = marker.prefix(&graph.full_filter(), n.data.subgraph(), &physical);
+
+            debug_tags!(#generation, #uv, #graph, #term;
+                forest_term = %n.data.simple_display(graph),
+                log.expr = atom,
+                "Term before simplification"
+            );
+
+            let atom = &atom
+                * &graph.global_prefactor.projector
+                * &graph.global_prefactor.num
+                * &graph.overall_factor;
+            debug_tags!(#generation, #uv, #inspect, #dump;
+                log.expression = atom,
+                dod = n.data.spinney.dod,
+                "Dumped pole part color simplification input"
+            );
+            let atom = atom.simplify_color().expand_num().to_dots();
+            // .replace(GS.dim)
+            // .max_level(0)
+            // .with(4); //.with(Atom::var(GS.dim_epsilon) * (-2) + 4);
+
+            debug_tags!(#generation, #uv, #graph, #term;
+                forest_term=%
+                n.data
+                    .simple_approx
+                    .as_ref()
+                    .unwrap()
+                    .expr(&graph.full_filter()),
+               expr = % atom.log_print(None),"Term"
+            );
+            sum += atom;
+        }
+
+        Ok(RenormalizationPart::legacy(
+            sum.replace_multiple(&replacements)
+                .replace(GS.m_uv_expansion)
+                .with(GS.m_uv_vacuum),
+        ))
+    }
+
+    #[debug_instrument(graph = %graph.log_display())]
+    pub(crate) fn orientation_parametric_expr(&self, graph: &Graph) -> Result<FinalIntegrands> {
+        let mut sum: Option<FinalIntegrands> = None;
+
+        for (_, n) in &self.dag.nodes {
+            debug_tags!(#generation, #uv, #graph, #term;
+                dod = %n.data.dod(),
+                log.graph = %graph.dot_lmb_of(&n.data.spinney.subgraph,&n.data.spinney.lmb),
+                simple = %n.data.simple_display(graph),"Terms"
+            );
+            let terms = n
+                .data
+                .final_integrand(graph)?
+                .map_expressions(|integrand| Ok(integrand.clone().collect_color()))?;
+            sum = Some(match sum {
+                Some(sum) => sum.zip_add(terms).wrap_err_with(|| {
+                    format!(
+                        "while aggregating legacy UV forest term {}",
+                        n.data.simple_display(graph)
+                    )
+                })?,
+                None => terms,
+            });
+        }
+
+        let sum = sum.ok_or(eyre!("No terms in forest"))?;
+        let split_momentum_replacements = graph
+            .iter_edges_of(
+                &graph
+                    .full_filter()
+                    .subtract(&graph.initial_state_cut)
+                    .subtract(&graph.tree_edges),
+            )
+            .filter_map(|(pair, edge_index, _)| {
+                (!matches!(pair, HedgePair::Unpaired { .. }))
+                    .then(|| GS.split_mom_pattern_simple(edge_index))
+            })
+            .collect::<Vec<_>>();
+
+        sum.map_expressions(|integrand| {
+            Ok(integrand
+                .replace_multiple(&split_momentum_replacements)
+                .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                .with(W_.d_))
+            // .collect_factors(); Really bad ! Turns
+        })
+    }
+
+    // pub(crate) fn graphs(&self, graph: &Graph) -> String {
+    //     let mut out = String::new();
+    //     self.dag.nodes.iter().for_each(|(_, a)| {
+    //         writeln!(
+    //             out,
+    //             "//S_{}:\n{}",
+    //             a.data.subgraph.string_label(),
+    //             a.data.dot(graph)
+    //         )
+    //         .unwrap()
+    //     });
+    //     writeln!(
+    //         out,
+    //         "{}",
+    //         self.dag
+    //             .to_dot_impl(&|n| format!("label=S_{}", n.data.subgraph.string_label()))
+    //     )
+    //     .unwrap();
+
+    //     out
+    // }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::ParametricIntegrands;
+    use crate::{
+        cff::CutCFFIndex, graph::cuts::CutSet, integrands::process::param_builder::FnMapEntry,
+        uv::Integrands,
+    };
+    use symbolica::{
+        atom::{Atom, AtomCore},
+        function, symbol,
+    };
+
+    #[test]
+    fn semantic_maps_substitute_shared_bodies_while_prefactors_multiply_roots()
+    -> color_eyre::Result<()> {
+        crate::initialisation::test_initialise()?;
+        let family = symbol!("gammalooprs::uv::numerator_family");
+        let parameter = symbol!("uv_forest_test::parameter");
+        let scope = Atom::var(symbol!("uv_forest_test::scope"));
+        let coordinate = Atom::var(symbol!("uv_forest_test::coordinate"));
+        let definition = Arc::new(FnMapEntry {
+            lhs: function!(family, &scope, parameter),
+            rhs: Atom::var(parameter) + &coordinate,
+            args: vec![parameter.into()],
+            tags: vec![scope.clone()],
+        });
+        let cut = CutCFFIndex::new_all_none();
+        let original = ParametricIntegrands {
+            integrands: Integrands::from_iter([(cut, &coordinate * function!(family, &scope, 2))])
+                .with_numerators([Arc::clone(&definition)])?,
+            cuts: CutSet::empty(3),
+        };
+        let multiplied = original.clone().map(|atom| Atom::num(3) * atom);
+        assert!(Arc::ptr_eq(
+            &multiplied.integrands.numerators()[0],
+            &definition
+        ));
+        assert_eq!(
+            multiplied.integrands.resolved()?,
+            Integrands::from_iter([(
+                cut,
+                Atom::num(3) * &coordinate * (Atom::num(2) + &coordinate)
+            )])
+        );
+
+        let mut visited = 0;
+        let substituted = original.map_expressions(|atom| {
+            visited += 1;
+            Ok(atom
+                .replace(coordinate.to_pattern())
+                .with(Atom::num(2) * &coordinate))
+        })?;
+        assert_eq!(visited, 2, "visit the root and shared body once each");
+        assert_eq!(substituted.cuts, CutSet::empty(3));
+        assert_eq!(
+            substituted.integrands.resolved()?,
+            Integrands::from_iter([(
+                cut,
+                Atom::num(2) * &coordinate * (Atom::num(2) + Atom::num(2) * &coordinate)
+            )])
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn zero_like_preserves_shape_and_cuts() {
+        let integrands = ParametricIntegrands {
+            integrands: Integrands::from_iter([
+                (CutCFFIndex::new_all_none(), Atom::var(symbol!("x"))),
+                (
+                    CutCFFIndex {
+                        left_threshold_order: Some(1),
+                        right_threshold_order: None,
+                        lu_cut_order: None,
+                    },
+                    Atom::num(7),
+                ),
+            ]),
+            cuts: CutSet::empty(3),
+        };
+
+        let zeroed = integrands.zero_like();
+
+        assert_eq!(
+            zeroed.integrands,
+            Integrands::from_iter([
+                (CutCFFIndex::new_all_none(), Atom::Zero),
+                (
+                    CutCFFIndex {
+                        left_threshold_order: Some(1),
+                        right_threshold_order: None,
+                        lu_cut_order: None,
+                    },
+                    Atom::Zero,
+                ),
+            ]),
+        );
+        assert_eq!(zeroed.cuts, CutSet::empty(3));
+    }
+}

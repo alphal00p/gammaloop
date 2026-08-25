@@ -1,0 +1,126 @@
+---
+source: crates/gammalooprs/src/cff/feynkit.rs
+expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cache\": graph.surface_cache,\n})"
+---
+{
+  "expression": {
+    "orientations": [
+      {
+        "data": {
+          "orientation": [
+            "Default",
+            "Default",
+            "Default"
+          ]
+        },
+        "expression": {
+          "nodes": [
+            {
+              "children": [],
+              "data": {
+                "Esurface": 1
+              },
+              "node_id": 0,
+              "parent": null
+            }
+          ]
+        }
+      },
+      {
+        "data": {
+          "orientation": [
+            "Default",
+            "Reversed",
+            "Reversed"
+          ]
+        },
+        "expression": {
+          "nodes": [
+            {
+              "children": [],
+              "data": {
+                "Esurface": 1
+              },
+              "node_id": 0,
+              "parent": null
+            }
+          ]
+        }
+      }
+    ],
+    "surfaces": {
+      "esurface_cache": [
+        {
+          "energies": [
+            99
+          ],
+          "external_shift": [],
+          "vertex_set": {
+            "vertex_set": 0
+          }
+        },
+        {
+          "energies": [
+            1,
+            2
+          ],
+          "external_shift": [],
+          "vertex_set": {
+            "vertex_set": 1
+          }
+        }
+      ],
+      "hsurface_cache": [
+        {
+          "external_shift": [],
+          "negative_energies": [
+            99
+          ],
+          "positive_energies": [
+            98
+          ],
+          "vertex_set": {
+            "vertex_set": 0
+          }
+        }
+      ]
+    }
+  },
+  "surface_cache": {
+    "esurface_cache": [
+      {
+        "energies": [
+          99
+        ],
+        "external_shift": [],
+        "vertex_set": {
+          "vertex_set": 0
+        }
+      },
+      {
+        "energies": [
+          1,
+          2
+        ],
+        "external_shift": [],
+        "vertex_set": {
+          "vertex_set": 1
+        }
+      }
+    ],
+    "hsurface_cache": [
+      {
+        "external_shift": [],
+        "negative_energies": [
+          99
+        ],
+        "positive_energies": [
+          98
+        ],
+        "vertex_set": {
+          "vertex_set": 0
+        }
+      }
+    ]
+  }
+}

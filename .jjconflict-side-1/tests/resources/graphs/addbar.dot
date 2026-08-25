@@ -1,0 +1,8 @@
+digraph addbar {
+    v1 [style=invis, is_cut=0]
+    v1 -> v2 [particle="a"]
+    v2 -> a -> v3 [particle="d"]
+    v3 -> b -> v2 [particle="d"]
+    a -> b [particle="g"]
+    v3 -> v1 [particle="a"]
+}

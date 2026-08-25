@@ -54,6 +54,7 @@ pub mod orientations;
 //pub mod cut_expression;
 pub mod esurface;
 pub mod expression;
+mod feynkit;
 pub mod generation;
 pub mod hsurface;
 pub mod surface;

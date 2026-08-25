@@ -1,0 +1,16 @@
+digraph scalar_spectacles_self_energy {
+    num = "-1𝑖/2"
+    node [num = "1"]
+    edge [particle = scalar_1]
+
+    e [style = invis]
+
+    e -> A:0 [id = 5]
+    D:1 -> e [id = 6]
+
+    A -> B [id = 0]
+    A -> B [id = 1]
+    B -> C [id = 2 particle = scalar_0]
+    C -> D [id = 3]
+    C -> D [id = 4]
+}
