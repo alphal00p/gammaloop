@@ -222,6 +222,14 @@ case "$mode" in
             fail "latest build has no light collaboration mark"
         [ -f "$build_root/assets/local-unitarity-dark.svg" ] ||
             fail "latest build has no dark collaboration mark"
+        for asset in \
+            about-double-triangle-light.svg \
+            about-double-triangle-dark.svg \
+            about-local-unitarity-equation-light.svg \
+            about-local-unitarity-equation-dark.svg; do
+            [ -f "$build_root/assets/$asset" ] ||
+                fail "latest build has no About-page Typst asset: $asset"
+        done
         for graph_id in \
             aa-2l-gl00 \
             aa-2l-gl08 \
@@ -252,6 +260,10 @@ case "$mode" in
             fail "latest build has no people portraits"
         [ -f "$build_root/people/index.html" ] ||
             fail "latest build has no people page"
+        [ -f "$build_root/about/index.html" ] ||
+            fail "latest build has no about page"
+        [ -f "$build_root/talks/index.html" ] ||
+            fail "latest build has no talks page"
         [ -f "$build_root/publications/index.html" ] ||
             fail "latest build has no publications page"
         [ -f "$build_root/citations/index.html" ] ||
@@ -288,7 +300,7 @@ case "$mode" in
         install -m 0644 "$build_root/.nojekyll" "$pages_root/.nojekyll"
         rm -rf -- "$pages_root/assets"
         cp -a "$build_root/assets" "$pages_root/assets"
-        for portal_page in people publications citations; do
+        for portal_page in about people talks publications citations; do
             rm -rf -- "$pages_root/$portal_page"
             cp -a "$build_root/$portal_page" "$pages_root/$portal_page"
         done

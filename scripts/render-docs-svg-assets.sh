@@ -73,6 +73,18 @@ for source in "${graph_sources[@]}"; do
     done
 done
 
+for source in \
+    docs/assets/typst/about/double-triangle.typ \
+    docs/assets/typst/about/local-unitarity-equation.typ; do
+    name=$(basename -- "$source" .typ)
+    for theme in light dark; do
+        queue_render \
+            "$source" \
+            "$output_root/docs/assets/about-$name-$theme.svg" \
+            "$theme"
+    done
+done
+
 queue_render \
     docs/assets/typst/marks/local-unitarity.typ \
     "$output_root/docs/assets/local-unitarity-light.svg" \
@@ -100,9 +112,10 @@ queue_render \
 wait_batch
 
 generated=(
+    "$output_root"/docs/assets/about-*.svg
     "$output_root"/docs/assets/graphs/portal-graph-*.svg
     "$output_root"/docs/assets/local-unitarity-*.svg
     "$output_root"/docs/assets/spensologo.svg
     "$output_root"/assets/gammalooplogo*.svg
 )
-test "${#generated[@]}" -eq 28
+test "${#generated[@]}" -eq 32
