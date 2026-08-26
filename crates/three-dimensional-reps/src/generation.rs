@@ -87,6 +87,8 @@ pub struct Generate3DExpressionOptions {
     #[serde(default)]
     pub representation: RepresentationMode,
     #[serde(default)]
+    pub medium_mode: crate::MediumMode,
+    #[serde(default)]
     pub cff_generation_context: CffGenerationContext,
     /// `None` keeps the legacy numerator class, which is affine in every EMR
     /// edge energy. `Some` selects an explicit bounded class; omitted edges
@@ -105,6 +107,7 @@ impl Default for Generate3DExpressionOptions {
     fn default() -> Self {
         Self {
             representation: RepresentationMode::Cff,
+            medium_mode: crate::MediumMode::Vacuum,
             cff_generation_context: CffGenerationContext::Standalone,
             energy_degree_bounds: None,
             numerator_sampling_scale: NumeratorSamplingScaleMode::None,
@@ -336,6 +339,8 @@ pub enum GenerationError {
         "this generalized CFF higher energy-numerator sector is not supported by the current Rust port"
     )]
     CffHigherEnergyPowerNotImplemented,
+    #[error("thermal CFF does not support uniform numerator sampling scales")]
+    ThermalNumeratorSamplingScaleUnsupported,
     #[error("cut-structure generation failed: {0}")]
     CutStructure(#[from] crate::cut_structure::CutStructureError),
     #[error("could not find a nonsingular loop-energy basis")]
@@ -488,6 +493,40 @@ fn generate_3d_expression_from_parsed_generated(
         .is_empty()
     {
         return build_expression_preserving_internal_edges(parsed, options);
+    }
+    if options.medium_mode != crate::MediumMode::Vacuum {
+        if options.numerator_sampling_scale != NumeratorSamplingScaleMode::None {
+            return Err(GenerationError::ThermalNumeratorSamplingScaleUnsupported);
+        }
+        // Thermal CFF retains the on-shell numerator maps of the medium
+        // representation. Its distribution factors are part of the shared
+        // expression and never enter the polynomial Laurent interpolation.
+        let core_global_prefactor_sign =
+            CffGlobalPrefactorSign::from_exponent(parsed.loop_names.len().saturating_sub(1));
+        let expression = generate_pure_cff_expression_from_parsed_with_duplicate_excess(
+            parsed,
+            0,
+            options.medium_mode,
+        )?;
+        let denominator_only_global_prefactor_sign = core_global_prefactor_sign;
+        let denominator_edges = parsed.denominator_internal_edge_ids();
+        let energy_factor_ownership = CffEnergyFactorOwnership::GlobalSourceProduct;
+        return Ok(GeneratedThreeDExpression {
+            expression: expression.fuse_compatible_variants(),
+            energy_factor_ownership,
+            energy_factor_components: (!denominator_edges.is_empty())
+                .then_some(CffEnergyFactorComponent {
+                    internal_edge_ids: denominator_edges,
+                    ownership: energy_factor_ownership,
+                    denominator_only_global_prefactor_sign,
+                    core_global_prefactor_sign,
+                })
+                .into_iter()
+                .collect(),
+            source_energy_degree_bounds: Vec::new(),
+            denominator_only_global_prefactor_sign,
+            core_global_prefactor_sign,
+        });
     }
     if let Some(mut generated) = generate_rational_component_product(parsed, options)? {
         generated.expression = generated.expression.fuse_compatible_variants();
@@ -760,6 +799,7 @@ fn expression_with_only_preserved_edges(
         loop_energy_map: Vec::new(),
         edge_energy_map,
         variants: vec![crate::expression::CFFVariant {
+            thermal_weight: crate::ThermalWeight::default(),
             origin: Some("preserved_tree".to_string()),
             prefactor: rational_coeff_one(),
             half_edges: Vec::new(),
@@ -967,6 +1007,11 @@ fn lift_expression_to_preserved_graph(
             .variants
             .iter()
             .map(|variant| crate::expression::CFFVariant {
+                thermal_weight: {
+                    let mut weight = variant.thermal_weight.clone();
+                    weight.remap_internal_edges(&active_edge_map);
+                    weight
+                },
                 origin: variant.origin.clone(),
                 prefactor: variant.prefactor.clone(),
                 half_edges: variant
@@ -1337,6 +1382,7 @@ fn project_component_options(
         .transpose()?;
     Ok(Generate3DExpressionOptions {
         representation: options.representation,
+        medium_mode: options.medium_mode,
         cff_generation_context: options.cff_generation_context,
         energy_degree_bounds,
         numerator_sampling_scale: options.numerator_sampling_scale,
@@ -1360,6 +1406,7 @@ fn lift_component_expression_product(
         loop_energy_map: vec![LinearEnergyExpr::zero(); parsed.loop_names.len()],
         edge_energy_map: vec![LinearEnergyExpr::zero(); parsed.internal_edges.len()],
         variants: vec![crate::expression::CFFVariant {
+            thermal_weight: crate::ThermalWeight::default(),
             origin: Some("component_product_identity".to_string()),
             prefactor: rational_coeff_one(),
             half_edges: Vec::new(),
@@ -1498,6 +1545,7 @@ fn product_variants(
     }
 
     Ok(crate::expression::CFFVariant {
+        thermal_weight: lhs.thermal_weight.product(&rhs.thermal_weight),
         origin: Some(format!(
             "component_product:{}:{}",
             lhs.origin.as_deref().unwrap_or("lhs"),
@@ -1550,12 +1598,17 @@ fn generate_pure_cff_expression_from_parsed_with_duplicate_sign(
     } else {
         0
     };
-    generate_pure_cff_expression_from_parsed_with_duplicate_excess(parsed, duplicate_excess)
+    generate_pure_cff_expression_from_parsed_with_duplicate_excess(
+        parsed,
+        duplicate_excess,
+        crate::MediumMode::Vacuum,
+    )
 }
 
 fn generate_pure_cff_expression_from_parsed_with_duplicate_excess(
     parsed: &ParsedGraph,
     duplicate_excess: usize,
+    medium_mode: crate::MediumMode,
 ) -> Result<ThreeDExpression<OrientationID>> {
     let signatures = parsed
         .internal_edges
@@ -1588,7 +1641,7 @@ fn generate_pure_cff_expression_from_parsed_with_duplicate_excess(
                 -1
             };
         }
-        let surface_chains = enumerate_cff_surface_chains(parsed, &signs);
+        let surface_chains = enumerate_cff_surface_chains(parsed, &signs, medium_mode);
         if surface_chains.is_empty() {
             continue;
         }
@@ -1613,41 +1666,45 @@ fn generate_pure_cff_expression_from_parsed_with_duplicate_excess(
             }
         }));
         let data = OrientationData::new(orientation);
-        let denominator_chains = surface_chains
+        let mut groups = BTreeMap::<(crate::ThermalWeight, i32), Vec<Vec<HybridSurfaceID>>>::new();
+        for chain in surface_chains {
+            let denominators = chain
+                .surfaces
+                .into_iter()
+                .map(|surface_expr| {
+                    intern_linear_surface(&mut expression, &mut surface_index, surface_expr, false)
+                })
+                .collect();
+            groups
+                .entry((chain.thermal_weight, chain.sign))
+                .or_default()
+                .push(denominators);
+        }
+        let variants = groups
             .into_iter()
-            .map(|chain| {
-                chain
-                    .into_iter()
-                    .map(|surface_expr| {
-                        intern_linear_surface(
-                            &mut expression,
-                            &mut surface_index,
-                            surface_expr,
-                            false,
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-        let variants = vec![crate::expression::CFFVariant {
-            origin: Some("pure_cff".to_string()),
-            prefactor: rational_coeff_new(overall_sign, 1),
-            half_edges: denominator_edge_ids
-                .iter()
-                .copied()
-                .map(EdgeIndex)
-                .collect(),
-            denominator_edges: denominator_edge_ids
-                .iter()
-                .copied()
-                .map(EdgeIndex)
-                .collect(),
-            denominator_surface_signs: BTreeMap::new(),
-            denominator_edge_support_signs: BTreeMap::new(),
-            uniform_scale_power: 0,
-            numerator_surfaces: Vec::new(),
-            denominator: denominator_tree_from_chains(&denominator_chains),
-        }];
+            .map(
+                |((thermal_weight, sign), denominator_chains)| crate::expression::CFFVariant {
+                    thermal_weight,
+                    origin: Some("pure_cff".to_string()),
+                    prefactor: rational_coeff_new(overall_sign * i64::from(sign), 1),
+                    half_edges: denominator_edge_ids
+                        .iter()
+                        .copied()
+                        .map(EdgeIndex)
+                        .collect(),
+                    denominator_edges: denominator_edge_ids
+                        .iter()
+                        .copied()
+                        .map(EdgeIndex)
+                        .collect(),
+                    denominator_surface_signs: BTreeMap::new(),
+                    denominator_edge_support_signs: BTreeMap::new(),
+                    uniform_scale_power: 0,
+                    numerator_surfaces: Vec::new(),
+                    denominator: denominator_tree_from_chains(&denominator_chains),
+                },
+            )
+            .collect();
 
         expression.orientations.push(OrientationExpression {
             data,
@@ -1760,6 +1817,7 @@ fn generate_simple_residue_basis_expression_from_parsed(
             rational_coeff_new(-1, 1)
         };
         let variant = crate::expression::CFFVariant {
+            thermal_weight: crate::ThermalWeight::default(),
             origin: Some("residue_basis".to_string()),
             prefactor,
             half_edges: basis,
@@ -2693,6 +2751,7 @@ impl<'a> BoundedCffBuilder<'a> {
                         orientation.loop_energy_map.clone(),
                         edge_exprs,
                         crate::expression::CFFVariant {
+                            thermal_weight: crate::ThermalWeight::default(),
                             origin: Some(format!(
                                 "bounded_degree_quadratic_recursive_remainder:e{edge_id}={}",
                                 if component.sample > 0 { "+" } else { "-" }
@@ -2796,6 +2855,7 @@ impl<'a> BoundedCffBuilder<'a> {
                         full_loop_exprs.clone(),
                         edge_exprs,
                         crate::expression::CFFVariant {
+                            thermal_weight: crate::ThermalWeight::default(),
                             origin: Some(format!(
                                 "bounded_degree_quadratic_recursive_contact:e{edge_id}={}",
                                 match component.sample {
@@ -2987,6 +3047,7 @@ impl<'a> BoundedCffBuilder<'a> {
                         full_loop_exprs.clone(),
                         edge_exprs,
                         crate::expression::CFFVariant {
+                            thermal_weight: crate::ThermalWeight::default(),
                             origin: Some(match &variant.origin {
                                 Some(source) => format!("{origin}:{source}"),
                                 None => origin,
@@ -3944,6 +4005,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                         loop_exprs.clone(),
                         full_edge_exprs.clone(),
                         crate::expression::CFFVariant {
+                            thermal_weight: crate::ThermalWeight::default(),
                             origin: Some(
                                 if self.contact_only {
                                     "bounded_degree_known_factor_cff_contact_generalized"
@@ -4070,6 +4132,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
             let mut direct = generate_pure_cff_expression_from_parsed_with_duplicate_excess(
                 parsed,
                 duplicate_excess,
+                crate::MediumMode::Vacuum,
             )?;
             let native_prefactor = Rational::from(
                 CffGlobalPrefactorSign::from_exponent(
@@ -4232,6 +4295,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                     loop_exprs.clone(),
                     full_edge_exprs.clone(),
                     crate::expression::CFFVariant {
+                        thermal_weight: crate::ThermalWeight::default(),
                         origin: Some(
                             if self.contact_only {
                                 "bounded_degree_known_factor_cff_contact"
@@ -5057,6 +5121,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
                 loop_exprs,
                 edge_exprs,
                 crate::expression::CFFVariant {
+                    thermal_weight: crate::ThermalWeight::default(),
                     origin: Some(origin),
                     prefactor: rational_to_coefficient(partial.coeff)?,
                     half_edges: half_edges.into_iter().map(EdgeIndex).collect(),

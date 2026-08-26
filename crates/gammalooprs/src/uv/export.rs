@@ -211,7 +211,7 @@ fn export_legacy_forest(
     forest_dot: &mut String,
     node_terms: &mut Vec<UVForestNodeTerm>,
 ) -> Result<()> {
-    let cut_woods = CutWoods::new(cut_structure, graph, &generation_settings.uv);
+    let cut_woods = CutWoods::new(cut_structure, graph, generation_settings);
     let mut cut_forests = cut_woods.unfold(graph);
     let Some(forest) = cut_forests.forests.first_mut() else {
         return Err(eyre!("Legacy UV exporter produced no forest"));
@@ -268,7 +268,7 @@ fn export_hedge_poset_forest(
     forest_dot: &mut String,
     node_terms: &mut Vec<UVForestNodeTerm>,
 ) -> Result<()> {
-    let wood = HedgePosetWood::new(cut_structure, graph, &generation_settings.uv);
+    let wood = HedgePosetWood::new(cut_structure, graph, generation_settings);
     let mut forests = wood.unfold();
     forest_dot.push_str(&name_dot_graph(forests.dot_serialize(), forest_name));
     forest_dot.push('\n');

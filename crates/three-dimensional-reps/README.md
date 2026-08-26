@@ -36,6 +36,16 @@ cargo nextest run -p three-dimensional-reps --features eval \
   --no-fail-fast --test-threads 1
 ```
 
+Thermal generation uses `Generate3DExpressionOptions::medium_mode`. Finite-
+temperature and zero-temperature equilibrium use the same structural recursion,
+including cyclic orientations and distribution derivatives. The serializable
+`ThermalWeight` on each variant retains symbolic edge distributions separately
+from rational CFF coefficients. GammaLoop owns their expansion using particle
+statistics, chemical potentials, and temperature. The standalone `eval` feature
+does not accept these model-dependent distribution inputs and rejects thermal
+expressions explicitly. Thermal generation retains on-shell numerator maps and
+does not support uniform numerator sampling scales.
+
 The GammaLoop CLI-side `3Drep build` command is diagnostic-only: it validates,
 renders, and optionally writes the oriented expression, but its input and
 expression preparation are not a GammaLoop production contract. Production

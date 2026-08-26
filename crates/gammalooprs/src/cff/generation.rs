@@ -532,9 +532,11 @@ impl Graph {
         &self,
         settings: &GenerationSettings,
     ) -> Result<Generate3DExpressionOptions> {
-        self.cff_3d_expression_options(numerator_sampling_scale_mode(
+        let mut options = self.cff_3d_expression_options(numerator_sampling_scale_mode(
             settings.uniform_numerator_sampling_scale,
-        ))
+        ))?;
+        options.medium_mode = settings.medium.mode;
+        Ok(options)
     }
 
     pub fn cff_3d_expression_options(
@@ -564,6 +566,7 @@ impl Graph {
             "using production CFF source-edge numerator energy-degree bounds"
         );
         Ok(Generate3DExpressionOptions {
+            medium_mode: Default::default(),
             representation: RepresentationMode::Cff,
             cff_generation_context: CffGenerationContext::Standalone,
             energy_degree_bounds: Some(energy_degree_bounds),
@@ -575,6 +578,7 @@ impl Graph {
     #[cfg(test)]
     pub(crate) fn denominator_only_cff_3d_expression_options(&self) -> Generate3DExpressionOptions {
         Generate3DExpressionOptions {
+            medium_mode: Default::default(),
             representation: RepresentationMode::Cff,
             cff_generation_context: CffGenerationContext::Standalone,
             energy_degree_bounds: Some(Vec::new()),

@@ -41,6 +41,7 @@ use crate::{
         cuts::CutSet,
         parse::string_utils::{ToOrderedSimple, dot_attr_value},
     },
+    settings::global::GenerationSettings,
     utils::{GS, W_},
     uv::{
         ApproximationType, RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
@@ -101,7 +102,11 @@ impl TraceUnfold<SuBitGraph> for Wood {
     /// their union must be the target filter, they must be pairwise disjoint, and there must be
     /// one factor per connected component.
     fn join_factors(&self, target: NodeIndex) -> Option<BTreeSet<SuBitGraph>> {
-        if self.graph[target].n_components() < 2 {
+        // Vacuum subtraction is one full-observable operation; no componentwise
+        // vacuum-subtraction semantics are defined.
+        if self.graph[target].renormalization_scheme == ApproximationType::VacuumLimit
+            || self.graph[target].n_components() < 2
+        {
             return None;
         }
 
@@ -167,7 +172,7 @@ impl Wood {
         (current, given)
     }
 
-    pub(crate) fn new(cuts: CutStructure, graph: &Graph, settings: &UVgenerationSettings) -> Self {
+    pub(crate) fn new(cuts: CutStructure, graph: &Graph, settings: &GenerationSettings) -> Self {
         let mut subgraph = graph.full_filter();
         subgraph.subtract_with(&graph.initial_state_cut.left);
         let mut spinneys = Vec::new();
@@ -176,12 +181,13 @@ impl Wood {
             let cut_sub = subgraph.subtract(&cut.union);
             spinneys.extend(graph.classified_spinneys(
                 &cut_sub,
-                settings,
+                &settings.uv,
                 &graph.loop_momentum_basis,
             ));
         }
+        graph.add_vacuum_subtraction_spinney(&mut spinneys, settings, &graph.loop_momentum_basis);
 
-        Self::from_spinneys(spinneys, graph, cuts, settings)
+        Self::from_spinneys(spinneys, graph, cuts, &settings.uv)
     }
 
     pub(crate) fn from_spinneys<I: IntoIterator<Item = Spinney>>(
@@ -1019,6 +1025,10 @@ impl Forests {
             return Ok((Local4dCts::root(), IntegratedCts::root()));
         }
 
+        if self.source_spinney(node).renormalization_scheme == ApproximationType::VacuumLimit {
+            return Ok((Local4dCts::root(), IntegratedCts::root()));
+        }
+
         if self.graph.is_disjoint_union(node) {
             let components = self.disconnected_component_nodes(node)?;
             let mut full_components = Vec::with_capacity(components.len());
@@ -1569,7 +1579,7 @@ mod tests {
         let forests = Wood::new(
             CutStructure::empty(&dumbell),
             &dumbell,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         )
         .unfold();
 
@@ -1731,7 +1741,7 @@ mod tests {
                 v1 -> v1;v1 -> v1;
             },"scalars"
         )?;
-        let settings = UVgenerationSettings::default();
+        let settings = GenerationSettings::default();
         let cut_structure = CutStructure::empty(&graph);
         let cutset = cut_structure
             .cuts
@@ -1809,8 +1819,13 @@ mod tests {
                 false,
             ),
         );
-        let seed =
-            forests.local_3d_for_node(forests.root, &mut graph, &cutset, localizer, &settings)?;
+        let seed = forests.local_3d_for_node(
+            forests.root,
+            &mut graph,
+            &cutset,
+            localizer,
+            &settings.uv,
+        )?;
         let root_store_marker = symbolica::symbol!("root_store_marker");
         let frontier_store_marker = symbolica::symbol!("frontier_store_marker");
         // Mark cached local terms so the union result proves that replay starts from typed roots.
@@ -1840,7 +1855,7 @@ mod tests {
             &mut graph,
             &cutset,
             localizer,
-            &settings,
+            &settings.uv,
         )?;
         assert_eq!(root_result.local_3d.direct()?.sectors()?.len(), 3);
         assert!(
@@ -1860,7 +1875,7 @@ mod tests {
             &mut graph,
             &cutset,
             localizer,
-            &settings,
+            &settings.uv,
         )?;
         assert_eq!(frontier_result.local_3d.direct()?.sectors()?.len(), 5);
         let replay_states = forests.union_replay_states(dependent_disconnected)?;
@@ -1924,18 +1939,21 @@ mod tests {
             },
             "scalars"
         )?;
-        let settings = UVgenerationSettings {
-            softct: false,
-            renormalization_prescription: RenormalizationPrescriptionSettings {
-                log_divergent: ApproximationType::MUV,
-                massive_power_divergent: ApproximationType::PolePart,
-                massless_power_divergent: ApproximationType::PolePart,
+        let settings = GenerationSettings {
+            uv: UVgenerationSettings {
+                softct: false,
+                renormalization_prescription: RenormalizationPrescriptionSettings {
+                    log_divergent: ApproximationType::MUV,
+                    massive_power_divergent: ApproximationType::PolePart,
+                    massless_power_divergent: ApproximationType::PolePart,
+                    ..Default::default()
+                },
                 ..Default::default()
             },
             ..Default::default()
         };
         let mut forests = Wood::new(CutStructure::empty(&graph), &graph, &settings).unfold();
-        forests.integrate(&graph, crate::utils::vakint()?, &settings)?;
+        forests.integrate(&graph, crate::utils::vakint()?, &settings.uv)?;
 
         let terminals = forests
             .graph
@@ -1996,7 +2014,7 @@ mod tests {
             .replace(GS.m_uv_expansion)
             .with(GS.m_uv_vacuum);
         let actual = forests
-            .renormalization_part_of_ends(&graph, &settings)?
+            .renormalization_part_of_ends(&graph, &settings.uv)?
             .expression;
         assert_eq!(actual.expand(), expected.expand());
 
@@ -2025,7 +2043,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&dumbell),
             &dumbell,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
 
         println!("{}", f);
@@ -2121,7 +2139,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&dt),
             &dt,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
 
         println!("{}", dt.dot_serialize(&DotExportSettings::default()));
@@ -2164,7 +2182,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&dumbell),
             &dumbell,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
 
         println!("{}", f);
@@ -2219,11 +2237,7 @@ mod tests {
                     .into_iter()
                     .filter_map(|a| Spinney::new(a, &g, &g.loop_momentum_basis))
                     .collect();
-                let f = Wood::new(
-                    CutStructure::empty(&g),
-                    &g,
-                    &UVgenerationSettings::default(),
-                );
+                let f = Wood::new(CutStructure::empty(&g), &g, &GenerationSettings::default());
 
                 println!("{}", f);
 
@@ -2291,7 +2305,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&mercedes),
             &mercedes,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -2326,7 +2340,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&sunrise),
             &sunrise,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -2362,7 +2376,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&sunrise),
             &sunrise,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -2400,7 +2414,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&sunrise),
             &sunrise,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -2438,7 +2452,7 @@ mod tests {
         )?;
 
         // let spinneys = spectacles.spinneys(&spectacles.full_filter());
-        let settings = UVgenerationSettings::default();
+        let settings = GenerationSettings::default();
         let cut_structure = CutStructure::empty(&spectacles);
         let cutset = cut_structure
             .cuts
@@ -2577,14 +2591,15 @@ mod tests {
             .iter()
             .map(|active| active.union(&reduced))
             .collect::<Vec<_>>();
-        let child_local = Direct3dApproximation::new(localizer, &mut spectacles, &settings).run(
-            &union_local,
-            &IntegratedCts::root(),
-            &current,
-            &given,
-            &current,
-            &given,
-        )?;
+        let child_local = Direct3dApproximation::new(localizer, &mut spectacles, &settings.uv)
+            .run(
+                &union_local,
+                &IntegratedCts::root(),
+                &current,
+                &given,
+                &current,
+                &given,
+            )?;
         let child_sectors = child_local.sectors()?;
         let child_active = child_sectors
             .iter()
@@ -2937,7 +2952,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&basketball),
             &basketball,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -2975,7 +2990,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&fourloop_b),
             &fourloop_b,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -3012,7 +3027,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&four_loop_a),
             &four_loop_a,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
         println!("{}", f);
         insta::assert_snapshot!(
@@ -3046,7 +3061,7 @@ mod tests {
         let f = Wood::new(
             CutStructure::empty(&dumbell),
             &dumbell,
-            &UVgenerationSettings::default(),
+            &GenerationSettings::default(),
         );
 
         insta::assert_snapshot!(
@@ -3084,7 +3099,7 @@ mod tests {
             let f = Wood::new(
                 CutStructure::empty(&dumbell),
                 &dumbell,
-                &UVgenerationSettings::default(),
+                &GenerationSettings::default(),
             );
 
             println!("{}", f);
@@ -3124,7 +3139,7 @@ mod tests {
             let f = Wood::new(
                 CutStructure::empty(&dumbell),
                 &dumbell,
-                &UVgenerationSettings::default(),
+                &GenerationSettings::default(),
             )
             .unfold_uncached();
             assert!(f.compute_store.entries.is_empty());
@@ -3160,7 +3175,7 @@ mod tests {
             let f = Wood::new(
                 CutStructure::empty(&dumbell),
                 &dumbell,
-                &UVgenerationSettings::default(),
+                &GenerationSettings::default(),
             );
 
             println!("{}", f);
@@ -3180,7 +3195,7 @@ mod tests {
             let f = Wood::new(
                 CutStructure::empty(&dumbell),
                 &dumbell,
-                &UVgenerationSettings::default(),
+                &GenerationSettings::default(),
             )
             .unfold_uncached();
 

@@ -72,7 +72,7 @@ fn scalar_bubble_root_integrand_reference(
     let cutstructure = CutStructure {
         cuts: vec![CutSet::empty(amplitude_graph.graph.n_hedges())],
     };
-    let woods = CutWoods::new(cutstructure, &amplitude_graph.graph, &reference_settings.uv);
+    let woods = CutWoods::new(cutstructure, &amplitude_graph.graph, &reference_settings);
     let mut forests = woods.unfold(&amplitude_graph.graph);
     let vakint = crate::utils::vakint().unwrap();
     let production = amplitude_graph

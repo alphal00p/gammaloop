@@ -25,6 +25,7 @@ pub struct ThreeDimensionalRepSymbols {
     pub affine_parameter: Symbol,
     pub coefficient: Symbol,
     pub loop_energy: Symbol,
+    pub thermal_distribution: Symbol,
 }
 
 impl ThreeDimensionalRepSymbols {
@@ -89,6 +90,7 @@ pub static S: LazyLock<ThreeDimensionalRepSymbols> = LazyLock::new(|| ThreeDimen
     affine_parameter: symbol!("three_dimensional_reps::a"),
     coefficient: symbol!("three_dimensional_reps::c"),
     loop_energy: symbol!("three_dimensional_reps::ell0"),
+    thermal_distribution: symbol!("gammalooprs::N"),
 });
 
 pub static SYMBOL_REGISTRY: LazyLock<HashSet<Symbol>> = LazyLock::new(|| {
@@ -105,6 +107,7 @@ pub static SYMBOL_REGISTRY: LazyLock<HashSet<Symbol>> = LazyLock::new(|| {
         s.affine_parameter,
         s.coefficient,
         s.loop_energy,
+        s.thermal_distribution,
     ]
     .into_iter()
     .collect()
