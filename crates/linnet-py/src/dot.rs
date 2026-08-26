@@ -1,9 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use dot_parser::ast::CompassPt;
-use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
-use linnet::half_edge::involution::{EdgeIndex, Flow, Hedge, HedgePair, Orientation};
-use linnet::half_edge::nodestore::DefaultNodeStore;
+use linnet::half_edge::involution::{EdgeIndex, Flow, Hedge, HedgePair};
+use linnet::half_edge::nodestore::{NodeStorageOps, NodeStorageVec};
 use linnet::half_edge::{HedgeGraph, NodeIndex};
 use linnet::parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData};
 use pyo3::class::gc::{PyTraverseError, PyVisit};
@@ -17,7 +16,8 @@ use crate::drawing::{
     copy_drawing, drawing_dict, PyEdgeDrawing, PyHalfEdgeDrawing, PyNodeDrawing, EDGE_FIELDS,
     HEDGE_FIELDS, NODE_FIELDS,
 };
-use crate::graph::{EdgeRecord, EndpointRecord, GraphState, NodeRecord, PyGraph, PyOrientation};
+use crate::graph::{EdgeRecord, GraphState, HalfEdgeRecord, NodeRecord, PyGraph};
+use crate::native_graph::{PyHedgeGraph, PyNodeStore};
 
 /// DOT graph metadata kept separate from arbitrary Python element data.
 #[gen_stub_pyclass]
@@ -959,10 +959,22 @@ fn snapshot_value<T: DetachedValue>(py: Python<'_>, value: &Bound<'_, PyAny>) ->
     T::clone_detached(py, value)
 }
 
-type RawGraph =
-    HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData, DefaultNodeStore<DotVertexData>>;
+type RawGraph = HedgeGraph<DotEdgeData, DotVertexData, DotHedgeData, NodeStorageVec<DotVertexData>>;
+type RawDotGraph = DotGraph<NodeStorageVec<DotVertexData>>;
+type RawDotGraphSet = linnet::parser::set::GraphSet<
+    DotEdgeData,
+    DotVertexData,
+    DotHedgeData,
+    GlobalData,
+    NodeStorageVec<DotVertexData>,
+>;
 
-fn decode_parsed(py: Python<'_>, mut parsed: DotGraph, codec: Py<PyDotCodec>) -> PyResult<PyGraph> {
+fn decode_parsed(
+    py: Python<'_>,
+    mut parsed: RawDotGraph,
+    codec: Py<PyDotCodec>,
+    node_store: PyNodeStore,
+) -> PyResult<PyGraph> {
     let parsed_name =
         (!parsed.global_data.name.is_empty()).then(|| parsed.global_data.name.clone());
     let graph_name = if let Some(encoded) = parsed.global_data.statements.remove(GLOBAL_METADATA) {
@@ -974,9 +986,9 @@ fn decode_parsed(py: Python<'_>, mut parsed: DotGraph, codec: Py<PyDotCodec>) ->
         parsed_name
     };
     let codec_ref = codec.borrow(py);
-    let mut nodes = Vec::with_capacity(parsed.n_nodes());
     let mut node_names = BTreeSet::new();
-    for (_, _, raw) in parsed.iter_nodes() {
+    let mut nodes = Vec::with_capacity(parsed.n_nodes());
+    for (_, _, raw) in parsed.graph.iter_nodes() {
         let mut raw = raw.clone();
         let name = raw
             .statements
@@ -997,16 +1009,15 @@ fn decode_parsed(py: Python<'_>, mut parsed: DotGraph, codec: Py<PyDotCodec>) ->
             }
         }
         let value = codec_ref.decode_node(py, &raw)?;
-        nodes.push(crate::graph::NodeRecord {
+        nodes.push(Some(NodeRecord {
             name,
             data: value.data.expect("decoded snapshot"),
             drawing: value.drawing.expect("decoded snapshot"),
-        });
+        }));
     }
-
-    let mut edges = Vec::with_capacity(parsed.n_edges());
     let mut edge_names = BTreeSet::new();
-    for (pair, _, raw_edge) in parsed.iter_edges() {
+    let mut edges = Vec::with_capacity(parsed.n_edges());
+    for (_, _, raw_edge) in parsed.graph.iter_edges() {
         let mut clean_edge = raw_edge.data.clone();
         clean_edge.statements.remove(SOURCE_HEDGE_DATA);
         clean_edge.statements.remove(SINK_HEDGE_DATA);
@@ -1028,49 +1039,43 @@ fn decode_parsed(py: Python<'_>, mut parsed: DotGraph, codec: Py<PyDotCodec>) ->
             }
         }
         let value = codec_ref.decode_edge(py, &clean_edge)?;
-        let endpoint = |hedge: Hedge, metadata: &str| -> PyResult<EndpointRecord> {
-            let mut raw_half_edge = parsed[hedge].clone();
-            if let Some(encoded) = raw_edge.data.statements.get(metadata) {
-                restore_half_edge_envelope(&mut raw_half_edge, encoded)?;
-            }
-            let value = codec_ref.decode_half_edge(py, &raw_half_edge)?;
-            Ok(EndpointRecord {
-                node: parsed.node_id(hedge).0,
-                data: value.data.expect("decoded snapshot"),
-                drawing: value.drawing.expect("decoded snapshot"),
-            })
-        };
-        let (source, sink) = match pair {
-            HedgePair::Paired { source, sink } => (
-                Some(endpoint(source, SOURCE_HEDGE_DATA)?),
-                Some(endpoint(sink, SINK_HEDGE_DATA)?),
-            ),
-            HedgePair::Unpaired { hedge, flow } => match flow {
-                Flow::Source => (Some(endpoint(hedge, SOURCE_HEDGE_DATA)?), None),
-                Flow::Sink => (None, Some(endpoint(hedge, SINK_HEDGE_DATA)?)),
-            },
-            HedgePair::Split { .. } => {
-                return Err(PyValueError::new_err(
-                    "a parsed full DOT graph cannot contain a split edge",
-                ));
-            }
-        };
-        edges.push(EdgeRecord {
+        edges.push(Some(EdgeRecord {
             name,
             data: value.data.expect("decoded snapshot"),
             drawing: value.drawing.expect("decoded snapshot"),
-            source,
-            sink,
-            orientation: PyOrientation::from(raw_edge.orientation),
-        });
+        }));
     }
+    let mut half_edges = Vec::with_capacity(parsed.n_hedges());
+    for (hedge, raw_half_edge) in parsed.graph.iter_hedges() {
+        let mut raw_half_edge = raw_half_edge.clone();
+        let edge = &parsed.graph[parsed.graph[&hedge]];
+        let metadata = match parsed.graph.flow(hedge) {
+            Flow::Source => SOURCE_HEDGE_DATA,
+            Flow::Sink => SINK_HEDGE_DATA,
+        };
+        if let Some(encoded) = edge.statements.get(metadata) {
+            restore_half_edge_envelope(&mut raw_half_edge, encoded)?;
+        }
+        let value = codec_ref.decode_half_edge(py, &raw_half_edge)?;
+        half_edges.push(Some(HalfEdgeRecord {
+            data: value.data.expect("decoded snapshot"),
+            drawing: value.drawing.expect("decoded snapshot"),
+        }));
+    }
+    let graph = parsed.graph.map(
+        |_, index, _| nodes[index.0].take().expect("decoded node"),
+        |_, _, _, index, edge| edge.map(|_| edges[index.0].take().expect("decoded edge")),
+        |hedge, _| half_edges[hedge.0].take().expect("decoded half-edge"),
+    );
+    let graph = PyHedgeGraph::Vec(graph)
+        .into_node_store(node_store)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
     let global_data = PyGlobalData {
         inner: parsed.global_data,
     };
     drop(codec_ref);
     Ok(PyGraph::from_state(GraphState {
-        nodes,
-        edges,
+        graph,
         name: graph_name,
         global_data,
         codec: Some(codec),
@@ -1079,22 +1084,28 @@ fn decode_parsed(py: Python<'_>, mut parsed: DotGraph, codec: Py<PyDotCodec>) ->
     }))
 }
 
-pub(crate) fn decode_dot(py: Python<'_>, source: &str, codec: Py<PyDotCodec>) -> PyResult<PyGraph> {
-    let parsed =
-        DotGraph::from_string(source).map_err(|error| PyValueError::new_err(error.to_string()))?;
-    decode_parsed(py, parsed, codec)
+pub(crate) fn decode_dot(
+    py: Python<'_>,
+    source: &str,
+    codec: Py<PyDotCodec>,
+    node_store: PyNodeStore,
+) -> PyResult<PyGraph> {
+    let parsed = RawDotGraph::from_string(source)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    decode_parsed(py, parsed, codec, node_store)
 }
 
 pub(crate) fn decode_dot_set(
     py: Python<'_>,
     source: &str,
     codec: Py<PyDotCodec>,
+    node_store: PyNodeStore,
 ) -> PyResult<Vec<PyGraph>> {
-    let parsed = linnet::parser::set::DotGraphSet::from_string(source)
+    let parsed = RawDotGraphSet::from_string(source)
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
     parsed
         .into_iter()
-        .map(|graph| decode_parsed(py, graph, codec.clone_ref(py)))
+        .map(|graph| decode_parsed(py, graph, codec.clone_ref(py), node_store))
         .collect()
 }
 
@@ -1103,7 +1114,7 @@ pub(crate) fn encode_graph(
     graph: &PyGraph,
     codec: Option<Py<PyDotCodec>>,
 ) -> PyResult<String> {
-    let (codec, nodes, edges, graph_name, global_data) = {
+    let (codec, topology, graph_name, global_data) = {
         let state = graph.state.borrow();
         let state = state
             .as_ref()
@@ -1113,52 +1124,24 @@ pub(crate) fn encode_graph(
             .ok_or_else(|| {
                 PyValueError::new_err("Graph.to_dot() requires an explicit or stored DotCodec")
             })?;
-        let nodes = state
-            .nodes
-            .iter()
-            .map(|node| {
-                Ok(NodeRecord {
-                    name: node.name.clone(),
-                    data: node.data.clone_ref(py),
-                    drawing: copy_drawing(py, &node.drawing)?,
-                })
-            })
-            .collect::<PyResult<Vec<_>>>()?;
-        let edges = state
-            .edges
-            .iter()
-            .map(|edge| {
-                let endpoint = |endpoint: &EndpointRecord| -> PyResult<EndpointRecord> {
-                    Ok(EndpointRecord {
-                        node: endpoint.node,
-                        data: endpoint.data.clone_ref(py),
-                        drawing: copy_drawing(py, &endpoint.drawing)?,
-                    })
-                };
-                Ok(EdgeRecord {
-                    name: edge.name.clone(),
-                    data: edge.data.clone_ref(py),
-                    drawing: copy_drawing(py, &edge.drawing)?,
-                    source: edge.source.as_ref().map(endpoint).transpose()?,
-                    sink: edge.sink.as_ref().map(endpoint).transpose()?,
-                    orientation: edge.orientation,
-                })
-            })
-            .collect::<PyResult<Vec<_>>>()?;
         (
             codec,
-            nodes,
-            edges,
+            state.copy_graph(py)?,
             state.name.clone(),
             state.global_data.clone(),
         )
     };
+    let topology = topology
+        .into_node_store(PyNodeStore::Vec)
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    let PyHedgeGraph::Vec(topology) = topology else {
+        unreachable!("requested Vec node storage")
+    };
     let codec = codec.borrow(py);
-    let mut builder = HedgeGraphBuilder::<DotEdgeData, DotVertexData, DotHedgeData>::new();
-    let mut raw_nodes = Vec::with_capacity(nodes.len());
-    for (index, node) in nodes.iter().enumerate() {
+    let mut raw_nodes = Vec::with_capacity(topology.n_nodes());
+    for (index, _, node) in topology.iter_nodes() {
         let value = PyNodeValue::snapshot(py, &node.data, &node.drawing)?;
-        let mut raw = codec.encode_node(py, value, index, node.name.clone())?;
+        let mut raw = codec.encode_node(py, value, index.0, node.name.clone())?;
         reject_reserved(
             &raw.statements,
             &["id", ELEMENT_NAME, NODE_METADATA],
@@ -1180,14 +1163,14 @@ pub(crate) fn encode_graph(
             );
         }
         raw.name = None;
-        raw_nodes.push(builder.add_node(raw));
+        raw_nodes.push(Some(raw));
     }
-    let mut hedge_index = 0;
-    for (edge_index, edge) in edges.iter().enumerate() {
-        let value = PyEdgeValue::snapshot(py, &edge.data, &edge.drawing)?;
-        let mut edge_data = codec.encode_edge(py, value, edge_index)?;
+    let mut raw_edges = Vec::with_capacity(topology.n_edges());
+    for (_, index, edge) in topology.iter_edges() {
+        let value = PyEdgeValue::snapshot(py, &edge.data.data, &edge.data.drawing)?;
+        let mut raw = codec.encode_edge(py, value, index.0)?;
         reject_reserved(
-            &edge_data.statements,
+            &raw.statements,
             &[
                 "id",
                 ELEMENT_NAME,
@@ -1197,82 +1180,65 @@ pub(crate) fn encode_graph(
             ],
             "edge",
         )?;
-        if let Some(name) = &edge.name {
-            edge_data
-                .statements
+        if let Some(name) = &edge.data.name {
+            raw.statements
                 .insert(ELEMENT_NAME.to_owned(), encode_hex(name.as_bytes()));
         } else {
-            edge_data.statements.remove(ELEMENT_NAME);
+            raw.statements.remove(ELEMENT_NAME);
         }
-        if edge_data.payload.is_some() || !edge_data.local_statements.is_empty() {
-            edge_data.statements.insert(
+        if raw.payload.is_some() || !raw.local_statements.is_empty() {
+            raw.statements.insert(
                 EDGE_METADATA.to_owned(),
                 encode_envelope(&EdgeEnvelope {
-                    payload: edge_data.payload.clone(),
-                    local_statements: edge_data.local_statements.clone(),
+                    payload: raw.payload.clone(),
+                    local_statements: raw.local_statements.clone(),
                 })?,
             );
         }
-        let mut source = edge
-            .source
-            .as_ref()
-            .map(|endpoint| -> PyResult<HedgeData<DotHedgeData>> {
-                let value = PyHalfEdgeValue::snapshot(py, &endpoint.data, &endpoint.drawing)?;
-                let raw = codec.encode_half_edge(py, value, hedge_index)?;
-                hedge_index += 1;
-                Ok(raw_nodes[endpoint.node].add_data(raw))
-            })
-            .transpose()?;
-        let mut sink = edge
-            .sink
-            .as_ref()
-            .map(|endpoint| -> PyResult<HedgeData<DotHedgeData>> {
-                let value = PyHalfEdgeValue::snapshot(py, &endpoint.data, &endpoint.drawing)?;
-                let raw = codec.encode_half_edge(py, value, hedge_index)?;
-                hedge_index += 1;
-                Ok(raw_nodes[endpoint.node].add_data(raw))
-            })
-            .transpose()?;
-        if let Some(source) = &mut source {
-            edge_data.statements.insert(
-                SOURCE_HEDGE_DATA.to_owned(),
-                encode_half_edge_envelope(&source.data)?,
-            );
-            source.data = DotHedgeData {
-                id: source.data.id,
-                ..Default::default()
-            };
-        }
-        if let Some(sink) = &mut sink {
-            edge_data.statements.insert(
-                SINK_HEDGE_DATA.to_owned(),
-                encode_half_edge_envelope(&sink.data)?,
-            );
-            sink.data = DotHedgeData {
-                id: sink.data.id,
-                ..Default::default()
-            };
-        }
-        match (source, sink) {
-            (Some(source), Some(sink)) => {
-                builder.add_edge(source, sink, edge_data, Orientation::from(edge.orientation))
+        raw_edges.push(Some(raw));
+    }
+    let mut raw_half_edges = Vec::with_capacity(topology.n_hedges());
+    for (hedge, half_edge) in topology.iter_hedges() {
+        let value = PyHalfEdgeValue::snapshot(py, &half_edge.data, &half_edge.drawing)?;
+        raw_half_edges.push(Some(codec.encode_half_edge(py, value, hedge.0)?));
+    }
+    let mut raw: RawGraph = topology.map(
+        |_, index, _| raw_nodes[index.0].take().expect("encoded node"),
+        |_, _, _, index, edge| edge.map(|_| raw_edges[index.0].take().expect("encoded edge")),
+        |hedge, _| raw_half_edges[hedge.0].take().expect("encoded half-edge"),
+    );
+    let edges = raw
+        .iter_edges()
+        .map(|(pair, index, _)| (pair, index))
+        .collect::<Vec<_>>();
+    for (pair, edge) in edges {
+        let endpoints = match pair {
+            HedgePair::Paired { source, sink } => [
+                (Some(source), SOURCE_HEDGE_DATA),
+                (Some(sink), SINK_HEDGE_DATA),
+            ],
+            HedgePair::Unpaired { hedge, flow } => match flow {
+                Flow::Source => [(Some(hedge), SOURCE_HEDGE_DATA), (None, SINK_HEDGE_DATA)],
+                Flow::Sink => [(None, SOURCE_HEDGE_DATA), (Some(hedge), SINK_HEDGE_DATA)],
+            },
+            HedgePair::Split { .. } => {
+                return Err(PyValueError::new_err(
+                    "a full graph cannot serialize a split edge to DOT",
+                ));
             }
-            (Some(source), None) => builder.add_external_edge(
-                source,
-                edge_data,
-                Orientation::from(edge.orientation),
-                Flow::Source,
-            ),
-            (None, Some(sink)) => builder.add_external_edge(
-                sink,
-                edge_data,
-                Orientation::from(edge.orientation),
-                Flow::Sink,
-            ),
-            (None, None) => return Err(PyValueError::new_err("edge has no endpoints")),
+        };
+        for (hedge, metadata) in endpoints {
+            let Some(hedge) = hedge else {
+                continue;
+            };
+            let envelope = encode_half_edge_envelope(&raw[hedge])?;
+            raw[edge].statements.insert(metadata.to_owned(), envelope);
+            raw[hedge] = DotHedgeData {
+                id: raw[hedge].id,
+                ..Default::default()
+            };
         }
     }
-    let raw: RawGraph = builder.build();
     let mut global = global_data.inner.clone();
     reject_reserved(&global.statements, &[GLOBAL_METADATA], "global")?;
     reject_reserved(&global.edge_statements, &[], "global edge default")?;
@@ -1296,95 +1262,43 @@ pub(crate) fn encode_graph(
     Ok(graph.debug_dot())
 }
 
-pub(crate) fn topology_dot(_py: Python<'_>, graph: &PyGraph) -> PyResult<String> {
-    let (graph_name, node_names, edges) = {
-        let state = graph.state.borrow();
-        let state = state
-            .as_ref()
-            .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
-        (
-            state.name.clone(),
-            state
-                .nodes
-                .iter()
-                .map(|node| node.name.clone())
-                .collect::<Vec<_>>(),
-            state
-                .edges
-                .iter()
-                .map(|edge| {
-                    (
-                        edge.name.clone(),
-                        edge.source.as_ref().map(|endpoint| endpoint.node),
-                        edge.sink.as_ref().map(|endpoint| endpoint.node),
-                        edge.orientation,
-                    )
-                })
-                .collect::<Vec<_>>(),
-        )
-    };
-
-    let mut builder = HedgeGraphBuilder::<DotEdgeData, DotVertexData, DotHedgeData>::new();
-    let nodes = node_names
-        .into_iter()
-        .enumerate()
-        .map(|(index, name)| {
-            builder.add_node(DotVertexData {
-                name,
-                index: Some(NodeIndex(index)),
+fn topology_dot_for<N>(
+    graph: &HedgeGraph<EdgeRecord, NodeRecord, HalfEdgeRecord, N>,
+    graph_name: Option<String>,
+) -> PyResult<String>
+where
+    N: NodeStorageOps<NodeData = NodeRecord>,
+{
+    let mut node_index = 0;
+    let raw = graph.map_data_ref(
+        |_, _, node| {
+            let raw = DotVertexData {
+                name: node.name.clone(),
+                index: Some(NodeIndex(node_index)),
                 payload: None,
                 statements: BTreeMap::new(),
-            })
-        })
-        .collect::<Vec<_>>();
-    let mut hedge_index = 0;
-    for (edge_index, (name, source, sink, orientation)) in edges.into_iter().enumerate() {
-        let mut edge_data = DotEdgeData {
-            payload: None,
-            statements: BTreeMap::new(),
-            local_statements: BTreeMap::new(),
-            edge_id: Some(EdgeIndex::from(edge_index)),
-        };
-        if let Some(name) = name {
-            edge_data
-                .statements
-                .insert(RENDER_EDGE_NAME.to_owned(), name);
-        }
-        let source = source.map(|node| {
-            let endpoint = nodes[node].add_data(DotHedgeData {
-                id: Some(Hedge(hedge_index)),
-                ..Default::default()
-            });
-            hedge_index += 1;
-            endpoint
-        });
-        let sink = sink.map(|node| {
-            let endpoint = nodes[node].add_data(DotHedgeData {
-                id: Some(Hedge(hedge_index)),
-                ..Default::default()
-            });
-            hedge_index += 1;
-            endpoint
-        });
-        match (source, sink) {
-            (Some(source), Some(sink)) => {
-                builder.add_edge(source, sink, edge_data, Orientation::from(orientation))
+            };
+            node_index += 1;
+            raw
+        },
+        |_, edge_index, _, edge| {
+            let mut raw = DotEdgeData {
+                payload: None,
+                statements: BTreeMap::new(),
+                local_statements: BTreeMap::new(),
+                edge_id: Some(edge_index),
+            };
+            if let Some(name) = &edge.data.name {
+                raw.statements
+                    .insert(RENDER_EDGE_NAME.to_owned(), name.clone());
             }
-            (Some(source), None) => builder.add_external_edge(
-                source,
-                edge_data,
-                Orientation::from(orientation),
-                Flow::Source,
-            ),
-            (None, Some(sink)) => builder.add_external_edge(
-                sink,
-                edge_data,
-                Orientation::from(orientation),
-                Flow::Sink,
-            ),
-            (None, None) => return Err(PyValueError::new_err("edge has no endpoints")),
-        }
-    }
+            edge.map(|_| raw)
+        },
+        |hedge, _| DotHedgeData {
+            id: Some(hedge),
+            ..Default::default()
+        },
+    );
     let mut graph = DotGraph {
         // GlobalData is a DOT-codec concern. Rendering stages only topology;
         // typed drawing state travels separately in the V1 configuration.
@@ -1395,12 +1309,23 @@ pub(crate) fn topology_dot(_py: Python<'_>, graph: &PyGraph) -> PyResult<String>
             edge_statements: BTreeMap::new(),
             node_statements: BTreeMap::new(),
         },
-        graph: builder.build::<DefaultNodeStore<DotVertexData>>(),
+        graph: raw,
     };
     graph
         .apply_explicit_id_ordering()
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
     Ok(graph.debug_dot())
+}
+
+pub(crate) fn topology_dot(_py: Python<'_>, graph: &PyGraph) -> PyResult<String> {
+    let state = graph.state.borrow();
+    let state = state
+        .as_ref()
+        .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
+    match &state.graph {
+        PyHedgeGraph::Vec(graph) => topology_dot_for(graph, state.name.clone()),
+        PyHedgeGraph::Forest(graph) => topology_dot_for(graph, state.name.clone()),
+    }
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
