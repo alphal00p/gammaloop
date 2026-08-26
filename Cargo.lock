@@ -1879,7 +1879,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "2.1.0"
-source = "git+https://github.com/alphal00p/symbolica?rev=e5c3fbf94db81fb71dd4da9837bd72186a77b1c0#e5c3fbf94db81fb71dd4da9837bd72186a77b1c0"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=d6bb961d22c026c4866b2e698f56fbb964c4ee0e#d6bb961d22c026c4866b2e698f56fbb964c4ee0e"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -2893,7 +2893,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "2.2.0"
-source = "git+https://github.com/alphal00p/symbolica?rev=e5c3fbf94db81fb71dd4da9837bd72186a77b1c0#e5c3fbf94db81fb71dd4da9837bd72186a77b1c0"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=d6bb961d22c026c4866b2e698f56fbb964c4ee0e#d6bb961d22c026c4866b2e698f56fbb964c4ee0e"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -4676,7 +4676,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "2.2.0"
-source = "git+https://github.com/alphal00p/symbolica?rev=e5c3fbf94db81fb71dd4da9837bd72186a77b1c0#e5c3fbf94db81fb71dd4da9837bd72186a77b1c0"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=d6bb961d22c026c4866b2e698f56fbb964c4ee0e#d6bb961d22c026c4866b2e698f56fbb964c4ee0e"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",

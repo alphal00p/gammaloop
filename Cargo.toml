@@ -71,9 +71,9 @@ which = "8.0.0"
 # graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 # numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-graphica = { git = "https://github.com/alphal00p/symbolica", rev = "e5c3fbf94db81fb71dd4da9837bd72186a77b1c0" }
-numerica = { git = "https://github.com/alphal00p/symbolica", rev = "e5c3fbf94db81fb71dd4da9837bd72186a77b1c0" }
-symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "e5c3fbf94db81fb71dd4da9837bd72186a77b1c0" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d6bb961d22c026c4866b2e698f56fbb964c4ee0e" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d6bb961d22c026c4866b2e698f56fbb964c4ee0e" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d6bb961d22c026c4866b2e698f56fbb964c4ee0e" }
 # graphica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
 # numerica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }

@@ -1,5 +1,5 @@
 {
-  "git+https://github.com/alphal00p/symbolica?rev=e5c3fbf94db81fb71dd4da9837bd72186a77b1c0#2.2.0": "1sbn8bpijw8fy8l5cxmy2bc2a1c6c5mbhnjr3pkhy1wj7c5yqgjh",
-  "git+https://github.com/alphal00p/symbolica?rev=e5c3fbf94db81fb71dd4da9837bd72186a77b1c0#graphica@2.1.0": "1sbn8bpijw8fy8l5cxmy2bc2a1c6c5mbhnjr3pkhy1wj7c5yqgjh",
-  "git+https://github.com/alphal00p/symbolica?rev=e5c3fbf94db81fb71dd4da9837bd72186a77b1c0#numerica@2.2.0": "1sbn8bpijw8fy8l5cxmy2bc2a1c6c5mbhnjr3pkhy1wj7c5yqgjh"
+  "git+https://github.com/symbolica-dev/symbolica?rev=d6bb961d22c026c4866b2e698f56fbb964c4ee0e#2.2.0": "1h6hg6hgsfcnkyc36rbcl4vc7p0gy1y3ry2l6nrnsphbm1kkj5am",
+  "git+https://github.com/symbolica-dev/symbolica?rev=d6bb961d22c026c4866b2e698f56fbb964c4ee0e#graphica@2.1.0": "1h6hg6hgsfcnkyc36rbcl4vc7p0gy1y3ry2l6nrnsphbm1kkj5am",
+  "git+https://github.com/symbolica-dev/symbolica?rev=d6bb961d22c026c4866b2e698f56fbb964c4ee0e#numerica@2.2.0": "1h6hg6hgsfcnkyc36rbcl4vc7p0gy1y3ry2l6nrnsphbm1kkj5am"
 }

@@ -6,10 +6,10 @@
 //! eyre = "0.6"
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
-//! symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "e5c3fbf94db81fb71dd4da9837bd72186a77b1c0", default-features = false, features = ["bincode", "serde"] }
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d6bb961d22c026c4866b2e698f56fbb964c4ee0e", default-features = false, features = ["bincode", "serde"] }
 //! [patch.crates-io]
-//! numerica = { git = "https://github.com/alphal00p/symbolica", rev = "e5c3fbf94db81fb71dd4da9837bd72186a77b1c0" }
-//! graphica = { git = "https://github.com/alphal00p/symbolica", rev = "e5c3fbf94db81fb71dd4da9837bd72186a77b1c0" }
+//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d6bb961d22c026c4866b2e698f56fbb964c4ee0e" }
+//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "d6bb961d22c026c4866b2e698f56fbb964c4ee0e" }
 //! ```
 
 #![allow(dead_code)]
