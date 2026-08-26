@@ -6,12 +6,16 @@ use pyo3_stub_gen::define_stub_info_gatherer;
 mod dot;
 mod drawing;
 mod graph;
+mod mutations;
+mod native_graph;
 mod render;
+mod topology;
 mod typst;
 
 #[pymodule]
 fn linnet_py(module: &Bound<'_, PyModule>) -> PyResult<()> {
     graph::register(module)?;
+    topology::register(module)?;
     drawing::register(module)?;
     dot::register(module)?;
     typst::register_typst_api(module)?;
@@ -238,6 +242,7 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
         ("PyEdgeDrawing", "EdgeDrawing"),
         ("PyEdgeValue", "EdgeValue"),
         ("PyHalfEdge", "HalfEdge"),
+        ("PyOrientedCut", "OrientedCut"),
         ("PyLabelLayout", "LabelLayout"),
         ("PyMarkDirection", "MarkDirection"),
         ("PyMarkPosition", "MarkPosition"),
@@ -250,6 +255,9 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
         ("PyTextStyle", "TextStyle"),
         ("PyTypstFields", "TypstFields"),
         ("PyNodeValue", "NodeValue"),
+        ("PySubgraph", "Subgraph"),
+        ("PyTraversalTree", "TraversalTree"),
+        ("PyCycle", "Cycle"),
         ("PyPlacement", "Placement"),
         ("PyStrokeCap", "StrokeCap"),
         ("PyCompass", "Compass"),
@@ -261,5 +269,8 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
     ] {
         stub = stub.replace(rust, python);
     }
+    // Rust collection constructors are valid PyO3 defaults but are not Python
+    // syntax. Keep the generated stub's conventional unspecified default.
+    stub = stub.replace(" = Vec :: new()", " = ...");
     Ok(stub)
 }
