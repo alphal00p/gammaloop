@@ -624,6 +624,17 @@
         };
 
         workspacePackageRuntimeTestExtraSourceRoots = {
+          "alphal00p-docs-builder" = [
+            "assets/embedded/drawing/templates/layout-core.typ"
+            "assets/embedded/drawing/templates/layout.typ"
+            "assets/gammalooplogo-dark.svg"
+            "assets/gammalooplogo-light.svg"
+            "crates/idenso/CHANGELOG.typ"
+            "crates/linnet/CHANGELOG.typ"
+            "crates/spenso/CHANGELOG.typ"
+            "docs"
+            "scripts/render-docs-svg-assets.sh"
+          ];
           "alphal00p-docs-catalogs" = [
             "docs/api/python"
           ];
@@ -3546,6 +3557,10 @@
               "alphal00p-docs-python-exporter"
               "alphal00p-docs-schema"
             ];
+            runtimeInputs = [
+              nextestPython
+              pkgs.gitMinimal
+            ];
           }
           {
             name = "integration";
@@ -3652,7 +3667,10 @@
             packageSourcePackages = target.packages;
             testSourcePackages = target.packages;
             runtimeTestSourcePackages = target.runtimeTestSourcePackages or target.packages;
-            extraFilesets = [ ./.config/nextest.toml ];
+            extraFilesets = [
+              ./.config/nextest.toml
+            ]
+            ++ lib.optionals (target.name == "docs") documentationDeveloperScopeSources;
           };
 
         nextestFeatureArgsFor =
@@ -3810,6 +3828,7 @@
                 pkgs.gcc
                 nextestFailureSummary
               ]
+              ++ (target.runtimeInputs or [ ])
               ++ lib.optionals (nextestUsesPythonModule target) [ nextestPython ];
               CC = nixCc;
               CXX = nixCxx;
@@ -3832,6 +3851,15 @@
                 cp -R ${nextestRuntimeSrcFor target}/. /build/source/
                 chmod -R u+w /build/source
                 cd /build/source
+                ${lib.optionalString (target.name == "docs") ''
+                  export ALPHAL00P_DOCS_GIT_COMMIT=${lib.escapeShellArg nixCiBarrierRevision}
+                  export ALPHAL00P_DOCS_GIT_TIMESTAMP=${lib.escapeShellArg (toString self.lastModified)}
+                  mkdir -p "$NIX_BUILD_TOP/nextest-tmp"
+                  export TMPDIR="$NIX_BUILD_TOP/nextest-tmp"
+                ''}
+                mkdir -p .cargo .cargo-home
+                cp ${cargoVendorDir}/config.toml .cargo/config.toml
+                export CARGO_HOME="$PWD/.cargo-home"
                 # Workspace-root discovery checks these directories even for test
                 # targets that do not consume any files from them.
                 mkdir -p tests/resources examples/cli
@@ -3862,6 +3890,8 @@
                   rm -f ${lib.escapeShellArg nextestJunitPath}
                   cargo nextest run \
                     --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target package} \
+                    --extract-to . \
+                    --extract-overwrite \
                     --workspace-remap . \
                     ${nextestBaseExtraArgs}
                   package_status=$?

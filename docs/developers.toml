@@ -407,13 +407,15 @@ digest = "05983dad9fdb3db00351c9e536a439ce48efd94b"
 # Documentation-impact attestation 2026-08-21: malformed DOT endpoint,
 # direction, and ID failures are now explicit parser errors, as documented by
 # the DOT interchange boundary in the architecture note.
+# Documentation-impact attestation 2026-08-26: the subsequent parser change is
+# a semantics-preserving Clippy rewrite of empty graph-name formatting.
 path = "crates/linnet/src/parser/mod.rs"
 symbol = "linnet::parser::DotGraph"
 anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {"
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
 # documented DOT parser path, added a round trip, and qualified its macro link.
 # The 2026-08-26 serializer cleanup only omits empty attribute lists.
-digest = "ba0ee57dc3811fb79509246b2095cd80f4ec4d71"
+digest = "65cdcb180c6779a5bdd6e08ab5214ee46aecb887"
 
 [[section.note]]
 id = "vakint-architecture"
@@ -702,12 +704,16 @@ topics = ["nix", "ci", "cache", "documentation"]
 review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/**", "crates/gammaloop-workspace-hack/**"]
 
 [[section.note.scope]]
+# Documentation-impact attestation 2026-08-26: the CI repair completes the
+# documented per-package archive/runtime-source boundary by staging the exact
+# documentation sources and tools, restoring vendored Cargo configuration,
+# and extracting archives into the reconstructed workspace root.
 path = "flake.nix"
 symbol = "alphal00pDocsCargoArtifacts"
 anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
 # No cache-architecture impact: the documentation source filter now includes the
 # double-triangle test fixture consumed by the deterministic About-page SVG.
-digest = "692adae64fe7a7fd3aa0e51ac7ba8b0d10919d5d"
+digest = "4d7d67e9bd879d24e2a765f234a54147489cb3f1"
 
 [[section]]
 id = "documentation"
