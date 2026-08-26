@@ -1,8 +1,10 @@
 use std::{
+    any::Any,
     collections::{BTreeMap, HashSet},
     fmt, fs,
     io::{self, IsTerminal, Write},
     ops::Deref,
+    panic::{self, AssertUnwindSafe},
     path::PathBuf,
     sync::mpsc,
     thread,
@@ -650,6 +652,25 @@ impl StreamingDisplayController {
     ) -> Result<()> {
         let status_block = render_status_update_tabled(status_update, &self.tabled_options);
         emit_integration_status_via_tracing(kind, &status_block)
+    }
+
+    fn handle_panic(&mut self, payload: Box<dyn Any + Send>) -> color_eyre::Report {
+        if !self.stream_updates && !self.stream_iterations {
+            // Without streaming, the panic hook's original report is still
+            // visible. Preserve normal unwinding instead of reporting it twice.
+            panic::resume_unwind(payload);
+        }
+        if let Some(mut renderer) = self.renderer.take() {
+            let _ = renderer.shutdown();
+        }
+        let message = if let Some(message) = payload.downcast_ref::<&'static str>() {
+            message
+        } else if let Some(message) = payload.downcast_ref::<String>() {
+            message.as_str()
+        } else {
+            "panic payload is not a string"
+        };
+        eyre!("Integration panicked: {message}")
     }
 
     fn render_stream_block(
@@ -1967,22 +1988,27 @@ impl Integrate {
         })
         .collect();
 
-        let result = havana_integrate(
-            HavanaIntegrateRequest {
-                slots,
-                sampling_correlation_mode: self.sampling_correlation_mode(),
-                n_cores,
-                state: integration_state,
-                workspace: Some(workspace_path.clone()),
-                output_control: self.workspace_snapshot_control(),
-                batching: self
-                    .build_batching_settings(stream_updates, stream_updates || stream_iterations),
-                view_options,
-            },
-            move |status_update: StatusUpdate| {
-                stream_controller.handle_status_update(status_update)
-            },
-        )?;
+        let result = match panic::catch_unwind(AssertUnwindSafe(|| {
+            havana_integrate(
+                HavanaIntegrateRequest {
+                    slots,
+                    sampling_correlation_mode: self.sampling_correlation_mode(),
+                    n_cores,
+                    state: integration_state,
+                    workspace: Some(workspace_path.clone()),
+                    output_control: self.workspace_snapshot_control(),
+                    batching: self.build_batching_settings(
+                        stream_updates,
+                        stream_updates || stream_iterations,
+                    ),
+                    view_options,
+                },
+                |status_update: StatusUpdate| stream_controller.handle_status_update(status_update),
+            )
+        })) {
+            Ok(result) => result?,
+            Err(payload) => return Err(stream_controller.handle_panic(payload)),
+        };
 
         Ok(IntegrationOutput {
             observables: self.collect_workspace_observable_snapshots(
@@ -2000,7 +2026,10 @@ mod tests {
     use super::Integrate;
     use super::IntegrationOutput;
     use super::ResolvedIntegrandSlot;
-    use super::{ContributionSortOption, DashboardKeyAction, ShowPhaseOption, TabledKeyAction};
+    use super::{
+        ContributionSortOption, DashboardKeyAction, RendererOption, ShowPhaseOption,
+        StreamingDisplayController, TabledKeyAction,
+    };
     use crate::{
         state::{CommandHistory, ProcessRef, State},
         CLISettings, Commands, SessionSettings, StateSettings,
@@ -2021,6 +2050,59 @@ mod tests {
     use std::path::{Path, PathBuf};
     use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid};
     use tempfile::tempdir;
+
+    #[test]
+    fn non_streamed_panics_resume_the_original_payload() {
+        for renderer in [RendererOption::Tabled, RendererOption::Ratatui] {
+            let mut controller =
+                StreamingDisplayController::new(renderer, false, false, Default::default());
+            let payload = Box::new(vec![1_u8, 2, 3]);
+            let address = payload.as_ref() as *const Vec<u8>;
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                controller.handle_panic(payload)
+            }));
+            let resumed = result.expect_err("non-streamed integration must keep unwinding");
+            assert_eq!(
+                resumed.downcast_ref::<Vec<u8>>().unwrap() as *const Vec<u8>,
+                address
+            );
+        }
+    }
+
+    #[test]
+    fn streamed_panics_stop_the_renderer_and_return_an_error() {
+        for renderer in [RendererOption::Tabled, RendererOption::Ratatui] {
+            for (updates, iterations) in [(true, false), (false, true), (true, true)] {
+                for (payload, expected) in [
+                    (
+                        Box::new("borrowed panic") as Box<dyn std::any::Any + Send>,
+                        "borrowed panic",
+                    ),
+                    (Box::new(String::from("owned panic")), "owned panic"),
+                    (Box::new(42_u32), "panic payload is not a string"),
+                ] {
+                    let mut controller = StreamingDisplayController::new(
+                        renderer,
+                        updates,
+                        iterations,
+                        Default::default(),
+                    );
+                    let report = controller.handle_panic(payload);
+                    assert_eq!(
+                        report.to_string(),
+                        format!("Integration panicked: {expected}")
+                    );
+                    assert!(controller.renderer.is_none());
+                    // Streamed runs still recover after Final has closed the display.
+                    let report = controller.handle_panic(Box::new("after display cleanup"));
+                    assert_eq!(
+                        report.to_string(),
+                        "Integration panicked: after display cleanup"
+                    );
+                }
+            }
+        }
+    }
 
     fn write_unversioned_workspace(
         workspace: &Path,
