@@ -5,6 +5,37 @@ let
   workspaceGraph = builtins.fromJSON ''
     {
       "normal_dependencies": {
+        "alphal00p-docs-builder": [
+          "alphal00p-docs-schema"
+        ],
+        "alphal00p-docs-catalogs": [
+          "alphal00p-docs-macros",
+          "alphal00p-docs-schema",
+          "gammaloop-api",
+          "gammalooprs",
+          "vakint"
+        ],
+        "alphal00p-docs-examples": [
+          "alphal00p-docs-catalogs",
+          "alphal00p-docs-schema",
+          "gammaloop-api",
+          "gammalooprs",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-hep-lib",
+          "spenso-macros",
+          "vakint"
+        ],
+        "alphal00p-docs-macros": [],
+        "alphal00p-docs-python-exporter": [
+          "gammaloop-api",
+          "idenso",
+          "linnet-py",
+          "spynso3",
+          "vakint"
+        ],
+        "alphal00p-docs-schema": [],
         "clinnet": [],
         "gammaloop-api": [
           "gammaloop-tracing-filter",
@@ -81,6 +112,63 @@ let
         "vakint": []
       },
       "normal_dependency_features": {
+        "alphal00p-docs-builder": {
+          "alphal00p-docs-schema": []
+        },
+        "alphal00p-docs-catalogs": {
+          "alphal00p-docs-macros": [],
+          "alphal00p-docs-schema": [],
+          "gammaloop-api": [
+            "cli"
+          ],
+          "gammalooprs": [],
+          "vakint": []
+        },
+        "alphal00p-docs-examples": {
+          "alphal00p-docs-catalogs": [],
+          "alphal00p-docs-schema": [],
+          "gammaloop-api": [
+            "cli"
+          ],
+          "gammalooprs": [],
+          "idenso": [
+            "bincode",
+            "reference-cases"
+          ],
+          "linnet": [
+            "bincode",
+            "drawing",
+            "nodestore-vec",
+            "serde",
+            "symbolica"
+          ],
+          "spenso": [
+            "shadowing"
+          ],
+          "spenso-hep-lib": [],
+          "spenso-macros": [
+            "shadowing"
+          ],
+          "vakint": []
+        },
+        "alphal00p-docs-macros": {},
+        "alphal00p-docs-python-exporter": {
+          "gammaloop-api": [
+            "python_stubgen"
+          ],
+          "idenso": [
+            "python_stubgen"
+          ],
+          "linnet-py": [],
+          "spynso3": [
+            "python_stubgen"
+          ],
+          "vakint": [
+            "python_stubgen",
+            "symbolica_community_module"
+          ]
+        },
+        "alphal00p-docs-schema": {},
         "clinnet": {},
         "gammaloop-api": {
           "gammaloop-tracing-filter": [
@@ -195,6 +283,12 @@ let
         "vakint": {}
       },
       "package_dirs": {
+        "alphal00p-docs-builder": "crates/alphal00p-docs-builder",
+        "alphal00p-docs-catalogs": "crates/alphal00p-docs-catalogs",
+        "alphal00p-docs-examples": "crates/alphal00p-docs-examples",
+        "alphal00p-docs-macros": "crates/alphal00p-docs-macros",
+        "alphal00p-docs-python-exporter": "crates/alphal00p-docs-python-exporter",
+        "alphal00p-docs-schema": "crates/alphal00p-docs-schema",
         "clinnet": "crates/clinnet",
         "gammaloop-api": "crates/gammaloop-api",
         "gammaloop-integration-tests": "tests",
@@ -215,6 +309,12 @@ let
         "vakint": "crates/vakint"
       },
       "packages": [
+        "alphal00p-docs-builder",
+        "alphal00p-docs-catalogs",
+        "alphal00p-docs-examples",
+        "alphal00p-docs-macros",
+        "alphal00p-docs-python-exporter",
+        "alphal00p-docs-schema",
         "clinnet",
         "gammaloop-api",
         "gammaloop-integration-tests",
@@ -235,6 +335,33 @@ let
         "vakint"
       ],
       "resolved_normal_dependencies": {
+        "alphal00p-docs-builder": [
+          "alphal00p-docs-schema"
+        ],
+        "alphal00p-docs-catalogs": [
+          "alphal00p-docs-macros",
+          "alphal00p-docs-schema"
+        ],
+        "alphal00p-docs-examples": [
+          "alphal00p-docs-catalogs",
+          "alphal00p-docs-macros",
+          "alphal00p-docs-schema",
+          "gammaloop-api",
+          "gammaloop-tracing-filter",
+          "gammaloop-tracing-filter-macros",
+          "gammaloop-workspace-hack",
+          "gammalooprs",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-hep-lib",
+          "spenso-macros",
+          "symbolica-utils",
+          "vakint"
+        ],
+        "alphal00p-docs-macros": [],
+        "alphal00p-docs-python-exporter": [],
+        "alphal00p-docs-schema": [],
         "clinnet": [],
         "gammaloop-api": [
           "gammaloop-tracing-filter",
@@ -334,6 +461,35 @@ let
         "vakint": []
       },
       "resolved_test_dependencies": {
+        "alphal00p-docs-builder": [
+          "alphal00p-docs-schema"
+        ],
+        "alphal00p-docs-catalogs": [
+          "alphal00p-docs-macros",
+          "alphal00p-docs-schema"
+        ],
+        "alphal00p-docs-examples": [
+          "alphal00p-docs-catalogs",
+          "alphal00p-docs-macros",
+          "alphal00p-docs-schema",
+          "gammaloop-api",
+          "gammaloop-tracing-filter",
+          "gammaloop-tracing-filter-macros",
+          "gammaloop-workspace-hack",
+          "gammalooprs",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-hep-lib",
+          "spenso-macros",
+          "symbolica-utils",
+          "vakint"
+        ],
+        "alphal00p-docs-macros": [
+          "alphal00p-docs-schema"
+        ],
+        "alphal00p-docs-python-exporter": [],
+        "alphal00p-docs-schema": [],
         "clinnet": [],
         "gammaloop-api": [
           "gammaloop-tracing-filter",
@@ -439,6 +595,7 @@ let
         "vakint": []
       },
       "symbolica_normal_packages": [
+        "alphal00p-docs-examples",
         "gammaloop-api",
         "gammaloop-integration-tests",
         "gammaloop-tracing-filter",
@@ -456,6 +613,7 @@ let
         "vakint"
       ],
       "symbolica_test_packages": [
+        "alphal00p-docs-examples",
         "gammaloop-api",
         "gammaloop-integration-tests",
         "gammaloop-tracing-filter",
@@ -473,6 +631,39 @@ let
         "vakint"
       ],
       "test_dependencies": {
+        "alphal00p-docs-builder": [
+          "alphal00p-docs-schema"
+        ],
+        "alphal00p-docs-catalogs": [
+          "alphal00p-docs-macros",
+          "alphal00p-docs-schema",
+          "gammaloop-api",
+          "gammalooprs",
+          "vakint"
+        ],
+        "alphal00p-docs-examples": [
+          "alphal00p-docs-catalogs",
+          "alphal00p-docs-schema",
+          "gammaloop-api",
+          "gammalooprs",
+          "idenso",
+          "linnet",
+          "spenso",
+          "spenso-hep-lib",
+          "spenso-macros",
+          "vakint"
+        ],
+        "alphal00p-docs-macros": [
+          "alphal00p-docs-schema"
+        ],
+        "alphal00p-docs-python-exporter": [
+          "gammaloop-api",
+          "idenso",
+          "linnet-py",
+          "spynso3",
+          "vakint"
+        ],
+        "alphal00p-docs-schema": [],
         "clinnet": [],
         "gammaloop-api": [
           "gammaloop-tracing-filter",
@@ -553,6 +744,65 @@ let
         "vakint": []
       },
       "test_dependency_features": {
+        "alphal00p-docs-builder": {
+          "alphal00p-docs-schema": []
+        },
+        "alphal00p-docs-catalogs": {
+          "alphal00p-docs-macros": [],
+          "alphal00p-docs-schema": [],
+          "gammaloop-api": [
+            "cli"
+          ],
+          "gammalooprs": [],
+          "vakint": []
+        },
+        "alphal00p-docs-examples": {
+          "alphal00p-docs-catalogs": [],
+          "alphal00p-docs-schema": [],
+          "gammaloop-api": [
+            "cli"
+          ],
+          "gammalooprs": [],
+          "idenso": [
+            "bincode",
+            "reference-cases"
+          ],
+          "linnet": [
+            "bincode",
+            "drawing",
+            "nodestore-vec",
+            "serde",
+            "symbolica"
+          ],
+          "spenso": [
+            "shadowing"
+          ],
+          "spenso-hep-lib": [],
+          "spenso-macros": [
+            "shadowing"
+          ],
+          "vakint": []
+        },
+        "alphal00p-docs-macros": {
+          "alphal00p-docs-schema": []
+        },
+        "alphal00p-docs-python-exporter": {
+          "gammaloop-api": [
+            "python_stubgen"
+          ],
+          "idenso": [
+            "python_stubgen"
+          ],
+          "linnet-py": [],
+          "spynso3": [
+            "python_stubgen"
+          ],
+          "vakint": [
+            "python_stubgen",
+            "symbolica_community_module"
+          ]
+        },
+        "alphal00p-docs-schema": {},
         "clinnet": {},
         "gammaloop-api": {
           "gammaloop-tracing-filter": [
@@ -840,6 +1090,14 @@ let
       "gammaloop-tracing-filter-macros"
       "gammalooprs"
     ];
+    docs = [
+      "alphal00p-docs-builder"
+      "alphal00p-docs-catalogs"
+      "alphal00p-docs-examples"
+      "alphal00p-docs-macros"
+      "alphal00p-docs-python-exporter"
+      "alphal00p-docs-schema"
+    ];
     integration = [ "gammaloop-integration-tests" ];
     "python-api" = [ "gammaloop-integration-tests" ];
     clinnet = [ "clinnet" ];
@@ -905,6 +1163,7 @@ let
       "packages.${system}.workspaceBuildArtifacts" = [ "packages.${system}.cargoArtifacts" ];
       "checks.${system}.gammaloop-nextest-binaries-core" = nextestArchiveDependenciesFor "core";
       "checks.${system}.gammaloop-nextest-binaries-clinnet" = nextestArchiveDependenciesFor "clinnet";
+      "checks.${system}.gammaloop-nextest-binaries-docs" = nextestArchiveDependenciesFor "docs";
       "checks.${system}.gammaloop-nextest-binaries-integration" =
         nextestArchiveDependenciesFor "integration";
       "checks.${system}.gammaloop-nextest-binaries-python-api" =
@@ -925,6 +1184,9 @@ let
       ];
       "packages.${system}.nix-ci-check-gammaloop-nextest-core" = [
         "checks.${system}.gammaloop-nextest-binaries-core"
+      ];
+      "packages.${system}.nix-ci-check-gammaloop-nextest-docs" = [
+        "checks.${system}.gammaloop-nextest-binaries-docs"
       ];
       "packages.${system}.nix-ci-check-gammaloop-nextest-integration" = [
         "checks.${system}.gammaloop-nextest-binaries-integration"
@@ -979,6 +1241,7 @@ let
       "checks.${system}.gammaloop-nextest-binaries"
       "checks.${system}.gammaloop-nextest-clinnet"
       "checks.${system}.gammaloop-nextest-core"
+      "checks.${system}.gammaloop-nextest-docs"
       "checks.${system}.gammaloop-nextest-integration"
       "checks.${system}.gammaloop-nextest-python-api"
       "checks.${system}.gammaloop-nextest-linnet"
@@ -1101,6 +1364,13 @@ in
 
     gammaloop-nextest-clinnet = {
       package = "packages.${system}.nix-ci-check-gammaloop-nextest-clinnet";
+      system = system;
+      in-repo = true;
+      secrets = [ "SYMBOLICA_LICENSE" ];
+    };
+
+    gammaloop-nextest-docs = {
+      package = "packages.${system}.nix-ci-check-gammaloop-nextest-docs";
       system = system;
       in-repo = true;
       secrets = [ "SYMBOLICA_LICENSE" ];
