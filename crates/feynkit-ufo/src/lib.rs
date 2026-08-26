@@ -228,10 +228,7 @@ fn to_json(py: Python<'_>, value: &Py<PyAny>) -> Result<String, UfoLoadError> {
 mod tests {
     use std::ffi::CString;
 
-    use pyo3::{
-        prelude::*,
-        types::{PyDict, PyModule},
-    };
+    use pyo3::types::{PyDict, PyModule};
 
     use super::*;
 
