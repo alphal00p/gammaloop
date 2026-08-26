@@ -1559,6 +1559,7 @@
             [
               "--locked"
               "--no-default-features"
+              "--lib"
             ]
             ++ map (package: "-p ${lib.escapeShellArg package}") selectedPackages
             ++ lib.optional (featureArgs != "") featureArgs
@@ -2082,7 +2083,7 @@
               cargoWithProfile test --locked --no-run -p alphal00p-docs-examples
               cargo clean --profile ${docsCargoProfile} -p alphal00p-docs-examples
               cargoWithProfile build --locked -p alphal00p-docs-builder
-              cargoWithProfile build --locked -p linnet-py --features extension-module,abi3-py310
+              cargoWithProfile build --locked -p linnet-py --lib --features extension-module,abi3-py310
               ${documentationRustdocBuildCommands}
               cargoWithProfile build --locked -p alphal00p-docs-catalogs \
                 --features ${lib.escapeShellArg documentationCatalogFeatures} \
