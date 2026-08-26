@@ -50,27 +50,37 @@ lam = Parameter(name='lam',
 # Assign masses and widths to the scalars
 scalar_mass_parameters = []
 scalar_width_parameters = []
+scalar_chemical_potential_parameters = []
 for i_scalar in range(N_SCALARS):
     # Set the first scalar with id 0 to always be massless
     if i_scalar == 0:
         scalar_mass_parameters.append(ZERO)
         scalar_width_parameters.append(ZERO)
-        continue
-    # remember that the constructor automatically adds the objects to all_parameters
-    scalar_mass_parameters.append(Parameter(name='mass_scalar_%s' % i_scalar,
-                                            nature='external',
-                                            type='real',
-                                            value=1.0*i_scalar,
-                                            texname='m_%d' % i_scalar,
-                                            lhablock='SCALARS',
-                                            lhacode=[2001+i_scalar]))
-    scalar_width_parameters.append(Parameter(name='width_scalar_%s' % i_scalar,
-                                             nature='external',
-                                             type='real',
-                                             value=0.0,
-                                             texname='w_%d' % i_scalar,
-                                             lhablock='SCALARS',
-                                             lhacode=[3001+i_scalar]))
+    else:
+        # remember that the constructor automatically adds the objects to all_parameters
+        scalar_mass_parameters.append(Parameter(name='mass_scalar_%s' % i_scalar,
+                                                nature='external',
+                                                type='real',
+                                                value=1.0*i_scalar,
+                                                texname='m_%d' % i_scalar,
+                                                lhablock='SCALARS',
+                                                lhacode=[2001+i_scalar]))
+        scalar_width_parameters.append(Parameter(name='width_scalar_%s' % i_scalar,
+                                                 nature='external',
+                                                 type='real',
+                                                 value=0.0,
+                                                 texname='w_%d' % i_scalar,
+                                                 lhablock='SCALARS',
+                                                 lhacode=[3001+i_scalar]))
+
+    scalar_chemical_potential_parameters.append(
+        Parameter(name='chemical_potential_scalar_%s' % i_scalar,
+                  nature='external',
+                  type='real',
+                  value=1.0,
+                  texname='\\mu_%d' % i_scalar,
+                  lhablock='CHEMICALPOTENTIAL',
+                  lhacode=[1+i_scalar]))
 
 # User-defined parameters. Keep key SM parameters as their use may be hardcoded in some generators
 aEWM1 = Parameter(name='aEWM1',

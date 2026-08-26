@@ -1607,6 +1607,7 @@ mod tests {
             lepton_number: 0,
             y_charge: 0,
             goldstone,
+            chemical_potential: None,
         }
     }
 

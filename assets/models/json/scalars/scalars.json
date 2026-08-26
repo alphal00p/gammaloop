@@ -60,6 +60,14 @@
     "value": [1.0, 0.0]
   }, {
     "expression": null,
+    "lhablock": "CHEMICALPOTENTIAL",
+    "lhacode": [1],
+    "name": "chemical_potential_scalar_0",
+    "nature": "external",
+    "parameter_type": "real",
+    "value": [1.0, 0.0]
+  }, {
+    "expression": null,
     "lhablock": "SCALARS",
     "lhacode": [2002],
     "name": "mass_scalar_1",
@@ -76,6 +84,14 @@
     "value": [0.0, 0.0]
   }, {
     "expression": null,
+    "lhablock": "CHEMICALPOTENTIAL",
+    "lhacode": [2],
+    "name": "chemical_potential_scalar_1",
+    "nature": "external",
+    "parameter_type": "real",
+    "value": [1.0, 0.0]
+  }, {
+    "expression": null,
     "lhablock": "SCALARS",
     "lhacode": [2003],
     "name": "mass_scalar_2",
@@ -90,6 +106,14 @@
     "nature": "external",
     "parameter_type": "real",
     "value": [0.0, 0.0]
+  }, {
+    "expression": null,
+    "lhablock": "CHEMICALPOTENTIAL",
+    "lhacode": [3],
+    "name": "chemical_potential_scalar_2",
+    "nature": "external",
+    "parameter_type": "real",
+    "value": [1.0, 0.0]
   }, {
     "expression": null,
     "lhablock": "SMINPUTS",
@@ -151,6 +175,7 @@
     "antiname": "scalar_0",
     "antitexname": "\\phi_0",
     "charge": 0.0,
+    "chemical_potential": "chemical_potential_scalar_0",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -165,6 +190,7 @@
     "antiname": "scalar_1",
     "antitexname": "\\phi_1",
     "charge": 0.0,
+    "chemical_potential": "chemical_potential_scalar_1",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -179,6 +205,7 @@
     "antiname": "scalar_2",
     "antitexname": "\\phi_2",
     "charge": 0.0,
+    "chemical_potential": "chemical_potential_scalar_2",
     "color": 1,
     "ghost_number": 0,
     "lepton_number": 0,
