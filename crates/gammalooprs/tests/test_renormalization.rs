@@ -4,6 +4,7 @@ use gammalooprs::{
     initialisation::test_initialise,
     model::Model,
     processes::{Amplitude, AmplitudeGraph},
+    settings::global::{GenerationSettings, MediumSettings},
     utils::{GS, load_generic_model},
     uv::{
         ApproximationType, RenormalizationPart, RenormalizationPrescriptionSettings,
@@ -25,7 +26,15 @@ use symbolica::{
 };
 use symbolica_utils::AtomPrintExt;
 
-fn pole_part_uv_settings() -> UVgenerationSettings {
+fn vacuum_generation_settings(uv: UVgenerationSettings) -> GenerationSettings {
+    GenerationSettings {
+        uv,
+        medium: MediumSettings::default(),
+        ..Default::default()
+    }
+}
+
+fn pole_part_uv_settings() -> GenerationSettings {
     let undoing_normalization = parse!(
         "(
      𝑖*(𝜋^((4-2*eps)/2))
@@ -34,7 +43,7 @@ fn pole_part_uv_settings() -> UVgenerationSettings {
   )^(-1*(n_loops))",
         default_namespace = "vakint"
     );
-    UVgenerationSettings {
+    vacuum_generation_settings(UVgenerationSettings {
         softct: false,
         renormalization_prescription: RenormalizationPrescriptionSettings {
             log_divergent: ApproximationType::PolePart,
@@ -47,7 +56,7 @@ fn pole_part_uv_settings() -> UVgenerationSettings {
             ..Default::default()
         },
         ..Default::default()
-    }
+    })
 }
 // GammaLoop and RQFT use opposite ghost-propagator signs (+i versus -i).
 // Their ghost-gluon momentum and color conventions differ as well, so the net
@@ -100,17 +109,17 @@ fn scalar_pole_part() {
 
     let model = load_generic_model("scalars");
 
-    let a = amp.graphs[0]
-        .renormalization_part(&UVgenerationSettings {
-            softct: false,
-            vakint: VakintSettings {
-                normalization: "MSbar".to_string(),
-                additional_normalization: "1".to_string(),
-                ..Default::default()
-            },
+    let settings = vacuum_generation_settings(UVgenerationSettings {
+        softct: false,
+        vakint: VakintSettings {
+            normalization: "MSbar".to_string(),
+            additional_normalization: "1".to_string(),
             ..Default::default()
-        })
-        .unwrap();
+        },
+        ..Default::default()
+    });
+
+    let a = amp.graphs[0].renormalization_part(&settings).unwrap();
 
     println!("ren part: {:>}", a);
     println!(
@@ -388,15 +397,10 @@ fn finite_part_ghost_2loop() {
 
     let mut amp = Amplitude::from_graph_list("bub", g).unwrap();
 
-    let settings = UVgenerationSettings {
-        orchestrator: UVOrchestrator::LegacyDagForest,
-        ..pole_part_uv_settings()
-    };
-
-    let new_settings = UVgenerationSettings {
-        orchestrator: UVOrchestrator::HedgePoset,
-        ..settings.clone()
-    };
+    let mut settings = pole_part_uv_settings();
+    settings.uv.orchestrator = UVOrchestrator::LegacyDagForest;
+    let mut new_settings = settings.clone();
+    new_settings.uv.orchestrator = UVOrchestrator::HedgePoset;
 
     let model = load_generic_model("sm");
 
@@ -414,7 +418,7 @@ fn finite_part_ghost_2loop() {
     fn assert_new_paths_match_legacy(
         amp: &mut AmplitudeGraph,
         a: RenormalizationPart,
-        new_settings: &UVgenerationSettings,
+        new_settings: &GenerationSettings,
     ) -> ForestStatsSnapshot {
         let normalize = |atom: &Atom| {
             atom.replace(parse_lit!(gammalooprs::dim))
@@ -563,8 +567,8 @@ fn finit_part_ghlo() {
 mod failing {
     use super::*;
 
-    fn rqft_3loop_settings() -> UVgenerationSettings {
-        UVgenerationSettings {
+    fn rqft_3loop_settings() -> GenerationSettings {
+        vacuum_generation_settings(UVgenerationSettings {
             softct: false,
             orchestrator: UVOrchestrator::HedgePoset,
             renormalization_prescription: RenormalizationPrescriptionSettings {
@@ -593,7 +597,7 @@ mod failing {
                 ..Default::default()
             },
             ..Default::default()
-        }
+        })
     }
 
     #[test]

@@ -17,7 +17,7 @@ use crate::model::Model;
 use crate::momentum::sample::LoopIndex;
 use crate::processes::{Amplitude, AmplitudeGraph};
 use crate::settings::GlobalSettings;
-use crate::settings::global::OrientationPattern;
+use crate::settings::global::{MediumMode, OrientationPattern};
 use crate::utils::{GS, W_};
 use crate::uv::approx::{CutStructure, OrientationProjection};
 use crate::uv::profile::{ProfileSettings, UVProfileable};
@@ -72,7 +72,7 @@ fn scalar_bubble_root_integrand_reference(
     let cutstructure = CutStructure {
         cuts: vec![CutSet::empty(amplitude_graph.graph.n_hedges())],
     };
-    let woods = CutWoods::new(cutstructure, &amplitude_graph.graph, &reference_settings.uv);
+    let woods = CutWoods::new(cutstructure, &amplitude_graph.graph, &reference_settings);
     let mut forests = woods.unfold(&amplitude_graph.graph);
     let vakint = crate::utils::vakint().unwrap();
     let valid_orientations: Vec<_> = amplitude_graph
@@ -92,7 +92,7 @@ fn scalar_bubble_root_integrand_reference(
                 &valid_orientations,
                 &generation_settings.orientation_pattern,
             ),
-            &reference_settings.uv,
+            &reference_settings,
         )
         .unwrap();
 
@@ -345,7 +345,8 @@ fn scalars_integrated_cts_compare_legacy_and_hedge_poset() {
     )
     .unwrap();
 
-    amp.generate_cff(&OrientationPattern::default()).unwrap();
+    amp.generate_cff(&OrientationPattern::default(), MediumMode::Vacuum)
+        .unwrap();
     let orientation_pattern = OrientationPattern::from_orientation(
         &amp.derived_data
             .cff_expression
@@ -391,7 +392,8 @@ fn scalars_integrated_banana_hedge_poset() {
     )
     .unwrap();
 
-    amp.generate_cff(&OrientationPattern::default()).unwrap();
+    amp.generate_cff(&OrientationPattern::default(), MediumMode::Vacuum)
+        .unwrap();
     let orientation_pattern = OrientationPattern::from_orientation(
         &amp.derived_data
             .cff_expression
@@ -1639,7 +1641,8 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.generate_cff(&OrientationPattern::default()).unwrap();
+        amp.generate_cff(&OrientationPattern::default(), set.medium.mode)
+            .unwrap();
         amp.build_integrands(&set, vk).unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);
@@ -1680,7 +1683,8 @@ mod failing {
         };
         let vk = crate::utils::vakint().unwrap();
 
-        amp.generate_cff(&OrientationPattern::default()).unwrap();
+        amp.generate_cff(&OrientationPattern::default(), set.medium.mode)
+            .unwrap();
         amp.build_integrands(&set, vk).unwrap();
 
         println!("{}", amp.derived_data.all_mighty_integrand);
