@@ -3,7 +3,7 @@
 #let quickstart-python = [
 = Using Linnet from Python
 
-The `linnet_py` extension provides DOT-backed Linnet graphs to Python 3.10 and newer. It is a real
+The `linnet_py` extension provides native Linnet graphs to Python 3.10 and newer. It is a real
 binding with runtime tests, but it is not currently published to PyPI.
 
 #callout("Developer preview: build from source", [
@@ -36,27 +36,29 @@ Save this as `linnet_quickstart.py`:
 ```python
 import linnet_py as lp
 
-graph = lp.DotGraph.from_string(
+codec = lp.DotCodec.topology()
+graph = lp.Graph.from_dot(
     """
     digraph G {
       A;
       B;
       A -> B;
     }
-    """
+    """,
+    codec,
 )
 
-whole = graph.full_filter()
-assert graph.n_nodes() == 2
-assert graph.n_edges() == 1
-assert len(graph.iter_nodes_of(whole)) == 2
-assert len(graph.iter_edges_of(whole)) == 1
+whole = graph.full_subgraph()
+assert graph.n_nodes == 2
+assert graph.n_edges == 1
+assert len(graph.nodes_of(whole)) == 2
+assert len(graph.edges_of(whole)) == 1
 
-print(graph.dot())
+print(graph.to_dot())
 ```
 
 Run `python linnet_quickstart.py`. Success means the assertions pass and the graph is printed as
-DOT. `DotGraph` also exposes typed nodes, half-edges, subgraphs, cycles, oriented cuts, and
+DOT. `Graph` also exposes typed nodes, half-edges, subgraphs, cycles, oriented cuts, and
 traversal trees; use the #link("reference/python/")[Python reference] for the exact current
 surface.
 

@@ -8,7 +8,7 @@ use crate::half_edge::{
 };
 
 use super::{
-    dot_id, escape_dot_string, strip_quotes, subgraph_free::Edge, DotHedgeData, DotParseError,
+    dot_id, dot_value, strip_quotes, subgraph_free::Edge, DotHedgeData, DotParseError,
     ExplicitIdKind, GlobalData, NodeIdOrDangling,
 };
 
@@ -34,7 +34,6 @@ impl DotEdgeData {
         for (key, value) in iter {
             match key.as_str() {
                 "id" => {
-                    let value = strip_quotes(&value);
                     edge_id = Some(EdgeIndex::from(value.parse::<usize>().map_err(
                         |source| DotParseError::InvalidExplicitId {
                             kind: ExplicitIdKind::Edge,
@@ -44,7 +43,7 @@ impl DotEdgeData {
                     )?));
                 }
                 _ => {
-                    statements.insert(strip_quotes(&key), strip_quotes(&value));
+                    statements.insert(key, value);
                 }
             }
         }
@@ -68,7 +67,7 @@ impl Display for DotEdgeData {
             if !first {
                 write!(f, " ")?;
             }
-            write!(f, "{}=\"{}\"", dot_id(key), escape_dot_string(value))?;
+            write!(f, "{}={}", dot_id(key), dot_value(value))?;
             first = false;
         }
 
@@ -161,7 +160,11 @@ impl DotEdgeData {
         let mut orientation = is_digraph.into();
         let mut source_data = DotHedgeData::from_parser(edge.source_port())?;
         let mut sink_data = DotHedgeData::from_parser(edge.sink_port())?;
-        let local_statements = edge.attr.clone().into_iter().collect();
+        let local_statements = edge
+            .attr
+            .iter()
+            .map(|(key, value)| (strip_quotes(key), strip_quotes(value)))
+            .collect();
         let mut statements = global_data.edge_statements.clone();
         if let Some(value) = statements.remove("dir") {
             orientation = match value.as_str() {

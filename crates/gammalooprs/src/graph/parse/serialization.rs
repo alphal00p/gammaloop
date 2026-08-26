@@ -21,10 +21,7 @@ use crate::{
     uv::UltravioletGraph,
 };
 
-use super::{
-    ParseGraph,
-    string_utils::{ToQuoted, dot_statement_value},
-};
+use super::{ParseGraph, string_utils::ToQuoted};
 
 impl Graph {
     pub fn to_dot_graph_with_settings(&self, settings: &DotExportSettings) -> DotGraph {
@@ -61,10 +58,8 @@ impl Graph {
 
             dotgraph.global_data.statements.insert(
                 "full_num".into(),
-                dot_statement_value(
-                    &num.printer(SpensoPrintSettings::typst_options())
-                        .to_string(),
-                ),
+                num.printer(SpensoPrintSettings::typst_options())
+                    .to_string(),
             );
         }
 
@@ -260,7 +255,7 @@ mod tests {
         });
         let full_num = &dot.global_data.statements["full_num"];
 
-        assert_eq!(full_num, r#"op(\"Tr\")(1)"#);
+        assert_eq!(full_num, r#"op("Tr")(1)"#);
         assert!(!full_num.contains("gammalooprs::Truncate"));
     }
 }

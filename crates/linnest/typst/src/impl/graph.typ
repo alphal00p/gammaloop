@@ -777,6 +777,8 @@
     ("pos", "shift", "statements")
   } else if kind == "edge" {
     ("pos", "shift", "label-pos", "label-angle", "bend", "statements")
+  } else if kind == "hedge" {
+    ("statement", "port-label", "compass")
   } else {
     ()
   }
@@ -953,7 +955,7 @@
   let sink = callbacks.sink
   let changed = false
   let structural-changed = false
-  let structural-patches = (nodes: (), edges: ())
+  let structural-patches = (nodes: (), edges: (), hedges: ())
   let native-data = _native-data(graph_)
   let info = _info-record(graph_)
   let graph-record = _record-with-fields(info + (statements: info.at("global-statements", default: (:))), (:), (:))
@@ -1006,6 +1008,11 @@
           native-data.hedges = _array-set(native-data.hedges, source-record.hedge, source-patch.data)
           changed = true
         }
+        if source-patch.structural != none {
+          let structural = source-patch.structural + (index: source-record.hedge)
+          structural-patches.hedges.push(structural)
+          structural-changed = true
+        }
       }
 
       let sink-record = edge-source.at("sink", default: none)
@@ -1019,6 +1026,11 @@
         if sink-patch.data != none {
           native-data.hedges = _array-set(native-data.hedges, sink-record.hedge, sink-patch.data)
           changed = true
+        }
+        if sink-patch.structural != none {
+          let structural = sink-patch.structural + (index: sink-record.hedge)
+          structural-patches.hedges.push(structural)
+          structural-changed = true
         }
       }
     }

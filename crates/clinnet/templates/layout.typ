@@ -52,8 +52,14 @@
       _indexed(edges, edge.edge),
       ("pos", "shift", "label-pos", "label-angle", "bend", "statements"),
     ),
-    source: half-edge => _drawing-patch(_indexed(hedges, half-edge.hedge), ()),
-    sink: half-edge => _drawing-patch(_indexed(hedges, half-edge.hedge), ()),
+    source: half-edge => _drawing-patch(
+      _indexed(hedges, half-edge.hedge),
+      ("statement", "port-label", "compass"),
+    ),
+    sink: half-edge => _drawing-patch(
+      _indexed(hedges, half-edge.hedge),
+      ("statement", "port-label", "compass"),
+    ),
   )
 }
 
@@ -516,7 +522,10 @@
       "label-anchor": if side == "left" { "east" } else { "west" },
       "momentum-index": if match-cut { rank } else { edge.edge },
     )
-    if mode == "amplitude" and edge.at("pos", default: none) == none {
+    if mode == "amplitude" and not (
+      edge.at("pos-x-set", default: false)
+        or edge.at("pos-y-set", default: false)
+    ) {
       let x = if side == "left" {
         graph.group("left", side: "-")
       } else {

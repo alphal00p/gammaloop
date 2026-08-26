@@ -44,9 +44,10 @@ rendering run has these steps:
    bundle instead, binding the model-specific `edge-style.typ` callbacks and its generic,
    amplitude, and cross-section presets.
 + The selected `layout.typ` parses the staged DOT topology, attaches the typed node, edge, and
-   half-edge records from `config.elements`, applies final labels and styles with `graph.style`,
-   and only then runs the ordered layout passes and `draw`. Label and node measurements therefore
-   participate in spacing.
+   half-edge records from `config.elements`, and patches half-edge statements, port labels, and
+   compass points into the native graph by topology index. It applies final labels and styles with
+   `graph.style`, and only then runs the ordered layout passes and `draw`. Label and node
+   measurements therefore participate in spacing.
 + `draw` calls the generated callbacks from `edge-style.typ`, draws edges and
    labels, then draws nodes last so nodes sit on top of edges.
 
