@@ -156,6 +156,8 @@ impl SlotMeta {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct IntegrationWorkspaceManifest {
+    #[serde(default)]
+    pub version: u32,
     pub slots: Vec<SlotMeta>,
     pub targets: Vec<Option<Complex<F<f64>>>>,
     pub effective_model_parameters: Vec<SerializableInputParamCard<F<f64>>>,
@@ -163,6 +165,28 @@ pub struct IntegrationWorkspaceManifest {
     pub training_slot: usize,
     pub integrator_settings_slot: usize,
     pub sampling_correlation_mode: SamplingCorrelationMode,
+}
+
+impl IntegrationWorkspaceManifest {
+    pub const CURRENT_VERSION: u32 = 1;
+
+    pub fn validate_version(&self) -> Result<()> {
+        if self.version == Self::CURRENT_VERSION {
+            return Ok(());
+        }
+
+        let reason = if self.version == 0 {
+            "is unversioned".to_string()
+        } else if self.version < Self::CURRENT_VERSION {
+            format!("uses the older format version {}", self.version)
+        } else {
+            format!("uses the newer format version {}", self.version)
+        };
+        Err(Report::msg(format!(
+            "Integration workspace {reason} and cannot be resumed by this GammaLoop build (supported version {}); use --restart to create a new workspace",
+            Self::CURRENT_VERSION
+        )))
+    }
 }
 
 impl crate::utils::serde_utils::SmartSerde for IntegrationWorkspaceManifest {}
@@ -3154,11 +3178,15 @@ fn write_integration_state_to_workspace(
     workspace_path: &Path,
     integration_state: &IntegrationState,
 ) -> Result<()> {
-    write_atomic_bytes(
-        &workspace_state_path(workspace_path),
-        &bincode::encode_to_vec(integration_state, bincode::config::standard())
-            .unwrap_or_else(|_| panic!("failed to serialize the integration state")),
-    )?;
+    let state_path = workspace_state_path(workspace_path);
+    let state_bytes = bincode::encode_to_vec(integration_state, bincode::config::standard())
+        .map_err(|err| {
+            Report::msg(format!(
+                "Could not serialize integration state for {}: {err}",
+                state_path.display()
+            ))
+        })?;
+    write_atomic_bytes(&state_path, &state_bytes)?;
     Ok(())
 }
 
@@ -3832,6 +3860,41 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
     use std::fs;
     use symbolica::numerical_integration::ContinuousGrid;
+
+    fn integration_workspace_manifest(version: Option<u32>) -> IntegrationWorkspaceManifest {
+        let mut manifest = serde_json::json!({
+            "slots": [],
+            "targets": [],
+            "effective_model_parameters": [],
+            "integrand_fingerprints": [],
+            "training_slot": 0,
+            "integrator_settings_slot": 0,
+            "sampling_correlation_mode": "correlated"
+        });
+        if let Some(version) = version {
+            manifest["version"] = version.into();
+        }
+        serde_json::from_value(manifest).unwrap()
+    }
+
+    #[test]
+    fn integration_workspace_manifest_accepts_only_the_current_version() {
+        integration_workspace_manifest(Some(IntegrationWorkspaceManifest::CURRENT_VERSION))
+            .validate_version()
+            .unwrap();
+
+        let unversioned = integration_workspace_manifest(None);
+        assert_eq!(unversioned.version, 0);
+        let unversioned_error = unversioned.validate_version().unwrap_err().to_string();
+        assert!(unversioned_error.contains("unversioned"));
+        assert!(unversioned_error.contains("--restart"));
+
+        let future =
+            integration_workspace_manifest(Some(IntegrationWorkspaceManifest::CURRENT_VERSION + 1));
+        let future_error = future.validate_version().unwrap_err().to_string();
+        assert!(future_error.contains("newer format version"));
+        assert!(future_error.contains("--restart"));
+    }
 
     fn make_accumulator(
         re_avg: f64,

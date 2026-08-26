@@ -63,6 +63,10 @@ impl EnergyPowerCapMap {
 
 #[derive(Debug, Error)]
 pub enum EnergyPowerAnalysisError {
+    #[error(
+        "physical-EMR energy-power analysis cannot assign loop-basis expression `{expression}` to a source edge; normalize it to Q(edge, index) before CFF analysis"
+    )]
+    LoopMomentumInPhysicalEmrAnalysis { expression: String },
     #[error("loop momentum K({loop_index}, ...) has no carrier edge in this loop momentum basis")]
     MissingLoopCarrierEdge { loop_index: usize },
     #[error(
@@ -87,7 +91,7 @@ pub enum EnergyPowerAnalysisError {
 }
 
 pub struct EnergyPowerAnalyzer {
-    loop_edges: Vec<EdgeIndex>,
+    loop_edges: Option<Vec<EdgeIndex>>,
     internal_edges: Option<BTreeSet<EdgeIndex>>,
     minkowski_symbol: Symbol,
 }
@@ -108,7 +112,7 @@ enum LorentzIndexKind {
 impl EnergyPowerAnalyzer {
     pub fn new(loop_edges: impl IntoIterator<Item = EdgeIndex>) -> Self {
         Self {
-            loop_edges: loop_edges.into_iter().collect(),
+            loop_edges: Some(loop_edges.into_iter().collect()),
             internal_edges: None,
             minkowski_symbol: LibraryRep::from(Minkowski {}).symbol(),
         }
@@ -119,7 +123,15 @@ impl EnergyPowerAnalyzer {
         internal_edges: impl IntoIterator<Item = EdgeIndex>,
     ) -> Self {
         Self {
-            loop_edges: loop_edges.into_iter().collect(),
+            loop_edges: Some(loop_edges.into_iter().collect()),
+            internal_edges: Some(internal_edges.into_iter().collect()),
+            minkowski_symbol: LibraryRep::from(Minkowski {}).symbol(),
+        }
+    }
+
+    pub fn for_physical_emr_edges(internal_edges: impl IntoIterator<Item = EdgeIndex>) -> Self {
+        Self {
+            loop_edges: None,
             internal_edges: Some(internal_edges.into_iter().collect()),
             minkowski_symbol: LibraryRep::from(Minkowski {}).symbol(),
         }
@@ -216,20 +228,46 @@ impl EnergyPowerAnalyzer {
                 }
 
                 if function.get_nargs() == 2 && function.get_symbol() == GS.loop_mom {
+                    let Some(loop_edges) = &self.loop_edges else {
+                        return Err(
+                            EnergyPowerAnalysisError::LoopMomentumInPhysicalEmrAnalysis {
+                                expression: Atom::from(function.to_owned()).log_print(None),
+                            },
+                        );
+                    };
                     let loop_index = usize::try_from(function.get(0)).map_err(|_| {
                         EnergyPowerAnalysisError::InvalidLoopMomentumArgument {
                             argument: function.get(0).to_owned().log_print(None),
                         }
                     })?;
-                    let edge =
-                        self.loop_edges.get(loop_index).copied().ok_or(
-                            EnergyPowerAnalysisError::MissingLoopCarrierEdge { loop_index },
-                        )?;
+                    let edge = loop_edges
+                        .get(loop_index)
+                        .copied()
+                        .ok_or(EnergyPowerAnalysisError::MissingLoopCarrierEdge { loop_index })?;
                     return Ok(if self.is_internal_edge(edge) {
                         self.component_degree(edge, function.get(1))
                     } else {
                         EnergyPowerCapMap::default()
                     });
+                }
+
+                // `den(edge, momentum, mass, full_expr)` is a provenance
+                // wrapper whose algebraic value is its final argument. A
+                // positive wrapper can remain in a factorized numerator after
+                // a local 4D Taylor expansion, so analyze that polynomial
+                // without also counting its edge/momentum metadata.
+                if function.get_nargs() == 4 && function.get_symbol() == GS.den {
+                    return self.analyze_view(function.get(3), mode);
+                }
+
+                // Dot products are bilinear. Keep that composition explicit:
+                // the Symbolica symbol is intentionally not globally declared
+                // linear, while numerator energy degrees still add between its
+                // two vector slots.
+                if function.get_nargs() == 2 && function.get_symbol() == GS.dot {
+                    let mut degree = self.analyze_view(function.get(0), mode)?;
+                    degree.add_assign(self.analyze_view(function.get(1), mode)?);
+                    return Ok(degree);
                 }
 
                 let argument_degrees = function
@@ -288,12 +326,12 @@ impl EnergyPowerAnalyzer {
             };
         }
 
-        if function.get_symbol() == self.minkowski_symbol && function.get_nargs() == 2 {
-            // `mink(4, n)` is an abstract Lorentz-index label in the numerator
-            // algebra, not a concrete component selection. Concrete components
-            // use `cind(n)` and are handled above. Any abstract Minkowski index
-            // can contract onto the temporal component, so it contributes to the
-            // conservative energy-power bound.
+        if function.get_symbol() == self.minkowski_symbol && matches!(function.get_nargs(), 1 | 2) {
+            // `mink(4)` is the compact full-vector slot and `mink(4, n)` is an
+            // abstract Lorentz-index label in the numerator algebra. Neither
+            // selects a concrete spatial component; those use `cind(n)` and are
+            // handled above. Both forms can contract onto the temporal
+            // component and therefore contribute to the energy-power bound.
             return LorentzIndexKind::Abstract;
         }
 
@@ -353,11 +391,8 @@ impl Graph {
                 (pair.is_paired() && !edge_data.data.is_dummy).then_some(edge)
             });
 
-        EnergyPowerAnalyzer::with_internal_edges(
-            self.loop_momentum_basis.loop_edges.iter().copied(),
-            internal_edges,
-        )
-        .analyze_view(numerator.as_view(), mode)
+        EnergyPowerAnalyzer::for_physical_emr_edges(internal_edges)
+            .analyze_view(numerator.as_view(), mode)
     }
 
     pub fn automatic_numerator_energy_degree_bounds(
@@ -382,14 +417,11 @@ impl Graph {
                 (pair.is_paired() && !edge_data.data.is_dummy && !excluded_edges.contains(&edge))
                     .then_some(edge)
             });
-        Ok(EnergyPowerAnalyzer::with_internal_edges(
-            self.loop_momentum_basis.loop_edges.iter().copied(),
-            active_edges,
-        )
-        .analyze_atom(numerator)?
-        .iter()
-        .filter_map(|(edge, degree)| (degree >= min_degree).then_some((edge.into(), degree)))
-        .collect())
+        Ok(EnergyPowerAnalyzer::for_physical_emr_edges(active_edges)
+            .analyze_atom(numerator)?
+            .iter()
+            .filter_map(|(edge, degree)| (degree >= min_degree).then_some((edge.into(), degree)))
+            .collect())
     }
 }
 
@@ -424,6 +456,12 @@ mod tests {
             .finish()
     }
 
+    fn compact_minkowski_vector() -> Atom {
+        FunctionBuilder::new(LibraryRep::from(Minkowski {}).symbol())
+            .add_arg(Atom::num(4).as_view())
+            .finish()
+    }
+
     fn bounds(expression: Atom) -> Vec<(usize, usize)> {
         EnergyPowerAnalyzer::new([EdgeIndex(7), EdgeIndex(9)])
             .analyze_atom(&expression)
@@ -454,6 +492,28 @@ mod tests {
     fn emr_numeric_zero_minkowski_label_counts_as_abstract_energy_power() {
         let expression = function!(GS.emr_mom, 3, mink_component(0));
         assert_eq!(bounds(expression), vec![(3, 1)]);
+    }
+
+    #[test]
+    fn compact_emr_vector_counts_as_energy_power() {
+        let expression = function!(GS.emr_mom, 3, compact_minkowski_vector());
+        assert_eq!(bounds(expression), vec![(3, 1)]);
+    }
+
+    #[test]
+    fn dot_product_composes_compact_vector_energy_powers() {
+        let q3 = function!(GS.emr_mom, 3, compact_minkowski_vector());
+        let q7 = function!(GS.emr_mom, 7, compact_minkowski_vector());
+        assert_eq!(bounds(function!(GS.dot, q3.clone(), q3)), vec![(3, 2)]);
+        assert_eq!(bounds(function!(GS.dot, q7, q3)), vec![(3, 1), (7, 1)]);
+    }
+
+    #[test]
+    fn positive_denominator_wrapper_analyzes_only_its_polynomial_value() {
+        let q3 = function!(GS.emr_mom, 3, compact_minkowski_vector());
+        let full_expr = function!(GS.dot, q3.clone(), q3.clone()) - Atom::one();
+        let denominator = GS.den(3, q3, Atom::one(), full_expr);
+        assert_eq!(bounds(denominator), vec![(3, 2)]);
     }
 
     #[test]
@@ -496,6 +556,25 @@ mod tests {
     fn lmb_energy_maps_to_carrier_edge() {
         let expression = function!(GS.loop_mom, 1, mink_index("mu"));
         assert_eq!(bounds(expression), vec![(9, 1)]);
+    }
+
+    #[test]
+    fn physical_emr_analysis_rejects_loop_basis_energy() {
+        let analyzer = EnergyPowerAnalyzer::for_physical_emr_edges([EdgeIndex(7)]);
+        let loop_momentum = function!(GS.loop_mom, 0, mink_index("mu"));
+        assert!(matches!(
+            analyzer.analyze_atom(&loop_momentum),
+            Err(EnergyPowerAnalysisError::LoopMomentumInPhysicalEmrAnalysis { .. })
+        ));
+
+        let emr_momentum = function!(GS.emr_mom, 7, mink_index("mu"));
+        assert_eq!(
+            analyzer
+                .analyze_atom(&emr_momentum)
+                .unwrap()
+                .into_generation_bounds(),
+            vec![(7, 1)]
+        );
     }
 
     #[test]

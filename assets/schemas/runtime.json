@@ -481,6 +481,10 @@
           "type": "number",
           "format": "double"
         },
+        "numerator_sampling_scale": {
+          "type": "number",
+          "format": "double"
+        },
         "orientation_pat": {
           "$ref": "#/$defs/OrientationPattern"
         },

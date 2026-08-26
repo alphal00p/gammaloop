@@ -1,6 +1,12 @@
 use crate::{
-    cff::expression::{
-        GammaLoopOrientationExpression, OrientationExpression, OrientationID, OrientationSelector,
+    cff::{
+        esurface::Esurface,
+        expression::{
+            GammaLoopOrientationExpression, OrientationExpression, OrientationID,
+            OrientationSelector, energy_map_replacements_gs,
+        },
+        hsurface::Hsurface,
+        surface::LinearEnergyExpr,
     },
     debug_tags,
     graph::{Graph, LoopMomentumBasis, cuts::CutSet},
@@ -33,6 +39,7 @@ use symbolica::{
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
 use three_dimensional_reps::Generate3DExpressionOptions;
+use three_dimensional_reps::GeneratedThreeDExpression;
 use typed_index_collections::TiVec;
 
 use super::IntegrandExpr;
@@ -175,6 +182,7 @@ impl Approximation {
             self.integrated(graph)?,
             self.renormalization_scheme(),
             self.spinney.subgraph.is_empty(),
+            self.lmb(),
         )
     }
 
@@ -249,7 +257,10 @@ pub struct CutStructure {
 
 #[derive(Clone, Copy, Debug)]
 enum OrientationProjectionSource<'a> {
-    Exact(&'a TiVec<OrientationID, OrientationExpression>),
+    Exact {
+        orientations: &'a TiVec<OrientationID, OrientationExpression>,
+        root_expression: Option<&'a GeneratedThreeDExpression<Esurface, Hsurface>>,
+    },
     Coarse(&'a [EdgeVec<Orientation>]),
 }
 
@@ -258,6 +269,7 @@ pub(crate) struct OrientationProjection<'a> {
     source: OrientationProjectionSource<'a>,
     options: Option<&'a Generate3DExpressionOptions>,
     pub(crate) orientation_pattern: &'a OrientationPattern,
+    pub(crate) explicit_orientation_sum_only: bool,
 }
 
 impl<'a> OrientationProjection<'a> {
@@ -271,18 +283,42 @@ impl<'a> OrientationProjection<'a> {
             source: OrientationProjectionSource::Coarse(valid_orientations),
             options: None,
             orientation_pattern,
+            explicit_orientation_sum_only: false,
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn exact(
         orientations: &'a TiVec<OrientationID, OrientationExpression>,
         options: &'a Generate3DExpressionOptions,
         orientation_pattern: &'a OrientationPattern,
+        explicit_orientation_sum_only: bool,
     ) -> Self {
         Self {
-            source: OrientationProjectionSource::Exact(orientations),
+            source: OrientationProjectionSource::Exact {
+                orientations,
+                root_expression: None,
+            },
             options: Some(options),
             orientation_pattern,
+            explicit_orientation_sum_only,
+        }
+    }
+
+    pub(crate) fn exact_expression(
+        expression: &'a GeneratedThreeDExpression<Esurface, Hsurface>,
+        options: &'a Generate3DExpressionOptions,
+        orientation_pattern: &'a OrientationPattern,
+        explicit_orientation_sum_only: bool,
+    ) -> Self {
+        Self {
+            source: OrientationProjectionSource::Exact {
+                orientations: &expression.expression.orientations,
+                root_expression: Some(expression),
+            },
+            options: Some(options),
+            orientation_pattern,
+            explicit_orientation_sum_only,
         }
     }
 
@@ -294,7 +330,7 @@ impl<'a> OrientationProjection<'a> {
 
     pub(crate) fn orientation_ids(self) -> Vec<OrientationID> {
         match self.source {
-            OrientationProjectionSource::Exact(orientations) => orientations
+            OrientationProjectionSource::Exact { orientations, .. } => orientations
                 .iter_enumerated()
                 .filter_map(|(id, orientation)| {
                     self.orientation_pattern
@@ -321,34 +357,59 @@ impl<'a> OrientationProjection<'a> {
         self,
     ) -> Option<&'a TiVec<OrientationID, OrientationExpression>> {
         match self.source {
-            OrientationProjectionSource::Exact(orientations) => Some(orientations),
+            OrientationProjectionSource::Exact { orientations, .. } => Some(orientations),
+            OrientationProjectionSource::Coarse(_) => None,
+        }
+    }
+
+    pub(crate) fn root_expression(
+        self,
+    ) -> Option<&'a GeneratedThreeDExpression<Esurface, Hsurface>> {
+        match self.source {
+            OrientationProjectionSource::Exact {
+                root_expression, ..
+            } => root_expression,
             OrientationProjectionSource::Coarse(_) => None,
         }
     }
 
     pub(crate) fn orientation(self, id: OrientationID) -> Option<&'a EdgeVec<Orientation>> {
         match self.source {
-            OrientationProjectionSource::Exact(orientations) => orientations
+            OrientationProjectionSource::Exact { orientations, .. } => orientations
                 .get(id)
                 .map(|orientation| &orientation.data.orientation),
             OrientationProjectionSource::Coarse(orientations) => orientations.get(id.0),
         }
     }
 
-    /// Apply one production energy map only to the newly owned numerator
-    /// fragment. Coarse projectors retain the ordinary UV behavior.
+    /// Apply one branch-owned exact energy map only to the newly owned
+    /// numerator fragment. The source map, when present, is authoritative;
+    /// otherwise the production selector also owns the numerator map.
     pub(crate) fn map_numerator(
         self,
         graph: &Graph,
-        id: OrientationID,
+        selector_id: OrientationID,
+        source_edge_energy_map: Option<&[LinearEnergyExpr]>,
         numerator: &Atom,
     ) -> Result<Atom> {
         match self.source {
-            OrientationProjectionSource::Exact(orientations) => {
-                let orientation = orientations.get(id).ok_or_else(|| {
-                    eyre!("missing production energy map for orientation {}", id.0)
+            OrientationProjectionSource::Exact { orientations, .. } => {
+                let orientation = orientations.get(selector_id).ok_or_else(|| {
+                    eyre!(
+                        "missing production energy map for orientation {}",
+                        selector_id.0
+                    )
                 })?;
-                Ok(numerator.replace_multiple(orientation.energy_replacements_gs(graph)))
+                let replacements = source_edge_energy_map.map_or_else(
+                    || orientation.energy_replacements_gs(graph),
+                    |edge_energy_map| energy_map_replacements_gs(edge_energy_map, graph),
+                );
+                Ok(numerator.replace_multiple(replacements))
+            }
+            OrientationProjectionSource::Coarse(_) if source_edge_energy_map.is_some() => {
+                Err(eyre!(
+                    "a source-local exact energy map cannot be carried by a coarse orientation projector"
+                ))
             }
             OrientationProjectionSource::Coarse(_) => Ok(numerator.clone()),
         }
@@ -374,16 +435,10 @@ impl Approximation {
         self.local = Some(Local4dCts::root());
         let integrated = IntegratedCts::root();
         if let FinalIntegrandDimension::ThreeD = settings.final_integrand {
-            let local_3d = if settings.local_uv_cts_from_expanded_4d_integrands {
-                let cograph = graph
-                    .full_filter()
-                    .subtract(self.subgraph())
-                    .subtract(&graph.initial_state_cut);
-                let source = Full4dCts::with_cograph(self.local(graph)?, graph, &cograph);
-                localizer.project_4d(&source, graph, self.subgraph())?
-            } else {
-                Local3DCts::root(graph, localizer)?
-            };
+            // The root is the original factorized 3D integrand, not a local UV
+            // approximation. Expanded-4D projection applies only to proper UV
+            // nodes and therefore must not change this identity element.
+            let local_3d = Local3DCts::root(graph, localizer)?;
             self.final_integrand = Some(FinalIntegrandBuilder::new(localizer, settings).build_3d(
                 graph,
                 self,
@@ -484,6 +539,46 @@ impl Approximation {
                 .build_3d(graph, self, &local_3d, integrated)?,
         );
         self.local_3d = Some(local_3d);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{dot, graph::parse::IntoGraph, initialisation::test_initialise};
+
+    #[test]
+    fn expanded_4d_setting_does_not_change_the_empty_forest_root() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph root_identity {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+        })?;
+        let mut direct_graph = graph.clone();
+        let mut projected_graph = graph;
+        let cutset = CutSet::empty(direct_graph.n_hedges());
+        let orientation_pattern = OrientationPattern::default();
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::new(&[], &orientation_pattern),
+        );
+        let mut direct = Approximation::new(Spinney::empty(&direct_graph));
+        let mut projected = Approximation::new(Spinney::empty(&projected_graph));
+        let direct_settings = UVgenerationSettings::default();
+        let projected_settings = UVgenerationSettings {
+            local_uv_cts_from_expanded_4d_integrands: true,
+            ..direct_settings.clone()
+        };
+
+        direct.root(&mut direct_graph, localizer, &direct_settings)?;
+        projected.root(&mut projected_graph, localizer, &projected_settings)?;
+
+        assert_eq!(projected.local_3d, direct.local_3d);
+        assert_eq!(projected.final_integrand, direct.final_integrand);
         Ok(())
     }
 }

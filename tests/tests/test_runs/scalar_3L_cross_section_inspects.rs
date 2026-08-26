@@ -268,20 +268,21 @@ fn assert_weight_benchmark(
 }
 
 fn run_scalar_3l_cross_section_case(case: Scalar3LGraphCase) -> Result<()> {
-    run_scalar_3l_cross_section_case_impl("scalar_3l_all", case, true)
+    run_scalar_3l_cross_section_case_impl("scalar_3l_all", case, true, true)
 }
 
 fn run_scalar_3l_cross_section_numerator_only_case(
     test_scope: &str,
     case: Scalar3LGraphCase,
 ) -> Result<()> {
-    run_scalar_3l_cross_section_case_impl(test_scope, case, false)
+    run_scalar_3l_cross_section_case_impl(test_scope, case, false, true)
 }
 
 fn run_scalar_3l_cross_section_case_impl(
     test_scope: &str,
     case: Scalar3LGraphCase,
     include_no_numerator: bool,
+    assert_benchmark: bool,
 ) -> Result<()> {
     let numerator = case.numerator.expression();
     let numerator_label = case.numerator.label();
@@ -379,7 +380,9 @@ fn run_scalar_3l_cross_section_case_impl(
                 case.graph
             ),
         );
-        assert_weight_benchmark(case, &label, &cff_3d_result);
+        if assert_benchmark {
+            assert_weight_benchmark(case, &label, &cff_3d_result);
+        }
     }
 
     clean_test(&cff_3d.cli_settings.state.folder);
@@ -404,6 +407,75 @@ fn run_scalar_3l_quartic_energy_numerator_case(case: Scalar3LGraphCase, edge: us
         &format!("scalar_3l_quartic_energy_q{edge}"),
         numerator_case,
     )
+}
+
+#[test]
+#[serial]
+fn scalar_3l_gl00_higher_power_cff_is_invariant_under_nonzero_sampling_scale() -> Result<()> {
+    let case = Scalar3LGraphCase::default("GL00").without_uv_subtraction();
+    let process = "scalar_3l_gl00_higher_power_sampling_scale";
+    let integrand = "numerator";
+    let numerator = [mink_dot(1, 2, 1), mink_dot(1, 2, 2), mink_dot(1, 2, 3)].join("*");
+    let sampling_mode =
+        "set global kv global.generation.uniform_numerator_sampling_scale=beyond_quadratic"
+            .to_string();
+    let graph_command = generate_graph_command(
+        process,
+        integrand,
+        case.graph,
+        case.final_states,
+        Some(&numerator),
+    );
+    let integrand_command = format!("generate existing -p {process} -i {integrand}");
+    let mut cli = setup_scalar_3l_cross_section_cli(
+        "scalar_3l_gl00_higher_power_sampling_scale",
+        false,
+        &[&sampling_mode, &graph_command],
+        &[&integrand_command],
+        case.subtract_uv(),
+        case.enable_thresholds(),
+    )?;
+
+    cli.run_command(&format!(
+        "set process -p {process} -i {integrand} kv general.numerator_sampling_scale=0.75"
+    ))?;
+    let first = complex_ff64(
+        &evaluate_xspace_process_with_events(&mut cli, process, integrand, &SAMPLE_POINT, &[])?
+            .sample
+            .evaluation
+            .integrand_result,
+    );
+    cli.run_command(&format!(
+        "set process -p {process} -i {integrand} kv general.numerator_sampling_scale=2.25"
+    ))?;
+    let second = complex_ff64(
+        &evaluate_xspace_process_with_events(&mut cli, process, integrand, &SAMPLE_POINT, &[])?
+            .sample
+            .evaluation
+            .integrand_result,
+    );
+    let first_norm = (first.re * first.re + first.im * first.im).sqrt();
+    let second_norm = (second.re * second.re + second.im * second.im).sqrt();
+    let scale = first_norm.max(second_norm);
+    assert!(scale > 1.0e-18, "sampling-scale acceptance point is zero");
+    assert!(
+        complex_distance(first, second) <= 1.0e-8 * scale,
+        "GammaLoop higher-power CFF changed with auxiliary M: {first} vs {second}"
+    );
+
+    cli.run_command(&format!(
+        "set process -p {process} -i {integrand} kv general.numerator_sampling_scale=0.0"
+    ))?;
+    let error =
+        match evaluate_xspace_process_with_events(&mut cli, process, integrand, &SAMPLE_POINT, &[])
+        {
+            Ok(_) => panic!("an evaluator that uses M accepted a zero sampling scale"),
+            Err(error) => error,
+        };
+    assert!(format!("{error:#}").contains("sampling scale M"));
+
+    clean_test(&cli.cli_settings.state.folder);
+    Ok(())
 }
 
 macro_rules! scalar_3l_graph_test {
@@ -528,6 +600,17 @@ mod default_scalar_3l_cross_section_inspects {
     use super::*;
 
     scalar_3l_graph_test!(scalar_3l_cross_section_gl02_inspects_match, "GL02");
+
+    #[test]
+    #[serial]
+    fn scalar_3l_cross_section_gl02_dod_zero_triangle_inspects_match() -> Result<()> {
+        run_scalar_3l_cross_section_case_impl(
+            "scalar_3l_gl02_dod_zero_triangle",
+            Scalar3LGraphCase::default("GL02"),
+            false,
+            false,
+        )
+    }
 
     mod quadratic_energy_numerators {
         use super::*;

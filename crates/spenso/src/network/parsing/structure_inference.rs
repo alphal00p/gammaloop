@@ -206,7 +206,9 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
         }
     }
 
-    fn syntactic_structure_from_atom(value: AtomView<'_>) -> Result<Self, StructureError> {
+    pub(super) fn syntactic_structure_from_atom(
+        value: AtomView<'_>,
+    ) -> Result<Self, StructureError> {
         match value {
             AtomView::Add(add) => {
                 let Some(first) = add.iter().next() else {

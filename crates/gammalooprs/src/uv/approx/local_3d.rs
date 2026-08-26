@@ -4,7 +4,7 @@ use eyre::eyre;
 
 use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, HedgePair, Orientation},
-    subgraph::{SuBitGraph, SubSetOps},
+    subgraph::{SuBitGraph, SubSetLike, SubSetOps},
 };
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Symbol},
@@ -18,6 +18,7 @@ use crate::{
         CutCFF, CutCFFIndex,
         expression::{OrientationExpression, OrientationID, OrientationSelector},
         orientations::GraphOrientation,
+        surface::LinearEnergyExpr,
     },
     debug_tags,
     graph::{Graph, GraphThreeDSource, LMBext, LoopMomentumBasis, cuts::CutSet},
@@ -46,15 +47,27 @@ impl FrozenActiveCt {
     }
 }
 
-/// Residue integrands grouped by the one production energy map that owns every
-/// numerator factor in the term. Operations zip equal IDs and never form a
-/// Cartesian product of energy maps.
+/// Residue integrands grouped by the selector and exact energy map that own
+/// every numerator factor in the term. A missing source map uses the selected
+/// production map; a present source map remains authoritative while production
+/// IDs only partition theta sectors.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct OrientationIntegrands(BTreeMap<OrientationID, Integrands>);
+struct OrientationIntegrandBranch {
+    selector_id: OrientationID,
+    source_edge_energy_map: Option<Vec<LinearEnergyExpr>>,
+    integrands: Integrands,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct OrientationIntegrands(Vec<OrientationIntegrandBranch>);
 
 impl From<Integrands> for OrientationIntegrands {
     fn from(integrands: Integrands) -> Self {
-        Self(BTreeMap::from([(OrientationID(0), integrands)]))
+        Self(vec![OrientationIntegrandBranch {
+            selector_id: OrientationID(0),
+            source_edge_energy_map: None,
+            integrands,
+        }])
     }
 }
 
@@ -65,50 +78,60 @@ impl OrientationIntegrands {
     ) -> Self {
         Self(
             ids.into_iter()
-                .map(|id| {
-                    (
-                        id,
-                        indices.iter().map(|index| (*index, Atom::Zero)).collect(),
-                    )
+                .map(|selector_id| OrientationIntegrandBranch {
+                    selector_id,
+                    source_edge_energy_map: None,
+                    integrands: indices.iter().map(|index| (*index, Atom::Zero)).collect(),
                 })
                 .collect(),
         )
     }
 
-    fn checked_zip(
-        &self,
-        other: &Self,
-        mut map: impl FnMut(OrientationID, &Integrands, &Integrands) -> Result<Integrands>,
-    ) -> Result<Self> {
-        if self.0.len() != other.0.len() {
-            return Err(eyre!(
-                "energy-map integrands have different map counts: {} and {}",
-                self.0.len(),
-                other.0.len()
-            ));
-        }
-        self.0
-            .iter()
-            .map(|(id, left)| {
-                let right = other
-                    .0
-                    .get(id)
-                    .ok_or_else(|| eyre!("right integrands are missing energy map {}", id.0))?;
-                Ok((*id, map(*id, left, right)?))
-            })
-            .collect::<Result<BTreeMap<_, _>>>()
-            .map(Self)
-    }
-
     pub(crate) fn zip_add(&self, other: &Self) -> Result<Self> {
-        self.checked_zip(other, |_, left, right| left.clone().zip_add(right.clone()))
+        // Deferred integrands expose nonzero evaluator calls through `iter`, so
+        // this predicate only prunes compact branches proven to be zero.
+        let is_zero = |branch: &OrientationIntegrandBranch| {
+            branch.integrands.iter().all(|(_, atom)| atom.is_zero())
+        };
+        let fallback_zero = self
+            .0
+            .iter()
+            .chain(&other.0)
+            .find(|branch| is_zero(branch))
+            .cloned();
+        let mut branches = self
+            .0
+            .iter()
+            .filter(|branch| !is_zero(branch))
+            .cloned()
+            .collect::<Vec<_>>();
+        for right in other.0.iter().filter(|branch| !is_zero(branch)) {
+            if let Some(left) = branches.iter_mut().find(|left| {
+                left.selector_id == right.selector_id
+                    && left.source_edge_energy_map == right.source_edge_energy_map
+            }) {
+                left.integrands = left.integrands.clone().zip_add(right.integrands.clone())?;
+            } else {
+                branches.push(right.clone());
+            }
+        }
+        if branches.is_empty() {
+            branches.extend(fallback_zero);
+        }
+        Ok(Self(branches))
     }
 
     fn zip_mul_unmapped(&self, other: &Integrands) -> Result<Self> {
         self.0
             .iter()
-            .map(|(id, integrands)| Ok((*id, integrands.zip_mul(other)?)))
-            .collect::<Result<BTreeMap<_, _>>>()
+            .map(|branch| {
+                Ok(OrientationIntegrandBranch {
+                    selector_id: branch.selector_id,
+                    source_edge_energy_map: branch.source_edge_energy_map.clone(),
+                    integrands: branch.integrands.zip_mul(other)?,
+                })
+            })
+            .collect::<Result<Vec<_>>>()
             .map(Self)
     }
 
@@ -116,35 +139,67 @@ impl OrientationIntegrands {
         Self(
             self.0
                 .iter()
-                .map(|(id, integrands)| (*id, integrands.map(&mut f)))
+                .map(|branch| OrientationIntegrandBranch {
+                    selector_id: branch.selector_id,
+                    source_edge_energy_map: branch.source_edge_energy_map.clone(),
+                    integrands: branch.integrands.map(&mut f),
+                })
                 .collect(),
         )
     }
 
     fn fallible_map(
         &self,
-        mut f: impl FnMut(OrientationID, &Atom) -> Result<Atom>,
+        mut f: impl FnMut(OrientationID, Option<&[LinearEnergyExpr]>, &Atom) -> Result<Atom>,
     ) -> Result<Self> {
         self.0
             .iter()
-            .map(|(id, integrands)| Ok((*id, integrands.fallible_map(|atom| f(*id, atom))?)))
-            .collect::<Result<BTreeMap<_, _>>>()
+            .map(|branch| {
+                Ok(OrientationIntegrandBranch {
+                    selector_id: branch.selector_id,
+                    source_edge_energy_map: branch.source_edge_energy_map.clone(),
+                    integrands: branch.integrands.fallible_map(|atom| {
+                        f(
+                            branch.selector_id,
+                            branch.source_edge_energy_map.as_deref(),
+                            atom,
+                        )
+                    })?,
+                })
+            })
+            .collect::<Result<Vec<_>>>()
             .map(Self)
     }
 
     #[cfg(test)]
     pub(crate) fn iter(&self) -> impl Iterator<Item = (&CutCFFIndex, &Atom)> {
-        self.0.values().flat_map(Integrands::iter)
+        self.0.iter().flat_map(|branch| branch.integrands.iter())
     }
 
-    pub(crate) fn iter_orientations(&self) -> impl Iterator<Item = (OrientationID, &Integrands)> {
-        self.0.iter().map(|(id, integrands)| (*id, integrands))
+    pub(crate) fn iter_orientations(
+        &self,
+    ) -> impl Iterator<Item = (OrientationID, Option<&[LinearEnergyExpr]>, &Integrands)> {
+        self.0.iter().map(|branch| {
+            (
+                branch.selector_id,
+                branch.source_edge_energy_map.as_deref(),
+                &branch.integrands,
+            )
+        })
     }
 }
 
 impl FromIterator<(OrientationID, Integrands)> for OrientationIntegrands {
     fn from_iter<T: IntoIterator<Item = (OrientationID, Integrands)>>(iter: T) -> Self {
-        Self(iter.into_iter().collect())
+        Self(
+            iter.into_iter()
+                .map(|(selector_id, integrands)| OrientationIntegrandBranch {
+                    selector_id,
+                    source_edge_energy_map: None,
+                    integrands,
+                })
+                .collect(),
+        )
     }
 }
 
@@ -155,7 +210,11 @@ impl Neg for OrientationIntegrands {
         Self(
             self.0
                 .into_iter()
-                .map(|(id, integrands)| (id, -integrands))
+                .map(|branch| OrientationIntegrandBranch {
+                    selector_id: branch.selector_id,
+                    source_edge_energy_map: branch.source_edge_energy_map,
+                    integrands: -branch.integrands,
+                })
                 .collect(),
         )
     }
@@ -206,13 +265,31 @@ impl<'a> Localizer<'a> {
             .exact_orientations()
             .is_some()
             .then_some(analysis_numerator);
-        let cff = graph.cff(
-            &contract_subgraph,
-            self.cutset,
-            orientation_pattern,
-            &options,
-            analysis_numerator,
-        )?;
+        let cff = if to_contract.is_empty() {
+            if let Some(root_expression) = self.orientation.root_expression() {
+                graph.cff_from_production_expression(
+                    root_expression,
+                    self.cutset,
+                    orientation_pattern,
+                )?
+            } else {
+                graph.cff(
+                    &contract_subgraph,
+                    self.cutset,
+                    orientation_pattern,
+                    &options,
+                    analysis_numerator,
+                )?
+            }
+        } else {
+            graph.cff(
+                &contract_subgraph,
+                self.cutset,
+                orientation_pattern,
+                &options,
+                analysis_numerator,
+            )?
+        };
         Ok((cff, contract_subgraph))
     }
 
@@ -344,17 +421,68 @@ impl<'a> Localizer<'a> {
         }
     }
 
+    fn source_selector_representatives(
+        self,
+        graph: &Graph,
+        reduced: &OrientationExpression,
+        contract_subgraph: &SuBitGraph,
+    ) -> Result<Vec<OrientationID>> {
+        let production = self
+            .orientation
+            .exact_orientations()
+            .expect("source selectors are only requested for an exact projector");
+        let contracted_edges = graph.paired_edges(contract_subgraph);
+        // The reduced source map owns numerator energies. Production maps only
+        // extend its surviving directions into full theta sectors.
+        let mut explicit_reduced_orientation = reduced.data.orientation.clone();
+        for edge in &contracted_edges {
+            if explicit_reduced_orientation
+                .iter()
+                .any(|(explicit_edge, _)| explicit_edge == *edge)
+            {
+                explicit_reduced_orientation[*edge] = Orientation::Undirected;
+            }
+        }
+        let compatible = production
+            .iter_enumerated()
+            .filter(|(_, full)| {
+                full.data
+                    .orientation
+                    .is_compatible_with(&explicit_reduced_orientation)
+            })
+            .map(|(id, _)| id)
+            .collect::<Vec<_>>();
+
+        if compatible.is_empty() {
+            return Err(eyre!(
+                "no valid global orientation matches reduced orientation {}",
+                GS.orientation_delta(&explicit_reduced_orientation)
+            ));
+        }
+
+        Ok(compatible
+            .into_iter()
+            .filter(|id| {
+                self.orientation.orientation_pattern.filter_orientation(
+                    &production
+                        .get(*id)
+                        .expect("source selector belongs to the production map set")
+                        .data
+                        .orientation,
+                )
+            })
+            .collect())
+    }
+
     fn coarse_representatives(
         self,
         reduced_orientation: &EdgeVec<Orientation>,
-        internal_edges: &[EdgeIndex],
-        average: bool,
     ) -> Result<Vec<OrientationID>> {
         let ids = self.orientation.orientation_ids();
         if ids.len() == 1 && self.orientation.orientation(ids[0]).is_none() {
             return Ok(ids);
         }
-        let mut compatible = ids
+        let compatible = ids
             .into_iter()
             .filter(|id| {
                 self.orientation
@@ -362,19 +490,6 @@ impl<'a> Localizer<'a> {
                     .is_some_and(|orientation| orientation.is_compatible_with(reduced_orientation))
             })
             .collect::<Vec<_>>();
-
-        if !average {
-            compatible = compatible
-                .into_iter()
-                .max_by_key(|id| {
-                    self.orientation
-                        .orientation(*id)
-                        .expect("coarse representative has an orientation")
-                        .score(internal_edges)
-                })
-                .into_iter()
-                .collect();
-        }
 
         if compatible.is_empty() {
             Err(eyre!(
@@ -386,9 +501,11 @@ impl<'a> Localizer<'a> {
         }
     }
 
-    /// Assign a reduced CFF map to exact production map IDs. The reduced
-    /// selector remains attached to the denominator, while selectors for the
-    /// integrated subgraph come from its full-map extensions.
+    /// Assign a reduced CFF map to its production representation. Ordinary 3D
+    /// evaluation keeps the reduced selector and one deterministic integrated-
+    /// subgraph selector. Explicit-sum evaluation keeps each reduced residue
+    /// once without orientation selectors; its ID is then map metadata only.
+    #[allow(clippy::too_many_arguments)]
     fn localized_orientation_terms(
         self,
         graph: &Graph,
@@ -396,50 +513,92 @@ impl<'a> Localizer<'a> {
         reduced_expression: &Atom,
         contract_subgraph: &SuBitGraph,
         internal_edges: &[EdgeIndex],
-        average: bool,
+        production_orientation_id: Option<OrientationID>,
+        source_edge_energy_map: Option<&[LinearEnergyExpr]>,
     ) -> Result<Vec<(OrientationID, Atom)>> {
-        let representatives = if self.orientation.exact_orientations().is_some() {
-            self.exact_representatives(graph, reduced, contract_subgraph)?
-        } else {
-            self.coarse_representatives(&reduced.data.orientation, internal_edges, average)?
-        };
-        if representatives.is_empty() {
-            return Ok(Vec::new());
+        if let Some(id) = production_orientation_id
+            && source_edge_energy_map.is_none()
+        {
+            // A stored root residue is already diagonal in its production map.
+            // Its outer orientation key owns the numerator map, while its full
+            // theta selector still partitions ordinary parametric evaluation.
+            // Explicit-sum evaluators set all orientation inputs to zero, which
+            // activates every theta factor and retains the complete sum.
+            return Ok(self
+                .orientation
+                .orientation(id)
+                .filter(|orientation| {
+                    self.orientation
+                        .orientation_pattern
+                        .filter_orientation(orientation)
+                })
+                .map(|orientation| {
+                    vec![(
+                        id,
+                        if self.orientation.explicit_orientation_sum_only {
+                            reduced_expression.clone()
+                        } else {
+                            reduced_expression.clone() * orientation.orientation_thetas()
+                        },
+                    )]
+                })
+                .unwrap_or_default());
         }
-        // Collapsed local or integrated 4D sources split a reduced residue
-        // evenly among its full extensions. Root CFF already has distinct
-        // production residues and retains them without this normalization.
-        let normalization = if average {
-            Atom::num(representatives.len() as i64)
+        let representatives = if self.orientation.exact_orientations().is_some() {
+            if source_edge_energy_map.is_some() {
+                self.source_selector_representatives(graph, reduced, contract_subgraph)?
+            } else {
+                self.exact_representatives(graph, reduced, contract_subgraph)?
+            }
         } else {
-            Atom::one()
+            self.coarse_representatives(&reduced.data.orientation)?
         };
-        let mut explicit_orientation = reduced.data.orientation.clone();
-        for edge in internal_edges {
-            if explicit_orientation
-                .iter()
-                .any(|(explicit_edge, _)| explicit_edge == *edge)
-            {
-                explicit_orientation[*edge] = Orientation::Undirected;
+        let mut selector_edges = graph
+            .as_ref()
+            .iter_edges()
+            .filter_map(|(pair, edge_id, edge)| {
+                (pair.is_paired() && !edge.data.is_dummy).then_some(edge_id)
+            })
+            .collect::<Vec<_>>();
+        for edge_id in internal_edges {
+            if !selector_edges.contains(edge_id) {
+                selector_edges.push(*edge_id);
             }
         }
-        let reduced_selector = explicit_orientation.orientation_thetas();
-
-        Ok(representatives
-            .into_iter()
-            .map(|id| {
-                let internal_selector = self
-                    .orientation
-                    .orientation(id)
-                    .map(|orientation| orientation.internal_orientation_selector(internal_edges))
-                    .unwrap_or_else(Atom::one);
-                (
-                    id,
-                    reduced_expression.clone() * &reduced_selector * internal_selector
-                        / &normalization,
-                )
+        let Some(representative) = representatives.into_iter().max_by_key(|id| {
+            self.orientation.orientation(*id).map(|orientation| {
+                // Generalized numerator sampling can add under-resolved maps
+                // to the CFF carrier. They own numerator values, but are not
+                // additional physical orientation channels, so resolve as many
+                // selector directions as possible before applying the ordinary
+                // deterministic representative ordering.
+                let directed_count = selector_edges
+                    .iter()
+                    .filter(|edge_id| orientation[**edge_id] != Orientation::Undirected)
+                    .count();
+                (directed_count, orientation.score(&selector_edges))
             })
-            .collect())
+        }) else {
+            return Ok(Vec::new());
+        };
+        if self.orientation.explicit_orientation_sum_only {
+            return Ok(vec![(representative, reduced_expression.clone())]);
+        }
+        // The reduced term fixes every surviving physical direction. Any
+        // remaining under-resolved direction is either contracted or belongs
+        // to a generalized numerator-sampling contact map. Host the complete
+        // branch in one resolved production orientation so ordinary runtime
+        // orientation summation sees it exactly once; the branch-owned source
+        // map still evaluates its numerator at the original sampling point.
+        let selector = self
+            .orientation
+            .orientation(representative)
+            .map(|orientation| orientation.orientation_thetas())
+            .unwrap_or_else(Atom::one);
+        Ok(vec![(
+            representative,
+            reduced_expression.clone() * selector,
+        )])
     }
 
     #[cfg(test)]
@@ -448,21 +607,20 @@ impl<'a> Localizer<'a> {
         reduced_expression: &Atom,
         reduced_orientation: &EdgeVec<Orientation>,
         internal_edges: &[EdgeIndex],
-        average: bool,
     ) -> Result<Atom> {
-        let representatives =
-            self.coarse_representatives(reduced_orientation, internal_edges, average)?;
-        let normalization = if average {
-            Atom::num(representatives.len() as i64)
-        } else {
-            Atom::one()
-        };
-        let reduced_selector = reduced_orientation.orientation_thetas();
-        Ok(representatives
+        let representative = self
+            .coarse_representatives(reduced_orientation)?
             .into_iter()
+            .max_by_key(|id| {
+                self.orientation
+                    .orientation(*id)
+                    .map(|orientation| orientation.score(internal_edges))
+            });
+        let reduced_selector = reduced_orientation.orientation_thetas();
+        Ok(representative
             .map(|id| {
                 reduced_expression.clone()
-                    * &reduced_selector
+                    * reduced_selector
                     * self
                         .orientation
                         .orientation(id)
@@ -470,9 +628,7 @@ impl<'a> Localizer<'a> {
                             orientation.internal_orientation_selector(internal_edges)
                         })
                         .unwrap_or_else(Atom::one)
-                    / &normalization
             })
-            .reduce(|left, right| left + right)
             .unwrap_or(Atom::Zero))
     }
 
@@ -480,21 +636,23 @@ impl<'a> Localizer<'a> {
         self,
         graph: &mut Graph,
         to_contract: &SuBitGraph,
-        average: bool,
         analysis_numerator: &Atom,
     ) -> Result<OrientationIntegrands> {
         let (cff, contract_subgraph) = self.cff(graph, to_contract, analysis_numerator)?;
         let indices = cff.terms.keys().copied().collect::<Vec<_>>();
+        let production_prefactor = Atom::num(cff.production_prefactor_factor());
         let ids = self.orientation.orientation_ids();
         if ids.is_empty() {
             return Err(eyre!(
                 "orientation pattern selects no production energy maps"
             ));
         }
-        let mut terms = ids
-            .iter()
-            .flat_map(|id| indices.iter().map(move |index| ((*id, *index), Atom::Zero)))
-            .collect::<BTreeMap<_, _>>();
+        #[allow(clippy::type_complexity)]
+        let mut terms: Vec<(
+            OrientationID,
+            Option<Vec<LinearEnergyExpr>>,
+            BTreeMap<CutCFFIndex, Atom>,
+        )> = Vec::new();
         let internal_edges = if self.orientation.exact_orientations().is_some() {
             // Exact full maps must also recover selectors for graph tree edges
             // contracted by the CFF source, not only the explicit UV subgraph.
@@ -506,36 +664,54 @@ impl<'a> Localizer<'a> {
 
         for (index, cff_term) in cff.terms {
             for reduced in cff_term.orientations {
+                // A generalized carrier map can be under-resolved even for a
+                // stored root residue. Keep that branch-owned numerator map
+                // separate from the resolved production orientation selected
+                // solely to partition the ordinary runtime orientation sum.
+                let source_edge_energy_map = self
+                    .orientation
+                    .exact_orientations()
+                    .is_some()
+                    .then(|| reduced.orientation.edge_energy_map.clone());
+                let reduced_expression = &reduced.expression * &production_prefactor;
                 for (id, expression) in self.localized_orientation_terms(
                     graph,
                     &reduced.orientation,
-                    &reduced.expression,
+                    &reduced_expression,
                     &contract_subgraph,
                     &internal_edges,
-                    average,
+                    reduced.production_orientation_id,
+                    source_edge_energy_map.as_deref(),
                 )? {
-                    *terms.get_mut(&(id, index)).ok_or_else(|| {
-                        eyre!("projected CFF returned unselected map {}", id.0)
-                    })? += expression;
+                    if !terms.iter().any(|(selector_id, energy_map, _)| {
+                        *selector_id == id && energy_map == &source_edge_energy_map
+                    }) {
+                        terms.push((
+                            id,
+                            source_edge_energy_map.clone(),
+                            indices.iter().map(|index| (*index, Atom::Zero)).collect(),
+                        ));
+                    }
+                    *terms
+                        .iter_mut()
+                        .find(|(selector_id, energy_map, _)| {
+                            *selector_id == id && energy_map == &source_edge_energy_map
+                        })
+                        .and_then(|(_, _, integrands)| integrands.get_mut(&index))
+                        .expect("all projected CFF branch keys were initialized") += expression;
                 }
             }
         }
 
         Ok(OrientationIntegrands(
-            ids.into_iter()
-                .map(|id| {
-                    let integrands = indices
-                        .iter()
-                        .map(|index| {
-                            (
-                                *index,
-                                terms
-                                    .remove(&(id, *index))
-                                    .expect("all projected CFF keys were initialized"),
-                            )
-                        })
-                        .collect();
-                    (id, integrands)
+            terms
+                .into_iter()
+                .map(|(selector_id, source_edge_energy_map, integrands)| {
+                    OrientationIntegrandBranch {
+                        selector_id,
+                        source_edge_energy_map,
+                        integrands: integrands.into_iter().collect(),
+                    }
                 })
                 .collect(),
         ))
@@ -559,94 +735,109 @@ impl<'a> Localizer<'a> {
             .expect("Graph numerator should be available")
             * graph.global_atom();
 
-        for term in source.terms()? {
-            // Analyze and later map the numerator owned by this exact 4D term
-            // together with the factors grown outside its owning spinney. Keep
-            // the product factorized throughout both operations.
-            let analysis_numerator = &term.numerator * &outside_numerator;
-            let mut active_denominators = Vec::new();
-            let mut residual_factor = Atom::one();
-            for denominator in term.denominators {
-                if denominator.depends_on_loop(graph)? {
-                    active_denominators.push(denominator);
-                } else {
-                    // Keep each exact occurrence. This deliberately does not
-                    // group by source edge: equal edge IDs can carry distinct
-                    // full expressions after a 4D Taylor expansion.
-                    residual_factor /= denominator.full_expr;
+        for sector in source.sectors() {
+            let frozen_localizer = sector
+                .frozen_lmbs()
+                .iter()
+                .fold(Atom::one(), |product, lmb| {
+                    product * GS.localizing_integrand(lmb)
+                });
+            for term in sector.physical_terms()? {
+                // Analyze and later map the numerator owned by this exact 4D term
+                // together with the factors grown outside its owning spinney. Keep
+                // the product factorized throughout both operations.
+                let analysis_numerator = &term.numerator * &outside_numerator;
+                let mut active_denominators = Vec::new();
+                let mut residual_factor = Atom::one();
+                for denominator in term.denominators {
+                    if denominator.depends_on_loop(graph)? {
+                        active_denominators.push(denominator);
+                    } else {
+                        // Keep each exact occurrence. This deliberately does not
+                        // group by source edge: equal edge IDs can carry distinct
+                        // full expressions after a 4D Taylor expansion.
+                        residual_factor /= denominator.full_expr;
+                    }
                 }
-            }
-
-            if active_denominators.is_empty() {
-                if !indices.contains(&CutCFFIndex::new_all_none()) {
+                if active_denominators.is_empty() {
+                    if !indices.contains(&CutCFFIndex::new_all_none()) {
+                        continue;
+                    }
+                    // A denominatorless exact source has no local energy residue
+                    // and therefore no orientation selector. Its complete
+                    // numerator must be independent of every loop energy; the
+                    // empty exact source proves that before setting its inactive
+                    // temporal placeholders to zero.
+                    let exact_source = GraphThreeDSource::from_exact_denominators(graph, &[])
+                        .map_err(|error| {
+                            eyre!("could not build denominatorless exact 4D source: {error}")
+                        })?;
+                    // Initial-cut and tree-edge energies are external to the empty
+                    // CFF source. The mapper below still projects their complete
+                    // external-affine physical energy into the factorized
+                    // numerator, while `residual_factor` owns every corresponding
+                    // denominator occurrence.
+                    let cff_external_edges = graph
+                        .iter_edges_of(&graph.initial_state_cut)
+                        .chain(graph.iter_edges_of(&graph.tree_edges))
+                        .map(|(_, edge_id, _)| edge_id);
+                    let energy_degree_bounds = graph
+                        .automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
+                            &analysis_numerator,
+                            cff_external_edges,
+                            1,
+                        )?;
+                    if !energy_degree_bounds.is_empty() {
+                        return Err(eyre!(
+                            "denominatorless exact 4D term has nonconstant numerator EMR energy-degree bounds {:?}, but no denominator residue or affine numerator-only source map can carry them",
+                            energy_degree_bounds,
+                        ));
+                    }
+                    let mapped_numerator = exact_source
+                        .exact_source_energy_mapper()
+                        .expect("empty exact source has an owned parent-energy mapper")
+                        .map_numerator(&[], &[], &analysis_numerator)?;
+                    projected.push(
+                        CutCFFIndex::new_all_none(),
+                        mapped_numerator * &residual_factor * &frozen_localizer,
+                    )?;
                     continue;
                 }
-                // A denominatorless exact source has no local energy residue
-                // and therefore no orientation selector. Its complete
-                // numerator must be independent of every loop energy; the
-                // empty exact source proves that before setting its inactive
-                // temporal placeholders to zero.
-                let exact_source =
-                    GraphThreeDSource::from_exact_denominators(graph, &[]).map_err(|error| {
-                        eyre!("could not build denominatorless exact 4D source: {error}")
-                    })?;
-                // Initial-cut and tree-edge energies are external to the empty
-                // CFF source. The mapper below still projects their complete
-                // external-affine physical energy into the factorized
-                // numerator, while `residual_factor` owns every corresponding
-                // denominator occurrence.
-                let cff_external_edges = graph
-                    .iter_edges_of(&graph.initial_state_cut)
-                    .chain(graph.iter_edges_of(&graph.tree_edges))
-                    .map(|(_, edge_id, _)| edge_id);
-                let energy_degree_bounds = graph
-                    .automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
-                        &analysis_numerator,
-                        cff_external_edges,
-                        1,
-                    )?;
-                if !energy_degree_bounds.is_empty() {
-                    return Err(eyre!(
-                        "denominatorless exact 4D term has nonconstant numerator EMR energy-degree bounds {:?}, but no denominator residue or affine numerator-only source map can carry them",
-                        energy_degree_bounds,
-                    ));
-                }
-                let mapped_numerator = exact_source
-                    .exact_source_energy_mapper()
-                    .expect("empty exact source has an owned parent-energy mapper")
-                    .map_numerator(&[], &[], &analysis_numerator)?;
-                projected.push(
-                    CutCFFIndex::new_all_none(),
-                    mapped_numerator * &residual_factor,
+
+                let options = self.orientation.cff_options(graph);
+                // The exact source CFF resolves contracted directions internally.
+                // Its orientations are an explicit source-local sum, so a
+                // production orientation pattern is deliberately never applied.
+                let (cff, _contract_subgraph) = graph.cff_from_4d_denominators(
+                    &active_denominators,
+                    self.cutset,
+                    &options,
+                    &analysis_numerator,
                 )?;
-                continue;
-            }
+                let production_prefactor = Atom::num(cff.production_prefactor_factor());
 
-            let options = self.orientation.cff_options(graph);
-            // The exact source CFF resolves contracted directions internally.
-            // Its orientations are an explicit source-local sum, so a
-            // production orientation pattern is deliberately never applied.
-            let (cff, _contract_subgraph) = graph.cff_from_4d_denominators(
-                &active_denominators,
-                self.cutset,
-                &options,
-                &analysis_numerator,
-            )?;
-
-            for (index, cff_term) in cff.terms {
-                for orientation in &cff_term.orientations {
-                    let mapped_numerator = cff_term
-                        .map_exact_source_numerator(&orientation.orientation, &analysis_numerator)
-                        .map_err(|error| {
-                            eyre!(
-                                "{error}; exact 4D term active denominators are {:?}",
-                                active_denominators
+                for (index, cff_term) in cff.terms {
+                    for orientation in &cff_term.orientations {
+                        let mapped_numerator = cff_term
+                            .map_exact_source_numerator(
+                                &orientation.orientation,
+                                &analysis_numerator,
                             )
-                        })?;
-                    projected.push(
-                        index,
-                        orientation.expression.clone() * mapped_numerator * &residual_factor,
-                    )?;
+                            .map_err(|error| {
+                                eyre!(
+                                    "{error}; exact 4D term active denominators are {:?}",
+                                    active_denominators
+                                )
+                            })?;
+                        projected.push(
+                            index,
+                            orientation.expression.clone()
+                                * &production_prefactor
+                                * mapped_numerator
+                                * &residual_factor
+                                * &frozen_localizer,
+                        )?;
+                    }
                 }
             }
         }
@@ -708,13 +899,16 @@ impl<'a> Localizer<'a> {
 
         let localizing_integrand = GS.localizing_integrand(integrated_node.lmb());
         let active = self
-            .projected_cff(graph, to_contract, true, &analysis_numerator)?
-            .fallible_map(|orientation_id, localized| {
+            .projected_cff(graph, to_contract, &analysis_numerator)?
+            .fallible_map(|orientation_id, source_edge_energy_map, localized| {
                 let localized = localized * &fourddenoms;
                 let localized_cff_byte_size = localized.as_view().get_byte_size();
-                let mapped_finite_ct =
-                    self.orientation
-                        .map_numerator(graph, orientation_id, &finite_ct)?;
+                let mapped_finite_ct = self.orientation.map_numerator(
+                    graph,
+                    orientation_id,
+                    source_edge_energy_map,
+                    &finite_ct,
+                )?;
                 let active_ct = localized * mapped_finite_ct;
                 let localized_ct = &active_ct * &localizing_integrand;
                 debug_tags!(#generation, #profile, #uv, #integrated, #local, #term, #summary;
@@ -744,10 +938,11 @@ impl<'a> Localizer<'a> {
         self,
         graph: &Graph,
         orientation_id: OrientationID,
+        source_edge_energy_map: Option<&[LinearEnergyExpr]>,
         numerator: &Atom,
     ) -> Result<Atom> {
         self.orientation
-            .map_numerator(graph, orientation_id, numerator)
+            .map_numerator(graph, orientation_id, source_edge_energy_map, numerator)
     }
 
     pub(crate) fn uses_exact_maps(self) -> bool {
@@ -1049,14 +1244,17 @@ impl Local3DCts {
             let active_sectors = active_sectors
                 .iter()
                 .map(|(active, integrands)| {
-                    Ok((active.clone(), integrands.fallible_map(|_, atom| f(atom))?))
+                    Ok((
+                        active.clone(),
+                        integrands.fallible_map(|_, _, atom| f(atom))?,
+                    ))
                 })
                 .collect::<Result<_>>()?;
             Self::from_active_sectors(active_sectors)
         } else {
             let representation = match &self.representation {
                 Local3DRepresentation::Direct(integrands) => {
-                    Local3DRepresentation::Direct(integrands.fallible_map(|_, atom| f(atom))?)
+                    Local3DRepresentation::Direct(integrands.fallible_map(|_, _, atom| f(atom))?)
                 }
                 Local3DRepresentation::Projected(integrands) => {
                     Local3DRepresentation::Projected(integrands.fallible_map(f)?)
@@ -1071,7 +1269,7 @@ impl Local3DCts {
 
     fn map_orientations(
         &self,
-        mut f: impl FnMut(OrientationID, &Atom) -> Result<Atom>,
+        mut f: impl FnMut(OrientationID, Option<&[LinearEnergyExpr]>, &Atom) -> Result<Atom>,
     ) -> Result<Self> {
         if let Some(active_sectors) = &self.active_sectors {
             let active_sectors = active_sectors
@@ -1095,7 +1293,7 @@ impl Local3DCts {
     pub(crate) fn root(graph: &mut Graph, localizer: Localizer<'_>) -> Result<Self> {
         let analysis_numerator = graph.production_numerator_atom_for_full_3d_expression();
         let to_contract = graph.empty_subgraph::<SuBitGraph>();
-        let cff = localizer.projected_cff(graph, &to_contract, false, &analysis_numerator)?;
+        let cff = localizer.projected_cff(graph, &to_contract, &analysis_numerator)?;
 
         let fourddenoms = GS.wrap_tree_denoms(
             graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
@@ -1139,10 +1337,12 @@ static OSE_FOR_LOCAL_3D_SERIES: LazyLock<Symbol> = LazyLock::new(|| {
 //     given = %given.log_display(),
 //     reduced,
 // )]
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn t_tilde<S: super::ForestNodeLike>(
     ctx: &UVCtx<'_>,
     orientation: OrientationProjection<'_>,
     orientation_id: OrientationID,
+    source_edge_energy_map: Option<&[LinearEnergyExpr]>,
     current: &S,
     given: &S,
     cff: &Atom,
@@ -1173,7 +1373,7 @@ pub(crate) fn t_tilde<S: super::ForestNodeLike>(
         .get_single_atom()
         .unwrap();
     let mut numerator = orientation
-        .map_numerator(graph, orientation_id, &numerator)?
+        .map_numerator(graph, orientation_id, source_edge_energy_map, &numerator)?
         .replace_multiple(&reps);
 
     // rescale the external momenta in the added numerator subgraph
@@ -1266,10 +1466,12 @@ pub(crate) fn t_tilde<S: super::ForestNodeLike>(
     Ok(a)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn start<S: super::ForestNodeLike>(
     ctx: &UVCtx<'_>,
     orientation: OrientationProjection<'_>,
     orientation_id: OrientationID,
+    source_edge_energy_map: Option<&[LinearEnergyExpr]>,
     current: &S,
     given: &S,
     cff: &Atom,
@@ -1289,7 +1491,8 @@ pub(crate) fn start<S: super::ForestNodeLike>(
         .numerator(&reduced, given.subgraph())
         .get_single_atom()
         .unwrap();
-    let mut atomarg = cff * orientation.map_numerator(graph, orientation_id, &numerator)?;
+    let mut atomarg = cff
+        * orientation.map_numerator(graph, orientation_id, source_edge_energy_map, &numerator)?;
     debug_tags!(#generation, #profile, #uv, #local, #trace;
         stage = "local_3d_start_initial",
         byte_size = atomarg.as_view().get_byte_size(),
@@ -1351,7 +1554,7 @@ fn full<S: super::ForestNodeLike>(
     orientation: OrientationProjection<'_>,
     current: &S,
     given: &S,
-) -> impl FnMut(OrientationID, &Atom) -> Result<Atom> {
+) -> impl FnMut(OrientationID, Option<&[LinearEnergyExpr]>, &Atom) -> Result<Atom> {
     Local3DLoopRescaling::FullSubgraph.map(ctx, orientation, current, given, None)
 }
 fn reduced<S: super::ForestNodeLike>(
@@ -1359,7 +1562,7 @@ fn reduced<S: super::ForestNodeLike>(
     orientation: OrientationProjection<'_>,
     current: &S,
     given: &S,
-) -> impl FnMut(OrientationID, &Atom) -> Result<Atom> {
+) -> impl FnMut(OrientationID, Option<&[LinearEnergyExpr]>, &Atom) -> Result<Atom> {
     Local3DLoopRescaling::ReducedSubgraph.map(ctx, orientation, current, given, None)
 }
 impl Local3DLoopRescaling {
@@ -1474,8 +1677,8 @@ impl Local3DLoopRescaling {
         current: &S,
         given: &S,
         active_subgraph: Option<SuBitGraph>,
-    ) -> impl FnMut(OrientationID, &Atom) -> Result<Atom> {
-        move |orientation_id, integrand| {
+    ) -> impl FnMut(OrientationID, Option<&[LinearEnergyExpr]>, &Atom) -> Result<Atom> {
+        move |orientation_id, source_edge_energy_map, integrand| {
             let active_lmb = active_subgraph
                 .as_ref()
                 .filter(|active| *active != current.subgraph())
@@ -1495,6 +1698,7 @@ impl Local3DLoopRescaling {
                         ctx,
                         orientation,
                         orientation_id,
+                        source_edge_energy_map,
                         current,
                         given,
                         integrand,
@@ -1514,6 +1718,7 @@ impl Local3DLoopRescaling {
                         ctx,
                         orientation,
                         orientation_id,
+                        source_edge_energy_map,
                         current,
                         given,
                         integrand,
@@ -1528,6 +1733,7 @@ impl Local3DLoopRescaling {
                             ctx,
                             orientation,
                             orientation_id,
+                            source_edge_energy_map,
                             current,
                             given,
                             integrand,
@@ -1571,6 +1777,7 @@ impl Local3DLoopRescaling {
 
 #[cfg(test)]
 mod tests {
+    use super::{OrientationIntegrandBranch, OrientationIntegrands};
     use crate::{
         cff::{
             CutCFFIndex,
@@ -1578,10 +1785,11 @@ mod tests {
                 GammaLoopOrientationExpression, OrientationData, OrientationExpression,
                 OrientationID,
             },
+            orientations::GraphOrientation,
             surface::LinearEnergyExpr,
         },
         dot,
-        graph::{FeynmanGraph, Graph, cuts::CutSet, parse::IntoGraph},
+        graph::{FeynmanGraph, FourDDenominator, Graph, cuts::CutSet, parse::IntoGraph},
         initialisation::test_initialise,
         settings::global::OrientationPattern,
         utils::GS,
@@ -1603,7 +1811,7 @@ mod tests {
     };
     use std::{collections::BTreeMap, sync::OnceLock};
     use symbolica::{
-        atom::{Atom, AtomCore},
+        atom::{Atom, AtomCore, AtomView, FunctionBuilder},
         function,
     };
     use typed_index_collections::TiVec;
@@ -1658,6 +1866,123 @@ mod tests {
     }
 
     #[test]
+    fn production_emr_map_cancels_one_powered_denominator() -> Result<()> {
+        let mut graph = two_edge_graph()?;
+        let edge = EdgeIndex(0);
+        let on_shell_energy_squared = (1..=3).fold(
+            graph.underlying[edge].particle.mass_atom().pow(2),
+            |norm_squared, spatial_index| {
+                norm_squared + GS.emr_mom(edge, GS.cind(spatial_index)).pow(2)
+            },
+        );
+        let numerator = GS.emr_mom(edge, GS.cind(0)).pow(2) - &on_shell_energy_squared;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &options,
+            Some(&numerator),
+        )?;
+        let pattern = OrientationPattern::default();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact_expression(&production, &options, &pattern, false),
+        );
+        let contract = graph.empty_subgraph();
+        let powered = localizer.projected_cff(&mut graph, &contract, &numerator)?;
+        let mut explicit_sum = Atom::Zero;
+        for (selector_id, source_map, integrands) in powered.iter_orientations() {
+            assert!(source_map.is_none());
+            let mapped = localizer.map_numerator(&graph, selector_id, source_map, &numerator)?;
+            explicit_sum += integrands
+                .iter()
+                .fold(Atom::Zero, |sum, (_, term)| sum + term * &mapped);
+        }
+        let mut selected_production = edgevec([1, 1]).select(&explicit_sum);
+        let momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(edge))
+            .finish();
+        let mass_squared = graph.underlying[edge].particle.mass_atom().pow(2);
+        let denominators = [
+            FourDDenominator {
+                source_edge: edge,
+                momentum: momentum.clone(),
+                mass_squared: mass_squared.clone(),
+                full_expr: Atom::var(symbolica::symbol!("local_3d_test::first")),
+            },
+            FourDDenominator {
+                source_edge: EdgeIndex(1),
+                momentum: -momentum,
+                mass_squared: graph.underlying[EdgeIndex(1)].particle.mass_atom().pow(2),
+                full_expr: Atom::var(symbolica::symbol!("local_3d_test::second")),
+            },
+        ];
+        let (exact_powered, _) =
+            graph.cff_from_4d_denominators(&denominators, &cutset, &options, &numerator)?;
+        let occurrence_offset = graph.underlying.n_edges();
+        let remaining_powered_occurrence = EdgeIndex(occurrence_offset + 1);
+        let mut exact_powered_sum = Atom::Zero;
+        for term in exact_powered.terms.values() {
+            for orientation in term.orientations.iter().filter(|orientation| {
+                orientation.orientation.data.orientation[remaining_powered_occurrence]
+                    == Orientation::Default
+            }) {
+                exact_powered_sum += &orientation.expression
+                    * term.map_exact_source_numerator(&orientation.orientation, &numerator)?;
+            }
+        }
+        exact_powered_sum *= Atom::num(exact_powered.production_prefactor_factor());
+        let (exact_lower, _) =
+            graph.cff_from_4d_denominators(&denominators[1..], &cutset, &options, &Atom::one())?;
+        // The exact one-denominator source enumerates both contour directions.
+        // Compare the remaining-edge direction selected by the (+,+) production sector.
+        let remaining_lower_occurrence = EdgeIndex(occurrence_offset);
+        let mut exact_lower_sum = exact_lower
+            .terms
+            .values()
+            .flat_map(|term| &term.orientations)
+            .find(|orientation| {
+                orientation.orientation.data.orientation[remaining_lower_occurrence]
+                    == Orientation::Default
+            })
+            .expect("the lower source has the selected remaining-edge direction")
+            .expression
+            .clone()
+            * Atom::num(exact_lower.production_prefactor_factor());
+        let mass = graph.underlying[edge].particle.mass_atom();
+        for expression in [
+            &mut selected_production,
+            &mut exact_powered_sum,
+            &mut exact_lower_sum,
+        ] {
+            *expression = expression.replace(mass.clone()).with(Atom::one());
+            for spatial_index in 1..=3 {
+                *expression = expression
+                    .replace(GS.emr_mom(edge, GS.cind(spatial_index)))
+                    .with(Atom::Zero);
+            }
+            *expression = expression
+                .replace(GS.ose(EdgeIndex(0)))
+                .with(Atom::one())
+                .replace(GS.ose(EdgeIndex(1)))
+                .with(Atom::one());
+        }
+        let exact_difference = (&exact_powered_sum - &exact_lower_sum).together();
+        assert!(
+            exact_difference.is_zero(),
+            "exact-source powered and lower channels differ: powered={exact_powered_sum}, lower={exact_lower_sum}, difference={exact_difference}"
+        );
+        let production_difference = (&selected_production - &exact_lower_sum).together();
+        assert!(
+            production_difference.is_zero(),
+            "production EMR mapping does not cancel the powered denominator: production={selected_production}, lower={exact_lower_sum}, difference={production_difference}"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn orientation_term_keeps_external_selectors_and_adds_internal_ones() {
         let reduced_expression = function!(GS.ose, 0);
         let reduced_orientation = edgevec([1, 0, -1]);
@@ -1666,12 +1991,7 @@ mod tests {
         let cutset = CutSet::empty(1);
         let loc = Localizer::new(&cutset, OrientationProjection::new(&valid, &pat));
         let localized = loc
-            .localized_orientation_term(
-                &reduced_expression,
-                &reduced_orientation,
-                &edges([1]),
-                false,
-            )
+            .localized_orientation_term(&reduced_expression, &reduced_orientation, &edges([1]))
             .unwrap();
 
         let expected = reduced_expression
@@ -1714,7 +2034,7 @@ mod tests {
         let cutset = CutSet::empty(graph.n_hedges());
         let localizer = Localizer::new(
             &cutset,
-            OrientationProjection::exact(&production, &options, &pattern),
+            OrientationProjection::exact(&production, &options, &pattern, false),
         );
 
         assert_eq!(
@@ -1752,7 +2072,7 @@ mod tests {
         let cutset = CutSet::empty(graph.n_hedges());
         let localizer = Localizer::new(
             &cutset,
-            OrientationProjection::exact(&production, &options, &pattern),
+            OrientationProjection::exact(&production, &options, &pattern, false),
         );
 
         let error = localizer
@@ -1762,6 +2082,169 @@ mod tests {
             error
                 .to_string()
                 .contains("no production energy map exactly extends")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn source_energy_map_owns_factorized_contact_branch() -> Result<()> {
+        let graph = two_edge_graph()?;
+        let production = vec![
+            energy_map(
+                edgevec([1, 1]),
+                vec![
+                    LinearEnergyExpr::ose(EdgeIndex(0), 1),
+                    LinearEnergyExpr::ose(EdgeIndex(1), 1),
+                ],
+            ),
+            energy_map(
+                edgevec([1, -1]),
+                vec![
+                    LinearEnergyExpr::ose(EdgeIndex(0), 1),
+                    LinearEnergyExpr::ose(EdgeIndex(1), -1),
+                ],
+            ),
+        ]
+        .into_iter()
+        .collect::<TiVec<OrientationID, _>>();
+        let reduced = energy_map(
+            edgevec([1, 0]),
+            vec![LinearEnergyExpr::uniform_scale(2), LinearEnergyExpr::zero()],
+        );
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let pattern = OrientationPattern::default();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern, false),
+        );
+        let contract = graph.get_edge_subgraph(EdgeIndex(1));
+
+        let strict_error = localizer
+            .exact_representatives(&graph, &reduced, &contract)
+            .expect_err("the source map must not weaken strict production-map matching");
+        assert!(
+            strict_error
+                .to_string()
+                .contains("no production energy map exactly extends")
+        );
+        let localized = localizer.localized_orientation_terms(
+            &graph,
+            &reduced,
+            &Atom::one(),
+            &contract,
+            &[EdgeIndex(1)],
+            None,
+            Some(&reduced.edge_energy_map),
+        )?;
+        let outer_selector = GS.sign_theta(GS.sign(EdgeIndex(0)));
+        assert_eq!(localized.len(), 1);
+        assert_eq!(localized[0].0, OrientationID(0));
+        assert_eq!(
+            localized[0].1,
+            &outer_selector * GS.sign_theta(GS.sign(EdgeIndex(1)))
+        );
+
+        let factor_a = Atom::var(symbolica::symbol!("source_factor_a"));
+        let factor_b = Atom::var(symbolica::symbol!("source_factor_b"));
+        let edge_energy = GS.emr_mom(EdgeIndex(0), GS.cind(0));
+        let numerator = (edge_energy.clone() + &factor_a) * (edge_energy + &factor_b);
+        let mapped = localizer.map_numerator(
+            &graph,
+            OrientationID(0),
+            Some(&reduced.edge_energy_map),
+            &numerator,
+        )?;
+        assert_eq!(
+            localizer.map_numerator(
+                &graph,
+                OrientationID(1),
+                Some(&reduced.edge_energy_map),
+                &numerator,
+            )?,
+            mapped,
+            "production IDs partition theta sectors but do not remap source-owned numerators"
+        );
+        let sampled_energy = Atom::num(2) * Atom::var(GS.numerator_sampling_scale);
+        assert_eq!(
+            mapped,
+            (sampled_energy.clone() + &factor_a) * (sampled_energy + &factor_b)
+        );
+        let AtomView::Mul(factors) = mapped.as_view() else {
+            panic!("the source-mapped numerator must remain factorized")
+        };
+        assert_eq!(
+            factors
+                .iter()
+                .filter(|factor| matches!(factor, AtomView::Add(_)))
+                .count(),
+            2
+        );
+        assert_ne!(
+            localizer.map_numerator(&graph, OrientationID(0), None, &numerator)?,
+            mapped
+        );
+        let coarse = Localizer::new(&cutset, OrientationProjection::new(&[], &pattern));
+        assert!(
+            coarse
+                .map_numerator(
+                    &graph,
+                    OrientationID(0),
+                    Some(&reduced.edge_energy_map),
+                    &numerator,
+                )
+                .expect_err("a coarse projector cannot consume an exact source map")
+                .to_string()
+                .contains("cannot be carried by a coarse orientation projector")
+        );
+
+        let index = CutCFFIndex::new_all_none();
+        let source = OrientationIntegrands(vec![OrientationIntegrandBranch {
+            selector_id: OrientationID(0),
+            source_edge_energy_map: Some(reduced.edge_energy_map.clone()),
+            integrands: [(index, Atom::num(3))].into_iter().collect(),
+        }]);
+        let distinct_map = vec![LinearEnergyExpr::zero(), LinearEnergyExpr::zero()];
+        let distinct = OrientationIntegrands(vec![OrientationIntegrandBranch {
+            selector_id: OrientationID(0),
+            source_edge_energy_map: Some(distinct_map.clone()),
+            integrands: [(index, Atom::num(5))].into_iter().collect(),
+        }]);
+        let production_zero = OrientationIntegrands(vec![OrientationIntegrandBranch {
+            selector_id: OrientationID(0),
+            source_edge_energy_map: None,
+            integrands: [(index, Atom::Zero)].into_iter().collect(),
+        }]);
+        let union = source.zip_add(&distinct)?.zip_add(&production_zero)?;
+        assert_eq!(union.iter_orientations().count(), 2);
+        assert!(
+            union
+                .iter_orientations()
+                .all(|(_, source_map, _)| source_map.is_some()),
+            "a zero production-map identity branch is pruned beside source-owned terms"
+        );
+        assert!(
+            union
+                .iter_orientations()
+                .any(|(_, map, _)| map == Some(reduced.edge_energy_map.as_slice()))
+        );
+        assert!(
+            union
+                .iter_orientations()
+                .any(|(_, map, _)| map == Some(distinct_map.as_slice()))
+        );
+
+        let same_source = OrientationIntegrands(vec![OrientationIntegrandBranch {
+            selector_id: OrientationID(0),
+            source_edge_energy_map: Some(reduced.edge_energy_map.clone()),
+            integrands: [(index, Atom::num(7))].into_iter().collect(),
+        }]);
+        let merged = source.zip_add(&same_source)?;
+        assert_eq!(merged.iter_orientations().count(), 1);
+        assert_eq!(
+            merged.iter().next(),
+            Some((&index, &Atom::num(10))),
+            "only identical selector/source-map branches are coalesced"
         );
         Ok(())
     }
@@ -1799,7 +2282,7 @@ mod tests {
         let cutset = CutSet::empty(graph.n_hedges());
         let localizer = Localizer::new(
             &cutset,
-            OrientationProjection::exact(&production, &options, &pattern),
+            OrientationProjection::exact(&production, &options, &pattern, false),
         );
         let contract = graph.get_edge_subgraph(EdgeIndex(1));
 
@@ -1817,7 +2300,8 @@ mod tests {
                     &Atom::one(),
                     &contract,
                     &[EdgeIndex(1)],
-                    true,
+                    None,
+                    None,
                 )?
                 .is_empty(),
             "an excluded extension contributes zero without normalization"
@@ -1851,17 +2335,16 @@ mod tests {
         let cutset = CutSet::empty(graph.n_hedges());
         let localizer = Localizer::new(
             &cutset,
-            OrientationProjection::exact(&production, &options, &pattern),
+            OrientationProjection::exact(&production, &options, &pattern, false),
         );
         let to_contract = graph.get_edge_subgraph(EdgeIndex(1));
         let analysis_numerator = graph.production_numerator_atom_for_full_3d_expression();
-        let projected =
-            localizer.projected_cff(&mut graph, &to_contract, true, &analysis_numerator)?;
+        let projected = localizer.projected_cff(&mut graph, &to_contract, &analysis_numerator)?;
 
         assert_eq!(
             projected
                 .iter_orientations()
-                .map(|(id, _)| id)
+                .map(|(id, _, _)| id)
                 .collect::<Vec<_>>(),
             vec![OrientationID(0)]
         );
@@ -1879,7 +2362,7 @@ mod tests {
         let unsupported_numerator = (GS.emr_mom(EdgeIndex(0), GS.cind(0)) + Atom::one()).pow(-1);
 
         let projected =
-            localizer.projected_cff(&mut graph, &to_contract, false, &unsupported_numerator)?;
+            localizer.projected_cff(&mut graph, &to_contract, &unsupported_numerator)?;
 
         assert!(projected.iter().any(|(_, atom)| !atom.is_zero()));
         Ok(())
@@ -1910,7 +2393,7 @@ mod tests {
         let cutset = CutSet::empty(graph.n_hedges());
         let localizer = Localizer::new(
             &cutset,
-            OrientationProjection::exact(&production, &options, &pattern),
+            OrientationProjection::exact(&production, &options, &pattern, false),
         );
         let subgraph =
             InternalSubGraph::cleaned_filter_optimist(graph.full_filter(), graph.as_ref());
@@ -1991,7 +2474,7 @@ mod tests {
         let cutset = CutSet::empty(graph.n_hedges());
         let localizer = Localizer::new(
             &cutset,
-            OrientationProjection::exact(&production, &options, &pattern),
+            OrientationProjection::exact(&production, &options, &pattern, false),
         );
         let integrated_node = OwnedForestNode {
             spinney: Spinney::empty(&graph),
@@ -2003,12 +2486,12 @@ mod tests {
         let baseline = baseline
             .active
             .iter_orientations()
-            .find_map(|(id, integrands)| (id == orientation_id).then_some(integrands))
+            .find_map(|(id, _, integrands)| (id == orientation_id).then_some(integrands))
             .expect("the selected production map has a baseline branch");
         let localized = localized
             .active
             .iter_orientations()
-            .find_map(|(id, integrands)| (id == orientation_id).then_some(integrands))
+            .find_map(|(id, _, integrands)| (id == orientation_id).then_some(integrands))
             .expect("the selected production map has a finite-CT branch");
 
         assert_eq!(localized, &baseline.map(|atom| atom * &mapped_finite_ct));
@@ -2017,8 +2500,7 @@ mod tests {
     }
 
     #[test]
-    fn contracted_exact_extensions_are_unweighted_at_root_and_averaged_when_localized() -> Result<()>
-    {
+    fn contracted_exact_extensions_follow_evaluator_orientation_mode() -> Result<()> {
         let graph = two_edge_graph()?;
         let production = vec![
             energy_map(
@@ -2050,38 +2532,200 @@ mod tests {
         let cutset = CutSet::empty(graph.n_hedges());
         let localizer = Localizer::new(
             &cutset,
-            OrientationProjection::exact(&production, &options, &pattern),
+            OrientationProjection::exact(&production, &options, &pattern, false),
         );
         let contract = graph.get_edge_subgraph(EdgeIndex(1));
-        let root = localizer.localized_orientation_terms(
-            &graph,
-            &reduced,
-            &Atom::one(),
-            &contract,
-            &[EdgeIndex(1)],
-            false,
-        )?;
         let localized = localizer.localized_orientation_terms(
             &graph,
             &reduced,
             &Atom::one(),
             &contract,
             &[EdgeIndex(1)],
-            true,
+            None,
+            None,
         )?;
         let expected_default =
             GS.sign_theta(GS.sign(EdgeIndex(0))) * GS.sign_theta(GS.sign(EdgeIndex(1)));
-        let expected_reversed =
-            GS.sign_theta(GS.sign(EdgeIndex(0))) * GS.sign_theta(-GS.sign(EdgeIndex(1)));
+
+        assert_eq!(localized, vec![(OrientationID(0), expected_default)]);
+
+        let explicit_localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern, true),
+        );
+        let explicit = explicit_localizer.localized_orientation_terms(
+            &graph,
+            &reduced,
+            &Atom::one(),
+            &contract,
+            &[EdgeIndex(1)],
+            None,
+            None,
+        )?;
+        assert_eq!(explicit, vec![(OrientationID(0), Atom::one())]);
+        Ok(())
+    }
+
+    #[test]
+    fn stored_root_residue_keeps_its_production_orientation_diagonal() -> Result<()> {
+        let graph = two_edge_graph()?;
+        let production = vec![
+            energy_map(
+                edgevec([1, 1]),
+                vec![
+                    LinearEnergyExpr::ose(EdgeIndex(0), 1),
+                    LinearEnergyExpr::ose(EdgeIndex(1), 1),
+                ],
+            ),
+            energy_map(
+                edgevec([1, -1]),
+                vec![
+                    LinearEnergyExpr::ose(EdgeIndex(0), 1),
+                    LinearEnergyExpr::ose(EdgeIndex(1), -1),
+                ],
+            ),
+        ]
+        .into_iter()
+        .collect::<TiVec<OrientationID, _>>();
+        let reduced = energy_map(
+            edgevec([1, 0]),
+            vec![
+                LinearEnergyExpr::ose(EdgeIndex(0), 1),
+                LinearEnergyExpr::zero(),
+            ],
+        );
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let pattern = OrientationPattern::default();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern, false),
+        );
+        let contract = graph.get_edge_subgraph(EdgeIndex(1));
+
+        let localized = localizer.localized_orientation_terms(
+            &graph,
+            &reduced,
+            &Atom::one(),
+            &contract,
+            &[EdgeIndex(1)],
+            Some(OrientationID(1)),
+            None,
+        )?;
+
+        assert_eq!(localized.len(), 1);
+        assert_eq!(localized[0].0, OrientationID(1));
+        assert_eq!(
+            localized[0].1,
+            GS.sign_theta(GS.sign(EdgeIndex(0))) * GS.sign_theta(-GS.sign(EdgeIndex(1)))
+        );
+        assert_eq!(
+            production[OrientationID(0)]
+                .data
+                .orientation
+                .select(localized[0].1.as_view()),
+            Atom::Zero,
+            "a stored root residue must not leak into another runtime orientation"
+        );
+        assert_eq!(
+            production[OrientationID(1)]
+                .data
+                .orientation
+                .select(localized[0].1.as_view()),
+            Atom::one()
+        );
+
+        let explicit_localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern, true),
+        );
+        let explicit = explicit_localizer.localized_orientation_terms(
+            &graph,
+            &reduced,
+            &Atom::one(),
+            &contract,
+            &[EdgeIndex(1)],
+            Some(OrientationID(1)),
+            None,
+        )?;
+        assert_eq!(explicit, vec![(OrientationID(1), Atom::one())]);
+        Ok(())
+    }
+
+    #[test]
+    fn stored_generalized_root_map_uses_one_resolved_orientation_selector() -> Result<()> {
+        let graph = two_edge_graph()?;
+        let production = vec![
+            energy_map(
+                edgevec([1, 1]),
+                vec![
+                    LinearEnergyExpr::ose(EdgeIndex(0), 1),
+                    LinearEnergyExpr::ose(EdgeIndex(1), 1),
+                ],
+            ),
+            energy_map(
+                edgevec([1, -1]),
+                vec![
+                    LinearEnergyExpr::ose(EdgeIndex(0), 1),
+                    LinearEnergyExpr::ose(EdgeIndex(1), -1),
+                ],
+            ),
+            energy_map(
+                edgevec([1, 0]),
+                vec![
+                    LinearEnergyExpr::ose(EdgeIndex(0), 1),
+                    LinearEnergyExpr::zero(),
+                ],
+            ),
+        ]
+        .into_iter()
+        .collect::<TiVec<OrientationID, _>>();
+        let reduced = production[OrientationID(2)].clone();
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let pattern = OrientationPattern::default();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern, false),
+        );
+        let contract = graph.empty_subgraph();
+
+        let localized = localizer.localized_orientation_terms(
+            &graph,
+            &reduced,
+            &Atom::one(),
+            &contract,
+            &[],
+            Some(OrientationID(2)),
+            Some(&reduced.edge_energy_map),
+        )?;
 
         assert_eq!(
-            root.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
-            vec![OrientationID(0), OrientationID(1)]
+            localized,
+            vec![(
+                OrientationID(0),
+                GS.sign_theta(GS.sign(EdgeIndex(0))) * GS.sign_theta(GS.sign(EdgeIndex(1))),
+            )],
+            "an under-resolved numerator sampling map must live in one resolved physical orientation",
         );
-        assert_eq!(root[0].1, expected_default);
-        assert_eq!(root[1].1, expected_reversed);
-        assert_eq!(localized[0].1, root[0].1.clone() / 2);
-        assert_eq!(localized[1].1, root[1].1.clone() / 2);
+
+        let explicit_localizer = Localizer::new(
+            &cutset,
+            OrientationProjection::exact(&production, &options, &pattern, true),
+        );
+        assert_eq!(
+            explicit_localizer.localized_orientation_terms(
+                &graph,
+                &reduced,
+                &Atom::one(),
+                &contract,
+                &[],
+                Some(OrientationID(2)),
+                Some(&reduced.edge_energy_map),
+            )?,
+            vec![(OrientationID(0), Atom::one())],
+            "an explicit orientation sum keeps the generalized branch exactly once without a selector",
+        );
         Ok(())
     }
 
@@ -2111,7 +2755,7 @@ mod tests {
         let cutset = CutSet::empty(graph.n_hedges());
         let localizer = Localizer::new(
             &cutset,
-            OrientationProjection::exact(&production, &options, &pattern),
+            OrientationProjection::exact(&production, &options, &pattern, false),
         );
         let cograph = graph.full_filter();
         let source = Full4dCts::from_coefficient(&Atom::one(), &graph, &cograph);
@@ -2125,7 +2769,7 @@ mod tests {
         let opposite_pattern = OrientationPattern::from_user_pattern("(-1,1)")?;
         let opposite = Localizer::new(
             &cutset,
-            OrientationProjection::exact(&production, &options, &opposite_pattern),
+            OrientationProjection::exact(&production, &options, &opposite_pattern, false),
         )
         .project_4d(&source, &mut graph, &root_spinney)?;
 
@@ -2144,6 +2788,39 @@ mod tests {
                 .iter()
                 .any(|(_, atom)| !atom.is_zero())
         );
+        Ok(())
+    }
+
+    #[test]
+    fn typed_4d_projection_localizes_each_frozen_loop_sector_once() -> Result<()> {
+        let mut graph = two_edge_graph()?;
+        let pattern = OrientationPattern::default();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let localizer = Localizer::new(&cutset, OrientationProjection::new(&[], &pattern));
+        let cograph = graph.full_filter();
+        let root_spinney = graph.empty_subgraph();
+        let frozen_lmb = graph.loop_momentum_basis.clone();
+        let localizing_integrand = GS.localizing_integrand(&frozen_lmb);
+        assert!(!localizing_integrand.is_one());
+
+        let baseline_source = Full4dCts::from_coefficient(&Atom::one(), &graph, &cograph);
+        let frozen_source = Full4dCts::from_frozen_coefficient(
+            &Atom::var(GS.integrated_loop_scale).pow(4),
+            &graph,
+            &cograph,
+            &frozen_lmb,
+        );
+        let baseline = localizer.project_4d(&baseline_source, &mut graph, &root_spinney)?;
+        let frozen = localizer.project_4d(&frozen_source, &mut graph, &root_spinney)?;
+        let baseline = baseline.projected_integrands()?.materialize();
+        let frozen = frozen.projected_integrands()?.materialize();
+        let expected = baseline.map(|atom| atom * &localizing_integrand);
+
+        assert_eq!(frozen, expected);
+        assert!(frozen.iter().all(|(_, atom)| {
+            !atom.contains_symbol(GS.integrated_loop_scale)
+                && atom.contains_symbol(GS.localizing_integrand)
+        }));
         Ok(())
     }
 
@@ -2202,7 +2879,7 @@ mod tests {
         let cutset = CutSet::empty(graph.n_hedges());
         let localizer = Localizer::new(
             &cutset,
-            OrientationProjection::exact(&production, &options, &pattern),
+            OrientationProjection::exact(&production, &options, &pattern, false),
         );
         let cograph = graph.full_filter().subtract(&graph.initial_state_cut);
         let baseline_source = Full4dCts::from_coefficient(&Atom::one(), &graph, &cograph);
@@ -2362,7 +3039,7 @@ mod tests {
         let cutset = CutSet::empty(graph.n_hedges());
         let localizer = Localizer::new(
             &cutset,
-            OrientationProjection::exact(&production, &options, &pattern),
+            OrientationProjection::exact(&production, &options, &pattern, false),
         );
         let contract = graph.full_filter();
         let localized = localizer.localized_orientation_terms(
@@ -2371,17 +3048,15 @@ mod tests {
             &Atom::one(),
             &contract,
             &[EdgeIndex(0), EdgeIndex(1)],
-            false,
+            None,
+            None,
         )?;
 
-        assert_eq!(localized.len(), 2);
+        assert_eq!(localized.len(), 1);
+        assert_eq!(localized[0].0, OrientationID(0));
         assert_eq!(
             localized[0].1,
             GS.sign_theta(GS.sign(EdgeIndex(0))) * GS.sign_theta(GS.sign(EdgeIndex(1)))
-        );
-        assert_eq!(
-            localized[1].1,
-            GS.sign_theta(-GS.sign(EdgeIndex(0))) * GS.sign_theta(-GS.sign(EdgeIndex(1)))
         );
         Ok(())
     }

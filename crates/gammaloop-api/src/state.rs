@@ -1558,7 +1558,7 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 2;
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 3;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -4479,7 +4479,7 @@ commands = ["quit -n"]
 
     #[test]
     fn state_manifest_rejects_legacy_versions() {
-        for version in [0, 1] {
+        for version in [0, 1, 2] {
             let temp = tempdir().unwrap();
             fs::write(
                 temp.path().join(STATE_MANIFEST_FILE),

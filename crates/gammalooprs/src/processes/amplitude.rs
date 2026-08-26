@@ -28,7 +28,6 @@ use crate::{
     cff::{
         CutCFFIndex,
         esurface::{GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceId},
-        expression::{CFFExpression, OrientationID},
     },
     graph::{
         GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
@@ -68,6 +67,7 @@ use linnet::{
 };
 use spenso::shadowing::symbolica_utils::LogPrint;
 use symbolica::{atom::Var, prelude::*};
+use three_dimensional_reps::GeneratedThreeDExpression;
 use tracing::{debug, info};
 use typed_index_collections::{TiVec, ti_vec};
 
@@ -791,6 +791,7 @@ impl AmplitudeGraph {
             .cff_expression
             .as_ref()
             .expect("cff_expression should have been created")
+            .expression
             .orientations
             .iter()
             .map(|orientation| orientation.data.orientation.clone())
@@ -842,18 +843,18 @@ impl AmplitudeGraph {
             .map(|x| x.1)
             .collect_vec();
 
+        // The options provision maps from the complete factorized numerator.
+        // The numerator itself remains caller-owned and is mapped only when
+        // the corresponding orientation integrand is assembled.
         let options = self.graph.production_cff_3d_expression_options(settings)?;
-        let analysis_numerator = self
-            .graph
-            .production_numerator_atom_for_full_3d_expression();
         let generated = self.graph.generate_3d_expression_for_integrand(
             &contract_edges,
             &shift_rewrite,
             &options,
-            Some(&analysis_numerator),
+            None,
         )?;
 
-        self.derived_data.cff_expression = Some(generated.expression);
+        self.derived_data.cff_expression = Some(generated);
 
         Ok(())
     }
@@ -875,10 +876,12 @@ impl AmplitudeGraph {
         // belong to the CFF expression generated above.
         let raised_data = settings.threshold_subtraction.enable_thresholds.then(|| {
             self.graph.determine_raised_esurfaces_from_expression(
-                self.derived_data
+                &self
+                    .derived_data
                     .cff_expression
                     .as_ref()
-                    .expect("cff_expression should have been created"),
+                    .expect("cff_expression should have been created")
+                    .expression,
             )
         });
 
@@ -1214,12 +1217,12 @@ impl AmplitudeGraph {
             "Generation timing milestone"
         );
         let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
-        let production_orientations = &self
+        let production_expression = self
             .derived_data
             .cff_expression
             .as_ref()
-            .expect("cff_expression should have been created")
-            .orientations;
+            .expect("cff_expression should have been created");
+        let production_orientations = &production_expression.expression.orientations;
         crate::debug_tags!(#generation, #profile, #graph, #orientation, #summary;
             stage = "amplitude_graph_valid_orientations_done",
             graph = %self.graph.name,
@@ -1233,10 +1236,11 @@ impl AmplitudeGraph {
             &mut self.graph,
             cutstructure,
             vakint,
-            OrientationProjection::exact(
-                production_orientations,
+            OrientationProjection::exact_expression(
+                production_expression,
                 &cff_options,
                 &settings.orientation_pattern,
+                settings.explicit_orientation_sum_only,
             ),
             &settings.uv,
         )?;
@@ -1301,12 +1305,11 @@ impl AmplitudeGraph {
         let _progress_guard =
             generation_progress::enter_detailed_progress_span("Building Threshold Counterterms");
         let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
-        let production_orientations = &self
+        let production_expression = self
             .derived_data
             .cff_expression
             .as_ref()
-            .expect("cff_expression should have been created")
-            .orientations;
+            .expect("cff_expression should have been created");
 
         let global_cff = self
             .derived_data
@@ -1319,7 +1322,7 @@ impl AmplitudeGraph {
             esurface_raising.raised_groups.len()
         ];
         let mut raised_esurface_ids: TiVec<EsurfaceID, Option<RaisedEsurfaceId>> =
-            ti_vec![None; global_cff.surfaces.esurface_cache.len()];
+            ti_vec![None; global_cff.expression.surfaces.esurface_cache.len()];
 
         for (raised_esurface_id, raised_group) in esurface_raising.raised_groups.iter_enumerated() {
             for &esurface_id in &raised_group.esurface_ids {
@@ -1354,7 +1357,7 @@ impl AmplitudeGraph {
 
         for raised_data in esurface_raising.raised_groups.iter().cloned() {
             let esurface_id = raised_data.esurface_ids[0];
-            let esurface = &global_cff.surfaces.esurface_cache[esurface_id];
+            let esurface = &global_cff.expression.surfaces.esurface_cache[esurface_id];
 
             if esurface.external_shift.is_empty() {
                 continue;
@@ -1420,10 +1423,11 @@ impl AmplitudeGraph {
             &mut self.graph,
             cut_structure,
             vakint,
-            OrientationProjection::exact(
-                production_orientations,
+            OrientationProjection::exact_expression(
+                production_expression,
                 &cff_options,
                 &settings.orientation_pattern,
+                settings.explicit_orientation_sum_only,
             ),
             &settings.uv,
         )?;
@@ -1609,7 +1613,9 @@ pub struct AmplitudeDerivedData {
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub tropical_sampler: Option<SampleGenerator<3>>,
-    pub cff_expression: Option<CFFExpression<OrientationID>>,
+    pub cff_expression: Option<
+        GeneratedThreeDExpression<crate::cff::esurface::Esurface, crate::cff::hsurface::Hsurface>,
+    >,
 }
 
 pub trait AmplitudeState:
@@ -1881,6 +1887,7 @@ pub mod test {
                 .cff_expression
                 .as_ref()
                 .unwrap()
+                .expression
                 .orientations
                 .len()
                 > 1
@@ -1894,6 +1901,7 @@ pub mod test {
                         .cff_expression
                         .as_ref()
                         .unwrap()
+                        .expression
                         .orientations[OrientationID(0)],
                 ),
                 threshold_subtraction: ThresholdSubtractionSettings {
@@ -1922,6 +1930,7 @@ pub mod test {
                 .cff_expression
                 .as_ref()
                 .unwrap()
+                .expression
                 .orientations[OrientationID(0)]
             .data
             .orientation

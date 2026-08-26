@@ -142,6 +142,7 @@ impl AmplitudeGraphTerm {
             .cff_expression
             .as_ref()
             .unwrap()
+            .expression
             .orientations
             .iter()
             .filter(|orientation| {
@@ -149,10 +150,28 @@ impl AmplitudeGraphTerm {
                     || settings.generation.orientation_pattern.filter(*orientation)
             })
             .collect_vec();
+        // Generalized numerator sampling adds contact maps with under-resolved
+        // directions and can repeat a physical orientation with distinct
+        // numerator maps. Those maps remain in the expression, while runtime
+        // orientation sampling must expose each maximally resolved physical
+        // direction exactly once.
+        let resolved_edges = selected_generation_orientations
+            .iter()
+            .flat_map(|orientation| orientation.data.orientation.iter())
+            .filter_map(|(edge_id, orientation)| {
+                (*orientation != Orientation::Undirected).then_some(edge_id)
+            })
+            .collect::<HashSet<_>>();
         let orientations: TiVec<OrientationID, EdgeVec<Orientation>> =
             selected_generation_orientations
                 .iter()
-                .map(|a| a.data.orientation.clone())
+                .filter(|orientation| {
+                    resolved_edges.iter().all(|edge_id| {
+                        orientation.data.orientation[*edge_id] != Orientation::Undirected
+                    })
+                })
+                .map(|orientation| orientation.data.orientation.clone())
+                .unique()
                 .collect();
         crate::debug_tags!(#generation, #profile, #compile, #graph, #orientation, #summary;
             stage = "amplitude_graph_term_orientations_done",
@@ -401,6 +420,7 @@ impl AmplitudeGraphTerm {
                     .cff_expression
                     .as_ref()
                     .expect("cff_expression should have been created")
+                    .expression
                     .surfaces
                     .esurface_cache
                     .clone(),
@@ -1772,7 +1792,16 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
           )
     )]
     fn warm_up(&mut self, model: &Model) -> Result<()> {
-        validate_process_runtime_settings(&self.settings, self.data.explicit_orientation_sum_only)?;
+        let mut uses_numerator_sampling_scale = false;
+        self.for_each_generic_evaluator_mut(|evaluator| {
+            uses_numerator_sampling_scale |= evaluator.uses_numerator_sampling_scale();
+            Ok(())
+        })?;
+        validate_process_runtime_settings(
+            &self.settings,
+            self.data.explicit_orientation_sum_only,
+            uses_numerator_sampling_scale,
+        )?;
 
         self.data.rotations = Some(
             Some(Rotation::new(RotationMethod::Identity))

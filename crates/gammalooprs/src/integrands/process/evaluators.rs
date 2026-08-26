@@ -399,14 +399,23 @@ impl EvaluatorStack {
 
         // Summed evaluators contain concrete orientation calls; runtime orientation
         // selection stays in the single-parametric evaluator.
-        let sum = (0..entries.len()).map(|i| {
-            orientations
-                .iter()
-                .map(|orientation| GS.integrand(i, orientation))
-                .fold(Atom::Zero, |acc, n| acc + n)
-        });
-
-        GenericEvaluator::new_from_raw_params(
+        let sum = (0..entries.len())
+            .map(|i| {
+                orientations
+                    .iter()
+                    .map(|orientation| GS.integrand(i, orientation))
+                    .fold(Atom::Zero, |acc, n| acc + n)
+            })
+            .collect::<Vec<_>>();
+        let source_replacements = param_builder
+            .reps
+            .iter()
+            .chain(&entries)
+            .map(FnMapEntry::replacement)
+            .collect::<Vec<_>>();
+        let uses_numerator_sampling_scale =
+            GenericEvaluator::source_atoms_use_numerator_sampling_scale(&sum, &source_replacements);
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
             sum,
             &params,
             &fn_map,
@@ -414,7 +423,9 @@ impl EvaluatorStack {
             settings.optimization_settings(),
             dual_shape.clone(),
             settings,
-        )
+        )?;
+        evaluator.uses_numerator_sampling_scale = uses_numerator_sampling_scale;
+        Ok(evaluator)
     }
 
     #[instrument(skip_all)]
@@ -1295,6 +1306,7 @@ pub struct GenericEvaluator {
     pub exprs: Option<Vec<Atom>>,
     pub fn_map_entries: Vec<FnMapEntry>,
     pub exprs_len: usize,
+    uses_numerator_sampling_scale: bool,
     pub backend_policy: EvaluatorBackendPolicy,
     pub rational: Option<ExpressionEvaluator<symbolica::domains::float::Complex<Rational>>>,
     pub f64_compiled: Option<CompiledCode<Complex<f64>>>,
@@ -1308,6 +1320,30 @@ pub struct GenericEvaluator {
 }
 
 impl GenericEvaluator {
+    fn source_atoms_use_numerator_sampling_scale(
+        atoms: &[Atom],
+        source_replacements: &[Replacement],
+    ) -> bool {
+        atoms.iter().any(|atom| {
+            let mut expanded = atom.clone();
+            for _ in 0..=source_replacements.len() {
+                if expanded.contains_symbol(GS.numerator_sampling_scale) {
+                    return true;
+                }
+                let next = expanded.replace_multiple(source_replacements);
+                if next == expanded {
+                    return false;
+                }
+                expanded = next;
+            }
+            expanded.contains_symbol(GS.numerator_sampling_scale)
+        })
+    }
+
+    pub(crate) fn uses_numerator_sampling_scale(&self) -> bool {
+        self.uses_numerator_sampling_scale
+    }
+
     pub(crate) fn into_eager_only(mut self) -> Self {
         self.backend_policy = EvaluatorBackendPolicy::EagerOnly;
         self.activate_eager_only();
@@ -1469,23 +1505,45 @@ impl GenericEvaluator {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
-        let reps = if settings.do_fn_map_replacements {
-            fn_map_entries
-                .iter()
-                .map(|r| r.replacement())
-                .collect::<Vec<_>>()
+        let source_replacements = fn_map_entries
+            .iter()
+            .map(FnMapEntry::replacement)
+            .collect::<Vec<_>>();
+        let evaluator_replacements = if settings.do_fn_map_replacements {
+            source_replacements.as_slice()
         } else {
-            vec![]
+            &[]
         };
 
-        for r in &reps {
+        // Vakint and older Symbolica states represent the imaginary unit as a
+        // symbolic constant. The evaluator domain expects the exact complex
+        // coefficient used by current Symbolica instead.
+        let mut fn_map = fn_map.clone();
+        fn_map
+            .add_aliases([
+                (Atom::var(vakint::symbols::S.cmplx_i), Atom::i()),
+                (Atom::var(symbol!("symbolica::𝑖")), Atom::i()),
+            ])
+            .map_err(|e| eyre!("Failed to register the imaginary-unit constant: {e}"))?;
+
+        for r in evaluator_replacements {
             println!("Reps!!{:#}", r)
         }
 
         let exprs: Vec<Atom> = atoms
             .into_iter()
-            .map(|a| a.replace_multiple(&reps).replace_multiple(&reps))
+            .map(|a| {
+                a.replace_multiple(evaluator_replacements)
+                    .replace_multiple(evaluator_replacements)
+            })
             .collect();
+        // Keep this fact even when `store_atom` is disabled: runtime settings
+        // must be validated against the finalized evaluator sources, not the
+        // generation mode that may or may not have left M in them. Follow only
+        // function bodies reachable from an emitted expression; unrelated
+        // entries in its shared function map do not make that evaluator use M.
+        let uses_numerator_sampling_scale =
+            Self::source_atoms_use_numerator_sampling_scale(&exprs, &source_replacements);
 
         let mut tree: Option<ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>>> = None;
         for n in exprs.iter() {
@@ -1551,6 +1609,7 @@ impl GenericEvaluator {
             } else {
                 None
             },
+            uses_numerator_sampling_scale,
             backend_policy: EvaluatorBackendPolicy::FollowIntegrand,
             rational: Some(rational),
             f64_compiled: None,
@@ -1923,11 +1982,14 @@ impl GenericEvaluatorFloat for ArbPrec {
 
 #[cfg(test)]
 mod tests {
-    use idenso::{color::CS, representations::Bispinor};
-    use spenso::structure::representation::RepName;
-    use symbolica::atom::Symbol;
+    use std::io::Cursor;
 
-    use crate::initialisation::test_initialise;
+    use idenso::{color::CS, dirac::AGS, representations::Bispinor};
+    use linnet::half_edge::involution::EdgeIndex;
+    use spenso::{network::tags::SPENSO_TAG, structure::representation::RepName};
+    use symbolica::{atom::Symbol, parse_lit, state::State};
+
+    use crate::{GammaLoopContextContainer, initialisation::test_initialise, model::Model};
 
     use super::*;
 
@@ -1994,6 +2056,185 @@ mod tests {
         )(&[]);
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn evaluator_preprocess_scalarizes_abstract_minkowski_contractions_without_algebra() {
+        test_initialise().unwrap();
+        let abstract_index = parse_lit!(spenso::mink(4, 1));
+        let edge = EdgeIndex(7);
+        let mapped_momentum = GS.emr_vec_index(edge, abstract_index.as_view())
+            + GS.ose(edge) * GS.energy_delta(abstract_index.as_view());
+        let numerator = &mapped_momentum * &mapped_momentum;
+        let settings = EvaluatorSettings::default();
+        let scalar = EvaluatorStack::preprocess_atom(&numerator, 0, &settings).unwrap();
+        let algebraic_scalar = EvaluatorStack::preprocess_atom(
+            &numerator,
+            0,
+            &EvaluatorSettings {
+                do_algebra: true,
+                ..settings
+            },
+        )
+        .unwrap();
+
+        assert_eq!(scalar, algebraic_scalar);
+    }
+
+    #[test]
+    fn evaluator_preprocess_scalarizes_temporal_emr_gamma_slash() {
+        test_initialise().unwrap();
+        let momentum_index = parse_lit!(spenso::mink(4, 1));
+        let compact_minkowski = parse_lit!(spenso::mink(4));
+        let left_index = parse_lit!(spenso::bis(4, 2));
+        let right_index = parse_lit!(spenso::bis(4, 3));
+        let edge = EdgeIndex(7);
+        let temporal_momentum = GS.ose(edge) * GS.energy_delta(compact_minkowski.as_view());
+        let gamma_factor = FunctionBuilder::new(AGS.gamma)
+            .add_arg(Atom::var(SPENSO_TAG.chain_in))
+            .add_arg(Atom::var(SPENSO_TAG.chain_out))
+            .add_arg(&temporal_momentum)
+            .finish();
+        let gamma_slash = FunctionBuilder::new(SPENSO_TAG.chain)
+            .add_arg(&left_index)
+            .add_arg(&right_index)
+            .add_arg(gamma_factor)
+            .finish();
+        let numerator = function!(GS.vbar, 0, left_index)
+            * gamma_slash
+            * function!(GS.u, 1, right_index.clone());
+        let explicit_numerator = function!(GS.vbar, 0, parse_lit!(spenso::bis(4, 2)))
+            * GS.ose(edge)
+            * GS.energy_delta(momentum_index.as_view())
+            * parse_lit!(spenso::gamma(
+                spenso::bis(4, 2),
+                spenso::bis(4, 3),
+                spenso::mink(4, 1)
+            ))
+            * function!(GS.u, 1, right_index);
+        let settings = EvaluatorSettings::default();
+        let scalar = EvaluatorStack::preprocess_atom(&numerator, 0, &settings).unwrap();
+        let explicit_scalar =
+            EvaluatorStack::preprocess_atom(&explicit_numerator, 0, &settings).unwrap();
+        let algebraic_scalar = EvaluatorStack::preprocess_atom(
+            &numerator,
+            0,
+            &EvaluatorSettings {
+                do_algebra: true,
+                ..settings
+            },
+        )
+        .unwrap();
+
+        assert!(
+            !scalar.contains_symbol(AGS.gamma),
+            "gamma slash was componentized before its temporal delta contracted: {scalar}"
+        );
+        assert_eq!(scalar, explicit_scalar);
+        assert!(!algebraic_scalar.contains_symbol(AGS.gamma));
+    }
+
+    #[test]
+    fn evaluator_archives_sampling_scale_usage_without_stored_atoms() {
+        test_initialise().unwrap();
+        let source_function = symbol!("evaluator_test::sampled_source");
+        let source_call = FunctionBuilder::new(source_function).finish();
+        let scale = Atom::var(GS.numerator_sampling_scale);
+        let source_body = &scale + Atom::num(1);
+        let mut function_map = FunctionMap::default();
+        function_map
+            .add_function(
+                source_function,
+                Vec::<Indeterminate>::new(),
+                source_body.clone(),
+            )
+            .unwrap();
+        let source_entry = FnMapEntry {
+            lhs: source_call.clone(),
+            rhs: source_body,
+            args: Vec::new(),
+            tags: Vec::new(),
+        };
+        let evaluator = GenericEvaluator::new_from_raw_params(
+            [source_call.clone()],
+            std::slice::from_ref(&scale),
+            &function_map,
+            vec![source_entry.clone()],
+            OptimizationSettings::default(),
+            None,
+            &EvaluatorSettings::default(),
+        )
+        .unwrap();
+        assert!(evaluator.exprs.is_none());
+        assert!(evaluator.uses_numerator_sampling_scale());
+
+        let encoded = bincode::encode_to_vec(&evaluator, bincode::config::standard()).unwrap();
+        let mut state = Vec::new();
+        State::export(&mut state).unwrap();
+        let state_map = State::import(&mut Cursor::new(state), None).unwrap();
+        let model = Model::default();
+        let (decoded, _): (GenericEvaluator, _) = bincode::decode_from_slice_with_context(
+            &encoded,
+            bincode::config::standard(),
+            GammaLoopContextContainer {
+                state_map: &state_map,
+                model: &model,
+            },
+        )
+        .unwrap();
+
+        assert!(decoded.exprs.is_none());
+        assert!(decoded.uses_numerator_sampling_scale());
+
+        let independent = GenericEvaluator::new_from_raw_params(
+            [Atom::num(1)],
+            std::slice::from_ref(&scale),
+            &function_map,
+            vec![source_entry],
+            OptimizationSettings::default(),
+            None,
+            &EvaluatorSettings::default(),
+        )
+        .unwrap();
+        assert!(!independent.uses_numerator_sampling_scale());
+    }
+
+    #[test]
+    fn evaluator_treats_vakint_imaginary_symbol_as_exact_constant() {
+        test_initialise().unwrap();
+        for (index, symbolic_i) in [
+            Atom::var(vakint::symbols::S.cmplx_i),
+            Atom::var(symbol!("symbolica::𝑖")),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            assert_ne!(symbolic_i, Atom::i());
+            let source_symbol = symbol!(&format!("evaluator_test::imaginary_source_{index}"));
+            let source_call = FunctionBuilder::new(source_symbol).finish();
+            let mut function_map = FunctionMap::default();
+            function_map
+                .add_function(
+                    source_symbol,
+                    Vec::<Indeterminate>::new(),
+                    symbolic_i.clone(),
+                )
+                .unwrap();
+
+            let mut evaluator = GenericEvaluator::new_from_raw_params(
+                [symbolic_i + source_call],
+                &[],
+                &function_map,
+                vec![],
+                OptimizationSettings::default(),
+                None,
+                &EvaluatorSettings::default(),
+            )
+            .unwrap();
+            let actual = <f64 as GenericEvaluatorFloat>::get_evaluator_single(&mut evaluator)(&[]);
+
+            assert_eq!(actual, Complex::new(F(0.0), F(2.0)));
+        }
     }
 
     #[test]

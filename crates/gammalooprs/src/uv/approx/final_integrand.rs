@@ -21,7 +21,7 @@ use idenso::{
     color::{ColorSimplifier, ColorSimplifySettings},
     shorthands::metric::MetricSimplifier,
 };
-use linnet::half_edge::subgraph::SubSetOps;
+use linnet::half_edge::subgraph::{SubSetLike, SubSetOps};
 use symbolica::{
     atom::{Atom, AtomCore},
     function,
@@ -99,24 +99,26 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .subtract(&graph.initial_state_cut);
         let full_graph = graph.full_filter();
 
-        if self.project_from_4d {
+        // The empty forest is the original factorized 3D integrand. The
+        // expanded-4D setting governs only proper UV approximations, so the
+        // root must retain the ordinary production-orientation assembly.
+        if self.project_from_4d && !current.subgraph().is_empty() {
             // Keep finite addbacks for nested multi-loop entries. Integrated
             // coefficients carry their forest-composition signs; projecting the
             // complete typed coefficient preserves the Tint(T(...)) terms. The
             // normalized spatial factor restores the integrated loop variables
             // without sending it through numerator energy-map substitution.
-            let integrated_source = Full4dCts::from_coefficient(
+            let integrated_source = Full4dCts::from_frozen_coefficient(
                 &integrated.physical_finite_counterterm_atom(),
                 graph,
                 &reduced,
+                current.lmb(),
             );
-            let localizing_integrand = GS.localizing_integrand(current.lmb());
             let projected_integrated =
                 self.localizer
                     .project_4d(&integrated_source, graph, current.subgraph())?;
             let localized_integrated = projected_integrated
                 .projected_integrands()?
-                .map(|atom| atom * &localizing_integrand)
                 .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
             let local_terms = local_terms
                 .projected_integrands()?
@@ -198,10 +200,13 @@ impl<'a> FinalIntegrandBuilder<'a> {
         };
 
         let mut result: Option<Integrands> = None;
-        for (orientation_id, integrands) in final_int.iter_orientations() {
-            let mapped_resnum = self
-                .localizer
-                .map_numerator(graph, orientation_id, &resnum)?;
+        for (orientation_id, source_edge_energy_map, integrands) in final_int.iter_orientations() {
+            let mapped_resnum = self.localizer.map_numerator(
+                graph,
+                orientation_id,
+                source_edge_energy_map,
+                &resnum,
+            )?;
             let mapped = integrands.fallible_map(|a| {
                 let mut a = a.clone();
 

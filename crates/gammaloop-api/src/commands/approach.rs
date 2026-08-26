@@ -286,6 +286,12 @@ struct ComplexJson {
 
 impl Approach {
     pub fn run(&self, state: &mut State, cli_settings: &CLISettings) -> Result<PathBuf> {
+        let output_path = self
+            .output_results
+            .clone()
+            .unwrap_or_else(|| PathBuf::from("approach_result.json"));
+        cli_settings
+            .ensure_write_target_outside_active_state(&output_path, "write approach results")?;
         self.validate_cli()?;
         let (process_id, integrand_name) =
             state.find_integrand_ref(self.process.as_ref(), self.integrand_name.as_ref())?;
@@ -465,10 +471,6 @@ impl Approach {
             points: point_records,
         };
 
-        let output_path = self
-            .output_results
-            .clone()
-            .unwrap_or_else(|| PathBuf::from("approach_result.json"));
         let relative_output = relative_path_display(&output_path);
         info!(
             "{} {}",

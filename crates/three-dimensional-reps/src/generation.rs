@@ -3,6 +3,7 @@ use std::{
     ops::{Add, Neg, Sub},
 };
 
+use bincode_trait_derive::{Decode, Encode};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use serde::{Deserialize, Serialize};
@@ -87,16 +88,50 @@ impl Default for Generate3DExpressionOptions {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Encode, Decode)]
 pub enum CffEnergyFactorOwnership {
     GlobalSourceProduct,
     VariantLocal,
 }
 
-#[derive(Debug, Clone)]
+/// The uniform prefactor sign inserted by CFF generation.
+///
+/// For each connected source this contains the shared core's
+/// `(-1)^(L-1)` contour convention. Pure CFF also includes its uniform
+/// duplicate-denominator sign. Duplicate signs introduced only inside
+/// individual generalized variants are deliberately not represented here.
+/// The metadata accompanies the generated expression so consumers can bridge
+/// their own prefactor convention without reconstructing provenance from its
+/// final algebra.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Encode, Decode)]
+pub struct CffGlobalPrefactorSign {
+    odd: bool,
+}
+
+impl CffGlobalPrefactorSign {
+    fn from_exponent(exponent: usize) -> Self {
+        Self {
+            odd: !exponent.is_multiple_of(2),
+        }
+    }
+
+    fn product(self, rhs: Self) -> Self {
+        Self {
+            odd: self.odd != rhs.odd,
+        }
+    }
+
+    pub const fn factor(self) -> i64 {
+        if self.odd { -1 } else { 1 }
+    }
+}
+
+#[derive(Debug, Clone, Encode, Decode)]
+#[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct GeneratedThreeDExpression<E = (), H = ()> {
     pub expression: ThreeDExpression<OrientationID, E, H>,
     pub energy_factor_ownership: CffEnergyFactorOwnership,
+    pub core_global_prefactor_sign: CffGlobalPrefactorSign,
 }
 
 #[derive(Debug, Error)]
@@ -239,16 +274,24 @@ fn generate_3d_expression_from_parsed_generated(
         return Ok(generated);
     }
 
-    let (expression, energy_factor_ownership) =
+    let (expression, energy_factor_ownership, core_global_prefactor_sign) =
         if cff_bounds_need_generalized_expression_from_options(parsed, options)? {
             (
                 BoundedCffBuilder::new(parsed, options)?.build()?,
                 CffEnergyFactorOwnership::VariantLocal,
+                CffGlobalPrefactorSign::from_exponent(parsed.loop_names.len().saturating_sub(1)),
             )
         } else {
+            let duplicate_excess = cff_duplicate_signature_excess(parsed);
             (
-                generate_pure_cff_expression_from_parsed(parsed)?,
+                generate_pure_cff_expression_from_parsed_with_duplicate_excess(
+                    parsed,
+                    duplicate_excess,
+                )?,
                 CffEnergyFactorOwnership::GlobalSourceProduct,
+                CffGlobalPrefactorSign::from_exponent(
+                    parsed.loop_names.len().saturating_sub(1) + duplicate_excess,
+                ),
             )
         };
     let mut expression = expression.fuse_compatible_variants();
@@ -256,6 +299,7 @@ fn generate_3d_expression_from_parsed_generated(
     Ok(GeneratedThreeDExpression {
         expression,
         energy_factor_ownership,
+        core_global_prefactor_sign,
     })
 }
 
@@ -346,6 +390,7 @@ fn build_expression_preserving_internal_edges(
             &preserved,
         )?,
         energy_factor_ownership: generated.energy_factor_ownership,
+        core_global_prefactor_sign: generated.core_global_prefactor_sign,
     })
 }
 
@@ -399,6 +444,7 @@ fn expression_with_only_preserved_edges(
     Ok(GeneratedThreeDExpression {
         expression,
         energy_factor_ownership: CffEnergyFactorOwnership::GlobalSourceProduct,
+        core_global_prefactor_sign: CffGlobalPrefactorSign::default(),
     })
 }
 
@@ -662,9 +708,15 @@ fn generate_disconnected_component_product(
         .iter()
         .map(|(generated, embedding)| (&generated.expression, embedding))
         .collect::<Vec<_>>();
+    let core_global_prefactor_sign = component_expressions
+        .iter()
+        .fold(CffGlobalPrefactorSign::default(), |sign, (generated, _)| {
+            sign.product(generated.core_global_prefactor_sign)
+        });
     Ok(Some(GeneratedThreeDExpression {
         expression: lift_component_expression_product(parsed, &expressions)?,
         energy_factor_ownership,
+        core_global_prefactor_sign,
     }))
 }
 
@@ -1983,6 +2035,23 @@ impl<'a> BoundedCffBuilder<'a> {
             .bounds
             .iter()
             .any(|degree| *degree > 1 && self.sampling_scale_mode.is_active_for_degree(*degree));
+        // A repeated denominator channel shares one physical EMR energy. Reconstruct its
+        // aggregate numerator degree before taking a per-edge quadratic shortcut.
+        let repeated_channel_needs_known_factor =
+            KnownFactorCffBuilder::logical_channels(self.parsed)
+                .iter()
+                .any(|channel| {
+                    channel
+                        .members
+                        .iter()
+                        .map(|edge_id| self.bounds[*edge_id])
+                        .sum::<usize>()
+                        > 2
+                });
+        if repeated_channel_needs_known_factor {
+            return KnownFactorCffBuilder::new(self.parsed, self.bounds, self.sampling_scale_mode)
+                .build();
+        }
         if !uniform_sampling_for_nonlinear_degree && self.supports_quadratic_e_surface_only() {
             self.build_quadratic_e_surface_only()?;
             self.finalize_numerator_map_labels();
@@ -2232,8 +2301,8 @@ impl<'a> BoundedCffBuilder<'a> {
                     half_edges.sort_unstable();
                     let mut numerator_surfaces = base_num_surfaces.clone();
                     numerator_surfaces.extend(component.numerator_surfaces.iter().copied());
-                    let prefactor = -rational_from_coefficient(&variant.prefactor)
-                        * component.prefactor.clone();
+                    let prefactor =
+                        rational_from_coefficient(&variant.prefactor) * component.prefactor.clone();
                     if prefactor.is_zero() {
                         continue;
                     }
@@ -5757,6 +5826,110 @@ mod cff_tests {
     }
 
     #[test]
+    fn disconnected_metadata_composes_componentwise_global_prefactor_signs() {
+        let edge =
+            |edge_id, tail, head, loop_signature: [i32; 2], mass: &str| ParsedGraphInternalEdge {
+                edge_id,
+                tail,
+                head,
+                label: format!("q{edge_id}"),
+                mass_key: Some(mass.to_string()),
+                signature: MomentumSignature {
+                    loop_signature: loop_signature.to_vec(),
+                    external_signature: Vec::new(),
+                },
+                had_pow: false,
+            };
+        let parsed = ParsedGraph {
+            internal_edges: vec![
+                edge(0, 0, 1, [1, 0], "ma"),
+                edge(1, 1, 0, [-1, 0], "ma"),
+                edge(2, 2, 3, [0, 1], "mb"),
+                edge(3, 3, 2, [0, -1], "mb"),
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["ka".to_string(), "kb".to_string()],
+            external_names: Vec::new(),
+            node_name_to_internal: BTreeMap::from([
+                ("a0".to_string(), 0),
+                ("a1".to_string(), 1),
+                ("b0".to_string(), 2),
+                ("b1".to_string(), 3),
+            ]),
+        };
+        let options = Generate3DExpressionOptions {
+            energy_degree_bounds: Some(vec![(0, 2)]),
+            ..Default::default()
+        };
+        let components = denominator_connected_components(&parsed)
+            .into_iter()
+            .map(|component_edges| {
+                let (component, embedding) =
+                    project_denominator_component(&parsed, &component_edges)?;
+                let component_options =
+                    project_component_options(&options, parsed.internal_edges.len(), &embedding)?;
+                generate_3d_expression_from_parsed_generated(&component, &component_options)
+            })
+            .collect::<Result<Vec<_>>>()
+            .unwrap();
+
+        assert_eq!(
+            components
+                .iter()
+                .map(|generated| generated.energy_factor_ownership)
+                .collect::<Vec<_>>(),
+            vec![
+                CffEnergyFactorOwnership::VariantLocal,
+                CffEnergyFactorOwnership::GlobalSourceProduct,
+            ]
+        );
+        assert_eq!(
+            components
+                .iter()
+                .map(|generated| generated.core_global_prefactor_sign.factor())
+                .collect::<Vec<_>>(),
+            vec![1, -1],
+            "branch-local generalized signs must not be inferred as a global bridge"
+        );
+
+        let generated = generate_3d_expression_from_parsed_generated(&parsed, &options).unwrap();
+        assert_eq!(
+            generated.energy_factor_ownership,
+            CffEnergyFactorOwnership::VariantLocal
+        );
+        assert_eq!(generated.core_global_prefactor_sign.factor(), -1);
+    }
+
+    #[test]
+    fn connected_multiloop_metadata_carries_pure_and_generalized_prefactor_signs() {
+        let mut parsed = parsed_fixture("sunrise_pow4.dot");
+        parsed.internal_edges.truncate(3);
+        parsed.internal_edges[2].head = 1;
+
+        let pure = generate_3d_expression_from_parsed_generated(
+            &parsed,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(Vec::new()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let generalized = generate_3d_expression_from_parsed_generated(
+            &parsed,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(vec![(2, 2)]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        assert_eq!(cff_duplicate_signature_excess(&parsed), 0);
+        assert_eq!(pure.core_global_prefactor_sign.factor(), -1);
+        assert_eq!(generalized.core_global_prefactor_sign.factor(), -1);
+    }
+
+    #[test]
     fn cff_generation_builds_repeated_box_with_branching_denominator_trees() {
         let parsed = parsed_fixture("box_pow3.dot");
         let expression = generate_3d_expression_from_parsed(
@@ -6113,6 +6286,39 @@ mod cff_tests {
                     origin.starts_with("bounded_degree_quadratic_recursive_remainder")
                 }))
         );
+    }
+
+    #[test]
+    fn cff_generation_samples_a_nonlinear_repeated_channel_as_one_emr_energy() {
+        let parsed = parsed_fixture("box_pow3.dot");
+        let expression = generate_3d_expression_from_parsed(
+            &parsed,
+            &Generate3DExpressionOptions {
+                representation: RepresentationMode::Cff,
+                energy_degree_bounds: Some(vec![(3, 2), (5, 1)]),
+                numerator_sampling_scale: NumeratorSamplingScaleMode::BeyondQuadratic,
+                preserve_internal_edges_as_four_d_denominators: Vec::new(),
+            },
+        )
+        .unwrap();
+
+        assert!(!expression.orientations.is_empty());
+        assert!(expression.orientations.iter().all(|orientation| {
+            let channel_maps = &orientation.edge_energy_map[3..=5];
+            channel_maps
+                .iter()
+                .all(|energy_map| energy_map == &channel_maps[0])
+        }));
+        assert!(expression.orientations.iter().any(|orientation| {
+            orientation.edge_energy_map[3..=5]
+                .iter()
+                .all(LinearEnergyExpr::is_zero)
+        }));
+        assert!(expression.orientations.iter().any(|orientation| {
+            orientation.edge_energy_map[3..=5]
+                .iter()
+                .all(LinearEnergyExpr::uses_uniform_scale)
+        }));
     }
 
     #[test]

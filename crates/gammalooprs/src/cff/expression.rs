@@ -18,7 +18,11 @@ use symbolica::{
     id::Replacement,
 };
 
-use super::{esurface::Esurface, hsurface::Hsurface};
+use super::{
+    esurface::Esurface,
+    hsurface::Hsurface,
+    surface::{GammaLoopLinearEnergyExpr, LinearEnergyExpr},
+};
 use crate::{
     graph::Graph,
     utils::{GS, W_, ose_atom_from_index},
@@ -132,69 +136,72 @@ impl GammaLoopOrientationExpression for OrientationExpression {
     }
 
     fn energy_replacements_gs(&self, graph: &Graph) -> Vec<Replacement> {
-        let mut replacements = Vec::new();
-        let mink_index = LibraryRep::from(Minkowski {}).to_symbolic([Atom::var(W_.a__)]);
+        energy_map_replacements_gs(&self.edge_energy_map, graph)
+    }
+}
 
-        for (edge_id, energy_expr) in self.edge_energy_map.iter().enumerate() {
-            let edge_id = EdgeIndex(edge_id);
-            let energy = super::surface::GammaLoopLinearEnergyExpr::to_atom_gs(energy_expr, &[]);
-            replacements.push(Replacement::new(
-                GS.emr_mom(edge_id, AIND_SYMBOLS.cind.call(Atom::Zero))
-                    .to_pattern(),
-                energy.clone().to_pattern(),
-            ));
-            replacements.push(Replacement::new(
-                GS.emr_mom(edge_id, &mink_index).to_pattern(),
-                (GS.emr_vec_index(edge_id, &mink_index) + energy * GS.energy_delta(&mink_index))
-                    .to_pattern(),
-            ));
-        }
+pub(crate) fn energy_map_replacements_gs(
+    edge_energy_map: &[LinearEnergyExpr],
+    graph: &Graph,
+) -> Vec<Replacement> {
+    let mut replacements = Vec::new();
+    let mink_index = LibraryRep::from(Minkowski {}).to_symbolic([Atom::var(W_.a__)]);
 
-        for (loop_id, loop_edge_id) in graph.loop_momentum_basis.loop_edges.iter_enumerated() {
-            let loop_id = usize::from(loop_id);
-            let loop_id_atom = Atom::num(loop_id as i64);
-            let energy = self
-                .edge_energy_map
-                .get(usize::from(*loop_edge_id))
-                .map(|energy_expr| {
-                    super::surface::GammaLoopLinearEnergyExpr::to_atom_gs(energy_expr, &[])
-                })
-                .unwrap_or_else(Atom::new);
+    for (edge_id, energy_expr) in edge_energy_map.iter().enumerate() {
+        let edge_id = EdgeIndex(edge_id);
+        let energy = energy_expr.to_atom_gs(&[]);
+        replacements.push(Replacement::new(
+            GS.emr_mom(edge_id, AIND_SYMBOLS.cind.call(Atom::Zero))
+                .to_pattern(),
+            energy.clone().to_pattern(),
+        ));
+        replacements.push(Replacement::new(
+            GS.emr_mom(edge_id, &mink_index).to_pattern(),
+            (GS.emr_vec_index(edge_id, &mink_index) + energy * GS.energy_delta(&mink_index))
+                .to_pattern(),
+        ));
+    }
+
+    for (loop_id, loop_edge_id) in graph.loop_momentum_basis.loop_edges.iter_enumerated() {
+        let loop_id = usize::from(loop_id);
+        let loop_id_atom = Atom::num(loop_id as i64);
+        let energy = edge_energy_map
+            .get(usize::from(*loop_edge_id))
+            .map(|energy_expr| energy_expr.to_atom_gs(&[]))
+            .unwrap_or_else(Atom::new);
+        replacements.push(Replacement::new(
+            function!(
+                GS.loop_mom,
+                loop_id_atom.clone(),
+                AIND_SYMBOLS.cind.call(Atom::Zero)
+            )
+            .to_pattern(),
+            energy.clone().to_pattern(),
+        ));
+        for spatial_index in 1..=3 {
             replacements.push(Replacement::new(
                 function!(
                     GS.loop_mom,
                     loop_id_atom.clone(),
-                    AIND_SYMBOLS.cind.call(Atom::Zero)
+                    AIND_SYMBOLS.cind.call(spatial_index)
                 )
                 .to_pattern(),
-                energy.clone().to_pattern(),
-            ));
-            for spatial_index in 1..=3 {
-                replacements.push(Replacement::new(
-                    function!(
-                        GS.loop_mom,
-                        loop_id_atom.clone(),
-                        AIND_SYMBOLS.cind.call(spatial_index)
-                    )
+                GS.emr_mom(*loop_edge_id, AIND_SYMBOLS.cind.call(spatial_index))
                     .to_pattern(),
-                    GS.emr_mom(*loop_edge_id, AIND_SYMBOLS.cind.call(spatial_index))
-                        .to_pattern(),
-                ));
-            }
-            replacements.push(Replacement::new(
-                FunctionBuilder::new(GS.loop_mom)
-                    .add_arg(loop_id as i64)
-                    .add_arg(mink_index.as_view())
-                    .finish()
-                    .to_pattern(),
-                (GS.emr_vec_index(*loop_edge_id, &mink_index)
-                    + energy * GS.energy_delta(&mink_index))
-                .to_pattern(),
             ));
         }
-
-        replacements
+        replacements.push(Replacement::new(
+            FunctionBuilder::new(GS.loop_mom)
+                .add_arg(loop_id as i64)
+                .add_arg(mink_index.as_view())
+                .finish()
+                .to_pattern(),
+            (GS.emr_vec_index(*loop_edge_id, &mink_index) + energy * GS.energy_delta(&mink_index))
+                .to_pattern(),
+        ));
     }
+
+    replacements
 }
 
 #[cfg(test)]

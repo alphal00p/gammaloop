@@ -3,7 +3,8 @@
 //! This module provides functionality for analyzing ultraviolet behavior of loop integrands
 //! by evaluating them at different momentum scalings and computing degrees of divergence.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Display;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -11,34 +12,33 @@ use crate::DependentMomentaConstructor;
 use crate::cff::expression::OrientationData;
 use crate::cff::orientations::GraphOrientation;
 use crate::graph::parse::string_utils::ToOrderedSimple;
-use crate::graph::{Graph, LmbIndex};
+use crate::graph::{Graph, LmbIndex, LoopMomentumBasis};
 use crate::integrands::evaluation::EvaluationResult;
+use crate::integrands::process::{
+    OrientationProfileMode, ProcessIntegrand, evaluate_profile_momentum_point,
+    orientation_labels_for_graph,
+};
 use crate::model::Model;
 use crate::momentum::ThreeMomentum;
-use crate::momentum::sample::{ExternalIndex, LoopIndex};
+use crate::momentum::sample::{LoopIndex, LoopMomenta, MomentumSample};
 use crate::processes::{Amplitude, AmplitudeGraph, CrossSection};
 use crate::settings::RuntimeSettings;
 use crate::utils::F;
 use crate::uv::UltravioletGraph;
-use crate::{
-    graph::LoopMomentumBasis,
-    integrands::process::{
-        OrientationProfileMode, ProcessIntegrand, evaluate_profile_momentum_point,
-        orientation_labels_for_graph,
-    },
-};
+use clap::ValueEnum;
 use color_eyre::{Result, eyre::Context};
 use colored::Colorize;
 use eyre::eyre;
 use itertools::Itertools;
 use linnet::half_edge::PowersetIterator;
-use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation, SignOrZero};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, HedgePair, Orientation, SignOrZero};
 use linnet::half_edge::subgraph::subset::SubSet;
-use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike, SubSetOps};
-use linnet::half_edge::tree::SimpleTraversalTree;
+use linnet::half_edge::subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps};
 use rand::Rng;
 use rayon::prelude::*;
-use serde::Serialize;
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use spenso::algebra::complex::Complex;
 use symbolica::domains::atom::AtomField;
 use symbolica::numerical_integration::MonteCarloRng;
 use symbolica::poly::series::Series;
@@ -52,9 +52,104 @@ use tracing::{debug, info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use typed_index_collections::TiVec;
 
-type ExternalMomenta = TiVec<ExternalIndex, ThreeMomentum<F<f64>>>;
 type LoopMomentumSample = TiVec<LoopIndex, ThreeMomentum<F<f64>>>;
+type ProfileLmbLimits = Vec<(LoopMomentumBasis, Vec<(SubSet<LoopIndex>, i32)>)>;
 const UV_PROFILE_RETRY_MAX_DOD: f64 = -0.9;
+
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema, ValueEnum,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum UVLimitSelection {
+    #[default]
+    OnlyDivergent,
+    All,
+}
+
+impl UVLimitSelection {
+    fn includes(self, bare_dod: i32) -> bool {
+        matches!(self, Self::All) || bare_dod >= 0
+    }
+
+    fn cycle_union(
+        graph: &Graph,
+        lmb: &LoopMomentumBasis,
+        subset: &SubSet<LoopIndex>,
+    ) -> SuBitGraph {
+        let mut subgraph: SuBitGraph = graph.empty_subgraph();
+        for (pair, edge_id, _) in graph.underlying.iter_edges() {
+            if matches!(pair, HedgePair::Paired { .. })
+                && subset.included_iter().any(|loop_index| {
+                    lmb.edge_signatures[edge_id].internal[loop_index] != SignOrZero::Zero
+                })
+            {
+                subgraph.add(pair);
+            }
+        }
+        subgraph
+    }
+
+    fn all_lmb_limits(
+        graph: &Graph,
+        lmb: &LoopMomentumBasis,
+        compatible_cuts: Option<&[SuBitGraph]>,
+    ) -> Vec<(SubSet<LoopIndex>, i32)> {
+        let mut loops = PowersetIterator::<LoopIndex>::new(lmb.loop_edges.len() as u8);
+        loops.next();
+        loops
+            .filter_map(|subset| {
+                let cycle = Self::cycle_union(graph, lmb, &subset);
+                let is_cut_compatible = compatible_cuts
+                    .is_none_or(|cuts| cuts.iter().any(|cut| !cycle.intersects(cut)));
+                is_cut_compatible.then(|| (subset, graph.compute_dod(&cycle)))
+            })
+            .collect()
+    }
+
+    fn lmb_limits(
+        self,
+        graph: &Graph,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+        compatible_cuts: Option<&[SuBitGraph]>,
+    ) -> Result<ProfileLmbLimits> {
+        if matches!(self, Self::All) {
+            return Ok(all_lmbs
+                .iter()
+                .cloned()
+                .map(|lmb| {
+                    let limits = Self::all_lmb_limits(graph, &lmb, compatible_cuts);
+                    (lmb, limits)
+                })
+                .collect());
+        }
+
+        let mut examined = BTreeSet::new();
+        let mut selected: ProfileLmbLimits = Vec::new();
+        for lmb in std::iter::once(&graph.loop_momentum_basis).chain(all_lmbs.iter()) {
+            let mut subsets = PowersetIterator::<LoopIndex>::new(lmb.loop_edges.len() as u8);
+            subsets.next();
+            let limits = subsets
+                .filter_map(|subset| {
+                    let cycle = Self::cycle_union(graph, lmb, &subset);
+                    if !examined.insert(cycle.string_label()) {
+                        return None;
+                    }
+                    let is_cut_compatible = compatible_cuts
+                        .is_none_or(|cuts| cuts.iter().any(|cut| !cycle.intersects(cut)));
+                    if !is_cut_compatible {
+                        return None;
+                    }
+                    let dod = graph.compute_dod(&cycle);
+                    self.includes(dod).then_some((subset, dod))
+                })
+                .collect_vec();
+            if !limits.is_empty() {
+                selected.push((lmb.clone(), limits));
+            }
+        }
+        Ok(selected)
+    }
+}
 
 pub struct ProfileSettings {
     pub n_points: usize,
@@ -65,6 +160,9 @@ pub struct ProfileSettings {
     pub analyse_analytically: bool,
     pub orientation_mode: OrientationProfileMode,
     pub fixed_uv_ray: Option<UVProfileFixedRay>,
+    pub graph_id: Option<usize>,
+    pub cutkosky_cut: Option<Vec<EdgeIndex>>,
+    pub selected_limits: UVLimitSelection,
 }
 
 impl Default for ProfileSettings {
@@ -78,6 +176,9 @@ impl Default for ProfileSettings {
             use_f128: false,
             orientation_mode: OrientationProfileMode::Summed,
             fixed_uv_ray: None,
+            graph_id: None,
+            cutkosky_cut: None,
+            selected_limits: UVLimitSelection::OnlyDivergent,
         }
     }
 }
@@ -171,7 +272,257 @@ impl UVProfileFixedRay {
 
 #[cfg(test)]
 mod tests {
-    use super::UVProfileFixedRay;
+    use std::sync::OnceLock;
+
+    use linnet::half_edge::involution::EdgeIndex;
+    use linnet::half_edge::subgraph::{
+        Inclusion, ModifySubSet, SuBitGraph, SubSetLike, subset::SubSet,
+    };
+    use typed_index_collections::TiVec;
+
+    use crate::dot;
+    use crate::graph::parse::from_dot::IntoGraph;
+    use crate::graph::{Graph, LMBext, LmbIndex, LoopMomentumBasis};
+    use crate::initialisation::test_initialise;
+    use crate::momentum::ThreeMomentum;
+    use crate::momentum::sample::{
+        BareMomentumSample, ExternalThreeMomenta, LoopIndex, LoopMomenta, MomentumSample,
+    };
+    use crate::utils::F;
+
+    use super::{
+        SubsetOrientationInput, UVLimitSelection, UVProfile, UVProfileFailure, UVProfileFixedRay,
+        UVProfilePassFail, UVSamplingResult,
+    };
+
+    static THETA_GRAPH: OnceLock<(Graph, TiVec<LmbIndex, LoopMomentumBasis>)> = OnceLock::new();
+
+    fn theta_graph() -> (Graph, TiVec<LmbIndex, LoopMomentumBasis>) {
+        THETA_GRAPH
+            .get_or_init(|| {
+                test_initialise().unwrap();
+                let mut graph: Graph = dot!(digraph theta_profile {
+                    edge [num=1 mass=0]
+                    node [num=1]
+                    A -> B [id=0]
+                    A -> B [id=1]
+                    A -> B [id=2]
+                })
+                .unwrap();
+                let lmbs = graph.generate_loop_momentum_bases();
+                graph.loop_momentum_basis = lmbs[LmbIndex::from(0)].clone();
+                (graph, lmbs)
+            })
+            .clone()
+    }
+
+    #[test]
+    fn selected_limits_default_to_bare_uv_divergences() {
+        let divergent = UVLimitSelection::default();
+        assert!(divergent.includes(1));
+        assert!(divergent.includes(0));
+        assert!(!divergent.includes(-1));
+        assert!(UVLimitSelection::All.includes(-1));
+    }
+
+    #[test]
+    fn cycle_union_uses_lmb_signatures_for_a_self_loop() {
+        let _ = theta_graph();
+        let graph: Graph = dot!(digraph tadpole_profile {
+            edge [num=1 mass=0]
+            node [num=1]
+            A -> A [id=0]
+        })
+        .unwrap();
+        assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 1);
+
+        let mut subset = SubSet::empty(1);
+        subset.add(LoopIndex::from(0));
+        let cycle = UVLimitSelection::cycle_union(&graph, &graph.loop_momentum_basis, &subset);
+        assert!(cycle.includes(&graph[&EdgeIndex::from(0)].1));
+    }
+
+    #[test]
+    fn only_divergent_profiles_all_theta_cycles_once() {
+        let (graph, lmbs) = theta_graph();
+        let selected = UVLimitSelection::OnlyDivergent
+            .lmb_limits(&graph, &lmbs, None)
+            .unwrap();
+        let represented = selected
+            .iter()
+            .flat_map(|(lmb, limits)| {
+                limits.iter().map(|(subset, _)| {
+                    UVLimitSelection::cycle_union(&graph, lmb, subset).string_label()
+                })
+            })
+            .collect::<std::collections::BTreeSet<_>>();
+        let selected_limit_count: usize = selected.iter().map(|(_, limits)| limits.len()).sum();
+
+        assert_eq!(selected_limit_count, 4);
+        assert_eq!(represented.len(), selected_limit_count);
+        assert!(
+            selected.len() > 1,
+            "the third one-loop theta cycle requires another generated physical basis"
+        );
+        assert!(
+            selected
+                .iter()
+                .all(|(selected_lmb, _)| lmbs.iter().any(|lmb| lmb == selected_lmb)),
+            "divergent-only selection must not synthesize loop-momentum bases"
+        );
+        assert_eq!(
+            selected
+                .iter()
+                .flat_map(|(_, limits)| limits)
+                .filter(|(subset, _)| subset.n_included() == 1)
+                .count(),
+            3,
+            "all three logarithmically divergent one-loop theta cycles must be selected"
+        );
+
+        let generation_only: TiVec<LmbIndex, LoopMomentumBasis> =
+            vec![graph.loop_momentum_basis.clone()].into();
+        let generation_selected = UVLimitSelection::OnlyDivergent
+            .lmb_limits(&graph, &generation_only, None)
+            .unwrap();
+        assert_eq!(
+            generation_selected
+                .iter()
+                .flat_map(|(_, limits)| limits)
+                .filter(|(subset, _)| subset.n_included() == 1)
+                .count(),
+            2,
+            "an unrepresentable theta cycle must be skipped when only the generation basis is physical"
+        );
+
+        let exhaustive = UVLimitSelection::All
+            .lmb_limits(&graph, &lmbs, None)
+            .unwrap();
+        assert_eq!(exhaustive.len(), lmbs.len());
+        assert!(exhaustive.iter().all(
+            |(_, limits)| limits.len() == (1 << graph.loop_momentum_basis.loop_edges.len()) - 1
+        ));
+
+        let mut cut_union: SuBitGraph = graph.empty_subgraph();
+        cut_union.add(graph[&EdgeIndex::from(0)].1);
+        let cut_compatible_exhaustive = UVLimitSelection::All
+            .lmb_limits(&graph, &lmbs, Some(std::slice::from_ref(&cut_union)))
+            .unwrap();
+        let cut_compatible_count: usize = cut_compatible_exhaustive
+            .iter()
+            .map(|(_, limits)| limits.len())
+            .sum();
+        assert!(cut_compatible_count > 0 && cut_compatible_count < exhaustive.len() * 3);
+        assert!(
+            cut_compatible_exhaustive
+                .iter()
+                .all(|(lmb, limits)| limits.iter().all(|(subset, _)| {
+                    !UVLimitSelection::cycle_union(&graph, lmb, subset).intersects(&cut_union)
+                }))
+        );
+    }
+
+    #[test]
+    fn candidate_lmb_sample_is_transformed_to_the_generation_lmb() {
+        let (graph, lmbs) = theta_graph();
+        let candidate = lmbs
+            .iter()
+            .find(|lmb| *lmb != &graph.loop_momentum_basis)
+            .unwrap();
+        let loop_moms: LoopMomenta<F<f64>> = [
+            ThreeMomentum::new(F(0.25), F(-0.5), F(0.75)),
+            ThreeMomentum::new(F(-0.125), F(0.375), F(0.625)),
+        ]
+        .into_iter()
+        .collect();
+        let sample = MomentumSample {
+            sample: BareMomentumSample {
+                loop_moms: loop_moms.clone(),
+                dual_loop_moms: None,
+                loop_mom_cache_id: 0,
+                loop_mom_base_cache_id: 0,
+                external_moms: Vec::new().into(),
+                external_mom_cache_id: 0,
+                external_mom_base_cache_id: 0,
+                jacobian: F(1.0),
+                orientation: None,
+                parameterization_branch: None,
+            },
+        };
+        let subset = SubSet::empty(candidate.loop_edges.len());
+        let candidate_sample = candidate
+            .loop_edges
+            .iter()
+            .map(|_| ThreeMomentum::default())
+            .collect();
+        let input = SubsetOrientationInput {
+            graph_id: 0,
+            subset: &subset,
+            lmb: candidate,
+            generation_lmb: &graph.loop_momentum_basis,
+            sample: &candidate_sample,
+            orientation: None,
+        };
+        let transformed: LoopMomenta<F<f64>> =
+            input.generation_loop_momenta(&sample).into_iter().collect();
+        let externals: ExternalThreeMomenta<F<f64>> = Vec::new().into();
+
+        for (_, edge_id, _) in graph.underlying.iter_edges() {
+            assert_eq!(
+                candidate.edge_signatures[edge_id].compute_momentum(&loop_moms, &externals),
+                graph.loop_momentum_basis.edge_signatures[edge_id]
+                    .compute_momentum(&transformed, &externals)
+            );
+        }
+    }
+
+    #[test]
+    fn analysis_preserves_selected_graph_and_cut_identity() {
+        let profile = UVProfile {
+            per_graph: vec![UVSamplingResult {
+                graph_index: 2,
+                graph_name: "GL2".to_string(),
+                cutkosky_cut: Some(vec![EdgeIndex::from(5), EdgeIndex::from(2)]),
+                per_lmb: Vec::new(),
+            }],
+            scales: Vec::new(),
+            allow_vanishing_missing_fits: true,
+        };
+
+        let analysis = profile.analyse();
+        let graph = &analysis.graphs[0];
+        assert_eq!(graph.graph_index, 2);
+        assert_eq!(graph.graph_name, "GL2");
+        assert_eq!(
+            graph.cutkosky_cut,
+            Some(vec![EdgeIndex::from(5), EdgeIndex::from(2)])
+        );
+    }
+
+    #[test]
+    fn pass_fail_display_lists_only_failures_with_context() {
+        let report = UVProfilePassFail {
+            max_dod: -0.9,
+            total: 3,
+            failed: 1,
+            failures: vec![UVProfileFailure {
+                graph_index: 2,
+                graph_name: "GL2".to_string(),
+                cutkosky_cut: Some(vec![EdgeIndex::from(5), EdgeIndex::from(2)]),
+                lmb_index: 0,
+                fixed: vec![EdgeIndex::from(1)],
+                free: vec![EdgeIndex::from(3)],
+                orientation_label: None,
+                reason: "estimated DOD exceeds threshold".to_string(),
+            }],
+        };
+
+        let rendered = report.to_string();
+        assert!(rendered.contains("UV limit tests:"));
+        assert!(rendered.contains("GL2"));
+        assert!(rendered.contains("e5,e2"));
+        assert!(rendered.contains("estimated DOD exceeds threshold"));
+    }
 
     #[test]
     fn fixed_uv_ray_repeats_single_direction_and_norm() {
@@ -216,11 +567,11 @@ fn lmb_seed(base_seed: u64, graph_id: usize, lmb_index: usize) -> u64 {
 struct UVProfileRunner<'a> {
     integrand: &'a Arc<Mutex<ProcessIntegrand>>,
     scales: &'a [f64],
-    externals: &'a ExternalMomenta,
     model: &'a Model,
     settings: &'a RuntimeSettings,
     profile_settings: &'a ProfileSettings,
     base_seed: u64,
+    selected_cut_id: Option<usize>,
 }
 
 pub trait UVProfileable {
@@ -240,6 +591,12 @@ impl UVProfileable for Amplitude {
         // settings: &RuntimeSettings,
         profile_settings: &ProfileSettings,
     ) -> Result<UVProfile> {
+        if profile_settings.cutkosky_cut.is_some() {
+            return Err(eyre!(
+                "Cutkosky-cut selection is only supported for cross sections"
+            ));
+        }
+
         let scales = logspace(
             profile_settings.min_scale_exponent,
             profile_settings.max_scale_exponent,
@@ -253,16 +610,22 @@ impl UVProfileable for Amplitude {
             .ok_or(eyre!("Integrand Not built yet"))?
             .get_settings()
             .clone();
-        let externals: ExternalMomenta = settings
-            .kinematics
-            .externals
-            .get_dependent_externals(DependentMomentaConstructor::Amplitude(
-                &self.external_signature,
-            ))
-            .unwrap()
-            .into_iter()
-            .map(|a| a.spatial)
-            .collect();
+        let graph_inputs = self
+            .graphs
+            .iter()
+            .enumerate()
+            .filter(|(graph_id, _)| profile_settings.graph_id.is_none_or(|id| id == *graph_id))
+            .collect::<Vec<_>>();
+        if let Some(graph_id) = profile_settings.graph_id
+            && graph_inputs.is_empty()
+        {
+            return Err(eyre!(
+                "Graph id {} is out of range for amplitude '{}'; it has {} graphs",
+                graph_id,
+                self.name,
+                self.graphs.len()
+            ));
+        }
 
         let base_seed = profile_settings.seed;
         let integrand = Arc::new(Mutex::new(self.integrand.take().unwrap()));
@@ -271,7 +634,8 @@ impl UVProfileable for Amplitude {
         profile_span.pb_set_style(&ProgressStyle::with_template(
             "{wide_bar} {pos}/{len} {msg}",
         )?);
-        profile_span.pb_set_length(self.graphs.len() as u64);
+
+        profile_span.pb_set_length(graph_inputs.len() as u64);
         profile_span.pb_set_message("Profiling graphs");
         profile_span.pb_set_finish_message("all graphs profiled");
         let _profile_span_enter = profile_span.enter();
@@ -279,19 +643,17 @@ impl UVProfileable for Amplitude {
         let runner = UVProfileRunner {
             integrand: &integrand,
             scales: &scales,
-            externals: &externals,
             model,
             settings: &settings,
             profile_settings,
             base_seed,
+            selected_cut_id: None,
         };
 
-        let per_graph = self
-            .graphs
+        let per_graph = graph_inputs
             .par_iter()
-            .enumerate()
-            .map(|(i, g)| {
-                let res = runner.sample_graph(i, g)?;
+            .map(|(graph_id, graph)| {
+                let res = runner.sample_graph(*graph_id, graph)?;
                 profile_span.pb_inc(1);
                 Ok(res)
             })
@@ -330,26 +692,148 @@ impl UVProfileable for CrossSection {
             .as_ref()
             .ok_or(eyre!("Integrand Not built yet"))?;
         let settings = integrand.get_settings().clone();
-        let graph_inputs = match integrand {
-            ProcessIntegrand::CrossSection(cross_section) => cross_section
-                .data
-                .graph_terms
-                .iter()
-                .map(|graph_term| (graph_term.graph.clone(), graph_term.lmbs.clone()))
-                .collect::<Vec<_>>(),
+        let (graph_inputs, selected_cut_id) = match integrand {
+            ProcessIntegrand::CrossSection(cross_section) => {
+                if let Some(graph_id) = profile_settings.graph_id
+                    && graph_id >= cross_section.data.graph_terms.len()
+                {
+                    return Err(eyre!(
+                        "Graph id {} is out of range for cross section '{}'; it has {} graphs",
+                        graph_id,
+                        self.name,
+                        cross_section.data.graph_terms.len()
+                    ));
+                }
+                if profile_settings.cutkosky_cut.is_some() && profile_settings.graph_id.is_none() {
+                    return Err(eyre!("A Cutkosky-cut selection requires selecting a graph"));
+                }
+
+                let selected_cut_id = profile_settings
+                    .cutkosky_cut
+                    .as_ref()
+                    .map(|requested_edges| {
+                        let graph_id = profile_settings
+                            .graph_id
+                            .expect("Cutkosky-cut selection requires a graph");
+                        let graph_term = &cross_section.data.graph_terms[graph_id];
+                        let requested_edges = requested_edges.iter().copied().sorted().collect_vec();
+                        let matching_cuts = graph_term
+                            .cuts
+                            .iter_enumerated()
+                            .filter_map(|(cut_id, cut)| {
+                                let cut_edges = graph_term
+                                    .graph
+                                    .underlying
+                                    .iter_edges_of(&cut.cut)
+                                    .map(|(_, edge_id, _)| edge_id)
+                                    .sorted()
+                                    .collect_vec();
+                                (cut_edges == requested_edges).then_some(cut_id)
+                            })
+                            .collect_vec();
+                        let cut_id = match matching_cuts.as_slice() {
+                            [cut_id] => *cut_id,
+                            [] => {
+                                let available = graph_term
+                                    .cuts
+                                    .iter_enumerated()
+                                    .map(|(cut_id, cut)| {
+                                        let edges = graph_term
+                                            .graph
+                                            .underlying
+                                            .iter_edges_of(&cut.cut)
+                                            .map(|(_, edge_id, _)| edge_id.to_string())
+                                            .sorted()
+                                            .join(",");
+                                        format!("{}:[{}]", cut_id.0, edges)
+                                    })
+                                    .join(", ");
+                                return Err(eyre!(
+                                    "No Cutkosky cut with edges [{}] exists for graph '{}'. Available cuts: {}",
+                                    requested_edges.iter().map(ToString::to_string).join(","),
+                                    graph_term.graph.name,
+                                    available
+                                ));
+                            }
+                            _ => {
+                                return Err(eyre!(
+                                    "Cutkosky-cut edges [{}] ambiguously match cuts {} for graph '{}'",
+                                    requested_edges.iter().map(ToString::to_string).join(","),
+                                    matching_cuts.iter().map(|cut_id| cut_id.0).join(","),
+                                    graph_term.graph.name
+                                ));
+                            }
+                        };
+                        let cut_group = graph_term
+                            .cut_group_data
+                            .cut_groups
+                            .iter()
+                            .find(|cut_group| cut_group.cuts.contains(&cut_id))
+                            .ok_or_else(|| {
+                                eyre!(
+                                    "Cut {} is not assigned to a cut group for graph '{}'",
+                                    cut_id.0,
+                                    graph_term.graph.name
+                                )
+                            })?;
+                        // LU evaluates one contribution per cut group and tags its generated
+                        // event with the group's first (representative) physical cut.
+                        cut_group
+                            .cuts
+                            .first()
+                            .map(|cut_id| cut_id.0)
+                            .ok_or_else(|| {
+                                eyre!(
+                                    "The selected cut group is empty for graph '{}'",
+                                    graph_term.graph.name
+                                )
+                            })
+                    })
+                    .transpose()?;
+
+                let graph_inputs = cross_section
+                    .data
+                    .graph_terms
+                    .iter()
+                    .enumerate()
+                    .filter(|(graph_id, _)| {
+                        profile_settings.graph_id.is_none_or(|id| id == *graph_id)
+                    })
+                    .map(|(graph_id, graph_term)| {
+                        let cuts = graph_term
+                            .cut_group_data
+                            .cut_groups
+                            .iter()
+                            .filter(|group| {
+                                selected_cut_id.is_none_or(|cut_id| {
+                                    group.cuts.first().is_some_and(|id| id.0 == cut_id)
+                                })
+                            })
+                            .map(|group| {
+                                group
+                                    .cuts
+                                    .iter()
+                                    .map(|cut_id| graph_term.cuts[*cut_id].cut.as_subgraph())
+                                    .fold(
+                                        graph_term.graph.empty_subgraph(),
+                                        |union: SuBitGraph, cut| union.union(&cut),
+                                    )
+                            })
+                            .collect_vec();
+                        (
+                            graph_id,
+                            graph_term.graph.clone(),
+                            graph_term.lmbs.clone(),
+                            cuts,
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                (graph_inputs, selected_cut_id)
+            }
             ProcessIntegrand::Amplitude(_) => {
                 unreachable!("cross-section UV profiling expects cross-section integrands")
             }
         };
-        let externals: ExternalMomenta = settings
-            .kinematics
-            .externals
-            .get_dependent_externals(DependentMomentaConstructor::CrossSection)
-            .unwrap()
-            .into_iter()
-            .map(|a| a.spatial)
-            .collect();
-
         let base_seed = profile_settings.seed;
         let integrand = Arc::new(Mutex::new(self.integrand.take().unwrap()));
 
@@ -365,18 +849,17 @@ impl UVProfileable for CrossSection {
         let runner = UVProfileRunner {
             integrand: &integrand,
             scales: &scales,
-            externals: &externals,
             model,
             settings: &settings,
             profile_settings,
             base_seed,
+            selected_cut_id,
         };
 
         let per_graph = graph_inputs
             .par_iter()
-            .enumerate()
-            .map(|(i, (graph, lmbs))| {
-                let res = runner.sample_cross_section_graph(i, graph, lmbs)?;
+            .map(|(graph_id, graph, lmbs, cuts)| {
+                let res = runner.sample_cross_section_graph(*graph_id, graph, lmbs, cuts)?;
                 profile_span.pb_inc(1);
                 Ok(res)
             })
@@ -410,8 +893,8 @@ impl UVProfile {
         let graphs = self
             .per_graph
             .iter()
-            .enumerate()
-            .map(|(graph_index, graph)| {
+            .map(|graph| {
+                let graph_index = graph.graph_index;
                 let lmbs: Vec<UVProfileLmbAnalysis> = graph
                     .per_lmb
                     .iter()
@@ -487,7 +970,12 @@ impl UVProfile {
                     })
                     .collect();
 
-                UVProfileGraphAnalysis { graph_index, lmbs }
+                UVProfileGraphAnalysis {
+                    graph_index,
+                    graph_name: graph.graph_name.clone(),
+                    cutkosky_cut: graph.cutkosky_cut.clone(),
+                    lmbs,
+                }
             })
             .collect();
 
@@ -530,6 +1018,8 @@ pub struct UVProfileAnalysis {
 #[derive(Debug, Clone, Serialize)]
 pub struct UVProfileGraphAnalysis {
     pub graph_index: usize,
+    pub graph_name: String,
+    pub cutkosky_cut: Option<Vec<EdgeIndex>>,
     pub lmbs: Vec<UVProfileLmbAnalysis>,
 }
 
@@ -592,11 +1082,73 @@ pub struct UVProfilePassFail {
 #[derive(Debug, Clone, Serialize)]
 pub struct UVProfileFailure {
     pub graph_index: usize,
+    pub graph_name: String,
+    pub cutkosky_cut: Option<Vec<EdgeIndex>>,
     pub lmb_index: usize,
     pub fixed: Vec<EdgeIndex>,
     pub free: Vec<EdgeIndex>,
     pub orientation_label: Option<String>,
     pub reason: String,
+}
+
+impl Display for UVProfilePassFail {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let status = if self.failed == 0 {
+            "PASS".green().bold()
+        } else {
+            "FAIL".red().bold()
+        };
+        writeln!(
+            f,
+            "UV limit tests: {} ({}/{})",
+            status,
+            self.total.saturating_sub(self.failed),
+            self.total
+        )?;
+
+        if self.failures.is_empty() {
+            return Ok(());
+        }
+
+        let mut table = Builder::new();
+        table.push_record([
+            "status",
+            "graph",
+            "cut edges",
+            "LMB",
+            "fixed",
+            "→ ∞",
+            "orientation",
+            "reason",
+        ]);
+        for failure in &self.failures {
+            table.push_record([
+                "FAIL".red().bold().to_string(),
+                format!("{}:{}", failure.graph_index, failure.graph_name),
+                failure
+                    .cutkosky_cut
+                    .as_ref()
+                    .map(|edges| edges.iter().map(ToString::to_string).join(","))
+                    .unwrap_or_else(|| "all".to_string()),
+                failure.lmb_index.to_string(),
+                format!(
+                    "{{{}}}",
+                    failure.fixed.iter().map(ToString::to_string).join(",")
+                ),
+                format!(
+                    "{{{}}}",
+                    failure.free.iter().map(ToString::to_string).join(",")
+                ),
+                failure
+                    .orientation_label
+                    .clone()
+                    .unwrap_or_else(|| "sum".to_string()),
+                failure.reason.red().to_string(),
+            ]);
+        }
+
+        write!(f, "{}", table.build().with(Style::rounded()))
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -940,6 +1492,8 @@ impl UVProfileAnalysis {
                     if let Some(reason) = reason.filter(|_| !all_orientations_pass) {
                         failures.push(UVProfileFailure {
                             graph_index: graph.graph_index,
+                            graph_name: graph.graph_name.clone(),
+                            cutkosky_cut: graph.cutkosky_cut.clone(),
                             lmb_index: lmb.lmb_index,
                             fixed: subset.fixed.clone(),
                             free: subset.free.clone(),
@@ -960,6 +1514,8 @@ impl UVProfileAnalysis {
                         if let Some(reason) = reason {
                             failures.push(UVProfileFailure {
                                 graph_index: graph.graph_index,
+                                graph_name: graph.graph_name.clone(),
+                                cutkosky_cut: graph.cutkosky_cut.clone(),
                                 lmb_index: lmb.lmb_index,
                                 fixed: subset.fixed.clone(),
                                 free: subset.free.clone(),
@@ -1017,12 +1573,14 @@ fn orientation_signs(orientation: &OrientationData) -> (Vec<String>, Vec<String>
 }
 
 pub struct UVSamplingResult {
+    pub graph_index: usize,
+    pub graph_name: String,
+    pub cutkosky_cut: Option<Vec<EdgeIndex>>,
     pub per_lmb: Vec<LMBResult>,
 }
 
 impl<'a> UVProfileRunner<'a> {
     fn sample_graph(&self, graph_id: usize, g: &AmplitudeGraph) -> Result<UVSamplingResult> {
-        let lmbs = g.derived_data.lmbs.as_ref().unwrap();
         let deferred_integrands = g.derived_data.deferred_integrands.as_ref();
         let profiles_per_orientation = self
             .profile_settings
@@ -1066,6 +1624,7 @@ impl<'a> UVProfileRunner<'a> {
                 .cff_expression
                 .as_ref()
                 .unwrap()
+                .expression
                 .orientations
                 .iter()
                 .map(|orientation| {
@@ -1092,7 +1651,15 @@ impl<'a> UVProfileRunner<'a> {
         } else {
             None
         };
-        let lmb_refs: Vec<_> = lmbs.iter().enumerate().collect();
+        let all_lmbs = g
+            .derived_data
+            .lmbs
+            .as_ref()
+            .ok_or_else(|| eyre!("Loop momentum bases have not been generated"))?;
+        let lmbs = self
+            .profile_settings
+            .selected_limits
+            .lmb_limits(&g.graph, all_lmbs, None)?;
 
         let lmb_span = info_span!(
             "Profiling loop momentum bases",
@@ -1103,19 +1670,21 @@ impl<'a> UVProfileRunner<'a> {
             &ProgressStyle::with_template("{wide_bar} {pos}/{len} {msg}")
                 .expect("invalid progress bar template"),
         );
-        lmb_span.pb_set_length(lmb_refs.len() as u64);
+        lmb_span.pb_set_length(lmbs.len() as u64);
         lmb_span.pb_set_message("Profiling loop momentum bases");
         lmb_span.pb_set_finish_message("all loop momentum bases profiled");
         let _lmb_span_enter = lmb_span.enter();
 
-        let per_lmb = lmb_refs
+        let per_lmb = lmbs
             .par_iter()
-            .map(|(lmb_index, lmb)| {
-                let mut res = self.sample_lmb(
+            .enumerate()
+            .map(|(lmb_index, (lmb, subsets))| {
+                let mut result = self.sample_lmb(
                     graph_id,
                     &g.graph,
-                    *lmb_index,
+                    lmb_index,
                     lmb,
+                    subsets,
                     orientation_labels.as_deref(),
                 )?;
 
@@ -1135,41 +1704,46 @@ impl<'a> UVProfileRunner<'a> {
                                     lmb,
                                 )
                                 .into_iter()
-                                .map(|(l, v)| (l, orientation.clone(), v))
+                                .map(|(limit, value)| (limit, orientation.clone(), value))
                                 .collect::<Vec<_>>()
                         })
-                        .reduce(Vec::new, |mut acc, mut v| {
-                            acc.append(&mut v);
-                            acc
+                        .reduce(Vec::new, |mut limits, mut more_limits| {
+                            limits.append(&mut more_limits);
+                            limits
                         });
 
-                    for (l, odata, v) in orientation_limits {
-                        let subset = res
-                            .per_subsets
-                            .get_mut(&l)
-                            .expect("subset missing for orientation limits");
+                    for (limit, orientation, value) in orientation_limits {
+                        let Some(subset) = result.per_subsets.get_mut(&limit) else {
+                            continue;
+                        };
                         let analytic = subset.analytic.get_or_insert_with(|| AnalyticResult {
                             per_orientations: BTreeMap::new(),
                         });
-                        analytic.per_orientations.insert(odata, v);
+                        analytic.per_orientations.insert(orientation, value);
                     }
                 }
                 lmb_span.pb_inc(1);
-                Ok(res)
+                Ok(result)
             })
             .collect::<Result<Vec<_>>>()?;
 
         drop(_lmb_span_enter);
         drop(lmb_span);
 
-        Ok(UVSamplingResult { per_lmb })
+        Ok(UVSamplingResult {
+            graph_index: graph_id,
+            graph_name: g.graph.name.clone(),
+            cutkosky_cut: None,
+            per_lmb,
+        })
     }
 
     fn sample_cross_section_graph(
         &self,
         graph_id: usize,
         graph: &Graph,
-        lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+        all_lmbs: &TiVec<LmbIndex, LoopMomentumBasis>,
+        cuts: &[SuBitGraph],
     ) -> Result<UVSamplingResult> {
         if self.profile_settings.analyse_analytically {
             return Err(eyre!(
@@ -1185,6 +1759,11 @@ impl<'a> UVProfileRunner<'a> {
             let integrand = self.integrand.lock().expect("integrand mutex poisoned");
             match &*integrand {
                 ProcessIntegrand::CrossSection(cross_section) => {
+                    if cross_section.data.explicit_orientation_sum_only {
+                        return Err(eyre!(
+                            "an explicit orientation sum cannot be profiled by production orientation"
+                        ));
+                    }
                     Some(orientation_labels_for_graph(cross_section, graph_id)?)
                 }
                 ProcessIntegrand::Amplitude(_) => {
@@ -1194,7 +1773,10 @@ impl<'a> UVProfileRunner<'a> {
         } else {
             None
         };
-        let lmb_refs: Vec<_> = lmbs.iter().enumerate().collect();
+        let lmbs = self
+            .profile_settings
+            .selected_limits
+            .lmb_limits(graph, all_lmbs, Some(cuts))?;
 
         let lmb_span = info_span!(
             "Profiling loop momentum bases",
@@ -1205,30 +1787,37 @@ impl<'a> UVProfileRunner<'a> {
             &ProgressStyle::with_template("{wide_bar} {pos}/{len} {msg}")
                 .expect("invalid progress bar template"),
         );
-        lmb_span.pb_set_length(lmb_refs.len() as u64);
+        lmb_span.pb_set_length(lmbs.len() as u64);
         lmb_span.pb_set_message("Profiling loop momentum bases");
         lmb_span.pb_set_finish_message("all loop momentum bases profiled");
         let _lmb_span_enter = lmb_span.enter();
 
-        let per_lmb = lmb_refs
+        let per_lmb = lmbs
             .par_iter()
-            .map(|(lmb_index, lmb)| {
-                let res = self.sample_lmb(
+            .enumerate()
+            .map(|(lmb_index, (lmb, subsets))| {
+                let result = self.sample_lmb(
                     graph_id,
                     graph,
-                    *lmb_index,
+                    lmb_index,
                     lmb,
+                    subsets,
                     orientation_labels.as_deref(),
                 )?;
                 lmb_span.pb_inc(1);
-                Ok(res)
+                Ok(result)
             })
             .collect::<Result<Vec<_>>>()?;
 
         drop(_lmb_span_enter);
         drop(lmb_span);
 
-        Ok(UVSamplingResult { per_lmb })
+        Ok(UVSamplingResult {
+            graph_index: graph_id,
+            graph_name: graph.name.clone(),
+            cutkosky_cut: self.profile_settings.cutkosky_cut.clone(),
+            per_lmb,
+        })
     }
 }
 
@@ -1244,6 +1833,7 @@ impl<'a> UVProfileRunner<'a> {
         graph: &Graph,
         lmb_index: usize,
         lmb: &LoopMomentumBasis,
+        subsets: &[(SubSet<LoopIndex>, i32)],
         orientation_labels: Option<&[String]>,
     ) -> Result<LMBResult> {
         let sample: LoopMomentumSample =
@@ -1267,10 +1857,6 @@ impl<'a> UVProfileRunner<'a> {
                     .collect()
             };
 
-        let mut loops = PowersetIterator::<LoopIndex>::new(lmb.loop_edges.len() as u8);
-        loops.next();
-
-        let subsets: Vec<_> = loops.collect();
         let subset_span = info_span!(
             "Profiling subsets",
             indicatif.pb_show = true,
@@ -1286,28 +1872,35 @@ impl<'a> UVProfileRunner<'a> {
         let _subset_span_enter = subset_span.enter();
 
         let per_subsets_vec: Vec<(SubSet<LoopIndex>, SubSetResult)> = subsets
-            .into_par_iter()
+            .par_iter()
             .map_init(
                 || {
-                    self.integrand
+                    let mut integrand = self
+                        .integrand
                         .lock()
                         .expect("integrand mutex poisoned")
-                        .clone()
+                        .clone();
+                    // A selected LU cut is projected from the production event weights.
+                    if self.selected_cut_id.is_some() {
+                        integrand.get_mut_settings().general.generate_events = true;
+                    }
+                    integrand
                 },
-                |integrand, ls| {
+                |integrand, (subset, initial_dod)| {
                     let res = self.sample_subset(
                         integrand,
                         SubsetSampleInput {
                             graph_id,
-                            graph,
-                            subset: &ls,
+                            subset,
+                            initial_dod: *initial_dod,
                             lmb,
+                            generation_lmb: &graph.loop_momentum_basis,
                             sample: &sample,
                             orientation_labels,
                         },
                     )?;
                     subset_span.pb_inc(1);
-                    Ok((ls, res))
+                    Ok((subset.clone(), res))
                 },
             )
             .collect::<Result<Vec<_>>>()?;
@@ -1354,15 +1947,28 @@ struct SubsetOrientationInput<'a> {
     graph_id: usize,
     subset: &'a SubSet<LoopIndex>,
     lmb: &'a LoopMomentumBasis,
+    generation_lmb: &'a LoopMomentumBasis,
     sample: &'a LoopMomentumSample,
     orientation: Option<usize>,
 }
 
+impl SubsetOrientationInput<'_> {
+    fn generation_loop_momenta(self, sample: &MomentumSample<f64>) -> Vec<ThreeMomentum<F<f64>>> {
+        sample
+            .lmb_transform(self.lmb, self.generation_lmb)
+            .loop_moms()
+            .iter()
+            .cloned()
+            .collect()
+    }
+}
+
 struct SubsetSampleInput<'a> {
     graph_id: usize,
-    graph: &'a Graph,
     subset: &'a SubSet<LoopIndex>,
+    initial_dod: i32,
     lmb: &'a LoopMomentumBasis,
+    generation_lmb: &'a LoopMomentumBasis,
     sample: &'a LoopMomentumSample,
     orientation_labels: Option<&'a [String]>,
 }
@@ -1373,28 +1979,6 @@ impl<'a> UVProfileRunner<'a> {
         integrand: &mut ProcessIntegrand,
         input: SubsetSampleInput<'_>,
     ) -> Result<SubSetResult> {
-        let mut subgraph: SuBitGraph = input.graph.empty_subgraph();
-        for l in input.subset.included_iter() {
-            let eid = input.lmb.loop_edges[l];
-            let cut = input.graph[&eid].1.any_hedge();
-            let root_node = input.graph.node_id(cut);
-
-            let tree = SimpleTraversalTree::depth_first_traverse(
-                input.graph,
-                &input.lmb.tree,
-                &root_node,
-                None,
-            )
-            .unwrap();
-            subgraph.union_with(
-                &tree
-                    .get_cycle(cut, input.graph.underlying.as_ref())
-                    .unwrap()
-                    .filter,
-            );
-        }
-
-        let initial_dod = input.graph.compute_dod(&subgraph);
         let inspect = if let Some(orientation_labels) = input.orientation_labels {
             let per_orientation = orientation_labels
                 .iter()
@@ -1406,6 +1990,7 @@ impl<'a> UVProfileRunner<'a> {
                             graph_id: input.graph_id,
                             subset: input.subset,
                             lmb: input.lmb,
+                            generation_lmb: input.generation_lmb,
                             sample: input.sample,
                             orientation: Some(orientation_id),
                         },
@@ -1432,6 +2017,7 @@ impl<'a> UVProfileRunner<'a> {
                     graph_id: input.graph_id,
                     subset: input.subset,
                     lmb: input.lmb,
+                    generation_lmb: input.generation_lmb,
                     sample: input.sample,
                     orientation: None,
                 },
@@ -1446,7 +2032,7 @@ impl<'a> UVProfileRunner<'a> {
 
         Ok(SubSetResult {
             inspect,
-            initial_dod,
+            initial_dod: input.initial_dod,
             analytic,
         })
     }
@@ -1490,15 +2076,22 @@ impl<'a> UVProfileRunner<'a> {
                 for l in input.subset.included_iter() {
                     scaled_sample[l] = scaled_sample[l].map_ref(&|a| a * F(*s));
                 }
-                let loop_momenta = input
-                    .lmb
-                    .loop_edges
-                    .iter()
-                    .map(|edge| {
-                        input.lmb.edge_signatures[*edge]
-                            .compute_momentum(&scaled_sample, self.externals)
-                    })
-                    .collect::<Vec<_>>();
+                let dependent_momenta_constructor = match &*integrand {
+                    ProcessIntegrand::Amplitude(amplitude) => {
+                        DependentMomentaConstructor::Amplitude(&amplitude.data.external_signature)
+                    }
+                    ProcessIntegrand::CrossSection(_) => DependentMomentaConstructor::CrossSection,
+                };
+                let sample_in_lmb = MomentumSample::new(
+                    scaled_sample.iter().cloned().collect::<LoopMomenta<_>>(),
+                    0,
+                    &self.settings.kinematics.externals,
+                    0,
+                    F(1.0),
+                    dependent_momenta_constructor,
+                    input.orientation,
+                )?;
+                let loop_momenta = input.generation_loop_momenta(&sample_in_lmb);
 
                 let inspect_res_eval = evaluate_momentum_space_point(
                     integrand,
@@ -1507,6 +2100,7 @@ impl<'a> UVProfileRunner<'a> {
                     input.graph_id,
                     input.orientation,
                     use_arb_prec,
+                    self.selected_cut_id,
                 )?;
 
                 Ok(InspectResult {
@@ -1727,8 +2321,9 @@ fn evaluate_momentum_space_point(
     graph_id: usize,
     orientation: Option<usize>,
     use_arb_prec: bool,
+    selected_cut_id: Option<usize>,
 ) -> Result<EvaluationResult> {
-    match integrand {
+    let mut result = match integrand {
         ProcessIntegrand::Amplitude(amplitude) => evaluate_profile_momentum_point(
             amplitude,
             model,
@@ -1745,7 +2340,18 @@ fn evaluate_momentum_space_point(
             loop_momenta,
             use_arb_prec,
         ),
+    }?;
+
+    if let Some(selected_cut_id) = selected_cut_id {
+        result.integrand_result = result
+            .event_groups
+            .iter()
+            .flat_map(|event_group| event_group.iter())
+            .filter(|event| event.cut_info.cut_id == selected_cut_id)
+            .fold(Complex::new_re(F(0.0)), |sum, event| sum + event.weight);
     }
+
+    Ok(result)
 }
 
 #[derive(Debug, Clone)]

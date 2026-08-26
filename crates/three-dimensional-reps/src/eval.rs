@@ -1007,8 +1007,9 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::{
-        Generate3DExpressionOptions, NumeratorSamplingScaleMode,
+        Generate3DExpressionOptions, MomentumSignature, NumeratorSamplingScaleMode,
         generation::generate_3d_expression_from_parsed,
+        graph_io::{ParsedGraphInitialStateCutEdge, ParsedGraphInternalEdge},
     };
 
     use super::*;
@@ -1113,6 +1114,104 @@ mod tests {
             parse_uniform_scale(Some("0")),
             Err(EvaluationError::ZeroUniformScale)
         ));
+    }
+
+    #[test]
+    fn initial_cut_repeated_spectator_quadratic_matches_finite_pole_identity() {
+        let internal_edges = [
+            (0, 1, 0, vec![0, 0, 0], vec![1], "m0"),
+            (1, 0, 1, vec![1, 0, 0], vec![0], "m0"),
+            (2, 0, 5, vec![-1, 0, 0], vec![1], "m0"),
+            (3, 1, 3, vec![1, 0, 0], vec![-1], "m0"),
+            (4, 2, 3, vec![0, 1, 0], vec![0], "m0"),
+            (5, 2, 3, vec![-1, -1, 0], vec![1], "m0"),
+            (6, 2, 4, vec![1, 0, 0], vec![-1], "m0"),
+            (7, 4, 5, vec![0, 0, 1], vec![0], "m0"),
+            (8, 4, 5, vec![1, 0, -1], vec![-1], "m1"),
+        ]
+        .into_iter()
+        .map(
+            |(edge_id, tail, head, loop_signature, external_signature, mass_key)| {
+                ParsedGraphInternalEdge {
+                    edge_id,
+                    tail,
+                    head,
+                    label: format!("q{edge_id}"),
+                    mass_key: Some(mass_key.to_string()),
+                    signature: MomentumSignature {
+                        loop_signature,
+                        external_signature,
+                    },
+                    had_pow: false,
+                }
+            },
+        )
+        .collect();
+        let parsed = ParsedGraph {
+            internal_edges,
+            external_edges: Vec::new(),
+            initial_state_cut_edges: vec![ParsedGraphInitialStateCutEdge {
+                edge_id: 0,
+                external_id: 0,
+                external_sign: 1,
+            }],
+            loop_names: vec!["e1".to_string(), "e4".to_string(), "e7".to_string()],
+            external_names: vec!["p0".to_string()],
+            node_name_to_internal: (0..6).map(|node| (format!("v{node}"), node)).collect(),
+        };
+        let expression = generate_3d_expression_from_parsed(
+            &parsed,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(vec![(7, 2)]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let input = EvaluationInput::deterministic(
+            &parsed,
+            17,
+            &BTreeMap::from([("m0".to_string(), 0.0), ("m1".to_string(), 1.0)]),
+            None,
+        )
+        .unwrap();
+        let numerator = "edges[7][0]**2";
+        let value = evaluate_expression(&parsed, &expression, numerator, &input)
+            .unwrap()
+            .value;
+
+        assert!(
+            (value - -17.21131191349002).abs() < 1.0e-10,
+            "initial-cut repeated-spectator finite-pole identity mismatch: {value}"
+        );
+    }
+
+    #[test]
+    fn higher_power_cff_is_invariant_under_nonzero_uniform_scale() {
+        let parsed = crate::graph_io::test_graphs::box_pow3_graph();
+        let expression = generate_3d_expression_from_parsed(
+            &parsed,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(vec![(3, 4)]),
+                numerator_sampling_scale: NumeratorSamplingScaleMode::BeyondQuadratic,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let mut input =
+            EvaluationInput::deterministic(&parsed, 1337, &BTreeMap::new(), Some(0.75)).unwrap();
+        let first = evaluate_expression(&parsed, &expression, "edges[3][0]**4", &input)
+            .unwrap()
+            .value;
+        input.uniform_scale = Some(2.25);
+        let second = evaluate_expression(&parsed, &expression, "edges[3][0]**4", &input)
+            .unwrap()
+            .value;
+        let scale = first.abs().max(second.abs()).max(1.0e-14);
+
+        assert!(
+            (first - second).abs() <= 1.0e-9 * scale,
+            "higher-power CFF changed with auxiliary M: {first:e} vs {second:e}"
+        );
     }
 
     #[test]

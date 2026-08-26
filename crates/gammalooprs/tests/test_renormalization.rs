@@ -21,7 +21,7 @@ use idenso::{
 use spenso::{shadowing::symbolica_utils::LogPrint, structure::abstract_index::AbstractIndex};
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
-    parse, parse_lit,
+    function, parse, parse_lit,
 };
 use symbolica_utils::AtomPrintExt;
 
@@ -154,10 +154,49 @@ fn finite_part_quark_lo() {
     // F0 (direct) / H = +ep^-1.
     // Sum / H = +ep^-1; native GammaLoop / RQFT = +1. The one-loop Vakint sign
     // and the two quark-gluon vertex phase differences cancel.
+    let aligned_pole = align_to_rqft(&a, &model);
     insta::assert_snapshot!(
-        align_to_rqft(&a,&model)
-        .to_bare_ordered_string(),@"cas(2,cof(3))*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
+        aligned_pole.to_bare_ordered_string(),@"cas(2,cof(3))*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
     );
+
+    let muv = amp.graphs[0]
+        .renormalization_part(&UVgenerationSettings {
+            softct: false,
+            ..Default::default()
+        })
+        .unwrap();
+    let muv = align_to_rqft(&muv, &model)
+        .replace(GS.dim_epsilon)
+        .with(0)
+        .expand();
+    let log_mu_r_sq = function!(Symbol::LOG, Atom::var(GS.mu_r_sq));
+    let log_coefficients = muv.coefficient_list::<i8>(std::slice::from_ref(&log_mu_r_sq));
+    assert_eq!(log_coefficients.len(), 2);
+    let log_coefficient = log_coefficients
+        .into_iter()
+        .find_map(|(power, coefficient)| (power == log_mu_r_sq).then_some(coefficient))
+        .unwrap();
+    let contracted_log_coefficient = log_coefficient
+        .replace(parse_lit!(
+            gammalooprs::P(0, spenso::mink(4, gammalooprs::uvind(0, 2))) ^ 2
+        ))
+        .with(parse_lit!(spenso::dot(
+            gammalooprs::P(0, spenso::mink(4)),
+            gammalooprs::P(0, spenso::mink(4))
+        )))
+        .expand()
+        .collect_factors();
+    // Vakint leaves the repeated UV dummy as an indexed momentum squared. After
+    // contracting it and stripping the standard i/(16 pi^2) loop normalization,
+    // the MUV scale logarithm must be minus the already verified pole residue.
+    let normalized_log_coefficient =
+        (contracted_log_coefficient * Atom::num(-16) * Atom::i() * Atom::var(Symbol::PI).pow(2))
+            .expand()
+            .collect_factors();
+    let pole_residue = (aligned_pole * Atom::var(GS.dim_epsilon))
+        .expand()
+        .collect_factors();
+    assert_eq!(normalized_log_coefficient, -pole_residue);
 }
 
 #[test]

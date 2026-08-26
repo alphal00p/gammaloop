@@ -2547,10 +2547,17 @@ pub trait ProcessIntegrandImpl {
 pub(crate) fn validate_process_runtime_settings(
     settings: &RuntimeSettings,
     explicit_orientation_sum_only: bool,
+    uses_numerator_sampling_scale: bool,
 ) -> Result<()> {
     if settings.general.use_ltd {
         return Err(eyre!(
             "`runtime.general.use_ltd = true` is reserved for deferred proper-LTD support; the current evaluation backend is CFF"
+        ));
+    }
+
+    if uses_numerator_sampling_scale && settings.general.numerator_sampling_scale == 0.0 {
+        return Err(eyre!(
+            "`runtime.general.numerator_sampling_scale` must be nonzero because the generated CFF evaluators use the auxiliary sampling scale M"
         ));
     }
 
@@ -4155,15 +4162,28 @@ mod tests {
     fn explicit_orientation_sum_rejects_runtime_filters_and_ltd() {
         let mut settings = RuntimeSettings::default();
         settings.general.orientation_pat = OrientationPattern::from_user_pattern("(+)").unwrap();
-        let error = validate_process_runtime_settings(&settings, true).unwrap_err();
+        let error = validate_process_runtime_settings(&settings, true, false).unwrap_err();
         assert!(error.to_string().contains("orientation_pat` must be unset"));
 
-        validate_process_runtime_settings(&settings, false).unwrap();
+        validate_process_runtime_settings(&settings, false, false).unwrap();
 
         settings.general.orientation_pat = OrientationPattern::default();
         settings.general.use_ltd = true;
-        let error = validate_process_runtime_settings(&settings, false).unwrap_err();
+        let error = validate_process_runtime_settings(&settings, false, false).unwrap_err();
         assert!(error.to_string().contains("deferred proper-LTD support"));
+    }
+
+    #[test]
+    fn zero_numerator_sampling_scale_is_rejected_only_when_an_evaluator_uses_it() {
+        let mut settings = RuntimeSettings::default();
+        settings.general.numerator_sampling_scale = 0.0;
+
+        validate_process_runtime_settings(&settings, false, false).unwrap();
+        let error = validate_process_runtime_settings(&settings, false, true).unwrap_err();
+        assert!(error.to_string().contains("sampling scale M"));
+
+        settings.general.numerator_sampling_scale = -2.0;
+        validate_process_runtime_settings(&settings, false, true).unwrap();
     }
 
     #[test]

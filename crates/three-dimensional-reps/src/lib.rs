@@ -26,8 +26,9 @@ pub use expression::{
     OrientationSelector, ResidualDenominator, ThreeDExpression,
 };
 pub use generation::{
-    CffEnergyFactorOwnership, Generate3DExpressionOptions, GeneratedThreeDExpression,
-    GenerationError, NumeratorSamplingScaleMode, RepresentationMode, generate_3d_expression,
+    CffEnergyFactorOwnership, CffGlobalPrefactorSign, Generate3DExpressionOptions,
+    GeneratedThreeDExpression, GenerationError, NumeratorSamplingScaleMode, RepresentationMode,
+    generate_3d_expression,
 };
 pub use graph_io::{
     EnergyEdgeIndexMap, GraphInfo, ParsedGraph, RepeatedGroup, ThreeDGraphSource, graph_info,

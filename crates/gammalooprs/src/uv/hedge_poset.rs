@@ -651,6 +651,7 @@ impl Forests {
             computed.integrated(operation)?,
             self.source_spinney(node).renormalization_scheme,
             node == self.root,
+            &self.source_spinney(node).lmb,
         )
     }
 
@@ -1247,7 +1248,11 @@ impl Forests {
             {
                 debug!(order, nidx=%nidx, key=%self.graph[nidx], "Computing hedge-poset per-cut term");
                 let operation = self.graph[nidx].clone();
-                let cut_computation = if settings.local_uv_cts_from_expanded_4d_integrands {
+                // The empty forest is the original factorized 3D integrand.
+                // Expanded-4D projection is a choice only for proper UV nodes.
+                let cut_computation = if settings.local_uv_cts_from_expanded_4d_integrands
+                    && !operation.key.is_empty()
+                {
                     self.local_3d_from_4d_for_node(nidx, graph, localizer, settings)?
                 } else {
                     self.local_3d_for_node(nidx, graph, &cutset, localizer, settings)?

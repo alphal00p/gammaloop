@@ -2,9 +2,206 @@ use super::utils::*;
 use super::*;
 use std::fs;
 
+use gammalooprs::integrands::process::ProcessIntegrand;
 use gammalooprs::settings::runtime::{
     RotationSetting, StabilityLevelSetting, StabilityRecordingSettings,
 };
+
+#[test]
+#[serial]
+fn raised_cut_numerator_cancels_one_propagator_in_both_orientation_modes() -> Result<()> {
+    for explicit_orientation_sum_only in [false, true] {
+        let mode = if explicit_orientation_sum_only {
+            "explicit"
+        } else {
+            "localized"
+        };
+        let test_root =
+            get_tests_workspace_path().join(format!("raised_cut_numerator_cancellation_{mode}"));
+        let mut cli = get_test_cli(None, &test_root, Some(mode.to_string()), true)?;
+        run_commands(
+            &mut cli,
+            &[
+                "import model ./assets/models/json/scalars/scalars_2p_3p.json",
+                "import graphs ./tests/resources/graphs/raised_cut_numerator_cancellation.dot -p raised_cut_cancellation -i compare",
+                &format!(
+                    "set global kv global.generation.explicit_orientation_sum_only={explicit_orientation_sum_only} global.generation.tropical_subgraph_table.disable_tropical_generation=true global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.compile=false global.generation.evaluator.store_atom=true global.generation.threshold_subtraction.enable_thresholds=false"
+                ),
+                r#"set default-runtime string '
+                    [general]
+                    integral_unit = "none"
+                    disable_flux_factor = true
+
+                    [kinematics.externals]
+                    type = "constant"
+
+                    [kinematics.externals.data]
+                    momenta = [[4.0, 0.0, 0.0, 0.0]]
+                    helicities = [1]
+
+                    [sampling]
+                    graphs = "summed"
+                    orientations = "summed"
+                    lmb_multichanneling = true
+                    lmb_channel_weight = "ose"
+                    lmb_channels = "summed"
+
+                    [subtraction]
+                    disable_threshold_subtraction = true
+                '"#,
+                "generate existing -p raised_cut_cancellation -i compare",
+                "select -p raised_cut_cancellation -i compare --with-only-graph-names powered_cancel --output_process raised_cut_powered --output_integrand compare",
+                "select -p raised_cut_cancellation -i compare --with-only-graph-names lower_bubble --output_process raised_cut_lower --output_integrand compare",
+                "generate existing -p raised_cut_powered -i compare",
+                "generate existing -p raised_cut_lower -i compare",
+            ],
+        )?;
+
+        for point in [[0.11, 0.23, 0.37], [0.71, 0.43, 0.19]] {
+            let powered =
+                inspect_xspace_process(&mut cli, "raised_cut_powered", "compare", &point)?;
+            let lower = inspect_xspace_process(&mut cli, "raised_cut_lower", "compare", &point)?;
+            let combined =
+                inspect_xspace_process(&mut cli, "raised_cut_cancellation", "compare", &point)?;
+            let scale = powered.re.hypot(powered.im).max(lower.re.hypot(lower.im));
+            let direct_difference = powered + lower;
+
+            assert!(
+                scale > 0.0,
+                "the raised-cut cancellation oracle is trivial at {point:?} in {mode} mode"
+            );
+            assert!(
+                direct_difference.re.hypot(direct_difference.im) <= 1.0e-12 * scale,
+                "the q^2-m^2 numerator did not cancel one raised propagator at {point:?} in {mode} mode: powered={powered:e}, lower={lower:e}"
+            );
+            assert!(
+                combined.re.hypot(combined.im) <= 1.0e-12 * scale,
+                "the summed LU graph did not preserve the raised-propagator cancellation at {point:?} in {mode} mode: combined={combined:e}, scale={scale:e}"
+            );
+        }
+
+        clean_test(test_root);
+    }
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn uv_profile_selects_lu_graph_and_cut() -> Result<()> {
+    let test_root = get_tests_workspace_path().join("uv_profile_selects_lu_graph_and_cut");
+    let mut cli = get_test_cli(None, &test_root, Some("uv_profile_cut".to_string()), true)?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model ./assets/models/json/scalars/scalars_2p_3p.json",
+            "import graphs ./tests/resources/graphs/mass_approach_scalar_self_energy.dot -p scalar_self_energy -i compare",
+            "set global kv global.generation.tropical_subgraph_table.disable_tropical_generation=true global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.compile=false global.generation.evaluator.store_atom=true global.generation.threshold_subtraction.enable_thresholds=false",
+            r#"set default-runtime string '
+                [general]
+                integral_unit = "none"
+                disable_flux_factor = true
+
+                [kinematics.externals]
+                type = "constant"
+
+                [kinematics.externals.data]
+                momenta = [[4.0, 0.0, 0.0, 0.0]]
+                helicities = [1]
+
+                [sampling]
+                graphs = "summed"
+                orientations = "summed"
+                lmb_multichanneling = true
+                lmb_channel_weight = "ose"
+                lmb_channels = "summed"
+
+                [subtraction]
+                disable_threshold_subtraction = true
+            '"#,
+            "generate existing -p scalar_self_energy -i compare",
+        ],
+    )?;
+
+    let cut_edges = {
+        let process = ProcessRef::Unqualified("scalar_self_energy".to_string());
+        let integrand_name = "compare".to_string();
+        let (process_id, integrand_name) = cli
+            .state
+            .find_integrand_ref(Some(&process), Some(&integrand_name))?;
+        let ProcessIntegrand::CrossSection(integrand) = cli
+            .state
+            .process_list
+            .get_integrand(process_id, &integrand_name)?
+            .require_generated()?
+        else {
+            panic!("scalar self-energy fixture must generate a cross-section integrand")
+        };
+        let graph = integrand
+            .data
+            .graph_terms
+            .iter()
+            .find(|term| term.graph.name == "dotted_bubble")
+            .expect("scalar self-energy fixture must contain dotted_bubble");
+        let cut = graph
+            .cuts
+            .first()
+            .expect("dotted_bubble must contain a physical Cutkosky cut");
+        graph
+            .graph
+            .underlying
+            .iter_edges_of(&cut.cut)
+            .map(|(_, edge_id, _)| usize::from(edge_id))
+            .sorted()
+            .collect_vec()
+    };
+    assert!(!cut_edges.is_empty());
+
+    let analysis = Profile::UltraViolet(UltraVioletProfile {
+        process: Some(ProcessRef::Unqualified("scalar_self_energy".to_string())),
+        integrand_name: Some("compare".to_string()),
+        graph: Some("dotted_bubble".to_string()),
+        cutkosky_cut: cut_edges.clone(),
+        n_points: 6,
+        ..Default::default()
+    })
+    .run(&mut cli.state, &cli.cli_settings)?
+    .unwrap_uv();
+
+    assert_eq!(analysis.graphs.len(), 1);
+    let graph = &analysis.graphs[0];
+    assert_eq!(graph.graph_name, "dotted_bubble");
+    assert_eq!(
+        graph
+            .cutkosky_cut
+            .as_ref()
+            .expect("selected cut identity must be preserved")
+            .iter()
+            .copied()
+            .map(usize::from)
+            .collect_vec(),
+        cut_edges
+    );
+    let fitted_limits = analysis
+        .graphs
+        .iter()
+        .flat_map(|graph| &graph.lmbs)
+        .flat_map(|lmb| &lmb.subsets)
+        .filter(|subset| subset.estimated_dod().is_some())
+        .count();
+    let report = analysis.pass_fail(-0.9);
+    assert!(
+        report.total > 0,
+        "the selected UV profile must be nonvacuous"
+    );
+    assert!(
+        fitted_limits > 0,
+        "the selected UV profile must fit at least one nonvanishing limit"
+    );
+    assert_eq!(report.failed, 0, "{report}");
+
+    clean_test(test_root);
+    Ok(())
+}
 
 #[test]
 fn inspect_x_space_reports_invalid_coordinate_count_cleanly() -> Result<()> {

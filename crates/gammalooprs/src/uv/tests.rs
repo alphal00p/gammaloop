@@ -80,6 +80,7 @@ fn scalar_bubble_root_integrand_reference(
         .cff_expression
         .as_ref()
         .expect("cff_expression should have been created")
+        .expression
         .orientations
         .iter()
         .map(|orientation| orientation.data.orientation.clone())
@@ -351,6 +352,7 @@ fn scalars_integrated_cts_compare_legacy_and_hedge_poset() {
             .cff_expression
             .as_ref()
             .unwrap()
+            .expression
             .orientations[OrientationID(0)],
     );
     let settings = GenerationSettings {
@@ -397,6 +399,7 @@ fn scalars_integrated_banana_hedge_poset() {
             .cff_expression
             .as_ref()
             .unwrap()
+            .expression
             .orientations[OrientationID(0)],
     );
     let settings = GenerationSettings {
@@ -1629,6 +1632,7 @@ mod failing {
                     .cff_expression
                     .as_ref()
                     .unwrap()
+                    .expression
                     .orientations[OrientationID(0)],
             ),
             uv: UVgenerationSettings {
@@ -1670,6 +1674,7 @@ mod failing {
                     .cff_expression
                     .as_ref()
                     .unwrap()
+                    .expression
                     .orientations[OrientationID(0)],
             ),
             uv: UVgenerationSettings {

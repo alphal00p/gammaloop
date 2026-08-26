@@ -101,6 +101,43 @@ multiplied as though it were scalar. The maintained sign, projection, marker,
 and backend-boundary invariants are documented in
 [`uv-renormalization.md`](uv-renormalization.md).
 
+### 3.2 CFF production and numerator-energy ownership
+
+GammaLoop owns production graph/source construction, UV orchestration, exact
+source mapping, and evaluator preparation. The `three-dimensional-reps` crate
+owns the shared CFF algebra. The `3Drep` command and feature-gated eager
+evaluator are diagnostic tools, not production contracts: GammaLoop may prepare
+their inputs, factors, and expressions differently.
+
+All CFF power and capacity questions, including numerator, repeated-channel,
+and finite-pole powers, are expressed solely in physical EMR/source-edge
+energies. LMB coordinates describe momentum routing and are never consulted to
+identify, cap, or substitute an energy power. Production capacity analysis
+accepts physical `Q(edge, index)` atoms and rejects `K(loop, index)` until its
+producer normalizes it with physical edge provenance.
+
+The production numerator remains factorized. Degree analysis traverses its
+factors without expanding them, each UV step attaches only newly owned factors,
+and final assembly attaches outside and global factors exactly once. For higher
+powers, interpolation may replace an EMR energy by `a*M`, where `a` is a signed
+integer and `M` is the common auxiliary CFF numerator-sampling scale. This is an
+EMR substitution, never an LMB rewrite. Only finalized evaluators that use `M`
+require `M != 0`, and the physical result is invariant under changing its
+nonzero value.
+
+Integrated finite UV terms retain their exact source-local EMR maps. Production
+orientation selectors partition theta sectors but do not replace those maps.
+The empty UV forest is the ordinary factorized production root in both local-UV
+routes; the expanded-4D setting changes only proper, nonempty UV nodes.
+The shared CFF core also returns its connected-loop and pure
+duplicate-denominator global sign as typed metadata. GammaLoop consumes that
+bridge exactly once for root, reduced, and exact production CFF sources,
+cancelling the shared-core-local uniform convention and retaining GammaLoop's
+established complete-integrand convention.
+The standalone inclusive `epem_a_ddx` GL0+GL2 normalization acceptance for
+these production boundaries remains open; successful generation and focused
+coverage are not a numerical acceptance pass.
+
 ## Lifecycle and Data Flow
 
 ### 1. Startup
@@ -129,6 +166,11 @@ and backend-boundary invariants are documented in
 ### 3. Evaluation and Integration Flow
 1. Commands (`inspect`, `evaluate`, `integrate`) resolve process + integrand references.
 2. Integrand is warmed up (`ProcessIntegrand::warm_up`) to initialize rotations and caches.
+   Each finalized evaluator persists whether its source expressions (including
+   deferred function bodies) contain the auxiliary numerator sampling scale
+   `M`; warm-up rejects a zero runtime scale only when at least one evaluator
+   in the selected amplitude or cross-section integrand actually uses it. This
+   enforces the EMR-only `a*M` contract above; `M` is not an LMB coordinate.
 3. Sampling path parameterizes points and evaluates graph terms.
 4. Stability checks may escalate precision (`f64 -> f128 -> arbitrary`) and rotate kinematics.
 5. Process graph evaluation returns a rich `GraphEvaluationResult<T>` rather
@@ -350,7 +392,7 @@ For local experimentation, prefer an isolated path such as `.local/scratch/<run>
 The persistence model is file-system based and intentionally human-editable for settings/run cards, mixed with binary artifacts for performance-heavy data.
 
 ### Persistence Compatibility Contract
-- State format is versioned with `state_manifest.toml` (`version = 2` currently).
+- State format is versioned with `state_manifest.toml` (`version = 3` currently).
 - State loading and direct overwrite both require exactly the current manifest version; older states must be regenerated, and states from newer binaries require a newer GammaLoop binary.
 - A missing manifest denotes an unmanifested folder rather than a legacy state and is never loaded as saved state.
 - Process settings history now uses `settings_history.toml` consistently; loader still accepts legacy `settings_history.yaml` for backward compatibility and migration.

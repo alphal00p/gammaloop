@@ -22,7 +22,7 @@
 //! then lets this Schoonschip helper expand compact arguments inside each factor.
 
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, MulView, Symbol, representation::FunView},
     id::MatchSettings,
 };
 
@@ -43,7 +43,7 @@ use crate::{
     shadowing,
     shadowing::Concretize,
     structure::{
-        HasStructure, ScalarStructure, TensorShell, TensorStructure,
+        HasStructure, OrderedStructure, ScalarStructure, TensorShell, TensorStructure,
         representation::{LibraryRep, RepName, Representation},
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, Slot},
     },
@@ -297,7 +297,8 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
     ///
     /// Functions expose a compact representation through exactly one direct
     /// representation argument. Sums are accepted only when every summand exposes
-    /// the same representation.
+    /// the same representation. Products are accepted only when exactly one factor
+    /// is a compact vector and every other factor is syntactically scalar.
     fn compact_vector_rep(value: AtomView<'_>) -> Option<Representation<LibraryRep>> {
         match value {
             AtomView::Fun(fun) => Self::compact_tensor_rep_arg(fun).map(|(_, rep)| rep),
@@ -306,8 +307,38 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
                 let rep = reps.next()??;
                 reps.all(|candidate| candidate == Some(rep)).then_some(rep)
             }
+            AtomView::Mul(product) => Self::compact_vector_product_parts(product)
+                .map(|(_, representation)| representation),
             _ => None,
         }
+    }
+
+    /// Locate the only compact vector in a scalar-weighted product.
+    ///
+    /// Failure to identify a compact vector does not prove that a factor is
+    /// scalar: explicit-slot tensors also have no compact representation. The
+    /// ordinary syntactic structure inference is therefore the authority for
+    /// every remaining factor.
+    fn compact_vector_product_parts(
+        product: MulView<'_>,
+    ) -> Option<(usize, Representation<LibraryRep>)> {
+        let mut compact_vector = None;
+
+        for (position, factor) in product.iter().enumerate() {
+            if let Some(representation) = Self::compact_vector_rep(factor) {
+                if compact_vector.is_some() {
+                    return None;
+                }
+                compact_vector = Some((position, representation));
+            } else if !OrderedStructure::<LibraryRep, Aind>::syntactic_structure_from_atom(factor)
+                .ok()?
+                .is_scalar()
+            {
+                return None;
+            }
+        }
+
+        compact_vector
     }
 
     /// Locate the compact representation argument of one tensor function.
@@ -367,7 +398,9 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
     ///
     /// For a function, this rebuilds the function with the matched compact
     /// representation argument replaced by `slot`. For a sum, every summand is
-    /// rebuilt with the same slot so the expansion keeps a single dummy edge.
+    /// rebuilt with the same slot so the expansion keeps a single dummy edge. A
+    /// scalar-weighted product preserves its scalar factors around that rebuilt
+    /// vector.
     fn materialize_compact_vector_with_slot(
         value: AtomView<'_>,
         rep: &Representation<LibraryRep>,
@@ -397,6 +430,24 @@ impl<'a, Aind: AbsInd + DummyAind + ParseableAind> SchoonschipMaterializer<'a, A
                 let first = terms.next()??;
                 let rest = terms.collect::<Option<Vec<_>>>()?;
                 Some(rest.into_iter().fold(first, |sum, term| sum + term))
+            }
+            AtomView::Mul(product) => {
+                let (vector_position, matched_rep) = Self::compact_vector_product_parts(product)?;
+                if matched_rep != *rep {
+                    return None;
+                }
+
+                product
+                    .iter()
+                    .enumerate()
+                    .try_fold(Atom::num(1), |product, (position, factor)| {
+                        if position == vector_position {
+                            Self::materialize_compact_vector_with_slot(factor, rep, slot)
+                                .map(|factor| product * factor)
+                        } else {
+                            Some(product * factor)
+                        }
+                    })
             }
             _ => None,
         }
@@ -975,6 +1026,74 @@ mod tests {
 
         assert_eq!(f_dummy, p_dummy);
         assert_eq!(f_args[1], visible_slot.as_view());
+    }
+
+    #[test]
+    fn scalar_weighted_compact_vector_argument_becomes_slot_and_factor() {
+        let state = ParseState::<AbstractIndex>::default();
+        let materializer =
+            SchoonschipMaterializer::with_mode(&state, SchoonschipExpansionMode::full());
+        let weight = symbol!("materialized_weight");
+        let vector = compact_vector(symbol!("materialized_weighted_p"));
+        let expression = function!(symbol!("f"), Atom::var(weight) * &vector);
+
+        let materialized = materializer.materialize_shorthand(expression.as_view());
+        let AtomView::Mul(product) = materialized.as_view() else {
+            panic!("expected scalar weight beside materialized tensor factors");
+        };
+        let factors = product.iter().collect::<Vec<_>>();
+        let f_arg = factors
+            .iter()
+            .find_map(|factor| match factor {
+                AtomView::Fun(fun) if fun.get_symbol() == symbol!("f") => fun.iter().next(),
+                _ => None,
+            })
+            .unwrap();
+        let vector_arg = factors
+            .iter()
+            .find_map(|factor| match factor {
+                AtomView::Fun(fun) if fun.get_symbol() == symbol!("materialized_weighted_p") => {
+                    fun.iter().next()
+                }
+                _ => None,
+            })
+            .unwrap();
+
+        assert!(materialized.contains_symbol(weight));
+        assert_eq!(f_arg, vector_arg);
+    }
+
+    #[test]
+    fn product_of_two_compact_vectors_is_not_a_rank_one_argument() {
+        let state = ParseState::<AbstractIndex>::default();
+        let materializer =
+            SchoonschipMaterializer::with_mode(&state, SchoonschipExpansionMode::full());
+        let vectors =
+            compact_vector(symbol!("materialized_p")) * compact_vector(symbol!("materialized_q"));
+        let expression = function!(symbol!("f"), vectors);
+
+        assert_eq!(
+            materializer.materialize_shorthand(expression.as_view()),
+            expression
+        );
+    }
+
+    #[test]
+    fn compact_vector_times_explicit_tensor_is_not_a_rank_one_argument() {
+        let state = ParseState::<AbstractIndex>::default();
+        let materializer =
+            SchoonschipMaterializer::with_mode(&state, SchoonschipExpansionMode::full());
+        let explicit_slot = mink4()
+            .slot::<AbstractIndex, _>(AbstractIndex::from(1))
+            .to_atom();
+        let explicit_tensor = function!(symbol!("materialized_explicit_tensor"), explicit_slot);
+        let product = compact_vector(symbol!("materialized_p")) * explicit_tensor;
+        let expression = function!(symbol!("f"), product);
+
+        assert_eq!(
+            materializer.materialize_shorthand(expression.as_view()),
+            expression
+        );
     }
 
     #[test]

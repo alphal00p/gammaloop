@@ -164,6 +164,161 @@
         "VaccuumLimit"
       ]
     },
+    "Bench": {
+      "type": "object",
+      "properties": {
+        "discrete_dim": {
+          "description": "Discrete dimensions of the fixed sample",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint",
+            "minimum": 0
+          }
+        },
+        "duration": {
+          "description": "Target benchmark duration",
+          "type": "string"
+        },
+        "graph_id": {
+          "description": "Select a specific graph in momentum-space evaluation",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "integrand_name": {
+          "description": "The integrand name to benchmark",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "json_output": {
+          "description": "Write the benchmark result as pretty JSON to this path",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "minimal_integrand": {
+          "description": "Temporarily benchmark only the raw integrand path by disabling stability rotations,\ncaches, generated events, additional event weights, selectors, and observables.",
+          "type": "boolean",
+          "default": false
+        },
+        "momentum_space": {
+          "description": "Interpret the point as momentum-space coordinates",
+          "type": "boolean"
+        },
+        "n_batches": {
+          "description": "Number of batches used to estimate uncertainty",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "orientation_id": {
+          "description": "Select a specific orientation of the selected graph",
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint",
+          "minimum": 0
+        },
+        "point": {
+          "description": "Fixed x-space or momentum-space point to benchmark",
+          "type": "array",
+          "items": {
+            "type": "number",
+            "format": "double"
+          }
+        },
+        "process": {
+          "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "use_arb_prec": {
+          "description": "Evaluate in arbitrary precision",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "point",
+        "duration",
+        "use_arb_prec",
+        "momentum_space",
+        "discrete_dim"
+      ]
+    },
+    "Build": {
+      "type": "object",
+      "properties": {
+        "json_out": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "no_color": {
+          "type": "boolean"
+        },
+        "no_pretty": {
+          "type": "boolean"
+        },
+        "no_save_json": {
+          "type": "boolean"
+        },
+        "numerator_samples_normalization": {
+          "description": "Override the global numerator sampling normalization for this build.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/CliNumeratorSamplesNormalization"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "representation": {
+          "description": "Three-dimensional representation to build. LTD is reserved but not implemented yet.",
+          "$ref": "#/$defs/CliRepresentationMode",
+          "default": "cff"
+        },
+        "selection": {
+          "$ref": "#/$defs/GraphSelectorArgs"
+        },
+        "show_details_for_orientation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "workspace_path": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "selection",
+        "no_save_json",
+        "no_pretty",
+        "no_color"
+      ]
+    },
     "CLISettings": {
       "type": "object",
       "properties": {
@@ -223,6 +378,21 @@
         "prescription"
       ]
     },
+    "CliNumeratorSamplesNormalization": {
+      "type": "string",
+      "enum": [
+        "NeverM",
+        "MForAll",
+        "MForBeyondQuadraticOnly"
+      ]
+    },
+    "CliRepresentationMode": {
+      "type": "string",
+      "enum": [
+        "cff",
+        "ltd"
+      ]
+    },
     "CommandHistory": {
       "description": "Represents a command with optional raw string representation\n\nThis struct stores both the parsed command and optionally the original\nstring that was used to create it. This allows for preserving the exact\nuser input while still having access to the structured command data.",
       "type": "object",
@@ -248,7 +418,8 @@
         {
           "type": "string",
           "enum": [
-            "FinishCommandsBlock"
+            "FinishCommandsBlock",
+            "CommandTemplate"
           ]
         },
         {
@@ -451,35 +622,7 @@
           "type": "object",
           "properties": {
             "Bench": {
-              "type": "object",
-              "properties": {
-                "integrand_name": {
-                  "description": "The integrand name to benchmark",
-                  "type": "string"
-                },
-                "n_cores": {
-                  "description": "Number of cores to parallelize over",
-                  "type": "integer",
-                  "format": "uint",
-                  "minimum": 0
-                },
-                "process": {
-                  "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
-                  "$ref": "#/$defs/ProcessRef"
-                },
-                "samples": {
-                  "description": "Number of random samples to evaluate",
-                  "type": "integer",
-                  "format": "uint",
-                  "minimum": 0
-                }
-              },
-              "required": [
-                "samples",
-                "process",
-                "integrand_name",
-                "n_cores"
-              ]
+              "$ref": "#/$defs/Bench"
             }
           },
           "additionalProperties": false,
@@ -497,6 +640,18 @@
           "additionalProperties": false,
           "required": [
             "Profile"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "ThreeDRep": {
+              "$ref": "#/$defs/ThreeDRep"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "ThreeDRep"
           ]
         },
         {
@@ -970,7 +1125,8 @@
                 },
                 "hide_non_existing_thresholds": {
                   "description": "Hide generated threshold CTs that cannot exist for the active model and kinematics",
-                  "type": "boolean"
+                  "type": "boolean",
+                  "default": false
                 },
                 "integrand_name": {
                   "description": "Integrand name inside the selected process",
@@ -993,8 +1149,7 @@
               },
               "required": [
                 "graphs",
-                "categories",
-                "hide_non_existing_thresholds"
+                "categories"
               ]
             }
           },
@@ -1574,6 +1729,10 @@
           "type": "number",
           "format": "double"
         },
+        "numerator_sampling_scale": {
+          "type": "number",
+          "format": "double"
+        },
         "orientation_pat": {
           "$ref": "#/$defs/OrientationPattern"
         },
@@ -1664,6 +1823,9 @@
         "evaluator": {
           "$ref": "#/$defs/EvaluatorSettings"
         },
+        "explicit_orientation_sum_only": {
+          "type": "boolean"
+        },
         "feyngen": {
           "$ref": "#/$defs/FeyGenSettings"
         },
@@ -1687,6 +1849,9 @@
         },
         "tropical_subgraph_table": {
           "$ref": "#/$defs/TropicalSubgraphTableSettings"
+        },
+        "uniform_numerator_sampling_scale": {
+          "$ref": "#/$defs/UniformNumeratorSamplingScale"
         },
         "uv": {
           "$ref": "#/$defs/UVgenerationSettings"
@@ -1717,6 +1882,36 @@
         }
       },
       "additionalProperties": false
+    },
+    "GraphSelectorArgs": {
+      "type": "object",
+      "properties": {
+        "graph": {
+          "description": "Graph id, graph name, or inspect label such as \"#3 : graph_name\".",
+          "type": "string"
+        },
+        "integrand_name": {
+          "description": "Integrand name inside the selected process.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "process": {
+          "description": "Process reference: #<id>, name:<name>, or <id>/<name>.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ProcessRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "graph"
+      ]
     },
     "GroupingChoice": {
       "type": "string",
@@ -1828,6 +2023,13 @@
                 "append": {
                   "type": "boolean"
                 },
+                "inline_dot": {
+                  "description": "Inline DOT graph content to import instead of reading from a file path.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
                 "integrand_name": {
                   "type": [
                     "string",
@@ -1836,9 +2038,6 @@
                 },
                 "overwrite": {
                   "type": "boolean"
-                },
-                "path": {
-                  "type": "string"
                 },
                 "process": {
                   "description": "Process reference: #<id>, name:<name>, or <id>/<name>",
@@ -1850,10 +2049,22 @@
                       "type": "null"
                     }
                   ]
+                },
+                "process_spec": {
+                  "description": "Process definition used to select physical Cutkosky cuts for imported graphs.",
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "source": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 }
               },
               "required": [
-                "path",
                 "overwrite",
                 "append"
               ]
@@ -1990,6 +2201,13 @@
         },
         "integrand_name": {
           "description": "The integrand name to inspect",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "json_output": {
+          "description": "Write the inspection result as pretty JSON to this path.",
           "type": [
             "string",
             "null"
@@ -3840,10 +4058,32 @@
             "string",
             "null"
           ]
+        },
+        "defines": {
+          "description": "Define a string variable available to selected command blocks; repeat as needed",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RunVariable"
+          }
         }
       },
       "required": [
         "block_names"
+      ]
+    },
+    "RunVariable": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "value"
       ]
     },
     "RuntimeModelSettings": {
@@ -5148,6 +5388,34 @@
         "entry_aware"
       ]
     },
+    "ThreeDRep": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "Validate": {
+              "$ref": "#/$defs/Validate"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Validate"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "Build": {
+              "$ref": "#/$defs/Build"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "Build"
+          ]
+        }
+      ]
+    },
     "ThresholdSubtractionSettings": {
       "type": "object",
       "properties": {
@@ -5235,6 +5503,9 @@
           "type": "boolean"
         },
         "keep_marker": {
+          "type": "boolean"
+        },
+        "local_uv_cts_from_expanded_4d_integrands": {
           "type": "boolean"
         },
         "orchestrator": {
@@ -5347,6 +5618,14 @@
         "uv_ray_norms"
       ]
     },
+    "UniformNumeratorSamplingScale": {
+      "type": "string",
+      "enum": [
+        "none",
+        "beyond_quadratic",
+        "all"
+      ]
+    },
     "UnitSurfaceSettings": {
       "type": "object",
       "properties": {
@@ -5423,6 +5702,23 @@
         }
       },
       "additionalProperties": false
+    },
+    "Validate": {
+      "type": "object",
+      "properties": {
+        "json_out": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "selection": {
+          "$ref": "#/$defs/GraphSelectorArgs"
+        }
+      },
+      "required": [
+        "selection"
+      ]
     },
     "ValueRangeSelectorSerdeTag": {
       "type": "string",

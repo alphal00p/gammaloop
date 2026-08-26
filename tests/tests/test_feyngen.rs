@@ -4,6 +4,7 @@ use std::fs;
 use gammaloop_api::state::SyncSettings;
 use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
 use gammalooprs::feyngen::diagram_generator::evaluate_sign_origin;
+use gammalooprs::integrands::process::amplitude::load::StandaloneEvaluatorArchive;
 use gammalooprs::processes::{
     CycleSignature, GraphGroupSelectionSpec, GraphSelectionSignatureInventory, ProcessCollection,
     RaisedCutSignatureInventory, RaisedPropagatorScope, RaisedPropagatorSignature,
@@ -15,6 +16,7 @@ use gammaloop_integration_tests::{CLIState, get_test_cli, get_tests_workspace_pa
 use serial_test::serial;
 use symbolica::{
     atom::{Atom, AtomCore},
+    domains::float::Complex,
     printer::CanonicalOrderingSettings,
 };
 use tracing::debug;
@@ -640,6 +642,65 @@ fn scalar_lu_generation_with_e2e_hack_compiles() -> Result<()> {
         cli.run_command("generate")?;
         Ok(())
     })()
+}
+
+#[test]
+fn amplitude_standalone_export_reloads_and_evaluates() -> Result<()> {
+    let workspace = get_tests_workspace_path().join("amplitude_standalone_export");
+    let output_dir = workspace.join("standalone_export_check");
+    if workspace.exists() {
+        fs::remove_dir_all(&workspace)?;
+    }
+
+    let mut cli = get_test_cli(
+        Some("scalars_load.toml".into()),
+        workspace.clone(),
+        Some("amplitude_standalone_export".to_string()),
+        true,
+    )?;
+    cli.run_command("set global kv global.generation.evaluator.store_atom=true")?;
+    cli.run_command("generate amp scalar_1 > scalar_0 scalar_0 [{1}] --allowed-vertex-interactions V_3_SCALAR_022 V_3_SCALAR_122 -p triangle -i archive_eval --global-prefactor-num '1𝑖'")?;
+    cli.run_command("generate")?;
+
+    cli.state.process_list.export_standalone(
+        &output_dir,
+        &StandaloneExportSettings {
+            mode: StandaloneExportMode::Rust,
+            format: StandaloneDataFormat::Json,
+            ..Default::default()
+        },
+    )?;
+
+    let exported_base = output_dir
+        .join("processes")
+        .join("amplitudes")
+        .join("triangle")
+        .join("archive_eval");
+    let archive_path = exported_base.join("standalone_evaluators.json");
+    assert!(archive_path.exists());
+    assert!(exported_base.join("standalone_evaluators_rust.rs").exists());
+
+    let archive: StandaloneEvaluatorArchive<(), String> =
+        serde_json::from_slice(&fs::read(archive_path)?)?;
+    let mut loaded = archive.load()?;
+    let graph_term = loaded
+        .graph_terms
+        .first_mut()
+        .ok_or_else(|| eyre!("standalone amplitude archive has no graph terms"))?;
+    let input = (0..graph_term.param_builder_params.len())
+        .map(|index| Complex::new(0.625 + index as f64 * 0.173, 0.031 + index as f64 * 0.007))
+        .collect::<Vec<_>>();
+    let (_, _, evaluator, result) = &mut graph_term.original_integrand.parametric;
+    evaluator.evaluate(&input, result);
+    assert!(!result.is_empty());
+    assert!(
+        result
+            .iter()
+            .all(|value| value.re.is_finite() && value.im.is_finite())
+    );
+
+    fs::remove_dir_all(workspace)?;
+    Ok(())
 }
 
 #[test]

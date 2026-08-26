@@ -20,15 +20,25 @@ CLI/state layer.
 
 ## Features
 
-- `serde` (default): serializable expression data model.
+- `serde` (default): retained as downstream compatibility vocabulary. Serde
+  dependencies and derives are unconditional, so disabling this no-op feature
+  does not change the crate's serialization API.
 - `display`: colored/table expression summaries.
-- `eval`: eager f64 evaluator used by integration tests.
+- `eval`: optional eager f64 diagnostic evaluator and oracle tests.
 
 The compiled Symbolica runtime evaluator from the Python prototype is not part
-of this library crate. The current `eval` feature is an eager f64 diagnostic
-evaluator used by the GammaLoop integration tests. The GammaLoop CLI-side
-`3Drep build` command validates, renders, and optionally writes the oriented
-expression; production evaluator construction remains in GammaLoop.
+of this library crate. Neither GammaLoop nor the normal workspace test suite
+enables `eval`; run its diagnostic inventory manually and serially with:
+
+```bash
+cargo nextest run -p three-dimensional-reps --features eval \
+  --no-fail-fast --test-threads 1
+```
+
+The GammaLoop CLI-side `3Drep build` command is diagnostic-only: it validates,
+renders, and optionally writes the oriented expression, but its input and
+expression preparation are not a GammaLoop production contract. Production
+evaluator construction remains in GammaLoop.
 
 ## Current Limits
 

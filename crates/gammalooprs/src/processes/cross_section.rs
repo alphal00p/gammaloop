@@ -25,7 +25,7 @@ use crate::{
         CutCFFIndex,
         esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
         expression::{
-            CFFExpression, OrientationID, normalize_cut_edge_support_with_raised_edge_groups,
+            OrientationID, normalize_cut_edge_support_with_raised_edge_groups,
             normalize_three_d_expression_cut_support_with_raised_edge_groups,
         },
     },
@@ -74,6 +74,7 @@ use linnet::half_edge::{
 };
 use serde::{Deserialize, Serialize};
 use symbolica::{domains::dual::HyperDual, prelude::*};
+use three_dimensional_reps::GeneratedThreeDExpression;
 use tracing::{debug, warn};
 use typed_index_collections::{TiVec, ti_vec};
 
@@ -1488,26 +1489,23 @@ impl CrossSectionGraph {
             .map(|x| x.1)
             .collect_vec();
 
+        // The options provision maps from the complete factorized numerator.
+        // The numerator itself remains caller-owned and is mapped only when
+        // the corresponding orientation integrand is assembled.
         let options = self.graph.production_cff_3d_expression_options(settings)?;
-        let analysis_numerator = self
-            .graph
-            .production_numerator_atom_for_full_3d_expression();
-        let mut global_cff = self
-            .graph
-            .generate_3d_expression_for_integrand(
-                &contract_edges,
-                &canonize_esurface,
-                &options,
-                Some(&analysis_numerator),
-            )?
-            .expression;
+        let mut global_cff = self.graph.generate_3d_expression_for_integrand(
+            &contract_edges,
+            &canonize_esurface,
+            &options,
+            None,
+        )?;
         let raised_edge_groups = self.graph.get_raised_edge_groups();
         normalize_three_d_expression_cut_support_with_raised_edge_groups(
-            &mut global_cff,
+            &mut global_cff.expression,
             &raised_edge_groups,
         );
 
-        let generated_esurfaces = &global_cff.surfaces.esurface_cache;
+        let generated_esurfaces = &global_cff.expression.surfaces.esurface_cache;
         let normalized_generated_esurfaces = generated_esurfaces
             .iter()
             .map(|esurface| {
@@ -1542,7 +1540,7 @@ impl CrossSectionGraph {
 
         let esurface_raised_data = self
             .graph
-            .determine_raised_esurfaces_from_expression(&global_cff);
+            .determine_raised_esurfaces_from_expression(&global_cff.expression);
 
         let (cut_group_data, cut_group_stats) = CutGroupData::new_from_esurface(
             &esurface_raised_data,
@@ -1766,12 +1764,11 @@ impl CrossSectionGraph {
         );
 
         let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
-        let production_orientations = &self
+        let production_expression = self
             .derived_data
             .global_cff_expression
             .as_ref()
-            .expect("global_cff_expression should have been created")
-            .orientations;
+            .expect("global_cff_expression should have been created");
 
         let lu_prefactor = self.lu_prefactor_helper();
 
@@ -1780,10 +1777,11 @@ impl CrossSectionGraph {
             &mut self.graph,
             cut_structure,
             vakint,
-            OrientationProjection::exact(
-                production_orientations,
+            OrientationProjection::exact_expression(
+                production_expression,
                 &cff_options,
                 &settings.orientation_pattern,
+                settings.explicit_orientation_sum_only,
             ),
             &settings.uv,
         )?;
@@ -2720,7 +2718,7 @@ impl CrossSectionGraph {
             .global_cff_expression
             .as_ref()
             .expect("global_cff_expression should have been created");
-        let expression_esurfaces = &root_expression.surfaces.esurface_cache;
+        let expression_esurfaces = &root_expression.expression.surfaces.esurface_cache;
         let raised_edge_groups = self.graph.get_raised_edge_groups();
         let normalized_expression_esurfaces = expression_esurfaces
             .iter()
@@ -2733,7 +2731,7 @@ impl CrossSectionGraph {
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
         let threshold_raised_data = self
             .graph
-            .determine_raised_esurfaces_from_expression(root_expression);
+            .determine_raised_esurfaces_from_expression(&root_expression.expression);
         let mut raised_threshold_ids: TiVec<EsurfaceID, Option<RaisedEsurfaceId>> =
             ti_vec![None; expression_esurfaces.len()];
 
@@ -3050,12 +3048,11 @@ impl CrossSectionGraph {
         };
 
         let cff_options = self.graph.production_cff_3d_expression_options(settings)?;
-        let production_orientations = &self
+        let production_expression = self
             .derived_data
             .global_cff_expression
             .as_ref()
-            .expect("global_cff_expression should have been created")
-            .orientations;
+            .expect("global_cff_expression should have been created");
 
         let mut threshold_counterterms = settings
             .uv
@@ -3064,10 +3061,11 @@ impl CrossSectionGraph {
                 &mut self.graph,
                 cut_structure,
                 vakint,
-                OrientationProjection::exact(
-                    production_orientations,
+                OrientationProjection::exact_expression(
+                    production_expression,
                     &cff_options,
                     &settings.orientation_pattern,
+                    settings.explicit_orientation_sum_only,
                 ),
                 &settings.uv,
             )?
@@ -3299,7 +3297,9 @@ impl CrossSectionGraph {
 pub struct CrossSectionDerivedData {
     pub orientations: Option<TiVec<OrientationID, EdgeVec<Orientation>>>,
     pub cut_paramatric_integrand: TiVec<CutGroupId, ParametricIntegrands>,
-    pub global_cff_expression: Option<CFFExpression<OrientationID>>,
+    pub global_cff_expression: Option<
+        GeneratedThreeDExpression<crate::cff::esurface::Esurface, crate::cff::hsurface::Hsurface>,
+    >,
     pub lmbs: Option<TiVec<LmbIndex, LoopMomentumBasis>>,
     pub multi_channeling_setup: Option<LmbMultiChannelingSetup>,
     pub threshold_counterterms: TiVec<CutGroupId, LUCounterTermData>,

@@ -91,31 +91,32 @@ impl Graph {
                 1,
             )
             .map_err(|error| {
+                eyre::eyre!("could not analyze numerator in physical EMR energy variables: {error}")
+            })?;
+        // The exact source has occurrence-local denominator IDs. A physical
+        // numerator energy can cross that boundary only through one literal
+        // Q(edge) occurrence; ownership and loop coordinates are deliberately
+        // irrelevant. Bridge energies remain in the complete factorized
+        // numerator and are projected independently as external affine tree
+        // factors.
+        let exact_energy_degree_bounds = source
+            .exact_source_energy_mapper()
+            .expect("exact 4D source has an owned parent-energy mapper")
+            .map_energy_degree_bounds(&energy_degree_bounds)
+            .map_err(|error| {
                 eyre::eyre!(
-                    "could not analyze numerator in the contracted-source loop basis: {error}"
+                    "could not map exact 4D CFF numerator bounds for graph `{}`: {error}",
+                    self.name,
                 )
             })?;
-        if !energy_degree_bounds.is_empty() {
-            return Err(eyre::eyre!(
-                "exact 4D CFF generation for graph `{}` cannot soundly map nonconstant nonbridge numerator EMR energy-degree bounds {:?} to occurrence-local energies: an affine numerator-only EMR-to-occurrence contract is not implemented",
-                self.name,
-                energy_degree_bounds,
-            ));
-        }
-        // The exact source has occurrence-local denominator IDs. Until it can
-        // carry physical EMR numerator variables through an independent
-        // affine map, only the explicit energy-constant nonbridge numerator
-        // class is sound inside CFF. Bridge energies remain in the complete
-        // factorized numerator and are projected independently as external
-        // affine tree factors. This overrides production-wide bounds with the
-        // class of the numerator actually owned by this 4D term.
-        source_options.energy_degree_bounds = Some(energy_degree_bounds);
+        source_options.energy_degree_bounds = Some(exact_energy_degree_bounds);
         let parsed = source.to_three_d_parsed_graph()?;
         let generated = three_dimensional_reps::generate_3d_expression(source, &source_options);
         generated.map_err(|error| {
             eyre::eyre!(
-                "generalized CFF expression generation failed for exact 4D source in graph `{}` with source-edge numerator energy-degree bounds {:?}: {error}\n{}",
+                "generalized CFF expression generation failed for exact 4D source in graph `{}` with physical EMR bounds {:?} mapped to exact-occurrence bounds {:?}: {error}\n{}",
                 self.name,
+                energy_degree_bounds,
                 source_options.energy_degree_bounds,
                 three_d_source_summary(&parsed),
             )
@@ -384,6 +385,7 @@ impl Graph {
         let GeneratedThreeDExpression {
             mut expression,
             energy_factor_ownership,
+            core_global_prefactor_sign,
         } = generated;
         if !expression.residual_denominators.is_empty() {
             return Err(eyre::eyre!(
@@ -467,6 +469,7 @@ impl Graph {
                 residual_denominators: Vec::new(),
             },
             energy_factor_ownership,
+            core_global_prefactor_sign,
         })
     }
 
@@ -801,14 +804,111 @@ mod tests {
     use crate::{
         dot,
         graph::{
-            FeynmanGraph,
+            FeynmanGraph, FourDDenominator,
             cuts::{CutSet, LuCutSelection},
             parse::from_dot::IntoGraph,
         },
         initialisation::test_initialise,
         settings::global::{GenerationSettings, OrientationPattern},
         utils::GS,
+        uv::uv_graph::UVE,
     };
+    use linnet::half_edge::subgraph::SubSetOps;
+    use symbolica::atom::FunctionBuilder;
+
+    #[test]
+    fn direct_cff_carries_core_global_sign_as_production_metadata() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph direct_duplicate_sign {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+        })?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let source = GraphThreeDSource::new(&graph, &[])?;
+        let shared_core = three_dimensional_reps::generate_3d_expression(&source, &options)?;
+
+        assert_eq!(shared_core.core_global_prefactor_sign.factor(), -1);
+        assert!(
+            shared_core
+                .expression
+                .orientations
+                .iter()
+                .flat_map(|orientation| &orientation.variants)
+                .all(|variant| (&variant.prefactor + Atom::one()).is_zero()),
+            "the shared-core global sign must remain in the generated expression"
+        );
+
+        let cutset = CutSet::empty(graph.n_hedges());
+        let contract: linnet::half_edge::subgraph::SuBitGraph = graph.empty_subgraph();
+        let cff = graph.cff(
+            &contract,
+            &cutset,
+            &OrientationPattern::default(),
+            &options,
+            None,
+        )?;
+        assert_eq!(cff.production_prefactor_factor(), -1);
+
+        let contracted_loop = graph
+            .get_edge_subgraph(EdgeIndex(0))
+            .union(&graph.get_edge_subgraph(EdgeIndex(1)));
+        assert_eq!(graph.cyclotomatic_number(&contracted_loop), 1);
+        let reduced = graph.cff(
+            &contracted_loop,
+            &cutset,
+            &OrientationPattern::default(),
+            &options,
+            None,
+        )?;
+        assert_eq!(
+            reduced.production_prefactor_factor(),
+            1,
+            "contracting one loop must regenerate the active one-loop source convention"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn two_loop_cff_carries_core_loop_parity_as_production_metadata() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph direct_two_loop_sign {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1 lmb_id=1]
+            b -> a [id=2]
+        })?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let source = GraphThreeDSource::new(&graph, &[])?;
+        let shared_core = three_dimensional_reps::generate_3d_expression(&source, &options)?;
+
+        assert_eq!(shared_core.core_global_prefactor_sign.factor(), -1);
+        assert!(
+            shared_core
+                .expression
+                .orientations
+                .iter()
+                .flat_map(|orientation| &orientation.variants)
+                .all(|variant| (&variant.prefactor + Atom::one()).is_zero()),
+            "the connected two-loop core parity must remain in the generated expression"
+        );
+
+        let cutset = CutSet::empty(graph.n_hedges());
+        let contract: linnet::half_edge::subgraph::SuBitGraph = graph.empty_subgraph();
+        let cff = graph.cff(
+            &contract,
+            &cutset,
+            &OrientationPattern::default(),
+            &options,
+            None,
+        )?;
+        assert_eq!(cff.production_prefactor_factor(), -1);
+        Ok(())
+    }
 
     #[test]
     fn contracted_raised_generation_rejects_absent_emr_bound_without_aliasing() -> Result<()> {
@@ -948,6 +1048,101 @@ mod tests {
                 local.orientation.edge_energy_map,
             );
         }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_massless_raised_lu_cff_retains_selected_residue() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_massless_raised_lu {
+            edge [num=1 mass="UFO::ZERO"]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> v1 [id=0]
+            v1 -> v2 [id=1 lmb_id=0]
+            v2 -> v3 [id=2]
+            v1 -> v3 [id=3]
+            v3 -> outgoing [id=4]
+        })?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let numerator = GS.emr_mom(EdgeIndex(1), GS.cind(0)).pow(2);
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph
+            .generate_3d_expression_for_integrand(&[], &canonization, &options, Some(&numerator))?
+            .expression;
+        let lu_cut = graph
+            .determine_raised_esurfaces_from_expression(&production)
+            .raised_groups
+            .into_iter()
+            .find(|group| {
+                group.max_occurence > 1
+                    && group.esurface_ids.iter().any(|esurface_id| {
+                        !production.surfaces.esurface_cache[*esurface_id]
+                            .external_shift
+                            .is_empty()
+                    })
+            })
+            .expect("raised production CFF should contain a physical repeated LU surface");
+        let mut cutset = CutSet::empty(graph.n_hedges());
+        cutset.residue_selector.lu = Some(LuCutSelection {
+            raised_group: lu_cut.clone(),
+            cut_edge_alternatives: lu_cut
+                .esurface_ids
+                .iter()
+                .map(|esurface_id| {
+                    production.surfaces.esurface_cache[*esurface_id]
+                        .energies
+                        .clone()
+                })
+                .collect(),
+        });
+        let denominators = [1, 2, 3].map(|edge| {
+            let edge = EdgeIndex(edge);
+            FourDDenominator {
+                source_edge: edge,
+                momentum: FunctionBuilder::new(GS.emr_mom)
+                    .add_arg(usize::from(edge))
+                    .finish(),
+                mass_squared: graph.underlying[edge].mass_atom().pow(2),
+                full_expr: Atom::one(),
+            }
+        });
+        assert!(
+            denominators
+                .iter()
+                .all(|denominator| denominator.mass_squared.is_zero()),
+            "UFO::ZERO masses must be normalized before exact surface projection"
+        );
+        let source = GraphThreeDSource::from_exact_denominators(&graph, &denominators)?;
+        assert_eq!(
+            source
+                .exact_source_energy_mapper()
+                .expect("exact source has a physical EMR mapper")
+                .map_energy_degree_bounds(&[(1, 2)])?,
+            vec![(graph.underlying.n_edges(), 2)]
+        );
+
+        let (exact, _) =
+            graph.cff_from_4d_denominators(&denominators, &cutset, &options, &numerator)?;
+        assert_eq!(exact.terms.len(), lu_cut.max_occurence);
+        let selected = exact
+            .terms
+            .iter()
+            .find(|(index, _)| index.lu_cut_order == Some(2))
+            .expect("the exact raised CFF should retain its second LU residue");
+        assert!(!selected.1.orientations.is_empty());
+        assert!(
+            selected
+                .1
+                .orientations
+                .iter()
+                .flat_map(|orientation| &orientation.orientation.variants)
+                .next()
+                .is_some(),
+            "the selected exact LU residue must retain a causal variant"
+        );
         Ok(())
     }
 }

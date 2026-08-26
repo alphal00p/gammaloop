@@ -110,7 +110,7 @@ custom = []
 [cli_settings.global.generation.uv]
 softct=false
 inner_products=true
-generate_integrated=false
+generate_integrated=true
 subtract_uv=true
 
 [cli_settings.global.n_cores]

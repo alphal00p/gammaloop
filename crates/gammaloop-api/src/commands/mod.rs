@@ -300,7 +300,7 @@ impl Commands {
 mod tests {
     use std::path::PathBuf;
 
-    use super::{Bench, Commands, Inspect};
+    use super::{Approach, Bench, Commands, Inspect, Renormalize};
     use crate::{
         commands::generate::{Generate, GenerateCmd, ProcessArgs},
         state::{ProcessRef, RunHistory, State},
@@ -520,6 +520,65 @@ mod tests {
         let rendered = format!("{err:?}");
         assert!(
             rendered.contains("Cannot write benchmark JSON output"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("--read-only-state"), "{rendered}");
+    }
+
+    #[test]
+    fn approach_rejects_output_inside_read_only_state_before_integrand_lookup() {
+        let mut state = State::new_test();
+        let mut run_history = RunHistory::default();
+        let mut cli_settings = CLISettings::default();
+        let mut runtime_settings = RuntimeSettings::default();
+        cli_settings.state.folder = PathBuf::from("/tmp/read_only_state");
+        cli_settings.session.read_only_state = true;
+
+        let err = Commands::Approach(Approach {
+            point: vec![0.1, 0.2],
+            output_results: Some(PathBuf::from("/tmp/read_only_state/approach.json")),
+            ..Approach::default()
+        })
+        .run(
+            &mut state,
+            &mut run_history,
+            &mut cli_settings,
+            &mut runtime_settings,
+        )
+        .unwrap_err();
+
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("Cannot write approach results"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("--read-only-state"), "{rendered}");
+    }
+
+    #[test]
+    fn renormalize_rejects_output_inside_read_only_state_before_integrand_lookup() {
+        let mut state = State::new_test();
+        let mut run_history = RunHistory::default();
+        let mut cli_settings = CLISettings::default();
+        let mut runtime_settings = RuntimeSettings::default();
+        cli_settings.state.folder = PathBuf::from("/tmp/read_only_state");
+        cli_settings.session.read_only_state = true;
+
+        let err = Commands::Renormalize(Renormalize {
+            result_path: Some(PathBuf::from("/tmp/read_only_state/renormalization")),
+            ..Renormalize::default()
+        })
+        .run(
+            &mut state,
+            &mut run_history,
+            &mut cli_settings,
+            &mut runtime_settings,
+        )
+        .unwrap_err();
+
+        let rendered = format!("{err:?}");
+        assert!(
+            rendered.contains("Cannot write renormalization results"),
             "{rendered}"
         );
         assert!(rendered.contains("--read-only-state"), "{rendered}");

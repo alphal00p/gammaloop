@@ -918,17 +918,24 @@ fn read_existing_workspace_state(
         workspace_manifest_path(workspace_path),
         "integration manifest",
     )?;
-    let state_bytes = fs::read(workspace_state_path(workspace_path)).map_err(|err| {
+    manifest.validate_version()?;
+    let state_path = workspace_state_path(workspace_path);
+    let state_bytes = fs::read(&state_path).map_err(|err| {
         eyre!(
             "Could not read integration workspace state from {}: {err}",
-            workspace_path.display()
+            state_path.display()
         )
     })?;
     let integration_state = bincode::decode_from_slice::<IntegrationState, _>(
         &state_bytes,
         bincode::config::standard(),
     )
-    .map_err(|err| eyre!("Could not deserialize integration state: {err}"))?
+    .map_err(|err| {
+        eyre!(
+            "Could not deserialize integration state from {}: {err}",
+            state_path.display()
+        )
+    })?
     .0;
     Ok((manifest, integration_state))
 }
@@ -1236,6 +1243,7 @@ impl Integrate {
                         &manifest_path,
                         "integration manifest",
                     )?;
+                manifest.validate_version()?;
                 if manifest.sampling_correlation_mode != self.sampling_correlation_mode() {
                     return Err(eyre!(
                         "Workspace integration sampling mode does not match the requested mode; use --restart to switch between correlated and uncorrelated integration"
@@ -1345,7 +1353,12 @@ impl Integrate {
                         &state_bytes,
                         bincode::config::standard(),
                     )
-                    .expect("Could not deserialize state")
+                    .map_err(|err| {
+                        eyre!(
+                            "Could not deserialize integration state from {}: {err}; use --restart to create a new workspace",
+                            path_to_state.display()
+                        )
+                    })?
                     .0;
 
                 for ((slot, target), workspace_settings) in selected_slots
@@ -1401,10 +1414,14 @@ impl Integrate {
 
                 Ok(Some(integration_state))
             }
-            Err(_) => {
+            Err(err) if err.kind() == io::ErrorKind::NotFound => {
                 info!("No integration state found, starting new integration");
                 Ok(None)
             }
+            Err(err) => Err(eyre!(
+                "Could not read integration workspace state from {}: {err}",
+                path_to_state.display()
+            )),
         }
     }
 
@@ -1603,6 +1620,7 @@ impl Integrate {
             ));
         }
         let manifest = IntegrationWorkspaceManifest {
+            version: IntegrationWorkspaceManifest::CURRENT_VERSION,
             slots: selected_slots
                 .iter()
                 .map(|slot| slot.slot_meta.clone())
@@ -1891,15 +1909,92 @@ mod tests {
     use clap::Parser;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
     use gammalooprs::{
-        integrate::{ContributionSortMode, IntegrationStatusPhaseDisplay, SlotMeta},
+        integrate::{
+            workspace_manifest_path, workspace_state_path, ContributionSortMode,
+            IntegrationStatusPhaseDisplay, SlotMeta,
+        },
         observables::ObservableSnapshotBundle,
         settings::{runtime::IntegratedPhase, IntegratorSettings, RuntimeSettings},
         utils::F,
     };
     use spenso::algebra::complex::Complex;
     use std::collections::BTreeMap;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid};
+    use tempfile::tempdir;
+
+    fn write_unversioned_workspace(workspace: &Path) {
+        let state_path = workspace_state_path(workspace);
+        std::fs::create_dir_all(state_path.parent().unwrap()).unwrap();
+        std::fs::write(
+            workspace_manifest_path(workspace),
+            r#"{
+                "slots": [],
+                "targets": [],
+                "effective_model_parameters": [],
+                "integrand_fingerprints": [],
+                "training_slot": 0,
+                "integrator_settings_slot": 0,
+                "sampling_correlation_mode": "correlated"
+            }"#,
+        )
+        .unwrap();
+        std::fs::write(state_path, b"not a bincode integration state").unwrap();
+    }
+
+    #[test]
+    fn summary_rejects_unversioned_workspace_before_decoding_state() {
+        let temp = tempdir().unwrap();
+        write_unversioned_workspace(temp.path());
+
+        let error = super::read_existing_workspace_state(temp.path())
+            .err()
+            .expect("unversioned workspace must be rejected");
+        let message = error.to_string();
+        assert!(message.contains("unversioned"), "{message}");
+        assert!(message.contains("--restart"), "{message}");
+        assert!(!message.contains("deserialize"), "{message}");
+    }
+
+    #[test]
+    fn resume_rejects_unversioned_workspace_before_decoding_state() {
+        let temp = tempdir().unwrap();
+        write_unversioned_workspace(temp.path());
+        let mut state = State::new_test();
+        let mut targets = Vec::new();
+
+        let error = Integrate::default()
+            .load_or_prepare_workspace_state(&mut state, &[], &[], &[], temp.path(), &mut targets)
+            .err()
+            .expect("unversioned workspace must be rejected");
+        let message = error.to_string();
+        assert!(message.contains("unversioned"), "{message}");
+        assert!(message.contains("--restart"), "{message}");
+        assert!(!message.contains("deserialize"), "{message}");
+    }
+
+    #[test]
+    fn resume_propagates_workspace_state_read_errors() {
+        let temp = tempdir().unwrap();
+        let state_path = workspace_state_path(temp.path());
+        std::fs::create_dir_all(&state_path).unwrap();
+        let mut state = State::new_test();
+        let mut targets = Vec::new();
+
+        let error = Integrate::default()
+            .load_or_prepare_workspace_state(&mut state, &[], &[], &[], temp.path(), &mut targets)
+            .err()
+            .expect("workspace read error must be propagated");
+        let message = error.to_string();
+        assert!(
+            message.contains("Could not read integration workspace state"),
+            "{message}"
+        );
+        assert!(
+            message.contains(&state_path.display().to_string()),
+            "{message}"
+        );
+    }
 
     fn resolved_slot(process_name: &str, integrand_name: &str) -> ResolvedIntegrandSlot {
         ResolvedIntegrandSlot {

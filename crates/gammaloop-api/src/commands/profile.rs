@@ -14,10 +14,11 @@ use gammalooprs::{
     },
     processes::ProcessCollection,
     uv::{
-        profile::{ProfileSettings, UVProfileFixedRay, UVProfileable},
+        profile::{ProfileSettings, UVLimitSelection, UVProfileFixedRay, UVProfileable},
         UVProfileAnalysis,
     },
 };
+use linnet::half_edge::involution::EdgeIndex;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use tracing::{info, instrument};
@@ -52,6 +53,32 @@ pub struct UltraVioletProfile {
         completion_integrand_selector(crate::completion::SelectorKind::Any)
     )]
     pub integrand_name: Option<String>,
+
+    /// Restrict profiling to this graph
+    #[arg(
+        short = 'g',
+        long = "graph",
+        value_name = "GRAPH",
+        completion_selected_master_graph()
+    )]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub graph: Option<String>,
+
+    /// Restrict a cross section to the Cutkosky cut with these edge IDs
+    #[arg(
+        long = "cutkosky-cut",
+        value_name = "EDGE",
+        num_args = 1..,
+        value_delimiter = ',',
+        requires = "graph"
+    )]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub cutkosky_cut: Vec<usize>,
+
+    /// UV limits to profile
+    #[arg(long = "selected-limits", value_enum, default_value = "only-divergent")]
+    #[serde(default)]
+    pub selected_limits: UVLimitSelection,
 
     /// Number of scaling points to sample
     #[arg(long = "n-points", default_value_t = 20)]
@@ -178,6 +205,9 @@ impl Default for UltraVioletProfile {
         Self {
             process: None,
             integrand_name: None,
+            graph: None,
+            cutkosky_cut: Vec::new(),
+            selected_limits: UVLimitSelection::OnlyDivergent,
             n_points: 20,
             min_scale_exponent: 3.0,
             max_scale_exponent: 6.0,
@@ -225,6 +255,9 @@ impl Profile {
             Profile::UltraViolet(UltraVioletProfile {
                 process,
                 integrand_name,
+                graph,
+                cutkosky_cut,
+                selected_limits,
                 n_points,
                 min_scale_exponent,
                 max_scale_exponent,
@@ -239,42 +272,52 @@ impl Profile {
                 let (process_id, integrand_name) =
                     state.find_integrand_ref(process.as_ref(), integrand_name.as_ref())?;
                 let model = state.resolve_model_for_integrand(process_id, &integrand_name)?;
-                let default_uv_ray_norm = {
-                    let process = &mut state.process_list.processes[process_id];
-                    match &mut process.collection {
-                        ProcessCollection::Amplitudes(amplitudes) => {
-                            let amplitude =
-                                amplitudes.get_mut(&integrand_name).ok_or_else(|| {
-                                    eyre!(
-                                        "No amplitude named '{}' in process '{}'",
-                                        integrand_name,
-                                        process.definition.folder_name
-                                    )
-                                })?;
-                            let integrand = amplitude.integrand.as_mut().ok_or(eyre!(
-                                "Integrand {} has not yet been generated, but exists",
-                                amplitude.name
-                            ))?;
-                            integrand.warm_up(&model)?;
-                            integrand.get_settings().kinematics.e_cm
-                        }
-                        ProcessCollection::CrossSections(cross_sections) => {
-                            let cross_section =
-                                cross_sections.get_mut(&integrand_name).ok_or_else(|| {
-                                    eyre!(
-                                        "No cross section named '{}' in process '{}'",
-                                        integrand_name,
-                                        process.definition.folder_name
-                                    )
-                                })?;
-                            let integrand = cross_section.integrand.as_mut().ok_or(eyre!(
-                                "Integrand {} has not yet been generated, but exists",
-                                cross_section.name
-                            ))?;
-                            integrand.warm_up(&model)?;
-                            integrand.get_settings().kinematics.e_cm
-                        }
+                let (default_uv_ray_norm, graph_id) = {
+                    let integrand = state
+                        .process_list
+                        .get_integrand_mut(process_id, &integrand_name)?;
+                    integrand.warm_up(&model)?;
+                    let graph_id = graph
+                        .as_ref()
+                        .map(|graph_selector| {
+                            let numeric_selector =
+                                graph_selector.strip_prefix('#').unwrap_or(graph_selector);
+                            if let Some(graph_id) = numeric_selector
+                                .parse::<usize>()
+                                .ok()
+                                .filter(|graph_id| *graph_id < integrand.graph_count())
+                            {
+                                return Ok(graph_id);
+                            }
+                            if let Some(graph_id) = integrand.find_graph_id_by_name(graph_selector)
+                            {
+                                return Ok(graph_id);
+                            }
+
+                            let available = (0..integrand.graph_count())
+                                .filter_map(|graph_id| {
+                                    integrand
+                                        .graph_name_by_id(graph_id)
+                                        .map(|name| format!("{graph_id}:{name}"))
+                                })
+                                .collect::<Vec<_>>()
+                                .join(", ");
+                            Err(eyre!(
+                                "No graph '{}' exists in integrand '{}'. Available graphs: {}",
+                                graph_selector,
+                                integrand_name,
+                                available
+                            ))
+                        })
+                        .transpose()?;
+                    if !cutkosky_cut.is_empty()
+                        && matches!(integrand, ProcessIntegrand::Amplitude(_))
+                    {
+                        return Err(eyre!(
+                            "Cutkosky-cut selection is only supported for cross sections"
+                        ));
                     }
+                    (integrand.get_settings().kinematics.e_cm, graph_id)
                 };
 
                 let fixed_uv_ray = if uv_ray_directions.is_empty() {
@@ -304,6 +347,10 @@ impl Profile {
                         OrientationProfileMode::Summed
                     },
                     fixed_uv_ray,
+                    graph_id,
+                    cutkosky_cut: (!cutkosky_cut.is_empty())
+                        .then(|| cutkosky_cut.iter().copied().map(EdgeIndex::from).collect()),
+                    selected_limits: *selected_limits,
                     ..Default::default()
                 };
                 let profile_res = {
@@ -350,6 +397,8 @@ impl Profile {
                     };
                     info!("\n{}", t);
                 }
+
+                info!("\n{}", profile_res.pass_fail(-0.9));
 
                 if let Some(file) = output_file {
                     global_cli_settings
@@ -432,5 +481,63 @@ impl Profile {
                 Ok(ProfileResult::InfraRed(profile_result))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use clap::Parser;
+    use gammalooprs::uv::profile::UVLimitSelection;
+
+    use crate::{commands::Commands, Repl};
+
+    use super::Profile;
+
+    #[test]
+    fn uv_profile_cli_defaults_to_only_divergent_limits() {
+        let repl = Repl::try_parse_from(["gammaloop", "profile", "ultra-violet"]).unwrap();
+        let Commands::Profile(Profile::UltraViolet(profile)) = repl.command else {
+            panic!("expected an ultraviolet profile command");
+        };
+
+        assert_eq!(profile.selected_limits, UVLimitSelection::OnlyDivergent);
+        assert_eq!(profile.graph, None);
+        assert!(profile.cutkosky_cut.is_empty());
+    }
+
+    #[test]
+    fn uv_profile_cli_parses_graph_cut_and_all_limits() {
+        let repl = Repl::try_parse_from([
+            "gammaloop",
+            "profile",
+            "ultra-violet",
+            "--graph",
+            "GL2",
+            "--cutkosky-cut",
+            "5,2",
+            "--selected-limits",
+            "all",
+        ])
+        .unwrap();
+        let Commands::Profile(Profile::UltraViolet(profile)) = repl.command else {
+            panic!("expected an ultraviolet profile command");
+        };
+
+        assert_eq!(profile.selected_limits, UVLimitSelection::All);
+        assert_eq!(profile.graph.as_deref(), Some("GL2"));
+        assert_eq!(profile.cutkosky_cut, [5, 2]);
+    }
+
+    #[test]
+    fn uv_profile_cli_requires_a_graph_for_a_cut() {
+        let result = Repl::try_parse_from([
+            "gammaloop",
+            "profile",
+            "ultra-violet",
+            "--cutkosky-cut",
+            "5,2",
+        ]);
+
+        assert!(result.is_err());
     }
 }

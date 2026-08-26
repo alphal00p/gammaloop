@@ -93,11 +93,15 @@ Example full command:
 The generation command blocks call `save state -o` explicitly. `--no-save-state`
 only prevents an extra save attempt at process exit.
 
-## Inspect benchmark timings
+## Fixed-point benchmark timings
 
-All timings below use `inspect --bench 5 --n_batches 10 --minimal-integrand`.
-The current warmup-based auto-sizing undershot the requested wall time on this
-point, but the reported uncertainty is still the standard error over 10 batches.
+These archived timings used the since-removed `inspect --bench` mode. The
+current equivalent is the top-level `bench` command with `--duration 5s`,
+`--n-batches 10`, and `--minimal-integrand`. The original fixed x-space point
+was not recorded, and `BNL.toml` does not define the referenced
+`bench_bnl_reference` command block, so the numbers below are historical rather
+than exactly reproducible from the committed files. The reported uncertainty is
+the standard error over 10 batches.
 
 | state | threshold runtime | total time / sample | evaluator time / sample | samples |
 | --- | --- | ---: | ---: | ---: |
@@ -106,26 +110,23 @@ point, but the reported uncertainty is still the standard error over 10 batches.
 | `final_threshold_reference` | on | `2.5149e-3 +/- 3.88e-6 s` | `2.4001e-3 +/- 3.70e-6 s` | 716 |
 | `final_threshold_reference_optimized` | on | `7.2629e-4 +/- 2.00e-6 s` | `6.2314e-4 +/- 2.01e-6 s` | 862 |
 
-Example reproduction commands:
+For a new measurement, set `BNL_POINT` to the complete fixed x-space coordinate
+vector for the generated integrand and invoke `bench` directly:
 
 ```bash
+BNL_POINT="<x0> <x1> ..."
+
 ./target/release/gammaloop --read-only-state \
   -s ./examples/cli/BNL/states/final_no_threshold_reference_optimized \
-  ./examples/cli/BNL/BNL.toml \
-  run bench_bnl_reference \
-  -D mt=510.0 -D ymt=510.0 \
-  -D disable_threshold_subtraction=true \
-  -D output_file=final_no_threshold_reference_optimized_bench.json
+  run -c "bench -p BNL -i default -x ${BNL_POINT} --duration 5s \
+    --n-batches 10 --minimal-integrand \
+    --json-output final_no_threshold_reference_optimized_bench.json"
 
 ./target/release/gammaloop --read-only-state \
   -s ./examples/cli/BNL/states/final_threshold_reference_optimized \
-  ./examples/cli/BNL/BNL.toml \
-  run bench_bnl_reference \
-  -D mt=400.0 -D ymt=400.0 \
-  -D disable_threshold_subtraction=false \
-  -D integrated_h_sigma=1.0 \
-  -D local_gaussian_width=1.0 \
-  -D output_file=final_threshold_reference_optimized_bench.json
+  run -c "bench -p BNL -i default -x ${BNL_POINT} --duration 5s \
+    --n-batches 10 --minimal-integrand \
+    --json-output final_threshold_reference_optimized_bench.json"
 ```
 
 ## Final four-mass integrations
