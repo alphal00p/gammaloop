@@ -417,7 +417,9 @@ pub(crate) fn build_momentum_input(
     }
 
     let loop_momenta = point
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .map(|coords| ThreeMomentum {
             px: F(coords[0]),
             py: F(coords[1]),
