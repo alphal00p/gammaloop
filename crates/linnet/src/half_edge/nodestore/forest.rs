@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{collections::HashSet, fmt};
 
 use super::{NodeStorage, NodeStorageOps, NodeStorageVec};
 use crate::{
@@ -167,18 +167,45 @@ impl<V, P: ForestNodeStore + ForestNodeStorePreorder + Clone> NodeStorageOps for
         Ok(())
     }
     fn extract_nodes(&mut self, nodes: impl IntoIterator<Item = NodeIndex>) -> (SuBitGraph, Self) {
-        let nodes: Vec<NodeIndex> = nodes.into_iter().collect();
+        let nodes: HashSet<NodeIndex> = nodes.into_iter().collect();
         let n_hedges: Hedge = <Self as Swap<Hedge>>::len(self);
         let mut extracted = SuBitGraph::empty(n_hedges.0);
-        for node in nodes {
-            extracted.union_with_iter(self.get_neighbor_iterator(node));
+        let mut isolated = vec![false; self.roots.len()];
+        for node in 0..self.roots.len() {
+            let node = NodeIndex(node);
+            if nodes.contains(&node) {
+                if self.roots[node.0].root_id.is_active_empty() {
+                    isolated[node.0] = true;
+                } else {
+                    extracted.union_with_iter(self.get_neighbor_iterator(node));
+                }
+            }
         }
 
-        let extracted_store = self.extract(
+        // Isolated roots have no half-edge representation, so move them out before the
+        // crown-based extraction. Track selection alongside swaps because node IDs change.
+        let mut left = 0;
+        let mut right = isolated.len();
+        while left < right {
+            if !isolated[left] {
+                left += 1;
+            } else {
+                right -= 1;
+                if !isolated[right] {
+                    self.swap_roots(RootId(left), RootId(right));
+                    isolated.swap(left, right);
+                    left += 1;
+                }
+            }
+        }
+        let isolated_roots = self.roots.split_off(left);
+
+        let mut extracted_store = self.extract(
             &extracted,
             |_| panic!("Forest::extract_nodes encountered a split node; expected full nodes only."),
             |d| d,
         );
+        extracted_store.roots.extend(isolated_roots);
 
         (extracted, extracted_store)
     }
