@@ -63,10 +63,10 @@ impl Renormalize {
             .process_list
             .get_amplitude_mut_ref(self.process.as_ref(), self.integrand_name.as_ref())?;
 
-        let mut settings = global_cli_settings.global.generation.uv.clone();
+        let mut settings = global_cli_settings.global.generation.clone();
 
-        settings.generate_integrated = true;
-        let prescription = &mut settings.renormalization_prescription;
+        settings.uv.generate_integrated = true;
+        let prescription = &mut settings.uv.renormalization_prescription;
         for scheme in [
             &mut prescription.log_divergent,
             &mut prescription.massive_power_divergent,

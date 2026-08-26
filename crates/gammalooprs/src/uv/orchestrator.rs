@@ -11,6 +11,7 @@ use vakint::Vakint;
 use crate::{
     graph::{Graph, cuts::CutSet, feynman_graph::FeynmanGraph},
     numerator::aind::Aind,
+    settings::global::{GenerationSettings, MediumMode},
     uv::{
         Integrands, RenormalizationPart, UVOrchestrator, UVgenerationSettings, UltravioletGraph,
         approx::{CutStructure, OrientationProjection, local_3d::Localizer},
@@ -29,9 +30,9 @@ impl UVOrchestrator {
         cut_structure: CutStructure,
         vakint: &Vakint,
         orientation: OrientationProjection<'_>,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<Vec<ParametricIntegrands>> {
-        if !matches!(settings.final_integrand, FinalIntegrandDimension::ThreeD) {
+        if !matches!(settings.uv.final_integrand, FinalIntegrandDimension::ThreeD) {
             return Err(eyre!(
                 "4D parametric UV integrands are not supported yet; this mode is planned for a future implementation"
             ));
@@ -52,7 +53,7 @@ impl UVOrchestrator {
                 compare_parametric_integrands(graph, cut_structure, vakint, orientation, settings)
             }
         }?;
-        let marker = UvMarker::new(settings);
+        let marker = UvMarker::new(&settings.uv);
         Ok(result
             .into_iter()
             .map(|integrands| integrands.map(|atom| marker.finish(&atom)))
@@ -84,12 +85,12 @@ fn legacy_parametric_integrands(
     cut_structure: CutStructure,
     vakint: &Vakint,
     orientation: OrientationProjection<'_>,
-    settings: &UVgenerationSettings,
+    settings: &GenerationSettings,
 ) -> Result<Vec<ParametricIntegrands>> {
     let cut_woods = CutWoods::new(cut_structure, graph, settings);
     let mut cut_forests = cut_woods.unfold(graph);
     cut_forests.compute(graph, vakint, orientation, settings)?;
-    cut_forests.orientation_parametric_exprs(graph, settings)
+    cut_forests.orientation_parametric_exprs(graph, &settings.uv)
 }
 
 fn hedge_poset_parametric_integrands(
@@ -97,12 +98,12 @@ fn hedge_poset_parametric_integrands(
     cut_structure: CutStructure,
     vakint: &Vakint,
     orientation: OrientationProjection<'_>,
-    settings: &UVgenerationSettings,
+    settings: &GenerationSettings,
 ) -> Result<Vec<ParametricIntegrands>> {
     let wood = HedgePosetWood::new(cut_structure, graph, settings);
     let mut forests = wood.unfold();
     forests.compute(graph, vakint, orientation, settings)?;
-    forests.orientation_parametric_exprs(graph, settings)
+    forests.orientation_parametric_exprs(graph, &settings.uv)
 }
 
 fn compare_parametric_integrands(
@@ -110,7 +111,7 @@ fn compare_parametric_integrands(
     cut_structure: CutStructure,
     vakint: &Vakint,
     orientation: OrientationProjection<'_>,
-    settings: &UVgenerationSettings,
+    settings: &GenerationSettings,
 ) -> Result<Vec<ParametricIntegrands>> {
     let mut hedge_graph = graph.clone();
     let legacy =
@@ -143,7 +144,12 @@ fn legacy_renormalization_part(
     let mut forest = wood.unfold(graph, &graph.loop_momentum_basis);
     let vk = (crate::utils::vakint()?, &vk_settings);
     let cuts = CutSet::empty(graph.n_hedges());
-    forest.compute(graph, vk, Localizer::new(&cuts, orientation), settings)?;
+    forest.compute(
+        graph,
+        vk,
+        Localizer::new(&cuts, orientation, MediumMode::Vacuum),
+        settings,
+    )?;
 
     forest.renormalization_part_of_ends(graph, settings)
 }
@@ -153,7 +159,11 @@ fn hedge_poset_renormalization_part(
     settings: &UVgenerationSettings,
 ) -> Result<RenormalizationPart> {
     let cuts = CutStructure::empty(graph);
-    let wood = HedgePosetWood::new(cuts, graph, settings);
+    let generation_settings = GenerationSettings {
+        uv: settings.clone(),
+        ..GenerationSettings::default()
+    };
+    let wood = HedgePosetWood::new(cuts, graph, &generation_settings);
     let mut forest = wood.unfold();
     forest.integrate(graph, crate::utils::vakint()?, settings)?;
     forest.renormalization_part_of_ends(graph, settings)

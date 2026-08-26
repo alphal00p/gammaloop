@@ -1,6 +1,7 @@
 use crate::{
     GammaLoopContext, debug_tags,
     graph::{Graph, LMBext, cuts::CutSet, parse::string_utils::dot_attr_value},
+    settings::global::GenerationSettings,
     utils::{GS, W_},
     uv::{
         ApproximationType, Integrands,
@@ -67,7 +68,7 @@ impl CutForests {
         graph: &mut Graph,
         vakint: &Vakint,
         orientation: OrientationProjection<'_>,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<()> {
         for ((forest, cuts), vakint_settings) in &mut self
             .forests
@@ -75,11 +76,11 @@ impl CutForests {
             .zip(self.cuts.cuts.iter())
             .zip(self.settings.iter())
         {
-            let localizer = Localizer::new(cuts, orientation);
+            let localizer = Localizer::new(cuts, orientation, settings.medium.mode);
             debug_tags!(#forest,#uv;
                 n_terms = %forest.n_terms(),
                 "Computing cut forest");
-            forest.compute(graph, (vakint, vakint_settings), localizer, settings)?;
+            forest.compute(graph, (vakint, vakint_settings), localizer, &settings.uv)?;
         }
         Ok(())
     }

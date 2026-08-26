@@ -46,12 +46,14 @@ use crate::{
         build_derivative_structure_atom, params_for_derivative_order,
     },
     settings::{
-        GlobalSettings, RuntimeSettings, global::OrientationPattern, runtime::LockedRuntimeSettings,
+        GlobalSettings, RuntimeSettings,
+        global::{MediumMode, OrientationPattern},
+        runtime::LockedRuntimeSettings,
     },
     subtraction::amplitude_counterterm::AmplitudeCountertermAtom,
     utils::{F, GS, Length, W_},
     uv::{
-        RenormalizationPart, UVgenerationSettings, UltravioletGraph,
+        RenormalizationPart, UltravioletGraph,
         approx::{CutStructure, OrientationProjection, integrated::to_vakint_integrand},
         settings::VakintSettings,
     },
@@ -776,10 +778,11 @@ impl AmplitudeGraph {
 impl AmplitudeGraph {
     pub fn renormalization_part(
         &mut self,
-        settings: &UVgenerationSettings,
+        settings: &GenerationSettings,
     ) -> Result<RenormalizationPart> {
         if self.derived_data.cff_expression.is_none() {
-            self.generate_cff(&OrientationPattern::default())?;
+            let medium_mode = settings.medium.mode;
+            self.generate_cff(&OrientationPattern::default(), medium_mode)?;
         }
         let valid_orientations: Vec<_> = self
             .derived_data
@@ -791,10 +794,10 @@ impl AmplitudeGraph {
             .map(|orientation| orientation.data.orientation.clone())
             .collect();
 
-        settings.orchestrator.renormalization_part(
+        settings.uv.orchestrator.renormalization_part(
             &mut self.graph,
             OrientationProjection::new(&valid_orientations, &OrientationPattern::default()),
-            settings,
+            &settings.uv,
         )
     }
 
@@ -816,7 +819,11 @@ impl AmplitudeGraph {
     }
 
     #[instrument(skip_all, err)]
-    pub(crate) fn generate_cff(&mut self, orientation_pattern: &OrientationPattern) -> Result<()> {
+    pub(crate) fn generate_cff(
+        &mut self,
+        orientation_pattern: &OrientationPattern,
+        medium_mode: MediumMode,
+    ) -> Result<()> {
         let _progress_guard = generation_progress::enter_detailed_progress_span("Generating CFF");
         let shift_rewrite = self
             .graph
@@ -834,9 +841,12 @@ impl AmplitudeGraph {
             .map(|x| x.1)
             .collect_vec();
 
-        let cff_expression =
-            self.graph
-                .generate_cff(&contract_edges, &shift_rewrite, orientation_pattern)?;
+        let cff_expression = self.graph.generate_cff(
+            &contract_edges,
+            &shift_rewrite,
+            orientation_pattern,
+            medium_mode,
+        )?;
 
         self.derived_data.cff_expression = Some(cff_expression);
 
@@ -854,7 +864,8 @@ impl AmplitudeGraph {
         let preprocess_started = std::time::Instant::now();
         let vk = crate::utils::vakint()?;
 
-        self.generate_cff(&settings.orientation_pattern)?;
+        let medium_mode = settings.medium.mode;
+        self.generate_cff(&settings.orientation_pattern, medium_mode)?;
 
         // UV orchestration can extend the graph surface cache, while raised IDs
         // belong to the CFF expression generated above.
@@ -1025,6 +1036,10 @@ impl AmplitudeGraph {
                     .run_time_settings
                     .general
                     .mu_r_sq())));
+                param_builder.inverse_temperature_value(Complex::new_re(F(config
+                    .run_time_settings
+                    .general
+                    .inverse_temperature)));
 
                 // println!("\nParamBuilder parameters:\n{}", param_builder);
 
@@ -1221,7 +1236,7 @@ impl AmplitudeGraph {
             cutstructure,
             vakint,
             OrientationProjection::new(&valid_orientations, &settings.orientation_pattern),
-            &settings.uv,
+            settings,
         )?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "amplitude_graph_parametric_orchestration_done",
@@ -1393,9 +1408,8 @@ impl AmplitudeGraph {
             cut_structure,
             vakint,
             OrientationProjection::new(&valid_orientations, &settings.orientation_pattern),
-            &settings.uv,
+            settings,
         )?;
-
         for expr in exprs.into_iter() {
             let loop_number = self.graph.n_loops(&self.graph.underlying.full_filter());
             let jacobian_factor = Atom::var(GS.radius_star_left).pow(loop_number as i32 * 3 - 1);
@@ -1771,7 +1785,9 @@ pub mod test {
         processes::AmplitudeGraph,
         settings::{
             GlobalSettings, RuntimeSettings,
-            global::{GenerationSettings, OrientationPattern, ThresholdSubtractionSettings},
+            global::{
+                GenerationSettings, MediumMode, OrientationPattern, ThresholdSubtractionSettings,
+            },
         },
         utils::load_generic_model,
     };
@@ -1795,7 +1811,9 @@ pub mod test {
 
         let _model = load_generic_model("sm");
 
-        graph.generate_cff(&OrientationPattern::default()).unwrap();
+        graph
+            .generate_cff(&OrientationPattern::default(), MediumMode::Vacuum)
+            .unwrap();
         // graph.build_parametric_integrand(&GenerationSettings::default());
 
         let param_builder = &graph.graph.param_builder;

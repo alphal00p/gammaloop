@@ -324,6 +324,14 @@ impl Approximation {
             "Computing 4D",
         );
 
+        // Vacuum subtraction is intrinsically three-dimensional. Keep the typed 4D
+        // accumulator neutral and let the local 3D pass apply the full vacuum limit.
+        if self.renormalization_scheme() == ApproximationType::VacuumLimit {
+            self.local = Some(Local4dCts::root());
+            self.integrated = Some(IntegratedCts::root());
+            return Ok(());
+        }
+
         let old_full = dependent.recursion_input_4d(graph)?;
         let local = local_4d::uv_limit(&old_full, &ctx, self, dependent, self, dependent)?;
         let integrated = if settings.generate_integrated {

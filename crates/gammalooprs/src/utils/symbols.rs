@@ -178,6 +178,8 @@ pub struct GammaloopSymbols {
     pub sign: Symbol,
     pub theta: Symbol,
     pub broadcasting_sqrt: Symbol,
+    pub tanh: Symbol,
+    pub heaviside: Symbol,
     ///for selecting orientations at generation
     pub selected: Symbol,
 
@@ -216,6 +218,24 @@ pub struct GammaloopSymbols {
     pub radius_star_right: Symbol,
     pub uv_damp_plus_right: Symbol,
     pub uv_damp_minus_right: Symbol,
+    pub thermal_distribution: Symbol,
+    pub inverse_temperature: Symbol,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThermalDistributionLimit {
+    Default,
+    ZeroTemperature,
+    Vacuum,
+}
+
+impl ThermalDistributionLimit {
+    pub fn is_finite_temperature(&self) -> bool {
+        matches!(self, ThermalDistributionLimit::Default)
+    }
+    pub fn temperature_flag(&self) -> Atom {
+        Atom::num(if self.is_finite_temperature() { 1 } else { 0 })
+    }
 }
 
 impl GammaloopSymbols {
@@ -810,6 +830,8 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
             **out = Atom::num(1) / (Atom::num(2) * a);
         }
     ),
+    tanh: symbol!("tanh"),
+    heaviside: symbol!("heaviside"),
     expansion: symbol!("expansion"),
     rescale_star: symbol!("t⃰"),
     hfunction_lu_cut: symbol!("h_lu_cut"),
@@ -997,6 +1019,8 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     radius_star_right: symbol!("r⃰_right"),
     uv_damp_plus_right: symbol!("damp_plus_right"),
     uv_damp_minus_right: symbol!("damp_minus_right"),
+    thermal_distribution: symbol!("N"),
+    inverse_temperature: symbol!("β"),
 };
 }
 
@@ -1015,6 +1039,21 @@ impl GammaloopSymbols {
         FunctionBuilder::new(self.integrand)
             .add_arg(i)
             .add_args(&args)
+            .finish()
+    }
+
+    pub fn thermal_distribution<'a>(
+        &self,
+        eid: impl Into<AtomOrView<'a>>,
+        derivative_order: impl Into<AtomOrView<'a>>,
+        temperature_flag: impl Into<AtomOrView<'a>>,
+        sign: impl Into<AtomOrView<'a>>,
+    ) -> Atom {
+        FunctionBuilder::new(self.thermal_distribution)
+            .add_arg(eid)
+            .add_arg(derivative_order)
+            .add_arg(temperature_flag)
+            .add_arg(sign)
             .finish()
     }
 
@@ -1118,6 +1157,16 @@ impl GammaloopSymbols {
                 }
             }
         })
+    }
+
+    pub(crate) fn tanh<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
+        let a = arg.into();
+        function!(self.tanh, a.as_view())
+    }
+
+    pub(crate) fn heaviside<'a>(&self, arg: impl Into<AtomOrView<'a>>) -> Atom {
+        let a = arg.into();
+        function!(self.heaviside, a.as_view())
     }
 
     pub(crate) fn emr_mom<'a>(&self, e: EdgeIndex, arg: impl Into<AtomOrView<'a>>) -> Atom {

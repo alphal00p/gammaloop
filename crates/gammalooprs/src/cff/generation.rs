@@ -9,21 +9,20 @@ use crate::{
     },
     graph::{Graph, LoopMomentumBasis, get_cff_inverse_energy_product_impl},
     processes::{CrossSectionCut, CutId},
-    settings::global::OrientationPattern,
+    settings::global::{MediumMode, OrientationPattern},
 };
 use ahash::HashSet;
 use bincode::{Decode, Encode};
 use color_eyre::Report;
 use color_eyre::Result;
 use itertools::Itertools;
-use linnet::half_edge::{
-    HedgeGraph,
-    involution::{EdgeVec, HedgePair},
-    subgraph::{OrientedCut, SubGraphLike, SubSetOps},
-};
-use linnet::half_edge::{
-    involution::{EdgeIndex, Orientation},
-    subgraph::InternalSubGraph,
+use linnet::{
+    half_edge::{
+        HedgeGraph,
+        involution::{EdgeIndex, EdgeVec, HedgePair, Orientation},
+        subgraph::{InternalSubGraph, OrientedCut, SubGraphLike, SubSetOps},
+    },
+    num_traits::Sign,
 };
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -41,12 +40,50 @@ use super::{
     expression::{CFFExpression, OrientationID},
     hsurface::HsurfaceCollection,
     surface::{HybridSurfaceRef, UnitSurface},
+    thermal_numerator::{
+        ThermalDistributionFactor, ThermalNumeratorCollection, ThermalNumeratorID,
+    },
 };
 
 #[derive(Debug, Clone)]
 struct GenerationData {
     graph: CFFGenerationGraph,
     surface_id: Option<HybridSurfaceID>,
+    thermal_numerator_id: Option<ThermalNumeratorID>,
+    thermal_sign: Option<Sign>,
+    thermal_distribution_factors: Vec<ThermalDistributionFactor>,
+    medium_mode: MediumMode,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq)]
+pub struct CFFNodeData {
+    #[bincode(with_serde)]
+    pub surface_id: HybridSurfaceID,
+    #[bincode(with_serde)]
+    pub thermal_numerator_id: Option<ThermalNumeratorID>,
+    #[bincode(with_serde)]
+    pub thermal_sign: Option<Sign>,
+    #[bincode(with_serde)]
+    pub thermal_distribution_factors: Vec<ThermalDistributionFactor>,
+    #[bincode(with_serde)]
+    pub is_finite_temperature: bool,
+}
+
+impl From<CFFNodeData> for Atom {
+    fn from(data: CFFNodeData) -> Atom {
+        let surface = Atom::from(data.surface_id);
+        let thermal_factor_product = data
+            .thermal_distribution_factors
+            .into_iter()
+            .map(|factor| factor.to_atom(data.is_finite_temperature))
+            .fold(Atom::num(1), |acc, factor| acc * factor);
+        let term = match data.thermal_numerator_id {
+            Some(id) => surface / Atom::from(id),
+            None => surface,
+        } / thermal_factor_product;
+
+        data.thermal_sign.unwrap_or(Sign::Positive) * term
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -55,8 +92,14 @@ pub struct ShiftRewrite {
     pub dependent_momentum_expr: ExternalShift,
 }
 
-fn forget_graphs(data: GenerationData) -> HybridSurfaceID {
-    data.surface_id.expect("corrupted expression tree")
+fn forget_graphs(data: GenerationData) -> CFFNodeData {
+    CFFNodeData {
+        surface_id: data.surface_id.expect("corrupted expression tree"),
+        thermal_numerator_id: data.thermal_numerator_id,
+        thermal_sign: data.thermal_sign,
+        thermal_distribution_factors: data.thermal_distribution_factors,
+        is_finite_temperature: data.medium_mode.is_finite_temperature(),
+    }
 }
 
 impl GenerationData {
@@ -177,41 +220,48 @@ pub(crate) fn get_orientations_from_subgraph<E, V, H, S: SubGraphLike>(
     graph: &HedgeGraph<E, V, H>,
     subgraph: &S,
     reversed_dangling: &[EdgeIndex],
+    medium_mode: MediumMode,
 ) -> Vec<CFFGenerationGraph> {
     let num_virtual_edges = graph.count_internal_edges(subgraph);
     let virtual_possible_orientations = iterate_possible_orientations(num_virtual_edges);
 
-    virtual_possible_orientations
-        .map(|orientation_of_virtuals| {
-            let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
+    let orientations = virtual_possible_orientations.map(|orientation_of_virtuals| {
+        let mut orientation_of_virtuals = orientation_of_virtuals.into_iter();
 
-            let global_orientation = graph.new_edgevec(|_, edge_id, _| {
-                if let Some((pair, _, _)) = graph
-                    .iter_edges_of(subgraph)
-                    .find(|(_pair, id, _)| *id == edge_id)
-                {
-                    match pair {
-                        HedgePair::Paired { .. } => orientation_of_virtuals
-                            .next()
-                            .expect("orientation generation corrupted, not enough edges"),
-                        HedgePair::Unpaired { .. } => Orientation::Default,
-                        HedgePair::Split { .. } => {
-                            if reversed_dangling.contains(&edge_id) {
-                                Orientation::Reversed
-                            } else {
-                                Orientation::Default
-                            }
+        let global_orientation = graph.new_edgevec(|_, edge_id, _| {
+            if let Some((pair, _, _)) = graph
+                .iter_edges_of(subgraph)
+                .find(|(_pair, id, _)| *id == edge_id)
+            {
+                match pair {
+                    HedgePair::Paired { .. } => orientation_of_virtuals
+                        .next()
+                        .expect("orientation generation corrupted, not enough edges"),
+                    HedgePair::Unpaired { .. } => Orientation::Default,
+                    HedgePair::Split { .. } => {
+                        if reversed_dangling.contains(&edge_id) {
+                            Orientation::Reversed
+                        } else {
+                            Orientation::Default
                         }
                     }
-                } else {
-                    Orientation::Undirected
                 }
-            });
+            } else {
+                Orientation::Undirected
+            }
+        });
 
-            CFFGenerationGraph::new_from_subgraph(graph, global_orientation, subgraph).unwrap()
-        })
-        .filter(|cff_graph| !cff_graph.has_directed_cycle_initial())
-        .collect()
+        CFFGenerationGraph::new_from_subgraph(graph, global_orientation, subgraph).unwrap()
+    });
+
+    match medium_mode {
+        MediumMode::Vacuum => orientations
+            .filter(|cff_graph| !cff_graph.has_directed_cycle_initial())
+            .collect(),
+        MediumMode::ThermodynamicEquilibrium | MediumMode::ZeroTemperatureEquilibrium => {
+            orientations.collect()
+        }
+    }
 }
 
 #[allow(unused)]
@@ -268,18 +318,21 @@ fn generate_cff_expression<E, V, H>(
     canonize_esurface: &Option<ShiftRewrite>,
     edges_in_initial_state_cut: &[EdgeIndex],
     dummy_edges: &[EdgeIndex],
+    medium_mode: MediumMode,
 ) -> Result<CFFExpression<OrientationID>> {
     let graphs = get_orientations(graph, dummy_edges);
     debug!("number of orientations: {}", graphs.len());
     let mut surface_cache = SurfaceCache {
         esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
         hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
+        thermal_numerator_cache: ThermalNumeratorCollection::from_iter(std::iter::empty()),
     };
     let graph_cff = generate_cff_from_orientations(
         graphs,
         &mut surface_cache,
         edges_in_initial_state_cut,
         canonize_esurface,
+        medium_mode,
     )?;
 
     // patch the surface cache
@@ -292,6 +345,7 @@ impl Graph {
         contract_edges: &[EdgeIndex],
         canonize_esurface: &Option<ShiftRewrite>,
         orientation_pattern: &OrientationPattern,
+        medium_mode: MediumMode,
     ) -> Result<CFFExpression<OrientationID>> {
         let mut seed_graph = CFFGenerationGraph::new_from_graph(self);
 
@@ -308,7 +362,7 @@ impl Graph {
 
         let orientations = iterate_possible_orientations(virtual_edges_of_contracted_graph);
 
-        let mut oriented_acyclic_graphs = vec![];
+        let mut oriented_graphs = vec![];
 
         for orientation in orientations {
             let mut orientation_iterator = orientation.into_iter();
@@ -329,17 +383,16 @@ impl Graph {
                 let mut cff_graph = seed_graph.clone();
                 cff_graph.apply_orientation(global_orientation)?;
 
-                if !cff_graph.has_directed_cycle_initial() {
-                    oriented_acyclic_graphs.push(cff_graph);
-                }
+                oriented_graphs.push(cff_graph);
             }
         }
 
         generate_cff_from_orientations(
-            oriented_acyclic_graphs,
+            oriented_graphs,
             &mut self.surface_cache,
             &edges_in_initial_state_cut,
             canonize_esurface,
+            medium_mode,
         )
     }
 }
@@ -351,13 +404,15 @@ pub fn generate_cff_expression_from_subgraph<E, V, H, S: SubGraphLike>(
     reversed_dangling: &[EdgeIndex],
     edges_in_initial_state_cut: &[EdgeIndex],
     surface_cache: &mut SurfaceCache,
+    medium_mode: MediumMode,
 ) -> Result<CFFExpression<OrientationID>> {
-    let graphs = get_orientations_from_subgraph(graph, subgraph, reversed_dangling);
+    let graphs = get_orientations_from_subgraph(graph, subgraph, reversed_dangling, medium_mode);
     let cff = generate_cff_from_orientations(
         graphs,
         surface_cache,
         edges_in_initial_state_cut,
         canonize_esurface,
+        medium_mode,
     )?;
     Ok(cff)
 }
@@ -399,6 +454,7 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
     let mut surface_cache = SurfaceCache {
         esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
         hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
+        thermal_numerator_cache: ThermalNumeratorCollection::from_iter(std::iter::empty()),
     };
 
     let generate_tree_for_orientation = generate_tree_for_orientation(
@@ -406,9 +462,10 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
         &mut surface_cache,
         topology.edges_in_initial_state_cut,
         canonize_esurface,
+        MediumMode::Vacuum,
     );
 
-    let mut tree = generate_tree_for_orientation.map(forget_graphs);
+    let mut tree: Tree<CFFNodeData> = generate_tree_for_orientation.map(forget_graphs);
 
     post_process(
         &mut tree,
@@ -424,7 +481,7 @@ pub fn generate_uv_cff<E, V, H, S: SubGraphLike>(
 
     let atom_tree = tree.to_atom_inv();
     let atom_tree_substituted =
-        surface_cache_to_use.substitute_energies(&atom_tree, topology.cut_edges);
+        surface_cache_to_use.substitute_energies(&atom_tree, false, topology.cut_edges);
     let inverse_energies =
         get_cff_inverse_energy_product_impl(graph, subgraph, topology.contract_edges);
 
@@ -446,24 +503,24 @@ pub struct EsurfaceRewritingInstructions<'a> {
 }
 
 fn post_process<S: SubGraphLike>(
-    tree: &mut Tree<HybridSurfaceID>,
+    tree: &mut Tree<CFFNodeData>,
     orientation: &EdgeVec<Orientation>,
     subgraph: &S,
     surface_cache: &SurfaceCache,
     setup: PostProcessingSetup<'_>,
 ) {
     if let Some(constraint_data) = setup.constraint_data {
-        tree.map_mut(|surface_id| {
-            let esurface_is_allowed = match surface_id {
+        tree.map_mut(|cff_node_data| {
+            let esurface_is_allowed = match cff_node_data.surface_id {
                 HybridSurfaceID::Esurface(esurface_id) => {
-                    let esurface_to_compare = &surface_cache.esurface_cache[*esurface_id];
+                    let esurface_to_compare = &surface_cache.esurface_cache[esurface_id];
                     constraint_data
                         .illegal_esurfaces
                         .iter()
                         .all(|illegal_esurface| esurface_to_compare != *illegal_esurface)
                 }
                 HybridSurfaceID::Hsurface(hsurface_id) => {
-                    let hsurface_to_compare = &surface_cache.hsurface_cache[*hsurface_id];
+                    let hsurface_to_compare = &surface_cache.hsurface_cache[hsurface_id];
                     constraint_data
                         .illegal_esurfaces
                         .iter()
@@ -483,7 +540,7 @@ fn post_process<S: SubGraphLike>(
             };
 
             if !esurface_is_allowed {
-                *surface_id = HybridSurfaceID::Infinite
+                cff_node_data.surface_id = HybridSurfaceID::Infinite
             }
         });
     }
@@ -491,7 +548,7 @@ fn post_process<S: SubGraphLike>(
     if let Some(rewrite_esurfaces) = setup.rewrite_esurfaces {
         let hashset_of_appearing_ids = tree
             .iter_nodes()
-            .map(|node| node.data)
+            .map(|node| node.data.surface_id)
             .collect::<HashSet<HybridSurfaceID>>();
 
         let mut id_map = HashMap::<HybridSurfaceID, HybridSurfaceID>::new();
@@ -668,7 +725,11 @@ fn post_process<S: SubGraphLike>(
             }
         }
 
-        tree.map_mut(|surface_id| *surface_id = id_map[surface_id]);
+        tree.map_mut(|node_data| {
+            node_data.surface_id = *id_map
+                .get(&node_data.surface_id)
+                .expect("missing rewritten surface id");
+        });
     }
 }
 
@@ -677,19 +738,25 @@ fn generate_cff_from_orientations<O: From<usize> + Into<usize>>(
     generator_cache: &mut SurfaceCache,
     edges_in_initial_state_cut: &[EdgeIndex],
     canonize_esurface: &Option<ShiftRewrite>,
+    medium_mode: MediumMode,
 ) -> Result<CFFExpression<O>, Report> {
     // filter cyclic orientations beforehand
-    let acyclic_orientations_and_graphs = orientations_and_graphs
-        .into_iter()
-        .filter(|graph| !graph.has_directed_cycle_initial())
-        .collect_vec();
+    let filtered_orientations_and_graphs = match medium_mode {
+        MediumMode::Vacuum => orientations_and_graphs
+            .into_iter()
+            .filter(|graph| !graph.has_directed_cycle_initial())
+            .collect_vec(),
+        MediumMode::ThermodynamicEquilibrium | MediumMode::ZeroTemperatureEquilibrium => {
+            orientations_and_graphs
+        }
+    };
 
     debug!(
-        "number of acyclic orientations: {}",
-        acyclic_orientations_and_graphs.len()
+        "number of contributing orientations: {}",
+        filtered_orientations_and_graphs.len()
     );
 
-    let terms = acyclic_orientations_and_graphs
+    let terms = filtered_orientations_and_graphs
         .into_iter()
         .map(|graph| {
             let global_orientation = graph.global_orientation.clone();
@@ -698,6 +765,7 @@ fn generate_cff_from_orientations<O: From<usize> + Into<usize>>(
                 generator_cache,
                 edges_in_initial_state_cut,
                 canonize_esurface,
+                medium_mode,
             );
             let expression = tree.map(forget_graphs);
 
@@ -722,11 +790,18 @@ pub struct SurfaceCache {
     pub esurface_cache: EsurfaceCollection, // Esurfaces of the supergraph
     #[bincode(with_serde)]
     pub hsurface_cache: HsurfaceCollection, // Anything else.
+    #[bincode(with_serde)]
+    pub thermal_numerator_cache: ThermalNumeratorCollection, // Thermal numerators.
 }
 
 impl SurfaceCache {
-    pub fn substitute_energies(&self, atom: &Atom, cut_edges: &[EdgeIndex]) -> Atom {
-        let replacement_rules = self.get_all_replacements(cut_edges);
+    pub fn substitute_energies(
+        &self,
+        atom: &Atom,
+        is_finite_temperature: bool,
+        cut_edges: &[EdgeIndex],
+    ) -> Atom {
+        let replacement_rules = self.get_all_replacements(is_finite_temperature, cut_edges);
         atom.replace_multiple(&replacement_rules)
     }
 
@@ -750,27 +825,56 @@ impl SurfaceCache {
         esurface_id_iter.chain(hsurface_id_iter)
     }
 
-    pub(crate) fn get_all_replacements(&self, cut_edges: &[EdgeIndex]) -> Vec<Replacement> {
-        self.iter_all_surfaces()
-            .map(|(id, surface)| {
-                let id_atom = Pattern::from(Atom::from(id));
-                let surface_atom = Pattern::from(surface.to_atom(cut_edges));
-                Replacement::new(id_atom, surface_atom)
-            })
+    pub(crate) fn get_all_replacements(
+        &self,
+        is_finite_temperature: bool,
+        cut_edges: &[EdgeIndex],
+    ) -> Vec<Replacement> {
+        let surface_replacements = self.iter_all_surfaces().map(|(id, surface)| {
+            let id_atom = Pattern::from(Atom::from(id));
+            let surface_atom = Pattern::from(surface.to_atom(cut_edges));
+            Replacement::new(id_atom, surface_atom)
+        });
+
+        let thermal_numerator_replacements =
+            self.thermal_numerator_cache
+                .iter_enumerated()
+                .map(|(id, thermal_numerator)| {
+                    let id_atom = Pattern::from(Atom::from(id));
+                    let numerator_atom =
+                        Pattern::from(thermal_numerator.to_atom(is_finite_temperature, cut_edges));
+                    Replacement::new(id_atom, numerator_atom)
+                });
+
+        surface_replacements
+            .chain(thermal_numerator_replacements)
             .collect()
     }
 
     pub(crate) fn get_all_replacements_in_lmb(
         &self,
+        is_finite_temperature: bool,
         cut_edges: &[EdgeIndex],
         lmb: &LoopMomentumBasis,
     ) -> Vec<Replacement> {
-        self.iter_all_surfaces()
-            .map(|(id, surface)| {
-                let id_atom = Pattern::from(Atom::from(id));
-                let surface_atom = Pattern::from(surface.to_atom_in_lmb(cut_edges, lmb));
-                Replacement::new(id_atom, surface_atom)
-            })
+        let surface_replacements = self.iter_all_surfaces().map(|(id, surface)| {
+            let id_atom = Pattern::from(Atom::from(id));
+            let surface_atom = Pattern::from(surface.to_atom_in_lmb(cut_edges, lmb));
+            Replacement::new(id_atom, surface_atom)
+        });
+
+        let thermal_numerator_replacements =
+            self.thermal_numerator_cache
+                .iter_enumerated()
+                .map(|(id, thermal_numerator)| {
+                    let id_atom = Pattern::from(Atom::from(id));
+                    let numerator_atom =
+                        Pattern::from(thermal_numerator.to_atom(is_finite_temperature, cut_edges));
+                    Replacement::new(id_atom, numerator_atom)
+                });
+
+        surface_replacements
+            .chain(thermal_numerator_replacements)
             .collect()
     }
 
@@ -789,27 +893,53 @@ impl SurfaceCache {
         Self {
             esurface_cache: EsurfaceCollection::from_iter(std::iter::empty()),
             hsurface_cache: HsurfaceCollection::from_iter(std::iter::empty()),
+            thermal_numerator_cache: ThermalNumeratorCollection::from_iter(std::iter::empty()),
         }
     }
 }
 
 fn generate_tree_for_orientation(
-    graph: CFFGenerationGraph,
+    mut graph: CFFGenerationGraph,
     generator_cache: &mut SurfaceCache,
     edges_in_initial_state_cut: &[EdgeIndex],
     canonize_esurface: &Option<ShiftRewrite>,
+    medium_mode: MediumMode,
 ) -> Tree<GenerationData> {
+    let thermal_distribution_factors = match medium_mode {
+        MediumMode::Vacuum => Vec::new(),
+        MediumMode::ThermodynamicEquilibrium | MediumMode::ZeroTemperatureEquilibrium => {
+            graph.strip_thermal_distribution_factors()
+        }
+    };
+
     let mut tree = Tree::from_root(GenerationData {
         graph,
         surface_id: None,
+        thermal_numerator_id: None,
+        thermal_sign: None,
+        thermal_distribution_factors,
+        medium_mode,
     });
 
-    while let Some(()) = advance_tree(
-        &mut tree,
-        generator_cache,
-        edges_in_initial_state_cut,
-        canonize_esurface,
-    ) {}
+    match medium_mode {
+        MediumMode::Vacuum => {
+            while let Some(()) = advance_tree(
+                &mut tree,
+                generator_cache,
+                edges_in_initial_state_cut,
+                canonize_esurface,
+            ) {}
+        }
+        MediumMode::ThermodynamicEquilibrium | MediumMode::ZeroTemperatureEquilibrium => {
+            while let Some(()) = advance_tree_thermal(
+                &mut tree,
+                generator_cache,
+                edges_in_initial_state_cut,
+                canonize_esurface,
+                medium_mode,
+            ) {}
+        }
+    }
 
     tree
 }
@@ -969,7 +1099,10 @@ fn advance_tree(
 
                     HybridSurfaceID::Esurface(esurface_id)
                 }
-                HybridSurface::Hsurface(hsurface) => {
+                HybridSurface::Hsurface(mut hsurface) => {
+                    if let Some(shift_rewrite) = canonize_esurface {
+                        hsurface.canonicalize_shift(shift_rewrite);
+                    }
                     let option_hsurface_id = generator_cache
                         .hsurface_cache
                         .position(|val| val == &hsurface);
@@ -1024,6 +1157,271 @@ fn advance_tree(
                 let child_node = GenerationData {
                     graph: child,
                     surface_id: None,
+                    thermal_numerator_id: None,
+                    thermal_sign: None,
+                    thermal_distribution_factors: Vec::new(),
+                    medium_mode: MediumMode::Vacuum,
+                };
+
+                tree.insert_node(node_id, child_node);
+            });
+        });
+    Some(())
+}
+
+fn advance_tree_thermal(
+    tree: &mut Tree<GenerationData>,
+    generator_cache: &mut SurfaceCache,
+    edges_in_initial_state_cut: &[EdgeIndex],
+    canonize_esurface: &Option<ShiftRewrite>,
+    medium_mode: MediumMode,
+) -> Option<()> {
+    use crate::cff::cff_graph::ChildWithContractedEdges;
+    use crate::cff::thermal_numerator::ThermalNumerator;
+
+    let bottom_layer = tree
+        .get_bottom_layer()
+        .into_iter()
+        .filter(|&node_id| tree.get_node(node_id).data.surface_id.is_none())
+        .collect_vec();
+
+    if bottom_layer.is_empty() {
+        return None;
+    }
+
+    let (children_optional, new_surfaces_for_tree): (
+        Vec<Option<Vec<ChildWithContractedEdges>>>,
+        Vec<HybridSurfaceID>,
+    ) = bottom_layer
+        .iter()
+        .map(|&node_id| {
+            let node = &tree.get_node(node_id);
+            let graph = &node.data.graph;
+
+            let generate_children_result = graph.generate_children_thermal();
+
+            // treat the edges in the initial state cut as true externals
+            let surface = match generate_children_result.surface {
+                HybridSurface::Esurface(esurface) => {
+                    let energies_to_be_moved = esurface
+                        .energies
+                        .iter()
+                        .filter(|edge_id| edges_in_initial_state_cut.contains(edge_id))
+                        .copied()
+                        .collect_vec();
+
+                    if energies_to_be_moved.is_empty() {
+                        HybridSurface::Esurface(esurface)
+                    } else {
+                        let new_energies = esurface
+                            .energies
+                            .iter()
+                            .filter(|edge_id| !energies_to_be_moved.contains(edge_id))
+                            .copied()
+                            .collect_vec();
+
+                        let mut new_shift = esurface.external_shift.clone();
+                        for energy_to_move in energies_to_be_moved.iter() {
+                            new_shift.push((*energy_to_move, 1));
+                        }
+
+                        new_shift.sort_by_key(|(edge_id, _)| *edge_id);
+
+                        HybridSurface::Esurface(Esurface {
+                            energies: new_energies,
+                            external_shift: new_shift,
+                            vertex_set: esurface.vertex_set,
+                        })
+                    }
+                }
+                HybridSurface::Unit(unit) => HybridSurface::Unit(unit),
+                HybridSurface::Infinite(infinite) => HybridSurface::Infinite(infinite),
+                HybridSurface::Hsurface(hsurface) => {
+                    let positive_energies_to_be_moved = hsurface
+                        .positive_energies
+                        .iter()
+                        .filter(|edge_id| edges_in_initial_state_cut.contains(edge_id))
+                        .copied()
+                        .collect_vec();
+
+                    let negative_energies_to_be_moved = hsurface
+                        .negative_energies
+                        .iter()
+                        .filter(|edge_id| edges_in_initial_state_cut.contains(edge_id))
+                        .copied()
+                        .collect_vec();
+
+                    if positive_energies_to_be_moved.is_empty()
+                        && negative_energies_to_be_moved.is_empty()
+                    {
+                        HybridSurface::Hsurface(hsurface)
+                    } else if !positive_energies_to_be_moved.is_empty()
+                        && negative_energies_to_be_moved.is_empty()
+                    {
+                        let new_positive_energies = hsurface
+                            .positive_energies
+                            .iter()
+                            .filter(|edge_id| !positive_energies_to_be_moved.contains(edge_id))
+                            .copied()
+                            .collect_vec();
+
+                        let mut new_shift = hsurface.external_shift.clone();
+
+                        for positive_energy_to_move in positive_energies_to_be_moved.iter() {
+                            new_shift.push((*positive_energy_to_move, 1));
+                        }
+
+                        new_shift.sort_by_key(|(edge_id, _)| *edge_id);
+
+                        HybridSurface::Hsurface(Hsurface {
+                            positive_energies: new_positive_energies,
+                            negative_energies: hsurface.negative_energies.clone(),
+                            external_shift: new_shift,
+                            vertex_set: hsurface.vertex_set,
+                        })
+                    } else if !negative_energies_to_be_moved.is_empty()
+                        && positive_energies_to_be_moved.is_empty()
+                    {
+                        let new_negative_energies = hsurface
+                            .negative_energies
+                            .iter()
+                            .filter(|edge_id| !negative_energies_to_be_moved.contains(edge_id))
+                            .copied()
+                            .collect_vec();
+
+                        let mut new_shift = hsurface.external_shift.clone();
+
+                        for negative_energy_to_move in negative_energies_to_be_moved.iter() {
+                            new_shift.push((*negative_energy_to_move, -1));
+                        }
+
+                        new_shift.sort_by_key(|(edge_id, _)| *edge_id);
+
+                        if new_negative_energies.is_empty() {
+                            HybridSurface::Esurface(Esurface {
+                                energies: hsurface.positive_energies.clone(),
+                                external_shift: new_shift,
+                                vertex_set: hsurface.vertex_set,
+                            })
+                        } else {
+                            HybridSurface::Hsurface(Hsurface {
+                                positive_energies: hsurface.positive_energies.clone(),
+                                negative_energies: new_negative_energies,
+                                external_shift: new_shift,
+                                vertex_set: hsurface.vertex_set,
+                            })
+                        }
+                    } else {
+                        unreachable!()
+                    }
+                }
+            };
+
+            let surface_id = match surface {
+                HybridSurface::Esurface(mut esurface) => {
+                    if let Some(shift_rewrite) = canonize_esurface {
+                        esurface.canonicalize_shift(shift_rewrite);
+                    }
+                    let option_esurface_id = generator_cache
+                        .esurface_cache
+                        .position(|val| *val == esurface);
+
+                    let esurface_id = match option_esurface_id {
+                        Some(esurface_id) => esurface_id,
+                        None => {
+                            generator_cache.esurface_cache.push(esurface);
+                            Into::<EsurfaceID>::into(generator_cache.esurface_cache.len() - 1)
+                        }
+                    };
+
+                    HybridSurfaceID::Esurface(esurface_id)
+                }
+                HybridSurface::Hsurface(mut hsurface) => {
+                    if let Some(shift_rewrite) = canonize_esurface {
+                        hsurface.canonicalize_shift(shift_rewrite);
+                    }
+                    let option_hsurface_id = generator_cache
+                        .hsurface_cache
+                        .position(|val| val == &hsurface);
+
+                    let hsurface_id = match option_hsurface_id {
+                        Some(hsurface_id) => hsurface_id,
+                        None => {
+                            generator_cache.hsurface_cache.push(hsurface);
+                            Into::<HsurfaceID>::into(generator_cache.hsurface_cache.len() - 1)
+                        }
+                    };
+
+                    HybridSurfaceID::Hsurface(hsurface_id)
+                }
+                HybridSurface::Unit(_) => HybridSurfaceID::Unit,
+                HybridSurface::Infinite(_) => HybridSurfaceID::Infinite,
+            };
+
+            (generate_children_result.children, surface_id)
+        })
+        .unzip();
+
+    bottom_layer
+        .iter()
+        .zip(new_surfaces_for_tree)
+        .for_each(|(&node_id, surface_id)| {
+            tree.apply_mut_closure(node_id, |data| data.insert_esurface(surface_id))
+        });
+
+    if children_optional.iter().all(Option::is_none) {
+        return None;
+    }
+
+    bottom_layer
+        .iter()
+        .zip(children_optional)
+        .for_each(|(&node_id, children_optional)| {
+            let Some(children) = children_optional else {
+                return;
+            };
+
+            children.into_iter().for_each(|child_with_edges| {
+                let ChildWithContractedEdges {
+                    mut child,
+                    contracted_edges,
+                    surface_sign,
+                } = child_with_edges;
+
+                let (thermal_numerator, numerator_sign) =
+                    ThermalNumerator::from_edge_lists_canonicalized(
+                        contracted_edges.outgoing_edges,
+                        contracted_edges.incoming_edges,
+                    );
+                let thermal_sign = surface_sign * numerator_sign;
+                let thermal_numerator_id = if thermal_numerator.is_trivial() {
+                    None
+                } else {
+                    // Check if this thermal numerator already exists in the cache.
+                    Some(
+                        generator_cache
+                            .thermal_numerator_cache
+                            .position(|val| *val == thermal_numerator)
+                            .unwrap_or_else(|| {
+                                generator_cache
+                                    .thermal_numerator_cache
+                                    .push(thermal_numerator);
+                                Into::<ThermalNumeratorID>::into(
+                                    generator_cache.thermal_numerator_cache.len() - 1,
+                                )
+                            }),
+                    )
+                };
+
+                let thermal_distribution_factors = child.strip_thermal_distribution_factors();
+
+                let child_node = GenerationData {
+                    graph: child,
+                    surface_id: None,
+                    thermal_numerator_id,
+                    thermal_sign: Some(thermal_sign),
+                    thermal_distribution_factors,
+                    medium_mode,
                 };
 
                 tree.insert_node(node_id, child_node);
@@ -1034,7 +1432,7 @@ fn advance_tree(
 
 #[cfg(test)]
 mod tests_cff {
-    use std::{ops::Range, vec};
+    use std::{collections::BTreeSet, ops::Range, vec};
 
     use ahash::HashMap;
 
@@ -1043,7 +1441,7 @@ mod tests_cff {
     };
     use symbolica::{
         evaluate::{ExpressionEvaluator, FunctionMap, OptimizationSettings},
-        parse, symbol,
+        function, parse, parse_lit, symbol,
     };
     use utils::FloatLike;
 
@@ -1053,9 +1451,10 @@ mod tests_cff {
         settings::global::OrientationPattern,
         utils::{
             self, F, RefDefault, external_energy_atom_from_index, ose_atom_from_index,
-            test_utils::dummy_hedge_graph,
+            test_utils::dummy_hedge_graph, thermal_distribution_atom_from_index,
         },
     };
+    use linnet::num_traits::Sign;
 
     use super::*;
 
@@ -1068,12 +1467,56 @@ mod tests_cff {
         ) -> ExpressionEvaluator<F<f64>> {
             let expression_atom_no_energy_sub = self.to_atom(OrientationPattern::default());
             let num_energies = external_range.end.max(virtual_range.end);
-            let mut expression_atom = self
-                .surfaces
-                .substitute_energies(&expression_atom_no_energy_sub, &[]);
+            let mut expression_atom =
+                self.surfaces
+                    .substitute_energies(&expression_atom_no_energy_sub, true, &[]);
             for edge_id in 0..num_energies {
                 let edge_id = EdgeIndex::from(edge_id);
+                let beta = 1;
                 expression_atom = expression_atom
+                    .replace(thermal_distribution_atom_from_index(
+                        edge_id,
+                        0,
+                        true,
+                        Sign::Positive,
+                    ))
+                    .with(
+                        (Atom::num(1)
+                            + function!(
+                                symbol!("coth"),
+                                ose_atom_from_index(edge_id) * Atom::num(beta) / Atom::num(2)
+                            ))
+                            / Atom::num(2),
+                    )
+                    .replace(thermal_distribution_atom_from_index(
+                        edge_id,
+                        0,
+                        true,
+                        Sign::Negative,
+                    ))
+                    .with(
+                        (Atom::num(-1)
+                            + function!(
+                                symbol!("coth"),
+                                ose_atom_from_index(edge_id) * Atom::num(beta) / Atom::num(2)
+                            ))
+                            / Atom::num(2),
+                    )
+                    .replace(thermal_distribution_atom_from_index(
+                        edge_id,
+                        1,
+                        true,
+                        Sign::Positive,
+                    ))
+                    .with(
+                        function!(
+                            symbol!("csch"),
+                            ose_atom_from_index(edge_id) * Atom::num(beta) / Atom::num(2)
+                        )
+                        .pow(Atom::num(2))
+                            * Atom::num(beta)
+                            / Atom::num(4),
+                    )
                     .replace(ose_atom_from_index(edge_id))
                     .with(external_energy_atom_from_index(edge_id));
             }
@@ -1082,7 +1525,22 @@ mod tests_cff {
                 .map(|i| external_energy_atom_from_index(EdgeIndex::from(i)))
                 .collect_vec();
 
-            let function_map = FunctionMap::new();
+            let mut function_map = FunctionMap::new();
+            // TODO: remove this once Symbolica has hyperbolic functions built in
+            function_map
+                .add_function(
+                    symbol!("coth"),
+                    vec![symbol!("x")],
+                    parse_lit!((exp(x) + exp(-x)) / (exp(x) - exp(-x))),
+                )
+                .unwrap();
+            function_map
+                .add_function(
+                    symbol!("csch"),
+                    vec![symbol!("x")],
+                    parse_lit!(2 / (exp(x) - exp(-x))),
+                )
+                .unwrap();
 
             let mut tree = expression_atom
                 .as_view()
@@ -1097,6 +1555,17 @@ mod tests_cff {
     }
 
     // helper function to do some quick tests
+    fn orientation_edgevec_for_testing(
+        incoming_edge_count: usize,
+        orientation_vector: &[Orientation],
+    ) -> EdgeVec<Orientation> {
+        let mut global_orientation_vector = vec![Orientation::Default; incoming_edge_count];
+        global_orientation_vector.extend(orientation_vector.iter().copied());
+        dummy_hedge_graph(global_orientation_vector.len())
+            .new_edgevec_from_iter(global_orientation_vector)
+            .unwrap()
+    }
+
     #[allow(unused)]
     fn generate_orientations_for_testing(
         edges: Vec<(usize, usize)>,
@@ -1127,9 +1596,57 @@ mod tests_cff {
                     }
                 }
 
-                CFFGenerationGraph::from_vec(new_edges, incoming_vertices.clone(), None)
+                let global_orientation =
+                    orientation_edgevec_for_testing(incoming_vertices.len(), &orientation_vector);
+
+                CFFGenerationGraph::from_vec(
+                    new_edges,
+                    incoming_vertices.clone(),
+                    Some(global_orientation),
+                )
             })
             .filter(|graph| !graph.has_directed_cycle_initial())
+            .collect_vec()
+    }
+
+    fn generate_all_orientations_for_testing(
+        edges: Vec<(usize, usize)>,
+        incoming_vertices: Vec<usize>,
+    ) -> Vec<CFFGenerationGraph> {
+        let num_edges = edges.len();
+        let incoming_vertices = incoming_vertices
+            .into_iter()
+            .map(|v| (v, CFFEdgeType::External))
+            .collect_vec();
+
+        iterate_possible_orientations(num_edges)
+            .map(|or| {
+                let orientation_vector = or.into_iter().collect_vec();
+                let mut new_edges = edges.clone();
+                for (edge_id, edge_orientation) in orientation_vector.iter().enumerate() {
+                    match edge_orientation {
+                        Orientation::Default => {
+                            new_edges[edge_id] = edges[edge_id];
+                        }
+                        Orientation::Reversed => {
+                            let rotated_edge = (edges[edge_id].1, edges[edge_id].0);
+                            new_edges[edge_id] = rotated_edge;
+                        }
+                        Orientation::Undirected => {
+                            unreachable!("unexpected orientation")
+                        }
+                    }
+                }
+
+                let global_orientation =
+                    orientation_edgevec_for_testing(incoming_vertices.len(), &orientation_vector);
+
+                CFFGenerationGraph::from_vec(
+                    new_edges,
+                    incoming_vertices.clone(),
+                    Some(global_orientation),
+                )
+            })
             .collect_vec()
     }
 
@@ -1271,6 +1788,7 @@ mod tests_cff {
             &mut surface_cache,
             &[],
             &Some(shift_rewrite),
+            MediumMode::Vacuum,
         )
         .unwrap();
 
@@ -1327,6 +1845,7 @@ mod tests_cff {
             &mut surface_cache,
             &[],
             &Some(shift_rewrite),
+            MediumMode::Vacuum,
         )
         .unwrap();
 
@@ -1334,10 +1853,10 @@ mod tests_cff {
     }
 
     fn proper_atom(graph: &HedgeGraph<(), ()>) -> Atom {
-        let cff = generate_cff_expression(graph, &None, &[], &[]).unwrap();
+        let cff = generate_cff_expression(graph, &None, &[], &[], MediumMode::Vacuum).unwrap();
 
         let mut cff_atom = cff.to_atom(OrientationPattern::default());
-        cff_atom = cff.surfaces.substitute_energies(&cff_atom, &[]);
+        cff_atom = cff.surfaces.substitute_energies(&cff_atom, false, &[]);
         let inverse_energy_product =
             get_cff_inverse_energy_product_impl(graph, &graph.full_graph(), &[]);
 
@@ -1451,6 +1970,7 @@ mod tests_cff {
             &mut surface_cache,
             &[],
             &shift_rewrite.clone(),
+            MediumMode::Vacuum,
         )
         .unwrap();
         assert_eq!(
@@ -1531,8 +2051,14 @@ mod tests_cff {
         let triangle_hedge_graph: HedgeGraph<(), (), ()> =
             triangle_hedge_graph_builder.build::<NodeStorageVec<()>>();
 
-        let cff_hedge =
-            generate_cff_expression(&triangle_hedge_graph, &shift_rewrite, &[], &[]).unwrap();
+        let cff_hedge = generate_cff_expression(
+            &triangle_hedge_graph,
+            &shift_rewrite,
+            &[],
+            &[],
+            MediumMode::Vacuum,
+        )
+        .unwrap();
         let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..3, 3..6);
 
         let cff_res: F<f64> = energy_prefactor
@@ -1545,6 +2071,887 @@ mod tests_cff {
 
         assert!(
             relative_error.abs() < F(1.0e-15),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+    }
+
+    #[test]
+    fn thermal_mode_keeps_cyclic_orientations() {
+        let triangle = vec![(2, 0), (0, 1), (1, 2)];
+        let incoming_vertices = vec![0, 1, 2];
+
+        let vacuum = generate_cff_from_orientations::<OrientationID>(
+            generate_all_orientations_for_testing(triangle.clone(), incoming_vertices.clone()),
+            &mut SurfaceCache::new(),
+            &[],
+            &None,
+            MediumMode::Vacuum,
+        )
+        .unwrap();
+        let thermal = generate_cff_from_orientations::<OrientationID>(
+            generate_all_orientations_for_testing(triangle, incoming_vertices),
+            &mut SurfaceCache::new(),
+            &[],
+            &None,
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+
+        assert_eq!(vacuum.orientations.len(), 6);
+        assert_eq!(thermal.orientations.len(), 8);
+    }
+
+    #[test]
+    fn thermal_generation_populates_and_deduplicates_thermal_numerator_cache() {
+        let triangle = vec![(2, 0), (0, 1), (1, 2)];
+        let incoming_vertices = vec![0, 1, 2];
+
+        let thermal = generate_cff_from_orientations::<OrientationID>(
+            generate_all_orientations_for_testing(triangle, incoming_vertices),
+            &mut SurfaceCache::new(),
+            &[],
+            &None,
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+
+        assert!(
+            !thermal.surfaces.thermal_numerator_cache.is_empty(),
+            "thermal generation should populate the thermal numerator cache"
+        );
+
+        let referenced_ids = thermal
+            .orientations
+            .iter()
+            .flat_map(|orientation| orientation.expression.iter_nodes())
+            .filter_map(|node| node.data.thermal_numerator_id)
+            .map(|id| {
+                let id: usize = id.into();
+                id
+            })
+            .collect_vec();
+        assert!(
+            !referenced_ids.is_empty(),
+            "thermal orientation trees should reference cached thermal numerators"
+        );
+
+        let referenced_signs = thermal
+            .orientations
+            .iter()
+            .flat_map(|orientation| orientation.expression.iter_nodes())
+            .filter_map(|node| node.data.thermal_sign)
+            .collect_vec();
+        assert!(
+            referenced_signs.contains(&Sign::Negative),
+            "independently canonicalized thermal CFF nodes should retain leftover minus signs"
+        );
+        assert!(
+            referenced_signs.contains(&Sign::Positive),
+            "thermal CFF nodes should also retain explicitly positive canonicalization signs"
+        );
+
+        let unique_referenced_ids = referenced_ids.iter().copied().collect::<BTreeSet<_>>();
+        assert_eq!(
+            unique_referenced_ids.len(),
+            thermal.surfaces.thermal_numerator_cache.len(),
+            "each cached thermal numerator should be reused by id, not stored multiple times"
+        );
+        assert!(
+            referenced_ids.len() > unique_referenced_ids.len(),
+            "expected repeated thermal numerator references across thermal CFF branches"
+        );
+
+        let unique_cached_numerators = thermal
+            .surfaces
+            .thermal_numerator_cache
+            .iter()
+            .map(|numerator| numerator.to_atom(true, &[]).to_canonical_string())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            unique_cached_numerators.len(),
+            thermal.surfaces.thermal_numerator_cache.len(),
+            "cached thermal numerators should already be deduplicated structurally"
+        );
+        assert!(
+            thermal
+                .surfaces
+                .thermal_numerator_cache
+                .iter()
+                .all(|numerator| !numerator.is_trivial()),
+            "trivial thermal numerators should be elided from the cache"
+        );
+        assert!(
+            thermal
+                .orientations
+                .iter()
+                .flat_map(|orientation| orientation.expression.iter_nodes())
+                .any(|node| {
+                    node.data.thermal_sign.is_some() && node.data.thermal_numerator_id.is_none()
+                }),
+            "thermal nodes with trivial numerators should keep only their sign"
+        );
+    }
+
+    #[test]
+    fn thermal_surface_cache_substitutes_tnum_placeholders_with_distribution_atoms() {
+        let triangle = vec![(2, 0), (0, 1), (1, 2)];
+        let incoming_vertices = vec![0, 1, 2];
+
+        let thermal = generate_cff_from_orientations::<OrientationID>(
+            generate_all_orientations_for_testing(triangle, incoming_vertices),
+            &mut SurfaceCache::new(),
+            &[],
+            &None,
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+
+        let atom_with_placeholders = thermal.to_atom(OrientationPattern::default());
+        let placeholder_string = atom_with_placeholders.to_canonical_string();
+        assert!(
+            placeholder_string.contains("Tnum("),
+            "thermal CFF atoms should carry thermal numerator placeholders before substitution: {placeholder_string}"
+        );
+
+        let substituted = thermal
+            .surfaces
+            .substitute_energies(&atom_with_placeholders, true, &[]);
+        let substituted_string = substituted.to_canonical_string();
+        assert!(
+            !substituted_string.contains("Tnum("),
+            "thermal numerator placeholders should disappear after cache substitution: {substituted_string}"
+        );
+        assert!(
+            substituted_string.contains("N("),
+            "substituted thermal CFF should contain explicit thermal distribution atoms: {substituted_string}"
+        );
+    }
+
+    #[test]
+    fn thermal_bubble() {
+        let bubble = vec![(0, 1), (1, 0)];
+
+        let incoming_vertices = vec![0, 1];
+        let orientations = generate_all_orientations_for_testing(bubble, incoming_vertices);
+        assert_eq!(orientations.len(), 4);
+
+        let dep_mom = EdgeIndex::from(1);
+        let dep_mom_expr = vec![(EdgeIndex::from(0), -1)];
+
+        let shift_rewrite = Some(ShiftRewrite {
+            dependent_momentum: dep_mom,
+            dependent_momentum_expr: dep_mom_expr,
+        });
+
+        let mut surface_cache = SurfaceCache::new();
+        let cff = generate_cff_from_orientations::<OrientationID>(
+            orientations,
+            &mut surface_cache,
+            &[],
+            &shift_rewrite.clone(),
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+        assert_eq!(cff.orientations.len(), 4);
+        assert_eq!(
+            cff.surfaces.esurface_cache.len(),
+            2,
+            "incorrect number of esurfaces: {:#?}",
+            cff.surfaces.esurface_cache,
+        );
+        assert_eq!(
+            cff.surfaces.hsurface_cache.len(),
+            2,
+            "incorrect number of hsurfaces: {:#?}",
+            cff.surfaces.hsurface_cache,
+        );
+
+        let p1 = FourMomentum::from_args(F(1.), F(3.), F(4.), F(5.));
+        let p2 = -p1;
+        let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
+        let m = F(0.);
+
+        let k = ThreeMomentum::new(F(1.), F(2.), F(3.));
+
+        let virtual_energy_cache = [
+            compute_one_loop_energy(k, zero.spatial, m),
+            compute_one_loop_energy(k, p1.spatial, m),
+        ];
+
+        let external_energy_cache = [p1.temporal.value, p2.temporal.value];
+
+        // combine the virtual and external energies
+        let mut energy_cache = external_energy_cache.to_vec();
+        energy_cache.extend(virtual_energy_cache);
+
+        let energy_cache = dummy_hedge_graph(4)
+            .new_edgevec_from_iter(energy_cache)
+            .unwrap();
+
+        let energy_prefactor = virtual_energy_cache
+            .iter()
+            .map(|e| (F(2.) * e).inv())
+            .reduce(|acc, x| acc * x)
+            .unwrap();
+
+        let mut evaluator = cff.quick_symbolica_evaluator(0..2, 2..4);
+
+        let cff_res: F<f64> =
+            energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
+
+        let target_res = F(9.236_597_515_492_299e-4_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        assert!(
+            relative_error.abs() < F(1.0e-15),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+
+        // test cff from hedge graph
+        let mut bubble_hedge_graph_builder = HedgeGraphBuilder::new();
+
+        let nodes = (0..2)
+            .map(|_| bubble_hedge_graph_builder.add_node(()))
+            .collect_vec();
+
+        for node in nodes.clone() {
+            bubble_hedge_graph_builder.add_external_edge(
+                node,
+                (),
+                Orientation::Undirected,
+                Flow::Sink,
+            );
+        }
+
+        bubble_hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        bubble_hedge_graph_builder.add_edge(nodes[1], nodes[0], (), Orientation::Undirected);
+
+        let bubble_hedge_graph: HedgeGraph<(), (), ()> =
+            bubble_hedge_graph_builder.build::<NodeStorageVec<()>>();
+
+        let cff_hedge = generate_cff_expression(
+            &bubble_hedge_graph,
+            &shift_rewrite,
+            &[],
+            &[],
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+        let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..4);
+
+        let cff_res: F<f64> =
+            energy_prefactor * cff_hedge_evaluator.evaluate_single(energy_cache.as_ref());
+
+        let target_res = F(9.236_597_515_492_299e-4_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        assert!(
+            relative_error.abs() < F(1.0e-15),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+    }
+
+    #[test]
+    fn thermal_mercedes() {
+        let mercedes = vec![(0, 1), (1, 2), (2, 0), (1, 3), (3, 0), (2, 3)];
+
+        let incoming_vertices = vec![];
+        let orientations = generate_all_orientations_for_testing(mercedes, incoming_vertices);
+        assert_eq!(orientations.len(), 64);
+
+        let mut surface_cache = SurfaceCache::new();
+        let cff = generate_cff_from_orientations::<OrientationID>(
+            orientations,
+            &mut surface_cache,
+            &[],
+            &None,
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+        assert_eq!(cff.orientations.len(), 64);
+        assert_eq!(
+            cff.surfaces.esurface_cache.len(),
+            7,
+            "incorrect number of esurfaces: {:#?}",
+            cff.surfaces.esurface_cache,
+        );
+        assert_eq!(
+            cff.surfaces.hsurface_cache.len(),
+            33,
+            "incorrect number of hsurfaces: {:#?}",
+            cff.surfaces.hsurface_cache,
+        );
+
+        let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
+        let m = F(0.);
+
+        let k1 = ThreeMomentum::new(F(1.1), F(-2.0), F(1.3));
+        let k2 = ThreeMomentum::new(F(2.7), F(2.1), F(-2.4));
+        let k3 = ThreeMomentum::new(F(0.2), F(1.4), F(-0.6));
+
+        let virtual_energy_cache = [
+            compute_one_loop_energy(k1, zero.spatial, m),
+            compute_one_loop_energy(k2, zero.spatial, m),
+            compute_one_loop_energy(k3, zero.spatial, m),
+            compute_one_loop_energy(k1 - k2, zero.spatial, m),
+            compute_one_loop_energy(k1 - k3, zero.spatial, m),
+            compute_one_loop_energy(k2 - k3, zero.spatial, m),
+        ];
+
+        let energy_cache = virtual_energy_cache.to_vec();
+
+        let energy_cache = dummy_hedge_graph(6)
+            .new_edgevec_from_iter(energy_cache)
+            .unwrap();
+
+        let energy_prefactor = virtual_energy_cache
+            .iter()
+            .map(|e| (F(2.) * e).inv())
+            .reduce(|acc, x| acc * x)
+            .unwrap();
+
+        let mut evaluator = cff.quick_symbolica_evaluator(0..0, 0..6);
+
+        let cff_res: F<f64> =
+            energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
+
+        let target_res = F(7.510_957_576_577_536e-7_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        assert!(
+            relative_error.abs() < F(1.0e-14),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+
+        // test cff from hedge graph
+        let mut mercedes_hedge_graph_builder = HedgeGraphBuilder::new();
+
+        let nodes = (0..4)
+            .map(|_| mercedes_hedge_graph_builder.add_node(()))
+            .collect_vec();
+
+        mercedes_hedge_graph_builder.add_edge(nodes[0], nodes[1], (), Orientation::Undirected);
+        mercedes_hedge_graph_builder.add_edge(nodes[1], nodes[2], (), Orientation::Undirected);
+        mercedes_hedge_graph_builder.add_edge(nodes[2], nodes[0], (), Orientation::Undirected);
+        mercedes_hedge_graph_builder.add_edge(nodes[1], nodes[3], (), Orientation::Undirected);
+        mercedes_hedge_graph_builder.add_edge(nodes[3], nodes[0], (), Orientation::Undirected);
+        mercedes_hedge_graph_builder.add_edge(nodes[2], nodes[3], (), Orientation::Undirected);
+
+        let mercedes_hedge_graph: HedgeGraph<(), (), ()> =
+            mercedes_hedge_graph_builder.build::<NodeStorageVec<()>>();
+
+        let cff_hedge = generate_cff_expression(
+            &mercedes_hedge_graph,
+            &None,
+            &[],
+            &[],
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+        let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..0, 0..6);
+
+        let cff_res: F<f64> =
+            energy_prefactor * cff_hedge_evaluator.evaluate_single(energy_cache.as_ref());
+
+        let target_res = F(7.510_957_576_577_536e-7_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        assert!(
+            relative_error.abs() < F(1.0e-14),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+    }
+
+    #[test]
+    fn thermal_eight() {
+        let eight = vec![(0, 0), (0, 0)];
+
+        let incoming_vertices = vec![];
+        let orientations = generate_all_orientations_for_testing(eight, incoming_vertices);
+        assert_eq!(orientations.len(), 4);
+
+        let mut surface_cache = SurfaceCache::new();
+        let cff = generate_cff_from_orientations::<OrientationID>(
+            orientations,
+            &mut surface_cache,
+            &[],
+            &None,
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+        assert_eq!(cff.orientations.len(), 4);
+        assert_eq!(
+            cff.surfaces.esurface_cache.len(),
+            0,
+            "incorrect number of esurfaces: {:#?}",
+            cff.surfaces.esurface_cache,
+        );
+        assert_eq!(
+            cff.surfaces.hsurface_cache.len(),
+            0,
+            "incorrect number of hsurfaces: {:#?}",
+            cff.surfaces.hsurface_cache,
+        );
+
+        let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
+        let m = F(0.);
+
+        let k1 = ThreeMomentum::new(F(0.1), F(0.2), F(0.3));
+        let k2 = ThreeMomentum::new(F(0.4), F(0.5), F(0.6));
+
+        let virtual_energy_cache = [
+            compute_one_loop_energy(k1, zero.spatial, m),
+            compute_one_loop_energy(k2, zero.spatial, m),
+        ];
+
+        let energy_cache = virtual_energy_cache.to_vec();
+
+        let energy_cache = dummy_hedge_graph(2)
+            .new_edgevec_from_iter(energy_cache)
+            .unwrap();
+
+        let energy_prefactor = virtual_energy_cache
+            .iter()
+            .map(|e| (F(2.) * e).inv())
+            .reduce(|acc, x| acc * x)
+            .unwrap();
+
+        let mut evaluator = cff.quick_symbolica_evaluator(0..0, 0..2);
+
+        let cff_res: F<f64> =
+            energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
+
+        let target_res = F(9.978_988_858_570_828_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        assert!(
+            relative_error.abs() < F(1.0e-14),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+
+        let k1 = ThreeMomentum::new(F(1.1), F(0.2), F(0.3));
+        let k2 = ThreeMomentum::new(F(0.4), F(0.5), F(0.6));
+
+        let virtual_energy_cache = [
+            compute_one_loop_energy(k1, zero.spatial, m),
+            compute_one_loop_energy(k2, zero.spatial, m),
+        ];
+
+        let energy_cache = virtual_energy_cache.to_vec();
+
+        let energy_cache = dummy_hedge_graph(2)
+            .new_edgevec_from_iter(energy_cache)
+            .unwrap();
+
+        let energy_prefactor = virtual_energy_cache
+            .iter()
+            .map(|e| (F(2.) * e).inv())
+            .reduce(|acc, x| acc * x)
+            .unwrap();
+
+        let cff_res: F<f64> =
+            energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
+
+        let target_res = F(1.143_176_604_199_321_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        assert!(
+            relative_error.abs() < F(1.0e-14),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+    }
+
+    #[test]
+    fn thermal_bubble_chain() {
+        let bubble_chain = vec![(0, 0), (0, 1), (1, 0), (1, 1)];
+
+        let incoming_vertices = vec![];
+        let orientations = generate_all_orientations_for_testing(bubble_chain, incoming_vertices);
+        assert_eq!(orientations.len(), 16);
+
+        let mut surface_cache = SurfaceCache::new();
+        let cff = generate_cff_from_orientations::<OrientationID>(
+            orientations,
+            &mut surface_cache,
+            &[],
+            &None,
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+        assert_eq!(cff.orientations.len(), 16);
+        assert_eq!(
+            cff.surfaces.esurface_cache.len(),
+            1,
+            "incorrect number of esurfaces: {:#?}",
+            cff.surfaces.esurface_cache,
+        );
+        assert_eq!(
+            cff.surfaces.hsurface_cache.len(),
+            0,
+            "incorrect number of hsurfaces: {:#?}",
+            cff.surfaces.hsurface_cache,
+        );
+
+        let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
+        let m = F(0.);
+
+        let k1 = ThreeMomentum::new(F(0.1), F(0.2), F(0.3));
+        let k2 = ThreeMomentum::new(F(0.4), F(0.5), F(0.6));
+        let k3 = ThreeMomentum::new(F(0.7), F(0.8), F(0.9));
+
+        let virtual_energy_cache = [
+            compute_one_loop_energy(k1, zero.spatial, m),
+            compute_one_loop_energy(k2, zero.spatial, m),
+            compute_one_loop_energy(k2, zero.spatial, m),
+            compute_one_loop_energy(k3, zero.spatial, m),
+        ];
+
+        let energy_cache = virtual_energy_cache.to_vec();
+
+        let energy_cache = dummy_hedge_graph(4)
+            .new_edgevec_from_iter(energy_cache)
+            .unwrap();
+
+        let energy_prefactor = virtual_energy_cache
+            .iter()
+            .map(|e| (F(2.) * e).inv())
+            .reduce(|acc, x| acc * x)
+            .unwrap();
+
+        let mut evaluator = cff.quick_symbolica_evaluator(0..0, 0..4);
+
+        let cff_res: F<f64> =
+            energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
+
+        let target_res = F(7.272_248_247_929_602_4_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        assert!(
+            relative_error.abs() < F(1.0e-14),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+
+        let k1 = ThreeMomentum::new(F(1.1), F(0.2), F(0.3));
+        let k2 = ThreeMomentum::new(F(0.4), F(1.5), F(0.6));
+        let k3 = ThreeMomentum::new(F(0.7), F(0.8), F(1.9));
+
+        let virtual_energy_cache = [
+            compute_one_loop_energy(k1, zero.spatial, m),
+            compute_one_loop_energy(k2, zero.spatial, m),
+            compute_one_loop_energy(k2, zero.spatial, m),
+            compute_one_loop_energy(k3, zero.spatial, m),
+        ];
+
+        let energy_cache = virtual_energy_cache.to_vec();
+
+        let energy_cache = dummy_hedge_graph(4)
+            .new_edgevec_from_iter(energy_cache)
+            .unwrap();
+
+        let energy_prefactor = virtual_energy_cache
+            .iter()
+            .map(|e| (F(2.) * e).inv())
+            .reduce(|acc, x| acc * x)
+            .unwrap();
+
+        let cff_res: F<f64> =
+            energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
+
+        let target_res = F(3.140_465_809_410_901_4e-2_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        assert!(
+            relative_error.abs() < F(1.0e-14),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+    }
+
+    #[test]
+    fn thermal_ring() {
+        let ring = vec![(0, 1), (1, 0), (1, 2), (2, 3), (3, 2), (3, 0)];
+
+        let incoming_vertices = vec![];
+        let orientations = generate_all_orientations_for_testing(ring, incoming_vertices);
+        assert_eq!(orientations.len(), 64);
+
+        let mut surface_cache = SurfaceCache::new();
+        let cff = generate_cff_from_orientations::<OrientationID>(
+            orientations,
+            &mut surface_cache,
+            &[],
+            &None,
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+        assert_eq!(cff.orientations.len(), 64);
+        assert_eq!(
+            cff.surfaces.esurface_cache.len(),
+            6,
+            "incorrect number of esurfaces: {:#?}",
+            cff.surfaces.esurface_cache,
+        );
+        assert_eq!(
+            cff.surfaces.hsurface_cache.len(),
+            19,
+            "incorrect number of hsurfaces: {:#?}",
+            cff.surfaces.hsurface_cache,
+        );
+
+        let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
+        let m = F(0.);
+
+        let k1 = ThreeMomentum::new(F(0.1), F(0.2), F(0.3));
+        let k2 = ThreeMomentum::new(F(0.4), F(0.5), F(0.6));
+        let k3 = ThreeMomentum::new(F(0.7), F(0.8), F(0.9));
+
+        let virtual_energy_cache = [
+            compute_one_loop_energy(k1, zero.spatial, m),
+            compute_one_loop_energy(k1 - k2, zero.spatial, m),
+            compute_one_loop_energy(k2, zero.spatial, m),
+            compute_one_loop_energy(k3, zero.spatial, m),
+            compute_one_loop_energy(-k2 + k3, zero.spatial, m),
+            compute_one_loop_energy(k2, zero.spatial, m),
+        ];
+
+        let energy_cache = virtual_energy_cache.to_vec();
+
+        let energy_cache = dummy_hedge_graph(6)
+            .new_edgevec_from_iter(energy_cache)
+            .unwrap();
+
+        let energy_prefactor = virtual_energy_cache
+            .iter()
+            .map(|e| (F(2.) * e).inv())
+            .reduce(|acc, x| acc * x)
+            .unwrap();
+
+        let mut evaluator = cff.quick_symbolica_evaluator(0..0, 0..6);
+
+        let cff_res: F<f64> =
+            energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
+
+        let target_res = F(8.524_796_385_080_671e1_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        // Note that the tolerance needs to be very loose here probably due to the
+        // numerical instability of the naively implemented hyperbolic functions.
+        assert!(
+            relative_error.abs() < F(2.0e-11),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+
+        let k1 = ThreeMomentum::new(F(1.1), F(0.2), F(0.3));
+        let k2 = ThreeMomentum::new(F(0.4), F(1.5), F(0.6));
+        let k3 = ThreeMomentum::new(F(0.7), F(0.8), F(1.9));
+
+        let virtual_energy_cache = [
+            compute_one_loop_energy(k1, zero.spatial, m),
+            compute_one_loop_energy(k1 - k2, zero.spatial, m),
+            compute_one_loop_energy(k2, zero.spatial, m),
+            compute_one_loop_energy(k3, zero.spatial, m),
+            compute_one_loop_energy(-k2 + k3, zero.spatial, m),
+            compute_one_loop_energy(k2, zero.spatial, m),
+        ];
+
+        let energy_cache = virtual_energy_cache.to_vec();
+
+        let energy_cache = dummy_hedge_graph(6)
+            .new_edgevec_from_iter(energy_cache)
+            .unwrap();
+
+        let energy_prefactor = virtual_energy_cache
+            .iter()
+            .map(|e| (F(2.) * e).inv())
+            .reduce(|acc, x| acc * x)
+            .unwrap();
+
+        let cff_res: F<f64> =
+            energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
+
+        let target_res = F(4.048_992_143_144_149e-3_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        assert!(
+            relative_error.abs() < F(1.0e-14),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+    }
+
+    #[test]
+    fn thermal_bugblatter() {
+        let bugblatter = vec![
+            (3, 0),
+            (4, 3),
+            (0, 1),
+            (1, 4),
+            (2, 5),
+            (5, 4),
+            (1, 2),
+            (3, 5),
+            (2, 0),
+        ];
+
+        let incoming_vertices = vec![];
+        let orientations = generate_all_orientations_for_testing(bugblatter, incoming_vertices);
+        assert_eq!(orientations.len(), 512);
+
+        let mut surface_cache = SurfaceCache::new();
+        let cff = generate_cff_from_orientations::<OrientationID>(
+            orientations,
+            &mut surface_cache,
+            &[],
+            &None,
+            MediumMode::ThermodynamicEquilibrium,
+        )
+        .unwrap();
+        assert_eq!(cff.orientations.len(), 512);
+        assert_eq!(
+            cff.surfaces.esurface_cache.len(),
+            22,
+            "incorrect number of esurfaces: {:#?}",
+            cff.surfaces.esurface_cache,
+        );
+        assert_eq!(
+            cff.surfaces.hsurface_cache.len(),
+            174,
+            "incorrect number of hsurfaces: {:#?}",
+            cff.surfaces.hsurface_cache,
+        );
+
+        let zero = FourMomentum::from_args(F(0.), F(0.), F(0.), F(0.));
+        let m = F(0.);
+
+        let k1 = ThreeMomentum::new(F(0.1), F(0.2), F(0.3));
+        let k2 = ThreeMomentum::new(F(0.5), F(0.4), F(0.6));
+        let k3 = ThreeMomentum::new(F(0.9), F(0.8), F(0.7));
+        let k4 = ThreeMomentum::new(F(1.1), F(1.2), F(1.3));
+
+        let virtual_energy_cache = [
+            compute_one_loop_energy(k1, zero.spatial, m),
+            compute_one_loop_energy(k2, zero.spatial, m),
+            compute_one_loop_energy(k3, zero.spatial, m),
+            compute_one_loop_energy(k4, zero.spatial, m),
+            compute_one_loop_energy(k1 - k4, zero.spatial, m),
+            compute_one_loop_energy(k2 - k4, zero.spatial, m),
+            compute_one_loop_energy(k3 - k4, zero.spatial, m),
+            compute_one_loop_energy(-k1 + k2, zero.spatial, m),
+            compute_one_loop_energy(-k1 + k3, zero.spatial, m),
+        ];
+
+        let energy_cache = virtual_energy_cache.to_vec();
+
+        let energy_cache = dummy_hedge_graph(9)
+            .new_edgevec_from_iter(energy_cache)
+            .unwrap();
+
+        let energy_prefactor = virtual_energy_cache
+            .iter()
+            .map(|e| (F(2.) * e).inv())
+            .reduce(|acc, x| acc * x)
+            .unwrap();
+
+        let mut evaluator = cff.quick_symbolica_evaluator(0..0, 0..9);
+
+        let cff_res: F<f64> =
+            energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
+
+        let target_res = F(1.308_467_742_357_907_9e0_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        // Note that the tolerance needs to be very loose here probably due to the
+        // numerical instability of the naively implemented hyperbolic functions.
+        assert!(
+            relative_error.abs() < F(5.0e-10),
+            "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
+            relative_error,
+            target_res,
+            cff_res
+        );
+
+        let k1 = ThreeMomentum::new(F(1.1), F(0.2), F(0.3));
+        let k2 = ThreeMomentum::new(F(0.5), F(1.4), F(0.6));
+        let k3 = ThreeMomentum::new(F(0.9), F(1.8), F(0.7));
+        let k4 = ThreeMomentum::new(F(1.1), F(2.2), F(1.3));
+
+        let virtual_energy_cache = [
+            compute_one_loop_energy(k1, zero.spatial, m),
+            compute_one_loop_energy(k2, zero.spatial, m),
+            compute_one_loop_energy(k3, zero.spatial, m),
+            compute_one_loop_energy(k4, zero.spatial, m),
+            compute_one_loop_energy(k1 - k4, zero.spatial, m),
+            compute_one_loop_energy(k2 - k4, zero.spatial, m),
+            compute_one_loop_energy(k3 - k4, zero.spatial, m),
+            compute_one_loop_energy(-k1 + k2, zero.spatial, m),
+            compute_one_loop_energy(-k1 + k3, zero.spatial, m),
+        ];
+
+        let energy_cache = virtual_energy_cache.to_vec();
+
+        let energy_cache = dummy_hedge_graph(9)
+            .new_edgevec_from_iter(energy_cache)
+            .unwrap();
+
+        let energy_prefactor = virtual_energy_cache
+            .iter()
+            .map(|e| (F(2.) * e).inv())
+            .reduce(|acc, x| acc * x)
+            .unwrap();
+
+        let cff_res: F<f64> =
+            energy_prefactor * evaluator.evaluate_single(energy_cache.clone().as_ref());
+
+        let target_res = F(3.799_072_627_985_78e-4_f64);
+        let absolute_error = cff_res - target_res;
+        let relative_error = absolute_error.abs() / cff_res.abs();
+
+        // Note that the tolerance needs to be very loose here probably due to the
+        // numerical instability of the naively implemented hyperbolic functions.
+        assert!(
+            relative_error.abs() < F(6.0e-10),
             "relative error: {:+e} (ground truth: {:+e} vs reproduced: {:+e})",
             relative_error,
             target_res,
@@ -1578,6 +2985,7 @@ mod tests_cff {
                 &mut surface_cache,
                 &[],
                 &shift_rewrite,
+                MediumMode::Vacuum,
             )
             .unwrap();
 
@@ -1655,8 +3063,14 @@ mod tests_cff {
 
             let hedge_double_traingle: HedgeGraph<(), (), ()> =
                 hedge_double_triangle_builder.build::<NodeStorageVec<()>>();
-            let cff_hedge =
-                generate_cff_expression(&hedge_double_traingle, &shift_rewrite, &[], &[]).unwrap();
+            let cff_hedge = generate_cff_expression(
+                &hedge_double_traingle,
+                &shift_rewrite,
+                &[],
+                &[],
+                MediumMode::Vacuum,
+            )
+            .unwrap();
             let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..7);
             let cff_res =
                 energy_prefactor * cff_hedge_evaluator.evaluate_single(energy_cache.as_ref());
@@ -1722,6 +3136,7 @@ mod tests_cff {
                 &mut surface_cache,
                 &[],
                 &shift_rewrite,
+                MediumMode::Vacuum,
             )
             .unwrap();
 
@@ -1789,7 +3204,9 @@ mod tests_cff {
             tbt_hedge_builder.add_edge(nodes[5], nodes[4], (), Orientation::Undirected);
 
             let tbt_hedge: HedgeGraph<(), (), ()> = tbt_hedge_builder.build::<NodeStorageVec<()>>();
-            let cff_hedge = generate_cff_expression(&tbt_hedge, &shift_rewrite, &[], &[]).unwrap();
+            let cff_hedge =
+                generate_cff_expression(&tbt_hedge, &shift_rewrite, &[], &[], MediumMode::Vacuum)
+                    .unwrap();
 
             let mut cff_hedge_evaluator = cff_hedge.quick_symbolica_evaluator(0..2, 2..10);
             let res =

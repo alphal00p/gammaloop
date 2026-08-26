@@ -36,7 +36,8 @@ impl LogMessage for Spinney {
 
 impl Spinney {
     pub fn compatible_with(&self, cut: &CutSet) -> bool {
-        !self.subgraph.filter.intersects(&cut.union)
+        self.renormalization_scheme == ApproximationType::VacuumLimit
+            || !self.subgraph.filter.intersects(&cut.union)
     }
 
     pub fn empty<E, V, H, G: AsRef<HedgeGraph<E, V, H>> + LMBext + ?Sized>(g: &G) -> Self {

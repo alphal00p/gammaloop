@@ -27,7 +27,11 @@ use symbolica::{
 use tabled::{builder::Builder, settings::Style};
 use typed_index_collections::TiVec;
 
-use super::{generation::SurfaceCache, surface::HybridSurfaceID, tree::Tree};
+use super::{
+    generation::{CFFNodeData, SurfaceCache},
+    surface::HybridSurfaceID,
+    tree::Tree,
+};
 
 #[derive(
     Debug,
@@ -156,7 +160,7 @@ impl OrientationData {
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct OrientationExpression {
     pub data: OrientationData,
-    pub expression: Tree<HybridSurfaceID>,
+    pub expression: Tree<CFFNodeData>,
 }
 #[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
 pub struct CFFExpression<O>
@@ -183,6 +187,7 @@ where
             surfaces: SurfaceCache {
                 esurface_cache: TiVec::new(),
                 hsurface_cache: TiVec::new(),
+                thermal_numerator_cache: TiVec::new(),
             },
         }
     }
@@ -253,7 +258,7 @@ where
                 if orientation
                     .expression
                     .iter_nodes()
-                    .any(|node| node.data == HybridSurfaceID::Esurface(esurface_id))
+                    .any(|node| node.data.surface_id == HybridSurfaceID::Esurface(esurface_id))
                 {
                     Some(id)
                 } else {
@@ -276,20 +281,24 @@ where
             let mut new_expression = self.clone();
 
             for orientation in new_expression.orientations.iter_mut() {
-                orientation.expression.keep_branches_with_value_count_mut(
-                    &HybridSurfaceID::Esurface(reprentative_esurface_id),
-                    occurence,
-                );
+                orientation
+                    .expression
+                    .keep_branches_with_predicate_count_mut(
+                        |node_data| {
+                            matches!(
+                                node_data.surface_id,
+                                HybridSurfaceID::Esurface(id) if id == reprentative_esurface_id
+                            )
+                        },
+                        occurence,
+                    );
 
                 orientation
                     .expression
-                    .map_mut(|hybrid_surface_id| match hybrid_surface_id {
-                        HybridSurfaceID::Esurface(esurface_id)
-                            if *esurface_id == reprentative_esurface_id =>
-                        {
-                            *hybrid_surface_id = HybridSurfaceID::Unit;
+                    .map_mut(|node_data| {
+                        if matches!(node_data.surface_id, HybridSurfaceID::Esurface(id) if id == reprentative_esurface_id) {
+                            node_data.surface_id = HybridSurfaceID::Unit;
                         }
-                        _ => (),
                     });
             }
 
@@ -305,11 +314,11 @@ where
         for orientation in self.orientations.iter_mut() {
             orientation
                 .expression
-                .map_mut(|hybrid_surface_id| match hybrid_surface_id {
+                .map_mut(|node_data| match &mut node_data.surface_id {
                     HybridSurfaceID::Esurface(esurface_id)
                         if raised_esurface_group.esurface_ids.contains(esurface_id) =>
                     {
-                        *hybrid_surface_id = HybridSurfaceID::Esurface(reprentative_esurface_id);
+                        node_data.surface_id = HybridSurfaceID::Esurface(reprentative_esurface_id);
                     }
                     _ => (),
                 });
@@ -328,8 +337,8 @@ where
         }
 
         for orientation in self.orientations.iter_mut() {
-            orientation.expression.map_mut(|hybrid_surface_id| {
-                if let HybridSurfaceID::Esurface(esurface_id) = hybrid_surface_id
+            orientation.expression.map_mut(|node_data| {
+                if let HybridSurfaceID::Esurface(esurface_id) = &mut node_data.surface_id
                     && let Some(normalized_esurface_id) = esurface_mappings.get(esurface_id)
                 {
                     *esurface_id = *normalized_esurface_id;

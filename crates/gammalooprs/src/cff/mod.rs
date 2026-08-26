@@ -10,7 +10,7 @@ use symbolica::atom::{Atom, AtomCore};
 use crate::{
     cff::orientations::GraphOrientation,
     graph::{FeynmanGraph, Graph, cuts::CutSet, get_cff_inverse_energy_product_impl},
-    settings::global::OrientationPattern,
+    settings::global::{MediumMode, OrientationPattern},
     utils::GS,
     uv::Integrands,
 };
@@ -24,6 +24,7 @@ pub mod expression;
 pub mod generation;
 pub mod hsurface;
 pub mod surface;
+pub mod thermal_numerator;
 pub mod tree;
 
 pub struct CFFTerm {
@@ -102,6 +103,7 @@ impl Graph {
         contract_subgraph: &S,
         cutset: &CutSet,
         orientation_pattern: &OrientationPattern,
+        medium_mode: MediumMode,
     ) -> Result<CutCFF> {
         let canonize_esurface = self.get_esurface_canonization(&self.loop_momentum_basis);
         let mut contract_edges = vec![];
@@ -114,7 +116,12 @@ impl Graph {
 
         let cff = [(
             CutCFFIndex::new_all_none(),
-            self.generate_cff(&contract_edges, &canonize_esurface, orientation_pattern)?,
+            self.generate_cff(
+                &contract_edges,
+                &canonize_esurface,
+                orientation_pattern,
+                medium_mode,
+            )?,
         )];
 
         let mut residues = BTreeMap::new();
@@ -199,10 +206,14 @@ impl Graph {
         let mut terms = BTreeMap::new();
 
         let replacement_rules = if cutset.canonicalize_external_shifts {
-            self.surface_cache
-                .get_all_replacements_in_lmb(&[], &self.loop_momentum_basis)
+            self.surface_cache.get_all_replacements_in_lmb(
+                medium_mode.is_finite_temperature(),
+                &[],
+                &self.loop_momentum_basis,
+            )
         } else {
-            self.surface_cache.get_all_replacements(&[])
+            self.surface_cache
+                .get_all_replacements(medium_mode.is_finite_temperature(), &[])
         };
 
         for (cut_cff_index, expr) in residues.into_iter() {

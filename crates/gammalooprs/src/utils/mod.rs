@@ -17,8 +17,7 @@ use bincode::{Decode, Encode};
 use colored::Colorize;
 use idenso::representations::initialize;
 use itertools::Itertools;
-use linnet::half_edge::involution::EdgeIndex;
-
+use linnet::{half_edge::involution::EdgeIndex, num_traits::Sign};
 use rand::Rng;
 use ref_ops::{RefAdd, RefDiv, RefMul, RefNeg, RefRem, RefSub};
 use rug::float::{Constant, ParseFloatError};
@@ -5113,6 +5112,20 @@ pub(crate) fn cut_energy(index: EdgeIndex) -> Atom {
 
 pub(crate) fn external_energy_atom_from_index(index: EdgeIndex) -> Atom {
     GS.emr_mom(index, Atom::from(ExpandedIndex::from_iter([0])))
+}
+
+pub(crate) fn thermal_distribution_atom_from_index(
+    index: EdgeIndex,
+    derivative_order: usize,
+    is_finite_temperature: bool,
+    sign: Sign,
+) -> Atom {
+    GS.thermal_distribution(
+        usize::from(index) as i64,
+        derivative_order as i64,
+        Atom::num(if is_finite_temperature { 1 } else { 0 }),
+        sign * Atom::num(1),
+    )
 }
 
 pub mod newton_solver;

@@ -17,7 +17,9 @@ use crate::{
     cff::{CutCFF, orientations::GraphOrientation},
     debug_tags,
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
-    utils::{GS, W_},
+    integrands::process::param_builder::{ParamBuilderGraph, ThermalDistributionReplacement},
+    settings::global::MediumMode,
+    utils::{GS, W_, symbols::ThermalDistributionLimit},
     uv::{
         ApproximationType, Integrands, UVgenerationSettings, UltravioletGraph,
         approx::{ForestNodeLike, OrientationProjection, UVCtx, integrated::IntegratedCts},
@@ -42,6 +44,7 @@ impl FrozenActiveCt {
 pub(crate) struct Localizer<'a> {
     cutset: &'a CutSet,
     orientation: OrientationProjection<'a>,
+    medium_mode: MediumMode,
 }
 
 impl<'a> Localizer<'a> {
@@ -52,13 +55,19 @@ impl<'a> Localizer<'a> {
                 .subtract(&graph.initial_state_cut),
             self.cutset,
             self.orientation.orientation_pattern,
+            self.medium_mode,
         )
     }
 
-    pub(crate) fn new(cutset: &'a CutSet, orientation: OrientationProjection<'a>) -> Self {
+    pub(crate) fn new(
+        cutset: &'a CutSet,
+        orientation: OrientationProjection<'a>,
+        medium_mode: MediumMode,
+    ) -> Self {
         Self {
             cutset,
             orientation,
+            medium_mode,
         }
     }
     fn representative_orientations(
@@ -156,6 +165,7 @@ impl<'a> Localizer<'a> {
                 .subtract(&graph.initial_state_cut),
             self.cutset,
             self.orientation.orientation_pattern,
+            self.medium_mode,
         )?;
 
         let fourddenoms = GS.wrap_tree_denoms(
@@ -636,6 +646,15 @@ pub(crate) fn start<S: super::ForestNodeLike>(
         .first()
         .copied()
         .unwrap_or_else(|| current.lmb_id());
+    // Every local UV kernel starts from the vacuum-explicit reduced graph, including
+    // thermal runs; the medium dependence lives in the unreduced observable.
+    let reduced_edges = graph.iter_edges_of(&reduced).map(|(_, edge, _)| edge);
+    let cff = graph.make_thermal_distributions_explicit(
+        cff,
+        ThermalDistributionLimit::Vacuum,
+        reduced_edges,
+        ThermalDistributionReplacement::All,
+    )?;
     let mut atomarg = cff
         * graph
             .numerator(&reduced, given.subgraph())
@@ -824,6 +843,23 @@ impl Local3DLoopRescaling {
         active_subgraph: Option<SuBitGraph>,
     ) -> impl FnMut(&Atom) -> Result<Atom> {
         move |integrand| {
+            if current.renormalization_scheme() == ApproximationType::VacuumLimit {
+                let reduced = current.reduced_subgraph(given);
+                let reduced_edges = ctx.graph.iter_edges_of(&reduced).map(|(_, edge, _)| edge);
+                let vacuum = ctx.graph.make_thermal_distributions_explicit(
+                    integrand,
+                    ThermalDistributionLimit::Vacuum,
+                    reduced_edges,
+                    ThermalDistributionReplacement::All,
+                )?;
+                return Ok(vacuum
+                    * ctx
+                        .graph
+                        .numerator(&reduced, given.subgraph())
+                        .get_single_atom()
+                        .unwrap());
+            }
+
             let active_lmb = active_subgraph
                 .as_ref()
                 .filter(|active| *active != current.subgraph())
@@ -881,7 +917,9 @@ impl Local3DLoopRescaling {
                     )? + &t_tilde
                         - self.t(ctx, current, given, &t_tilde, active_subgraph.as_ref(), lmb)?)
                 }
-                ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
+                ApproximationType::VacuumLimit => {
+                    unreachable!("vacuum limits return before loop-rescaling setup")
+                }
                 ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
                 ApproximationType::Unsubtracted => {
                     panic!("should have been kept out of the wood");
@@ -915,7 +953,7 @@ impl Local3DLoopRescaling {
 mod tests {
     use crate::{
         graph::cuts::CutSet,
-        settings::global::OrientationPattern,
+        settings::global::{MediumMode, OrientationPattern},
         utils::GS,
         uv::approx::{OrientationProjection, local_3d::Localizer},
     };
@@ -946,7 +984,11 @@ mod tests {
         let valid = vec![edgevec([1, 1, -1]), edgevec([1, -1, -1])];
         let pat = OrientationPattern::default();
         let cutset = CutSet::empty(1);
-        let loc = Localizer::new(&cutset, OrientationProjection::new(&valid, &pat));
+        let loc = Localizer::new(
+            &cutset,
+            OrientationProjection::new(&valid, &pat),
+            MediumMode::Vacuum,
+        );
         let localized = loc
             .localized_orientation_term(
                 &reduced_expression,

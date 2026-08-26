@@ -52,6 +52,8 @@ pub struct GenerationSettings {
     pub force_cuts: Vec<Vec<String>>,
     #[serde(skip_serializing_if = "is_false")]
     pub override_lmb_heuristics: bool,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub medium: MediumSettings,
 }
 
 #[cfg_attr(
@@ -678,5 +680,46 @@ impl Default for Parallelisation {
             compile: 1,
             integrate: 1,
         }
+    }
+}
+
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[trait_decode(trait = GammaLoopContext)]
+#[serde(default, deny_unknown_fields)]
+pub struct MediumSettings {
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub mode: MediumMode,
+    #[serde(skip_serializing_if = "is_false")]
+    pub vacuum_subtraction: bool,
+}
+
+impl Default for MediumSettings {
+    fn default() -> Self {
+        Self {
+            mode: MediumMode::Vacuum,
+            vacuum_subtraction: false,
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema,
+)]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
+pub enum MediumMode {
+    #[default]
+    Vacuum,
+    ThermodynamicEquilibrium,
+    ZeroTemperatureEquilibrium,
+}
+
+impl MediumMode {
+    pub fn is_finite_temperature(&self) -> bool {
+        matches!(self, MediumMode::ThermodynamicEquilibrium)
     }
 }

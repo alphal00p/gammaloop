@@ -1481,6 +1481,7 @@ impl CrossSectionGraph {
             &contract_edges,
             &canonize_esurface,
             &settings.orientation_pattern,
+            settings.medium.mode,
         )?;
 
         let cut_esurface_map = self
@@ -1725,7 +1726,7 @@ impl CrossSectionGraph {
             cut_structure,
             vakint,
             OrientationProjection::new(&valid_orientations, &settings.orientation_pattern),
-            &settings.uv,
+            settings,
         )?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "supergraph_parametric_orchestration_done",
@@ -2936,7 +2937,7 @@ impl CrossSectionGraph {
                 cut_structure,
                 vakint,
                 OrientationProjection::new(&valid_orientations, &settings.orientation_pattern),
-                &settings.uv,
+                settings,
             )?
             .into_iter();
 

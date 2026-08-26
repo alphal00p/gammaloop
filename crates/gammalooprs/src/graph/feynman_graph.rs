@@ -25,11 +25,16 @@ use crate::{
     cff::generation::ShiftRewrite,
     integrands::process::param_builder::{ParamBuilderGraph, SplitPolarizations},
     model::{ArcParticle, Model},
-    momentum::sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
-    momentum::signature::{ExternalSignature, SignatureLike},
-    momentum::{PolDef, SignOrZero},
+    momentum::{
+        PolDef, SignOrZero,
+        sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
+        signature::{ExternalSignature, SignatureLike},
+    },
     numerator::graph::ReversibleEdge,
-    utils::{F, FloatLike, GS, external_energy_atom_from_index, ose_atom_from_index},
+    utils::{
+        F, FloatLike, GS, external_energy_atom_from_index, ose_atom_from_index,
+        symbols::ThermalDistributionLimit,
+    },
     uv::uv_graph::UVE,
 };
 
@@ -129,6 +134,17 @@ where
         self.1.explicit_ose_atom(edge)
     }
 
+    fn explicit_thermal_distribution_atom(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+        limit: ThermalDistributionLimit,
+    ) -> Option<Atom> {
+        self.1
+            .explicit_thermal_distribution_atom(edge, derivative_order, thermal_sign, limit)
+    }
+
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom> {
         lmb.loop_edges
             .iter()
@@ -178,6 +194,82 @@ where
                 * GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([3])));
 
         (dot + mass2).sqrt()
+    }
+
+    fn explicit_thermal_distribution_atom(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+        limit: ThermalDistributionLimit,
+    ) -> Option<Atom> {
+        match limit {
+            ThermalDistributionLimit::Default => {
+                let chemical_potential = self[edge].chemical_potential_atom();
+                let shifted_ose = match chemical_potential {
+                    Some(mu) => ose_atom_from_index(edge) - GS.sign(edge) * mu,
+                    None => ose_atom_from_index(edge),
+                };
+
+                let beta = Atom::var(GS.inverse_temperature);
+                let arg = beta.clone() * shifted_ose / Atom::num(2);
+                let tanh_arg = GS.tanh(arg.clone());
+                let tanh_squared = tanh_arg.clone() * tanh_arg.clone();
+
+                let is_fermion = self[edge].is_fermion();
+
+                match (is_fermion, derivative_order) {
+                    (true, 0) => Some((thermal_sign + tanh_arg.clone()) / Atom::num(2)),
+                    (false, 0) => {
+                        Some((thermal_sign + Atom::num(1) / tanh_arg.clone()) / Atom::num(2))
+                    }
+                    (true, 1) => {
+                        Some(-beta.clone() * (Atom::num(1) - tanh_squared.clone()) / Atom::num(4))
+                    }
+                    (false, 1) => Some(
+                        beta.clone() * (Atom::num(1) / tanh_squared.clone() - Atom::num(1))
+                            / Atom::num(4),
+                    ),
+                    (true, 2) => Some(
+                        -beta.clone()
+                            * beta.clone()
+                            * (Atom::num(1) - tanh_squared.clone())
+                            * tanh_arg.clone()
+                            / Atom::num(4),
+                    ),
+                    (false, 2) => Some(
+                        beta.clone()
+                            * beta.clone()
+                            * (Atom::num(1) / tanh_squared.clone() - Atom::num(1))
+                            * (Atom::num(1) / tanh_arg.clone())
+                            / Atom::num(4),
+                    ),
+                    (_, _) => None,
+                }
+            }
+            ThermalDistributionLimit::ZeroTemperature => {
+                let chemical_potential = self[edge].chemical_potential_atom();
+                let shifted_ose = match chemical_potential {
+                    Some(mu) => ose_atom_from_index(edge) - GS.sign(edge) * mu,
+                    None => ose_atom_from_index(edge),
+                };
+                let chemical_potential = self[edge].chemical_potential_atom();
+                match (chemical_potential, derivative_order) {
+                    (Some(_), 0) => {
+                        Some(thermal_sign.clone() * GS.heaviside(thermal_sign * shifted_ose))
+                    }
+                    (None, 0) => Some((Atom::num(1) + thermal_sign) / Atom::num(2)),
+                    (None, _) => Some(Atom::num(0)),
+                    // TODO: distribution derivatives with chemical potential not yet
+                    // supported at zero temperature
+                    _ => None,
+                }
+            }
+            ThermalDistributionLimit::Vacuum => match derivative_order {
+                0 => Some((Atom::num(1) + thermal_sign) / Atom::num(2)),
+                _ => Some(Atom::num(0)),
+            },
+        }
     }
 
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom> {
@@ -260,6 +352,21 @@ impl ParamBuilderGraph for Graph {
 
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom {
         self.underlying.explicit_ose_atom(edge)
+    }
+
+    fn explicit_thermal_distribution_atom(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+        limit: ThermalDistributionLimit,
+    ) -> Option<Atom> {
+        self.underlying.explicit_thermal_distribution_atom(
+            edge,
+            derivative_order,
+            thermal_sign,
+            limit,
+        )
     }
 
     #[allow(unused_variables)]
