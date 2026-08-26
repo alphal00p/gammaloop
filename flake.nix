@@ -3215,6 +3215,17 @@
             ALPHAL00P_DOCS_GIT_COMMIT = nixCiBarrierRevision;
             ALPHAL00P_DOCS_GIT_TIMESTAMP = toString self.lastModified;
             buildPhaseCargoCommand = ''
+              # Exercise stale global routes and existing product channels in the
+              # single cached snapshot render, then remove the fixture-only files.
+              mkdir -p "$out/developers" \
+                "$out/.staging" \
+                "$out/products/gammaloop/latest" \
+                "$out/products/gammaloop/snapshots/legacy"
+              printf 'removed developer route\n' > "$out/developers/removed-before-rebuild.txt"
+              printf 'stale staging\n' > "$out/.staging/incomplete.txt"
+              printf 'latest route\n' > "$out/products/gammaloop/latest/.note"
+              printf 'product redirect\n' > "$out/products/gammaloop/index.html"
+              printf 'historical snapshot\n' > "$out/products/gammaloop/snapshots/legacy/.note"
               cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- \
                 build \
                 --product all \
@@ -3222,6 +3233,14 @@
                 --snapshot-tag v0.3.4 \
                 --output "$out" \
                 --rustdoc-target-root ${lib.escapeShellArg alphal00pDocsCargoTargetRoot}
+              test ! -e "$out/developers/removed-before-rebuild.txt"
+              test ! -e "$out/.staging"
+              grep -Fq 'latest route' "$out/products/gammaloop/latest/.note"
+              grep -Fq 'product redirect' "$out/products/gammaloop/index.html"
+              grep -Fq 'historical snapshot' "$out/products/gammaloop/snapshots/legacy/.note"
+              rm -r "$out/products/gammaloop/latest" \
+                "$out/products/gammaloop/snapshots/legacy" \
+                "$out/products/gammaloop/index.html"
               python3 scripts/check-docs-html.py "$out"
 
               for product in gammaloop linnet spenso idenso vakint; do
@@ -3409,7 +3428,8 @@
               if [ -d target ]; then
                 chmod -R u+w target
               fi
-              cargoWithProfile test --doc ${ciArgs.cargoExtraArgs}
+              cargoWithProfile test --doc ${ciArgs.cargoExtraArgs} \
+                --exclude alphal00p-docs-python-exporter
             '';
             checkPhaseCargoCommand = "";
             doCheck = false;

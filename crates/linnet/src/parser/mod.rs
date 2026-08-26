@@ -40,6 +40,8 @@
 //! [`HedgeGraph::dot_serialize_io`] or [`HedgeGraph::dot_serialize_fmt`]. Those
 //! methods take graph-level metadata plus mappings for half-edge, edge, and node
 //! payloads; parsing does not implicitly convert DOT payloads into user types.
+//! Canonical output reserves the ID namespace beginning with `__linnet_hex_id_`
+//! to transport strings ending in a backslash, which dot-parser cannot quote.
 //!
 //! [`HedgeGraph`]: crate::half_edge::HedgeGraph
 
@@ -72,26 +74,50 @@ use crate::{
     permutation::Permutation,
 };
 
+const HEX_DOT_ID_PREFIX: &str = "__linnet_hex_id_";
+
 /// Strips surrounding quotes from a string if present and decodes the escapes
 /// emitted by this module's canonical DOT serializer.
 pub(crate) fn strip_quotes(s: &str) -> String {
-    let Some(inner) = s
+    let inner = s
         .strip_prefix('"')
         .and_then(|value| value.strip_suffix('"'))
         .or_else(|| {
             s.strip_prefix('\'')
                 .and_then(|value| value.strip_suffix('\''))
-        })
-    else {
-        return s.to_owned();
-    };
-    let mut output = String::with_capacity(inner.len());
-    let mut chars = inner.chars().peekable();
-    while let Some(character) = chars.next() {
-        if character == '\\' && matches!(chars.peek(), Some('"')) {
-            output.push(chars.next().expect("peeked character"));
-        } else {
-            output.push(character);
+        });
+    let mut output = inner.map_or_else(
+        || s.to_owned(),
+        |inner| {
+            let mut output = String::with_capacity(inner.len());
+            let mut chars = inner.chars().peekable();
+            while let Some(character) = chars.next() {
+                if character == '\\' && matches!(chars.peek(), Some('"')) {
+                    output.push(chars.next().expect("peeked character"));
+                } else {
+                    output.push(character);
+                }
+            }
+            output
+        },
+    );
+    if let Some(encoded) = output.strip_prefix(HEX_DOT_ID_PREFIX) {
+        if encoded.len().is_multiple_of(2) {
+            let decoded = encoded
+                .as_bytes()
+                .chunks_exact(2)
+                .map(|digits| {
+                    std::str::from_utf8(digits)
+                        .ok()
+                        .and_then(|digits| u8::from_str_radix(digits, 16).ok())
+                })
+                .collect::<Option<Vec<_>>>();
+            if let Some(decoded) = decoded
+                .and_then(|bytes| String::from_utf8(bytes).ok())
+                .filter(|decoded| decoded.ends_with('\\') || decoded.starts_with(HEX_DOT_ID_PREFIX))
+            {
+                output = decoded;
+            }
         }
     }
     output
@@ -102,6 +128,17 @@ pub(crate) fn escape_dot_string(value: &str) -> String {
 }
 
 pub(crate) fn dot_id(value: &str) -> String {
+    // dot-parser treats the final `\"` of a quoted ID as an escaped quote, so
+    // use a semantic envelope that remains distinct after external DOT tools
+    // discard lexical quoting. Envelope-looking literal values are escaped too.
+    if value.ends_with('\\') || value.starts_with(HEX_DOT_ID_PREFIX) {
+        let mut encoded = String::with_capacity(HEX_DOT_ID_PREFIX.len() + value.len() * 2);
+        encoded.push_str(HEX_DOT_ID_PREFIX);
+        for byte in value.as_bytes() {
+            write!(encoded, "{byte:02x}").expect("writing to a String cannot fail");
+        }
+        return encoded;
+    }
     let keyword = matches!(
         value.to_ascii_lowercase().as_str(),
         "node" | "edge" | "graph" | "digraph" | "subgraph" | "strict"
@@ -113,6 +150,14 @@ pub(crate) fn dot_id(value: &str) -> String {
         && characters.all(|character| character.is_ascii_alphanumeric() || character == '_');
     if plain && !keyword {
         value.to_owned()
+    } else {
+        format!("\"{}\"", escape_dot_string(value))
+    }
+}
+
+pub(crate) fn dot_value(value: &str) -> String {
+    if value.ends_with('\\') || value.starts_with(HEX_DOT_ID_PREFIX) {
+        dot_id(value)
     } else {
         format!("\"{}\"", escape_dot_string(value))
     }
@@ -350,7 +395,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
         s: Str,
     ) -> Result<Self, HedgeParseError<'a, (), (), (), ()>> {
         let ast_graph: SubGraphFreeGraph = dot_parser::ast::Graph::try_from(s.as_ref())?
-            .filter_map(&|(k, v)| Some((k.into(), strip_quotes(v).to_string())))
+            .filter_map(&|(key, value)| Some((key.to_owned(), value.to_owned())))
             .into();
 
         Self::from_parser(ast_graph, Figment::new())
@@ -362,7 +407,7 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
         figment: figment::Figment,
     ) -> Result<Self, HedgeParseError<'a, (), (), (), ()>> {
         let ast_graph: SubGraphFreeGraph = dot_parser::ast::Graph::try_from(s.as_ref())?
-            .filter_map(&|(k, v)| Some((k.into(), strip_quotes(v).to_string())))
+            .filter_map(&|(key, value)| Some((key.to_owned(), value.to_owned())))
             .into();
 
         Self::from_parser(ast_graph, figment)
@@ -736,14 +781,39 @@ pub mod test {
             "node \"one" ["node-key"="a\"b\N"];
             "node \"one" -> other ["edge-key"="c\"d\l"];
         }"#;
-        let graph: DotGraph = DotGraph::from_string(source).unwrap();
+        let mut graph: DotGraph = DotGraph::from_string(source).unwrap();
+        let node_index = graph
+            .iter_nodes()
+            .find(|(_, _, node)| node.name.as_deref() == Some("node \"one"))
+            .map(|(index, _, _)| index)
+            .unwrap();
+        let edge_index = graph.iter_edges().next().unwrap().1;
+        graph
+            .global_data
+            .statements
+            .insert("global-terminal".to_owned(), "graph\\".to_owned());
+        graph[node_index]
+            .statements
+            .insert("node-terminal".to_owned(), "node\\".to_owned());
+        graph[edge_index]
+            .statements
+            .insert("edge-terminal".to_owned(), "edge\\".to_owned());
         let serialized = graph.debug_dot();
         let reparsed: DotGraph = DotGraph::from_string(&serialized).unwrap();
 
         assert_eq!(reparsed.global_data.name, "graph \"name");
+        assert_eq!(
+            reparsed
+                .global_data
+                .statements
+                .get("global-terminal")
+                .map(String::as_str),
+            Some("graph\\")
+        );
         assert!(reparsed.iter_nodes().any(|(_, _, node)| {
             node.name.as_deref() == Some("node \"one")
                 && node.statements.get("node-key").map(String::as_str) == Some("a\"b\\N")
+                && node.statements.get("node-terminal").map(String::as_str) == Some("node\\")
         }));
         assert_eq!(
             reparsed
@@ -753,10 +823,109 @@ pub mod test {
                 .map(String::as_str),
             Some("c\"d\\l")
         );
+        assert_eq!(
+            reparsed
+                .iter_edges()
+                .next()
+                .and_then(|(_, _, edge)| edge.data.statements.get("edge-terminal"))
+                .map(String::as_str),
+            Some("edge\\")
+        );
         assert_eq!(reparsed, reparsed.clone().back_and_forth_dot());
         assert!(serialized.contains("\"graph \\\"name\""));
         assert!(serialized.contains("\"node-key\"=\"a\\\"b\\N\""));
         assert!(serialized.contains("\"edge-key\"=\"c\\\"d\\l\""));
+        assert!(serialized.contains("\"global-terminal\" = __linnet_hex_id_"));
+        assert!(serialized.contains("\"node-terminal\"=__linnet_hex_id_"));
+        assert!(serialized.contains("\"edge-terminal\"=__linnet_hex_id_"));
+    }
+
+    #[test]
+    fn canonical_transport_prefix_remains_literal() {
+        let literal = "__linnet_hex_id_5c";
+        let mut graph: DotGraph = DotGraph::from_string("digraph { a -> other; }").unwrap();
+        let node_index = graph
+            .iter_nodes()
+            .find(|(_, _, node)| node.name.as_deref() == Some("a"))
+            .map(|(index, _, _)| index)
+            .unwrap();
+        let edge_index = graph.iter_edges().next().unwrap().1;
+        graph.global_data.name = literal.to_owned();
+        graph
+            .global_data
+            .statements
+            .insert("prefix".to_owned(), literal.to_owned());
+        graph
+            .global_data
+            .edge_statements
+            .insert("default-prefix".to_owned(), literal.to_owned());
+        graph[node_index].name = Some(literal.to_owned());
+        graph[node_index]
+            .statements
+            .insert("value".to_owned(), literal.to_owned());
+        graph[edge_index]
+            .statements
+            .insert("edge-prefix".to_owned(), literal.to_owned());
+        let serialized = graph.debug_dot();
+        let reparsed: DotGraph = DotGraph::from_string(&serialized).unwrap();
+        let node = reparsed
+            .iter_nodes()
+            .find(|(_, _, node)| node.name.as_deref() == Some("__linnet_hex_id_5c"))
+            .unwrap()
+            .2;
+
+        assert_eq!(reparsed.global_data.name, "__linnet_hex_id_5c");
+        assert_eq!(node.name.as_deref(), Some("__linnet_hex_id_5c"));
+        assert_eq!(
+            node.statements.get("value").map(String::as_str),
+            Some("__linnet_hex_id_5c")
+        );
+        assert_eq!(
+            reparsed
+                .global_data
+                .statements
+                .get("prefix")
+                .map(String::as_str),
+            Some("__linnet_hex_id_5c")
+        );
+        assert_eq!(
+            reparsed
+                .global_data
+                .edge_statements
+                .get("default-prefix")
+                .map(String::as_str),
+            Some("__linnet_hex_id_5c")
+        );
+        let edge = reparsed.iter_edges().next().unwrap().2;
+        assert_eq!(
+            edge.data.statements.get("edge-prefix").map(String::as_str),
+            Some("__linnet_hex_id_5c")
+        );
+        assert!(!serialized.contains("\"__linnet_hex_id_5c\""));
+        assert!(serialized.contains("__linnet_hex_id_5f5f"));
+    }
+
+    #[test]
+    fn canonical_dot_escapes_half_edge_statements() {
+        let source = r#"digraph {
+            a -> b [source="source-statement", sink="sink \"quoted\"\N"];
+        }"#;
+        let mut graph: DotGraph = DotGraph::from_string(source).unwrap();
+        let source_hedge = match graph.iter_edges().next().unwrap().0 {
+            crate::half_edge::involution::HedgePair::Paired { source, .. } => source,
+            _ => unreachable!("the test graph has one paired edge"),
+        };
+        graph[source_hedge].statement = Some("terminal-backslash\\".to_owned());
+        let serialized = graph.debug_dot();
+        let reparsed: DotGraph = DotGraph::from_string(&serialized).unwrap();
+
+        assert_eq!(
+            reparsed[source_hedge].statement.as_deref(),
+            Some("terminal-backslash\\")
+        );
+        assert_eq!(reparsed, graph.back_and_forth_dot());
+        assert!(serialized.contains("source=__linnet_hex_id_"));
+        assert!(serialized.contains("sink=\"sink \\\"quoted\\\"\\N\""));
     }
 
     #[test]

@@ -5772,7 +5772,8 @@ mod tests {
         assert!(
             suggestions
                 .iter()
-                .any(|suggestion| suggestion.description.as_deref() == Some("expects an integer")),
+                .any(|suggestion| suggestion.description.as_deref()
+                    == Some("Number of samples in the first Monte Carlo iteration.")),
             "{suggestions:?}"
         );
     }

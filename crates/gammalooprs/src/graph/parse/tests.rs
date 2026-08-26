@@ -250,7 +250,7 @@ fn parse_lmbsetting_crossection() {
     .unwrap();
 
     assert_snapshot!(g.debug_dot(),@r#"
-    digraph G{
+    digraph G {
       num = "1/2";
       overall_factor = "2*x";
       overall_factor_evaluated = "2*x";

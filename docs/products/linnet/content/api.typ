@@ -279,6 +279,8 @@ unique DOT representation. Supply a `DotCodec` to `Graph.from_dot`, `Graph.from_
 `Graph.from_dot_file`, and `Graph.to_dot`:
 
 ```python
+from dataclasses import dataclass
+
 from linnet_py import (
     DotCodec,
     DotEdgeData,

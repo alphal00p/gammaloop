@@ -147,6 +147,7 @@ type LinkValidationState<'a> = (
     &'a mut LinkedPageIndex,
     &'a mut LinkRewriteIndex,
     &'a mut LocalPathIndex,
+    Option<&'a str>,
 );
 
 #[derive(Clone, Debug)]
@@ -1819,19 +1820,30 @@ impl SiteBuilder {
         );
 
         let requested_output = absolute_from(&self.root, &request.output);
-        ensure_safe_output(&self.root, &requested_output)?;
-        let preview_work = if scope == BuildScope::ProductPreview {
+        let resolved_output = ensure_safe_output(&self.root, &requested_output)?;
+        let snapshot_build = scope == BuildScope::FullSite && tag.is_some();
+        let isolated_work = if scope == BuildScope::ProductPreview || snapshot_build {
             let target = self.root.join("target");
             fs::create_dir_all(&target)?;
-            Some(
-                TempDirBuilder::new()
-                    .prefix("alphal00p-product-preview-")
-                    .tempdir_in(target)?,
-            )
+            let work = TempDirBuilder::new()
+                .prefix(if scope == BuildScope::ProductPreview {
+                    "alphal00p-product-preview-"
+                } else {
+                    "alphal00p-snapshot-build-"
+                })
+                .tempdir_in(target)?;
+            let resolved_work = fs::canonicalize(work.path())?;
+            ensure!(
+                !resolved_work.starts_with(&resolved_output)
+                    && !resolved_output.starts_with(&resolved_work),
+                "documentation output overlaps isolated build workspace {}",
+                work.path().display()
+            );
+            Some(work)
         } else {
             None
         };
-        let output = preview_work
+        let output = isolated_work
             .as_ref()
             .map_or_else(|| requested_output.clone(), |work| work.path().join("site"));
         fs::create_dir_all(&output)
@@ -1876,11 +1888,95 @@ impl SiteBuilder {
             }
             BuildScope::ProductPreview => {
                 self.write_product_preview(&output, selected[0], request.channel, tag)?;
-                clear_stale_staging(&output)?;
             }
         }
-        self.validate_generated_links(&output, request.include_rustdoc)?;
+        clear_stale_staging(&output)?;
+        self.validate_generated_links(&output, request.include_rustdoc, tag)?;
         if scope == BuildScope::ProductPreview {
+            replace_generated_tree(&output, &requested_output)?;
+        } else if snapshot_build {
+            let tag = tag.expect("snapshot builds have a validated tag");
+            for product in &selected {
+                let relative = Path::new("products")
+                    .join(&product.id)
+                    .join("snapshots")
+                    .join(tag);
+                let generated = output.join(&relative);
+                let existing = requested_output.join(&relative);
+                if existing.exists() {
+                    ensure!(
+                        directories_equal(&generated, &existing)?,
+                        "immutable snapshot differs from {}",
+                        existing.display()
+                    );
+                }
+            }
+            // Validation normalizes generated Rustdoc links. Compare every existing
+            // snapshot before carrying the other published product routes into the
+            // validated candidate; replacing the tree then prunes stale global files.
+            if requested_output.exists() {
+                let metadata = fs::symlink_metadata(&requested_output)?;
+                ensure!(
+                    metadata.is_dir() && !metadata.file_type().is_symlink(),
+                    "documentation destination is not a directory: {}",
+                    requested_output.display()
+                );
+                for entry in WalkDir::new(&requested_output) {
+                    let entry = entry?;
+                    ensure!(
+                        entry.file_type().is_dir() || entry.file_type().is_file(),
+                        "unsupported documentation artifact {}",
+                        entry.path().display()
+                    );
+                }
+
+                for product in &selected {
+                    let existing_product = requested_output.join("products").join(&product.id);
+                    let generated_product = output.join("products").join(&product.id);
+                    let existing_index = existing_product.join("index.html");
+                    let generated_index = generated_product.join("index.html");
+                    if existing_index.exists() && !generated_index.exists() {
+                        let metadata = fs::symlink_metadata(&existing_index)?;
+                        ensure!(
+                            metadata.is_file() && !metadata.file_type().is_symlink(),
+                            "unsupported documentation artifact {}",
+                            existing_index.display()
+                        );
+                        fs::copy(&existing_index, &generated_index)?;
+                    }
+
+                    let existing_latest = existing_product.join("latest");
+                    let generated_latest = generated_product.join("latest");
+                    if existing_latest.exists() && !generated_latest.exists() {
+                        copy_tree(&existing_latest, &generated_latest)?;
+                    }
+
+                    let existing_snapshots = existing_product.join("snapshots");
+                    if existing_snapshots.exists() {
+                        let metadata = fs::symlink_metadata(&existing_snapshots)?;
+                        ensure!(
+                            metadata.is_dir() && !metadata.file_type().is_symlink(),
+                            "unsupported documentation artifact {}",
+                            existing_snapshots.display()
+                        );
+                        for entry in fs::read_dir(existing_snapshots)? {
+                            let entry = entry?;
+                            if entry.file_name() == Path::new(tag).as_os_str() {
+                                continue;
+                            }
+                            ensure!(
+                                entry.file_type()?.is_dir(),
+                                "unsupported documentation artifact {}",
+                                entry.path().display()
+                            );
+                            copy_tree(
+                                &entry.path(),
+                                &generated_product.join("snapshots").join(entry.file_name()),
+                            )?;
+                        }
+                    }
+                }
+            }
             replace_generated_tree(&output, &requested_output)?;
         }
         Ok(())
@@ -2714,7 +2810,7 @@ impl SiteBuilder {
         // the same repair before immutable snapshots are compared, otherwise
         // the first published tree is normalized only after it is copied while
         // a repeat build is compared in its fresh, unnormalized form.
-        self.validate_generated_links_in_roots(site, true, &[destination.as_path()])?;
+        self.validate_generated_links_in_roots(site, true, &[destination.as_path()], None)?;
         fs::write(
             destination.join("index.html"),
             reference_page(
@@ -4585,8 +4681,13 @@ impl SiteBuilder {
         Ok(())
     }
 
-    fn validate_generated_links(&self, output: &Path, include_rustdoc: bool) -> Result<()> {
-        self.validate_generated_links_in_roots(output, include_rustdoc, &[output])
+    fn validate_generated_links(
+        &self,
+        output: &Path,
+        include_rustdoc: bool,
+        snapshot_tag: Option<&str>,
+    ) -> Result<()> {
+        self.validate_generated_links_in_roots(output, include_rustdoc, &[output], snapshot_tag)
     }
 
     fn validate_generated_links_in_roots(
@@ -4594,6 +4695,7 @@ impl SiteBuilder {
         output: &Path,
         include_rustdoc: bool,
         roots: &[&Path],
+        snapshot_tag: Option<&str>,
     ) -> Result<()> {
         let patterns = LinkValidationPatterns::new()?;
         let documented_revision = self.git_commit();
@@ -4682,7 +4784,12 @@ impl SiteBuilder {
                             &documented_revision,
                             &mut failures,
                             &patterns,
-                            (&mut linked_pages, &mut link_rewrites, &mut local_paths),
+                            (
+                                &mut linked_pages,
+                                &mut link_rewrites,
+                                &mut local_paths,
+                                snapshot_tag,
+                            ),
                         )?;
                     }
                 }
@@ -4713,7 +4820,12 @@ impl SiteBuilder {
                         &documented_revision,
                         &mut failures,
                         &patterns,
-                        (&mut linked_pages, &mut link_rewrites, &mut local_paths),
+                        (
+                            &mut linked_pages,
+                            &mut link_rewrites,
+                            &mut local_paths,
+                            snapshot_tag,
+                        ),
                     )?;
                 }
             }
@@ -7790,7 +7902,7 @@ fn remove_symlink(path: &Path) -> std::io::Result<()> {
     }
 }
 
-fn ensure_safe_output(root: &Path, output: &Path) -> Result<()> {
+fn ensure_safe_output(root: &Path, output: &Path) -> Result<PathBuf> {
     ensure!(
         output != Path::new("/"),
         "refusing to write documentation to /"
@@ -7805,7 +7917,18 @@ fn ensure_safe_output(root: &Path, output: &Path) -> Result<()> {
             .any(|component| component == Component::ParentDir),
         "documentation output cannot contain '..'"
     );
-    Ok(())
+    let canonical_root = fs::canonicalize(root)
+        .wrap_err_with(|| format!("failed to resolve workspace root {}", root.display()))?;
+    let existing = closest_existing_directory(output)
+        .context("documentation output has no existing directory ancestor")?;
+    let canonical_existing = fs::canonicalize(&existing)
+        .wrap_err_with(|| format!("failed to resolve {}", existing.display()))?;
+    let resolved_output = canonical_existing.join(output.strip_prefix(&existing)?);
+    ensure!(
+        resolved_output != canonical_root && !canonical_root.starts_with(&resolved_output),
+        "documentation output cannot contain the workspace root"
+    );
+    Ok(resolved_output)
 }
 
 fn clear_stale_staging(output: &Path) -> Result<()> {
@@ -8936,6 +9059,31 @@ fn escape_html(value: &str) -> String {
 }
 
 fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
+    let source_metadata = fs::symlink_metadata(source)?;
+    ensure!(
+        source_metadata.is_dir() && !source_metadata.file_type().is_symlink(),
+        "documentation source is not a directory: {}",
+        source.display()
+    );
+    match fs::symlink_metadata(destination) {
+        Ok(metadata) => {
+            ensure!(
+                metadata.is_dir() && !metadata.file_type().is_symlink(),
+                "documentation destination is not a directory: {}",
+                destination.display()
+            );
+            for entry in WalkDir::new(destination) {
+                let entry = entry?;
+                ensure!(
+                    entry.file_type().is_dir() || entry.file_type().is_file(),
+                    "unsupported documentation artifact {}",
+                    entry.path().display()
+                );
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
     fs::create_dir_all(destination)?;
     for entry in WalkDir::new(source) {
         let entry = entry?;
@@ -9014,6 +9162,21 @@ fn remove_generated_path(path: &Path) -> Result<()> {
 }
 
 fn replace_generated_tree(source: &Path, destination: &Path) -> Result<()> {
+    let resolved_source = fs::canonicalize(source)
+        .wrap_err_with(|| format!("failed to resolve {}", source.display()))?;
+    let existing_destination = closest_existing_directory(destination)
+        .context("documentation destination has no existing directory ancestor")?;
+    let resolved_destination = fs::canonicalize(&existing_destination)
+        .wrap_err_with(|| format!("failed to resolve {}", existing_destination.display()))?
+        .join(destination.strip_prefix(&existing_destination)?);
+    ensure!(
+        resolved_source != resolved_destination
+            && !resolved_source.starts_with(&resolved_destination)
+            && !resolved_destination.starts_with(&resolved_source),
+        "cannot replace overlapping documentation trees {} and {}",
+        source.display(),
+        destination.display()
+    );
     remove_generated_path(destination)
         .wrap_err_with(|| format!("failed to replace {}", destination.display()))?;
     copy_tree(source, destination)
@@ -9027,6 +9190,11 @@ fn directory_files(root: &Path) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
             files.insert(
                 entry.path().strip_prefix(root)?.to_path_buf(),
                 fs::read(entry.path())?,
+            );
+        } else if !entry.file_type().is_dir() {
+            bail!(
+                "unsupported documentation artifact {}",
+                entry.path().display()
             );
         }
     }
@@ -9044,8 +9212,8 @@ fn validate_local_target(
     patterns: &LinkValidationPatterns,
     state: LinkValidationState<'_>,
 ) -> Result<()> {
-    let (linked_pages, link_rewrites, local_paths) = state;
-    let Some(resolved) = resolve_local_link(output, link.source, link.href, local_paths) else {
+    let (linked_pages, link_rewrites, local_paths, snapshot_tag) = state;
+    let Some(mut resolved) = resolve_local_link(output, link.source, link.href, local_paths) else {
         return Ok(());
     };
     let source_display = link
@@ -9060,7 +9228,7 @@ fn validate_local_target(
         ));
         return Ok(());
     }
-    let target_is_file = local_paths
+    let mut target_is_file = local_paths
         .entry(resolved.clone())
         .or_insert_with(|| {
             fs::metadata(&resolved)
@@ -9069,6 +9237,53 @@ fn validate_local_target(
         })
         .as_ref()
         .is_some_and(|file_type| file_type.is_file());
+    if !target_is_file
+        && let Some(tag) = snapshot_tag
+        && link
+            .source
+            .strip_prefix(output)
+            .is_ok_and(|source| source.starts_with("developers"))
+        && let Ok(relative) = resolved.strip_prefix(output)
+    {
+        let mut components = relative.components();
+        if matches!(components.next(), Some(Component::Normal(part)) if part == "products")
+            && let Some(Component::Normal(product)) = components.next()
+            && matches!(components.next(), Some(Component::Normal(part)) if part == "latest")
+        {
+            // Snapshot bundles are merged beside the deployed `latest` tree. Validate
+            // developer links to that tree against the same route in this snapshot.
+            let mut candidate = output
+                .join("products")
+                .join(product)
+                .join("snapshots")
+                .join(tag);
+            candidate.extend(components.map(|component| component.as_os_str()));
+            let candidate_is_directory = local_paths
+                .entry(candidate.clone())
+                .or_insert_with(|| {
+                    fs::metadata(&candidate)
+                        .ok()
+                        .map(|metadata| metadata.file_type())
+                })
+                .as_ref()
+                .is_some_and(|file_type| file_type.is_dir());
+            if candidate_is_directory {
+                candidate.push("index.html");
+            }
+            target_is_file = local_paths
+                .entry(candidate.clone())
+                .or_insert_with(|| {
+                    fs::metadata(&candidate)
+                        .ok()
+                        .map(|metadata| metadata.file_type())
+                })
+                .as_ref()
+                .is_some_and(|file_type| file_type.is_file());
+            if target_is_file {
+                resolved = candidate;
+            }
+        }
+    }
     if !target_is_file {
         let target_path = link.href.split(['?', '#']).next().unwrap_or_default();
         let inherited_rust_path = target_path.contains("::")
@@ -9527,7 +9742,7 @@ mod tests {
         fs::create_dir_all(&package).unwrap();
         fs::write(package.join("lib.typ"), "#let package-asset = true\n").unwrap();
         builder
-            .validate_generated_links(site.path(), false)
+            .validate_generated_links(site.path(), false, None)
             .unwrap();
 
         let leaked = site
@@ -9536,7 +9751,7 @@ mod tests {
         fs::create_dir_all(leaked.parent().unwrap()).unwrap();
         fs::write(&leaked, "= Changelog\n").unwrap();
         let error = builder
-            .validate_generated_links(site.path(), false)
+            .validate_generated_links(site.path(), false, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains(
             "authored Typst source was published instead of rendered: products/linnet/latest/reference/content/changelog.typ"
@@ -10515,9 +10730,43 @@ mod tests {
         .unwrap();
 
         let error = builder
-            .validate_generated_links(&output, false)
+            .validate_generated_links(&output, false, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains("escapes generated output root"));
+    }
+
+    #[test]
+    fn snapshot_developer_links_validate_against_the_same_snapshot_route() {
+        let builder = SiteBuilder::discover().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let developer = output
+            .path()
+            .join("developers/architecture/example/index.html");
+        let snapshot = output
+            .path()
+            .join("products/linnet/snapshots/v1.2.3/guides/clinnet/index.html");
+        fs::create_dir_all(developer.parent().unwrap()).unwrap();
+        fs::create_dir_all(snapshot.parent().unwrap()).unwrap();
+        fs::write(&snapshot, r#"<h1 id="python-api">Python API</h1>"#).unwrap();
+        fs::write(
+            &developer,
+            r#"<a href="/products/linnet/latest/guides/clinnet/#python-api">Clinnet</a>"#,
+        )
+        .unwrap();
+
+        builder
+            .validate_generated_links(output.path(), false, Some("v1.2.3"))
+            .unwrap();
+
+        fs::write(
+            developer,
+            r#"<a href="/products/linnet/latest/guides/misspelled/">broken</a>"#,
+        )
+        .unwrap();
+        let error = builder
+            .validate_generated_links(output.path(), false, Some("v1.2.3"))
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("guides/misspelled"));
     }
 
     #[test]
@@ -10533,10 +10782,10 @@ mod tests {
         .unwrap();
 
         builder
-            .validate_generated_links(output.path(), false)
+            .validate_generated_links(output.path(), false, None)
             .unwrap();
         let error = builder
-            .validate_generated_links(output.path(), true)
+            .validate_generated_links(output.path(), true, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains("missing.html"));
     }
@@ -10588,7 +10837,7 @@ mod tests {
         fs::write(rustdoc.join("guide"), "extensionless page").unwrap();
 
         builder
-            .validate_generated_links(output.path(), true)
+            .validate_generated_links(output.path(), true, None)
             .unwrap();
         let normalized = fs::read_to_string(rustdoc.join("index.html")).unwrap();
         assert!(normalized.contains("HREF = \"enum.Value.html#variant.Grouped\""));
@@ -10617,7 +10866,7 @@ mod tests {
         .unwrap();
 
         builder
-            .validate_generated_links_in_roots(output.path(), true, &[rustdoc.as_path()])
+            .validate_generated_links_in_roots(output.path(), true, &[rustdoc.as_path()], None)
             .unwrap();
 
         let normalized = fs::read_to_string(rustdoc.join("index.html")).unwrap();
@@ -10640,7 +10889,7 @@ mod tests {
         .unwrap();
 
         let error = builder
-            .validate_generated_links(output.path(), false)
+            .validate_generated_links(output.path(), false, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains("missing fragment"));
     }
@@ -10661,7 +10910,7 @@ mod tests {
         .unwrap();
 
         builder
-            .validate_generated_links(output.path(), false)
+            .validate_generated_links(output.path(), false, None)
             .unwrap();
     }
 
@@ -10681,7 +10930,7 @@ mod tests {
         .unwrap();
 
         let error = builder
-            .validate_generated_links(output.path(), false)
+            .validate_generated_links(output.path(), false, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains("missing fragment"));
     }
@@ -10710,7 +10959,7 @@ mod tests {
         fs::write(&search_index, &search).unwrap();
 
         let error = builder
-            .validate_generated_links(output.path(), true)
+            .validate_generated_links(output.path(), true, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains("missing fragment"));
         assert_eq!(fs::read(search_index).unwrap(), search);
@@ -10733,7 +10982,7 @@ mod tests {
         )
         .unwrap();
         builder
-            .validate_generated_links(output.path(), false)
+            .validate_generated_links(output.path(), false, None)
             .unwrap();
 
         fs::write(
@@ -10744,7 +10993,7 @@ mod tests {
         )
         .unwrap();
         let error = builder
-            .validate_generated_links(output.path(), false)
+            .validate_generated_links(output.path(), false, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains("missing repository source"));
 
@@ -10758,7 +11007,7 @@ mod tests {
             )
             .unwrap();
             let error = builder
-                .validate_generated_links(output.path(), false)
+                .validate_generated_links(output.path(), false, None)
                 .unwrap_err();
             assert!(format!("{error:#}").contains("missing repository source file"));
         }
@@ -10769,7 +11018,7 @@ mod tests {
         )
         .unwrap();
         let error = builder
-            .validate_generated_links(output.path(), false)
+            .validate_generated_links(output.path(), false, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains("does not match documented revision"));
     }
@@ -11198,7 +11447,7 @@ mod tests {
                 .write_product_preview(output.path(), product, BuildChannel::Latest, None)
                 .unwrap();
             builder
-                .validate_generated_links(output.path(), false)
+                .validate_generated_links(output.path(), false, None)
                 .unwrap();
 
             let entrypoint = fs::read_to_string(output.path().join("index.html")).unwrap();
@@ -11250,7 +11499,7 @@ mod tests {
             .unwrap();
 
         let error = builder
-            .validate_generated_links(output.path(), false)
+            .validate_generated_links(output.path(), false, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains("missing fragment"));
     }
@@ -11690,6 +11939,121 @@ mod tests {
 
         assert!(external.join("keep.txt").is_file());
         assert!(fs::symlink_metadata(output.join(".staging")).is_err());
+    }
+
+    #[test]
+    fn copying_generated_trees_requires_a_directory_source() {
+        let temporary = tempfile::tempdir().unwrap();
+        let source = temporary.path().join("source.html");
+        let destination = temporary.path().join("destination");
+        fs::write(&source, "not a generated tree").unwrap();
+
+        let error = copy_tree(&source, &destination).unwrap_err();
+
+        assert!(format!("{error:#}").contains("documentation source is not a directory"));
+        assert!(!destination.exists());
+    }
+
+    #[test]
+    fn replacing_generated_trees_rejects_overlapping_paths() {
+        let temporary = tempfile::tempdir().unwrap();
+        let destination = temporary.path().join("site");
+        let source = destination.join("candidate");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(destination.join("keep.html"), "keep").unwrap();
+
+        let error = replace_generated_tree(&source, &destination).unwrap_err();
+
+        assert!(format!("{error:#}").contains("overlapping documentation trees"));
+        assert_eq!(
+            fs::read_to_string(destination.join("keep.html")).unwrap(),
+            "keep"
+        );
+        assert!(source.is_dir());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn safe_outputs_reject_a_symlink_alias_to_the_workspace_root() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("workspace");
+        let alias = temporary.path().join("alias");
+        fs::create_dir(&root).unwrap();
+        symlink(&root, &alias).unwrap();
+
+        let error = ensure_safe_output(&root, &alias).unwrap_err();
+
+        assert!(format!("{error:#}").contains("cannot contain the workspace root"));
+        assert!(root.is_dir());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn replacing_generated_trees_resolves_symlinked_ancestors() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = tempfile::tempdir().unwrap();
+        let work = temporary.path().join("work");
+        let source = work.join("site");
+        let alias = temporary.path().join("alias");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join("keep.html"), "keep").unwrap();
+        symlink(&work, &alias).unwrap();
+
+        let error = replace_generated_tree(&source, &alias.join("site")).unwrap_err();
+
+        assert!(format!("{error:#}").contains("overlapping documentation trees"));
+        assert_eq!(
+            fs::read_to_string(source.join("keep.html")).unwrap(),
+            "keep"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copying_generated_trees_rejects_destination_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = tempfile::tempdir().unwrap();
+        let source = temporary.path().join("source");
+        let destination = temporary.path().join("destination");
+        let external = temporary.path().join("external");
+        fs::create_dir_all(source.join("developers")).unwrap();
+        fs::create_dir_all(&destination).unwrap();
+        fs::create_dir_all(&external).unwrap();
+        fs::write(source.join("developers/index.html"), "generated").unwrap();
+        fs::write(external.join("keep.html"), "keep").unwrap();
+        symlink(&external, destination.join("developers")).unwrap();
+
+        let error = copy_tree(&source, &destination).unwrap_err();
+
+        assert!(format!("{error:#}").contains("unsupported documentation artifact"));
+        assert_eq!(
+            fs::read_to_string(external.join("keep.html")).unwrap(),
+            "keep"
+        );
+        assert!(!external.join("index.html").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn immutable_directory_comparison_rejects_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = tempfile::tempdir().unwrap();
+        let generated = temporary.path().join("generated");
+        let existing = temporary.path().join("existing");
+        fs::create_dir_all(&generated).unwrap();
+        fs::create_dir_all(&existing).unwrap();
+        fs::write(generated.join("index.html"), "same").unwrap();
+        fs::write(existing.join("index.html"), "same").unwrap();
+        symlink(generated.join("index.html"), existing.join("extra.html")).unwrap();
+
+        let error = directories_equal(&generated, &existing).unwrap_err();
+
+        assert!(format!("{error:#}").contains("unsupported documentation artifact"));
     }
 
     #[test]

@@ -4,7 +4,7 @@ use itertools::Either;
 
 use crate::half_edge::NodeIndex;
 
-use super::{dot_id, escape_dot_string, strip_quotes, DotParseError, ExplicitIdKind, GlobalData};
+use super::{dot_id, dot_value, strip_quotes, DotParseError, ExplicitIdKind, GlobalData};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(
@@ -113,14 +113,14 @@ impl DotVertexData {
         let mut node_statements = BTreeMap::new();
         for (key, value) in value.attr {
             let key = strip_quotes(&key);
+            let value = strip_quotes(&value);
             match key.as_str() {
                 "style" => {
-                    if value.as_str() == "invis" {
+                    if value == "invis" {
                         is_dangling = true
                     }
                 }
                 "id" => {
-                    let value = strip_quotes(&value);
                     index = Some(NodeIndex(value.parse::<usize>().map_err(|source| {
                         DotParseError::InvalidExplicitId {
                             kind: ExplicitIdKind::Node,
@@ -130,7 +130,7 @@ impl DotVertexData {
                     })?));
                 }
                 _ => {
-                    node_statements.insert(key, strip_quotes(&value));
+                    node_statements.insert(key, value);
                 }
             }
         }
@@ -169,7 +169,7 @@ impl Display for DotVertexData {
             if !first {
                 write!(f, " ")?;
             }
-            write!(f, "{}=\"{}\"", dot_id(key), escape_dot_string(value))?;
+            write!(f, "{}={}", dot_id(key), dot_value(value))?;
             first = false;
         }
         Ok(())

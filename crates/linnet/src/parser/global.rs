@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, fmt::Display};
 use dot_parser::{ast::AttrStmt, canonical::IDEq};
 use figment::Figment;
 
-use super::{dot_id, escape_dot_string, strip_quotes};
+use super::{dot_id, dot_value, strip_quotes};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -93,13 +93,13 @@ impl Display for GlobalData {
                 if let Some(indent) = f.width() {
                     writeln!(
                         f,
-                        "{}{} = \"{}\";",
+                        "{}{} = {};",
                         vec![" "; indent].join(""),
                         dot_id(key),
-                        escape_dot_string(value)
+                        dot_value(value)
                     )?;
                 } else {
-                    write!(f, "\n{} = \"{}\";", dot_id(key), escape_dot_string(value))?;
+                    write!(f, "\n{} = {};", dot_id(key), dot_value(value))?;
                 }
             }
         }
@@ -116,7 +116,7 @@ impl Display for GlobalData {
                 if !first {
                     write!(f, ", ")?;
                 }
-                write!(f, "{} = \"{}\"", dot_id(key), escape_dot_string(value))?;
+                write!(f, "{} = {}", dot_id(key), dot_value(value))?;
                 first = false;
             }
             writeln!(f, "]")?;
@@ -134,7 +134,7 @@ impl Display for GlobalData {
                 if !first {
                     write!(f, ", ")?;
                 }
-                write!(f, "{} = \"{}\"", dot_id(key), escape_dot_string(value))?;
+                write!(f, "{} = {}", dot_id(key), dot_value(value))?;
                 first = false;
             }
             writeln!(f, "]")?;
@@ -188,7 +188,7 @@ impl TryFrom<(Vec<AttrStmt<(String, String)>>, Vec<IDEq>)> for GlobalData {
         let mut name = String::new();
         statements.retain(|k, v| {
             if k.as_str() == "name" {
-                name = strip_quotes(v);
+                name.clone_from(v);
                 false
             } else {
                 true
