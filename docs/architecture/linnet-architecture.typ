@@ -56,6 +56,11 @@ The default build resolves `DefaultNodeStore` to `NodeStorageVec`. The two fores
 stores are mutually exclusive features. The distinction matters: vector-backed node
 identification can invalidate previous `NodeIndex` values, whereas the forest-backed
 implementations preserve identification history until it is explicitly forgotten.
+`HedgeGraph::into_node_store` consumes a graph and rebuilds only its node store: node order,
+payloads, and incidence are retained, while edge and half-edge storage and IDs move unchanged.
+The conversion preserves active isolated nodes but rejects retained forest identification roots;
+callers must explicitly forget that history first when compaction and changed node IDs are
+acceptable.
 
 == Construction and data flow
 
@@ -72,6 +77,8 @@ HedgeGraphBuilder
 
 Mutation methods update all three stores. Adding an edge extends half-edge data, edge storage,
 and node incidence. Extraction and deletion partition the same half-edge set in each store.
+Complete-node extraction also moves explicitly selected empty-crown nodes, which have no
+half-edge representation in that partition.
 Joining extends the stores and then revalidates node incidence; sewing converts matched identity
 half-edges into pairs. `HedgeGraph::check` verifies involutivity and that every `EdgeIndex` points
 to the same `HedgePair` recorded by `SmartEdgeVec`. Node-store operations provide the additional
@@ -130,10 +137,11 @@ change the involution and node-incidence contracts.
 == Verification and related documentation
 
 Unit tests live beside the implementation and exercise involution and node-store consistency,
-extraction/join/sew operations, subgraphs and cuts, DOT round trips, permutations, union-find,
-topological and transitive algorithms, and optional archived views. Snapshot tests pin graph,
-cycle, ordering, and DOT representations. The default boundary is exercised with
-`cargo test -p linnet`; the `rkyv` archive path requires that feature explicitly.
+exact vector/forest conversion, extraction/join/sew operations, subgraphs and cuts, DOT round
+trips, permutations, union-find, topological and transitive algorithms, and optional archived
+views. Snapshot tests pin graph, cycle, ordering, and DOT representations. The default boundary
+is exercised with `cargo test -p linnet`; the `rkyv` archive path requires that feature
+explicitly.
 
 For supported usage, start with the
 #link("../../../products/linnet/latest/tutorial/")[first-graph tutorial], continue with the

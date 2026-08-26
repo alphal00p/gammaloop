@@ -491,7 +491,7 @@ fn manual_examples(workspace_root: &Path, registry: &Registry) -> Result<ManualE
                         ensure!(!code.trim().is_empty(), "empty text example {case}");
                         examples.data_blocks += 1;
                     }
-                    ("rs" | "c" | "form" | "typ", "syntax") => {
+                    ("rs" | "c" | "form" | "typ" | "typst", "syntax") => {
                         // The Idenso specification quotes Rust-like Symbolica
                         // patterns plus upstream C and FORM source fragments;
                         // authored Typst pages can likewise show partial import
