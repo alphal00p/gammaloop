@@ -78,9 +78,14 @@ Python strings remain data.
   Linnest, and Kurvst assets, and the `linnet` CLI used to batch-render DOT files and assemble
   grid PDFs. Every custom figure template must export `render(config)`.
 
-/ `crates/linnet-py`: Provides the declarative Python `Graph` API, typed drawing metadata and
-  render configuration, explicit DOT codecs, and module references. Its rendering methods and
-  notebook SVG display delegate to Clinnet rather than implementing a separate renderer.
+/ `crates/linnet-py`: Owns Linnet `HedgeGraph` topology through a selectable vector or forest node
+  store. It exposes declarative construction, graph-bound subgraphs, topology algorithms and
+  transformations,
+  typed drawing metadata and render configuration, explicit DOT codecs, and module references.
+  Subgraphs retain Linnet's native half-edge set and add only the zero-crown node IDs that the set
+  cannot represent, keeping isolated nodes visible to Python graph operations.
+  Its rendering methods and notebook SVG display delegate to Clinnet rather than implementing a
+  separate renderer.
 
 GammaLoop's particle policy is not part of Clinnet's generic embedded template. Python callers
 that want GammaLoop particle colors, labels, path decorations, or mode presets select the

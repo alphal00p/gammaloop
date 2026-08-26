@@ -379,12 +379,15 @@ topics = ["half-edge", "subgraph", "dot", "serialization", "algorithms"]
 review_triggers = ["crates/linnet/src/lib.rs", "crates/linnet/src/half_edge.rs", "crates/linnet/src/half_edge/**", "crates/linnet/src/parser/**", "crates/linnet/src/permutation.rs", "crates/linnet/src/tree/**", "crates/linnet/src/union_find/**", "crates/linnet/src/drawing.rs", "crates/linnet/src/num_traits.rs", "crates/linnet/Cargo.toml"]
 
 [[section.note.scope]]
+# Documentation-impact attestation 2026-08-26: the architecture note now
+# documents exact node-store conversion, retained-history rejection, and
+# explicit empty-crown extraction.
 path = "crates/linnet/src/half_edge.rs"
 symbol = "linnet::half_edge::HedgeGraph"
 anchor = "pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {"
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
 # public graph-invariant and DOT parsing documentation without changing behavior.
-digest = "899105d1558d0f52d4ea0abf0df2b7072c690aef"
+digest = "a2ee8ed749578bab2a539a59b2a2c774224d5ef8"
 
 [[section.note.scope]]
 path = "crates/linnet/src/half_edge/involution.rs"
