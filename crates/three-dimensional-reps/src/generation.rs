@@ -494,6 +494,11 @@ fn generate_3d_expression_from_parsed_generated(
     {
         return build_expression_preserving_internal_edges(parsed, options);
     }
+    if let Some(mut generated) = generate_rational_component_product(parsed, options)? {
+        generated.expression = generated.expression.fuse_compatible_variants();
+        assign_numerator_map_labels(&mut generated.expression.orientations);
+        return Ok(generated);
+    }
     if options.medium_mode != crate::MediumMode::Vacuum {
         if options.numerator_sampling_scale != NumeratorSamplingScaleMode::None {
             return Err(GenerationError::ThermalNumeratorSamplingScaleUnsupported);
@@ -527,11 +532,6 @@ fn generate_3d_expression_from_parsed_generated(
             denominator_only_global_prefactor_sign,
             core_global_prefactor_sign,
         });
-    }
-    if let Some(mut generated) = generate_rational_component_product(parsed, options)? {
-        generated.expression = generated.expression.fuse_compatible_variants();
-        assign_numerator_map_labels(&mut generated.expression.orientations);
-        return Ok(generated);
     }
 
     let bounds = normalize_energy_degree_bounds(
@@ -1544,8 +1544,10 @@ fn product_variants(
             .or_insert(1) *= sign;
     }
 
+    let mut rhs_thermal_weight = rhs.thermal_weight.clone();
+    rhs_thermal_weight.remap_internal_edges(rhs_edge_map);
     Ok(crate::expression::CFFVariant {
-        thermal_weight: lhs.thermal_weight.product(&rhs.thermal_weight),
+        thermal_weight: lhs.thermal_weight.product(&rhs_thermal_weight),
         origin: Some(format!(
             "component_product:{}:{}",
             lhs.origin.as_deref().unwrap_or("lhs"),
@@ -11357,6 +11359,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
+                medium_mode: crate::MediumMode::Vacuum,
                 representation: RepresentationMode::Cff,
                 cff_generation_context: CffGenerationContext::Standalone,
                 energy_degree_bounds: Some(vec![(3, 2), (5, 1)]),
@@ -11535,6 +11538,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
+                medium_mode: crate::MediumMode::Vacuum,
                 representation: RepresentationMode::Cff,
                 cff_generation_context: CffGenerationContext::Standalone,
                 energy_degree_bounds: Some(vec![(0, 1), (1, 1), (3, 4)]),
@@ -11573,6 +11577,7 @@ mod cff_tests {
         let expression = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
+                medium_mode: crate::MediumMode::Vacuum,
                 representation: RepresentationMode::Cff,
                 cff_generation_context: CffGenerationContext::Standalone,
                 energy_degree_bounds: Some(vec![(0, 1), (1, 1), (3, 4)]),
@@ -11666,6 +11671,7 @@ mod cff_tests {
         let beyond_quadratic = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
+                medium_mode: crate::MediumMode::Vacuum,
                 representation: RepresentationMode::Cff,
                 cff_generation_context: CffGenerationContext::Standalone,
                 energy_degree_bounds: Some(vec![(3, 2)]),
@@ -11677,6 +11683,7 @@ mod cff_tests {
         let all = generate_3d_expression_from_parsed(
             &parsed,
             &Generate3DExpressionOptions {
+                medium_mode: crate::MediumMode::Vacuum,
                 representation: RepresentationMode::Cff,
                 cff_generation_context: CffGenerationContext::Standalone,
                 energy_degree_bounds: Some(vec![(3, 2)]),
