@@ -4,8 +4,8 @@
   "title": "Idenso",
   "channel": "latest",
   "snapshot_tag": null,
-  "git_commit": "5bcbc849d361f332919214c4200a4572cad8a1a6",
-  "git_timestamp": 1787327794,
+  "git_commit": "ed5aa62ad38895524e198db9bbf1214fcd1c94ab",
+  "git_timestamp": 1787722156,
   "route": "/products/idenso/latest/",
   "components": [
     {
