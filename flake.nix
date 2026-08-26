@@ -3697,7 +3697,10 @@
             packageSourcePackages = target.packages;
             testSourcePackages = target.packages;
             runtimeTestSourcePackages = target.runtimeTestSourcePackages or target.packages;
-            extraFilesets = [ ./.config/nextest.toml ];
+            extraFilesets = [
+              ./.config/nextest.toml
+            ]
+            ++ lib.optionals (target.name == "docs") documentationDeveloperScopeSources;
           };
 
         nextestFeatureArgsFor =
@@ -3931,6 +3934,8 @@
                   rm -f ${lib.escapeShellArg nextestJunitPath}
                   cargo nextest run \
                     --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target package} \
+                    --extract-to . \
+                    --extract-overwrite \
                     --workspace-remap . \
                     ${nextestBaseExtraArgs}
                   package_status=$?
