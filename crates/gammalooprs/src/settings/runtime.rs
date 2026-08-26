@@ -254,6 +254,9 @@ pub struct GeneralSettings {
     /// Shared energy scale for numerator reconstruction when enabled during generation.
     #[serde(skip_serializing_if = "is_float::<1>")]
     pub numerator_sampling_scale: f64,
+    /// Inverse temperature used to evaluate thermal distribution functions.
+    #[serde(skip_serializing_if = "is_float::<1>")]
+    pub inverse_temperature: f64,
     /// Values assigned, in order, to extra symbolic parameters expected by the evaluator.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub additional_param_values: Vec<f64>,
@@ -284,7 +287,7 @@ impl Default for GeneralSettings {
             renormalization_localization_scale: 1000.0,
             mu_r: 1000.0,
             numerator_sampling_scale: 1.0,
-
+            inverse_temperature: 1.0,
             additional_param_values: vec![],
             integral_unit: IntegralUnit::Auto,
             disable_flux_factor: false,

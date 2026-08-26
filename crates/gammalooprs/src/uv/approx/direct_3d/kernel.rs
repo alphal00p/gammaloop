@@ -17,7 +17,8 @@ use symbolica::{
 use crate::{
     debug_tags,
     graph::{LMBext, LoopMomentumBasis},
-    utils::{GS, W_},
+    integrands::process::param_builder::{ParamBuilderGraph, ThermalDistributionReplacement},
+    utils::{GS, W_, symbols::ThermalDistributionLimit},
     uv::{
         ApproximationType, UltravioletGraph,
         approx::{ForestNodeLike, OrientationProjection, UVCtx},
@@ -261,6 +262,16 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
             simplify_non_color: false,
             ..Default::default()
         });
+    // Every local UV kernel starts from the vacuum-explicit reduced graph, including
+    // thermal runs; the medium dependence lives in the unreduced observable.
+    let integrands = integrands.map_expressions(|atom| {
+        ctx.graph.make_thermal_distributions_explicit(
+            atom,
+            ThermalDistributionLimit::Vacuum,
+            ctx.graph.iter_edges_of(&reduced).map(|(_, edge, _)| edge),
+            ThermalDistributionReplacement::All,
+        )
+    })?;
     let scope = DirectResidueBranches::numerator_scope();
     let numerator_tag = scope.1.clone();
     let integrands = integrands.multiply_key_mapped(orientation, ctx.graph, &numerator, scope)?;
@@ -273,13 +284,15 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
         branch_count = integrands.iter_keys().count(),
         "Prepared a shared numerator before its Taylor kernel"
     );
-    let started = integrands
-        .map_expressions(|atom| start(ctx, current, atom, active_subgraph.as_ref(), lmb))?;
     match current.renormalization_scheme() {
         ApproximationType::MUV | ApproximationType::PolePart => {
+            let started = integrands
+                .map_expressions(|atom| start(ctx, current, atom, active_subgraph.as_ref(), lmb))?;
             Direct3dApproximation::t(ctx, current, given, &started, lmb)
         }
         ApproximationType::IR => {
+            let started = integrands
+                .map_expressions(|atom| start(ctx, current, atom, active_subgraph.as_ref(), lmb))?;
             let t_tilde = t_tilde(
                 ctx,
                 current,
@@ -295,7 +308,11 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
                     ctx, current, given, &t_tilde, lmb,
                 )?)
         }
-        ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
+        ApproximationType::VacuumLimit => {
+            // The exact residue map already splits numerator time components; keep its
+            // energy assignment when taking the full observable's vacuum limit.
+            Ok(integrands)
+        }
         ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
         ApproximationType::Unsubtracted => panic!("should have been kept out of the wood"),
     }

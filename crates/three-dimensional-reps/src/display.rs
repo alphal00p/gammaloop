@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 use nu_ansi_term::{Color, Style as AnsiStyle};
-use symbolica::domains::rational::Rational;
+use symbolica::{atom::Atom, domains::rational::Rational};
 use tabled::{builder::Builder, settings::Style};
 
 use crate::{
@@ -254,7 +254,10 @@ fn orientation_table(
                 },
                 variant_id.to_string(),
                 origin_label(variant.origin.as_deref().unwrap_or("term"), use_color),
-                coefficient_label(&variant.prefactor, use_color),
+                coefficient_label(
+                    &(Atom::num(variant.prefactor.clone()) * variant.thermal_weight.to_atom()),
+                    use_color,
+                ),
                 factor_list(variant.uniform_scale_power, &variant.half_edges, use_color),
                 variant_surface_list(variant, use_color),
                 variant.denominator.get_num_nodes().to_string(),
@@ -352,7 +355,10 @@ fn orientation_details(
                 c("variant", Color::Blue, use_color),
                 variant_id,
                 origin_label(variant.origin.as_deref().unwrap_or("term"), use_color),
-                coefficient_label(&variant.prefactor, use_color),
+                coefficient_label(
+                    &(Atom::num(variant.prefactor.clone()) * variant.thermal_weight.to_atom()),
+                    use_color
+                ),
                 factor_list(variant.uniform_scale_power, &variant.half_edges, use_color),
                 variant_surface_list(variant, use_color),
                 variant.denominator.get_num_nodes(),
@@ -632,7 +638,7 @@ fn short_origin_label(origin: &str) -> String {
         .replace(":gamma=", ":γ=")
 }
 
-fn coefficient_label(coeff: &Rational, use_color: bool) -> String {
+fn coefficient_label(coeff: &Atom, use_color: bool) -> String {
     c(&coeff.to_string(), Color::Yellow, use_color)
 }
 
@@ -1112,6 +1118,7 @@ mod tests {
         denominator.insert_node(NodeId::root(), surface);
         denominator.insert_node(NodeId(2), surface);
         let variant = CFFVariant {
+            thermal_weight: crate::ThermalWeight::default(),
             origin: Some("test".to_string()),
             prefactor: Rational::one(),
             half_edges: Vec::new(),
