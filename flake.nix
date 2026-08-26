@@ -1224,8 +1224,24 @@
       };
       cranePythonFeaturesFor = package:
         sortedUnique (craneCiFeaturesFor package ++ (cranePythonExtraFeatureSets.${package} or []));
+      # The Python feature set enables optional workspace dependencies that are
+      # absent from the default resolved closure used by ordinary package builds.
+      cranePythonSourcePackageNames =
+        workspaceDependencyClosureFor workspaceDependencyNamesFor "gammaloop-api";
+      cranePythonDependencySourcePackageNames =
+        lib.filter (sourcePackage: sourcePackage != "gammaloop-api") cranePythonSourcePackageNames;
+      cranePythonExtraDependencySourcePackageNames =
+        lib.subtractLists
+        (lib.filter
+          (sourcePackage: sourcePackage != "gammaloop-api")
+          (workspaceNormalSourcePackageNamesFor "gammaloop-api"))
+        cranePythonDependencySourcePackageNames;
+      cranePythonSrc = workspacePackageSrcForSourcePackages {
+        sourcePackages = cranePythonSourcePackageNames;
+        packageSourcePackages = ["gammaloop-api"];
+      };
       cranePythonCargoArgs = let
-        featurePackages = workspaceNormalSourcePackageNamesFor "gammaloop-api";
+        featurePackages = cranePythonSourcePackageNames;
         selectedFeaturePackages =
           lib.filter (
             featurePackage:
@@ -1388,7 +1404,7 @@
         // {
           cargoArtifacts = cranePythonBuildArtifacts;
           pname = "gammaloop-api-python";
-          src = workspacePackageSrcFor "gammaloop-api";
+          src = cranePythonSrc;
           cargoExtraArgs = cranePythonCargoArgs;
           doCheck = false;
           postPatch = workspaceMissingCargoTargetsScript;
@@ -2571,20 +2587,22 @@
                 if dependency == workspaceHackPackage
                 then workspaceHackBuildArtifacts
                 else cranePackageDependencyModeArtifacts.${dependency}
-            ) (lib.filter (sourcePackage: sourcePackage != "gammaloop-api") (workspaceNormalSourcePackageNamesFor "gammaloop-api"))
+            ) cranePythonDependencySourcePackageNames
           );
           pname = "gammaloop-api-python";
           src = workspacePackageSrcForSourcePackages {
-            sourcePackages =
-              lib.filter (sourcePackage: sourcePackage != "gammaloop-api") (workspaceNormalSourcePackageNamesFor "gammaloop-api");
+            sourcePackages = cranePythonDependencySourcePackageNames;
           };
           buildPhaseCargoCommand = "cargoWithProfile build ${cranePythonCargoArgs}";
           checkPhaseCargoCommand = "";
           doCheck = false;
           preBuildWorkspaceArtifactStripPackages = ["gammaloop-api"];
           stripWorkspaceArtifacts = true;
-          preservedWorkspaceArtifactPackages = workspaceResolvedDependencyNamesFor "gammaloop-api";
-          extraDummyScript = workspaceDependencyDummyCargoTargetsScriptFor "gammaloop-api";
+          preservedWorkspaceArtifactPackages = cranePythonDependencySourcePackageNames;
+          extraDummyScript = ''
+            ${workspaceDependencyDummyCargoTargetsScriptFor "gammaloop-api"}
+            ${workspacePackageSourceRestoreInDummySrcScriptFor cranePythonExtraDependencySourcePackageNames}
+          '';
           postPatch = workspaceMissingCargoTargetsScript;
         });
 
@@ -2592,7 +2610,7 @@
         // {
           cargoArtifacts = cranePythonDependencyArtifacts;
           pname = "gammaloop-api-python-build";
-          src = workspacePackageSrcFor "gammaloop-api";
+          src = cranePythonSrc;
           cargoExtraArgs = cranePythonCargoArgs;
           postPatch = workspaceMissingCargoTargetsScript;
         });
