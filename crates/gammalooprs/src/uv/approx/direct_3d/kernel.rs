@@ -16,7 +16,8 @@ use symbolica::{
 use crate::{
     debug_tags,
     graph::{LMBext, LoopMomentumBasis},
-    utils::{GS, W_},
+    integrands::process::param_builder::{ParamBuilderGraph, ThermalDistributionReplacement},
+    utils::{GS, W_, symbols::ThermalDistributionLimit},
     uv::{
         ApproximationType, UltravioletGraph,
         approx::{ForestNodeLike, OrientationProjection, UVCtx},
@@ -271,6 +272,15 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
         .get_single_atom()
         .expect("graph numerator should be available");
     let mapped_numerator = key.map_numerator(orientation, ctx.graph, &numerator)?;
+    // Every local UV kernel starts from the vacuum-explicit reduced graph, including
+    // thermal runs; the medium dependence lives in the unreduced observable.
+    let vacuum = ctx.graph.make_thermal_distributions_explicit(
+        integrand,
+        ThermalDistributionLimit::Vacuum,
+        ctx.graph.iter_edges_of(&reduced).map(|(_, edge, _)| edge),
+        ThermalDistributionReplacement::All,
+    )?;
+    let integrand = &vacuum;
     debug_tags!(#generation, #profile, #uv, #local, #direct, #trace;
         stage = "direct_3d_taylor_mapped_numerator",
         current = %current.log_display(),
@@ -331,7 +341,11 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
             )? + &t_tilde
                 - Direct3dApproximation::t(ctx, current, given, &t_tilde, lmb)?)
         }
-        ApproximationType::VaccuumLimit => Err(eyre!("Not yet implemented VaccuumLimit")),
+        ApproximationType::VacuumLimit => {
+            // The exact residue map already splits numerator time components; keep its
+            // energy assignment when taking the full observable's vacuum limit.
+            Ok(integrand * mapped_numerator)
+        }
         ApproximationType::OS => Err(eyre!("Not yet implemented OS")),
         ApproximationType::Unsubtracted => panic!("should have been kept out of the wood"),
     }

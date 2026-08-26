@@ -243,6 +243,7 @@ pub struct ProfileSettings {
     pub seed: u64,
     pub use_f128: bool,
     pub analyse_analytically: bool,
+    pub allow_vanishing_missing_fits: bool,
     pub orientation_mode: OrientationProfileMode,
     pub fixed_uv_ray: Option<UVProfileFixedRay>,
     pub graph_id: Option<usize>,
@@ -259,6 +260,7 @@ impl Default for ProfileSettings {
             max_scale_exponent: 6.0,
             seed: 42,
             analyse_analytically: false,
+            allow_vanishing_missing_fits: false,
             use_f128: false,
             orientation_mode: OrientationProfileMode::Summed,
             fixed_uv_ray: None,
@@ -1147,7 +1149,7 @@ impl UVProfileable for Amplitude {
             stopped_early: runner.stopped.load(Ordering::Relaxed),
             per_graph,
             scales,
-            allow_vanishing_missing_fits: false,
+            allow_vanishing_missing_fits: profile_settings.allow_vanishing_missing_fits,
         })
         // results.push((inspect_res, analytic_res));
     }
@@ -1736,6 +1738,10 @@ impl UVProfileAnalysis {
                     .iter()
                     .flat_map(|lmb| {
                         lmb.subsets.iter().map(|subset| {
+                            let vanishing = subset
+                                .analysis
+                                .inspect_fit_status
+                                .missing_fit_is_vanishing();
                             let (slope, r_squared, estimated_dod) =
                                 match &subset.analysis.inspect_level {
                                     Some(analysis) => {
@@ -1758,6 +1764,9 @@ impl UVProfileAnalysis {
 
                                         (format!("{:.6}", analysis.result.slope), r2_text, dod_text)
                                     }
+                                    None if vanishing => {
+                                        ("-".to_string(), "-".to_string(), "-∞".green().to_string())
+                                    }
                                     None => ("-".to_string(), "-".to_string(), "-".to_string()),
                                 };
 
@@ -1778,9 +1787,11 @@ impl UVProfileAnalysis {
                                 } else {
                                     subset.initial_dod.to_string().green().to_string()
                                 },
-                                inspect: inspect_retry_label(
-                                    subset.analysis.inspect_level.as_ref(),
-                                ),
+                                inspect: if vanishing {
+                                    "vanishing".to_string()
+                                } else {
+                                    inspect_retry_label(subset.analysis.inspect_level.as_ref())
+                                },
                             }
                         })
                     })
@@ -1883,10 +1894,13 @@ impl UVProfileAnalysis {
                     .flat_map(|lmb| {
                         lmb.subsets.iter().flat_map(|subset| {
                             subset
-                                .per_orientation_inspect_entries
+                                .analysis
+                                .per_orientation_inspect
                                 .iter()
                                 .flatten()
                                 .map(|entry| {
+                                    let vanishing =
+                                        entry.inspect_fit_status.missing_fit_is_vanishing();
                                     let (slope, r_squared, estimated_dod) = match &entry.analysis {
                                         Some(analysis) => {
                                             let r2_text =
@@ -1913,6 +1927,11 @@ impl UVProfileAnalysis {
                                                 dod_text,
                                             )
                                         }
+                                        None if vanishing => (
+                                            "-".to_string(),
+                                            "-".to_string(),
+                                            "-∞".green().to_string(),
+                                        ),
                                         None => ("-".to_string(), "-".to_string(), "-".to_string()),
                                     };
 
@@ -1934,7 +1953,11 @@ impl UVProfileAnalysis {
                                         } else {
                                             subset.initial_dod.to_string().green().to_string()
                                         },
-                                        inspect: inspect_retry_label(entry.analysis.as_ref()),
+                                        inspect: if vanishing {
+                                            "vanishing".to_string()
+                                        } else {
+                                            inspect_retry_label(entry.analysis.as_ref())
+                                        },
                                     }
                                 })
                                 .collect::<Vec<_>>()
@@ -2431,7 +2454,11 @@ impl<'a> UVProfileRunner<'a> {
             if self.profile_settings.fail_fast
                 && res
                     .analyse(self.scales)
-                    .inspect_verdicts(UV_PROFILE_MAX_DOD, compatible_cuts.is_some())
+                    .inspect_verdicts(
+                        UV_PROFILE_MAX_DOD,
+                        compatible_cuts.is_some()
+                            || self.profile_settings.allow_vanishing_missing_fits,
+                    )
                     .any(|(_, reason)| reason.is_some())
             {
                 // Retain the completed limit (including all requested

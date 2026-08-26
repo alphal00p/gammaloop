@@ -1809,7 +1809,7 @@ impl CrossSectionGraph {
                 settings.explicit_orientation_sum_only,
             )
             .with_energy_degree_bound_reports(cff_energy_degree_bound_reports),
-            &settings.uv,
+            settings,
         )?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "supergraph_parametric_orchestration_done",
@@ -3067,7 +3067,7 @@ impl CrossSectionGraph {
                     settings.explicit_orientation_sum_only,
                 )
                 .with_energy_degree_bound_reports(cff_energy_degree_bound_reports),
-                &settings.uv,
+                settings,
             )?
             .into_iter();
 

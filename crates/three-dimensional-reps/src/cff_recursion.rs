@@ -2,7 +2,11 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{LinearEnergyExpr, ParsedGraph};
+use crate::{
+    LinearEnergyExpr, MediumMode, ParsedGraph, ThermalDistributionFactor, ThermalNumerator,
+    ThermalWeight,
+};
+use linnet::half_edge::involution::EdgeIndex;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 struct EdgeRef {
@@ -229,12 +233,132 @@ impl CffGenerationGraph {
         Self::new(vertices)
     }
 
+    fn strip_thermal_distribution_factors(
+        &mut self,
+        signs: &[i32],
+    ) -> Vec<ThermalDistributionFactor> {
+        let mut factors = Vec::new();
+        loop {
+            let self_edges = self
+                .vertices
+                .iter()
+                .flat_map(|vertex| {
+                    vertex
+                        .incoming
+                        .iter()
+                        .filter(|edge| {
+                            edge.edge_type == EdgeType::Virtual && vertex.outgoing.contains(edge)
+                        })
+                        .map(|edge| edge.edge_id)
+                })
+                .collect::<BTreeSet<_>>();
+            let mut removed = self_edges.clone();
+            factors.extend(
+                self_edges
+                    .into_iter()
+                    .map(|edge_id| ThermalDistributionFactor {
+                        edge_id: EdgeIndex(edge_id),
+                        sign: signs[edge_id],
+                        derivative_order: 0,
+                    }),
+            );
+            self.remove_virtual_edges(&removed);
+            if let Some(cycle) = self.vertices.iter().find_map(|vertex| {
+                self.detachable_cycle(
+                    &vertex.nodes,
+                    &vertex.nodes,
+                    &mut vec![vertex.nodes.clone()],
+                    &mut Vec::new(),
+                )
+            }) {
+                factors.push(ThermalDistributionFactor {
+                    edge_id: EdgeIndex(*cycle.iter().min().expect("cycle has edges")),
+                    sign: 1,
+                    derivative_order: cycle.len() - 1,
+                });
+                removed.extend(cycle.iter().copied());
+                self.remove_virtual_edges(&cycle.into_iter().collect());
+            }
+            if removed.is_empty() {
+                break;
+            }
+        }
+        factors
+    }
+
+    fn remove_virtual_edges(&mut self, edges: &BTreeSet<usize>) {
+        for vertex in &mut self.vertices {
+            vertex.incoming.retain(|edge| {
+                edge.edge_type != EdgeType::Virtual || !edges.contains(&edge.edge_id)
+            });
+            vertex.outgoing.retain(|edge| {
+                edge.edge_type != EdgeType::Virtual || !edges.contains(&edge.edge_id)
+            });
+        }
+        self.vertices
+            .retain(|vertex| !vertex.incoming.is_empty() || !vertex.outgoing.is_empty());
+    }
+
+    fn detachable_cycle(
+        &self,
+        start: &BTreeSet<usize>,
+        current: &BTreeSet<usize>,
+        visited: &mut Vec<BTreeSet<usize>>,
+        path: &mut Vec<usize>,
+    ) -> Option<Vec<usize>> {
+        for edge in self
+            .vertex(current)
+            .outgoing
+            .iter()
+            .filter(|edge| edge.edge_type == EdgeType::Virtual)
+        {
+            let Some(next) = self
+                .vertices
+                .iter()
+                .find(|vertex| vertex.incoming.contains(edge))
+            else {
+                continue;
+            };
+            if &next.nodes == start {
+                if path.is_empty() {
+                    continue;
+                }
+                let mut cycle = path.clone();
+                cycle.push(edge.edge_id);
+                let attachments = visited
+                    .iter()
+                    .filter(|nodes| {
+                        let vertex = self.vertex(nodes);
+                        vertex.incoming.iter().chain(&vertex.outgoing).any(|edge| {
+                            edge.edge_type != EdgeType::Virtual || !cycle.contains(&edge.edge_id)
+                        })
+                    })
+                    .count();
+                if attachments <= 1 {
+                    return Some(cycle);
+                }
+            } else if !visited.contains(&next.nodes) {
+                visited.push(next.nodes.clone());
+                path.push(edge.edge_id);
+                if let Some(cycle) = self.detachable_cycle(start, &next.nodes, visited, path) {
+                    return Some(cycle);
+                }
+                path.pop();
+                visited.pop();
+            }
+        }
+        None
+    }
+
     fn reverse_virtual_edge(&mut self, edge_id: usize) {
         let edge = EdgeRef {
             edge_id,
             edge_type: EdgeType::Virtual,
         };
         for vertex in &mut self.vertices {
+            if vertex.incoming.contains(&edge) && vertex.outgoing.contains(&edge) {
+                continue;
+            }
             if let Some(position) = vertex.outgoing.iter().position(|item| *item == edge) {
                 vertex.outgoing.remove(position);
                 vertex.incoming.push(edge);
@@ -248,22 +372,28 @@ impl CffGenerationGraph {
     }
 }
 
+pub(crate) struct CffSurfaceChain {
+    pub surfaces: Vec<LinearEnergyExpr>,
+    pub thermal_weight: ThermalWeight,
+    pub sign: i32,
+}
+
 pub(crate) fn enumerate_cff_surface_chains(
     parsed: &ParsedGraph,
     edge_signs: &[i32],
-) -> Vec<Vec<LinearEnergyExpr>> {
+    medium_mode: MediumMode,
+) -> Vec<CffSurfaceChain> {
     let mut graph = build_base_graph_from_parsed(parsed);
     for (edge_id, sign) in edge_signs.iter().enumerate() {
         if *sign < 0 {
             graph.reverse_virtual_edge(edge_id);
         }
     }
-    if graph.has_directed_cycle() {
+    if medium_mode == MediumMode::Vacuum && graph.has_directed_cycle() {
         return Vec::new();
     }
-
     let mut branches = Vec::new();
-    enumerate_cff_branches(&graph, parsed, &mut branches);
+    enumerate_cff_branches(&graph, parsed, edge_signs, medium_mode, &mut branches);
     branches
 }
 
@@ -321,39 +451,141 @@ fn build_base_graph_from_parsed(parsed: &ParsedGraph) -> CffGenerationGraph {
 fn enumerate_cff_branches(
     graph: &CffGenerationGraph,
     parsed: &ParsedGraph,
-    branch_acc: &mut Vec<Vec<LinearEnergyExpr>>,
+    edge_signs: &[i32],
+    medium_mode: MediumMode,
+    branch_acc: &mut Vec<CffSurfaceChain>,
 ) {
+    let mut graph = graph.clone();
+    let thermal = medium_mode != MediumMode::Vacuum;
+    let weight = ThermalWeight {
+        medium_mode,
+        distributions: if thermal {
+            graph.strip_thermal_distribution_factors(edge_signs)
+        } else {
+            Vec::new()
+        },
+        numerators: Vec::new(),
+    };
     if graph.vertices.len() < 2 {
-        branch_acc.push(Vec::new());
+        branch_acc.push(CffSurfaceChain {
+            surfaces: Vec::new(),
+            thermal_weight: weight,
+            sign: 1,
+        });
         return;
     }
-    let Some(vertex) = graph.source_sink_greedy() else {
+    // First, try to find a source or sink with connected complement.
+    // Thermal orientations can have no source or sink; then contract a vertex
+    // of degree at least three with connected complement.
+    let Some(vertex) = graph.source_sink_greedy().or_else(|| {
+        thermal
+            .then(|| {
+                graph.vertices.iter().find(|vertex| {
+                    vertex.incoming.len() + vertex.outgoing.len() >= 3
+                        && graph.has_connected_complement(&vertex.nodes)
+                })
+            })
+            .flatten()
+    }) else {
         return;
     };
-    let surface = cff_surface_for_vertex(parsed, vertex);
-    if graph.vertices.len() == 2 {
-        branch_acc.push(vec![surface]);
+    let (surface, surface_sign) = if thermal {
+        cff_surface_for_vertex_thermal(parsed, vertex)
+    } else {
+        (cff_surface_for_vertex(parsed, vertex), 1)
+    };
+    if !thermal && graph.vertices.len() == 2 {
+        branch_acc.push(CffSurfaceChain {
+            surfaces: vec![surface],
+            thermal_weight: weight,
+            sign: 1,
+        });
         return;
     }
 
     let mut emitted = false;
     for neighbour in graph.undirected_neighbours(&vertex.nodes) {
         let child = graph.contract_vertices(&vertex.nodes, &neighbour.nodes);
-        if child.has_directed_cycle() {
+        if !thermal && child.has_directed_cycle() {
             continue;
         }
+        let mut branch_weight = weight.clone();
+        let mut sign = 1;
+        if thermal {
+            // Edges joining the contracted vertices carry the thermal numerator
+            // for that contraction, with outgoing minus incoming ordering.
+            let outgoing = vertex
+                .outgoing
+                .iter()
+                .filter(|edge| neighbour.incoming.contains(edge))
+                .map(|edge| EdgeIndex(edge.edge_id))
+                .collect();
+            let incoming = vertex
+                .incoming
+                .iter()
+                .filter(|edge| neighbour.outgoing.contains(edge))
+                .map(|edge| EdgeIndex(edge.edge_id))
+                .collect();
+            let (numerator, numerator_sign) =
+                ThermalNumerator::from_edge_lists_canonicalized(outgoing, incoming);
+            sign = surface_sign * numerator_sign;
+            if !numerator.is_trivial() {
+                branch_weight.numerators.push(numerator);
+            }
+        }
         let mut sub = Vec::new();
-        enumerate_cff_branches(&child, parsed, &mut sub);
+        enumerate_cff_branches(&child, parsed, edge_signs, medium_mode, &mut sub);
         for mut chain in sub {
-            let mut full_chain = vec![surface.clone()];
-            full_chain.append(&mut chain);
-            branch_acc.push(full_chain);
+            chain.surfaces.insert(0, surface.clone());
+            chain.thermal_weight = branch_weight.product(&chain.thermal_weight);
+            chain.sign *= sign;
+            branch_acc.push(chain);
             emitted = true;
         }
     }
-    if !emitted {
-        branch_acc.push(vec![surface]);
+    if !emitted && !thermal {
+        branch_acc.push(CffSurfaceChain {
+            surfaces: vec![surface],
+            thermal_weight: weight,
+            sign: 1,
+        });
     }
+}
+
+fn cff_surface_for_vertex_thermal(
+    parsed: &ParsedGraph,
+    vertex: &CffVertex,
+) -> (LinearEnergyExpr, i32) {
+    let virtual_ids = |edges: &[EdgeRef]| {
+        edges
+            .iter()
+            .filter(|edge| edge.edge_type == EdgeType::Virtual)
+            .map(|edge| edge.edge_id)
+            .collect::<Vec<_>>()
+    };
+    let incoming = virtual_ids(&vertex.incoming);
+    let outgoing = virtual_ids(&vertex.outgoing);
+    // Canonicalize an H-surface with the larger positive side, using the
+    // smaller edge IDs as the tie break when the two sides have equal size.
+    let flip = match incoming.len().cmp(&outgoing.len()) {
+        std::cmp::Ordering::Greater => true,
+        std::cmp::Ordering::Less => false,
+        std::cmp::Ordering::Equal => outgoing > incoming,
+    };
+    let sign = if flip { -1 } else { 1 };
+    let mut expr = LinearEnergyExpr::zero();
+    for edge in outgoing {
+        expr = expr + LinearEnergyExpr::ose(EdgeIndex(edge), i64::from(sign));
+    }
+    for edge in incoming {
+        expr = expr + LinearEnergyExpr::ose(EdgeIndex(edge), -i64::from(sign));
+    }
+    let mut shift = boundary_external_shift_from_internal_labels(parsed, &vertex.nodes);
+    add_initial_state_cut_external_shift(parsed, vertex, &mut shift);
+    for (edge, coeff) in shift {
+        expr = expr + LinearEnergyExpr::external(EdgeIndex(edge), -i64::from(sign * coeff));
+    }
+    (expr.canonical(), sign)
 }
 
 fn cff_surface_for_vertex(parsed: &ParsedGraph, vertex: &CffVertex) -> LinearEnergyExpr {
@@ -460,11 +692,57 @@ mod tests {
                     }
                 })
                 .collect::<Vec<_>>();
-            enumerate_cff_surface_chains(&parsed, &signs)
+            enumerate_cff_surface_chains(&parsed, &signs, MediumMode::Vacuum)
                 .iter()
-                .any(|branch| branch.len() > 1)
+                .any(|branch| branch.surfaces.len() > 1)
         });
 
         assert!(has_nontrivial);
+    }
+}
+
+#[cfg(test)]
+mod thermal_tests {
+    use super::*;
+
+    #[test]
+    fn thermal_detachable_cycles_keep_distribution_derivatives() {
+        let mut parsed = crate::graph_io::test_graphs::box_graph();
+        parsed.external_edges.clear();
+        parsed.external_names.clear();
+        for edge in &mut parsed.internal_edges {
+            edge.signature.external_signature.clear();
+        }
+        for (count, derivative_order) in [(2, 1), (3, 2)] {
+            let mut cycle = parsed.clone();
+            cycle.internal_edges.truncate(count);
+            cycle.internal_edges[count - 1].head = 0;
+            let chains = enumerate_cff_surface_chains(
+                &cycle,
+                &vec![1; count],
+                MediumMode::ThermodynamicEquilibrium,
+            );
+            assert_eq!(chains.len(), 1);
+            assert!(chains[0].surfaces.is_empty());
+            assert_eq!(
+                chains[0].thermal_weight.distributions,
+                vec![ThermalDistributionFactor {
+                    edge_id: EdgeIndex(0),
+                    sign: 1,
+                    derivative_order,
+                }]
+            );
+        }
+    }
+
+    #[test]
+    fn thermal_cycles_with_multiple_attachments_are_not_stripped() {
+        let parsed = crate::graph_io::test_graphs::box_graph();
+        let mut graph = build_base_graph_from_parsed(&parsed);
+        assert!(graph.strip_thermal_distribution_factors(&[1; 4]).is_empty());
+        let chains =
+            enumerate_cff_surface_chains(&parsed, &[1; 4], MediumMode::ThermodynamicEquilibrium);
+        assert!(!chains.is_empty());
+        assert!(chains.iter().all(|chain| !chain.surfaces.is_empty()));
     }
 }

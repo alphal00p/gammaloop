@@ -267,6 +267,8 @@ pub struct CFFVariant {
     pub origin: Option<String>,
     #[serde(with = "crate::utils::serde_atom")]
     pub prefactor: Atom,
+    #[serde(default)]
+    pub thermal_weight: crate::ThermalWeight,
     pub half_edges: Vec<EdgeIndex>,
     pub denominator_edges: Vec<EdgeIndex>,
     /// Product of denominator-orientation signs already absorbed in
@@ -314,10 +316,12 @@ impl CFFVariant {
             * half_edge_factor
             * scale_factor
             * numerator_surface_factor
+            * self.thermal_weight.to_atom()
             * self.denominator.to_atom_inv()
     }
 
     pub fn remap_energy_edge_indices(&mut self, edge_map: &EnergyEdgeIndexMap) {
+        self.thermal_weight.remap_internal_edges(&edge_map.internal);
         self.half_edges = self
             .half_edges
             .iter()
@@ -442,6 +446,7 @@ impl ResidualDenominator {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct VariantFusionKey {
+    thermal_weight: crate::ThermalWeight,
     prefactor: String,
     origin: Option<String>,
     half_edges: Vec<usize>,
@@ -454,6 +459,7 @@ struct VariantFusionKey {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct VariantChainKey {
+    thermal_weight: crate::ThermalWeight,
     origin: Option<String>,
     half_edges: Vec<usize>,
     denominator_edges: Vec<usize>,
@@ -495,6 +501,7 @@ impl OrientationExpression {
             loop_energy_map: Vec::new(),
             edge_energy_map,
             variants: vec![CFFVariant {
+                thermal_weight: crate::ThermalWeight::default(),
                 origin: Some("lower_sector_unit".to_string()),
                 prefactor: rational_coeff_one(),
                 half_edges: Vec::new(),
@@ -543,6 +550,7 @@ impl OrientationExpression {
             variant.numerator_surfaces.sort();
             for chain in denominator_tree_chains(&variant.denominator) {
                 let key = VariantChainKey {
+                    thermal_weight: variant.thermal_weight.clone(),
                     origin: variant.origin.clone(),
                     half_edges: variant.half_edges.iter().map(|edge| edge.0).collect(),
                     denominator_edges: variant
@@ -573,6 +581,7 @@ impl OrientationExpression {
             }
             groups
                 .entry(VariantFusionKey {
+                    thermal_weight: key.thermal_weight,
                     prefactor: rational_coeff_atom(contribution.prefactor).to_canonical_string(),
                     origin: key.origin,
                     half_edges: key.half_edges,
@@ -589,6 +598,7 @@ impl OrientationExpression {
         self.variants = groups
             .into_iter()
             .map(|(key, chains)| CFFVariant {
+                thermal_weight: key.thermal_weight,
                 origin: key.origin,
                 prefactor: symbolica::parse!(&key.prefactor),
                 half_edges: key.half_edges.into_iter().map(EdgeIndex).collect(),
@@ -1299,6 +1309,7 @@ mod tests {
 
     fn cut_variant(denominator_edges: &[usize], support_signs: &[(&[usize], i64)]) -> CFFVariant {
         CFFVariant {
+            thermal_weight: crate::ThermalWeight::default(),
             origin: Some("cut_support_test".to_string()),
             prefactor: rational_coeff_one(),
             half_edges: Vec::new(),

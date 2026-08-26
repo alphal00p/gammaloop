@@ -113,6 +113,7 @@ impl GammaLoopCFFVariant for CFFVariant {
             .unwrap_or_else(|| Atom::num(1));
 
         self.prefactor.clone()
+            * self.thermal_weight.to_atom()
             * half_edge_factor
             * scale_factor
             * numerator_surface_factor

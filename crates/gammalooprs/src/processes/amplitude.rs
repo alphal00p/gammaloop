@@ -1046,6 +1046,10 @@ impl AmplitudeGraph {
                     .run_time_settings
                     .general
                     .mu_r_sq())));
+                param_builder.inverse_temperature_value(Complex::new_re(F(config
+                    .run_time_settings
+                    .general
+                    .inverse_temperature)));
 
                 // println!("\nParamBuilder parameters:\n{}", param_builder);
 
@@ -1246,7 +1250,7 @@ impl AmplitudeGraph {
                 &settings.orientation_pattern,
                 settings.explicit_orientation_sum_only,
             ),
-            &settings.uv,
+            settings,
         )?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "amplitude_graph_parametric_orchestration_done",
@@ -1428,7 +1432,7 @@ impl AmplitudeGraph {
                 &settings.orientation_pattern,
                 settings.explicit_orientation_sum_only,
             ),
-            &settings.uv,
+            settings,
         )?;
 
         for expr in exprs.into_iter() {

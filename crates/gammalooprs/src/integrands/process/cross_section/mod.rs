@@ -1462,6 +1462,9 @@ impl GraphTerm for CrossSectionGraphTerm {
             .mu_r_sq_value(Complex::new_re(F(settings.general.mu_r_sq())));
         self.graph
             .param_builder
+            .inverse_temperature_value(Complex::new_re(F(settings.general.inverse_temperature)));
+        self.graph
+            .param_builder
             .numerator_sampling_scale_value(Complex::new_re(F(settings
                 .general
                 .numerator_sampling_scale)));

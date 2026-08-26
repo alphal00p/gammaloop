@@ -11,6 +11,8 @@ use crate::{
 
 #[derive(Debug, Error)]
 pub enum EvaluationError {
+    #[error("standalone diagnostic evaluation does not yet accept thermal distribution inputs")]
+    ThermalDistributionInputsUnsupported,
     #[error("invalid JSON: {0}")]
     Json(#[from] serde_json::Error),
     #[error("{0}")]
@@ -206,6 +208,14 @@ pub fn evaluate_expression(
     numerator_expr: &str,
     input: &EvaluationInput,
 ) -> Result<EvaluationResult> {
+    if expression
+        .orientations
+        .iter()
+        .flat_map(|orientation| &orientation.variants)
+        .any(|variant| variant.thermal_weight.medium_mode != crate::MediumMode::Vacuum)
+    {
+        return Err(EvaluationError::ThermalDistributionInputsUnsupported);
+    }
     let numerator = NumeratorExpr::parse(numerator_expr)?;
     let evaluator = ExpressionEvaluator::new(parsed, expression, input);
     evaluator.evaluate(&numerator)

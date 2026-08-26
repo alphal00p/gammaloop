@@ -255,7 +255,10 @@ fn orientation_table(
                 },
                 variant_id.to_string(),
                 origin_label(variant.origin.as_deref().unwrap_or("term"), use_color),
-                coefficient_label(&variant.prefactor, use_color),
+                coefficient_label(
+                    &(variant.prefactor.clone() * variant.thermal_weight.to_atom()),
+                    use_color,
+                ),
                 factor_list(variant.uniform_scale_power, &variant.half_edges, use_color),
                 variant_surface_list(variant, use_color),
                 variant.denominator.get_num_nodes().to_string(),
@@ -353,7 +356,10 @@ fn orientation_details(
                 c("variant", Color::Blue, use_color),
                 variant_id,
                 origin_label(variant.origin.as_deref().unwrap_or("term"), use_color),
-                coefficient_label(&variant.prefactor, use_color),
+                coefficient_label(
+                    &(variant.prefactor.clone() * variant.thermal_weight.to_atom()),
+                    use_color
+                ),
                 factor_list(variant.uniform_scale_power, &variant.half_edges, use_color),
                 variant_surface_list(variant, use_color),
                 variant.denominator.get_num_nodes(),
@@ -1118,6 +1124,7 @@ mod tests {
         denominator.insert_node(NodeId::root(), surface);
         denominator.insert_node(NodeId(2), surface);
         let variant = CFFVariant {
+            thermal_weight: crate::ThermalWeight::default(),
             origin: Some("test".to_string()),
             prefactor: rational_coeff_one(),
             half_edges: Vec::new(),
