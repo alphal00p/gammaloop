@@ -8,6 +8,10 @@ structure, dual index matching, storage, and numerical result visible—the same
 larger Spenso network coordinates automatically. It uses a two-dimensional Euclidean
 representation as a small linear-algebra example; it is not a Lorentz-space physics example.
 
+For the shortest installation and first-run path, begin with
+#link("quickstart/rust/")[Using Spenso from Rust]. Then return here for a closer look at the
+index structure and contraction result.
+
 == Prerequisites
 
 Use Rust 1.85 or newer (Spenso uses Rust 2024 edition), then create a binary project:

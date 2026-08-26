@@ -7,6 +7,10 @@ This tutorial builds the GammaLoop command-line interface and uses the included 
 `g g -> h h h` run card to create a state that can be inspected and resumed. Compilation and
 process generation can take longer than a `--help` smoke test.
 
+For the shortest installation and first-run path, begin with
+#link("quickstart/cli/")[Using GammaLoop from the command line]. Then return here to create,
+inspect, and resume the larger bundled example.
+
 #callout("What this example establishes", [
   The card selects one fixed-helicity, one-loop amplitude contribution and supplies an
   explicit `1/8` color projector. It demonstrates software state creation, inspection, and
