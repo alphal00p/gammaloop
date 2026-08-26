@@ -115,9 +115,10 @@ class ParamCardWriter(object):
     def write_dep_param_block(self, lhablock):
         import cmath
         from .parameters import all_parameters
+        namespace = {'cmath': cmath}
         for parameter in all_parameters:
             try:
-                exec("%s = %s" % (parameter.name, parameter.value))
+                exec("%s = %s" % (parameter.name, parameter.value), namespace, namespace)
             except Exception:
                 pass
         text = "##  Not dependent paramater.\n"
@@ -133,7 +134,7 @@ class ParamCardWriter(object):
             prefix = "DECAY "
         for part, param in data:
             if isinstance(param.value, str):
-                value = complex(eval(param.value)).real
+                value = complex(eval(param.value, namespace, namespace)).real
             else:
                 value = param.value
 
