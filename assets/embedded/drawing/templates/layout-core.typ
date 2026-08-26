@@ -48,8 +48,14 @@
       _indexed(edges, edge.edge),
       ("pos", "shift", "label-pos", "label-angle", "bend", "statements"),
     ),
-    source: half-edge => _drawing-patch(_indexed(hedges, half-edge.hedge), ()),
-    sink: half-edge => _drawing-patch(_indexed(hedges, half-edge.hedge), ()),
+    source: half-edge => _drawing-patch(
+      _indexed(hedges, half-edge.hedge),
+      ("statement", "port-label", "compass"),
+    ),
+    sink: half-edge => _drawing-patch(
+      _indexed(hedges, half-edge.hedge),
+      ("statement", "port-label", "compass"),
+    ),
   )
 }
 
@@ -274,6 +280,9 @@
   let native = edge.at("data", default: none)
   if type(native) == dictionary and native.keys().contains("label") {
     return native.at("label")
+  }
+  if type(native) == dictionary and native.keys().contains("mode-label") {
+    return native.at("mode-label")
   }
   let momentum-arrows = edge-style-options.at("momentum-arrows", default: false)
   let show-momentum-index = (
@@ -700,7 +709,10 @@
       "label-anchor": if side == "left" { "east" } else { "west" },
       "momentum-index": index,
     )
-    if place and edge.at("pos", default: none) == none {
+    if place and not (
+      edge.at("pos-x-set", default: false)
+        or edge.at("pos-y-set", default: false)
+    ) {
       let x = if side == "left" {
         graph.group("left", side: "-")
       } else {
@@ -732,7 +744,7 @@
       // An explicit false show flag must suppress the mode-generated portion,
       // so preserve `none` as a deliberate label rather than falling through
       // to the particle-map default.
-      generated.insert("label", label)
+      generated.insert("mode-label", label)
     }
     // Native per-element drawing data has final precedence over mode-generated
     // side labels, momentum indices and placements.
@@ -768,7 +780,7 @@
   additional-data: (:),
   elements: (:),
   style-options: (:),
-  layout-passes: none,
+  layout-passes: ((:),),
   auto-mode: false,
 ) = {
   let graphs = graph.parse(input)

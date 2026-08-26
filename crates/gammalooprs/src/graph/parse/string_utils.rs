@@ -19,13 +19,9 @@ fn escaped_dot_string(value: &str) -> String {
 }
 
 /// Escapes raw text as a complete quoted DOT attribute value, including outer quotes.
+/// Complete statement values remain semantic strings for Linnet's serializer to escape.
 pub(crate) fn dot_attr_value(value: &str) -> String {
     format!("\"{}\"", escaped_dot_string(value))
-}
-
-/// Escapes raw text for a DOT statement value whose writer supplies the outer quotes.
-pub(crate) fn dot_statement_value(value: &str) -> String {
-    escaped_dot_string(value)
 }
 
 pub trait ToQuoted {
@@ -148,35 +144,16 @@ impl FromStripedStr for usize {
 
 #[cfg(test)]
 mod tests {
-    use linnet::parser::DotGraph;
-
-    use super::{dot_attr_value, dot_statement_value};
+    use super::dot_attr_value;
 
     const RAW_DOT_VALUE: &str = "quote:\" slash:\\ lf:\n cr:\r tab:\t";
     const ESCAPED_DOT_VALUE: &str = r#"quote:\" slash:\\ lf:\n cr:\r tab:\t"#;
 
     #[test]
     fn dot_values_escape_quoted_string_content() {
-        assert_eq!(dot_statement_value(RAW_DOT_VALUE), ESCAPED_DOT_VALUE);
         assert_eq!(
             dot_attr_value(RAW_DOT_VALUE),
             format!(r#""{ESCAPED_DOT_VALUE}""#)
-        );
-    }
-
-    #[test]
-    fn dot_statement_value_survives_dot_round_trip() {
-        let mut graph: DotGraph = DotGraph::from_string("digraph G {}").unwrap();
-        graph
-            .global_data
-            .statements
-            .insert("escaped".to_string(), dot_statement_value(RAW_DOT_VALUE));
-
-        let reparsed: DotGraph = DotGraph::from_string(graph.debug_dot()).unwrap();
-
-        assert_eq!(
-            reparsed.global_data.statements["escaped"],
-            ESCAPED_DOT_VALUE
         );
     }
 }

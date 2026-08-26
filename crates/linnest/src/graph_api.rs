@@ -140,6 +140,10 @@ pub struct TypstDotNode {
     pub name: Option<String>,
     pub data: Option<Vec<u8>>,
     pub pos: Option<TypstPoint>,
+    #[serde(rename = "pos-x-set")]
+    pub pos_x_set: bool,
+    #[serde(rename = "pos-y-set")]
+    pub pos_y_set: bool,
     pub shift: Option<TypstPoint>,
     pub statements: BTreeMap<String, String>,
 }
@@ -166,6 +170,8 @@ pub struct TypstDotEdge {
     pub source: Option<TypstDotEndpoint>,
     pub sink: Option<TypstDotEndpoint>,
     pub pos: Option<TypstPoint>,
+    pub pos_x_set: bool,
+    pub pos_y_set: bool,
     pub shift: Option<TypstPoint>,
     pub label_pos: Option<TypstPoint>,
     pub label_angle: Option<f64>,
@@ -265,6 +271,8 @@ struct TypstGraphStructuralPatch {
     pub nodes: Vec<TypstNodeStructuralPatch>,
     #[serde(default)]
     pub edges: Vec<TypstEdgeStructuralPatch>,
+    #[serde(default)]
+    pub hedges: Vec<TypstHedgeStructuralPatch>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -295,6 +303,18 @@ struct TypstEdgeStructuralPatch {
     pub bend: Option<f64>,
     #[serde(default)]
     pub statements: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+struct TypstHedgeStructuralPatch {
+    pub index: usize,
+    #[serde(default)]
+    pub statement: Option<String>,
+    #[serde(default)]
+    pub port_label: Option<String>,
+    #[serde(default)]
+    pub compass: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -571,6 +591,27 @@ fn apply_typst_graph_structural_patch(
                 .insert("bend".to_string(), format!("{bend}rad"));
         }
         graph.graph[index].statements.extend(edge.statements);
+    }
+
+    for hedge in patch.hedges {
+        if hedge.index >= graph.graph.n_hedges() {
+            return Err(format!(
+                "Half-edge structural patch index {} is out of bounds for graph with {} half-edges",
+                hedge.index,
+                graph.graph.n_hedges()
+            ));
+        }
+
+        let data = &mut graph.graph[Hedge(hedge.index)];
+        if let Some(statement) = hedge.statement {
+            data.statement = Some(statement);
+        }
+        if let Some(port_label) = hedge.port_label {
+            data.port_label = Some(port_label);
+        }
+        if let Some(compass) = hedge.compass {
+            data.compasspt = parse_endpoint_compass(&compass)?.map(compass_pt_to_string);
+        }
     }
 
     refresh_structural_state_from_statements(graph);
@@ -1119,8 +1160,8 @@ fn add_edge_to_builder(
             point: ResolvedPoint {
                 x: (source.x + sink.x) / 2.0,
                 y: (source.y + sink.y) / 2.0,
-                x_set: true,
-                y_set: true,
+                x_set: false,
+                y_set: false,
             },
             pin: None,
             mode: PlacementMode::Start,
@@ -1200,22 +1241,20 @@ fn apply_placement_statements(
         return statements;
     };
 
-    if placement.point.x_set || placement.point.y_set {
-        statements.insert(
-            "pos".to_string(),
-            format!("{},{}", placement.point.x, placement.point.y),
-        );
-        statements.insert("pos-x-set".to_string(), placement.point.x_set.to_string());
-        statements.insert("pos-y-set".to_string(), placement.point.y_set.to_string());
-        statements.insert(
-            "pos-mode".to_string(),
-            match placement.mode {
-                PlacementMode::Start => "start",
-                PlacementMode::Pin => "pin",
-            }
-            .to_string(),
-        );
-    }
+    statements.insert(
+        "pos".to_string(),
+        format!("{},{}", placement.point.x, placement.point.y),
+    );
+    statements.insert("pos-x-set".to_string(), placement.point.x_set.to_string());
+    statements.insert("pos-y-set".to_string(), placement.point.y_set.to_string());
+    statements.insert(
+        "pos-mode".to_string(),
+        match placement.mode {
+            PlacementMode::Start => "start",
+            PlacementMode::Pin => "pin",
+        }
+        .to_string(),
+    );
 
     if let Some(pin) = &placement.pin {
         statements.insert("pin".to_string(), pin.clone());
@@ -1546,6 +1585,8 @@ fn node_view_to_output(vertex: ArchivedDotVertexView<'_>) -> TypstDotNode {
             .map(|value| value.as_str().to_string()),
         data: vertex.data.payload.as_ref().map(|value| value.to_vec()),
         pos: parse_point(&raw_statements, "pos"),
+        pos_x_set: parse_bool_statement(&raw_statements, "pos-x-set").unwrap_or(false),
+        pos_y_set: parse_bool_statement(&raw_statements, "pos-y-set").unwrap_or(false),
         shift: parse_point(&raw_statements, "shift"),
         statements: public_statements(raw_statements),
     }
@@ -1576,6 +1617,8 @@ fn edge_view_to_output(
         source: endpoints.source.map(endpoint_to_output),
         sink: endpoints.sink.map(endpoint_to_output),
         pos: parse_point(&raw_statements, "pos"),
+        pos_x_set: parse_bool_statement(&raw_statements, "pos-x-set").unwrap_or(false),
+        pos_y_set: parse_bool_statement(&raw_statements, "pos-y-set").unwrap_or(false),
         shift: parse_point(&raw_statements, "shift"),
         label_pos: parse_point(&raw_statements, "label-pos"),
         label_angle: parse_rad(&raw_statements, "label-angle"),

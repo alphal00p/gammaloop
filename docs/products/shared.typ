@@ -12,14 +12,14 @@
 #let paper = rgb("#ffffff")
 #let canvas = rgb("#f9f6f0")
 
-#let product-link(id, label: none) = {
+#let product-link(id, label: none, path: "") = {
   let shown = if label == none { id } else { label }
   let route = if docs-channel == "snapshot" {
     "../../../" + id + "/snapshots/" + docs-snapshot-tag + "/"
   } else {
     "../../" + id + "/latest/"
   }
-  link(route)[#shown]
+  link(route + path)[#shown]
 }
 
 #let source-link(path, label: none) = {

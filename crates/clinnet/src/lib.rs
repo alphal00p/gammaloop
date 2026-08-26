@@ -1091,6 +1091,7 @@ mod tests {
         fs::write(
             &assertions,
             r#"#import "layout.typ": (
+  _attach-elements,
   _apply-element-layout-constraints,
   _apply-label-offsets,
   _autogen-mode-edges,
@@ -1134,6 +1135,26 @@ mod tests {
 #assert(override-style.stroke.paint == red)
 #assert(repr(_node-index-label((vid: 3))) == repr([$n_3$]))
 #assert(repr(_momentum-index-label((momentum-index: 4), (:))) == repr([$p_4$]))
+
+#let source-drawing = (statement: "source-statement", compass: "e")
+#source-drawing.insert("port-label", "source-port")
+#let sink-drawing = (statement: "sink-statement", compass: "w")
+#sink-drawing.insert("port-label", "sink-port")
+#let attached = _attach-elements(
+  graph.build({
+    graph.node(<source>)
+    graph.node(<sink>)
+    graph.edge(graph.source(<source>, id: 0), graph.sink(<sink>, id: 1))
+  }),
+  (hedges: (source-drawing, sink-drawing)),
+)
+#let attached-edge = graph.edges(attached).first()
+#assert(attached-edge.source.statement == "source-statement")
+#assert(attached-edge.source.at("port-label") == "source-port")
+#assert(attached-edge.source.compass == "e")
+#assert(attached-edge.sink.statement == "sink-statement")
+#assert(attached-edge.sink.at("port-label") == "sink-port")
+#assert(attached-edge.sink.compass == "w")
 
 #let constrained-base = graph.build({
   graph.node(<left>, pos: graph.pos(x: 0, y: 0, mode: "pin"))
@@ -1205,6 +1226,19 @@ mod tests {
 #assert(without-momentum.pattern == "wave")
 #assert(without-momentum.stroke.paint == black)
 
+#let explicit-partial = graph.parse(
+  "digraph explicit { 0 [id=0]; ext [style=invis]; ext -> 0 [id=0, pos=\"y:37!\"]; }",
+).first()
+#let explicit-edge = graph.edges(explicit-partial).first()
+#assert(explicit-edge.at("pos-x-set") == false)
+#assert(explicit-edge.at("pos-y-set") == true)
+#let explicit-roundtrip = graph.parse(graph.dot(explicit-partial)).first()
+#let explicit-roundtrip-edge = graph.edges(explicit-roundtrip).first()
+#assert(explicit-roundtrip-edge.at("pos-x-set") == false)
+#assert(explicit-roundtrip-edge.at("pos-y-set") == true)
+#let explicit-amplitude = _autogen-mode-edges(explicit-roundtrip, "amplitude")
+#assert(graph.edges(explicit-amplitude).first().pos == explicit-edge.pos)
+
 #let base = graph.build({
   graph.node(<a>)
   graph.node(<b>)
@@ -1257,14 +1291,18 @@ mod tests {
             .unwrap();
         let gamma_assertions = base.join("gamma-mode-assertions.typ");
         let gamma_source = r#"#import "@CORE@": (
+  _attach-elements,
   _apply-element-layout-constraints,
   _apply-label-offsets,
+  _edge-label,
   _edge-rank-same,
   _element-edge-style,
   _external-label-options,
   _layout-pass,
+  _momentum-edge-label,
   _particle-label,
   _resolved-mode,
+  autogen-external-edge-fields,
 )
 #import "@PHYSICS@" as physics
 #import "@GRAPH@" as graph
@@ -1273,6 +1311,21 @@ mod tests {
 #let explicit-map = ("fake": (label: [override]))
 #let particle-map = physics.default-map + fake-style.map + explicit-map
 #let edge = (fields: (particle: "fake"), data: (:), edge: 2)
+#let gamma-source-drawing = (statement: "gamma-source", compass: "e")
+#gamma-source-drawing.insert("port-label", "gamma-port")
+#let gamma-attached = _attach-elements(
+  graph.build({
+    graph.node(<gamma-a>)
+    graph.node(<gamma-b>)
+    graph.edge(graph.source(<gamma-a>, id: 0), graph.sink(<gamma-b>, id: 1))
+  }),
+  (hedges: (gamma-source-drawing, (:))),
+  graph: graph,
+)
+#let gamma-source = graph.edges(gamma-attached).first().source
+#assert(gamma-source.statement == "gamma-source")
+#assert(gamma-source.at("port-label") == "gamma-port")
+#assert(gamma-source.compass == "e")
 #assert(_external-label-options((show-particle: false, show-edge-index: false)) == (
   include-particle: false,
   include-index: false,
@@ -1308,6 +1361,35 @@ mod tests {
 )
 #assert(type(particle-only) == content)
 #assert(repr(particle-only).contains("override"))
+
+#let generated-base = graph.build({
+  graph.node(<external>)
+  graph.edge(graph.sink(<external>), particle: "fake")
+})
+#let generated = autogen-external-edge-fields(
+  generated-base,
+  graph: graph,
+  physics: physics,
+  particle-map: particle-map,
+)
+#let generated-edge = graph.edges(generated).first()
+#assert(generated-edge.data.keys().contains("mode-label"))
+#assert(not generated-edge.data.keys().contains("label"))
+#assert(repr(_momentum-edge-label(
+  generated-edge,
+  "plain",
+  (:),
+)) == repr(generated-edge.data.at("mode-label")))
+#assert(repr(_edge-label([configured], generated-edge)) == repr([configured]))
+#assert(_edge-label(none, generated-edge) == none)
+#let element-label = graph.map(
+  generated,
+  edge: edge => (data: edge.data + (label: [element],)),
+)
+#assert(repr(_edge-label(
+  [configured],
+  graph.edges(element-label).first(),
+)) == repr([element]))
 
 // Match the generated GammaLoop wrapper contract: the explicit map is spread
 // once, then merged above the generated and model-neutral maps.

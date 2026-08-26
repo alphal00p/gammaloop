@@ -199,10 +199,13 @@ topics = ["drawing", "typst"]
 review_triggers = ["crates/gammaloop-api/src/commands/save.rs", "crates/gammaloop-api/src/templates.rs", "crates/gammalooprs/src/graph/parse/from_dot.rs", "crates/gammalooprs/src/model/mod.rs", "crates/linnest/typst/**", "assets/embedded/drawing/**"]
 
 [[section.note.scope]]
+# No-impact attestation 2026-08-26: extraction checks now follow the drawing
+# mode defaults from the thin figure wrapper to their layout-core owner; the
+# embedded-template extraction contract is unchanged.
 path = "crates/gammaloop-api/src/templates.rs"
 symbol = "gammaloop_api::templates::Assets::extract_templates"
 anchor = "pub fn extract_templates<P: AsRef<Path>>"
-digest = "6a4b2fc71790f146c77bc6686401f3094eea2430"
+digest = "5f308342e83cc108e15ed79119f069e925692b59"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
@@ -395,7 +398,9 @@ symbol = "linnet::half_edge::involution::Involution"
 anchor = "pub struct Involution<E = EdgeIndex> {"
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
 # public involution invariants and terminology without changing behavior.
-digest = "6e8478c6f7cae54185a93ab8aedadc6f6d8fc937"
+# The 2026-08-27 serializer fix quotes endpoint statements without changing
+# graph invariants.
+digest = "2c3b0f19a5d4a991b493c75e3b0bb3294be302d6"
 
 [[section.note.scope]]
 path = "crates/linnet/src/half_edge/subgraph.rs"
@@ -415,7 +420,9 @@ anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = Default
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
 # documented DOT parser path, added a round trip, and qualified its macro link.
 # The 2026-08-26 serializer cleanup only omits empty attribute lists.
-digest = "65cdcb180c6779a5bdd6e08ab5214ee46aecb887"
+# The 2026-08-27 regression covers canonical endpoint-statement escaping and
+# one-pass decoding of the reserved terminal-backslash transport.
+digest = "0c85e45e482bc3862306d867973f7ffdad5d56e1"
 
 [[section.note]]
 id = "vakint-architecture"
@@ -707,13 +714,17 @@ review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/*
 # Documentation-impact attestation 2026-08-26: the CI repair completes the
 # documented per-package archive/runtime-source boundary by staging the exact
 # documentation sources and tools, restoring vendored Cargo configuration,
-# and extracting archives into the reconstructed workspace root.
+# extracting archives into the reconstructed workspace root, and isolating the
+# Python stub exporter from the feature-unified workspace doctest pass.
 path = "flake.nix"
 symbol = "alphal00pDocsCargoArtifacts"
 anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
 # No cache-architecture impact: the documentation source filter now includes the
 # double-triangle test fixture consumed by the deterministic About-page SVG.
-digest = "4d7d67e9bd879d24e2a765f234a54147489cb3f1"
+# The snapshot gate now also verifies stale routes are pruned while published
+# product channels survive; this does not change the documented cache graph.
+# Its Kurvst assertion follows the generated deployment-relative product link.
+digest = "a35d582b6828cd9a29ab1f8459958bae17a29df4"
 
 [[section]]
 id = "documentation"
@@ -743,7 +754,12 @@ anchor = "pub fn check(&self) -> Result<()> {"
 # existing registry, Typst renderer, example harness, and generated navigation pipeline.
 # No-impact attestation: collision-safe Python symbol routes change generated
 # API navigation only; architecture-note lifecycle enforcement is unchanged.
-digest = "190a32b84b62211f7f93f4f1d268e68fced4e18b"
+# Snapshot validation checks intentional developer links to the deployed latest
+# tree against the same generated route without changing publication topology.
+# Its validation-state grouping is a Clippy-only refactor with identical behavior.
+# Snapshot candidates are now normalized before immutable comparison, replace
+# stale global output, and retain existing product channels and snapshot tags.
+digest = "21fa9ad810530c405e411f23b5b9e9d935a9d5ab"
 
 [[section.note]]
 id = "documentation-improvement-plan"

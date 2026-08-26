@@ -1310,6 +1310,24 @@ class TestHedgeGraphTopology(unittest.TestCase):
 
 
 class TestDotCodec(unittest.TestCase):
+    def test_published_python_quickstart_runs(self):
+        source_path = (
+            Path(__file__).resolve().parents[3]
+            / "docs/products/linnet/content/quickstart-python.typ"
+        )
+        source = source_path.read_text(encoding="utf-8")
+        example = re.search(
+            r"// docs-example: compile linnet-python-quickstart\s*"
+            r"```python\n(.*?)\n```",
+            source,
+            re.DOTALL,
+        )
+        self.assertIsNotNone(example)
+        exec(
+            compile(example.group(1), str(source_path), "exec"),
+            {"print": lambda *_args, **_kwargs: None},
+        )
+
     def test_constructor_requires_six_callable_callbacks(self):
         callbacks = {
             "encode_node": lambda _value: None,
@@ -2349,10 +2367,31 @@ class TestRendering(unittest.TestCase):
             lp.edge(lp.source(left), "line", lp.sink(right)),
             render_config=lp.RenderConfig(typst_executable=TYPST),
         )
+        subgraph = [True] * graph.n_half_edges
+        graph.render_config = lp.RenderConfig(
+            typst_executable=TYPST,
+            layouts=lp.LayoutOptions(
+                algorithm=lp.LayoutAlgorithm.StableLayered,
+                roots=[0],
+                rank_same=[[0, 1]],
+                subgraph=subgraph,
+            ).then(
+                algorithm=lp.LayoutAlgorithm.Force,
+                nodes=lp.LayoutNodes.Fixed,
+                steps=2,
+                subgraph=subgraph,
+            ),
+            drawing=lp.DrawOptions(subgraph=subgraph),
+            physics=lp.PhysicsOptions(
+                momentum_arrows=True,
+                show_node_index=True,
+                show_edge_index=True,
+            ),
+        )
         self.assertIn("<svg", graph.to_svg())
 
     @unittest.skipUnless(TYPST, "Typst 0.15 or newer is not available")
-    def test_real_typst_preserves_structural_node_and_edge_names(self):
+    def test_real_typst_preserves_structural_names_and_half_edge_fields(self):
         repository = Path(__file__).resolve().parents[3]
         with TemporaryDirectory(prefix="linnet names ") as directory:
             root = Path(directory)
@@ -2368,10 +2407,32 @@ class TestRendering(unittest.TestCase):
                 "#let render(config) = {\n"
                 "  let helpers = config.elements.nodes.at(0)\n"
                 "  let parsed = helpers.at(\"inspect-parse\")(read(config.at(\"data-path\"))).first()\n"
-                "  let node-names = helpers.at(\"inspect-nodes\")(parsed).map(node => str(node.name))\n"
-                "  let edge-names = config.elements.edges.at(0).at(\"inspect-edges\")(parsed).map(edge => str(edge.name))\n"
+                "  let attach = half-edge => {\n"
+                "    let drawing = config.elements.hedges.at(half-edge.hedge)\n"
+                "    let patch = (data: drawing)\n"
+                '    for key in ("statement", "port-label", "compass") {\n'
+                "      if drawing.keys().contains(key) { patch.insert(key, drawing.at(key)) }\n"
+                "    }\n"
+                "    patch\n"
+                "  }\n"
+                "  parsed = helpers.at(\"inspect-map\")(parsed, source: attach, sink: attach)\n"
+                "  let nodes = helpers.at(\"inspect-nodes\")(parsed)\n"
+                "  let edges = config.elements.edges.at(0).at(\"inspect-edges\")(parsed)\n"
+                "  let node-names = nodes.map(node => str(node.name))\n"
+                "  let edge-names = edges.map(edge => str(edge.name))\n"
                 '  assert(node-names == ("left node", "right \\\"node\\\""))\n'
                 '  assert(edge-names == ("propagator edge",))\n'
+                '  assert(edges.first().source.statement == "source-statement")\n'
+                '  assert(edges.first().source.at("port-label") == "source-port")\n'
+                '  assert(edges.first().source.compass == "e")\n'
+                '  assert(edges.first().sink.statement == "sink-statement")\n'
+                '  assert(edges.first().sink.at("port-label") == "sink-port")\n'
+                '  assert(edges.first().sink.compass == "w")\n'
+                '  assert(config.elements.nodes.at(nodes.at(0).node).token == "left-node")\n'
+                '  assert(config.elements.nodes.at(nodes.at(1).node).token == "right-node")\n'
+                '  assert(config.elements.edges.at(edges.first().edge).token == "edge")\n'
+                '  assert(config.elements.hedges.at(edges.first().source.hedge).token == "source")\n'
+                '  assert(config.elements.hedges.at(edges.first().sink.hedge).token == "sink")\n'
                 "  set page(width: auto, height: auto, margin: 2mm)\n"
                 "  [structural names preserved]\n"
                 "}\n",
@@ -2381,18 +2442,35 @@ class TestRendering(unittest.TestCase):
                 "left node",
                 extensions={
                     "inspect-parse": graph_module.function("parse"),
+                    "inspect-map": graph_module.function("map"),
                     "inspect-nodes": graph_module.function("nodes"),
+                    "token": "left-node",
                 },
             )
-            right = lp.node('right "node"')
+            right = lp.node('right "node"', extensions={"token": "right-node"})
             graph = lp.build(
                 left,
                 right,
                 lp.edge(
-                    lp.source(left),
+                    lp.source(
+                        left,
+                        statement="source-statement",
+                        port_label="source-port",
+                        compass=lp.Compass.E,
+                        extensions={"token": "source"},
+                    ),
                     "propagator edge",
-                    lp.sink(right),
-                    extensions={"inspect-edges": graph_module.function("edges")},
+                    lp.sink(
+                        right,
+                        statement="sink-statement",
+                        port_label="sink-port",
+                        compass=lp.Compass.W,
+                        extensions={"token": "sink"},
+                    ),
+                    extensions={
+                        "inspect-edges": graph_module.function("edges"),
+                        "token": "edge",
+                    },
                 ),
                 render_config=lp.RenderConfig(
                     template=template,

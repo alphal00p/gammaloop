@@ -7,6 +7,7 @@ use std::{
 
 use crate::define_indexed_vec;
 pub use crate::num_traits::{Pow, Sign, SignError, SignOrZero};
+use crate::parser::dot_id;
 use rand::{rngs::SmallRng, Rng, SeedableRng};
 use thiserror::Error;
 
@@ -168,8 +169,8 @@ impl<H> HedgePairWithData<H> {
         }
         if let Some(hedge_label) = hedge.data.1 {
             match flow {
-                Flow::Sink => write!(writer, " sink={hedge_label}")?,
-                Flow::Source => write!(writer, " source={hedge_label}")?,
+                Flow::Sink => write!(writer, " sink={}", dot_id(&hedge_label))?,
+                Flow::Source => write!(writer, " source={}", dot_id(&hedge_label))?,
             }
         }
         write!(writer, " {attr}")?;
@@ -210,8 +211,8 @@ impl<H> HedgePairWithData<H> {
             },
             if let Some(hedge_label) = hedge.data.1 {
                 match flow {
-                    Flow::Sink => format!(" sink={hedge_label}"),
-                    Flow::Source => format!(" source={hedge_label}"),
+                    Flow::Sink => format!(" sink={}", dot_id(&hedge_label)),
+                    Flow::Source => format!(" source={}", dot_id(&hedge_label)),
                 }
             } else {
                 "".to_string()
@@ -241,12 +242,12 @@ impl<H> HedgePairWithData<H> {
                 _ => "",
             },
             if let Some(source_label) = source_data.data.1 {
-                format!(" source={source_label}")
+                format!(" source={}", dot_id(&source_label))
             } else {
                 "".to_string()
             },
             if let Some(sink_label) = sink_data.data.1 {
-                format!(" sink={sink_label}")
+                format!(" sink={}", dot_id(&sink_label))
             } else {
                 "".to_string()
             },
@@ -275,12 +276,12 @@ impl<H> HedgePairWithData<H> {
                 _ => "",
             },
             if let Some(source_label) = source_data.data.1 {
-                format!(" source={source_label}")
+                format!(" source={}", dot_id(&source_label))
             } else {
                 "".to_string()
             },
             if let Some(sink_label) = sink_data.data.1 {
-                format!(" sink={sink_label}")
+                format!(" sink={}", dot_id(&sink_label))
             } else {
                 "".to_string()
             },

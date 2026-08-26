@@ -143,7 +143,7 @@ threading-policy change can be mistaken for an algorithmic improvement.
 
 For exact parameters and defaults, use the
 #link("reference/python/spynso3/Tensor/#exports-tensor-evaluator-method")[evaluator reference] and
-#link("reference/python/spynso3/set_symbolica_rayon_enabled/")[symbolic parallelism reference].
+#link("reference/python/spynso3/set_symbolica_rayon_enabled-function/")[symbolic parallelism reference].
 The implementation starts in
 #source-link("crates/spynso3/src/lib.rs", label: "the Spenso Python adapter").
 ]

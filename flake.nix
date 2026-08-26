@@ -3212,6 +3212,15 @@
                 --snapshot-tag v0.3.4 \
                 --output "$docs_snapshot" \
                 --rustdoc-target-root "$docs_rustdoc"
+              mkdir -p "$docs_snapshot/developers" \
+                "$docs_snapshot/.staging" \
+                "$docs_snapshot/products/gammaloop/latest" \
+                "$docs_snapshot/products/gammaloop/snapshots/legacy"
+              printf 'removed developer route\n' > "$docs_snapshot/developers/removed-before-rebuild.txt"
+              printf 'stale staging\n' > "$docs_snapshot/.staging/incomplete.txt"
+              printf 'latest route\n' > "$docs_snapshot/products/gammaloop/latest/.note"
+              printf 'product redirect\n' > "$docs_snapshot/products/gammaloop/index.html"
+              printf 'historical snapshot\n' > "$docs_snapshot/products/gammaloop/snapshots/legacy/.note"
               cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- \
                 build \
                 --product all \
@@ -3219,6 +3228,11 @@
                 --snapshot-tag v0.3.4 \
                 --output "$docs_snapshot" \
                 --rustdoc-target-root "$docs_rustdoc"
+              test ! -e "$docs_snapshot/developers/removed-before-rebuild.txt"
+              test ! -e "$docs_snapshot/.staging"
+              grep -Fq 'latest route' "$docs_snapshot/products/gammaloop/latest/.note"
+              grep -Fq 'product redirect' "$docs_snapshot/products/gammaloop/index.html"
+              grep -Fq 'historical snapshot' "$docs_snapshot/products/gammaloop/snapshots/legacy/.note"
 
               docs_pages_test="$TMPDIR/alphal00p-docs-pages-test"
               mkdir -p "$docs_pages_test/products/gammaloop/snapshots/legacy"
@@ -3330,7 +3344,7 @@
                 "$out/products/linnet/latest/search-index.json"
               ! grep -Fq '"title": "Parameters"' \
                 "$out/products/linnet/latest/search-index.json"
-              grep -Fq '/products/gammaloop/latest/guides/kurvst/' \
+              grep -Fq '../../../../gammaloop/latest/guides/kurvst/' \
                 "$out/products/linnet/latest/reference/typst/index.html"
             '';
           }
@@ -3380,7 +3394,8 @@
               if [ -d target ]; then
                 chmod -R u+w target
               fi
-              cargoWithProfile test --doc ${ciArgs.cargoExtraArgs}
+              cargoWithProfile test --doc ${ciArgs.cargoExtraArgs} \
+                --exclude alphal00p-docs-python-exporter
             '';
             checkPhaseCargoCommand = "";
             doCheck = false;

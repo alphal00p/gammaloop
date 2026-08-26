@@ -48,7 +48,7 @@ assert len(list_dangling(safe_product)) == 2
 
 The stable invariant is two free indices, `nu` and `rho`; the two occurrences of local `mu`
 belong to separate contractions after wrapping. The generated
-#link("reference/python/idenso-community/wrap_dummies/")[`wrap_dummies` reference] records the
+#link("reference/python/idenso-community/wrap_dummies-function/")[`wrap_dummies` reference] records the
 Python signature, while the exact
 #link("reference/rust/idenso/trait.IndexTooling.html")[`IndexTooling` Rustdoc] covers
 the underlying Rust boundary.

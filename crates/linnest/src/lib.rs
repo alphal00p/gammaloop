@@ -267,8 +267,10 @@ impl TypstNode {
     fn to_dot(&self) -> DotVertexData {
         let mut statements = self.statements.clone();
 
-        // Add position as pos attribute
+        // Add the position and preserve which axes were supplied explicitly.
         statements.insert("pos".to_string(), format!("{},{}", self.pos.x, self.pos.y));
+        statements.insert("pos-x-set".to_string(), self.start_x.to_string());
+        statements.insert("pos-y-set".to_string(), self.start_y.to_string());
 
         if let Some(s) = self.shift {
             statements.insert("shift".to_string(), format!("{},{}", s.x, s.y));
@@ -498,8 +500,10 @@ impl TypstEdge {
     fn to_dot(&self) -> DotEdgeData {
         let mut statements = self.statements.clone();
 
-        // Add position as pos attribute
+        // Add the position and preserve which axes were supplied explicitly.
         statements.insert("pos".to_string(), format!("{},{}", self.pos.x, self.pos.y));
+        statements.insert("pos-x-set".to_string(), self.start_x.to_string());
+        statements.insert("pos-y-set".to_string(), self.start_y.to_string());
 
         // Add shift if present
         if let Some(s) = self.shift {
@@ -720,6 +724,7 @@ struct DotPlacementContext {
     edge_exprs: HashMap<usize, DotPlacementExpr>,
     node_id_map: HashMap<usize, usize>,
     edge_id_map: HashMap<usize, usize>,
+    position_flags: HashMap<DotPlacementTarget, (Option<bool>, Option<bool>)>,
     memo: HashMap<DotPlacementTarget, Option<DotResolvedPlacement>>,
     visiting: HashSet<DotPlacementTarget>,
 }
@@ -730,6 +735,7 @@ impl DotPlacementContext {
         let mut edge_exprs = HashMap::new();
         let mut node_id_map = HashMap::new();
         let mut edge_id_map = HashMap::new();
+        let mut position_flags = HashMap::new();
 
         for (node_id, _, node) in dot.graph.iter_nodes() {
             if let Some(index) = node.index {
@@ -740,6 +746,13 @@ impl DotPlacementContext {
                     .unwrap_or_else(|err| panic!("invalid DOT node pos {value:?}: {err}"))
             }) {
                 node_exprs.insert(node_id.0, expr);
+            }
+            let flags = (
+                TypstNode::parse_bool_statement(&node.statements, "pos-x-set"),
+                TypstNode::parse_bool_statement(&node.statements, "pos-y-set"),
+            );
+            if flags.0.is_some() || flags.1.is_some() {
+                position_flags.insert(DotPlacementTarget::Node(node_id.0), flags);
             }
         }
 
@@ -755,6 +768,13 @@ impl DotPlacementContext {
             {
                 edge_exprs.insert(edge_id.0, expr);
             }
+            let flags = (
+                TypstNode::parse_bool_statement(&edge.data.statements, "pos-x-set"),
+                TypstNode::parse_bool_statement(&edge.data.statements, "pos-y-set"),
+            );
+            if flags.0.is_some() || flags.1.is_some() {
+                position_flags.insert(DotPlacementTarget::Edge(edge_id.0), flags);
+            }
         }
 
         Self {
@@ -762,6 +782,7 @@ impl DotPlacementContext {
             edge_exprs,
             node_id_map,
             edge_id_map,
+            position_flags,
             memo: HashMap::new(),
             visiting: HashSet::new(),
         }
@@ -794,10 +815,20 @@ impl DotPlacementContext {
             DotPlacementTarget::Edge(index) => self.edge_exprs.get(&index).cloned(),
         };
 
-        let resolved = expr
+        let mut resolved = expr
             .as_ref()
             .map(|expr| self.resolve_expr(expr))
             .transpose()?;
+        if let (Some(resolved), Some((x_set, y_set))) =
+            (&mut resolved, self.position_flags.get(&target))
+        {
+            if let Some(x_set) = x_set {
+                resolved.x_set = *x_set;
+            }
+            if let Some(y_set) = y_set {
+                resolved.y_set = *y_set;
+            }
+        }
 
         self.visiting.remove(&target);
         self.memo.insert(target, resolved.clone());
@@ -1092,6 +1123,11 @@ fn apply_dot_placement_statements(
         }
         .to_string(),
     );
+    if let Some(pin) = &placement.pin {
+        if dot_statement_value(statements, "pin").is_none() {
+            statements.insert("pin".to_string(), pin.to_string());
+        }
+    }
 }
 
 fn initial_point_constraint(
