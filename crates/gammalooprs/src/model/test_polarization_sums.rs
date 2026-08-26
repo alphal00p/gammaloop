@@ -459,6 +459,7 @@ fn dummy_spinor_particle(pdg_code: isize) -> Particle {
         lepton_number: 0,
         y_charge: 0,
         goldstone: false,
+        chemical_potential: None,
     }
 }
 
@@ -508,6 +509,7 @@ fn dummy_particle_with_spin(
         lepton_number: 0,
         y_charge: 0,
         goldstone: false,
+        chemical_potential: None,
     }
 }
 
