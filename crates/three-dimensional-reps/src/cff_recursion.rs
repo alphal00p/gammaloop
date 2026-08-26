@@ -517,13 +517,17 @@ fn enumerate_cff_branches(
             let outgoing = vertex
                 .outgoing
                 .iter()
-                .filter(|edge| neighbour.incoming.contains(edge))
+                .filter(|edge| {
+                    edge.edge_type == EdgeType::Virtual && neighbour.incoming.contains(edge)
+                })
                 .map(|edge| EdgeIndex(edge.edge_id))
                 .collect();
             let incoming = vertex
                 .incoming
                 .iter()
-                .filter(|edge| neighbour.outgoing.contains(edge))
+                .filter(|edge| {
+                    edge.edge_type == EdgeType::Virtual && neighbour.outgoing.contains(edge)
+                })
                 .map(|edge| EdgeIndex(edge.edge_id))
                 .collect();
             let (numerator, numerator_sign) =

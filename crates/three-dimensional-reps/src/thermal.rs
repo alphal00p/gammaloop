@@ -239,7 +239,7 @@ mod tests {
         )
         .unwrap()
         .expression;
-        assert_eq!(expression.orientations.len().0, 16);
+        assert_eq!(expression.orientations.len(), 16);
         let before = expression.to_atom(AllOrientations);
         expression = expression.fuse_compatible_variants();
         assert_eq!(before, expression.to_atom(AllOrientations));
@@ -284,45 +284,59 @@ mod tests {
     #[test]
     fn thermal_box_vacuum_limit_agrees_with_vacuum_cff() {
         let parsed = crate::graph_io::test_graphs::box_graph();
-        let vacuum = generate_3d_expression(&parsed, &Generate3DExpressionOptions::default())
-            .unwrap()
-            .expression;
-        let vacuum_atom = vacuum
-            .surfaces
-            .substitute_energies(&vacuum.to_atom(AllOrientations), &[]);
-        for medium_mode in [
-            MediumMode::ThermodynamicEquilibrium,
-            MediumMode::ZeroTemperatureEquilibrium,
-        ] {
-            let thermal = generate_3d_expression(
-                &parsed,
-                &Generate3DExpressionOptions {
-                    medium_mode,
-                    ..Default::default()
-                },
-            )
-            .unwrap()
-            .expression;
-            let mut atom = thermal
+        let mut disconnected = parsed.clone();
+        disconnected.loop_names = vec!["ka".to_string(), "kb".to_string()];
+        disconnected.internal_edges[1].head = 0;
+        disconnected.internal_edges[3].head = 2;
+        for (edge_id, edge) in disconnected.internal_edges.iter_mut().enumerate() {
+            edge.signature.loop_signature = if edge_id < 2 { vec![1, 0] } else { vec![0, 1] };
+            edge.signature.external_signature = match edge_id {
+                1 => vec![1, 0, 0],
+                3 => vec![0, 1, 0],
+                _ => vec![0, 0, 0],
+            };
+        }
+        for parsed in [parsed, disconnected] {
+            let vacuum = generate_3d_expression(&parsed, &Generate3DExpressionOptions::default())
+                .unwrap()
+                .expression;
+            let vacuum_atom = vacuum
                 .surfaces
-                .substitute_energies(&thermal.to_atom(AllOrientations), &[]);
-            for edge in 0..4 {
-                for sign in [-1, 1] {
-                    for derivative_order in 0..4 {
-                        atom = atom
-                            .replace(
-                                ThermalDistributionFactor {
-                                    edge_id: EdgeIndex(edge),
-                                    sign,
-                                    derivative_order,
-                                }
-                                .to_atom(medium_mode.is_finite_temperature()),
-                            )
-                            .with(Atom::num(i64::from(sign == 1 && derivative_order == 0)));
+                .substitute_energies(&vacuum.to_atom(AllOrientations), &[]);
+            for medium_mode in [
+                MediumMode::ThermodynamicEquilibrium,
+                MediumMode::ZeroTemperatureEquilibrium,
+            ] {
+                let thermal = generate_3d_expression(
+                    &parsed,
+                    &Generate3DExpressionOptions {
+                        medium_mode,
+                        ..Default::default()
+                    },
+                )
+                .unwrap()
+                .expression;
+                let mut atom = thermal
+                    .surfaces
+                    .substitute_energies(&thermal.to_atom(AllOrientations), &[]);
+                for edge in 0..4 {
+                    for sign in [-1, 1] {
+                        for derivative_order in 0..4 {
+                            atom = atom
+                                .replace(
+                                    ThermalDistributionFactor {
+                                        edge_id: EdgeIndex(edge),
+                                        sign,
+                                        derivative_order,
+                                    }
+                                    .to_atom(medium_mode.is_finite_temperature()),
+                                )
+                                .with(Atom::num(i64::from(sign == 1 && derivative_order == 0)));
+                        }
                     }
                 }
+                assert_eq!((atom - &vacuum_atom).expand(), Atom::Zero);
             }
-            assert_eq!((atom - &vacuum_atom).expand(), Atom::Zero);
         }
     }
 
@@ -351,7 +365,7 @@ mod tests {
             )
             .unwrap()
             .expression;
-            assert_eq!(expression.orientations.len().0, 2);
+            assert_eq!(expression.orientations.len(), 2);
             let factors = expression
                 .orientations
                 .iter()
