@@ -698,9 +698,9 @@ review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/*
 path = "flake.nix"
 symbol = "alphal00pDocsCargoArtifacts"
 anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
-# No cache-architecture impact: documentation validation now includes the four
-# additional deterministic About-page SVG outputs.
-digest = "e1f0cd565c7952dccecedeb4ba3d6083a025aa21"
+# No cache-architecture impact: the documentation source filter now includes the
+# double-triangle test fixture consumed by the deterministic About-page SVG.
+digest = "692adae64fe7a7fd3aa0e51ac7ba8b0d10919d5d"
 
 [[section]]
 id = "documentation"
