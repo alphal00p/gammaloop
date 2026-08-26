@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clinnet::{TypstModule, TypstRenderRequest, TypstRenderer};
+use linnet::half_edge::involution::{Flow, Hedge};
 use pyo3::exceptions::{PyReferenceError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyDictMethods, PyList, PyListMethods};
@@ -43,7 +44,7 @@ fn base_elements(py: Python<'_>, graph: &PyGraph) -> PyResult<Py<PyDict>> {
         .as_ref()
         .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
     let nodes = PyList::empty(py);
-    for node in &state.nodes {
+    for (_, _, node) in state.graph.iter_nodes() {
         nodes.append(element_drawing(
             py,
             node.drawing.bind(py),
@@ -52,22 +53,19 @@ fn base_elements(py: Python<'_>, graph: &PyGraph) -> PyResult<Py<PyDict>> {
     }
     let edges = PyList::empty(py);
     let half_edges = PyList::empty(py);
-    for edge in &state.edges {
+    for (_, _, edge) in state.graph.iter_edges() {
         edges.append(element_drawing(
             py,
-            edge.drawing.bind(py),
+            edge.data.drawing.bind(py),
             DrawingKind::Edge,
         )?)?;
-        for endpoint in [edge.source.as_ref(), edge.sink.as_ref()]
-            .into_iter()
-            .flatten()
-        {
-            half_edges.append(element_drawing(
-                py,
-                endpoint.drawing.bind(py),
-                DrawingKind::HalfEdge,
-            )?)?;
-        }
+    }
+    for index in 0..state.graph.n_hedges() {
+        half_edges.append(element_drawing(
+            py,
+            state.graph[Hedge(index)].drawing.bind(py),
+            DrawingKind::HalfEdge,
+        )?)?;
     }
     let elements = PyDict::new(py);
     elements.set_item("graph", PyDict::new(py))?;
@@ -111,19 +109,11 @@ fn apply_selectors(
             .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
         (
             state.revision,
-            state.nodes.len(),
-            state.edges.len(),
-            state.n_hedges(),
-            state
-                .edges
-                .iter()
-                .flat_map(|edge| {
-                    [
-                        edge.source.as_ref().map(|_| true),
-                        edge.sink.as_ref().map(|_| false),
-                    ]
-                })
-                .flatten()
+            state.graph.n_nodes(),
+            state.graph.n_edges(),
+            state.graph.n_hedges(),
+            (0..state.graph.n_hedges())
+                .map(|index| state.graph.flow(Hedge(index)) == Flow::Source)
                 .collect::<Vec<_>>(),
         )
     };
