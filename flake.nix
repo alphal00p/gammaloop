@@ -1213,8 +1213,24 @@
       };
       cranePythonFeaturesFor = package:
         sortedUnique (craneCiFeaturesFor package ++ (cranePythonExtraFeatureSets.${package} or []));
+      # The Python feature set enables optional workspace dependencies that are
+      # absent from the default resolved closure used by ordinary package builds.
+      cranePythonSourcePackageNames =
+        workspaceDependencyClosureFor workspaceDependencyNamesFor "gammaloop-api";
+      cranePythonDependencySourcePackageNames =
+        lib.filter (sourcePackage: sourcePackage != "gammaloop-api") cranePythonSourcePackageNames;
+      cranePythonExtraDependencySourcePackageNames =
+        lib.subtractLists
+        (lib.filter
+          (sourcePackage: sourcePackage != "gammaloop-api")
+          (workspaceNormalSourcePackageNamesFor "gammaloop-api"))
+        cranePythonDependencySourcePackageNames;
+      cranePythonSrc = workspacePackageSrcForSourcePackages {
+        sourcePackages = cranePythonSourcePackageNames;
+        packageSourcePackages = ["gammaloop-api"];
+      };
       cranePythonCargoArgs = let
-        featurePackages = workspaceNormalSourcePackageNamesFor "gammaloop-api";
+        featurePackages = cranePythonSourcePackageNames;
         selectedFeaturePackages =
           lib.filter (
             featurePackage:
@@ -1324,12 +1340,113 @@
 
       ciArgs =
         commonArgs
-        workspaceTestSrc
-        nixCc
-        nixCxx
-        cargoLinkerVar
-        runtimeLibPath
-        ;
+        // {
+          buildType = ciCargoProfile;
+          CARGO_PROFILE = ciCargoProfile;
+          # The workspace sets default-members to gammaloop-api, so CI checks must
+          # opt into the full workspace explicitly.
+          cargoExtraArgs = "--locked --workspace ${craneWorkspacePrebuildFeatureArgs}";
+          # NixCI provides the runtime Symbolica license, not the compile-time
+          # OEM key consumed by gammalooprs' activate_oem_license! path.
+          NO_SYMBOLICA_OEM_LICENSE = "1";
+
+          PYO3_PYTHON = "${pkgs.python313}/bin/python3";
+          PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
+        };
+
+      licensePreCheck = ''
+        if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
+          echo "Missing SYMBOLICA_LICENSE environment variable" >&2
+          exit 1
+        fi
+      '';
+
+      gammaloop-cli = pkgs.runCommand "gammaloop-api-${apiMeta.version}" {
+        nativeBuildInputs = [
+          pkgs.coreutils
+          pkgs.findutils
+        ];
+      } ''
+        target="${gammaloopApiPackageArtifacts}/target/${ciCargoProfile}"
+        binary="$target/gammaloop"
+
+        if [ ! -x "$binary" ]; then
+          echo "Could not find Crane-built gammaloop binary in $target" >&2
+          exit 1
+        fi
+
+        library="$(
+          find "$target" -maxdepth 2 -type f \
+            \( -name 'libgammaloop_api*.so' -o -name 'libgammaloop_api*.dylib' \) \
+            | sort \
+            | head -n 1
+        )"
+        if [ -z "$library" ]; then
+          echo "Could not find Crane-built gammaloop-api shared library in $target" >&2
+          exit 1
+        fi
+
+        install -D -m 0755 "$binary" "$out/bin/gammaloop"
+        install -D -m 0644 "$library" "$out/lib/$(basename "$library")"
+      '';
+      gammaloop-python-lib = craneLib.buildPackage (ciArgs
+        // {
+          cargoArtifacts = cranePythonBuildArtifacts;
+          pname = "gammaloop-api-python";
+          src = cranePythonSrc;
+          cargoExtraArgs = cranePythonCargoArgs;
+          doCheck = false;
+          postPatch = workspaceMissingCargoTargetsScript;
+        });
+      gammaloop-python-lib-output = lib.getLib gammaloop-python-lib;
+      pythonSitePackages = "${pkgs.python313.sitePackages}";
+      gammaloop-python-module = pkgs.runCommand "gammaloop-python-module" {} ''
+        mkdir -p "$out/${pythonSitePackages}/gammaloop"
+        cp ${./crates/gammaloop-api/python/gammaloop/__init__.py} \
+          "$out/${pythonSitePackages}/gammaloop/__init__.py"
+
+        extension="$(
+          find ${gammaloop-python-lib-output} -type f \
+            \( -name 'libgammaloop_api*.so' -o -name 'gammaloop_api*.so' -o -name 'libgammaloop_api*.dylib' -o -name 'gammaloop_api*.dylib' \) \
+            | sort \
+            | head -n 1
+        )"
+        if [ -z "$extension" ]; then
+          echo "Could not find Crane-built gammaloop-api Python extension in ${gammaloop-python-lib-output}" >&2
+          exit 1
+        fi
+        cp "$extension" "$out/${pythonSitePackages}/gammaloop/_gammaloop.so"
+      '';
+      clinnetArgs = ciArgs
+        // {
+          pname = "clinnet";
+          inherit (clinnetMeta) version;
+          src = workspacePackageSrcFor "clinnet";
+          cargoExtraArgs = cargoPackageCiArgsFor "clinnet";
+          doCheck = false;
+          postPatch = workspaceMissingCargoTargetsScript;
+        };
+      drawingTypstBundleAssets = ''
+        mkdir -p crates/linnest/typst/src crates/kurvst/typst/src
+        cp -R ${linnest-wasm}/templates/crates/linnest/typst/src/. crates/linnest/typst/src/
+        cp ${linnest-wasm}/templates/crates/linnest/typst/typst.toml crates/linnest/typst/typst.toml
+        cp ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm crates/linnest/typst/linnest.wasm
+        cp -R ${linnest-wasm}/templates/crates/kurvst/typst/src/. crates/kurvst/typst/src/
+        cp ${linnest-wasm}/templates/crates/kurvst/typst/typst.toml crates/kurvst/typst/typst.toml
+        cp ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm crates/kurvst/typst/kurvst.wasm
+      '';
+
+      clinnetCargoArtifacts = craneLib.buildDepsOnly (clinnetArgs
+        // {
+          preBuild = drawingTypstBundleAssets;
+        });
+
+      clinnet-cli = craneLib.buildPackage (clinnetArgs
+        // {
+          cargoArtifacts = clinnetCargoArtifacts;
+          doNotLinkInheritedArtifacts = true;
+          preBuild = drawingTypstBundleAssets;
+        });
 
       rscls = pkgs.rustPlatform.buildRustPackage rec {
         pname = "rscls";
@@ -1934,20 +2051,22 @@
                 if dependency == workspaceHackPackage
                 then workspaceHackBuildArtifacts
                 else cranePackageDependencyModeArtifacts.${dependency}
-            ) (lib.filter (sourcePackage: sourcePackage != "gammaloop-api") (workspaceNormalSourcePackageNamesFor "gammaloop-api"))
+            ) cranePythonDependencySourcePackageNames
           );
           pname = "gammaloop-api-python";
           src = workspacePackageSrcForSourcePackages {
-            sourcePackages =
-              lib.filter (sourcePackage: sourcePackage != "gammaloop-api") (workspaceNormalSourcePackageNamesFor "gammaloop-api");
+            sourcePackages = cranePythonDependencySourcePackageNames;
           };
           buildPhaseCargoCommand = "cargoWithProfile build ${cranePythonCargoArgs}";
           checkPhaseCargoCommand = "";
           doCheck = false;
           preBuildWorkspaceArtifactStripPackages = ["gammaloop-api"];
           stripWorkspaceArtifacts = true;
-          preservedWorkspaceArtifactPackages = workspaceResolvedDependencyNamesFor "gammaloop-api";
-          extraDummyScript = workspaceDependencyDummyCargoTargetsScriptFor "gammaloop-api";
+          preservedWorkspaceArtifactPackages = cranePythonDependencySourcePackageNames;
+          extraDummyScript = ''
+            ${workspaceDependencyDummyCargoTargetsScriptFor "gammaloop-api"}
+            ${workspacePackageSourceRestoreInDummySrcScriptFor cranePythonExtraDependencySourcePackageNames}
+          '';
           postPatch = workspaceMissingCargoTargetsScript;
         });
 
@@ -1955,7 +2074,7 @@
         // {
           cargoArtifacts = cranePythonDependencyArtifacts;
           pname = "gammaloop-api-python-build";
-          src = workspacePackageSrcFor "gammaloop-api";
+          src = cranePythonSrc;
           cargoExtraArgs = cranePythonCargoArgs;
           postPatch = workspaceMissingCargoTargetsScript;
         });
