@@ -7,6 +7,10 @@ This tutorial parses and canonicalizes one vacuum integral in Rust. It deliberat
 all evaluation backends, so the first success exercises Vakint's topology library and momentum
 routing without requiring FORM, MATAD, FMFT, or pySecDec.
 
+For the shortest installation and first-run path, begin with
+#link("quickstart/rust/")[Using Vakint from Rust]. Then return here to inspect topology matching
+and momentum routing in more detail.
+
 == Prerequisites
 
 Use Rust 1.85 or newer and work from the GammaLoop source revision identified in this page's

@@ -8,6 +8,10 @@ its one independent cycle inside an explicitly selected subgraph, and print DOT.
 returns typed node indexes; Linnet's subgraph filters then select the half-edges on which an
 algorithm operates.
 
+For the shortest installation and first-run path, begin with
+#link("quickstart/rust/")[Using Linnet from Rust]. Then return here to work with a boundary,
+subgraphs, and cycle algorithms.
+
 == Prerequisites
 
 Create a Rust binary project and add the current Linnet release:

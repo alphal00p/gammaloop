@@ -7,6 +7,10 @@ This tutorial uses Idenso's Python community module to contract one four-dimensi
 metric tensor with a vector. It is intentionally small: the point is to establish the registered
 tensor syntax and observe one algebra pass before composing a larger Dirac or color pipeline.
 
+For the shortest installation and first-run path, begin with
+#link("quickstart/python/")[Using Idenso from Python]. Then return here to inspect the identity
+pass and extend it into an algebra pipeline.
+
 == Prerequisites
 
 Idenso is mounted at `symbolica.community.idenso`; it is not installed by `pip install idenso`.
