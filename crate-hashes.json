@@ -1,5 +1,5 @@
 {
-  "git+https://github.com/symbolica-dev/symbolica?branch=dev#2.2.0": "1n6ws0x37i3g5frab2k20b0233vh33x6di9hgw4bd9d3lqfwrhv8",
-  "git+https://github.com/symbolica-dev/symbolica?branch=dev#graphica@2.1.0": "1n6ws0x37i3g5frab2k20b0233vh33x6di9hgw4bd9d3lqfwrhv8",
-  "git+https://github.com/symbolica-dev/symbolica?branch=dev#numerica@2.2.0": "1n6ws0x37i3g5frab2k20b0233vh33x6di9hgw4bd9d3lqfwrhv8"
+  "git+https://github.com/symbolica-dev/symbolica?rev=11fff3116da997fcc500ae918f052f99e1a40062#2.2.0": "1cjm5p01y3cjm8605s2xqv7038wfx8zmw6q5lq0kzf0y26wx9wyy",
+  "git+https://github.com/symbolica-dev/symbolica?rev=11fff3116da997fcc500ae918f052f99e1a40062#graphica@2.1.0": "1cjm5p01y3cjm8605s2xqv7038wfx8zmw6q5lq0kzf0y26wx9wyy",
+  "git+https://github.com/symbolica-dev/symbolica?rev=11fff3116da997fcc500ae918f052f99e1a40062#numerica@2.2.0": "1cjm5p01y3cjm8605s2xqv7038wfx8zmw6q5lq0kzf0y26wx9wyy"
 }

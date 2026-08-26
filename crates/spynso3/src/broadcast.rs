@@ -6,7 +6,7 @@ use pyo3::{
 
 use spenso::network::{library::function_lib::INBUILTS, tags::SPENSO_TAG};
 use symbolica::{
-    api::python::{PythonExpression, PythonTransformer, PythonUserData},
+    api::python::{PythonExpression, PythonNormalization, PythonUserData},
     atom::{Atom, AtomView, DefaultNamespace, FunctionBuilder, Symbol},
 };
 
@@ -61,7 +61,7 @@ impl SpensoBroadcastFunction {
         is_positive: Option<bool>,
         tags: Option<Vec<String>>,
         aliases: Option<Vec<String>>,
-        normalization: Option<PythonTransformer>,
+        normalization: Option<PythonNormalization>,
         print: Option<Py<PyAny>>,
         derivative: Option<Py<PyAny>>,
         series: Option<Py<PyAny>>,

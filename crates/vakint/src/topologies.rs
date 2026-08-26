@@ -6,6 +6,8 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionArgument, FunctionBuilder, SliceType},
     function,
     id::{Condition, Match},
+    poly::PolyVariable,
+    solve::SolveError,
 };
 
 use crate::{
@@ -568,14 +570,39 @@ impl Topology {
         //     variables.iter().map(|a| a.to_string()).collect::<Vec<_>>()
         // );
         let basis_change = Arc::new(
-            match Atom::solve_linear_system::<u8, _, _>(
-                system
+            match (|| -> Result<Vec<Atom>, SolveError> {
+                Atom::system_to_matrix::<u8, _, _>(&system, &variables)?;
+                let mut solutions = Atom::solve(&system).wrt_with_exponent::<u8, _>(&variables)?;
+                let solution = solutions
+                    .pop()
+                    .ok_or_else(|| SolveError::Other("Linear system has no solution".to_owned()))?;
+                debug_assert!(solutions.is_empty());
+
+                let values = variables
                     .iter()
-                    .map(|a| a.as_view())
-                    .collect::<Vec<_>>()
-                    .as_slice(),
-                variables.as_slice(),
-            ) {
+                    .map(|variable| {
+                        let key =
+                            PolyVariable::try_from(variable.clone()).map_err(SolveError::Other)?;
+                        solution.get(&key).cloned().ok_or_else(|| {
+                            SolveError::Other(format!(
+                                "No solution for requested variable {variable}"
+                            ))
+                        })
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+
+                if solution.is_underdetermined() {
+                    let rank = u32::try_from(solution.rank()).map_err(|_| {
+                        SolveError::Other("Linear-system rank exceeds u32".to_owned())
+                    })?;
+                    Err(SolveError::Underdetermined {
+                        rank,
+                        partial_solution: values,
+                    })
+                } else {
+                    Ok(values)
+                }
+            })() {
                 Ok(b) => b,
                 Err(e) => {
                     return Err(VakintError::InvalidIntegralFormat(format!(

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     domains::{
-        algebraic_number::AlgebraicExtension,
+        algebraic::AlgebraicExtension,
         integer::IntegerRing,
         rational::{FractionField, Q},
     },
@@ -26,7 +26,7 @@ use crate::GammaLoopContext;
 use super::{GS, W_};
 
 pub static Q_I: LazyLock<AlgebraicExtension<FractionField<IntegerRing>>> =
-    LazyLock::new(|| AlgebraicExtension::new_complex(Q));
+    LazyLock::new(|| AlgebraicExtension::complex(Q));
 static RAW_UFO_MOMENTUM: LazyLock<Symbol> = LazyLock::new(|| symbol!("UFO::P"));
 static RAW_UFO_PSLASH: LazyLock<Symbol> = LazyLock::new(|| symbol!("UFO::PSlash"));
 

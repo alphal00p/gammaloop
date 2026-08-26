@@ -17,6 +17,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, FunctionBuilder, Symbol},
     function,
     id::Replacement,
+    poly::PolyVariable,
     printer::PrintOptions,
     symbol,
 };
@@ -1648,7 +1649,21 @@ impl LoopMomentumBasis {
             vars.push(othermom.call_args([l.0]))
         }
 
-        Atom::solve_linear_system::<u8, _, _>(&sys, &vars).unwrap()
+        Atom::system_to_matrix::<u8, _, _>(&sys, &vars).unwrap();
+        let mut solutions = Atom::solve(&sys).wrt_with_exponent::<u8, _>(&vars).unwrap();
+        let solution = solutions.pop().unwrap();
+        debug_assert!(solutions.is_empty());
+        assert!(
+            !solution.is_underdetermined(),
+            "Loop-momentum basis map is underdetermined"
+        );
+
+        vars.iter()
+            .map(|variable| {
+                let key = PolyVariable::try_from(variable.clone()).unwrap();
+                solution.get(&key).unwrap().clone()
+            })
+            .collect()
     }
     // pub(crate) fn spatial_emr<T: FloatLike>(
     //     &self,

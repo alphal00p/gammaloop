@@ -30,8 +30,7 @@ use symbolica::{
     function,
     id::Replacement,
     parse, parse_lit,
-    poly::series::Series,
-    solve::SolveError,
+    poly::{PolyVariable, series::Series},
 };
 use symbolica_utils::ReplaceBuilderExt;
 use vakint::{Vakint, VakintExpression, vakint_symbol};
@@ -1046,21 +1045,30 @@ impl VakintMomentumSolution {
             });
         }
 
-        match Atom::solve_linear_system::<u8, _, _>(system, variables) {
-            Ok(solution) => Ok(Self::from_solution(
-                &solution,
-                variables,
-                add_additional_args,
-            )),
-            Err(SolveError::Underdetermined {
-                partial_solution, ..
-            }) => Ok(Self::from_solution(
-                &partial_solution,
-                variables,
-                add_additional_args,
-            )),
-            Err(source) => Err(eyre!("{source}")),
-        }
+        Atom::system_to_matrix::<u8, _, _>(system, variables)?;
+        let mut solutions = Atom::solve(system).wrt_with_exponent::<u8, _>(variables)?;
+        let solution = solutions
+            .pop()
+            .ok_or_else(|| eyre!("Linear momentum system has no solution"))?;
+        debug_assert!(solutions.is_empty());
+
+        let ordered_solution = variables
+            .iter()
+            .map(|variable| {
+                let key =
+                    PolyVariable::try_from(variable.clone()).map_err(|source| eyre!(source))?;
+                solution
+                    .get(&key)
+                    .cloned()
+                    .ok_or_else(|| eyre!("No solution for requested variable {variable}"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        Ok(Self::from_solution(
+            &ordered_solution,
+            variables,
+            add_additional_args,
+        ))
     }
 
     fn from_solution(
@@ -1316,6 +1324,21 @@ mod tests {
     }
 
     #[test]
+    fn determined_vakint_momentum_solve_eliminates_variable() {
+        test_initialise().unwrap();
+
+        let q0 = function!(GS.emr_mom, 0);
+        let k0 = function!(GS.loop_mom, 0);
+        let system = vec![&q0 - &k0];
+
+        let solution =
+            VakintMomentumSolution::solve(&system, std::slice::from_ref(&q0), &[]).unwrap();
+
+        assert!(solution.free_variables.is_empty());
+        assert_eq!(solution.rewrite_numerator(&q0), k0);
+    }
+
+    #[test]
     fn underdetermined_vakint_momentum_solve_tracks_free_variables() {
         test_initialise().unwrap();
 
@@ -1378,6 +1401,22 @@ mod tests {
                 )
             )
         );
+    }
+
+    #[test]
+    fn nonlinear_vakint_momentum_solve_is_rejected() {
+        test_initialise().unwrap();
+
+        let q0 = function!(GS.emr_mom, 0);
+        let k0 = function!(GS.loop_mom, 0);
+        let system = vec![q0.clone().pow(2) - k0];
+
+        let error = match VakintMomentumSolution::solve(&system, &[q0], &[]) {
+            Ok(_) => panic!("nonlinear momentum system unexpectedly solved"),
+            Err(error) => error,
+        };
+
+        assert!(error.to_string().contains("Not a linear system"));
     }
 
     #[test]

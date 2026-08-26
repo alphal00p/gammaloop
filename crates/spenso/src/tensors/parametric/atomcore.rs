@@ -1332,12 +1332,40 @@ impl<S: TensorStructure> DenseTensor<Atom, S> {
 
     /// Solve a system that is linear in `vars`, if possible.
     /// Each expression in `system` is understood to yield 0.
-    pub fn solve_linear_system<E: PositiveExponent, T: AtomCore>(
+    pub fn solve_linear_system<E: PositiveExponent + 'static, T: AtomCore>(
         &self,
         vars: &[T],
     ) -> Result<Vec<Atom>, SolveError> {
-        <Atom as AtomCore>::solve_linear_system::<E, Atom, T>(&self.data, vars)
+        self.system_to_matrix::<E, T>(vars)?;
+        let mut solutions = Atom::solve(&self.data).wrt_with_exponent::<E, _>(vars)?;
+        let solution = solutions
+            .pop()
+            .ok_or_else(|| SolveError::Other("Linear system has no solution".to_owned()))?;
+        debug_assert!(solutions.is_empty());
+
+        let values = vars
+            .iter()
+            .map(|variable| {
+                let variable = PolyVariable::try_from(variable.as_atom_view().to_owned())
+                    .map_err(SolveError::Other)?;
+                solution.get(&variable).cloned().ok_or_else(|| {
+                    SolveError::Other(format!("No solution for requested variable {variable}"))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if solution.is_underdetermined() {
+            let rank = u32::try_from(solution.rank())
+                .map_err(|_| SolveError::Other("Linear-system rank exceeds u32".to_owned()))?;
+            Err(SolveError::Underdetermined {
+                rank,
+                partial_solution: values,
+            })
+        } else {
+            Ok(values)
+        }
     }
+
     /// Convert a system of linear equations to a matrix representation, returning the matrix
     /// and the right-hand side.
     #[allow(clippy::type_complexity)]

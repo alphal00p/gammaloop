@@ -71,9 +71,9 @@ which = "8.0.0"
 # graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 # numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "11fff3116da997fcc500ae918f052f99e1a40062" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "11fff3116da997fcc500ae918f052f99e1a40062" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "11fff3116da997fcc500ae918f052f99e1a40062" }
 # graphica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
 # numerica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
 # symbolica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
