@@ -827,6 +827,7 @@ pub struct SerializableParticle {
     y_charge: isize,
     #[serde(default, alias = "goldstoneboson", alias = "GoldstoneBoson")]
     goldstone: bool,
+    chemical_potential: Option<SmartString<LazyCompact>>,
 }
 
 impl SerializableParticle {
@@ -846,6 +847,10 @@ impl SerializableParticle {
             lepton_number: particle.lepton_number,
             y_charge: particle.y_charge,
             goldstone: particle.goldstone,
+            chemical_potential: particle
+                .chemical_potential
+                .as_ref()
+                .map(|chemical_potential| chemical_potential.namespaceless_string().into()),
         }
     }
 }
@@ -866,6 +871,7 @@ pub struct Particle {
     pub lepton_number: isize,
     pub y_charge: isize,
     pub goldstone: bool,
+    pub chemical_potential: Option<ParameterName>,
 }
 
 impl Particle {
@@ -1369,6 +1375,10 @@ impl Particle {
             lepton_number: particle.lepton_number,
             y_charge: particle.y_charge,
             goldstone: particle.goldstone,
+            chemical_potential: particle
+                .chemical_potential
+                .as_ref()
+                .map(|chemical_potential| ParameterName(chemical_potential.into())),
         }
     }
 }
