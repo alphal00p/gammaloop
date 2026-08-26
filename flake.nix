@@ -157,24 +157,30 @@
 
       workspaceTestSrc = lib.fileset.toSource {
         root = workspaceRoot;
-        fileset = lib.fileset.unions [
-          cargoSources
-          nonCargoBuildSources
-          snapshotSources
-          ./tests
-          ./examples/cli
-        ];
+        fileset = lib.fileset.unions (
+          [
+            cargoSources
+            nonCargoBuildSources
+            snapshotSources
+            ./tests
+            ./examples/cli
+          ]
+          ++ (workspacePackageTestCompileTimeExtraFilesetsForSourcePackages workspaceMemberPackages)
+        );
       };
 
       workspaceNonIntegrationTestSrc = lib.fileset.toSource {
         root = workspaceRoot;
-        fileset = lib.fileset.unions [
-          nonIntegrationCargoSources
-          nonCargoBuildSources
-          snapshotSources
-          ./tests/resources
-          ./examples/cli
-        ];
+        fileset = lib.fileset.unions (
+          [
+            nonIntegrationCargoSources
+            nonCargoBuildSources
+            snapshotSources
+            ./tests/resources
+            ./examples/cli
+          ]
+          ++ (workspacePackageTestCompileTimeExtraFilesetsForSourcePackages workspaceMemberPackages)
+        );
       };
 
       linnestWasmSrc = lib.fileset.toSource {
