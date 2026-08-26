@@ -210,6 +210,7 @@
               ./examples/cli/BNL/profiling/bnl_integrated_evaluator_atom_unfiltered_pre_network.sym
               ./examples/cli/BNL/profiling/bnl_scalar_alias_captures.ansi.txt
               ./examples/cli/gg_hhh/3L/3L_graph.dot
+              ./tests/resources/graphs/double_triangle.dot
               ./tests/resources/graphs/gghhh.dot
               ./tests/resources/graphs/qqx_aaa_pentabox_user_numerator.dot
               ./tests/resources/graphs/uv_tests/ad_ad_1L_gluon.dot
