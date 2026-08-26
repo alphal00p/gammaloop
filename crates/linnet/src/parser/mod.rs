@@ -194,9 +194,11 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
     }
 
     pub fn write_io<W: std::io::Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
-        let name = (!self.global_data.name.is_empty())
-            .then(|| format!(" {}", dot_id(&self.global_data.name)))
-            .unwrap_or_default();
+        let name = if self.global_data.name.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", dot_id(&self.global_data.name))
+        };
         writeln!(writer, "digraph{name} {{")?;
 
         writeln!(writer, "{:4}", self.global_data)?;
@@ -250,9 +252,11 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
     }
 
     pub fn write_fmt<W: std::fmt::Write>(&self, writer: &mut W) -> Result<(), std::fmt::Error> {
-        let name = (!self.global_data.name.is_empty())
-            .then(|| format!(" {}", dot_id(&self.global_data.name)))
-            .unwrap_or_default();
+        let name = if self.global_data.name.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", dot_id(&self.global_data.name))
+        };
         writeln!(writer, "digraph{name} {{")?;
 
         let mut writer = CodeFormatter::new(writer, "  ");
