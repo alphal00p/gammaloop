@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    collections::BTreeSet,
     fmt::Display,
     ops::{Deref, Range},
 };
@@ -41,7 +42,8 @@ use crate::{
     numerator::ParsingNet,
     utils::{
         F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, VarFloat, f128,
-        hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
+        hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, symbols::ThermalDistributionLimit,
+        tracing::StatusRenderable,
     },
 };
 
@@ -98,13 +100,104 @@ pub trait SplitPolarizations {
     fn polarizations(&self) -> Vec<Atom>;
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThermalDistributionReplacement {
+    All,
+    ConstantOnly,
+}
+
 pub trait ParamBuilderGraph {
     fn get_external_energy_atoms(&self) -> Vec<Atom>;
     fn iter_edge_ids(&self) -> impl Iterator<Item = EdgeIndex> + '_;
     fn external_spatial_params(&self) -> Vec<Atom>;
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom>;
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom;
-    // fn explicit_meduium_numerato(&self,edge)
+    /// Expand the medium numerator weight at the requested temperature limit.
+    /// Derivatives are with respect to positive on-shell energy, holding temperature,
+    /// chemical potential, and orientation fixed; cyclic-chain signs belong to CFF reduction.
+    fn explicit_thermal_distribution_atom(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+        limit: ThermalDistributionLimit,
+    ) -> Option<Atom>;
+    fn make_thermal_distributions_explicit(
+        &self,
+        atom: &Atom,
+        limit: ThermalDistributionLimit,
+        edges: impl IntoIterator<Item = EdgeIndex>,
+        replacement_mode: ThermalDistributionReplacement,
+    ) -> Result<Atom> {
+        let edges = edges.into_iter().collect::<BTreeSet<_>>();
+        let mut error = None;
+        let explicit = atom.replace_map(|term, _, out| {
+            if error.is_some() {
+                return;
+            }
+
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            if function.get_symbol() != GS.thermal_distribution {
+                return;
+            }
+            if function.get_nargs() != 4 {
+                error = Some(color_eyre::eyre::eyre!(
+                    "Thermal distribution must have four arguments, got {}",
+                    function.get_nargs()
+                ));
+                return;
+            }
+
+            let mut args = function.iter();
+            let edge_arg = args.next().unwrap();
+            let Ok(edge_id) = usize::try_from(edge_arg) else {
+                error = Some(color_eyre::eyre::eyre!(
+                    "Thermal distribution edge must be a non-negative integer, got {edge_arg}"
+                ));
+                return;
+            };
+            let edge = EdgeIndex::from(edge_id);
+            if !edges.contains(&edge) {
+                return;
+            }
+
+            let derivative_order_arg = args.next().unwrap();
+            let Ok(derivative_order) = usize::try_from(derivative_order_arg) else {
+                error = Some(color_eyre::eyre::eyre!(
+                    "Thermal distribution derivative order must be a non-negative integer, got \
+                     {derivative_order_arg}"
+                ));
+                return;
+            };
+            let _temperature_flag = args.next().unwrap();
+            let thermal_sign = args.next().unwrap().into();
+            let Some(replacement) = self.explicit_thermal_distribution_atom(
+                edge,
+                derivative_order,
+                thermal_sign,
+                limit,
+            ) else {
+                error = Some(color_eyre::eyre::eyre!(
+                    "Thermal distribution for edge {edge}, derivative order {derivative_order}, \
+                     and limit {limit:?} is unsupported"
+                ));
+                return;
+            };
+            if replacement_mode == ThermalDistributionReplacement::ConstantOnly
+                && !replacement.is_constant()
+            {
+                return;
+            }
+            **out = replacement;
+        });
+
+        match error {
+            Some(error) => Err(error),
+            None => Ok(explicit),
+        }
+    }
     fn get_ose_replacements(&self) -> Vec<Replacement>;
 }
 
@@ -179,6 +272,7 @@ define_gamma_loop_pairs! {
     uv_damp_minus_right,
     radius_right,
     radius_star_right,
+    inverse_temperature,
     pub additional_params,
 }
 
@@ -234,6 +328,8 @@ impl GammaLoopPairs {
         debug!("Validating radius_star");
         self.radius_star_left.validate();
         self.radius_star_right.validate();
+        debug!("Validating inverse_temperature");
+        self.inverse_temperature.validate();
     }
 
     pub(crate) fn new<
@@ -274,6 +370,7 @@ impl GammaLoopPairs {
             uv_damp_plus_right: ParamValuePairs::default_from_symbol(GS.uv_damp_plus_right),
             uv_damp_minus_left: ParamValuePairs::default_from_symbol(GS.uv_damp_minus_left),
             uv_damp_minus_right: ParamValuePairs::default_from_symbol(GS.uv_damp_minus_right),
+            inverse_temperature: ParamValuePairs::default_from_symbol(GS.inverse_temperature),
             additional_params: additional_params.into_iter().collect(),
             ..Default::default()
         };
@@ -1219,6 +1316,52 @@ impl<T: FloatLike> ParamBuilder<T> {
             .unwrap();
         }
 
+        let thermal_sign = symbol!("thermal_sign");
+        let thermal_edges = graph
+            .iter_edge_ids()
+            .filter(|&edge| {
+                lmb.edge_signatures[edge]
+                    .internal
+                    .iter()
+                    .any(|sign| sign.is_sign())
+            })
+            .collect_vec();
+        // A thermal cycle with n loop-dependent edges produces order n - 1.
+        let max_thermal_derivative_order = thermal_edges.len().saturating_sub(1).max(2);
+        for e in thermal_edges {
+            for limit in [
+                ThermalDistributionLimit::Default,
+                ThermalDistributionLimit::ZeroTemperature,
+            ] {
+                let temperature_flag = limit.temperature_flag();
+                let max_derivative_order = match limit {
+                    ThermalDistributionLimit::Default => max_thermal_derivative_order,
+                    _ => 2,
+                };
+                for derivative_order in 0..=max_derivative_order {
+                    if let Some(body) = graph.explicit_thermal_distribution_atom(
+                        e,
+                        derivative_order,
+                        Atom::var(thermal_sign),
+                        limit,
+                    ) {
+                        new.add_tagged_function::<Symbol>(
+                            GS.thermal_distribution,
+                            vec![
+                                Atom::num(e.0 as i64),
+                                Atom::num(derivative_order as i64),
+                                temperature_flag.clone(),
+                            ],
+                            format!("N{e}_{derivative_order}_{temperature_flag}"),
+                            vec![thermal_sign],
+                            body,
+                        )
+                        .unwrap();
+                    }
+                }
+            }
+        }
+
         for (edge_id, signature) in lmb.edge_signatures.iter() {
             // if !lmb.loop_edges.contains(&edge_id) {
             let start = if signature.internal.iter().any(|sign| sign.is_sign()) {
@@ -1264,6 +1407,13 @@ impl<T: FloatLike> ParamBuilder<T> {
             symbol!("x").to_atom(),
         )
         .unwrap();
+        new.add_function(
+            GS.heaviside,
+            vec![symbol!("x")],
+            parse_lit!((1 + x / abs(x)) / 2),
+        )
+        .unwrap();
+
         // new.fn_map.add_conditional(GS.orientation_if);
         new.add_constant(CS.cf.into(), Rational::new(4, 3).into());
         new.add_constant(CS.ca.into(), Rational::new(3, 1).into());
@@ -1334,6 +1484,15 @@ impl<T: FloatLike> ParamBuilder<T> {
             let multiplicative_offset = index + 1;
             values[self.pairs.numerator_sampling_scale.value_range.start * multiplicative_offset] =
                 numerator_sampling_scale.clone();
+        }
+    }
+
+    pub(crate) fn inverse_temperature_value(&mut self, inverse_temperature: Complex<F<T>>) {
+        debug_assert!(self.pairs.inverse_temperature.value_range.len() == 1);
+        for (index, values) in self.values.iter_mut().enumerate() {
+            let multiplicative_offset = index + 1;
+            values[self.pairs.inverse_temperature.value_range.start * multiplicative_offset] =
+                inverse_temperature.clone();
         }
     }
 
@@ -1732,7 +1891,8 @@ mod tests {
         graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise,
         momentum::sample::{BareMomentumSample, LoopMomenta},
-        utils::{ArbPrec, SamplingFloat},
+        utils::{ArbPrec, SamplingFloat, load_generic_model},
+        uv::uv_graph::UVE,
     };
 
     #[test]
@@ -1766,6 +1926,120 @@ mod tests {
 
         param_builder.initialize_duals(4);
         assert_eq!(param_builder.values.len(), 4);
+    }
+
+    #[test]
+    fn thermal_function_map_supports_higher_derivatives() {
+        test_initialise().unwrap();
+        let model = load_generic_model("sm");
+        for particle in ["d", "g"] {
+            let graph: Graph = format!(
+                r#"digraph thermal_cycle {{
+                    node [num=1]; edge [num=1 particle="{particle}"];
+                    A -> B; B -> C; C -> D; D -> E; E -> A;
+                }}"#
+            )
+            .into_graph(&model)
+            .unwrap();
+            let edge = EdgeIndex(0);
+            let mut params = vec![
+                GS.ose(edge),
+                GS.inverse_temperature.to_atom(),
+                GS.sign(edge),
+            ];
+            let mut input = vec![1.0, 2.0, 1.0];
+            if let Some(mu) = graph[edge]
+                .chemical_potential_atom()
+                .filter(|mu| !mu.is_zero())
+            {
+                params.push(mu);
+                input.push(0.0);
+            }
+            for order in [3, 4] {
+                let expressions = [
+                    GS.thermal_distribution(0, order, 1, 1),
+                    graph
+                        .explicit_thermal_distribution_atom(
+                            edge,
+                            order as usize,
+                            Atom::one(),
+                            ThermalDistributionLimit::Default,
+                        )
+                        .unwrap(),
+                ];
+                let [registered, explicit] = expressions.map(|expression| {
+                    expression
+                        .evaluator(&params)
+                        .function_map(graph.param_builder.fn_map.clone())
+                        .build()
+                        .unwrap()
+                        .map_coeff(&|coefficient| coefficient.re.to_f64())
+                        .evaluate_single(&input)
+                });
+                assert!((registered - explicit).abs() < 1e-13);
+            }
+        }
+    }
+
+    #[test]
+    fn thermal_tanh_remains_finite_at_uv_scales_and_preserves_derivatives() {
+        use symbolica::{
+            domains::dual::HyperDual,
+            prelude::{Complex as SymComplex, Dualizer},
+        };
+
+        test_initialise().unwrap();
+        let graph: Graph = dot!(
+            digraph thermal_tanh {
+                edge [num=1 mass=0]
+                node [num=1]
+                A -> B [id=0]
+            }
+        )
+        .unwrap();
+        let argument = Atom::var(symbol!("thermal_tanh_argument"));
+        // Thermal arguments are real, but native tanh must also preserve complex
+        // values and remain finite at UV scales, with analytic derivatives at x=0.
+        let evaluator = symbolica::transcendental::tanh()
+            .call_args([argument.clone()])
+            .evaluator(std::slice::from_ref(&argument))
+            .function_map(graph.param_builder.fn_map.clone())
+            .build()
+            .unwrap();
+        let mut real = evaluator
+            .clone()
+            .map_coeff(&|coefficient| coefficient.re.to_f64());
+        let dualizer = Dualizer::new(
+            HyperDual::<SymComplex<Rational>>::new(
+                crate::utils::hyperdual_utils::simple_n_deriv_shape(2),
+            ),
+            vec![],
+        );
+        let mut dual = evaluator
+            .clone()
+            .vectorize(&dualizer)
+            .unwrap()
+            .map_coeff(&|coefficient| coefficient.re.to_f64());
+        for value in [-1e12_f64, -1000., -1., 0., 1., 1000., 1e12] {
+            let tanh = value.tanh();
+            let first_derivative = 1. - tanh * tanh;
+            let expected = [tanh, first_derivative, -tanh * first_derivative];
+            assert!((real.evaluate_single(&[value]) - tanh).abs() < 1e-14);
+            let mut actual = [0.; 3];
+            dual.evaluate(&[value, 1., 0.], &mut actual);
+            for (actual, expected) in actual.into_iter().zip(expected) {
+                assert!((actual - expected).abs() < 1e-14, "tanh at {value}");
+            }
+        }
+
+        let mut complex = evaluator.map_coeff(&|coefficient| {
+            SymComplex::new(coefficient.re.to_f64(), coefficient.im.to_f64())
+        });
+        for value in [-1e12_f64, 1e12] {
+            let actual = complex.evaluate_single(&[SymComplex::new(value, 1.)]);
+            assert_eq!(actual.re, value.signum());
+            assert_eq!(actual.im, 0.);
+        }
     }
 
     #[test]

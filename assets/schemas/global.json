@@ -38,7 +38,7 @@
         "OS",
         "IR",
         "Unsubtracted",
-        "VaccuumLimit"
+        "VacuumLimit"
       ]
     },
     "CTIdentifier": {
@@ -280,6 +280,9 @@
             }
           }
         },
+        "medium": {
+          "$ref": "#/$defs/MediumSettings"
+        },
         "orientation_pattern": {
           "$ref": "#/$defs/OrientationPattern"
         },
@@ -345,6 +348,26 @@
           "type": "boolean"
         },
         "susbstitute_masters": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "MediumMode": {
+      "type": "string",
+      "enum": [
+        "vacuum",
+        "thermodynamic_equilibrium",
+        "zero_temperature_equilibrium"
+      ]
+    },
+    "MediumSettings": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "$ref": "#/$defs/MediumMode"
+        },
+        "vacuum_subtraction": {
           "type": "boolean"
         }
       },

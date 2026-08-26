@@ -717,7 +717,10 @@ impl Generate {
             Some(GenerateCmd::Amp(a)) => Some((GenerationType::Amplitude, a)),
             _ => None,
         };
-        if let Some((_, args)) = generation_mode.as_ref() {
+        if let Some((generation_type, args)) = generation_mode.as_ref() {
+            global_settings
+                .generation
+                .validate_for_process(*generation_type)?;
             if !state.process_list.processes.is_empty() && args.clear_existing_processes {
                 info!(
                     "Clearing all {} existing processes as requested.",
@@ -2226,6 +2229,59 @@ mod tests {
     use gammalooprs::utils::load_generic_model;
     use gammalooprs::{feyngen::GenerationType, initialisation::test_initialise};
     use std::time::Duration;
+
+    #[test]
+    fn thermal_xs_generation_is_rejected_before_changing_processes() -> Result<()> {
+        use gammalooprs::{processes::ProcessCollection, settings::global::MediumMode};
+
+        let mut state = State::new_test();
+        let mut cross_sections = BTreeMap::new();
+        cross_sections.insert(
+            "default".to_string(),
+            CrossSection::from_graph_list("default".to_string(), vec![], &state.model)?,
+        );
+        state.process_list.add_process(Process {
+            definition: ProcessDefinition {
+                generation_type: GenerationType::CrossSection,
+                ..ProcessDefinition::default()
+            },
+            settings_history: None,
+            collection: ProcessCollection::CrossSections(cross_sections),
+        });
+        let mut settings = GlobalSettings::default();
+        let runtime = RuntimeSettings::default();
+        let temp = tempfile::tempdir()?;
+
+        for mode in [
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            settings.generation.medium.mode = mode;
+            for command in [
+                "generate xs a > d d~ --clear-existing-processes",
+                "generate xs a > d d~ --only-diagrams --clear-existing-processes",
+                "generate existing -p 0",
+                "generate existing -p 0 --integrand-name default",
+                "generate",
+            ] {
+                let repl = Repl::try_parse_from(
+                    std::iter::once("gammaloop").chain(command.split_whitespace()),
+                )?;
+                let Commands::Generate(generate) = repl.command else {
+                    unreachable!();
+                };
+                let error = generate
+                    .run(&mut state, temp.path(), false, &settings, &runtime)
+                    .unwrap_err();
+                assert!(error.to_string().contains("`xs`"), "{command}: {error}");
+                assert!(error.to_string().contains("not supported"));
+                assert_eq!(state.process_list.processes.len(), 1);
+                assert!(state.process_list.processes[0].settings_history.is_none());
+            }
+        }
+        assert_eq!(std::fs::read_dir(temp.path())?.count(), 0);
+        Ok(())
+    }
 
     #[test]
     fn remove_compiled_cpp_sources_only_removes_sources_with_matching_libraries() -> Result<()> {

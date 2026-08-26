@@ -286,6 +286,21 @@ impl UVE for Edge {
     fn is_massive(&self) -> bool {
         self.particle.is_massive()
     }
+
+    fn is_fermion(&self) -> bool {
+        self.particle.is_fermion()
+    }
+
+    fn chemical_potential_atom(&self) -> Option<Atom> {
+        self.particle
+            .particle()
+            .and_then(|particle| particle.chemical_potential)
+            .map(|mu| {
+                Atom::var(mu.0.0)
+                    .replace(UFOSymbol::zero().0)
+                    .with(Atom::Zero)
+            })
+    }
 }
 
 impl Edge {
@@ -459,6 +474,21 @@ impl UVE for ParseEdge {
 
     fn is_massive(&self) -> bool {
         self.particle.is_massive()
+    }
+
+    fn is_fermion(&self) -> bool {
+        self.particle.is_fermion()
+    }
+
+    fn chemical_potential_atom(&self) -> Option<Atom> {
+        self.particle
+            .particle()
+            .and_then(|particle| particle.chemical_potential)
+            .map(|mu| {
+                Atom::var(mu.0.0)
+                    .replace(UFOSymbol::zero().0)
+                    .with(Atom::Zero)
+            })
     }
 }
 

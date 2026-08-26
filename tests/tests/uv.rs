@@ -76,6 +76,15 @@ const SUNRISE_INTEGRATED_UV_INTEGRATOR: IntegratedUvIntegratorSettings =
         n_cores: 10,
     };
 
+const THERMAL_SUNRISE_INTEGRATED_UV_INTEGRATOR: IntegratedUvIntegratorSettings =
+    IntegratedUvIntegratorSettings {
+        target_relative_accuracy: INTEGRATED_CT_RELATIVE_ERROR_LIMIT,
+        n_start: 50_000,
+        n_increase: 0,
+        n_max: 400_000,
+        n_cores: 1,
+    };
+
 const EPEM_A_BBX_INTEGRATED_UV_INTEGRATOR: IntegratedUvIntegratorSettings =
     IntegratedUvIntegratorSettings {
         target_relative_accuracy: 0.01,
@@ -817,6 +826,8 @@ fn integrated_uv_profile_passes(
     process: &str,
     integrand_name: &str,
 ) -> Result<bool> {
+    let medium = &cli.cli_settings.global.generation.medium;
+    let allow_vanishing_missing_fits = medium.vacuum_subtraction;
     let res = Profile::UltraViolet(UltraVioletProfile {
         process: Some(ProcessRef::Unqualified(process.to_string())),
         integrand_name: Some(integrand_name.to_string()),
@@ -824,6 +835,7 @@ fn integrated_uv_profile_passes(
         max_scale_exponent: UV_PROFILE_MAX_SCALE_EXPONENT,
         n_points: UV_PROFILE_N_POINTS,
         per_orientation: true,
+        allow_vanishing_missing_fits,
         ..Default::default()
     })
     .run(&mut cli.state, &cli.cli_settings)?;
@@ -2098,6 +2110,29 @@ fn helicity_amplitude_norm_stability_uses_both_components() -> Result<()> {
     }
     clean_test(&cli.cli_settings.state.folder);
     Ok(())
+}
+
+#[test]
+fn thermal_sunrise_uv() {
+    run_single_integrated_uv_case(&IntegratedUvCase {
+        run_card: "uv/thermal_sunrise",
+        test_name: "thermal_sunrise",
+        process: "thermal_sunrise",
+        integrand_name: "2L",
+        integrator: THERMAL_SUNRISE_INTEGRATED_UV_INTEGRATOR,
+        original_m_uv: 1.0,
+        shifted_m_uv: 6.0,
+        original_renormalization_localization_scale: 2.0,
+        shifted_renormalization_localization_scale: 5.0,
+        original_mu_r: 2.0,
+        shifted_mu_r: 2.0,
+        skip_uv_profile: false,
+        targets: IntegratedUvTargets {
+            integrated: Some(Complex::new(F(0.0), F(-1.207100279397555))),
+        },
+        integrated_ct_relative_error_limit: Some(INTEGRATED_CT_RELATIVE_ERROR_LIMIT),
+        check_mu_r_dependence: false,
+    });
 }
 
 const AA_AA_2L_UV_RICH_INSPECT: GraphUvRichInspectCase = GraphUvRichInspectCase {

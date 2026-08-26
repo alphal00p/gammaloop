@@ -17,6 +17,8 @@ itertools = { workspace = true }
 linnet = { workspace = true, features = ["bincode", "serde", "symbolica"] }
 nu-ansi-term = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"] }
+schemars = { workspace = true }
+pyo3 = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 symbolica = { workspace = true, features = ["bincode", "serde"] }
 tabled = { workspace = true, features = ["ansi"], optional = true }
@@ -32,3 +34,4 @@ default = ["serde"]
 serde = []
 display = ["dep:tabled", "dep:nu-ansi-term"]
 eval = ["dep:serde_json"]
+python_api = ["dep:pyo3"]

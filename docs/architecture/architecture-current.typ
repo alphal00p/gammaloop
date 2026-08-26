@@ -177,6 +177,44 @@ projection, marker, and backend-boundary invariants are documented in
 <cff-production-and-numerator-energy-ownership>
 GammaLoop owns production graph/source construction, UV orchestration, exact source mapping, and evaluator preparation. The `three-dimensional-reps` crate owns the shared CFF algebra. The `3Drep` command and feature-gated eager evaluator are diagnostic tools, not production contracts: GammaLoop may prepare their inputs, factors, and expressions differently.
 
+Finite-temperature and zero-temperature equilibrium share `MediumMode`, the
+structural CFF recursion, and bounded polynomial numerator reduction in
+`three-dimensional-reps`. Numerator reduction includes denominator-cancelling
+contact terms; each surviving denominator sector generates its own
+`CFFVariant::thermal_weight`. These weights retain cyclic orientations, thermal
+contraction numerators, and distribution derivatives separately from rational
+coefficients, keeping physical distributions outside Laurent interpolation.
+Distribution derivatives are ordinary energy derivatives at fixed temperature,
+chemical potential, and orientation. Reducing an m-edge cyclic chain contributes
+`(-1)^(m-1)/(m-1)!` to the CFF coefficient and a distribution derivative of order `m-1`.
+These weights survive serialization, variant fusion, source-edge remapping, and
+products of disconnected components. Initial-state cuts remain external energy
+aliases and never acquire thermal distribution factors. GammaLoop's graph and
+parameter layer expands the symbolic weights using particle statistics,
+chemical potentials, and inverse temperature; the shared generator does not
+own the physics model. Thermal terminal sectors retain their full distribution
+weights rather than applying the vacuum contour-closure normalization.
+
+The bounded and known-factor numerator builders share occurrence sampling and
+polynomial reduction across all medium modes. Every resulting scalar sector,
+including a contact, a terminal residue basis, or the zero-edge unit, goes
+through `LowerSectorCffBuilder`. That boundary owns duplicate parity, component
+factorization, terminal closure selection, and conversion into the immutable
+source convention. Thermal sectors discard inherited vacuum closure rows and
+retain both weighted poles. Variant lifting remaps thermal weights, energy IDs,
+surface IDs, and sign provenance together before attaching numerator factors;
+it applies no further medium-dependent normalization.
+
+Medium modes use direct local 3D UV subtraction. Their local UV kernels take the
+vacuum limit while the surrounding observable retains its medium dependence;
+optional vacuum subtraction is a complete-observable 3D operation. Generation
+validation rejects `local_uv_cts_from_expanded_4d_integrands` for either medium
+mode or vacuum subtraction. The diagnostic `3Drep build` command forwards the
+configured medium and records it alongside the serialized expression. Its
+model-free standalone eager evaluator rejects thermal expressions because it
+does not accept distribution inputs; production evaluation remains owned by
+GammaLoop.
+
 The shared `LinearEnergyExpr` stores exact `Rational` coefficients for indexed internal/external energies, the uniform scale and the constant term; `CFFVariant::prefactor` is also `Rational`. Arithmetic and cut handling retain that type until symbolic output converts it with `Atom::num`. Native rational serde/bincode support owns coefficient persistence; old Atom coefficient encodings are not a compatibility contract.
 
 CFF capacities belong to independently sampled denominator occurrences. Physical sources use their EMR/source-edge identities; completed UV sources additionally accept typed canonical denominator classes, which are distinct from `EdgeIndex`. LMB coordinates certify routing and fixed affine carriers. They do not authorize redistributing a physical source's energy powers or combining contours.

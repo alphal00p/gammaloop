@@ -6739,6 +6739,8 @@ dependencies = [
  "itertools 0.14.0",
  "linnet",
  "nu-ansi-term",
+ "pyo3",
+ "schemars",
  "serde",
  "serde_json",
  "symbolica",

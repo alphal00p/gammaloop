@@ -1,0 +1,17 @@
+digraph GL2{
+    num = "1";
+    overall_factor = "(AutG(3))^(-1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)";
+    overall_factor_evaluated = "-1/3";
+    projector = "1";
+
+	0 [int_id="V_135"];
+	1 [int_id="V_135"];
+	2 [int_id="V_135"];
+	3 [int_id="V_36"];
+	0:0	-> 1:1	 [id=0  lmb_id="0" lmb_rep="K(0,a___)" particle="u"];
+	2:2	-> 0:3	 [id=1  lmb_id="1" lmb_rep="K(1,a___)" particle="u"];
+	0:4	-> 3:5	 [id=2 dir=none  lmb_rep="-1*K(0,a___)+K(1,a___)" particle="g"];
+	1:6	-> 2:7	 [id=3  lmb_rep="-1*K(2,a___)+K(0,a___)" particle="u"];
+	1:8	-> 3:9	 [id=4 dir=none  lmb_id="2" lmb_rep="K(2,a___)" particle="g"];
+	2:10	-> 3:11	 [id=5 dir=none  lmb_rep="-1*K(1,a___)+-1*K(2,a___)+K(0,a___)" particle="g"];
+}

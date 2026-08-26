@@ -13,7 +13,7 @@ use gammalooprs::{
     graph::Graph,
     integrands::process::ProcessIntegrand,
     processes::{Amplitude, CrossSection, Process, ProcessCollection},
-    settings::global::UniformNumeratorSamplingScale,
+    settings::global::{MediumMode, UniformNumeratorSamplingScale},
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -193,6 +193,7 @@ struct ValidateOutput {
 struct BuildOutput {
     backend: &'static str,
     family: &'static str,
+    medium_mode: MediumMode,
     process_id: usize,
     integrand_name: String,
     graph_id: usize,
@@ -353,6 +354,7 @@ impl Build {
             .graph
             .cff_3d_expression_options(numerator_sampling_scale_mode)?;
         options.representation = representation;
+        options.medium_mode = global_cli_settings.global.generation.medium.mode;
         let initial_state_cut_edges = selected
             .graph
             .iter_edges_of(&selected.graph.initial_state_cut)
@@ -373,6 +375,7 @@ impl Build {
         let output = BuildOutput {
             backend: "gammaloop-3Drep",
             family: "cff",
+            medium_mode: options.medium_mode,
             process_id: selected.process_id,
             integrand_name: selected.integrand_name.clone(),
             graph_id: selected.graph_id,

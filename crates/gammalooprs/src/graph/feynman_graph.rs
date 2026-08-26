@@ -16,9 +16,10 @@ use spenso::{
 };
 // use petgraph::Direction::Outgoing;
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, Indeterminate},
     function,
     id::Replacement,
+    transcendental::{coth, csch, sech, tanh},
 };
 use typed_index_collections::TiVec;
 
@@ -30,7 +31,10 @@ use crate::{
     momentum::signature::{ExternalSignature, SignatureLike},
     momentum::{PolDef, SignOrZero},
     numerator::{graph::ReversibleEdge, ufo::UFO},
-    utils::{F, FloatLike, GS, external_energy_atom_from_index, ose_atom_from_index},
+    utils::{
+        F, FloatLike, GS, external_energy_atom_from_index, ose_atom_from_index,
+        symbols::ThermalDistributionLimit,
+    },
     uv::uv_graph::UVE,
 };
 
@@ -181,6 +185,17 @@ where
         self.1.explicit_ose_atom(edge)
     }
 
+    fn explicit_thermal_distribution_atom(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+        limit: ThermalDistributionLimit,
+    ) -> Option<Atom> {
+        self.1
+            .explicit_thermal_distribution_atom(edge, derivative_order, thermal_sign, limit)
+    }
+
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom> {
         lmb.loop_edges
             .iter()
@@ -230,6 +245,72 @@ where
                 * GS.emr_mom(edge, Atom::from(ExpandedIndex::from_iter([3])));
 
         (dot + mass2).sqrt()
+    }
+
+    fn explicit_thermal_distribution_atom(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+        limit: ThermalDistributionLimit,
+    ) -> Option<Atom> {
+        match limit {
+            ThermalDistributionLimit::Default => {
+                let chemical_potential = self[edge].chemical_potential_atom();
+                let shifted_ose = match chemical_potential {
+                    Some(mu) => ose_atom_from_index(edge) - GS.sign(edge) * mu,
+                    None => ose_atom_from_index(edge),
+                };
+
+                let beta = Atom::var(GS.inverse_temperature);
+                let arg = beta.clone() * shifted_ose / Atom::num(2);
+                match (self[edge].is_fermion(), derivative_order) {
+                    (true, 0) => Some((thermal_sign + tanh().call_args([arg])) / Atom::num(2)),
+                    (false, 0) => Some((thermal_sign + coth().call_args([arg])) / Atom::num(2)),
+                    (true, 1) => Some(beta * sech().call_args([arg]).pow(2) / Atom::num(4)),
+                    (false, 1) => Some(-beta * csch().call_args([arg]).pow(2) / Atom::num(4)),
+                    (true, 2) => Some(
+                        -beta.pow(2) * sech().call_args([&arg]).pow(2) * tanh().call_args([arg])
+                            / Atom::num(4),
+                    ),
+                    (false, 2) => Some(
+                        beta.pow(2) * csch().call_args([&arg]).pow(2) * coth().call_args([arg])
+                            / Atom::num(4),
+                    ),
+                    (_, _) => {
+                        let energy = Indeterminate::try_from(ose_atom_from_index(edge)).unwrap();
+                        let mut body =
+                            self.explicit_thermal_distribution_atom(edge, 2, thermal_sign, limit)?;
+                        for _ in 2..derivative_order {
+                            body = body.derivative(&energy).expand();
+                        }
+                        Some(body)
+                    }
+                }
+            }
+            ThermalDistributionLimit::ZeroTemperature => {
+                let chemical_potential = self[edge].chemical_potential_atom();
+                let shifted_ose = match chemical_potential {
+                    Some(mu) => ose_atom_from_index(edge) - GS.sign(edge) * mu,
+                    None => ose_atom_from_index(edge),
+                };
+                let chemical_potential = self[edge].chemical_potential_atom();
+                match (chemical_potential, derivative_order) {
+                    (Some(_), 0) => {
+                        Some(thermal_sign.clone() * GS.heaviside(thermal_sign * shifted_ose))
+                    }
+                    (None, 0) => Some((Atom::num(1) + thermal_sign) / Atom::num(2)),
+                    (None, _) => Some(Atom::num(0)),
+                    // TODO: distribution derivatives with chemical potential not yet
+                    // supported at zero temperature
+                    _ => None,
+                }
+            }
+            ThermalDistributionLimit::Vacuum => match derivative_order {
+                0 => Some((Atom::num(1) + thermal_sign) / Atom::num(2)),
+                _ => Some(Atom::num(0)),
+            },
+        }
     }
 
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom> {
@@ -312,6 +393,21 @@ impl ParamBuilderGraph for Graph {
 
     fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom {
         self.underlying.explicit_ose_atom(edge)
+    }
+
+    fn explicit_thermal_distribution_atom(
+        &self,
+        edge: EdgeIndex,
+        derivative_order: usize,
+        thermal_sign: Atom,
+        limit: ThermalDistributionLimit,
+    ) -> Option<Atom> {
+        self.underlying.explicit_thermal_distribution_atom(
+            edge,
+            derivative_order,
+            thermal_sign,
+            limit,
+        )
     }
 
     #[allow(unused_variables)]
@@ -825,8 +921,14 @@ impl FeynmanGraph for Graph {
 mod tests {
     use super::*;
     use crate::{
-        graph::parse::from_dot::IntoGraph, initialisation::test_initialise,
-        utils::load_generic_model,
+        dot,
+        graph::parse::from_dot::IntoGraph,
+        initialisation::test_initialise,
+        utils::{ArbPrec, load_generic_model},
+    };
+    use symbolica::{
+        evaluate::{CompileOptions, ExportSettings, FunctionMap, OptimizationSettings},
+        symbol,
     };
 
     #[test]
@@ -992,5 +1094,211 @@ mod tests {
             graph.validate_real_masses(&model)?;
         }
         Ok(())
+    }
+
+    #[test]
+    fn thermal_distribution_bodies_are_energy_derivatives() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph thermal {
+            node [num=1]
+            edge [num=1]
+            A -> B [particle="d"]
+            B -> A [particle="d"]
+            A -> B [particle="g"]
+        })
+        .unwrap();
+        let energy = symbol!("thermal_derivative_energy");
+        let thermal_sign = symbol!("thermal_derivative_sign").to_atom();
+        for fermion in [true, false] {
+            let edge = graph
+                .iter_edge_ids()
+                .find(|&edge| graph[edge].is_fermion() == fermion)
+                .unwrap();
+            let bodies = [0, 1, 2, 3, 4, 5, 6].map(|order| {
+                graph
+                    .explicit_thermal_distribution_atom(
+                        edge,
+                        order,
+                        thermal_sign.clone(),
+                        ThermalDistributionLimit::Default,
+                    )
+                    .unwrap()
+                    .replace(ose_atom_from_index(edge))
+                    .with(energy)
+            });
+            // Temperature, chemical potential, and orientation stay symbolic and fixed.
+            for (order, pair) in bodies.windows(2).enumerate() {
+                assert!(
+                    (pair[0].derivative(energy) - &pair[1]).expand().is_zero(),
+                    "energy derivative of thermal distribution order {order} on edge {edge}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn native_thermal_distributions() {
+        test_initialise().unwrap();
+        let graph: Graph = dot!(digraph thermal {
+            node [num=1]
+            edge [num=1]
+            A -> B [particle="d"]
+            B -> A [particle="d"]
+            A -> B [particle="g"]
+        })
+        .unwrap();
+        let directory =
+            std::env::temp_dir().join(format!("gammaloop-native-thermal-{}", std::process::id()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let energy = symbol!("thermal_test_energy").to_atom();
+        let mu = symbol!("thermal_test_mu").to_atom();
+        let orientation = symbol!("thermal_test_orientation").to_atom();
+        let thermal_sign = symbol!("thermal_test_sign").to_atom();
+        for fermion in [true, false] {
+            let edge = graph
+                .iter_edge_ids()
+                .find(|&edge| graph[edge].is_fermion() == fermion)
+                .unwrap();
+            let chemical_potential = graph[edge].chemical_potential_atom();
+            let has_mu = chemical_potential.as_ref().is_some_and(|mu| !mu.is_zero());
+            assert_eq!(has_mu, fermion);
+            for order in 0..=4 {
+                let mut expression = graph
+                    .explicit_thermal_distribution_atom(
+                        edge,
+                        order,
+                        thermal_sign.clone(),
+                        ThermalDistributionLimit::Default,
+                    )
+                    .unwrap()
+                    .replace(ose_atom_from_index(edge))
+                    .with(energy.clone())
+                    .replace(GS.inverse_temperature)
+                    .with(Atom::num(2))
+                    .replace(GS.sign(edge))
+                    .with(orientation.clone());
+                if has_mu {
+                    expression = expression
+                        .replace(chemical_potential.clone().unwrap())
+                        .with(mu.clone());
+                }
+                let evaluator = expression
+                    .as_view()
+                    .to_evaluation_tree(
+                        &FunctionMap::new(),
+                        &[
+                            energy.clone(),
+                            mu.clone(),
+                            orientation.clone(),
+                            thermal_sign.clone(),
+                        ],
+                    )
+                    .unwrap()
+                    .linearize(&OptimizationSettings::default());
+                let mut double = evaluator.clone().map_coeff(&|c| F::<f64>::from(&c.re));
+                let mut precise = evaluator.clone().map_coeff(&|c| F::<ArbPrec>::from(&c.re));
+                let path = directory.join(format!("thermal_{}_{}", edge.0, order));
+                let mut compiled = evaluator
+                    .export_cpp::<f64>(path.with_extension("cpp"), "thermal", ExportSettings::new())
+                    .unwrap()
+                    .compile(path.with_extension("so"), CompileOptions::default())
+                    .unwrap()
+                    .load()
+                    .unwrap();
+                for x in [
+                    -1000.0_f64,
+                    -40.0,
+                    -1.0,
+                    -2.0_f64.powi(-26),
+                    0.0,
+                    2.0_f64.powi(-26),
+                    1.0,
+                    40.0,
+                    1000.0,
+                ] {
+                    if !fermion && x == 0.0 {
+                        continue; // The Bose distribution has a pole at zero.
+                    }
+                    let q = (-2.0 * x.abs()).exp();
+                    let denominator = if fermion {
+                        1.0 + q
+                    } else {
+                        -(-2.0 * x.abs()).exp_m1()
+                    };
+                    let hyperbolic = x.signum()
+                        * if fermion {
+                            -(-2.0 * x.abs()).exp_m1() / denominator
+                        } else {
+                            (1.0 + q) / denominator
+                        };
+                    let squared = 4.0 * q / denominator.powi(2);
+                    for sign in [-1.0, 1.0] {
+                        for chemical_potential in [0.0, 0.5] {
+                            let energy_value = x + if has_mu {
+                                sign * chemical_potential
+                            } else {
+                                0.0
+                            };
+                            let expected = match order {
+                                0 => (sign + hyperbolic) / 2.0,
+                                1 => {
+                                    if fermion {
+                                        squared / 2.0
+                                    } else {
+                                        -squared / 2.0
+                                    }
+                                }
+                                2 => {
+                                    if fermion {
+                                        -squared * hyperbolic
+                                    } else {
+                                        squared * hyperbolic
+                                    }
+                                }
+                                3 => {
+                                    if fermion {
+                                        2.0 * squared * hyperbolic.powi(2) - squared.powi(2)
+                                    } else {
+                                        -2.0 * squared * hyperbolic.powi(2) - squared.powi(2)
+                                    }
+                                }
+                                4 => {
+                                    if fermion {
+                                        -4.0 * squared * hyperbolic.powi(3)
+                                            + 8.0 * squared.powi(2) * hyperbolic
+                                    } else {
+                                        4.0 * squared * hyperbolic.powi(3)
+                                            + 8.0 * squared.powi(2) * hyperbolic
+                                    }
+                                }
+                                _ => unreachable!(),
+                            };
+                            let input = [energy_value, chemical_potential, sign, sign];
+                            let mut output = [0.0];
+                            compiled.evaluate(&input, &mut output);
+                            // Preserve the computed binary64 inputs across backends.
+                            let precise_input = input.map(|v| F(ArbPrec::from_f64_exact_binary(v)));
+                            let results = [
+                                double.evaluate_single(&input.map(F)).0,
+                                precise.evaluate_single(&precise_input).into_ff64().0,
+                                output[0],
+                            ];
+                            for result in results {
+                                let tolerance = if order == 0 {
+                                    2e-15 * expected.abs().max(1.0)
+                                } else {
+                                    2e-13 * expected.abs() + 1e-300
+                                };
+                                assert!(
+                                    (result - expected).abs() <= tolerance,
+                                    "fermion={fermion}, order={order}, x={x}, mu={chemical_potential}, sign={sign}: {result} != {expected}"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        std::fs::remove_dir_all(directory).unwrap();
     }
 }

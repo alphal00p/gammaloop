@@ -6,10 +6,12 @@ use linnet::half_edge::involution::{EdgeVec, Orientation};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
 use symbolica::prelude::*;
+pub use three_dimensional_reps::MediumMode;
 
 use crate::{
     GammaLoopContext,
     cff::{expression::OrientationSelector, orientations::GraphOrientation},
+    feyngen::GenerationType,
     processes::EvaluatorSettings,
     utils::{
         DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, GS, W_,
@@ -69,10 +71,28 @@ pub struct GenerationSettings {
     /// Sum all generated residue branches explicitly, removing runtime orientation selectors.
     #[serde(skip_serializing_if = "is_false")]
     pub explicit_orientation_sum_only: bool,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub medium: MediumSettings,
 }
 
 impl GenerationSettings {
-    pub(crate) fn validate_explicit_orientation_sum_options(&self) -> EyreResult<()> {
+    pub fn validate_for_process(&self, generation_type: GenerationType) -> EyreResult<()> {
+        if generation_type == GenerationType::CrossSection
+            && (self.medium.mode != MediumMode::Vacuum || self.medium.vacuum_subtraction)
+        {
+            return Err(eyre!(
+                "Cross-section (`xs`) generation is not supported in thermal modes or with vacuum subtraction"
+            ));
+        }
+
+        if (self.medium.mode != MediumMode::Vacuum || self.medium.vacuum_subtraction)
+            && self.uv.local_uv_cts_from_expanded_4d_integrands
+        {
+            return Err(eyre!(
+                "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` is unsupported for finite-medium modes or vacuum subtraction; use local 3D subtraction instead"
+            ));
+        }
+
         if self.uv.local_uv_cts_from_expanded_4d_integrands && !self.explicit_orientation_sum_only {
             return Err(eyre!(
                 "`global.generation.uv.local_uv_cts_from_expanded_4d_integrands = true` requires `global.generation.explicit_orientation_sum_only = true` because projected 4D counterterms have term-local CFF orientation sums"
@@ -91,7 +111,63 @@ impl GenerationSettings {
 
 #[cfg(test)]
 mod generation_settings_tests {
-    use super::{GenerationSettings, OrientationPattern};
+    use super::{GenerationSettings, GenerationType, MediumMode, OrientationPattern};
+
+    #[test]
+    fn cross_sections_require_vacuum_mode_without_vacuum_subtraction() {
+        let mut settings = GenerationSettings::default();
+        settings
+            .validate_for_process(GenerationType::CrossSection)
+            .unwrap();
+
+        for mode in [
+            MediumMode::Vacuum,
+            MediumMode::ThermodynamicEquilibrium,
+            MediumMode::ZeroTemperatureEquilibrium,
+        ] {
+            for vacuum_subtraction in [false, true] {
+                settings.medium.mode = mode;
+                settings.medium.vacuum_subtraction = vacuum_subtraction;
+                settings
+                    .validate_for_process(GenerationType::Amplitude)
+                    .unwrap();
+                if mode != MediumMode::Vacuum || vacuum_subtraction {
+                    let error = settings
+                        .validate_for_process(GenerationType::CrossSection)
+                        .unwrap_err();
+                    assert!(error.to_string().contains("`xs`"));
+                    assert!(error.to_string().contains("not supported"));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn finite_medium_supports_only_local_3d_subtraction() {
+        for (mode, vacuum_subtraction) in [
+            (MediumMode::ThermodynamicEquilibrium, false),
+            (MediumMode::ZeroTemperatureEquilibrium, false),
+            (MediumMode::Vacuum, true),
+        ] {
+            let mut settings = GenerationSettings::default();
+            settings.medium.mode = mode;
+            settings.medium.vacuum_subtraction = vacuum_subtraction;
+            settings
+                .validate_for_process(GenerationType::Amplitude)
+                .unwrap();
+
+            settings.explicit_orientation_sum_only = true;
+            settings.uv.local_uv_cts_from_expanded_4d_integrands = true;
+            let error = settings
+                .validate_for_process(GenerationType::Amplitude)
+                .unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("use local 3D subtraction instead")
+            );
+        }
+    }
 
     #[test]
     fn projected_4d_cff_requires_an_unfiltered_explicit_orientation_sum() {
@@ -99,7 +175,7 @@ mod generation_settings_tests {
         settings.uv.local_uv_cts_from_expanded_4d_integrands = true;
 
         let error = settings
-            .validate_explicit_orientation_sum_options()
+            .validate_for_process(GenerationType::Amplitude)
             .unwrap_err();
         assert!(
             error
@@ -109,12 +185,12 @@ mod generation_settings_tests {
 
         settings.explicit_orientation_sum_only = true;
         settings
-            .validate_explicit_orientation_sum_options()
+            .validate_for_process(GenerationType::Amplitude)
             .unwrap();
 
         settings.orientation_pattern = OrientationPattern::from_user_pattern("(+,-)").unwrap();
         let error = settings
-            .validate_explicit_orientation_sum_options()
+            .validate_for_process(GenerationType::Amplitude)
             .unwrap_err();
         assert!(
             error
@@ -786,6 +862,29 @@ impl Default for Parallelisation {
             generate: 1,
             compile: 1,
             integrate: 1,
+        }
+    }
+}
+
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
+#[trait_decode(trait = GammaLoopContext)]
+#[serde(default, deny_unknown_fields)]
+pub struct MediumSettings {
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub mode: MediumMode,
+    #[serde(skip_serializing_if = "is_false")]
+    pub vacuum_subtraction: bool,
+}
+
+impl Default for MediumSettings {
+    fn default() -> Self {
+        Self {
+            mode: MediumMode::Vacuum,
+            vacuum_subtraction: false,
         }
     }
 }

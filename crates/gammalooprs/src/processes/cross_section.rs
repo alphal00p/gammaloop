@@ -37,6 +37,7 @@ use crate::{
         surface::HybridSurfaceID,
     },
     debug_tags, define_index,
+    feyngen::GenerationType,
     graph::{
         GraphGroup, GroupId, LMBext, LmbChannelFallback, LmbIndex, LoopMomentumBasis,
         ThresholdPinchStatus,
@@ -932,6 +933,7 @@ impl CrossSection {
         runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
+        global_settings.validate_for_process(GenerationType::CrossSection)?;
         let integrand_name = self.name.clone();
         generation_progress::begin_phase(
             GenerationProgressPhase::GraphPreprocessing,
@@ -989,6 +991,9 @@ impl CrossSection {
         runtime_default: LockedRuntimeSettings,
         generation_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
+        global_settings
+            .generation
+            .validate_for_process(GenerationType::CrossSection)?;
         let process_name = process_definition.folder_name.as_str();
         let started = std::time::Instant::now();
         crate::debug_tags!(#generation, #profile, #graph, #summary;
@@ -1627,7 +1632,7 @@ impl CrossSectionGraph {
     }
 
     fn generate_cff(&mut self, settings: &GenerationSettings) -> Result<GraphGenerationStats> {
-        settings.validate_explicit_orientation_sum_options()?;
+        settings.validate_for_process(GenerationType::CrossSection)?;
         self.graph.ensure_energy_convergent_cycles(
             &self
                 .graph
@@ -1945,7 +1950,7 @@ impl CrossSectionGraph {
                 settings.explicit_orientation_sum_only,
             )
             .with_energy_degree_bound_reports(cff_energy_degree_bound_reports),
-            &settings.uv,
+            settings,
         )?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
             stage = "supergraph_parametric_orchestration_done",
@@ -3980,7 +3985,7 @@ impl CrossSectionGraph {
                     settings.explicit_orientation_sum_only,
                 )
                 .with_energy_degree_bound_reports(cff_energy_degree_bound_reports),
-                &settings.uv,
+                settings,
             )?
             .into_iter();
 

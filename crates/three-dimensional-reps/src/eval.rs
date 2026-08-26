@@ -11,6 +11,8 @@ use crate::{
 
 #[derive(Debug, Error)]
 pub enum EvaluationError {
+    #[error("standalone diagnostic evaluation does not yet accept thermal distribution inputs")]
+    ThermalDistributionInputsUnsupported,
     #[error("invalid JSON: {0}")]
     Json(#[from] serde_json::Error),
     #[error("{0}")]
@@ -237,6 +239,14 @@ pub fn evaluate_expression(
     }
     if input.uniform_scale == Some(0.0) {
         return Err(EvaluationError::ZeroUniformScale);
+    }
+    if expression
+        .orientations
+        .iter()
+        .flat_map(|orientation| &orientation.variants)
+        .any(|variant| variant.thermal_weight.medium_mode != crate::MediumMode::Vacuum)
+    {
+        return Err(EvaluationError::ThermalDistributionInputsUnsupported);
     }
     let numerator = NumeratorExpr::parse(numerator_expr)?;
     let evaluator = ExpressionEvaluator::new(parsed, expression, input);
@@ -3842,5 +3852,713 @@ mod tests {
             (forward - reversed).abs() <= 1.0e-12 * scale,
             "reversing only the source incidence of an even vacuum triangle changed its generalized CFF: forward={forward:e}, reversed={reversed:e}"
         );
+    }
+}
+
+#[cfg(test)]
+mod thermal_reference_tests {
+    use super::*;
+    use crate::{
+        Generate3DExpressionOptions, MediumMode, MomentumSignature, NumeratorSamplingScaleMode,
+        generate_3d_expression,
+        graph_io::{ParsedGraphExternalEdge, ParsedGraphInternalEdge},
+        surface::LinearSurfaceKind,
+    };
+
+    #[test]
+    fn thermal_energy_numerators_preserve_propagator_cancellation() {
+        check_thermal_energy_numerator_cases(&["sunset", "double_pole"]);
+    }
+
+    #[test]
+    fn thermal_triple_pole_bose_derivatives() {
+        check_thermal_energy_numerator_cases(&["triple_pole"]);
+    }
+
+    fn check_thermal_energy_numerator_cases(names: &[&str]) {
+        // Keep the two three-gluon vertices factorized while performing the
+        // finite Lorentz contraction. The second vertex carries opposite momenta.
+        let metric = [1, -1, -1, -1];
+        let mut contractions = Vec::new();
+        for a in 0..4 {
+            for b in 0..4 {
+                for c in 0..4 {
+                    if a != b && a != c && b != c {
+                        continue;
+                    }
+                    let gab = if a == b { metric[a] } else { 0 };
+                    let gac = if a == c { metric[a] } else { 0 };
+                    let gbc = if b == c { metric[b] } else { 0 };
+                    let first = format!(
+                        "{gac}*edges[0][{b}]-{gab}*edges[0][{c}]-{gbc}*edges[1][{a}]+{gab}*edges[1][{c}]+{gbc}*edges[2][{a}]-{gac}*edges[2][{b}]"
+                    );
+                    let second = format!(
+                        "-{gac}*edges[0][{b}]+{gab}*edges[0][{c}]+{gbc}*edges[1][{a}]-{gab}*edges[1][{c}]-{gbc}*edges[2][{a}]+{gac}*edges[2][{b}]"
+                    );
+                    contractions.push(format!(
+                        "{}*({first})*({second})",
+                        metric[a] * metric[b] * metric[c]
+                    ));
+                }
+            }
+        }
+        let gl1 = contractions.join("+");
+        for (name, edges, signatures, bounds, input) in [
+            (
+                "sunset",
+                vec![(0, 1), (0, 1), (0, 1)],
+                vec![vec![1, 0], vec![0, 1], vec![-1, -1]],
+                vec![(0, 2), (1, 2), (2, 2)],
+                EvaluationInput {
+                    external_momenta: Vec::new(),
+                    loop_spatial_momenta: vec![
+                        [2.0, 0.0, 0.0],
+                        [0.75, 0.75 * 15.0_f64.sqrt(), 0.0],
+                    ],
+                    masses: vec![0.0; 3],
+                    uniform_scale: None,
+                },
+            ),
+            (
+                "double_pole",
+                vec![(0, 1), (1, 0)],
+                vec![vec![1], vec![1]],
+                vec![(0, 2)],
+                EvaluationInput {
+                    external_momenta: Vec::new(),
+                    loop_spatial_momenta: vec![[0.0; 3]],
+                    masses: vec![2.0; 2],
+                    uniform_scale: None,
+                },
+            ),
+            (
+                "triple_pole",
+                vec![(0, 1), (1, 2), (2, 0)],
+                vec![vec![1], vec![1], vec![1]],
+                vec![(0, 4)],
+                EvaluationInput {
+                    external_momenta: Vec::new(),
+                    loop_spatial_momenta: vec![[0.0; 3]],
+                    masses: vec![2.0; 3],
+                    uniform_scale: None,
+                },
+            ),
+        ] {
+            if !names.contains(&name) {
+                continue;
+            }
+            let n_nodes = edges.iter().flat_map(|(a, b)| [*a, *b]).max().unwrap() + 1;
+            let parsed = ParsedGraph {
+                loop_names: (0..signatures[0].len()).map(|i| format!("q{i}")).collect(),
+                internal_edges: edges
+                    .into_iter()
+                    .zip(signatures)
+                    .enumerate()
+                    .map(
+                        |(edge_id, ((tail, head), loop_signature))| ParsedGraphInternalEdge {
+                            edge_id,
+                            tail,
+                            head,
+                            label: format!("q{edge_id}"),
+                            mass_key: Some(format!(
+                                "m{}",
+                                if name == "sunset" { edge_id } else { 0 }
+                            )),
+                            signature: MomentumSignature {
+                                loop_signature,
+                                external_signature: Vec::new(),
+                            },
+                            had_pow: false,
+                        },
+                    )
+                    .collect(),
+                external_edges: Vec::new(),
+                initial_state_cut_edges: Vec::new(),
+                external_names: Vec::new(),
+                node_name_to_internal: (0..n_nodes).map(|i| (format!("v{i}"), i)).collect(),
+            };
+            for (medium_mode, sampling_mode, uniform_scale) in itertools::iproduct!(
+                [
+                    MediumMode::Vacuum,
+                    MediumMode::ThermodynamicEquilibrium,
+                    MediumMode::ZeroTemperatureEquilibrium,
+                ],
+                [
+                    NumeratorSamplingScaleMode::None,
+                    NumeratorSamplingScaleMode::BeyondQuadratic,
+                    NumeratorSamplingScaleMode::All,
+                ],
+                [0.75, 2.25],
+            ) {
+                let input = EvaluationInput {
+                    uniform_scale: Some(uniform_scale),
+                    ..input.clone()
+                };
+                let generated = generate_3d_expression(
+                    &parsed,
+                    &Generate3DExpressionOptions {
+                        medium_mode,
+                        energy_degree_bounds: Some(bounds.clone()),
+                        numerator_sampling_scale: sampling_mode,
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                let expression = &generated.expression;
+                let uses_uniform_scale = bounds
+                    .iter()
+                    .any(|(_, degree)| sampling_mode.is_active_for_degree(*degree));
+                assert_eq!(
+                    expression
+                        .orientations
+                        .iter()
+                        .flat_map(|orientation| &orientation.edge_energy_map)
+                        .any(LinearEnergyExpr::uses_uniform_scale),
+                    uses_uniform_scale,
+                    "{name}, {medium_mode:?}, {sampling_mode:?}: numerator sampling nodes"
+                );
+                assert_eq!(
+                    expression
+                        .orientations
+                        .iter()
+                        .flat_map(|orientation| &orientation.variants)
+                        .any(|variant| variant.uniform_scale_power != 0),
+                    uses_uniform_scale,
+                    "{name}, {medium_mode:?}, {sampling_mode:?}: compensating M powers"
+                );
+                let evaluator = ExpressionEvaluator::new(&parsed, expression, &input);
+                let energies = &evaluator.internal_energies;
+                let source_conversion =
+                    generated
+                        .energy_factor_components
+                        .iter()
+                        .fold(1.0, |factor, component| {
+                            let frame = match component.ownership {
+                                crate::CffEnergyFactorOwnership::GlobalSourceProduct => {
+                                    component.core_global_prefactor_sign
+                                }
+                                crate::CffEnergyFactorOwnership::VariantLocal => {
+                                    component.denominator_only_global_prefactor_sign
+                                }
+                            };
+                            factor
+                                * crate::CffGlobalPrefactorSign::from_exponent(
+                                    component.internal_edge_ids.len(),
+                                )
+                                .product(frame)
+                                .factor() as f64
+                        });
+                for vacuum_limit in [true, false] {
+                    if !vacuum_limit && medium_mode != MediumMode::ThermodynamicEquilibrium {
+                        continue;
+                    }
+                    let coth = energies
+                        .iter()
+                        .map(|energy| {
+                            if vacuum_limit {
+                                1.0
+                            } else {
+                                1.0 / (energy / 2.0).tanh()
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                    let tadpoles = energies
+                        .iter()
+                        .zip(&coth)
+                        .map(|(e, c)| c / (2.0 * e))
+                        .collect::<Vec<_>>();
+                    let mut cases = Vec::new();
+                    if name == "sunset" {
+                        // Independent bosonic Matsubara sunset formula; the raw
+                        // contour convention contributes its overall minus sign.
+                        let scalar = -(0..8)
+                            .map(|bits| {
+                                let signs = [0, 1, 2]
+                                    .map(|i| if bits & (1 << i) == 0 { -1.0 } else { 1.0 });
+                                let weight = [1.0, -1.0].map(|s| {
+                                    (0..3)
+                                        .map(|i| (coth[i] + s * signs[i]) / 2.0)
+                                        .product::<f64>()
+                                });
+                                (weight[0] - weight[1])
+                                    / (0..3).map(|i| signs[i] * energies[i]).sum::<f64>()
+                            })
+                            .sum::<f64>()
+                            / energies.iter().map(|e| 2.0 * e).product::<f64>();
+                        cases.push(("1".to_string(), scalar));
+                        for (i, energy) in energies.iter().enumerate() {
+                            // qi0^2 = Di + Ei^2 leaves the product of the other
+                            // two tadpoles when its own propagator cancels.
+                            let contact = (0..3)
+                                .filter(|j| *j != i)
+                                .map(|j| tadpoles[j])
+                                .product::<f64>();
+                            cases.push((
+                                format!("edges[{i}][0]**2"),
+                                contact + energy.powi(2) * scalar,
+                            ));
+                        }
+                        // Momentum conservation gives N_GL1=-9 sum qi^2.
+                        // For massless lines each qi^2 cancels its propagator.
+                        cases.push((
+                            gl1.clone(),
+                            -9.0 * (0..3)
+                                .map(|i| tadpoles[i] * tadpoles[(i + 1) % 3])
+                                .sum::<f64>(),
+                        ));
+                    } else {
+                        let e = energies[0];
+                        let c = coth[0];
+                        // Jr = T sum_n (omega_n^2+E^2)^(-r), obtained from
+                        // J1=coth(E/2)/(2E) by differentiation with respect to E^2.
+                        let j1 = tadpoles[0];
+                        let j2 = c / (4.0 * e.powi(3)) + (c * c - 1.0) / (8.0 * e.powi(2));
+                        let j3 = 3.0 * c / (16.0 * e.powi(5))
+                            + 3.0 * (c * c - 1.0) / (32.0 * e.powi(4))
+                            + c * (c * c - 1.0) / (32.0 * e.powi(3));
+                        if name == "double_pole" {
+                            cases.push(("1".to_string(), j2));
+                            cases.push(("edges[0][0]**2".to_string(), -(j1 - e * e * j2)));
+                        } else {
+                            cases.push(("1".to_string(), -j3));
+                            cases.push((
+                                "edges[0][0]**4".to_string(),
+                                -(j1 - 2.0 * e * e * j2 + e.powi(4) * j3),
+                            ));
+                        }
+                    }
+                    let distribution = |edge: usize, sign: i32, order| match order {
+                        0 => (f64::from(sign) + coth[edge]) / 2.0,
+                        1 => -(coth[edge] * coth[edge] - 1.0) / 4.0,
+                        2 => (coth[edge] * coth[edge] - 1.0) * coth[edge] / 4.0,
+                        _ => panic!("unexpected distribution derivative {order}"),
+                    };
+                    for (numerator, expected) in cases {
+                        let numerator_expr = NumeratorExpr::parse(&numerator).unwrap();
+                        let mut actual = 0.0;
+                        for orientation in &expression.orientations {
+                            for variant in &orientation.variants {
+                                let thermal = variant
+                                    .thermal_weight
+                                    .numerators
+                                    .iter()
+                                    .map(|numerator| {
+                                        let product = |sign| {
+                                            numerator
+                                                .positive_energies
+                                                .iter()
+                                                .map(|edge| distribution(edge.0, sign, 0))
+                                                .chain(
+                                                    numerator
+                                                        .negative_energies
+                                                        .iter()
+                                                        .map(|edge| distribution(edge.0, -sign, 0)),
+                                                )
+                                                .product::<f64>()
+                                        };
+                                        product(1) - product(-1)
+                                    })
+                                    .chain(variant.thermal_weight.distributions.iter().map(
+                                        |factor| {
+                                            distribution(
+                                                factor.edge_id.0,
+                                                factor.sign,
+                                                factor.derivative_order,
+                                            )
+                                        },
+                                    ))
+                                    .product::<f64>();
+                                // Reuse the full evaluator for every variant, including
+                                // numerator surfaces, maps and variant-local half edges.
+                                let mut branch = expression.clone();
+                                branch.orientations = vec![orientation.clone()].into();
+                                branch.orientations[OrientationID(0)].variants =
+                                    vec![variant.clone()];
+                                actual += thermal
+                                    * ExpressionEvaluator::new(&parsed, &branch, &input)
+                                        .evaluate(&numerator_expr)
+                                        .unwrap()
+                                        .value;
+                            }
+                        }
+                        actual *= source_conversion;
+                        let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+                        assert!(
+                            (actual - expected).abs() <= 2.0e-10 * scale,
+                            "{name}, {medium_mode:?}, {sampling_mode:?}, M={uniform_scale}, vacuum_limit={vacuum_limit}, numerator={numerator}: actual={actual:.17e}, exact={expected:.17e}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn thermal_scalar_bose_references() {
+        for (name, edges, signatures, points, surface_counts) in [
+            (
+                "thermal_bubble",
+                vec![(0, 1), (1, 0)],
+                vec![vec![1], vec![1]],
+                vec![(vec![[1.0, 2.0, 3.0]], 9.236_597_515_492_299e-4, 1.0e-15)],
+                (2, 2),
+            ),
+            (
+                "thermal_mercedes",
+                vec![(0, 1), (1, 2), (2, 0), (1, 3), (3, 0), (2, 3)],
+                vec![
+                    vec![1, 0, 0],
+                    vec![0, 1, 0],
+                    vec![0, 0, 1],
+                    vec![1, -1, 0],
+                    vec![1, 0, -1],
+                    vec![0, 1, -1],
+                ],
+                vec![(
+                    vec![[1.1, -2.0, 1.3], [2.7, 2.1, -2.4], [0.2, 1.4, -0.6]],
+                    7.510_957_576_577_536e-7,
+                    1.0e-14,
+                )],
+                (7, 33),
+            ),
+            (
+                "thermal_eight",
+                vec![(0, 0), (0, 0)],
+                vec![vec![1, 0], vec![0, 1]],
+                vec![
+                    (
+                        vec![[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
+                        9.978_988_858_570_828,
+                        1.0e-14,
+                    ),
+                    (
+                        vec![[1.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
+                        1.143_176_604_199_321,
+                        1.0e-14,
+                    ),
+                ],
+                (0, 0),
+            ),
+            (
+                "thermal_triangle",
+                vec![(0, 1), (1, 2), (2, 0)],
+                vec![vec![1], vec![1], vec![1]],
+                vec![
+                    (vec![[0.1, 0.2, 0.3]], 3.644_315_196_044_68e2, 1.0e-14),
+                    (vec![[1.3, 1.2, 0.1]], 3.232_700_472_845_54e-2, 1.0e-14),
+                ],
+                (3, 0),
+            ),
+            (
+                "thermal_box",
+                vec![(0, 1), (1, 2), (2, 3), (3, 0)],
+                vec![vec![1], vec![1], vec![1], vec![1]],
+                vec![
+                    (vec![[0.1, 0.2, 0.3]], 2.603_082_049_961_321e3, 1.0e-14),
+                    (vec![[1.3, 1.2, 0.1]], 1.028_743_567_114_515e-2, 1.0e-14),
+                ],
+                (6, 0),
+            ),
+            (
+                "thermal_bubble_chain",
+                vec![(0, 0), (0, 1), (1, 0), (1, 1)],
+                vec![vec![1, 0, 0], vec![0, 1, 0], vec![0, 1, 0], vec![0, 0, 1]],
+                vec![
+                    (
+                        vec![[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]],
+                        7.272_248_247_929_602_4,
+                        1.0e-14,
+                    ),
+                    (
+                        vec![[1.1, 0.2, 0.3], [0.4, 1.5, 0.6], [0.7, 0.8, 1.9]],
+                        3.140_465_809_410_901_4e-2,
+                        1.0e-14,
+                    ),
+                ],
+                (1, 0),
+            ),
+            (
+                "thermal_ring",
+                vec![(0, 1), (1, 0), (1, 2), (2, 3), (3, 2), (3, 0)],
+                vec![
+                    vec![1, 0, 0],
+                    vec![1, -1, 0],
+                    vec![0, 1, 0],
+                    vec![0, 0, 1],
+                    vec![0, -1, 1],
+                    vec![0, 1, 0],
+                ],
+                vec![
+                    (
+                        vec![[0.1, 0.2, 0.3], [0.4, 0.5, 0.6], [0.7, 0.8, 0.9]],
+                        8.524_796_385_080_671e1,
+                        // TODO: Investigate why the tolerance needs to be so loose
+                        3.0e-11,
+                    ),
+                    (
+                        vec![[1.1, 0.2, 0.3], [0.4, 1.5, 0.6], [0.7, 0.8, 1.9]],
+                        4.048_992_143_144_149e-3,
+                        1.0e-14,
+                    ),
+                ],
+                (6, 19),
+            ),
+            (
+                "thermal_triangle_tadpoles",
+                vec![(0, 0), (0, 1), (1, 2), (2, 0), (1, 1), (2, 2)],
+                vec![
+                    vec![1, 0, 0, 0],
+                    vec![0, 1, 0, 0],
+                    vec![0, 1, 0, 0],
+                    vec![0, 1, 0, 0],
+                    vec![0, 0, 1, 0],
+                    vec![0, 0, 0, 1],
+                ],
+                vec![
+                    (
+                        vec![
+                            [0.1, 0.2, 0.3],
+                            [0.5, 0.4, 0.6],
+                            [0.9, 0.8, 0.7],
+                            [1.1, 1.2, 1.3],
+                        ],
+                        2.909_296_300_604_124,
+                        1.0e-14,
+                    ),
+                    (
+                        vec![
+                            [1.1, 0.2, 0.3],
+                            [0.5, 1.4, 0.6],
+                            [0.9, 1.8, 0.7],
+                            [1.1, 2.2, 1.3],
+                        ],
+                        2.956_965_500_316_591e-3,
+                        1.0e-14,
+                    ),
+                ],
+                (3, 0),
+            ),
+            (
+                "thermal_bugblatter",
+                vec![
+                    (3, 0),
+                    (4, 3),
+                    (0, 1),
+                    (1, 4),
+                    (2, 5),
+                    (5, 4),
+                    (1, 2),
+                    (3, 5),
+                    (2, 0),
+                ],
+                vec![
+                    vec![1, 0, 0, 0],
+                    vec![0, 1, 0, 0],
+                    vec![0, 0, 1, 0],
+                    vec![0, 0, 0, 1],
+                    vec![1, 0, 0, -1],
+                    vec![0, 1, 0, -1],
+                    vec![0, 0, 1, -1],
+                    vec![-1, 1, 0, 0],
+                    vec![-1, 0, 1, 0],
+                ],
+                vec![
+                    (
+                        vec![
+                            [0.1, 0.2, 0.3],
+                            [0.5, 0.4, 0.6],
+                            [0.9, 0.8, 0.7],
+                            [1.1, 1.2, 1.3],
+                        ],
+                        1.308_467_742_357_907_9,
+                        // TODO: Investigate why the tolerance needs to be so loose
+                        1.0e-10,
+                    ),
+                    (
+                        vec![
+                            [1.1, 0.2, 0.3],
+                            [0.5, 1.4, 0.6],
+                            [0.9, 1.8, 0.7],
+                            [1.1, 2.2, 1.3],
+                        ],
+                        3.799_072_627_985_78e-4,
+                        // TODO: Investigate why the tolerance needs to be so loose
+                        1.0e-13,
+                    ),
+                ],
+                (22, 174),
+            ),
+        ] {
+            let bubble = name == "thermal_bubble";
+            let n_loops = signatures[0].len();
+            let n_nodes = edges
+                .iter()
+                .flat_map(|(tail, head)| [tail, head])
+                .max()
+                .unwrap()
+                + 1;
+            let parsed = ParsedGraph {
+                internal_edges: edges
+                    .into_iter()
+                    .zip(signatures)
+                    .enumerate()
+                    .map(
+                        |(edge_id, ((tail, head), loop_signature))| ParsedGraphInternalEdge {
+                            edge_id,
+                            tail,
+                            head,
+                            label: format!("q{edge_id}"),
+                            mass_key: None,
+                            signature: MomentumSignature {
+                                loop_signature,
+                                external_signature: if bubble {
+                                    vec![i32::from(edge_id == 1)]
+                                } else {
+                                    Vec::new()
+                                },
+                            },
+                            had_pow: false,
+                        },
+                    )
+                    .collect(),
+                external_edges: if bubble {
+                    vec![
+                        ParsedGraphExternalEdge {
+                            edge_id: 10_000_000,
+                            source: None,
+                            destination: Some(1),
+                            label: "p1".to_string(),
+                            external_coefficients: vec![1],
+                        },
+                        ParsedGraphExternalEdge {
+                            edge_id: 10_000_001,
+                            source: Some(0),
+                            destination: None,
+                            label: "-p1".to_string(),
+                            external_coefficients: vec![-1],
+                        },
+                    ]
+                } else {
+                    Vec::new()
+                },
+                initial_state_cut_edges: Vec::new(),
+                loop_names: (0..n_loops).map(|index| format!("k{index}")).collect(),
+                external_names: if bubble {
+                    vec!["p1".to_string()]
+                } else {
+                    Vec::new()
+                },
+                node_name_to_internal: (0..n_nodes)
+                    .map(|node| (format!("v{node}"), node))
+                    .collect(),
+            };
+            let generated = generate_3d_expression(
+                &parsed,
+                &Generate3DExpressionOptions {
+                    medium_mode: MediumMode::ThermodynamicEquilibrium,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let expression = &generated.expression;
+            assert_eq!(
+                expression.orientations.len(),
+                1 << parsed.internal_edges.len(),
+                "{name}"
+            );
+            for (kind, expected) in [
+                (LinearSurfaceKind::Esurface, surface_counts.0),
+                (LinearSurfaceKind::Hsurface, surface_counts.1),
+            ] {
+                assert_eq!(
+                    expression
+                        .surfaces
+                        .linear_surface_cache
+                        .iter()
+                        .filter(|surface| surface.kind == kind)
+                        .count(),
+                    expected,
+                    "{name}: {kind:?} count",
+                );
+            }
+            for (point, (loop_spatial_momenta, reference, tolerance)) in
+                points.into_iter().enumerate()
+            {
+                let input = EvaluationInput {
+                    external_momenta: if bubble {
+                        vec![[1.0, 3.0, 4.0, 5.0]]
+                    } else {
+                        Vec::new()
+                    },
+                    loop_spatial_momenta,
+                    masses: vec![0.0; parsed.internal_edges.len()],
+                    uniform_scale: None,
+                };
+                let evaluator = ExpressionEvaluator::new(&parsed, expression, &input);
+                // The existing thermal scalar oracles use bosonic distributions at beta=1, mu=0.
+                // Evaluate those explicit test inputs without giving the model-free
+                // standalone evaluator an implicit choice of particle statistics.
+                let distribution = |edge: usize, sign: i32, derivative_order| {
+                    let coth = 1.0 / (evaluator.internal_energies[edge] / 2.0).tanh();
+                    match derivative_order {
+                        0 => (f64::from(sign) + coth) / 2.0,
+                        1 => -(coth * coth - 1.0) / 4.0,
+                        2 => (coth * coth - 1.0) * coth / 4.0,
+                        3 => (coth * coth * (4.0 - 3.0 * coth * coth) - 1.0) / 8.0,
+                        _ => {
+                            panic!("{name}: unexpected distribution derivative {derivative_order}")
+                        }
+                    }
+                };
+                let mut result = 0.0;
+                for variant in expression
+                    .orientations
+                    .iter()
+                    .flat_map(|orientation| &orientation.variants)
+                {
+                    let thermal = variant
+                        .thermal_weight
+                        .numerators
+                        .iter()
+                        .map(|numerator| {
+                            let product = |sign| {
+                                numerator
+                                    .positive_energies
+                                    .iter()
+                                    .map(|edge| distribution(edge.0, sign, 0))
+                                    .chain(
+                                        numerator
+                                            .negative_energies
+                                            .iter()
+                                            .map(|edge| distribution(edge.0, -sign, 0)),
+                                    )
+                                    .product::<f64>()
+                            };
+                            product(1) - product(-1)
+                        })
+                        .chain(variant.thermal_weight.distributions.iter().map(|factor| {
+                            distribution(factor.edge_id.0, factor.sign, factor.derivative_order)
+                        }))
+                        .product::<f64>();
+                    let energy_product = variant
+                        .half_edges
+                        .iter()
+                        .map(|edge| 2.0 * evaluator.internal_energies[edge.0])
+                        .product::<f64>();
+                    result += variant.prefactor.to_f64()
+                        * thermal
+                        * evaluator.tree_sum(&variant.denominator).unwrap()
+                        / energy_product;
+                }
+                // These references include positive 1/(2E) factors, without the
+                // shared engine's contour sign or the physical i^L phase.
+                result *= generated.core_global_prefactor_sign.factor() as f64;
+                let difference = ((result - reference) / result).abs();
+                assert!(
+                    difference < tolerance,
+                    "{name}, point {point}: {result:e} != {reference:e} (difference {difference:e} is larger than relative tolerance {tolerance:e})",
+                );
+            }
+        }
     }
 }
