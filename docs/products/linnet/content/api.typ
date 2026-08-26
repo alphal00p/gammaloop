@@ -3,7 +3,7 @@
 #let api = [
 = Choose a Linnet interface
 
-Use Rust when Linnet is part of an application or library, Python for standalone DOT-backed
+Use Rust when Linnet is part of an application or library, Python for standalone
 graph workflows, and Linnest when a Typst document owns layout and drawing. Each interface
 shares the half-edge model while exposing the conventions natural to its language.
 
@@ -62,39 +62,53 @@ reference: it does not copy, compare, hash, pickle, stringify, or send them to T
 `drawing` properties contain only validated, typed values that the renderer can stage safely.
 
 Build a graph declaratively with node specifications, endpoint specifications, and edge
-specifications:
+specifications. The payload classes below belong to the example application; they are not
+Linnet types:
 
 ```python
-from linnet_py import Compass, MathSymbol, build, edge, node, sink, source
+from dataclasses import dataclass
 
-incoming_payload = object()
-edge_payload = {"model id": 17}
+from linnet_py import build, edge, node, sink, source
 
-incoming = node(
-    "in",
-    data=incoming_payload,
-    label=MathSymbol("n", subscript=0),
-)
-outgoing = node("out", data={"kind": "final"})
+
+@dataclass
+class UserNodeData:
+    state: object
+
+
+@dataclass
+class UserEdgeData:
+    interaction: object
+
+
+incoming_data = UserNodeData(state=object())
+outgoing_data = UserNodeData(state=object())
+propagator_data = UserEdgeData(interaction=object())
+
+incoming = node("in", data=incoming_data)
+outgoing = node("out", data=outgoing_data)
 graph = build(
     incoming,
     outgoing,
     edge(
-        source(incoming, data={"side": "source"}, compass=Compass.E),
+        source(incoming),
         "propagator",
-        sink(outgoing, data={"side": "sink"}, compass=Compass.W),
-        data=edge_payload,
-        particle="e-",
-        label=MathSymbol("p", subscript=0),
+        sink(outgoing),
+        data=propagator_data,
     ),
     name="example",
 )
+
+assert graph.node("in").data is incoming_data
+assert graph.edge("propagator").data is propagator_data
 ```
 
 `graph.node("in")`, `graph.edge("propagator")`, and `graph.half_edge(0)` return live views.
 Names and integer indices are accepted for node and edge lookup. Topology properties such as
 `index`, `incidence`, `source`, `sink`, `pair`, and `flow` are read-only, while `data` and every
-field on `drawing` are mutable. Drawing fields include labels and styles as well as placement,
+field on `drawing` are mutable. Endpoint-specific `source(..., data=...)` and
+`sink(..., data=...)` payloads are optional; use them only when the application has distinct
+half-edge data. Drawing fields include labels and styles as well as placement,
 routing, rank, size, bend, momentum, particle, cut, and half-edge anchor information. Put a
 template-specific field in `drawing.extensions`; built-in field names are reserved.
 
@@ -103,6 +117,48 @@ live element views and returns a new graph. An omitted callback preserves the ex
 object. Drawing and rendering configuration are copied by value. Reordering nodes or edges and
 reversing an edge preserve each data/drawing association, but invalidate every older live view;
 using a stale view raises `ReferenceError`.
+
+The long-lived topology is Linnet's native `HedgeGraph`; it is not a separate Python adjacency
+model. `NodeStore.Vec` is the default dense node store, while `NodeStore.Forest` selects the
+identification-preserving forest store. Pass `node_store=` to `Graph`, `build`, or a DOT importer,
+inspect `graph.node_store`, and use `graph.to_node_store(...)` for an explicit non-mutating
+conversion. Derived graphs preserve their input backend; append and join use the left graph's
+backend.
+
+A `Subgraph` is a graph-bound, revision-checked native half-edge selection, augmented only with
+explicit zero-crown node IDs so isolated nodes remain first-class members. Construct one from named
+or indexed nodes and edges, exact half-edge indices, or live-view predicates, then use the same
+object with Linnet's topology algorithms and owning transformations:
+
+```python
+# Explicit selections are unioned. Selecting a node includes its incident crown.
+selected = graph.subgraph(nodes=["in"], edges=["propagator"])
+
+# Predicates see the same live views as normal graph access.
+propagators = graph.filter(
+    edge=lambda value: isinstance(value.data, UserEdgeData),
+)
+
+component_copies = [graph.concretize(part) for part in graph.connected_components()]
+tree = graph.depth_first_traverse("in", subgraph=selected)
+cycles, covered = graph.cycle_basis(selected)
+
+# concretize() is non-mutating; extract(), delete(), contract(), append_mut(),
+# and join_mut() change topology and therefore stale old views and selections.
+detached = graph.concretize(propagators)
+removed = graph.extract(propagators)
+```
+
+`Subgraph` supports immutable union, intersection, difference, symmetric difference, complement,
+and their Python operators. The binding also exposes connectivity and component queries, DFS and
+BFS trees, bridges, cycle bases, spanning forests, cuts, contraction, disconnected append, and
+callback-driven joining of dangling half-edges. `append()` and `join()` return a graph while their
+`*_mut()` counterparts update the left graph; the right graph is unchanged. Transformations retain
+arbitrary data by Python identity and copy drawing/configuration by value. Callback failures and
+name collisions never publish a candidate topology. Join callbacks receive live views, so any
+explicit `data` or `drawing` mutations they perform take effect immediately and are not rolled back.
+Cut terminals must be disjoint node groups with a boundary half-edge; isolated or closed terminal
+regions raise `ValueError` rather than entering Linnet's cut enumeration.
 
 === Typed Typst configuration
 
@@ -118,6 +174,8 @@ the structured Python reference lists the choices for each option.
 Linnest surfaces. Layout passes retain their order:
 
 ```python
+from dataclasses import dataclass
+
 from linnet_py import (
     AUTO,
     Color,
@@ -234,23 +292,39 @@ from linnet_py import (
     TextLabel,
 )
 
+
+@dataclass
+class VertexPayload:
+    name: str | None
+    kind: str | None
+
+
+@dataclass
+class EdgePayload:
+    kind: str | None
+
+
+@dataclass
+class PortPayload:
+    statement: str | None
+
 codec = DotCodec(
     encode_node=lambda value: DotVertexData(
-        name=value.data["name"],
-        statements={"kind": value.data["kind"]},
+        name=value.data.name,
+        statements={"kind": value.data.kind or ""},
     ),
     decode_node=lambda dot: NodeValue(
-        data={"name": dot.name, "kind": dot.statements["kind"]},
+        data=VertexPayload(dot.name, dot.statements.get("kind")),
         drawing=NodeDrawing(label=TextLabel(dot.name or "")),
     ),
     encode_edge=lambda value: DotEdgeData(
-        statements={"kind": value.data["kind"]},
+        statements={"kind": value.data.kind or ""},
     ),
     decode_edge=lambda dot: EdgeValue(
-        data={"kind": dot.statements.get("kind")},
+        data=EdgePayload(dot.statements.get("kind")),
     ),
-    encode_half_edge=lambda value: DotHalfEdgeData(statement=value.data),
-    decode_half_edge=lambda dot: HalfEdgeValue(data=dot.statement),
+    encode_half_edge=lambda value: DotHalfEdgeData(statement=value.data.statement),
+    decode_half_edge=lambda dot: HalfEdgeValue(data=PortPayload(dot.statement)),
 )
 
 source = r'''digraph demo {
