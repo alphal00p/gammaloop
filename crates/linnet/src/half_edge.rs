@@ -97,7 +97,7 @@ use ahash::{AHashMap, AHashSet};
 
 use bitvec::prelude::*;
 use bitvec::slice::IterOnes;
-use builder::{HedgeData, HedgeGraphBuilder};
+use builder::{HedgeData, HedgeGraphBuilder, HedgeNodeBuilder};
 use hedgevec::{Accessors, SmartEdgeVec};
 use indexmap::IndexSet;
 use involution::{
@@ -416,6 +416,69 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         // Check smart edge vec
         self.edge_store.check_hedge_pairs()?;
         Ok(())
+    }
+
+    /// Rebuilds this graph with a different node-storage backend.
+    ///
+    /// Edge and half-edge storage is moved unchanged, so edge and half-edge IDs remain stable.
+    /// Node order, data, and incidence are retained as long as the source store represents a
+    /// valid partition.
+    ///
+    /// Forest stores may retain inactive roots after [`Self::identify_nodes`]. Those roots cannot
+    /// be represented by every backend, so this method returns an error instead of silently
+    /// dropping their data. Call [`Self::forget_identification_history`] explicitly before
+    /// conversion when compaction and the resulting node-ID changes are acceptable.
+    pub fn into_node_store<M>(self) -> Result<HedgeGraph<E, V, H, M>, HedgeGraphError>
+    where
+        M: NodeStorageOps<NodeData = V>,
+    {
+        self.node_store.check_nodes()?;
+        let mut topology = self
+            .node_store
+            .to_forest::<(), ()>(|_| ())
+            .cast::<crate::tree::child_vec::ChildVecStore<()>>();
+        let retained = topology.forget_identification_history();
+        let retained_count: NodeIndex = retained.len();
+        if retained_count.0 != 0 {
+            return Err(HedgeGraphError::NodesDoNotPartition(
+                "node store retains inactive identification roots".to_owned(),
+            ));
+        }
+
+        let n_hedges = self.n_hedges();
+        let node_store_hedges: Hedge = self.node_store.len();
+        let hedge_data_hedges: Hedge = self.hedge_data.len();
+        if node_store_hedges.0 != n_hedges || hedge_data_hedges.0 != n_hedges {
+            return Err(HedgeGraphError::DataLengthMismatch);
+        }
+
+        let HedgeGraph {
+            hedge_data,
+            edge_store,
+            node_store,
+        } = self;
+        let crowns = node_store.new_nodevec(|_, neighbors, _| neighbors.collect::<Vec<_>>());
+        let node_data = node_store.drain().collect::<Vec<_>>();
+        let crown_count: NodeIndex = crowns.len();
+        if crown_count.0 != node_data.len() {
+            return Err(HedgeGraphError::DataLengthMismatch);
+        }
+
+        let mut nodes = Vec::with_capacity(crown_count.0);
+        for ((crown_id, hedges), (data_id, data)) in crowns.into_iter().zip(node_data) {
+            if crown_id != data_id {
+                return Err(HedgeGraphError::DataLengthMismatch);
+            }
+            nodes.push(HedgeNodeBuilder { data, hedges });
+        }
+
+        let node_store = M::build(nodes, n_hedges);
+        node_store.check_nodes()?;
+        Ok(HedgeGraph {
+            hedge_data,
+            edge_store,
+            node_store,
+        })
     }
 
     /// Deletes all half-edges specified in the `subgraph` from the graph.
