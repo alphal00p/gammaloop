@@ -27,7 +27,7 @@ fn main() -> pyo3_stub_gen::Result<()> {
 fn normalize_stub_source(source: &str) -> String {
     let mut lines = source
         .lines()
-        .map(|line| line.trim_end_matches(|character| matches!(character, ' ' | '\t')))
+        .map(|line| line.trim_end_matches([' ', '\t']))
         .collect::<Vec<_>>();
     while lines.last().is_some_and(|line| line.is_empty()) {
         lines.pop();

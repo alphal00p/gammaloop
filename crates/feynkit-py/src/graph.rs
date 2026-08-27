@@ -10,7 +10,11 @@ use symbolica::{api::python::PythonExpression, atom::Atom, parser::ParseSettings
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 
-use crate::{display::escape_html, error, model::PyModel};
+use crate::{
+    display::{escape_html, render_diagram_html, render_diagram_svg},
+    error,
+    model::PyModel,
+};
 
 pub(crate) fn parse_symbolic_annotation(value: &str) -> Result<PythonExpression, String> {
     Atom::parse_with_default_namespace(wrap_input!(value), ParseSettings::default())
@@ -18,6 +22,18 @@ pub(crate) fn parse_symbolic_annotation(value: &str) -> Result<PythonExpression,
         .map_err(|parse_error| parse_error.to_string())
 }
 
+/// A named interaction point or external state in a Feynman diagram.
+///
+/// Internal vertices reference a model interaction rule, while external
+/// vertices identify an incoming or outgoing particle leg.
+///
+/// Examples
+/// --------
+/// >>> vertex = diagram.vertices[0]
+/// >>> if vertex.is_external:
+/// ...     print(vertex.external_state, vertex.external_index)
+/// ... else:
+/// ...     interaction = model.vertex_rule(vertex.interaction)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "DiagramVertex",
@@ -32,12 +48,9 @@ pub struct PyDiagramVertex {
     /// Examples
     /// --------
     /// >>> vertex = diagram.vertices[0]
-    /// >>> isinstance(vertex.id, int)
+    /// >>> diagram.vertices[vertex.id].name == vertex.name
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[pyo3(get)]
     id: usize,
     inner: DiagramVertex,
@@ -46,19 +59,7 @@ pub struct PyDiagramVertex {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyDiagramVertex {
-    /// Return the vertex name stored in the diagram.
-    ///
-    /// Examples
-    /// --------
-    /// Obtain a vertex from a diagram and inspect its name:
-    ///
-    /// >>> vertex = diagram.vertices[0]
-    /// >>> isinstance(vertex.name, str)
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
+    /// Return the stable vertex label stored in the diagram.
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
@@ -68,29 +69,15 @@ impl PyDiagramVertex {
     ///
     /// Examples
     /// --------
-    /// >>> vertex = next(vertex for vertex in diagram.vertices if not vertex.is_external)
-    /// >>> vertex.interaction is None or isinstance(vertex.interaction, str)
-    /// True
+    /// >>> vertex = next(v for v in diagram.vertices if not v.is_external)
+    /// >>> rule = model.vertex_rule(vertex.interaction)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn interaction(&self) -> Option<String> {
         self.inner.interaction.clone()
     }
 
     /// Return the symbolic numerator annotation as source text, if present.
-    ///
-    /// Examples
-    /// --------
-    /// >>> vertex = diagram.vertices[0]
-    /// >>> vertex.numerator is None or isinstance(vertex.numerator, str)
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn numerator(&self) -> Option<String> {
         self.inner.numerator.clone()
@@ -102,12 +89,9 @@ impl PyDiagramVertex {
     /// --------
     /// >>> vertex = diagram.vertices[0]
     /// >>> numerator = vertex.numerator_expression()
-    /// >>> numerator is None or isinstance(str(numerator), str)
-    /// True
+    /// >>> if numerator is not None:
+    /// ...     numerator  # rich Symbolica output in a notebook
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn numerator_expression(&self) -> PyResult<Option<PythonExpression>> {
         self.inner
             .numerator
@@ -121,13 +105,10 @@ impl PyDiagramVertex {
     ///
     /// Examples
     /// --------
-    /// >>> vertex = diagram.vertices[0]
-    /// >>> vertex.external_index is None or vertex.external_index >= 0
+    /// >>> external = [v for v in diagram.vertices if v.is_external]
+    /// >>> sorted(v.external_index for v in external) == list(range(len(external)))
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn external_index(&self) -> Option<usize> {
         self.inner.external.as_ref().map(|leg| leg.index)
@@ -141,9 +122,6 @@ impl PyDiagramVertex {
     /// >>> vertex.external_state in {"incoming", "outgoing"}
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn external_state(&self) -> Option<&'static str> {
         self.inner.external.as_ref().map(|leg| match leg.state {
@@ -156,13 +134,8 @@ impl PyDiagramVertex {
     ///
     /// Examples
     /// --------
-    /// >>> vertex = diagram.vertices[0]
-    /// >>> isinstance(vertex.is_external, bool)
-    /// True
+    /// >>> external_vertices = [vertex for vertex in diagram.vertices if vertex.is_external]
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn is_external(&self) -> bool {
         self.inner.is_external()
@@ -176,9 +149,6 @@ impl PyDiagramVertex {
     /// >>> repr(vertex).startswith("DiagramVertex(")
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         if let Some(external) = &self.inner.external {
             format!(
@@ -224,6 +194,16 @@ impl PyDiagramVertex {
     }
 }
 
+/// A particle propagator joining two vertices in a Feynman diagram.
+///
+/// Edges retain their particle identity, endpoints, flow direction, and an
+/// optional symbolic numerator contribution.
+///
+/// Examples
+/// --------
+/// >>> edge = diagram.edges[0]
+/// >>> particle = model.particle_by_pdg(edge.particle_pdg)
+/// >>> source, target = diagram.vertices[edge.source], diagram.vertices[edge.target]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "DiagramEdge",
@@ -238,12 +218,9 @@ pub struct PyDiagramEdge {
     /// Examples
     /// --------
     /// >>> edge = diagram.edges[0]
-    /// >>> isinstance(edge.id, int)
+    /// >>> diagram.edges[edge.id].particle_pdg == edge.particle_pdg
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[pyo3(get)]
     id: usize,
     /// Return the source vertex ID.
@@ -251,12 +228,8 @@ pub struct PyDiagramEdge {
     /// Examples
     /// --------
     /// >>> edge = diagram.edges[0]
-    /// >>> isinstance(edge.source, int)
-    /// True
+    /// >>> source_vertex = diagram.vertices[edge.source]
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[pyo3(get)]
     source: usize,
     /// Return the target vertex ID.
@@ -264,12 +237,8 @@ pub struct PyDiagramEdge {
     /// Examples
     /// --------
     /// >>> edge = diagram.edges[0]
-    /// >>> isinstance(edge.target, int)
-    /// True
+    /// >>> target_vertex = diagram.vertices[edge.target]
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[pyo3(get)]
     target: usize,
     inner: DiagramEdge,
@@ -283,12 +252,9 @@ impl PyDiagramEdge {
     /// Examples
     /// --------
     /// >>> edge = diagram.edges[0]
-    /// >>> isinstance(edge.particle_name, str)
+    /// >>> model.particle(edge.particle_name).pdg_code == edge.particle_pdg
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn particle_name(&self) -> &str {
         &self.inner.particle.name
@@ -299,44 +265,25 @@ impl PyDiagramEdge {
     /// Examples
     /// --------
     /// >>> edge = diagram.edges[0]
-    /// >>> isinstance(edge.particle_pdg, int)
-    /// True
+    /// >>> particle = model.particle_by_pdg(edge.particle_pdg)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn particle_pdg(&self) -> i64 {
         self.inner.particle.pdg
     }
 
-    /// Report whether the edge has a particle-flow direction.
+    /// Report whether the edge carries an oriented particle-flow arrow.
     ///
     /// Examples
     /// --------
-    /// >>> edge = diagram.edges[0]
-    /// >>> isinstance(edge.directed, bool)
-    /// True
+    /// >>> fermion_edges = [edge for edge in diagram.edges if edge.directed]
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn directed(&self) -> bool {
         self.inner.directed
     }
 
     /// Return the symbolic numerator annotation as source text, if present.
-    ///
-    /// Examples
-    /// --------
-    /// >>> edge = diagram.edges[0]
-    /// >>> edge.numerator is None or isinstance(edge.numerator, str)
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn numerator(&self) -> Option<String> {
         self.inner.numerator.clone()
@@ -348,12 +295,9 @@ impl PyDiagramEdge {
     /// --------
     /// >>> edge = diagram.edges[0]
     /// >>> numerator = edge.numerator_expression()
-    /// >>> numerator is None or isinstance(str(numerator), str)
-    /// True
+    /// >>> if numerator is not None:
+    /// ...     numerator  # rich Symbolica output in a notebook
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn numerator_expression(&self) -> PyResult<Option<PythonExpression>> {
         self.inner
             .numerator
@@ -371,9 +315,6 @@ impl PyDiagramEdge {
     /// >>> repr(edge).startswith("DiagramEdge(")
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         let connector = if self.inner.directed { "->" } else { "--" };
         format!(
@@ -412,6 +353,16 @@ impl PyDiagramEdge {
     }
 }
 
+/// Integer coefficients expressing one edge momentum in a chosen basis.
+///
+/// A signature separates coefficients of independent loop momenta from those
+/// of external momenta, for example ``-l1 + p2``.
+///
+/// Examples
+/// --------
+/// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
+/// >>> edge_id, signature = basis.edge_signatures[0]
+/// >>> print(f"q_{edge_id} = {signature.format_momentum()}")
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "MomentumSignature",
@@ -434,34 +385,12 @@ impl From<MomentumSignature> for PyMomentumSignature {
 #[pymethods]
 impl PyMomentumSignature {
     /// Return the integer coefficients of the independent loop momenta.
-    ///
-    /// Examples
-    /// --------
-    /// Obtain a signature from a loop-momentum basis:
-    ///
-    /// >>> _, signature = basis.edge_signatures[0]
-    /// >>> all(isinstance(coefficient, int) for coefficient in signature.loops)
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn loops(&self) -> Vec<isize> {
         self.inner.loops.integer_coefficients()
     }
 
     /// Return the integer coefficients of the external momenta.
-    ///
-    /// Examples
-    /// --------
-    /// >>> _, signature = basis.edge_signatures[0]
-    /// >>> all(isinstance(coefficient, int) for coefficient in signature.external)
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn external(&self) -> Vec<isize> {
         self.inner.external.integer_coefficients()
@@ -476,9 +405,6 @@ impl PyMomentumSignature {
     /// >>> (loops, external) == (signature.loops, signature.external)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn integer_coefficients(&self) -> (Vec<isize>, Vec<isize>) {
         self.inner.integer_coefficients()
     }
@@ -491,9 +417,6 @@ impl PyMomentumSignature {
     /// >>> isinstance(signature.format_momentum(), str)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn format_momentum(&self) -> String {
         self.inner.format_momentum()
     }
@@ -506,9 +429,6 @@ impl PyMomentumSignature {
     /// >>> str(signature) == signature.format_momentum()
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __str__(&self) -> String {
         self.inner.format_momentum()
     }
@@ -521,9 +441,6 @@ impl PyMomentumSignature {
     /// >>> repr(signature).startswith("MomentumSignature(")
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!("MomentumSignature({})", self.inner.format_momentum())
     }
@@ -553,6 +470,17 @@ impl PyMomentumSignature {
     }
 }
 
+/// A consistent routing of independent loop and external momenta.
+///
+/// Chords of the spanning tree define the loop momenta; every diagram edge is
+/// then assigned an integer ``MomentumSignature`` by momentum conservation.
+///
+/// Examples
+/// --------
+/// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
+/// >>> len(basis.loop_edges) == diagram.loop_count
+/// True
+/// >>> assignments = dict(basis.edge_signatures)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "LoopMomentumBasis",
@@ -575,16 +503,6 @@ impl From<LoopMomentumBasis> for PyLoopMomentumBasis {
 #[pymethods]
 impl PyLoopMomentumBasis {
     /// Return the edge identifiers belonging to the spanning tree.
-    ///
-    /// Examples
-    /// --------
-    /// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
-    /// >>> all(isinstance(edge_id, int) for edge_id in basis.tree_edges)
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn tree_edges(&self) -> Vec<usize> {
         self.inner.tree_edges.iter().map(|id| id.0).collect()
@@ -598,25 +516,12 @@ impl PyLoopMomentumBasis {
     /// >>> len(basis.loop_edges) == diagram.loop_count
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn loop_edges(&self) -> Vec<usize> {
         self.inner.loop_edges.iter().map(|id| id.0).collect()
     }
 
     /// Return the identifiers of edges attached to external states.
-    ///
-    /// Examples
-    /// --------
-    /// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
-    /// >>> all(isinstance(edge_id, int) for edge_id in basis.external_edges)
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn external_edges(&self) -> Vec<usize> {
         self.inner.external_edges.iter().map(|id| id.0).collect()
@@ -630,9 +535,6 @@ impl PyLoopMomentumBasis {
     /// >>> set(basis.dependent_externals) <= set(basis.external_edges)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn dependent_externals(&self) -> Vec<usize> {
         self.inner
@@ -647,13 +549,13 @@ impl PyLoopMomentumBasis {
     /// Examples
     /// --------
     /// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
-    /// >>> edge_id, signature = basis.edge_signatures[0]
-    /// >>> isinstance(edge_id, int) and isinstance(signature.format_momentum(), str)
+    /// >>> momentum_by_edge = {
+    /// ...     edge_id: signature.format_momentum()
+    /// ...     for edge_id, signature in basis.edge_signatures
+    /// ... }
+    /// >>> set(momentum_by_edge) == {edge.id for edge in diagram.edges}
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn edge_signatures(&self) -> Vec<(usize, PyMomentumSignature)> {
         self.inner
@@ -671,9 +573,6 @@ impl PyLoopMomentumBasis {
     /// >>> repr(basis).startswith("LoopMomentumBasis(")
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!(
             "LoopMomentumBasis(loop_edges={:?}, tree_edges={:?}, external_edges={:?})",
@@ -705,9 +604,6 @@ impl PyLoopMomentumBasis {
     /// >>> "<table" in basis._repr_html_()
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn _repr_html_(&self) -> String {
         let rows = self
             .inner
@@ -757,6 +653,16 @@ impl PyLoopMomentumBasis {
     }
 }
 
+/// A typed Feynman graph with model and symbolic physics annotations.
+///
+/// Diagrams expose vertices, propagator edges, loop-momentum routings, symmetry
+/// factors, Symbolica expressions, and Linnest/Typst notebook rendering.
+///
+/// Examples
+/// --------
+/// >>> diagram = result.diagrams[0]
+/// >>> diagram.validate(model)
+/// >>> diagram  # renders as a Linnest graph in Jupyter or Marimo
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "FeynmanDiagram",
@@ -819,31 +725,18 @@ impl PyFeynmanDiagram {
             .map_err(error::diagram)
     }
 
-    /// Return the model-assigned diagram name.
-    ///
-    /// Examples
-    /// --------
-    /// >>> isinstance(diagram.name, str)
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
+    /// Return the deterministic name assigned during diagram generation.
     #[getter]
     fn name(&self) -> &str {
         self.inner.name()
     }
 
-    /// Return the diagram symmetry factor as a positive integer denominator.
+    /// Return the positive integer denominator of the graph symmetry factor.
     ///
     /// Examples
     /// --------
-    /// >>> diagram.symmetry_factor >= 1
-    /// True
+    /// >>> graph_weight = 1 / diagram.symmetry_factor
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn symmetry_factor(&self) -> u64 {
         self.inner.symmetry_factor()
@@ -851,29 +744,22 @@ impl PyFeynmanDiagram {
 
     /// Return the diagram-wide multiplicative factor as Symbolica source text.
     ///
+    /// This string form is useful for serialization. For algebra or notebook
+    /// display, prefer ``overall_factor_expression()`` so Symbolica's native
+    /// rich formatting is preserved.
+    ///
     /// Examples
     /// --------
-    /// >>> isinstance(diagram.overall_factor, str)
-    /// True
+    /// >>> source = diagram.overall_factor
+    /// >>> factor = diagram.overall_factor_expression()
+    /// >>> factor  # rich Symbolica output in a notebook
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn overall_factor(&self) -> &str {
         self.inner.overall_factor()
     }
 
     /// Return the diagram numerator annotation as source text, if present.
-    ///
-    /// Examples
-    /// --------
-    /// >>> diagram.numerator is None or isinstance(diagram.numerator, str)
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn numerator(&self) -> Option<String> {
         self.inner.numerator().map(str::to_owned)
@@ -884,12 +770,9 @@ impl PyFeynmanDiagram {
     /// Examples
     /// --------
     /// >>> numerator = diagram.numerator_expression()
-    /// >>> numerator is None or isinstance(str(numerator), str)
-    /// True
+    /// >>> if numerator is not None:
+    /// ...     numerator  # native Symbolica rich display in a notebook
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn numerator_expression(&self) -> PyResult<Option<PythonExpression>> {
         self.inner
             .numerator()
@@ -903,12 +786,8 @@ impl PyFeynmanDiagram {
     /// Examples
     /// --------
     /// >>> factor = diagram.overall_factor_expression()
-    /// >>> isinstance(str(factor), str)
-    /// True
+    /// >>> factor  # supports Symbolica algebra and native rich display
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn overall_factor_expression(&self) -> PyResult<PythonExpression> {
         parse_symbolic_annotation(self.inner.overall_factor()).map_err(error::DiagramError::new_err)
     }
@@ -917,12 +796,10 @@ impl PyFeynmanDiagram {
     ///
     /// Examples
     /// --------
-    /// >>> diagram.loop_count >= 0
+    /// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
+    /// >>> len(basis.loop_edges) == diagram.loop_count
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn loop_count(&self) -> usize {
         self.inner.loop_count()
@@ -936,9 +813,6 @@ impl PyFeynmanDiagram {
     /// >>> all(vertex.id == index for index, vertex in enumerate(vertices))
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn vertices(&self) -> Vec<PyDiagramVertex> {
         self.inner
@@ -955,12 +829,10 @@ impl PyFeynmanDiagram {
     /// Examples
     /// --------
     /// >>> edges = diagram.edges
-    /// >>> all(edge.source >= 0 and edge.target >= 0 for edge in edges)
+    /// >>> vertex_ids = {vertex.id for vertex in diagram.vertices}
+    /// >>> all(edge.source in vertex_ids and edge.target in vertex_ids for edge in edges)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn edges(&self) -> Vec<PyDiagramEdge> {
         self.inner
@@ -1001,9 +873,6 @@ impl PyFeynmanDiagram {
     /// >>> encoded.lstrip().startswith("{")
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn to_json(&self) -> PyResult<String> {
         self.inner.to_json().map_err(error::diagram)
     }
@@ -1016,29 +885,37 @@ impl PyFeynmanDiagram {
     /// >>> "graph" in dot.lower()
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn to_dot(&self) -> PyResult<String> {
         self.inner.to_dot().map_err(error::diagram)
     }
 
-    /// Render the diagram as a self-contained, responsive SVG.
+    /// Emit a complete Typst document that draws the graph with Linnest.
+    ///
+    /// The source uses the same amplitude-layout settings as GammaLoop's
+    /// Linnest templates. It can be saved for reproducible figure generation
+    /// or compiled directly with ``typst-py``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> source = diagram.to_linnest()
+    /// >>> "graph.build" in source and "layout.layout" in source
+    /// True
+    fn to_linnest(&self) -> String {
+        self.inner.to_linnest()
+    }
+
+    /// Render the Linnest diagram as a self-contained SVG with ``typst-py``.
     ///
     /// Examples
     /// --------
     /// >>> svg = diagram.to_svg()
     /// >>> svg.startswith("<svg")
     /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
-    fn to_svg(&self) -> String {
-        self.inner.to_svg()
+    fn to_svg(&self, py: Python<'_>) -> PyResult<String> {
+        render_diagram_svg(py, &self.inner)
     }
 
-    /// Render the diagram as a self-contained HTML figure.
+    /// Render the Linnest diagram as a self-contained HTML figure.
     ///
     /// Examples
     /// --------
@@ -1047,12 +924,8 @@ impl PyFeynmanDiagram {
     /// >>> html = diagram.to_html()
     /// >>> "<figure" in html and "<svg" in html
     /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
-    fn to_html(&self) -> String {
-        self.inner.to_html()
+    fn to_html(&self, py: Python<'_>) -> PyResult<String> {
+        render_diagram_html(py, &self.inner)
     }
 
     /// Render the diagram as HTML in Marimo, Jupyter, and IPython.
@@ -1060,12 +933,8 @@ impl PyFeynmanDiagram {
     /// Examples
     /// --------
     /// Leave `diagram` as the final expression in a notebook cell to render it.
-    ///
-    /// Parameters
-    /// ----------
-    /// None
-    fn _repr_html_(&self) -> String {
-        self.inner.to_html()
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        render_diagram_html(py, &self.inner)
     }
 
     /// Return the raw SVG representation used by rich notebook frontends.
@@ -1074,12 +943,8 @@ impl PyFeynmanDiagram {
     /// --------
     /// >>> "<svg" in diagram._repr_svg_()
     /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
-    fn _repr_svg_(&self) -> String {
-        self.inner.to_svg()
+    fn _repr_svg_(&self, py: Python<'_>) -> PyResult<String> {
+        render_diagram_svg(py, &self.inner)
     }
 
     /// Write a concise summary to an IPython pretty printer.
@@ -1147,9 +1012,6 @@ impl PyFeynmanDiagram {
     /// >>> repr(diagram).startswith("FeynmanDiagram(")
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!(
             "FeynmanDiagram(name='{}', loops={})",

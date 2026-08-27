@@ -15,6 +15,17 @@ use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_py
 
 use crate::{display::escape_html, error};
 
+/// A particle species in a loaded interaction model.
+///
+/// Particle records expose the signed PDG code, spin and color
+/// representations, electric charge, and the parameters used for mass and
+/// width.
+///
+/// Examples
+/// --------
+/// >>> electron = model.particle_by_pdg(11)
+/// >>> electron.name
+/// 'e-'
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Particle",
@@ -40,11 +51,9 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
-    /// >>> particle.name
+    /// >>> model.particle_by_pdg(11).name
+    /// 'e-'
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
@@ -54,53 +63,45 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
-    /// >>> particle.antiname
+    /// >>> model.particle_by_pdg(11).antiname
+    /// 'e+'
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn antiname(&self) -> &str {
         &self.inner.antiname
     }
 
-    /// Return the particle's PDG code.
+    /// Return the signed Particle Data Group code.
     ///
     /// Examples
     /// --------
-    /// >>> particle.pdg_code
+    /// >>> model.particle("e-").pdg_code
+    /// 11
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn pdg_code(&self) -> i64 {
         self.inner.pdg_code
     }
 
-    /// Return the UFO spin representation code.
+    /// Return the UFO spin code ``2S + 1`` (negative for ghost fields).
     ///
     /// Examples
     /// --------
-    /// >>> particle.spin
+    /// >>> model.particle_by_pdg(11).spin  # spin-1/2 electron
+    /// 2
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn spin(&self) -> i64 {
         self.inner.spin
     }
 
-    /// Return the UFO color representation code.
+    /// Return the signed UFO SU(3) color representation code.
     ///
     /// Examples
     /// --------
-    /// >>> particle.color
+    /// >>> model.particle_by_pdg(11).color  # color-singlet electron
+    /// 1
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn color(&self) -> i64 {
         self.inner.color
@@ -110,11 +111,9 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
-    /// >>> particle.mass_parameter
+    /// >>> particle = model.particle_by_pdg(13)
+    /// >>> mass = model.parameter(particle.mass_parameter)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn mass_parameter(&self) -> &str {
         &self.inner.mass
@@ -124,11 +123,9 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
-    /// >>> particle.width_parameter
+    /// >>> particle = model.particle_by_pdg(23)
+    /// >>> width = model.parameter(particle.width_parameter)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn width_parameter(&self) -> &str {
         &self.inner.width
@@ -138,11 +135,9 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
-    /// >>> particle.charge
+    /// >>> model.particle_by_pdg(11).charge
+    /// -1.0
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn charge(&self) -> f64 {
         self.inner.charge
@@ -152,11 +147,9 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
-    /// >>> particle.is_antiparticle
+    /// >>> model.particle_by_pdg(11).is_antiparticle
+    /// False
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn is_antiparticle(&self) -> bool {
         self.inner.is_antiparticle()
@@ -166,11 +159,9 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
-    /// >>> particle.is_self_antiparticle
+    /// >>> model.particle_by_pdg(22).is_self_antiparticle
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn is_self_antiparticle(&self) -> bool {
         self.inner.is_self_antiparticle()
@@ -180,11 +171,9 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
-    /// >>> particle.is_fermion
+    /// >>> model.particle_by_pdg(11).is_fermion
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn is_fermion(&self) -> bool {
         self.inner.is_fermion()
@@ -194,11 +183,9 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
-    /// >>> particle.is_massless
+    /// >>> model.particle_by_pdg(22).is_massless
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn is_massless(&self) -> bool {
         self.inner.is_massless()
@@ -210,9 +197,6 @@ impl PyParticle {
     /// --------
     /// >>> repr(particle)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!(
             "Particle(name='{}', pdg_code={})",
@@ -221,11 +205,19 @@ impl PyParticle {
     }
 }
 
+/// Whether a model parameter is supplied externally or derived internally.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> nature = fk.ParameterNature.EXTERNAL
+/// >>> external = [p for p in model.parameters if p.nature == nature]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     name = "ParameterNature",
     module = "symbolica.community.feynkit",
     rename_all = "SCREAMING_SNAKE_CASE",
+    frozen,
     eq,
     eq_int,
     from_py_object
@@ -245,11 +237,18 @@ impl From<ParameterNature> for PyParameterNature {
     }
 }
 
+/// Whether a model parameter is real-valued or complex-valued.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> real_parameters = [p for p in model.parameters if p.parameter_type == fk.ParameterType.REAL]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     name = "ParameterType",
     module = "symbolica.community.feynkit",
     rename_all = "SCREAMING_SNAKE_CASE",
+    frozen,
     eq,
     eq_int,
     from_py_object
@@ -269,6 +268,16 @@ impl From<ParameterType> for PyParameterType {
     }
 }
 
+/// A numerical or symbolic parameter in a particle-physics model.
+///
+/// External parameters carry parameter-card coordinates and values; internal
+/// parameters carry expressions derived from the external inputs.
+///
+/// Examples
+/// --------
+/// >>> mass = model.parameter("MMU")
+/// >>> mass.nature
+/// ParameterNature.EXTERNAL
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Parameter",
@@ -294,11 +303,10 @@ impl PyParameter {
     ///
     /// Examples
     /// --------
-    /// >>> parameter.name
+    /// >>> parameter = model.parameter(model.particle_by_pdg(13).mass_parameter)
+    /// >>> parameter.name == model.particle_by_pdg(13).mass_parameter
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
@@ -308,11 +316,10 @@ impl PyParameter {
     ///
     /// Examples
     /// --------
-    /// >>> parameter.lhablock
+    /// >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
+    /// >>> mass.lhablock
+    /// 'MASS'
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn lhablock(&self) -> Option<String> {
         self.inner.lhablock.clone()
@@ -322,11 +329,10 @@ impl PyParameter {
     ///
     /// Examples
     /// --------
-    /// >>> parameter.lhacode
+    /// >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
+    /// >>> mass.lhacode
+    /// [13]
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn lhacode(&self) -> Option<Vec<usize>> {
         self.inner.lhacode.clone()
@@ -336,11 +342,10 @@ impl PyParameter {
     ///
     /// Examples
     /// --------
-    /// >>> parameter.nature
+    /// >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
+    /// >>> mass.nature == fk.ParameterNature.EXTERNAL
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn nature(&self) -> PyParameterNature {
         self.inner.nature.clone().into()
@@ -350,25 +355,23 @@ impl PyParameter {
     ///
     /// Examples
     /// --------
-    /// >>> parameter.parameter_type
+    /// >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
+    /// >>> mass.parameter_type == fk.ParameterType.REAL
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn parameter_type(&self) -> PyParameterType {
         self.inner.parameter_type.clone().into()
     }
 
-    /// Return the evaluated complex value, when available.
+    /// Return the evaluated value as ``(real, imaginary)``, when available.
     ///
     /// Examples
     /// --------
-    /// >>> parameter.value
+    /// >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
+    /// >>> mass.value is None or len(mass.value) == 2
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn value(&self) -> Option<(f64, f64)> {
         self.inner.value.map(Into::into)
@@ -378,11 +381,9 @@ impl PyParameter {
     ///
     /// Examples
     /// --------
-    /// >>> parameter.expression
+    /// >>> internal = next(p for p in model.parameters if p.expression is not None)
+    /// >>> formula = internal.expression
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn expression(&self) -> Option<String> {
         self.inner.expression.clone()
@@ -394,14 +395,21 @@ impl PyParameter {
     /// --------
     /// >>> repr(parameter)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!("Parameter(name='{}')", self.inner.name)
     }
 }
 
+/// A coupling coefficient associated with interaction vertices.
+///
+/// Couplings retain their symbolic expression, perturbative coupling orders,
+/// and evaluated complex value when the model has been numerically resolved.
+///
+/// Examples
+/// --------
+/// >>> coupling = model.couplings[0]
+/// >>> coupling.orders
+/// {'QED': 1}
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Coupling",
@@ -427,25 +435,16 @@ impl PyCoupling {
     ///
     /// Examples
     /// --------
-    /// >>> coupling.name
+    /// >>> coupling = model.couplings[0]
+    /// >>> model.coupling(coupling.name).name == coupling.name
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
 
     /// Return the expression defining the coupling.
-    ///
-    /// Examples
-    /// --------
-    /// >>> coupling.expression
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn expression(&self) -> &str {
         &self.inner.expression
@@ -455,25 +454,14 @@ impl PyCoupling {
     ///
     /// Examples
     /// --------
-    /// >>> coupling.orders
+    /// >>> qed_couplings = [c for c in model.couplings if c.orders.get("QED", 0) > 0]
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn orders(&self) -> BTreeMap<String, usize> {
         self.inner.orders.clone()
     }
 
-    /// Return the evaluated complex coupling value, when available.
-    ///
-    /// Examples
-    /// --------
-    /// >>> coupling.value
-    ///
-    /// Parameters
-    /// ----------
-    /// None
+    /// Return the evaluated coupling as ``(real, imaginary)``, when available.
     #[getter]
     fn value(&self) -> Option<(f64, f64)> {
         self.inner.value.map(Into::into)
@@ -485,14 +473,21 @@ impl PyCoupling {
     /// --------
     /// >>> repr(coupling)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!("Coupling(name='{}')", self.inner.name)
     }
 }
 
+/// An interaction vertex rule from a particle model.
+///
+/// A vertex rule links its participating particles to color tensors, Lorentz
+/// structures, and the corresponding matrix of coupling names.
+///
+/// Examples
+/// --------
+/// >>> vertex = model.vertex_rules[0]
+/// >>> vertex.particles
+/// ['e+', 'e-', 'a']
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "VertexRule",
@@ -518,11 +513,10 @@ impl PyVertexRule {
     ///
     /// Examples
     /// --------
-    /// >>> vertex.name
+    /// >>> vertex = model.vertex_rules[0]
+    /// >>> model.vertex_rule(vertex.name).name == vertex.name
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
@@ -532,25 +526,15 @@ impl PyVertexRule {
     ///
     /// Examples
     /// --------
-    /// >>> vertex.particles
+    /// >>> vertex = model.vertex_rules[0]
+    /// >>> particles = [model.particle(name) for name in vertex.particles]
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn particles(&self) -> Vec<String> {
         self.inner.particles.clone()
     }
 
     /// Return the color structures used by the vertex.
-    ///
-    /// Examples
-    /// --------
-    /// >>> vertex.color_structures
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn color_structures(&self) -> Vec<String> {
         self.inner.color_structures.clone()
@@ -560,11 +544,9 @@ impl PyVertexRule {
     ///
     /// Examples
     /// --------
-    /// >>> vertex.lorentz_structures
+    /// >>> vertex = model.vertex_rules[0]
+    /// >>> tensors = [model.lorentz_structure(name) for name in vertex.lorentz_structures]
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn lorentz_structures(&self) -> Vec<String> {
         self.inner.lorentz_structures.clone()
@@ -574,11 +556,10 @@ impl PyVertexRule {
     ///
     /// Examples
     /// --------
-    /// >>> vertex.couplings
+    /// >>> vertex = model.vertex_rules[0]
+    /// >>> names = [name for row in vertex.couplings for name in row if name is not None]
+    /// >>> couplings = [model.coupling(name) for name in names]
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn couplings(&self) -> Vec<Vec<Option<String>>> {
         self.inner.couplings.clone()
@@ -606,14 +587,21 @@ impl PyVertexRule {
     /// --------
     /// >>> repr(vertex)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!("VertexRule(name='{}')", self.inner.name)
     }
 }
 
+/// A reusable spin-dependent tensor structure in an interaction rule.
+///
+/// The structure records the spin representation of each leg and the UFO
+/// expression used when constructing a diagram numerator.
+///
+/// Examples
+/// --------
+/// >>> lorentz = model.lorentz_structures[0]
+/// >>> lorentz.spins
+/// [2, 2, 3]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "LorentzStructure",
@@ -639,39 +627,30 @@ impl PyLorentzStructure {
     ///
     /// Examples
     /// --------
-    /// >>> lorentz.name
+    /// >>> lorentz = model.lorentz_structures[0]
+    /// >>> model.lorentz_structure(lorentz.name).name == lorentz.name
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
 
-    /// Return the spin codes of the structure's particle slots.
+    /// Return the UFO ``2S + 1`` spin codes of the structure's particle slots.
     ///
     /// Examples
     /// --------
-    /// >>> lorentz.spins
+    /// >>> vertex = model.vertex_rules[0]
+    /// >>> lorentz = model.lorentz_structure(vertex.lorentz_structures[0])
+    /// >>> len(lorentz.spins) == len(vertex.particles)
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn spins(&self) -> Vec<i64> {
         self.inner.spins.clone()
     }
 
     /// Return the symbolic Lorentz expression.
-    ///
-    /// Examples
-    /// --------
-    /// >>> lorentz.structure
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn structure(&self) -> &str {
         &self.inner.structure
@@ -683,14 +662,21 @@ impl PyLorentzStructure {
     /// --------
     /// >>> repr(lorentz)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!("LorentzStructure(name='{}')", self.inner.name)
     }
 }
 
+/// A particle propagator with symbolic numerator and denominator.
+///
+/// Propagator formulas are kept in their model representation so that diagram
+/// construction can combine them with interaction Lorentz structures.
+///
+/// Examples
+/// --------
+/// >>> propagator = model.propagators[0]
+/// >>> propagator.denominator
+/// 'P(-1, id)**2 - Mass(id)**2'
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Propagator",
@@ -716,11 +702,10 @@ impl PyPropagator {
     ///
     /// Examples
     /// --------
-    /// >>> propagator.name
+    /// >>> propagator = model.propagators[0]
+    /// >>> model.propagator(propagator.name).name == propagator.name
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
@@ -730,39 +715,21 @@ impl PyPropagator {
     ///
     /// Examples
     /// --------
-    /// >>> propagator.particle
+    /// >>> propagator = model.propagators[0]
+    /// >>> particle = model.particle(propagator.particle)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn particle(&self) -> &str {
         &self.inner.particle
     }
 
     /// Return the symbolic propagator numerator.
-    ///
-    /// Examples
-    /// --------
-    /// >>> propagator.numerator
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn numerator(&self) -> &str {
         &self.inner.numerator
     }
 
     /// Return the symbolic propagator denominator.
-    ///
-    /// Examples
-    /// --------
-    /// >>> propagator.denominator
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn denominator(&self) -> &str {
         &self.inner.denominator
@@ -774,14 +741,21 @@ impl PyPropagator {
     /// --------
     /// >>> repr(propagator)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!("Propagator(name='{}')", self.inner.name)
     }
 }
 
+/// A named helper function used by model expressions.
+///
+/// Functions expose their formal arguments and, when available, a symbolic
+/// implementation that an evaluator can use during parameter recomputation.
+///
+/// Examples
+/// --------
+/// >>> function = model.functions[0]
+/// >>> function.arguments
+/// ['z']
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ModelFunction",
@@ -807,11 +781,10 @@ impl PyModelFunction {
     ///
     /// Examples
     /// --------
-    /// >>> function.name
+    /// >>> function = model.functions[0]
+    /// >>> model.function(function.name).name == function.name
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
@@ -821,25 +794,15 @@ impl PyModelFunction {
     ///
     /// Examples
     /// --------
-    /// >>> function.arguments
+    /// >>> function = model.functions[0]
+    /// >>> argument_slots = dict.fromkeys(function.arguments)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn arguments(&self) -> Vec<String> {
         self.inner.arguments.clone()
     }
 
     /// Return the function body, when one is defined by the model.
-    ///
-    /// Examples
-    /// --------
-    /// >>> function.expression
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn expression(&self) -> Option<String> {
         self.inner.expression.clone()
@@ -851,14 +814,21 @@ impl PyModelFunction {
     /// --------
     /// >>> repr(function)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!("ModelFunction(name='{}')", self.inner.name)
     }
 }
 
+/// A momentum-dependent form factor referenced by interaction rules.
+///
+/// Form factors keep their model type and symbolic value so specialized
+/// amplitude backends can evaluate them at the relevant kinematic point.
+///
+/// Examples
+/// --------
+/// >>> form_factor = model.form_factors[0]
+/// >>> form_factor.name
+/// 'FF1'
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "FormFactor",
@@ -884,39 +854,22 @@ impl PyFormFactor {
     ///
     /// Examples
     /// --------
-    /// >>> form_factor.name
+    /// >>> form_factor = model.form_factors[0]
+    /// >>> model.form_factor(form_factor.name).name == form_factor.name
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
 
     /// Return the model-defined form-factor type, when present.
-    ///
-    /// Examples
-    /// --------
-    /// >>> form_factor.type_name
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn type_name(&self) -> Option<String> {
         self.inner.type_name.clone()
     }
 
     /// Return the symbolic form-factor value, when present.
-    ///
-    /// Examples
-    /// --------
-    /// >>> form_factor.value
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn value(&self) -> Option<String> {
         self.inner.value.clone()
@@ -928,14 +881,21 @@ impl PyFormFactor {
     /// --------
     /// >>> repr(form_factor)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!("FormFactor(name='{}')", self.inner.name)
     }
 }
 
+/// A named symbolic expression awaiting numerical model evaluation.
+///
+/// These records describe internal parameters or couplings passed to a custom
+/// ``Model.recompute_with`` callback.
+///
+/// Examples
+/// --------
+/// >>> expression = request.couplings[0]
+/// >>> expression.name
+/// 'GC_1'
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ModelExpression",
@@ -961,31 +921,34 @@ impl PyModelExpression {
     ///
     /// Examples
     /// --------
-    /// >>> expression.name
+    /// >>> expression = request.couplings[0]
+    /// >>> coupling_names = {coupling.name for coupling in model.couplings}
+    /// >>> expression.name in coupling_names
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
 
     /// Return the symbolic expression text.
-    ///
-    /// Examples
-    /// --------
-    /// >>> expression.expression
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn expression(&self) -> &str {
         &self.inner.expression
     }
 }
 
+/// The complete input supplied to a custom model evaluator.
+///
+/// An evaluation request contains already-known numerical parameters and the
+/// internal parameters, couplings, functions, and form factors still needed.
+///
+/// Examples
+/// --------
+/// >>> def evaluate(request):
+/// ...     assert request.known_parameters
+/// ...     return fk.EvaluatedValues()
+/// >>> updated_model = model.recompute_with(evaluate)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "EvaluationRequest",
@@ -1011,11 +974,10 @@ impl PyEvaluationRequest {
     ///
     /// Examples
     /// --------
-    /// >>> request.known_parameters
+    /// >>> def evaluate(request):
+    /// ...     alpha_s = request.known_parameters["aS"]
+    /// ...     return fk.EvaluatedValues()
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn known_parameters(&self) -> BTreeMap<String, (f64, f64)> {
         self.inner
@@ -1025,15 +987,12 @@ impl PyEvaluationRequest {
             .collect()
     }
 
-    /// Return the internal expressions that must be evaluated.
+    /// Return the derived parameter expressions that must be evaluated.
     ///
     /// Examples
     /// --------
-    /// >>> request.internal_parameters
+    /// >>> formulas = {item.name: item.expression for item in request.internal_parameters}
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn internal_parameters(&self) -> Vec<PyModelExpression> {
         self.inner
@@ -1048,11 +1007,8 @@ impl PyEvaluationRequest {
     ///
     /// Examples
     /// --------
-    /// >>> request.couplings
+    /// >>> coupling_formulas = {item.name: item.expression for item in request.couplings}
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn couplings(&self) -> Vec<PyModelExpression> {
         self.inner
@@ -1067,11 +1023,8 @@ impl PyEvaluationRequest {
     ///
     /// Examples
     /// --------
-    /// >>> request.functions
+    /// >>> helper_functions = {function.name: function for function in request.functions}
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn functions(&self) -> Vec<PyModelFunction> {
         self.inner
@@ -1086,11 +1039,8 @@ impl PyEvaluationRequest {
     ///
     /// Examples
     /// --------
-    /// >>> request.form_factors
+    /// >>> form_factors = {factor.name: factor for factor in request.form_factors}
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn form_factors(&self) -> Vec<PyFormFactor> {
         self.inner
@@ -1102,6 +1052,22 @@ impl PyEvaluationRequest {
     }
 }
 
+/// Numerical values returned by a custom model evaluator.
+///
+/// Values are complex numbers represented as ``(real, imaginary)`` pairs and
+/// are applied atomically to the model after the callback completes.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> values = fk.EvaluatedValues(couplings={"GC_1": (0.3, 0.0)})
+///
+/// Parameters
+/// ----------
+/// internal_parameters : dict[str, tuple[float, float]], optional
+///     Evaluated internal parameter values keyed by name.
+/// couplings : dict[str, tuple[float, float]], optional
+///     Evaluated coupling values keyed by name.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "EvaluatedValues",
@@ -1155,11 +1121,10 @@ impl PyEvaluatedValues {
     ///
     /// Examples
     /// --------
-    /// >>> values.internal_parameters
+    /// >>> values = fk.EvaluatedValues(internal_parameters={"aEW": (0.0073, 0.0)})
+    /// >>> values.internal_parameters["aEW"]
+    /// (0.0073, 0.0)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn internal_parameters(&self) -> BTreeMap<String, (f64, f64)> {
         self.inner
@@ -1173,11 +1138,10 @@ impl PyEvaluatedValues {
     ///
     /// Examples
     /// --------
-    /// >>> values.couplings
+    /// >>> values = fk.EvaluatedValues(couplings={"GC_1": (0.3, 0.0)})
+    /// >>> values.couplings["GC_1"]
+    /// (0.3, 0.0)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn couplings(&self) -> BTreeMap<String, (f64, f64)> {
         self.inner
@@ -1204,6 +1168,16 @@ impl ModelEvaluator for PythonModelEvaluator<'_, '_> {
     }
 }
 
+/// Mutable external parameter values for a particle model.
+///
+/// A parameter card can be initialized from a model, edited by parameter name,
+/// serialized as JSON, and atomically applied to a model copy.
+///
+/// Examples
+/// --------
+/// >>> card = model.default_parameter_card()
+/// >>> card.set("MMU", 0.105658, 0.0)
+/// >>> shifted_model = model.with_parameter_card(card)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ParameterCard",
@@ -1230,9 +1204,6 @@ impl PyParameterCard {
     /// --------
     /// >>> card = ParameterCard()
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[new]
     fn new() -> Self {
         Self::default()
@@ -1325,9 +1296,6 @@ impl PyParameterCard {
     /// --------
     /// >>> card.items()
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn items(&self) -> Vec<(String, (f64, f64))> {
         self.inner
             .iter()
@@ -1377,14 +1345,21 @@ impl PyParameterCard {
     /// --------
     /// >>> len(card)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __len__(&self) -> usize {
         self.inner.len()
     }
 }
 
+/// A loaded particle model ready for diagram generation.
+///
+/// Models provide typed access to particles, parameters, couplings, interaction
+/// rules, propagators, and numerical parameter-card updates.
+///
+/// Examples
+/// --------
+/// >>> loaded = fk.UfoLoader().load("path/to/MyUFO")
+/// >>> model = loaded.model
+/// >>> electron = model.particle_by_pdg(11)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Model",
@@ -1448,42 +1423,25 @@ impl PyModel {
     }
 
     /// Return the model name.
-    ///
-    /// Examples
-    /// --------
-    /// >>> model.name
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn name(&self) -> &str {
         self.inner.name()
     }
 
     /// Return the applied restriction name, when present.
-    ///
-    /// Examples
-    /// --------
-    /// >>> model.restriction
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn restriction(&self) -> Option<String> {
         self.inner.restriction().map(str::to_owned)
     }
 
-    /// Return all particles in model order.
+    /// Return all particle species in deterministic model order.
     ///
     /// Examples
     /// --------
-    /// >>> model.particles
+    /// >>> pdg_codes = {particle.pdg_code for particle in model.particles}
+    /// >>> 11 in pdg_codes  # electron in a Standard Model UFO
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn particles(&self) -> Vec<PyParticle> {
         self.inner
@@ -1530,15 +1488,12 @@ impl PyModel {
             .map_err(error::model)
     }
 
-    /// Return all parameters in model order.
+    /// Return all external and internal parameters in model order.
     ///
     /// Examples
     /// --------
-    /// >>> model.parameters
+    /// >>> external = [p for p in model.parameters if p.nature == fk.ParameterNature.EXTERNAL]
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn parameters(&self) -> Vec<PyParameter> {
         self.inner
@@ -1567,15 +1522,12 @@ impl PyModel {
             .map_err(error::model)
     }
 
-    /// Return all couplings in model order.
+    /// Return all interaction couplings in model order.
     ///
     /// Examples
     /// --------
-    /// >>> model.couplings
+    /// >>> qed = [c for c in model.couplings if c.orders.get("QED", 0) > 0]
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn couplings(&self) -> Vec<PyCoupling> {
         self.inner
@@ -1604,15 +1556,12 @@ impl PyModel {
             .map_err(error::model)
     }
 
-    /// Return all vertex rules in model order.
+    /// Return all interaction vertex rules in model order.
     ///
     /// Examples
     /// --------
-    /// >>> model.vertex_rules
+    /// >>> electron_vertices = [v for v in model.vertex_rules if "e-" in v.particles]
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn vertex_rules(&self) -> Vec<PyVertexRule> {
         self.inner
@@ -1641,15 +1590,12 @@ impl PyModel {
             .map_err(error::model)
     }
 
-    /// Return all Lorentz structures in model order.
+    /// Return all reusable Lorentz structures in model order.
     ///
     /// Examples
     /// --------
-    /// >>> model.lorentz_structures
+    /// >>> lorentz_by_name = {item.name: item for item in model.lorentz_structures}
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn lorentz_structures(&self) -> Vec<PyLorentzStructure> {
         self.inner
@@ -1678,15 +1624,12 @@ impl PyModel {
             .map_err(error::model)
     }
 
-    /// Return all propagators in model order.
+    /// Return all model-defined propagators in model order.
     ///
     /// Examples
     /// --------
-    /// >>> model.propagators
+    /// >>> propagator_particles = {item.particle for item in model.propagators}
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn propagators(&self) -> Vec<PyPropagator> {
         self.inner
@@ -1715,15 +1658,12 @@ impl PyModel {
             .map_err(error::model)
     }
 
-    /// Return all model functions in model order.
+    /// Return all helper functions available to model expressions.
     ///
     /// Examples
     /// --------
-    /// >>> model.functions
+    /// >>> functions = {function.name: function for function in model.functions}
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn functions(&self) -> Vec<PyModelFunction> {
         self.inner
@@ -1752,15 +1692,12 @@ impl PyModel {
             .map_err(error::model)
     }
 
-    /// Return all form factors in model order.
+    /// Return all momentum-dependent model form factors in model order.
     ///
     /// Examples
     /// --------
-    /// >>> model.form_factors
+    /// >>> form_factors = {factor.name: factor for factor in model.form_factors}
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn form_factors(&self) -> Vec<PyFormFactor> {
         self.inner
@@ -1795,9 +1732,6 @@ impl PyModel {
     /// --------
     /// >>> card = model.default_parameter_card()
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn default_parameter_card(&self) -> PyResult<PyParameterCard> {
         self.inner
             .default_parameter_card()
@@ -1911,9 +1845,6 @@ impl PyModel {
     /// --------
     /// >>> repr(model)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!(
             "Model(name='{}', particles={})",
@@ -1929,9 +1860,6 @@ impl PyModel {
     /// Leave ``model`` as the final expression in a notebook cell to display
     /// its particle-content and interaction counts.
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn _repr_html_(&self) -> String {
         let restriction = self
             .inner
@@ -1968,7 +1896,7 @@ impl PyModel {
     ///
     /// Parameters
     /// ----------
-    /// pretty
+    /// pretty : object
     ///     The IPython pretty-printer object.
     /// cycle : bool
     ///     Whether this object is part of a recursive formatting cycle.
