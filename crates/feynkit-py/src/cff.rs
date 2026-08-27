@@ -25,8 +25,7 @@ use crate::{error, graph::PyFeynmanDiagram};
 /// Examples
 /// --------
 /// >>> surface = result.surfaces[0]
-/// >>> surface.kind in {"energy", "h"}
-/// True
+/// >>> print(surface, surface.positive_energies, surface.external_shift)
 ///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
@@ -62,12 +61,6 @@ impl PyCffSurface {
 #[pymethods]
 impl PyCffSurface {
     /// Return the surface category: energy, h, unit, or infinite.
-    ///
-    /// Examples
-    /// --------
-    /// >>> surface.kind
-    /// 'energy'
-    ///
     #[getter]
     fn kind(&self) -> &'static str {
         match self.id {
@@ -89,24 +82,12 @@ impl PyCffSurface {
     }
 
     /// Return the Symbolica variable name assigned to this surface.
-    ///
-    /// Examples
-    /// --------
-    /// >>> surface.symbol_name
-    /// 'feynkit::E0'
-    ///
     #[getter]
     fn symbol_name(&self) -> Option<String> {
         Self::symbol_name_for(self.id)
     }
 
     /// Return edge IDs whose on-shell energies enter with positive sign.
-    ///
-    /// Examples
-    /// --------
-    /// >>> surface.positive_energies
-    /// [0, 2]
-    ///
     #[getter]
     fn positive_energies(&self) -> Vec<usize> {
         match &self.surface {
@@ -123,12 +104,6 @@ impl PyCffSurface {
     }
 
     /// Return edge IDs whose on-shell energies enter with negative sign.
-    ///
-    /// Examples
-    /// --------
-    /// >>> surface.negative_energies
-    /// []
-    ///
     #[getter]
     fn negative_energies(&self) -> Vec<usize> {
         match &self.surface {
@@ -142,12 +117,6 @@ impl PyCffSurface {
     }
 
     /// Return external edge IDs and their integer shift coefficients.
-    ///
-    /// Examples
-    /// --------
-    /// >>> surface.external_shift
-    /// [(3, -1)]
-    ///
     #[getter]
     fn external_shift(&self) -> Vec<(usize, i64)> {
         match &self.surface {
@@ -159,13 +128,11 @@ impl PyCffSurface {
         .collect()
     }
 
-    /// Return the diagram vertex IDs enclosed by this surface.
+    /// Return the dense CFF vertex IDs enclosed by this surface.
     ///
-    /// Examples
-    /// --------
-    /// >>> surface.vertices
-    /// [0, 1]
-    ///
+    /// CFF generation remaps the diagram's internal vertices to a compact
+    /// zero-based range. These IDs therefore index the contracted CFF graph;
+    /// they are not the original ``diagram.vertices`` identifiers.
     #[getter]
     fn vertices(&self) -> Vec<usize> {
         match &self.surface {
@@ -181,8 +148,7 @@ impl PyCffSurface {
     ///
     /// Examples
     /// --------
-    /// >>> repr(surface)
-    /// 'feynkit::E0'
+    /// >>> print(surface)  # Symbolica denominator variable, for example feynkit::E0
     ///
     fn __repr__(&self) -> String {
         self.symbol_name().unwrap_or_else(|| self.kind().to_owned())
@@ -197,8 +163,8 @@ impl PyCffSurface {
 /// Examples
 /// --------
 /// >>> orientation = result.orientations[0]
-/// >>> orientation.id >= 0
-/// True
+/// >>> for product in orientation.denominator_products():
+/// ...     print([surface.symbol_name for surface in product])
 ///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
@@ -223,12 +189,6 @@ impl PyCffOrientation {
     }
 
     /// Return each edge ID and its selected orientation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> orientation.edge_orientations
-    /// [(0, 'default'), (1, 'reversed')]
-    ///
     #[getter]
     fn edge_orientations(&self) -> Vec<(usize, &'static str)> {
         self.inner
@@ -250,8 +210,9 @@ impl PyCffOrientation {
     /// Examples
     /// --------
     /// >>> products = orientation.denominator_products()
-    /// >>> products[0][0].kind
-    /// 'energy'
+    /// >>> denominator_variables = [
+    /// ...     [surface.symbol_name for surface in product] for product in products
+    /// ... ]
     ///
     fn denominator_products(&self) -> Vec<Vec<PyCffSurface>> {
         self.inner
@@ -317,8 +278,7 @@ impl PyCffReport {
     ///
     /// Examples
     /// --------
-    /// >>> repr(result.report).startswith("CffReport(")
-    /// True
+    /// >>> print(result.report)
     ///
     fn __repr__(&self) -> String {
         format!(
@@ -405,12 +365,6 @@ pub struct PyCffResult {
 #[pymethods]
 impl PyCffResult {
     /// Return generation statistics for this CFF result.
-    ///
-    /// Examples
-    /// --------
-    /// >>> result.report.candidate_orientations >= result.report.acyclic_orientations
-    /// True
-    ///
     #[getter]
     fn report(&self) -> PyCffReport {
         PyCffReport {
@@ -434,13 +388,6 @@ impl PyCffResult {
     }
 
     /// Return all unique energy and H surfaces in this result.
-    ///
-    /// Examples
-    /// --------
-    /// >>> surfaces = result.surfaces
-    /// >>> all(surface.kind in {"energy", "h"} for surface in surfaces)
-    /// True
-    ///
     #[getter]
     fn surfaces(&self) -> Vec<PyCffSurface> {
         let energy = (0..self.inner.surfaces.energy_surfaces().len()).map(|index| {
@@ -466,8 +413,7 @@ impl PyCffResult {
     /// Examples
     /// --------
     /// >>> expression = result.to_expression()
-    /// >>> expression is not None
-    /// True
+    /// >>> expression  # native Symbolica display in a notebook
     ///
     fn to_expression(&self) -> PythonExpression {
         let mut expression = Atom::Zero;
@@ -499,8 +445,7 @@ impl PyCffResult {
     ///
     /// Examples
     /// --------
-    /// >>> len(result) == result.report.unfolded_terms
-    /// True
+    /// >>> denominator_term_count = len(result)
     ///
     fn __len__(&self) -> usize {
         self.inner.expression.unfolded_term_count()
@@ -510,8 +455,7 @@ impl PyCffResult {
     ///
     /// Examples
     /// --------
-    /// >>> repr(result).startswith("CffResult(")
-    /// True
+    /// >>> print(result)
     ///
     fn __repr__(&self) -> String {
         format!(
@@ -699,8 +643,7 @@ impl PyCffGenerator {
     /// Examples
     /// --------
     /// >>> result = generator.generate(diagram)
-    /// >>> len(result) >= 0
-    /// True
+    /// >>> result.to_expression()
     ///
     /// Parameters
     /// ----------
@@ -730,8 +673,7 @@ impl PyCffGenerator {
 ///
 /// >>> cff = fk.build_cff(diagram, fixed_orientations={0: False})
 /// >>> expression = cff.to_expression()
-/// >>> len(cff.orientations) >= 0
-/// True
+/// >>> expression  # native Symbolica display in a notebook
 ///
 /// Parameters
 /// ----------

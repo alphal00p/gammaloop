@@ -24,8 +24,7 @@ use crate::{
 /// Examples
 /// --------
 /// >>> diagnostics = loaded.diagnostics
-/// >>> diagnostics.particle_count > 0
-/// True
+/// >>> print(diagnostics.source, diagnostics.particle_count, diagnostics.vertex_rule_count)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "UfoLoadDiagnostics",
@@ -42,24 +41,12 @@ pub struct PyUfoLoadDiagnostics {
 #[pymethods]
 impl PyUfoLoadDiagnostics {
     /// Return the UFO source directory.
-    ///
-    /// Examples
-    /// --------
-    /// >>> loaded.diagnostics.source
-    /// PosixPath('/models/scalars')
-    ///
     #[getter]
     fn source(&self) -> PathBuf {
         self.inner.source.clone()
     }
 
     /// Return the applied restriction-card name, if any.
-    ///
-    /// Examples
-    /// --------
-    /// >>> loaded.diagnostics.restriction_name
-    /// 'massless'
-    ///
     #[getter]
     fn restriction_name(&self) -> Option<String> {
         self.inner.options.restriction_name.clone()
@@ -84,108 +71,54 @@ impl PyUfoLoadDiagnostics {
     }
 
     /// Return the number of model parameters loaded.
-    ///
-    /// Examples
-    /// --------
-    /// >>> loaded.diagnostics.model_parameter_count == len(loaded.model.parameters)
-    /// True
-    ///
     #[getter]
     fn model_parameter_count(&self) -> usize {
         self.inner.model_parameter_count
     }
 
     /// Return the number of particles loaded.
-    ///
-    /// Examples
-    /// --------
-    /// >>> loaded.diagnostics.particle_count == len(loaded.model.particles)
-    /// True
-    ///
     #[getter]
     fn particle_count(&self) -> usize {
         self.inner.particle_count
     }
 
     /// Return the number of propagators loaded.
-    ///
-    /// Examples
-    /// --------
-    /// >>> loaded.diagnostics.propagator_count == len(loaded.model.propagators)
-    /// True
-    ///
     #[getter]
     fn propagator_count(&self) -> usize {
         self.inner.propagator_count
     }
 
     /// Return the number of Lorentz structures loaded.
-    ///
-    /// Examples
-    /// --------
-    /// >>> loaded.diagnostics.lorentz_structure_count == len(loaded.model.lorentz_structures)
-    /// True
-    ///
     #[getter]
     fn lorentz_structure_count(&self) -> usize {
         self.inner.lorentz_structure_count
     }
 
     /// Return the number of couplings loaded.
-    ///
-    /// Examples
-    /// --------
-    /// >>> loaded.diagnostics.coupling_count == len(loaded.model.couplings)
-    /// True
-    ///
     #[getter]
     fn coupling_count(&self) -> usize {
         self.inner.coupling_count
     }
 
     /// Return the number of vertex rules loaded.
-    ///
-    /// Examples
-    /// --------
-    /// >>> loaded.diagnostics.vertex_rule_count == len(loaded.model.vertex_rules)
-    /// True
-    ///
     #[getter]
     fn vertex_rule_count(&self) -> usize {
         self.inner.vertex_rule_count
     }
 
     /// Return the number of model functions loaded.
-    ///
-    /// Examples
-    /// --------
-    /// >>> loaded.diagnostics.function_count == len(loaded.model.functions)
-    /// True
-    ///
     #[getter]
     fn function_count(&self) -> usize {
         self.inner.function_count
     }
 
     /// Return the number of form factors loaded.
-    ///
-    /// Examples
-    /// --------
-    /// >>> loaded.diagnostics.form_factor_count == len(loaded.model.form_factors)
-    /// True
-    ///
     #[getter]
     fn form_factor_count(&self) -> usize {
         self.inner.form_factor_count
     }
 
     /// Return the number of parameter values loaded into the parameter card.
-    ///
-    /// Examples
-    /// --------
-    /// >>> loaded.diagnostics.parameter_value_count == len(loaded.parameters)
-    /// True
-    ///
     #[getter]
     fn parameter_value_count(&self) -> usize {
         self.inner.parameter_value_count
@@ -195,8 +128,7 @@ impl PyUfoLoadDiagnostics {
     ///
     /// Examples
     /// --------
-    /// >>> repr(loaded.diagnostics).startswith("UfoLoadDiagnostics(")
-    /// True
+    /// >>> print(loaded.diagnostics)
     ///
     fn __repr__(&self) -> String {
         format!(
@@ -315,13 +247,6 @@ impl PyLoadedModel {
     }
 
     /// Return counts and options recorded while loading the UFO model.
-    ///
-    /// Examples
-    /// --------
-    /// >>> diagnostics = loaded.diagnostics
-    /// >>> diagnostics.particle_count == len(loaded.model.particles)
-    /// True
-    ///
     #[getter]
     fn diagnostics(&self) -> PyUfoLoadDiagnostics {
         PyUfoLoadDiagnostics {
@@ -333,8 +258,7 @@ impl PyLoadedModel {
     ///
     /// Examples
     /// --------
-    /// >>> repr(loaded).startswith("LoadedModel(")
-    /// True
+    /// >>> print(loaded)
     ///
     fn __repr__(&self) -> String {
         format!(
@@ -511,8 +435,8 @@ impl PyUfoLoader {
 ///
 /// >>> loaded = fk.load_ufo_model("models/sm", restriction="massless")
 /// >>> electron = loaded.model.particle("e-")
-/// >>> loaded.diagnostics.particle_count == len(loaded.model.particles)
-/// True
+/// >>> electron.pdg_code
+/// 11
 ///
 /// Parameters
 /// ----------
