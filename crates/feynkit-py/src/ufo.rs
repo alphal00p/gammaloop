@@ -4,10 +4,11 @@ use feynkit_ufo::{LoadedModel, UfoLoadDiagnostics, UfoLoadOptions, UfoLoader};
 use pyo3::{
     prelude::*,
     types::{PyAny, PyModule},
+    wrap_pyfunction,
 };
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
+use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyfunction, gen_stub_pymethods};
 
 use crate::{
     display::escape_html,
@@ -15,6 +16,16 @@ use crate::{
     model::{PyModel, PyParameterCard},
 };
 
+/// Provenance, options, and entity counts from loading a UFO model.
+///
+/// Diagnostics make it easy to verify which restriction was applied and how
+/// many particles, interactions, and auxiliary structures were normalized.
+///
+/// Examples
+/// --------
+/// >>> diagnostics = loaded.diagnostics
+/// >>> diagnostics.particle_count > 0
+/// True
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "UfoLoadDiagnostics",
@@ -37,9 +48,6 @@ impl PyUfoLoadDiagnostics {
     /// >>> loaded.diagnostics.source
     /// PosixPath('/models/scalars')
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn source(&self) -> PathBuf {
         self.inner.source.clone()
@@ -52,54 +60,24 @@ impl PyUfoLoadDiagnostics {
     /// >>> loaded.diagnostics.restriction_name
     /// 'massless'
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn restriction_name(&self) -> Option<String> {
         self.inner.options.restriction_name.clone()
     }
 
     /// Return whether model expressions were simplified while loading.
-    ///
-    /// Examples
-    /// --------
-    /// >>> loaded.diagnostics.simplify_model
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn simplify_model(&self) -> bool {
         self.inner.options.simplify_model
     }
 
     /// Return whether normalized Lorentz indices were wrapped.
-    ///
-    /// Examples
-    /// --------
-    /// >>> loaded.diagnostics.wrap_indices_in_lorentz_structures
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn wrap_indices_in_lorentz_structures(&self) -> bool {
         self.inner.options.wrap_indices_in_lorentz_structures
     }
 
     /// Return the number of coupling orders loaded from the UFO model.
-    ///
-    /// Examples
-    /// --------
-    /// >>> loaded.diagnostics.order_count >= 0
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn order_count(&self) -> usize {
         self.inner.order_count
@@ -109,12 +87,9 @@ impl PyUfoLoadDiagnostics {
     ///
     /// Examples
     /// --------
-    /// >>> loaded.diagnostics.model_parameter_count >= 0
+    /// >>> loaded.diagnostics.model_parameter_count == len(loaded.model.parameters)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn model_parameter_count(&self) -> usize {
         self.inner.model_parameter_count
@@ -124,12 +99,9 @@ impl PyUfoLoadDiagnostics {
     ///
     /// Examples
     /// --------
-    /// >>> loaded.diagnostics.particle_count >= 0
+    /// >>> loaded.diagnostics.particle_count == len(loaded.model.particles)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn particle_count(&self) -> usize {
         self.inner.particle_count
@@ -139,12 +111,9 @@ impl PyUfoLoadDiagnostics {
     ///
     /// Examples
     /// --------
-    /// >>> loaded.diagnostics.propagator_count >= 0
+    /// >>> loaded.diagnostics.propagator_count == len(loaded.model.propagators)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn propagator_count(&self) -> usize {
         self.inner.propagator_count
@@ -154,12 +123,9 @@ impl PyUfoLoadDiagnostics {
     ///
     /// Examples
     /// --------
-    /// >>> loaded.diagnostics.lorentz_structure_count >= 0
+    /// >>> loaded.diagnostics.lorentz_structure_count == len(loaded.model.lorentz_structures)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn lorentz_structure_count(&self) -> usize {
         self.inner.lorentz_structure_count
@@ -169,12 +135,9 @@ impl PyUfoLoadDiagnostics {
     ///
     /// Examples
     /// --------
-    /// >>> loaded.diagnostics.coupling_count >= 0
+    /// >>> loaded.diagnostics.coupling_count == len(loaded.model.couplings)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn coupling_count(&self) -> usize {
         self.inner.coupling_count
@@ -184,12 +147,9 @@ impl PyUfoLoadDiagnostics {
     ///
     /// Examples
     /// --------
-    /// >>> loaded.diagnostics.vertex_rule_count >= 0
+    /// >>> loaded.diagnostics.vertex_rule_count == len(loaded.model.vertex_rules)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn vertex_rule_count(&self) -> usize {
         self.inner.vertex_rule_count
@@ -199,12 +159,9 @@ impl PyUfoLoadDiagnostics {
     ///
     /// Examples
     /// --------
-    /// >>> loaded.diagnostics.function_count >= 0
+    /// >>> loaded.diagnostics.function_count == len(loaded.model.functions)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn function_count(&self) -> usize {
         self.inner.function_count
@@ -214,12 +171,9 @@ impl PyUfoLoadDiagnostics {
     ///
     /// Examples
     /// --------
-    /// >>> loaded.diagnostics.form_factor_count >= 0
+    /// >>> loaded.diagnostics.form_factor_count == len(loaded.model.form_factors)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn form_factor_count(&self) -> usize {
         self.inner.form_factor_count
@@ -229,12 +183,9 @@ impl PyUfoLoadDiagnostics {
     ///
     /// Examples
     /// --------
-    /// >>> loaded.diagnostics.parameter_value_count >= 0
+    /// >>> loaded.diagnostics.parameter_value_count == len(loaded.parameters)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn parameter_value_count(&self) -> usize {
         self.inner.parameter_value_count
@@ -247,9 +198,6 @@ impl PyUfoLoadDiagnostics {
     /// >>> repr(loaded.diagnostics).startswith("UfoLoadDiagnostics(")
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!(
             "UfoLoadDiagnostics(source={:?}, particles={}, vertices={})",
@@ -264,9 +212,6 @@ impl PyUfoLoadDiagnostics {
     /// Leave ``loaded.diagnostics`` as the final expression in a notebook cell
     /// to display the import inventory.
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn _repr_html_(&self) -> String {
         let restriction = self
             .inner
@@ -321,6 +266,16 @@ impl PyUfoLoadDiagnostics {
     }
 }
 
+/// A normalized model, its parameter card, and its loading diagnostics.
+///
+/// This is the complete result returned by ``UfoLoader.load``; use ``model``
+/// for diagram generation and ``parameters`` for external numerical inputs.
+///
+/// Examples
+/// --------
+/// >>> loaded = fk.UfoLoader().load("path/to/MyUFO")
+/// >>> generator = fk.Generator(loaded.model)
+/// >>> parameters = loaded.parameters
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "LoadedModel",
@@ -340,11 +295,8 @@ impl PyLoadedModel {
     ///
     /// Examples
     /// --------
-    /// >>> model = loaded.model
+    /// >>> generator = fk.Generator(loaded.model)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn model(&self) -> PyModel {
         self.inner.model.clone().into()
@@ -355,10 +307,8 @@ impl PyLoadedModel {
     /// Examples
     /// --------
     /// >>> parameters = loaded.parameters
+    /// >>> shifted = loaded.model.with_parameter_card(parameters)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn parameters(&self) -> PyParameterCard {
         self.inner.parameters.clone().into()
@@ -369,10 +319,9 @@ impl PyLoadedModel {
     /// Examples
     /// --------
     /// >>> diagnostics = loaded.diagnostics
+    /// >>> diagnostics.particle_count == len(loaded.model.particles)
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn diagnostics(&self) -> PyUfoLoadDiagnostics {
         PyUfoLoadDiagnostics {
@@ -387,9 +336,6 @@ impl PyLoadedModel {
     /// >>> repr(loaded).startswith("LoadedModel(")
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!(
             "LoadedModel(name={:?}, source={:?}, particles={})",
@@ -406,9 +352,6 @@ impl PyLoadedModel {
     /// Leave ``loaded`` as the final expression in a notebook cell to display
     /// the normalized model and import source.
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn _repr_html_(&self) -> String {
         format!(
             "<div class=\"feynkit-loaded-model\" style=\"display:inline-block;max-width:100%;\
@@ -455,6 +398,25 @@ impl PyLoadedModel {
     }
 }
 
+/// Load and normalize a Universal FeynRules Output model.
+///
+/// The loader delegates UFO parsing to ``ufo_model_loader`` and returns typed
+/// FeynKit model entities suitable for process and diagram generation.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> loader = fk.UfoLoader(restriction_name="massless")
+/// >>> loaded = loader.load("path/to/MyUFO")
+///
+/// Parameters
+/// ----------
+/// restriction_name : str, optional
+///     Restriction-card name to apply while loading.
+/// simplify_model : bool, optional
+///     Simplify normalized symbolic model expressions.
+/// wrap_indices_in_lorentz_structures : bool, optional
+///     Wrap normalized indices in Lorentz structures.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "UfoLoader",
@@ -501,45 +463,18 @@ impl PyUfoLoader {
     }
 
     /// Return the configured restriction-card name.
-    ///
-    /// Examples
-    /// --------
-    /// >>> UfoLoader(restriction_name="massless").restriction_name
-    /// 'massless'
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn restriction_name(&self) -> Option<String> {
         self.inner.options().restriction_name.clone()
     }
 
     /// Return whether model simplification is enabled.
-    ///
-    /// Examples
-    /// --------
-    /// >>> UfoLoader().simplify_model
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn simplify_model(&self) -> bool {
         self.inner.options().simplify_model
     }
 
     /// Return whether normalized Lorentz indices are wrapped.
-    ///
-    /// Examples
-    /// --------
-    /// >>> UfoLoader().wrap_indices_in_lorentz_structures
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn wrap_indices_in_lorentz_structures(&self) -> bool {
         self.inner.options().wrap_indices_in_lorentz_structures
@@ -564,10 +499,61 @@ impl PyUfoLoader {
     }
 }
 
+/// Load and normalize a Universal FeynRules Output model.
+///
+/// The returned native :class:`LoadedModel` bundles the normalized model,
+/// parameter card, and diagnostics. Use :meth:`Model.from_path` instead when a
+/// model has already been normalized to FeynKit JSON.
+///
+/// Examples
+/// --------
+/// Load a UFO directory and inspect its particle content:
+///
+/// >>> loaded = fk.load_ufo_model("models/sm", restriction="massless")
+/// >>> electron = loaded.model.particle("e-")
+/// >>> loaded.diagnostics.particle_count == len(loaded.model.particles)
+/// True
+///
+/// Parameters
+/// ----------
+/// path : str or os.PathLike
+///     Directory containing the UFO Python modules.
+/// restriction : str or None, optional
+///     Restriction-card name to apply while loading.
+/// simplify : bool, optional
+///     Simplify normalized symbolic model expressions.
+/// wrap_lorentz_indices : bool, optional
+///     Wrap normalized indices in Lorentz structures.
+#[cfg_attr(
+    feature = "python_stubgen",
+    gen_stub_pyfunction(module = "symbolica.community.feynkit")
+)]
+#[pyfunction]
+#[pyo3(signature = (path, *, restriction=None, simplify=true, wrap_lorentz_indices=true))]
+fn load_ufo_model(
+    py: Python<'_>,
+    path: PathBuf,
+    restriction: Option<String>,
+    simplify: bool,
+    wrap_lorentz_indices: bool,
+) -> PyResult<PyLoadedModel> {
+    UfoLoader::with_options(UfoLoadOptions {
+        restriction_name: restriction,
+        simplify_model: simplify,
+        wrap_indices_in_lorentz_structures: wrap_lorentz_indices,
+    })
+    .load(py, path)
+    .map(|inner| PyLoadedModel { inner })
+    .map_err(error::ufo)
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyUfoLoadDiagnostics>()?;
     module.add_class::<PyLoadedModel>()?;
     module.add_class::<PyUfoLoader>()?;
+    let load_ufo_model = wrap_pyfunction!(load_ufo_model, module)?;
+    load_ufo_model.setattr("__module__", "symbolica.community.feynkit")?;
+    module.add_function(load_ufo_model)?;
     Ok(())
 }
 
