@@ -1463,12 +1463,10 @@ version = "0.1.0"
 dependencies = [
  "feynkit-graph",
  "feynkit-model",
- "idenso",
  "linnet",
  "rayon",
  "serde",
  "serde_json",
- "spenso",
  "symbolica",
  "thiserror 2.0.18",
 ]
@@ -1710,6 +1708,7 @@ dependencies = [
  "gammaloop-api",
  "gammaloop-workspace-hack",
  "gammalooprs",
+ "idenso",
  "insta",
  "itertools 0.14.0",
  "momtrop",
