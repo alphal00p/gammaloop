@@ -3581,6 +3581,7 @@ mod tests {
                 evaluator_spenso_time: Duration::from_secs(1),
                 evaluator_symbolica_time: Duration::from_secs(1),
                 evaluator_compile_time: Duration::ZERO,
+                ..GraphGenerationStats::default()
             },
             None,
         );
@@ -3595,6 +3596,7 @@ mod tests {
                 evaluator_spenso_time: Duration::from_secs(2),
                 evaluator_symbolica_time: Duration::ZERO,
                 evaluator_compile_time: Duration::ZERO,
+                ..GraphGenerationStats::default()
             },
             None,
         );

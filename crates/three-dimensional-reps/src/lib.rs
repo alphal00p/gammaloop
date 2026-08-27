@@ -17,18 +17,15 @@ pub mod validator;
 
 #[cfg(feature = "display")]
 pub use display::{DisplayOptions, NumeratorDisplay, render_expression_summary};
-pub use energy_bounds::{
-    EnergyDirectionReport, EnergyDivergenceReport, auto_numerator_expr_for_bounds,
-    energy_divergence_report, normalize_energy_degree_bounds,
-};
+pub use energy_bounds::{auto_numerator_expr_for_bounds, normalize_energy_degree_bounds};
 pub use expression::{
     CFFExpression, GraphOrientation, OrientationData, OrientationExpression, OrientationID,
     OrientationSelector, ResidualDenominator, ThreeDExpression,
 };
 pub use generation::{
-    CffEnergyFactorOwnership, CffGlobalPrefactorSign, Generate3DExpressionOptions,
-    GeneratedThreeDExpression, GenerationError, NumeratorSamplingScaleMode, RepresentationMode,
-    generate_3d_expression,
+    CffEnergyFactorComponent, CffEnergyFactorOwnership, CffGlobalPrefactorSign,
+    Generate3DExpressionOptions, GeneratedThreeDExpression, GenerationError,
+    NumeratorSamplingScaleMode, RepresentationMode, generate_3d_expression,
 };
 pub use graph_io::{
     EnergyEdgeIndexMap, GraphInfo, ParsedGraph, RepeatedGroup, ThreeDGraphSource, graph_info,

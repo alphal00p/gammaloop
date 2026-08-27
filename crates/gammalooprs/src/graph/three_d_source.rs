@@ -4,8 +4,8 @@ use ahash::AHashSet;
 use color_eyre::Result;
 use itertools::Itertools;
 use linnet::half_edge::{
-    involution::{EdgeIndex, Flow, HedgePair},
-    subgraph::{InternalSubGraph, ModifySubSet, SuBitGraph},
+    involution::{EdgeIndex, Flow, Hedge, HedgePair},
+    subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph},
 };
 use spenso::structure::{
     abstract_index::AIND_SYMBOLS,
@@ -16,6 +16,7 @@ use symbolica::domains::rational::Rational;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder},
     function,
+    graph::Graph as SymbolicaGraph,
     id::Replacement,
 };
 use three_dimensional_reps::{
@@ -25,12 +26,14 @@ use three_dimensional_reps::{
         ParsedGraphInternalEdge, initial_state_cut_external_alias,
     },
     utils::{rank_i64, solve_rational_system},
+    validate_parsed_graph,
 };
 
 use crate::{
     cff::surface::{GammaLoopLinearEnergyExpr, LinearEnergyExpr},
     graph::{Graph, LMBext},
     momentum::SignOrZero,
+    numerator::energy_degree::{EnergyPowerAssignmentPlan, EquivalentEnergyCandidates},
     utils::{GS, W_},
     uv::uv_graph::UVE,
 };
@@ -55,8 +58,18 @@ pub(crate) struct GraphThreeDSource<'a> {
     outer_loop_edges: Vec<EdgeIndex>,
     edge_loop_coordinates: BTreeMap<EdgeIndex, Vec<Rational>>,
     parent_loop_coordinates: Vec<Vec<Rational>>,
+    uv_edges: AHashSet<EdgeIndex>,
+    // UV boundary incidence is provenance too. It is optional for the current
+    // vacuum MUV expansion, while future non-vacuum schemes can retain source
+    // crown hedges explicitly without inferring their attachment from momentum
+    // balance.
+    exact_uv_boundary_hedges: Vec<Hedge>,
     exact_denominators: Option<&'a [FourDDenominator]>,
     exact_signatures: Vec<MomentumSignature>,
+    // Exact incidence is inherited from the source graph and canonically
+    // relabelled once during construction. Reusing that parsed graph keeps its
+    // occurrence order identical to the numerator/energy maps below.
+    exact_parsed: Option<ParsedGraph>,
     // Parsed edges use canonical local IDs while 4D factors retain their
     // original occurrence IDs; denominator semantics cross through this map.
     exact_local_to_original_occurrence: Vec<usize>,
@@ -76,20 +89,17 @@ type ExactSourceEdgeCoordinates = (EdgeIndex, Vec<Rational>, Vec<(EdgeIndex, Sig
 /// one source-local CFF energy map. The source graph is temporary; this owned
 /// value deliberately survives it without introducing production orientation
 /// IDs. Source coordinates follow the same carrier-occurrence maps as the
-/// reference evaluator, while a denominator with literal momentum `Q(i)`
-/// supplies the temporal component of that physical numerator edge. When
-/// several occurrences supply it, their canonical first occurrence owns the
-/// numerator coordinate. The rest are pole carriers whose source-local maps
-/// may reverse the routing of that common coordinate or be pinched in a
-/// lower-sector contact; neither changes numerator-sample ownership.
+/// reference evaluator, while a denominator with literal momentum `+Q(i)` or
+/// `-Q(i)` supplies one equivalent temporal component of that physical
+/// numerator edge. A factor-local energy-power assignment chooses among such
+/// occurrences; its sign restores the physical `Q(i)` convention.
 #[derive(Clone, Debug)]
 pub(crate) struct ExactSourceEnergyMapper {
     inactive_loop_count: usize,
     parent_loop_coordinates: Vec<Vec<Rational>>,
     parent_loop_edges: Vec<EdgeIndex>,
     edge_coordinates: Vec<ExactSourceEdgeCoordinates>,
-    source_loop_carrier_occurrences: Vec<usize>,
-    exact_literal_edge_occurrences: BTreeMap<EdgeIndex, Vec<usize>>,
+    exact_literal_edge_occurrences: BTreeMap<EdgeIndex, Vec<(usize, i64)>>,
     cut_alias_edges: AHashSet<EdgeIndex>,
     exact_ose_replacements: Vec<Replacement>,
 }
@@ -99,46 +109,34 @@ impl ExactSourceEnergyMapper {
         &self.exact_ose_replacements
     }
 
-    /// Translate physical EMR degree bounds only through a literal exact
-    /// denominator momentum. Ownership, loop carriers, and general affine
-    /// relations do not establish the one-to-one energy identity required by
-    /// the bounded CFF numerator contract. Equal duplicate denominators share
-    /// the first canonical occurrence used later for numerator evaluation.
-    pub(crate) fn map_energy_degree_bounds(
+    /// Certify literal exact occurrences which can carry the same physical
+    /// EMR energy. Ownership is provenance only here. Denominator routing is
+    /// canonicalized for CFF generation, while numerator mapping restores the
+    /// physical `Q(i)` convention, including its sign.
+    pub(crate) fn equivalent_energy_candidates(
         &self,
-        bounds: &[(usize, usize)],
-    ) -> Result<Vec<(usize, usize)>> {
-        bounds
-            .iter()
-            .map(|&(edge, degree)| {
-                let occurrences = self
-                    .exact_literal_edge_occurrences
-                    .get(&EdgeIndex(edge))
-                    .map(Vec::as_slice)
-                    .unwrap_or_default();
-                match occurrences {
-                    [] => Err(eyre::eyre!(
-                        "physical EMR energy-degree bound {degree} for edge {edge} has no exact occurrence whose momentum is literally Q({edge}); shifted and general-affine numerator-only mappings are not implemented"
-                    )),
-                    [occurrence, duplicates @ ..] => {
-                        let energy = crate::utils::ose_atom_from_index(EdgeIndex(*occurrence))
-                            .replace_multiple(&self.exact_ose_replacements);
-                        if let Some(duplicate) = duplicates.iter().find_map(|duplicate| {
-                            let duplicate_energy =
-                                crate::utils::ose_atom_from_index(EdgeIndex(*duplicate))
-                                    .replace_multiple(&self.exact_ose_replacements);
-                            (duplicate_energy != energy).then_some(duplicate_energy)
-                        }) {
-                            Err(eyre::eyre!(
-                                "physical EMR energy-degree bound {degree} for edge {edge} maps to literal exact occurrences whose energies disagree after on-shell-energy replacement: `{energy}` versus `{duplicate}`"
-                            ))
-                        } else {
-                            Ok((*occurrence, degree))
-                        }
-                    }
-                }
-            })
-            .collect()
+        physical_edges: impl IntoIterator<Item = EdgeIndex>,
+    ) -> Result<EquivalentEnergyCandidates> {
+        let physical_edges = physical_edges.into_iter().collect::<BTreeSet<_>>();
+        Ok(EquivalentEnergyCandidates::try_from_exact_energies(
+            self.exact_literal_edge_occurrences
+                .iter()
+                .filter(|(edge, _)| physical_edges.contains(edge))
+                .map(|(edge, occurrences)| {
+                    (
+                        *edge,
+                        occurrences
+                            .iter()
+                            .map(|(occurrence, _)| {
+                                let energy =
+                                    crate::utils::ose_atom_from_index(EdgeIndex(*occurrence))
+                                        .replace_multiple(&self.exact_ose_replacements);
+                                (*occurrence, energy)
+                            })
+                            .collect(),
+                    )
+                }),
+        )?)
     }
 
     /// Replace only temporal components. Spatial components remain in the
@@ -146,11 +144,47 @@ impl ExactSourceEnergyMapper {
     /// Inactive source energies are placeholders while the affine maps are
     /// assembled and are set to zero only after the complete factorized atom
     /// has been rewritten.
+    #[cfg(test)]
     pub(crate) fn map_numerator(
         &self,
         loop_energy_map: &[LinearEnergyExpr],
         edge_energy_map: &[LinearEnergyExpr],
         numerator: &Atom,
+    ) -> Result<Atom> {
+        let assignments = self
+            .exact_literal_edge_occurrences
+            .iter()
+            .filter_map(|(edge, occurrences)| {
+                occurrences
+                    .first()
+                    .map(|(occurrence, _)| (*edge, *occurrence))
+            })
+            .collect();
+        let mapped =
+            self.map_numerator_factor(loop_energy_map, edge_energy_map, numerator, &assignments)?;
+        Ok(self.set_inactive_loop_energies_to_zero(mapped))
+    }
+
+    pub(crate) fn map_planned_numerator(
+        &self,
+        loop_energy_map: &[LinearEnergyExpr],
+        edge_energy_map: &[LinearEnergyExpr],
+        plan: &EnergyPowerAssignmentPlan,
+    ) -> Result<Atom> {
+        let mapped = plan.map_factors(|factor, assignments| {
+            self.map_numerator_factor(loop_energy_map, edge_energy_map, factor, assignments)
+        })?;
+        Ok(self.set_inactive_loop_energies_to_zero(mapped))
+    }
+
+    /// Map one factor using exactly the occurrence assignment which was used
+    /// to bound that factor during generalized CFF generation.
+    fn map_numerator_factor(
+        &self,
+        loop_energy_map: &[LinearEnergyExpr],
+        edge_energy_map: &[LinearEnergyExpr],
+        numerator: &Atom,
+        assignments: &BTreeMap<EdgeIndex, usize>,
     ) -> Result<Atom> {
         let parent_loop_count = self.parent_loop_coordinates.len();
         let expected_active_loop_count = parent_loop_count - self.inactive_loop_count;
@@ -170,12 +204,6 @@ impl ExactSourceEnergyMapper {
         let inactive_energies = (0..self.inactive_loop_count)
             .map(|index| loop_temporal(parent_loop_count + index))
             .collect::<Vec<_>>();
-        if self.source_loop_carrier_occurrences.len() != expected_active_loop_count {
-            return Err(eyre::eyre!(
-                "exact source supplies {} loop-carrier occurrences, expected {expected_active_loop_count}",
-                self.source_loop_carrier_occurrences.len(),
-            ));
-        }
         if let Some(edge) = self
             .parent_loop_edges
             .iter()
@@ -186,11 +214,11 @@ impl ExactSourceEnergyMapper {
                 usize::from(*edge),
             ));
         }
-        let active_source_energies = loop_energy_map.iter().enumerate().map(|(index, fallback)| {
-            self.source_loop_carrier_occurrences
-                .get(index)
-                .and_then(|occurrence| edge_energy_map.get(*occurrence))
-                .unwrap_or(fallback)
+        // These are energies of the exact source coordinates themselves. In
+        // particular, a carrier denominator may be shifted by an external
+        // momentum, so its pole energy is not the corresponding loop energy.
+        let active_source_energies = loop_energy_map.iter().map(|energy| {
+            energy
                 .to_atom_gs(&[])
                 .replace_multiple(&self.exact_ose_replacements)
         });
@@ -212,16 +240,27 @@ impl ExactSourceEnergyMapper {
             )
         };
         let mut exact_edge_energies = BTreeMap::new();
-        for (edge, occurrences) in &self.exact_literal_edge_occurrences {
+        for (edge, occurrence) in assignments {
             // Cut momenta are external aliases, so occurrence-local pole
             // energies are neither required nor relevant for their numerator.
             if self.cut_alias_edges.contains(edge) {
                 continue;
             }
-            let Some(occurrence) = occurrences.first() else {
-                continue;
-            };
-            let energy = edge_energy_map
+            let physical_from_canonical_sign = self
+                .exact_literal_edge_occurrences
+                .get(edge)
+                .and_then(|occurrences| {
+                    occurrences
+                        .iter()
+                        .find_map(|(candidate, sign)| (candidate == occurrence).then_some(*sign))
+                })
+                .ok_or_else(|| {
+                    eyre::eyre!(
+                        "exact occurrence {occurrence} is not a certified literal-energy candidate for physical edge {}",
+                        usize::from(*edge),
+                    )
+                })?;
+            let mut energy = edge_energy_map
                 .get(*occurrence)
                 .ok_or_else(|| {
                     eyre::eyre!(
@@ -232,10 +271,11 @@ impl ExactSourceEnergyMapper {
                 })?
                 .to_atom_gs(&[])
                 .replace_multiple(&self.exact_ose_replacements);
-            // The canonical occurrence owns both the degree bound and every
-            // numerator sample, including a zero sample in lower-sector
-            // contact terms. Other repeated occurrences are pole carriers;
-            // their source-local maps need not equal the numerator sample.
+            if physical_from_canonical_sign == -1 {
+                energy = -energy;
+            }
+            // Each factor uses the same exact occurrence which owns its bound,
+            // including a zero sample in lower-sector contact terms.
             exact_edge_energies.insert(*edge, energy);
         }
         let external_shift = |terms: &[(EdgeIndex, SignOrZero)]| {
@@ -311,12 +351,20 @@ impl ExactSourceEnergyMapper {
             ));
         }
 
-        let mapped = numerator.replace_multiple(&replacements);
-        Ok(inactive_energies
-            .into_iter()
-            .fold(mapped, |atom, inactive| {
-                atom.replace(inactive).with(Atom::Zero)
-            }))
+        Ok(numerator.replace_multiple(&replacements))
+    }
+
+    fn set_inactive_loop_energies_to_zero(&self, atom: Atom) -> Atom {
+        let parent_loop_count = self.parent_loop_coordinates.len();
+        (0..self.inactive_loop_count).fold(atom, |atom, index| {
+            atom.replace(
+                FunctionBuilder::new(GS.loop_mom)
+                    .add_arg(parent_loop_count + index)
+                    .add_arg(GS.cind(0))
+                    .finish(),
+            )
+            .with(Atom::Zero)
+        })
     }
 }
 
@@ -488,8 +536,11 @@ impl<'a> GraphThreeDSource<'a> {
             outer_loop_edges,
             edge_loop_coordinates,
             parent_loop_coordinates,
+            uv_edges: AHashSet::new(),
+            exact_uv_boundary_hedges: Vec::new(),
             exact_denominators: None,
             exact_signatures: Vec::new(),
+            exact_parsed: None,
             exact_local_to_original_occurrence: Vec::new(),
         })
     }
@@ -498,9 +549,51 @@ impl<'a> GraphThreeDSource<'a> {
         graph: &'a Graph,
         denominators: &'a [FourDDenominator],
     ) -> three_dimensional_reps::graph_io::Result<Self> {
+        Self::from_exact_denominators_in_uv_edges(graph, denominators, [])
+    }
+
+    pub(crate) fn from_exact_denominators_in_uv_edges(
+        graph: &'a Graph,
+        denominators: &'a [FourDDenominator],
+        uv_edges: impl IntoIterator<Item = EdgeIndex>,
+    ) -> three_dimensional_reps::graph_io::Result<Self> {
+        Self::from_exact_denominators_in_uv_edges_and_boundaries(graph, denominators, uv_edges, [])
+    }
+
+    /// Build an exact source from original graph incidence. `uv_boundary_hedges`
+    /// are source-graph crown hedges retained by a non-vacuum UV prescription;
+    /// their endpoint is never reconstructed from momentum signatures.
+    pub(crate) fn from_exact_denominators_in_uv_edges_and_boundaries(
+        graph: &'a Graph,
+        denominators: &'a [FourDDenominator],
+        uv_edges: impl IntoIterator<Item = EdgeIndex>,
+        uv_boundary_hedges: impl IntoIterator<Item = Hedge>,
+    ) -> three_dimensional_reps::graph_io::Result<Self> {
+        let uv_edges = uv_edges.into_iter().collect::<AHashSet<_>>();
+        let exact_uv_boundary_hedges = uv_boundary_hedges
+            .into_iter()
+            .sorted()
+            .dedup()
+            .collect::<Vec<_>>();
+        if !exact_uv_boundary_hedges.is_empty() {
+            let mut uv_subgraph: SuBitGraph = graph.empty_subgraph();
+            for edge_id in &uv_edges {
+                uv_subgraph.add(graph[edge_id].1);
+            }
+            let crown = graph.dummy_stripped_external_flows_of(&uv_subgraph);
+            for hedge in &exact_uv_boundary_hedges {
+                if !crown.includes(hedge) {
+                    return Err(GraphIoError::Source(format!(
+                        "exact UV boundary hedge {hedge} is not in the source UV subgraph crown",
+                    )));
+                }
+            }
+        }
         let parent_signatures = denominators
             .iter()
-            .map(|denominator| denominator.momentum_signature(graph))
+            .map(|denominator| {
+                denominator.momentum_signature(graph, uv_edges.contains(&denominator.source_edge))
+            })
             .collect::<three_dimensional_reps::graph_io::Result<Vec<_>>>()?;
         // Exact 4D sources must use the same coordinate frame as the ordinary
         // production CFF. The configured graph LMB is not necessarily the
@@ -625,7 +718,7 @@ impl<'a> GraphThreeDSource<'a> {
             .map(|(denominator, signature)| {
                 (
                     usize::from(denominator.source_edge),
-                    denominator.uses_uv_loop_basis(),
+                    uv_edges.contains(&denominator.source_edge),
                     signature.clone(),
                     denominator.mass_squared.to_canonical_string(),
                     denominator.momentum.to_canonical_string(),
@@ -658,7 +751,7 @@ impl<'a> GraphThreeDSource<'a> {
             .collect();
         let active_cograph_edges = denominators
             .iter()
-            .filter(|denominator| !denominator.uses_uv_loop_basis())
+            .filter(|denominator| !uv_edges.contains(&denominator.source_edge))
             .map(|denominator| denominator.source_edge)
             .collect::<AHashSet<_>>();
         let initial_state_cut_edges = graph
@@ -677,7 +770,7 @@ impl<'a> GraphThreeDSource<'a> {
             })
             .collect();
 
-        Ok(Self {
+        let mut source = Self {
             graph,
             contract_edges,
             initial_state_cut_edges,
@@ -685,10 +778,21 @@ impl<'a> GraphThreeDSource<'a> {
             outer_loop_edges,
             edge_loop_coordinates,
             parent_loop_coordinates,
+            uv_edges,
+            exact_uv_boundary_hedges,
             exact_denominators: Some(denominators),
             exact_signatures,
+            exact_parsed: None,
             exact_local_to_original_occurrence,
-        })
+        };
+        let (exact_parsed, canonical_to_current) =
+            source.build_exact_parsed_graph_with_occurrence_order()?;
+        source.exact_local_to_original_occurrence = canonical_to_current
+            .into_iter()
+            .map(|current| source.exact_local_to_original_occurrence[current])
+            .collect();
+        source.exact_parsed = Some(exact_parsed);
+        Ok(source)
     }
 
     pub(crate) fn edge_loop_coordinates(&self, edge_id: EdgeIndex) -> Option<&[Rational]> {
@@ -704,37 +808,6 @@ impl<'a> GraphThreeDSource<'a> {
             .iter()
             .all(|coordinate| *coordinate == 0)
             .then_some(&coordinates[self.inner_loop_count..])
-    }
-
-    // Numerator capacity remains owned by physical EMR variables. These carrier occurrences are
-    // used only to evaluate a completed factorized numerator under an exact source map; they must
-    // not be repurposed as loop-basis ownership or as an inverse occurrence-to-physical ID map.
-    fn exact_loop_carrier_occurrences(
-        &self,
-    ) -> three_dimensional_reps::graph_io::Result<Vec<usize>> {
-        (0..self.outer_loop_edges.len())
-            .map(|variable| {
-                self.exact_local_to_original_occurrence
-                    .iter()
-                    .position(|original| {
-                        let signature = &self.exact_signatures[*original];
-                        signature.loop_signature.iter().enumerate().all(
-                            |(candidate, coefficient)| {
-                                if candidate == variable {
-                                    coefficient.abs() == 1
-                                } else {
-                                    *coefficient == 0
-                                }
-                            },
-                        )
-                    })
-                    .ok_or_else(|| {
-                        GraphIoError::Source(format!(
-                            "exact source coordinate {variable} has no denominator carrier"
-                        ))
-                    })
-            })
-            .collect()
     }
 
     fn outer_loop_signature(
@@ -773,6 +846,77 @@ impl<'a> GraphThreeDSource<'a> {
                 })
             })
             .collect()
+    }
+
+    fn exact_source_routing_sign(
+        &self,
+        source_edge: EdgeIndex,
+        uses_uv_loop_basis: bool,
+        canonical_exact_signature: &MomentumSignature,
+    ) -> three_dimensional_reps::graph_io::Result<i32> {
+        let source_signature = self.outer_loop_signature(source_edge)?;
+        if source_signature.len() != canonical_exact_signature.loop_signature.len() {
+            return Err(GraphIoError::Source(format!(
+                "source edge {} and its rewritten exact denominator use incompatible loop-coordinate dimensions",
+                usize::from(source_edge),
+            )));
+        }
+        let denominators = self
+            .exact_denominators
+            .expect("exact routing is requested only for exact denominators");
+        let opposite_domain_rows = self
+            .exact_local_to_original_occurrence
+            .iter()
+            .copied()
+            .filter(|original| {
+                self.uv_edges.contains(&denominators[*original].source_edge) != uses_uv_loop_basis
+            })
+            .map(|original| {
+                self.exact_signatures[original]
+                    .canonical_up_to_sign()
+                    .0
+                    .loop_signature
+            })
+            .collect::<Vec<_>>();
+        let opposite_rank = exact_integer_rank(&opposite_domain_rows);
+        let mut compatible_signs = Vec::new();
+        // Source incidence remains authoritative. This rank test never infers
+        // endpoints: it only determines whether the rewritten denominator is
+        // routed with or against that incidence after quotienting out loop
+        // directions belonging to the factorized opposite topology domain.
+        for sign in [1_i32, -1] {
+            let difference = canonical_exact_signature
+                .loop_signature
+                .iter()
+                .zip(&source_signature)
+                .map(|(exact, source)| {
+                    exact
+                        .checked_sub(sign.checked_mul(*source).ok_or_else(|| {
+                            GraphIoError::Source(
+                                "exact source routing coefficient overflow".to_string(),
+                            )
+                        })?)
+                        .ok_or_else(|| {
+                            GraphIoError::Source(
+                                "exact source routing coefficient overflow".to_string(),
+                            )
+                        })
+                })
+                .collect::<three_dimensional_reps::graph_io::Result<Vec<_>>>()?;
+            let mut rows_with_difference = opposite_domain_rows.clone();
+            rows_with_difference.push(difference);
+            if exact_integer_rank(&rows_with_difference) == opposite_rank {
+                compatible_signs.push(sign);
+            }
+        }
+        match compatible_signs.as_slice() {
+            [sign] => Ok(*sign),
+            _ => Err(GraphIoError::Source(format!(
+                "source edge {} has no unique routing for rewritten exact signature {:?} modulo the factorized opposite-domain loop span",
+                usize::from(source_edge),
+                canonical_exact_signature.loop_signature,
+            ))),
+        }
     }
 
     fn contracts_edge(&self, edge_id: EdgeIndex) -> bool {
@@ -826,7 +970,8 @@ impl<'a> GraphThreeDSource<'a> {
                     .and_then(|local| self.exact_local_to_original_occurrence.get(local))
                     .and_then(|original| denominators.get(*original))
                 {
-                    denominator.is_original_graph_denominator(self.graph)
+                    !self.uv_edges.contains(&denominator.source_edge)
+                        && denominator.is_original_graph_denominator(self.graph)
                 } else {
                     edge_map.internal.contains_key(&local)
                 }
@@ -898,13 +1043,7 @@ impl<'a> GraphThreeDSource<'a> {
             })
             .collect::<Vec<_>>();
         let offset = self.graph.underlying.n_edges();
-        let source_loop_carrier_occurrences = self
-            .exact_loop_carrier_occurrences()
-            .expect("exact source loop carriers were validated while building its graph")
-            .into_iter()
-            .map(|local| offset + local)
-            .collect();
-        let mut exact_literal_edge_occurrences = BTreeMap::<EdgeIndex, Vec<usize>>::new();
+        let mut exact_literal_edge_occurrences = BTreeMap::<EdgeIndex, Vec<(usize, i64)>>::new();
         if let Some(denominators) = self.exact_denominators {
             for (local, original) in self
                 .exact_local_to_original_occurrence
@@ -913,16 +1052,29 @@ impl<'a> GraphThreeDSource<'a> {
                 .enumerate()
             {
                 let denominator = &denominators[original];
-                if let Some((edge, _, _)) = edge_coordinates.iter().find(|(edge, _, _)| {
-                    denominator.momentum
-                        == FunctionBuilder::new(GS.emr_mom)
+                if let Some((edge, literal_sign)) =
+                    edge_coordinates.iter().find_map(|(edge, _, _)| {
+                        let literal = FunctionBuilder::new(GS.emr_mom)
                             .add_arg(usize::from(*edge))
-                            .finish()
-                }) {
+                            .finish();
+                        if denominator.momentum == literal {
+                            Some((*edge, 1))
+                        } else if denominator.momentum == -literal {
+                            Some((*edge, -1))
+                        } else {
+                            None
+                        }
+                    })
+                {
+                    let (_, denominator_to_canonical_sign) =
+                        self.exact_signatures[original].canonical_up_to_sign();
                     exact_literal_edge_occurrences
-                        .entry(*edge)
+                        .entry(edge)
                         .or_default()
-                        .push(offset + local);
+                        .push((
+                            offset + local,
+                            i64::from(literal_sign * denominator_to_canonical_sign),
+                        ));
                 }
             }
         }
@@ -937,7 +1089,6 @@ impl<'a> GraphThreeDSource<'a> {
                 .copied()
                 .collect(),
             edge_coordinates,
-            source_loop_carrier_occurrences,
             exact_literal_edge_occurrences,
             cut_alias_edges: self.initial_state_cut_edges.clone(),
             exact_ose_replacements,
@@ -1005,6 +1156,14 @@ impl<'a> GraphThreeDSource<'a> {
     }
 
     fn exact_parsed_graph(&self) -> three_dimensional_reps::graph_io::Result<ParsedGraph> {
+        self.exact_parsed.clone().ok_or_else(|| {
+            GraphIoError::Source("exact parsed graph was not initialized".to_string())
+        })
+    }
+
+    fn build_exact_parsed_graph_with_occurrence_order(
+        &self,
+    ) -> three_dimensional_reps::graph_io::Result<(ParsedGraph, Vec<usize>)> {
         let denominators = self
             .exact_denominators
             .expect("exact parsed source has exact denominators");
@@ -1052,10 +1211,8 @@ impl<'a> GraphThreeDSource<'a> {
         // and physical incidence encode one powered line. Subdivide that
         // incidence before CFF recursion. UV and cograph occurrences use
         // separate node domains even if all other data agree.
-        let mut occurrence_groups = BTreeMap::<
-            (Option<EdgeIndex>, bool, MomentumSignature, String),
-            Vec<(usize, EdgeIndex, i32, bool)>,
-        >::new();
+        let mut occurrence_groups =
+            BTreeMap::<EdgeIndex, (bool, MomentumSignature, String, i32, Vec<usize>)>::new();
         for (occurrence, original) in self
             .exact_local_to_original_occurrence
             .iter()
@@ -1063,62 +1220,116 @@ impl<'a> GraphThreeDSource<'a> {
             .enumerate()
         {
             let denominator = &denominators[original];
-            let (signature, relative_sign) = self.exact_signatures[original].canonical_up_to_sign();
-            let owned_momentum = FunctionBuilder::new(GS.emr_mom)
-                .add_arg(usize::from(denominator.source_edge))
-                .finish();
-            let owns_rewritten_momentum =
-                denominator.momentum == owned_momentum || denominator.momentum == -owned_momentum;
-            occurrence_groups
-                .entry((
-                    Some(denominator.source_edge),
-                    denominator.uses_uv_loop_basis(),
-                    signature,
-                    denominator.mass_squared.to_canonical_string(),
-                ))
-                .or_default()
-                .push((
-                    occurrence,
-                    denominator.source_edge,
-                    relative_sign,
-                    owns_rewritten_momentum,
-                ));
+            let source_edge = denominator.source_edge;
+            let (_, pair) = self.graph[&source_edge];
+            if !matches!(pair, HedgePair::Paired { .. }) {
+                return Err(GraphIoError::Source(format!(
+                    "4D denominator source edge {} is not a paired internal edge",
+                    usize::from(source_edge),
+                )));
+            }
+            let uses_uv_loop_basis = self.uv_edges.contains(&source_edge);
+            let (signature, _) = self.exact_signatures[original].canonical_up_to_sign();
+            if self
+                .outer_loop_signature(source_edge)?
+                .iter()
+                .all(|coefficient| *coefficient == 0)
+            {
+                return Err(GraphIoError::Source(format!(
+                    "loop-active exact denominator has loop-independent source edge {}",
+                    usize::from(source_edge),
+                )));
+            }
+            let source_routing_sign =
+                self.exact_source_routing_sign(source_edge, uses_uv_loop_basis, &signature)?;
+            let mass = denominator.mass_squared.to_canonical_string();
+            match occurrence_groups.entry(source_edge) {
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert((
+                        uses_uv_loop_basis,
+                        signature,
+                        mass,
+                        source_routing_sign,
+                        vec![occurrence],
+                    ));
+                }
+                std::collections::btree_map::Entry::Occupied(mut entry) => {
+                    let (domain, group_signature, group_mass, _, members) = entry.get_mut();
+                    if (*domain, &*group_signature, group_mass.as_str())
+                        != (uses_uv_loop_basis, &signature, mass.as_str())
+                    {
+                        return Err(GraphIoError::Source(format!(
+                            "source edge {} instantiates more than one rewritten rational denominator in one additive 4D term",
+                            usize::from(source_edge),
+                        )));
+                    }
+                    members.push(occurrence);
+                }
+            }
         }
         let occurrence_groups = occurrence_groups
             .into_iter()
-            .map(|(key, mut members)| {
-                members.sort_by_key(|(occurrence, _, _, _)| *occurrence);
-                let attachment = members
-                    .iter()
-                    .find(|(_, _, _, owns_rewritten_momentum)| *owns_rewritten_momentum)
-                    .or_else(|| members.first())
-                    .expect("an exact rational propagator group has an occurrence")
-                    .1;
-                (key, attachment, members)
-            })
+            .map(
+                |(source_edge, (domain, signature, mass, source_routing_sign, mut members))| {
+                    members.sort_unstable();
+                    (
+                        (source_edge, domain, signature, mass),
+                        source_routing_sign,
+                        members,
+                    )
+                },
+            )
             .collect::<Vec<_>>();
-        let uv_nodes = occurrence_groups
+        let active_uv_edges = occurrence_groups
             .iter()
             .filter(|((_, uses_uv_loop_basis, _, _), _, _)| *uses_uv_loop_basis)
-            .flat_map(|(_, source_edge, _)| {
-                let (_, pair) = self.graph[source_edge];
-                match pair {
-                    HedgePair::Paired { source, sink } => {
-                        vec![self.graph.node_id(source), self.graph.node_id(sink)]
-                    }
-                    _ => Vec::new(),
-                }
-            })
+            .map(|((source_edge, _, _, _), _, _)| *source_edge)
             .collect::<BTreeSet<_>>();
-        let uv_node_to_internal = uv_nodes
+        let mut uv_parent = (0..self.graph.n_nodes()).collect_vec();
+        for (pair, edge_id, edge) in self.graph.underlying.iter_edges() {
+            if edge.data.is_dummy
+                || !self.uv_edges.contains(&edge_id)
+                || active_uv_edges.contains(&edge_id)
+                || self.initial_state_cut_edges.contains(&edge_id)
+            {
+                continue;
+            }
+            if let HedgePair::Paired { source, sink } = pair {
+                union_parent(
+                    &mut uv_parent,
+                    usize::from(self.graph.node_id(source)),
+                    usize::from(self.graph.node_id(sink)),
+                );
+            }
+        }
+        let mut uv_roots = BTreeSet::new();
+        for source_edge in &active_uv_edges {
+            let (_, HedgePair::Paired { source, sink }) = self.graph[source_edge] else {
+                unreachable!("exact source edges were validated as paired")
+            };
+            for node in [self.graph.node_id(source), self.graph.node_id(sink)] {
+                uv_roots.insert(find_parent(&mut uv_parent, usize::from(node)));
+            }
+        }
+        let uv_root_to_internal = uv_roots
             .into_iter()
             .enumerate()
-            .map(|(offset, node)| (node, root_to_internal.len() + offset))
+            .map(|(offset, root)| (root, root_to_internal.len() + offset))
+            .collect::<BTreeMap<_, _>>();
+        let uv_node_to_internal = node_ids
+            .iter()
+            .filter_map(|node| {
+                let root = find_parent(&mut uv_parent, usize::from(*node));
+                uv_root_to_internal
+                    .get(&root)
+                    .copied()
+                    .map(|internal| (*node, internal))
+            })
             .collect::<BTreeMap<_, _>>();
         let mut next_node = root_to_internal.len() + uv_node_to_internal.len();
         let mut power_chain_nodes = BTreeMap::new();
         let mut occurrence_incidences = vec![None; denominators.len()];
-        for (group_id, ((_, uses_uv_loop_basis, _, _), source_edge, members)) in
+        for (group_id, ((source_edge, uses_uv_loop_basis, _, _), source_routing_sign, members)) in
             occurrence_groups.into_iter().enumerate()
         {
             let (_, pair) = self.graph[&source_edge];
@@ -1133,17 +1344,14 @@ impl<'a> GraphThreeDSource<'a> {
             } else {
                 &node_to_internal
             };
-            let relative_signs = members
-                .iter()
-                .map(|(_, _, relative_sign, _)| *relative_sign)
-                .collect::<Vec<_>>();
             let (incidences, auxiliary_nodes) = serial_power_chain_incidences(
                 node_map[&self.graph.node_id(source)],
                 node_map[&self.graph.node_id(sink)],
-                &relative_signs,
+                source_routing_sign,
+                members.len(),
                 &mut next_node,
             );
-            for ((occurrence, _, _, _), incidence) in members.into_iter().zip(incidences) {
+            for (occurrence, incidence) in members.into_iter().zip(incidences) {
                 occurrence_incidences[occurrence] = Some(incidence);
             }
             power_chain_nodes.extend(auxiliary_nodes.into_iter().enumerate().map(
@@ -1156,25 +1364,12 @@ impl<'a> GraphThreeDSource<'a> {
             ));
         }
 
-        // Generalized CFF generation selects the first occurrence carrying
-        // each exact source coordinate. Give that same occurrence a stable,
-        // unique label so numerical evaluation recovers the identical carrier.
-        let mut used_labels = self
-            .graph
-            .underlying
-            .iter_edges()
-            .map(|(_, _, edge)| edge.data.name.value.clone())
-            .collect::<BTreeSet<_>>();
+        // Exact production numerator evaluation uses the generated
+        // `loop_energy_map`, not a denominator-label carrier. These names are
+        // presentation metadata and are canonicalized again below.
         let loop_names = (0..self.outer_loop_edges.len())
-            .map(|variable| {
-                let mut label = format!("__gammaloop_exact_loop_{variable}");
-                while !used_labels.insert(label.clone()) {
-                    label.push('_');
-                }
-                label
-            })
+            .map(|variable| format!("__gammaloop_exact_loop_{variable}"))
             .collect::<Vec<_>>();
-        let loop_carrier_occurrences = self.exact_loop_carrier_occurrences()?;
 
         let mut internal_edges = Vec::new();
         for (occurrence, original) in self
@@ -1184,7 +1379,7 @@ impl<'a> GraphThreeDSource<'a> {
             .enumerate()
         {
             let denominator = &denominators[original];
-            let signature = &self.exact_signatures[original];
+            let (signature, _) = self.exact_signatures[original].canonical_up_to_sign();
             let (tail, head) = occurrence_incidences[occurrence]
                 .expect("every exact denominator occurrence belongs to one incidence group");
             let local_edge_id = internal_edges.len();
@@ -1192,18 +1387,12 @@ impl<'a> GraphThreeDSource<'a> {
                 edge_id: local_edge_id,
                 tail,
                 head,
-                label: loop_carrier_occurrences
-                    .iter()
-                    .position(|carrier| *carrier == occurrence)
-                    .map(|variable| loop_names[variable].clone())
-                    .unwrap_or_else(|| {
-                        self.graph.underlying[denominator.source_edge]
-                            .name
-                            .value
-                            .clone()
-                    }),
+                label: self.graph.underlying[denominator.source_edge]
+                    .name
+                    .value
+                    .clone(),
                 mass_key: Some(denominator.mass_squared.to_canonical_string()),
-                signature: signature.clone(),
+                signature,
                 had_pow: false,
             });
         }
@@ -1261,6 +1450,10 @@ impl<'a> GraphThreeDSource<'a> {
                         Flow::Source => (Some(node), None),
                         Flow::Sink => (None, Some(node)),
                     };
+                    let incidence_sign = match flow {
+                        Flow::Source => -1,
+                        Flow::Sink => 1,
+                    };
                     Some(ParsedGraphExternalEdge {
                         edge_id: usize::from(edge_id),
                         source,
@@ -1270,27 +1463,66 @@ impl<'a> GraphThreeDSource<'a> {
                             [edge_id]
                             .external)
                             .into_iter()
-                            .map(sign_to_i32)
+                            .map(|coefficient| incidence_sign * sign_to_i32(coefficient))
                             .collect(),
                     })
                 }
                 _ => None,
             })
             .collect::<Vec<_>>();
-        complete_external_balance_edges(
-            &mut external_edges,
-            &internal_edges,
-            &initial_state_cut_edges,
-            &self
-                .graph
-                .loop_momentum_basis
-                .ext_edges
+        for hedge in &self.exact_uv_boundary_hedges {
+            let edge_id = self.graph.underlying[hedge];
+            let node = self.graph.node_id(*hedge);
+            let Some(&internal_node) = uv_node_to_internal.get(&node) else {
+                return Err(GraphIoError::Source(format!(
+                    "UV boundary hedge {hedge} of source edge {} is not incident to the retained UV source minor",
+                    usize::from(edge_id),
+                )));
+            };
+            let signature = &self.graph.loop_momentum_basis.edge_signatures[edge_id];
+            if signature
+                .internal
                 .iter()
-                .map(|edge_id| self.graph.underlying[*edge_id].name.value.clone())
-                .collect::<Vec<_>>(),
-        );
+                .any(|coefficient| *coefficient != SignOrZero::Zero)
+            {
+                return Err(GraphIoError::Source(format!(
+                    "UV boundary hedge {hedge} of source edge {} carries a parent-loop coordinate; exact non-vacuum UV sources currently require an explicitly external fixed momentum",
+                    usize::from(edge_id),
+                )));
+            }
+            let (source, destination, incidence_sign) = match self.graph.underlying.flow(*hedge) {
+                Flow::Source => (Some(internal_node), None, -1),
+                Flow::Sink => (None, Some(internal_node), 1),
+            };
+            external_edges.push(ParsedGraphExternalEdge {
+                edge_id: usize::from(edge_id),
+                source,
+                destination,
+                label: self.graph.underlying[edge_id].name.value.clone(),
+                external_coefficients: (&signature.external)
+                    .into_iter()
+                    .map(|coefficient| incidence_sign * sign_to_i32(coefficient))
+                    .collect(),
+            });
+        }
+        // Contracted cograph components without any exact denominator are
+        // multiplicative identities. Keeping their external-only vertices in
+        // the causal graph would manufacture a zero E-surface. Retain every
+        // disconnected component that contains an exact denominator (or cut
+        // carrier), and only discard external incidence on zero-denominator
+        // components.
+        let active_nodes = internal_edges
+            .iter()
+            .flat_map(|edge| [edge.tail, edge.head])
+            .collect::<BTreeSet<_>>();
+        external_edges.retain(|edge| {
+            edge.source
+                .into_iter()
+                .chain(edge.destination)
+                .any(|node| active_nodes.contains(&node))
+        });
 
-        Ok(ParsedGraph {
+        let parsed = ParsedGraph {
             internal_edges,
             external_edges,
             initial_state_cut_edges,
@@ -1312,20 +1544,24 @@ impl<'a> GraphThreeDSource<'a> {
                 )
                 .chain(power_chain_nodes)
                 .collect(),
-        })
+        };
+        canonicalize_exact_parsed_graph(
+            parsed,
+            &self
+                .exact_local_to_original_occurrence
+                .iter()
+                .map(|original| self.uv_edges.contains(&denominators[*original].source_edge))
+                .collect::<Vec<_>>(),
+        )
     }
 }
 
 impl FourDDenominator {
-    fn uses_uv_loop_basis(&self) -> bool {
-        self.mass_squared == Atom::var(GS.m_uv_expansion).pow(2)
-    }
-
     fn is_original_graph_denominator(&self, graph: &Graph) -> bool {
-        self.momentum
-            == FunctionBuilder::new(GS.emr_mom)
-                .add_arg(usize::from(self.source_edge))
-                .finish()
+        let source_momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(self.source_edge))
+            .finish();
+        (self.momentum == source_momentum || self.momentum == -source_momentum)
             && self.mass_squared == graph.underlying[self.source_edge].mass_atom().pow(2)
     }
 
@@ -1344,6 +1580,7 @@ impl FourDDenominator {
     pub(crate) fn momentum_signature(
         &self,
         graph: &Graph,
+        uses_uv_loop_basis: bool,
     ) -> three_dimensional_reps::graph_io::Result<MomentumSignature> {
         let mut loop_signature = vec![0; graph.loop_momentum_basis.loop_edges.len()];
         let mut external_signature = vec![0; graph.loop_momentum_basis.ext_edges.len()];
@@ -1351,7 +1588,7 @@ impl FourDDenominator {
             graph,
             self.momentum.as_view(),
             1,
-            self.uses_uv_loop_basis(),
+            uses_uv_loop_basis,
             &mut loop_signature,
             &mut external_signature,
         )
@@ -1371,9 +1608,10 @@ impl FourDDenominator {
     pub(crate) fn depends_on_loop(
         &self,
         graph: &Graph,
+        uses_uv_loop_basis: bool,
     ) -> three_dimensional_reps::graph_io::Result<bool> {
         Ok(self
-            .momentum_signature(graph)?
+            .momentum_signature(graph, uses_uv_loop_basis)?
             .loop_signature
             .into_iter()
             .any(|coefficient| coefficient != 0))
@@ -1591,6 +1829,240 @@ impl ThreeDGraphSource for GraphThreeDSource<'_> {
     }
 }
 
+/// Canonically relabel an exact topology after its incidences have been
+/// inherited from the source graph. This operation only deduplicates already
+/// source-built topologies; momentum signatures never determine endpoints.
+fn canonicalize_exact_parsed_graph(
+    mut parsed: ParsedGraph,
+    exact_uv_domains: &[bool],
+) -> three_dimensional_reps::graph_io::Result<(ParsedGraph, Vec<usize>)> {
+    let exact_count = exact_uv_domains.len();
+    if parsed.internal_edges.len() < exact_count {
+        return Err(GraphIoError::Source(format!(
+            "exact topology has {} internal edges for {exact_count} denominator occurrences",
+            parsed.internal_edges.len(),
+        )));
+    }
+
+    let source_node_names = parsed.node_name_to_internal.clone();
+    let active_nodes = parsed
+        .internal_edges
+        .iter()
+        .flat_map(|edge| [edge.tail, edge.head])
+        .chain(
+            parsed
+                .external_edges
+                .iter()
+                .flat_map(|edge| edge.source.into_iter().chain(edge.destination)),
+        )
+        .collect::<BTreeSet<_>>();
+    let mut source_node_to_graphica = BTreeMap::new();
+    let mut canonicalizer = SymbolicaGraph::<(u8, Vec<i32>), _>::new();
+    for node in active_nodes {
+        source_node_to_graphica.insert(node, canonicalizer.add_node((0, Vec::new())));
+    }
+
+    let initial_cut_by_edge = parsed
+        .initial_state_cut_edges
+        .iter()
+        .map(|edge| (edge.edge_id, (edge.external_id, edge.external_sign)))
+        .collect::<BTreeMap<_, _>>();
+    for (position, edge) in parsed.internal_edges.iter().enumerate() {
+        let domain = if position < exact_count {
+            u8::from(exact_uv_domains[position])
+        } else {
+            2
+        };
+        canonicalizer
+            .add_edge(
+                source_node_to_graphica[&edge.tail],
+                source_node_to_graphica[&edge.head],
+                true,
+                (
+                    domain,
+                    edge.signature.clone(),
+                    edge.mass_key.clone(),
+                    initial_cut_by_edge.get(&edge.edge_id).copied(),
+                ),
+            )
+            .map_err(|error| GraphIoError::Source(error.to_string()))?;
+    }
+    for edge in &parsed.external_edges {
+        let external_node = canonicalizer.add_node((1, edge.external_coefficients.clone()));
+        match (edge.source, edge.destination) {
+            (Some(source), None) => {
+                canonicalizer
+                    .add_edge(
+                        source_node_to_graphica[&source],
+                        external_node,
+                        true,
+                        (
+                            3,
+                            MomentumSignature {
+                                loop_signature: Vec::new(),
+                                external_signature: edge.external_coefficients.clone(),
+                            },
+                            None,
+                            None,
+                        ),
+                    )
+                    .map_err(|error| GraphIoError::Source(error.to_string()))?;
+            }
+            (None, Some(destination)) => {
+                canonicalizer
+                    .add_edge(
+                        external_node,
+                        source_node_to_graphica[&destination],
+                        true,
+                        (
+                            3,
+                            MomentumSignature {
+                                loop_signature: Vec::new(),
+                                external_signature: edge.external_coefficients.clone(),
+                            },
+                            None,
+                            None,
+                        ),
+                    )
+                    .map_err(|error| GraphIoError::Source(error.to_string()))?;
+            }
+            _ => {
+                return Err(GraphIoError::Source(format!(
+                    "exact topology external edge {} must have exactly one internal endpoint",
+                    edge.edge_id,
+                )));
+            }
+        }
+    }
+
+    let canonical = canonicalizer.canonize();
+    let mut source_nodes_by_canonical_position = source_node_to_graphica
+        .iter()
+        .map(|(source_node, graphica_node)| (*source_node, canonical.vertex_map[*graphica_node]))
+        .collect::<Vec<_>>();
+    source_nodes_by_canonical_position.sort_by_key(|(_, canonical_node)| *canonical_node);
+    let source_to_canonical = source_nodes_by_canonical_position
+        .into_iter()
+        .enumerate()
+        .map(|(canonical_node, (source_node, _))| (source_node, canonical_node))
+        .collect::<BTreeMap<_, _>>();
+    for edge in &mut parsed.internal_edges {
+        edge.tail = source_to_canonical[&edge.tail];
+        edge.head = source_to_canonical[&edge.head];
+    }
+    for edge in &mut parsed.external_edges {
+        edge.source = edge.source.map(|node| source_to_canonical[&node]);
+        edge.destination = edge.destination.map(|node| source_to_canonical[&node]);
+    }
+    parsed.external_edges.sort_by_key(|edge| {
+        (
+            edge.source,
+            edge.destination,
+            edge.external_coefficients.clone(),
+            edge.edge_id,
+        )
+    });
+    for (edge_id, edge) in parsed.external_edges.iter_mut().enumerate() {
+        edge.edge_id = edge_id;
+        edge.label = format!("__gammaloop_exact_external_{edge_id}");
+    }
+
+    let mut canonical_to_current = (0..exact_count).collect::<Vec<_>>();
+    canonical_to_current.sort_by_key(|current| {
+        let edge = &parsed.internal_edges[*current];
+        (
+            edge.tail,
+            edge.head,
+            exact_uv_domains[*current],
+            edge.signature.clone(),
+            edge.mass_key.clone(),
+            edge.had_pow,
+            *current,
+        )
+    });
+    let mut internal_edges = canonical_to_current
+        .iter()
+        .enumerate()
+        .map(|(canonical, current)| {
+            let mut edge = parsed.internal_edges[*current].clone();
+            edge.edge_id = canonical;
+            edge.label = format!("__gammaloop_exact_edge_{canonical}");
+            edge
+        })
+        .collect::<Vec<_>>();
+    let cut_edge_id_map = parsed
+        .internal_edges
+        .iter()
+        .skip(exact_count)
+        .enumerate()
+        .map(|(position, edge)| (edge.edge_id, exact_count + position))
+        .collect::<BTreeMap<_, _>>();
+    internal_edges.extend(
+        parsed
+            .internal_edges
+            .iter()
+            .skip(exact_count)
+            .enumerate()
+            .map(|(position, edge)| {
+                let mut edge = edge.clone();
+                edge.edge_id = exact_count + position;
+                edge.label = format!("__gammaloop_exact_cut_{position}");
+                edge
+            }),
+    );
+    for cut_edge in &mut parsed.initial_state_cut_edges {
+        cut_edge.edge_id = cut_edge_id_map[&cut_edge.edge_id];
+    }
+    parsed.internal_edges = internal_edges;
+    parsed.loop_names = (0..parsed.loop_names.len())
+        .map(|index| format!("ell{index}"))
+        .collect();
+    parsed.node_name_to_internal = source_node_names
+        .into_iter()
+        .filter_map(|(name, source_node)| {
+            source_to_canonical
+                .get(&source_node)
+                .copied()
+                .map(|canonical_node| (name, canonical_node))
+        })
+        .collect();
+
+    let validation = validate_parsed_graph(&parsed);
+    if !validation.vertex_balance_violations.is_empty() {
+        return Err(GraphIoError::Source(format!(
+            "source-backed exact topology violates loop-momentum conservation at vertices {:?}",
+            validation.vertex_balance_violations,
+        )));
+    }
+    let initial_state_external_ids = parsed
+        .initial_state_cut_edges
+        .iter()
+        .map(|edge| edge.external_id)
+        .collect::<BTreeSet<_>>();
+    let unresolved_external_balance = validation
+        .vertex_external_balance_info
+        .into_iter()
+        .filter_map(|(node, mut coefficients)| {
+            for external_id in &initial_state_external_ids {
+                if let Some(coefficient) = coefficients.get_mut(*external_id) {
+                    *coefficient = 0;
+                }
+            }
+            coefficients
+                .iter()
+                .any(|coefficient| *coefficient != 0)
+                .then_some((node, coefficients))
+        })
+        .collect::<BTreeMap<_, _>>();
+    if !unresolved_external_balance.is_empty() {
+        return Err(GraphIoError::Source(format!(
+            "source-backed exact topology has external momentum imbalance {:?}; retain the corresponding source-graph UV boundary hedges explicitly",
+            unresolved_external_balance,
+        )));
+    }
+    Ok((parsed, canonical_to_current))
+}
+
 fn find_parent(parent: &mut [usize], node: usize) -> usize {
     let parent_node = parent[node];
     if parent_node == node {
@@ -1613,24 +2085,23 @@ fn union_parent(parent: &mut [usize], left: usize, right: usize) {
 fn serial_power_chain_incidences(
     tail: usize,
     head: usize,
-    relative_signs: &[i32],
+    source_routing_sign: i32,
+    power: usize,
     next_node: &mut usize,
 ) -> (Vec<(usize, usize)>, Vec<usize>) {
-    let Some(reference_sign) = relative_signs.first().copied() else {
+    if power == 0 {
         return (Vec::new(), Vec::new());
-    };
-    let auxiliary_nodes =
-        (*next_node..*next_node + relative_signs.len().saturating_sub(1)).collect::<Vec<_>>();
+    }
+    let auxiliary_nodes = (*next_node..*next_node + power.saturating_sub(1)).collect::<Vec<_>>();
     *next_node += auxiliary_nodes.len();
     let chain_nodes = std::iter::once(tail)
         .chain(auxiliary_nodes.iter().copied())
         .chain(std::iter::once(head))
         .collect::<Vec<_>>();
-    let incidences = relative_signs
-        .iter()
-        .zip(chain_nodes.windows(2))
-        .map(|(relative_sign, endpoints)| {
-            if *relative_sign == reference_sign {
+    let incidences = chain_nodes
+        .windows(2)
+        .map(|endpoints| {
+            if source_routing_sign == 1 {
                 (endpoints[0], endpoints[1])
             } else {
                 (endpoints[1], endpoints[0])
@@ -1638,96 +2109,6 @@ fn serial_power_chain_incidences(
         })
         .collect();
     (incidences, auxiliary_nodes)
-}
-
-fn complete_external_balance_edges(
-    external_edges: &mut Vec<ParsedGraphExternalEdge>,
-    internal_edges: &[ParsedGraphInternalEdge],
-    initial_state_cut_edges: &[ParsedGraphInitialStateCutEdge],
-    external_names: &[String],
-) {
-    let external_count = external_names.len();
-    let initial_state_cut_edge_ids = initial_state_cut_edges
-        .iter()
-        .map(|edge| edge.edge_id)
-        .collect::<BTreeSet<_>>();
-    let initial_state_external_ids = initial_state_cut_edges
-        .iter()
-        .map(|edge| edge.external_id)
-        .collect::<BTreeSet<_>>();
-    let mut balances = BTreeMap::<usize, Vec<i32>>::new();
-    for edge in internal_edges {
-        if initial_state_cut_edge_ids.contains(&edge.edge_id) {
-            continue;
-        }
-        balances
-            .entry(edge.tail)
-            .or_insert_with(|| vec![0; external_count]);
-        balances
-            .entry(edge.head)
-            .or_insert_with(|| vec![0; external_count]);
-        for (external_id, coefficient) in edge.signature.external_signature.iter().enumerate() {
-            if initial_state_external_ids.contains(&external_id) {
-                continue;
-            }
-            balances.get_mut(&edge.tail).unwrap()[external_id] -= coefficient;
-            balances.get_mut(&edge.head).unwrap()[external_id] += coefficient;
-        }
-    }
-    for edge in external_edges.iter() {
-        for node in [edge.source, edge.destination].into_iter().flatten() {
-            balances
-                .entry(node)
-                .or_insert_with(|| vec![0; external_count]);
-            for (external_id, coefficient) in edge.external_coefficients.iter().enumerate() {
-                if !initial_state_external_ids.contains(&external_id) {
-                    balances.get_mut(&node).unwrap()[external_id] += coefficient;
-                }
-            }
-        }
-    }
-
-    let mut next_external_id = external_edges
-        .iter()
-        .map(|edge| edge.edge_id)
-        .max()
-        .map(|edge_id| edge_id + 1)
-        .unwrap_or(0);
-    for (node, balance) in balances {
-        for (external_id, coefficient) in balance.into_iter().enumerate() {
-            if initial_state_external_ids.contains(&external_id) {
-                continue;
-            }
-            let name = external_names
-                .get(external_id)
-                .cloned()
-                .unwrap_or_else(|| format!("p{external_id}"));
-            for _ in 0..coefficient.max(0) {
-                let mut external_coefficients = vec![0; external_count];
-                external_coefficients[external_id] = -1;
-                external_edges.push(ParsedGraphExternalEdge {
-                    edge_id: next_external_id,
-                    source: Some(node),
-                    destination: None,
-                    label: format!("-{name}"),
-                    external_coefficients,
-                });
-                next_external_id += 1;
-            }
-            for _ in 0..(-coefficient).max(0) {
-                let mut external_coefficients = vec![0; external_count];
-                external_coefficients[external_id] = 1;
-                external_edges.push(ParsedGraphExternalEdge {
-                    edge_id: next_external_id,
-                    source: None,
-                    destination: Some(node),
-                    label: name.clone(),
-                    external_coefficients,
-                });
-                next_external_id += 1;
-            }
-        }
-    }
 }
 
 fn select_exact_loop_basis(
@@ -1954,6 +2335,7 @@ mod tests {
     use super::*;
     use crate::{
         dot, graph::parse::IntoGraph, initialisation::test_initialise, momentum::sample::LoopIndex,
+        numerator::energy_degree::EnergyPowerAnalyzer,
     };
     use color_eyre::Result;
 
@@ -2081,9 +2463,15 @@ mod tests {
         let [first, second, third] = parsed.internal_edges.as_slice() else {
             panic!("the cubic exact propagator must retain three occurrences");
         };
-        assert_eq!(first.head, second.tail);
-        assert_eq!(second.head, third.tail);
-        assert_eq!(third.head, first.tail);
+        let mut in_degree = BTreeMap::<usize, usize>::new();
+        let mut out_degree = BTreeMap::<usize, usize>::new();
+        for edge in [first, second, third] {
+            assert_ne!(edge.tail, edge.head);
+            *out_degree.entry(edge.tail).or_default() += 1;
+            *in_degree.entry(edge.head).or_default() += 1;
+        }
+        assert!(in_degree.values().all(|degree| *degree == 1));
+        assert!(out_degree.values().all(|degree| *degree == 1));
         assert_eq!(
             parsed
                 .internal_edges
@@ -2125,10 +2513,11 @@ mod tests {
             a -> b [id=0 lmb_id=0]
             a -> b [id=1]
         })?;
-        let momentum = FunctionBuilder::new(GS.emr_mom).add_arg(0).finish();
         let denominators = [EdgeIndex(0), EdgeIndex(1)].map(|source_edge| FourDDenominator {
             source_edge,
-            momentum: momentum.clone(),
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(source_edge))
+                .finish(),
             mass_squared: graph.underlying[source_edge].particle.mass_atom().pow(2),
             full_expr: Atom::one(),
         });
@@ -2136,16 +2525,26 @@ mod tests {
         let parsed = source.to_three_d_parsed_graph()?;
 
         assert_eq!(parsed.internal_edges.len(), 2);
+        let undirected_endpoints = |edge: &ParsedGraphInternalEdge| {
+            if edge.tail <= edge.head {
+                (edge.tail, edge.head)
+            } else {
+                (edge.head, edge.tail)
+            }
+        };
         assert_eq!(
-            (parsed.internal_edges[0].tail, parsed.internal_edges[0].head),
-            (parsed.internal_edges[1].tail, parsed.internal_edges[1].head),
-            "distinct physical owners must retain their coincident incidence"
+            undirected_endpoints(&parsed.internal_edges[0]),
+            undirected_endpoints(&parsed.internal_edges[1]),
+            "distinct physical owners must retain their coincident source incidence"
         );
         assert!(
             parsed
                 .node_name_to_internal
                 .keys()
-                .all(|name| !name.starts_with("__gammaloop_exact_power_"))
+                .filter(|name| name.starts_with("__gammaloop_exact_power_"))
+                .next()
+                .is_none(),
+            "equal denominators on distinct source edges must not form one cross-owner power chain"
         );
         assert_eq!(
             three_dimensional_reps::repeated_groups(&parsed)
@@ -2153,55 +2552,75 @@ mod tests {
                 .map(|group| group.edge_ids)
                 .collect::<Vec<_>>(),
             vec![vec![0, 1]],
-            "topological ownership must not change owner-blind denominator algebra"
+            "signature equivalence remains available after source incidence is fixed"
         );
         let offset = graph.underlying.n_edges();
+        let expected_physical_map = source
+            .exact_local_to_original_occurrence
+            .iter()
+            .enumerate()
+            .map(|(local, original)| {
+                (
+                    offset + local,
+                    usize::from(denominators[*original].source_edge),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
         assert_eq!(
             source.physical_energy_edge_index_map().unwrap().internal,
-            BTreeMap::from([
-                (offset, usize::from(EdgeIndex(0))),
-                (offset + 1, usize::from(EdgeIndex(1))),
-            ])
+            expected_physical_map
         );
         Ok(())
     }
 
     #[test]
-    fn exact_source_keeps_same_owner_domains_and_masses_separate() -> Result<()> {
+    fn exact_source_keeps_source_instantiated_domains_and_masses_separate() -> Result<()> {
         test_initialise()?;
         let graph: Graph = dot!(digraph exact_same_owner_domains {
             edge [num=1 mass=1]
             node [num=1]
 
             a -> b [id=0 lmb_id=0]
-            a -> b [id=1]
+            b -> c [id=3]
+            c -> a [id=4]
+            d -> e [id=1 lmb_id=1]
+            e -> f [id=5]
+            f -> d [id=6]
+            g -> h [id=2 lmb_id=2]
+            h -> i [id=7]
+            i -> g [id=8]
         })?;
-        let source_edge = EdgeIndex(0);
-        let momentum = FunctionBuilder::new(GS.emr_mom).add_arg(0).finish();
-        let cograph_mass = graph.underlying[source_edge].particle.mass_atom().pow(2);
+        let cograph_edge = EdgeIndex(0);
+        let other_cograph_edge = EdgeIndex(1);
+        let uv_edge = EdgeIndex(2);
+        let cograph_mass = graph.underlying[cograph_edge].particle.mass_atom().pow(2);
         let other_cograph_mass = Atom::num(2);
         let uv_mass = Atom::var(GS.m_uv_expansion).pow(2);
         let denominators = [
             FourDDenominator {
-                source_edge,
-                momentum: momentum.clone(),
+                source_edge: cograph_edge,
+                momentum: FunctionBuilder::new(GS.emr_mom).add_arg(0).finish(),
                 mass_squared: cograph_mass.clone(),
                 full_expr: Atom::one(),
             },
             FourDDenominator {
-                source_edge,
-                momentum: momentum.clone(),
+                source_edge: other_cograph_edge,
+                momentum: FunctionBuilder::new(GS.emr_mom).add_arg(1).finish(),
                 mass_squared: other_cograph_mass.clone(),
                 full_expr: Atom::one(),
             },
             FourDDenominator {
-                source_edge,
-                momentum,
+                source_edge: uv_edge,
+                momentum: FunctionBuilder::new(GS.emr_mom).add_arg(2).finish(),
                 mass_squared: uv_mass.clone(),
                 full_expr: Atom::one(),
             },
         ];
-        let source = GraphThreeDSource::from_exact_denominators(&graph, &denominators)?;
+        let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
+            &graph,
+            &denominators,
+            [uv_edge, EdgeIndex(7), EdgeIndex(8)],
+        )?;
         let parsed = source.to_three_d_parsed_graph()?;
         let edge_for_mass = |mass: &Atom| {
             let mass_key = mass.to_canonical_string();
@@ -2216,11 +2635,16 @@ mod tests {
         let uv = edge_for_mass(&uv_mass);
 
         assert_eq!(cograph.tail, cograph.head);
+        assert_eq!(other_cograph.tail, other_cograph.head);
+        assert_eq!(uv.tail, uv.head);
         assert_eq!(
-            (other_cograph.tail, other_cograph.head),
-            (cograph.tail, cograph.head)
+            [cograph.tail, other_cograph.tail, uv.tail]
+                .into_iter()
+                .collect::<BTreeSet<_>>()
+                .len(),
+            3,
+            "distinct source components and UV/cograph domains must remain separate after contraction"
         );
-        assert_ne!(uv.tail, uv.head);
         assert!(
             parsed
                 .node_name_to_internal
@@ -2229,19 +2653,26 @@ mod tests {
             "different masses and topology domains must not form a power chain"
         );
         let offset = graph.underlying.n_edges();
+        let expected_physical_map = source
+            .exact_local_to_original_occurrence
+            .iter()
+            .enumerate()
+            .map(|(local, original)| {
+                (
+                    offset + local,
+                    usize::from(denominators[*original].source_edge),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
         assert_eq!(
             source.physical_energy_edge_index_map().unwrap().internal,
-            BTreeMap::from([
-                (offset, usize::from(source_edge)),
-                (offset + 1, usize::from(source_edge)),
-                (offset + 2, usize::from(source_edge)),
-            ])
+            expected_physical_map
         );
         Ok(())
     }
 
     #[test]
-    fn exact_source_reverses_opposite_routing_inside_one_power_chain() -> Result<()> {
+    fn exact_source_normalizes_opposite_spelling_inside_one_power_chain() -> Result<()> {
         test_initialise()?;
         let graph: Graph = dot!(digraph exact_opposite_same_owner {
             edge [num=1 mass=1]
@@ -2289,12 +2720,11 @@ mod tests {
         };
         let first = &parsed.internal_edges[*first_id];
         let second = &parsed.internal_edges[*second_id];
-        let (_, first_sign) = first.signature.canonical_up_to_sign();
-        let (_, second_sign) = second.signature.canonical_up_to_sign();
-
-        assert_eq!(first_sign, -second_sign);
-        assert_eq!(first.head, second.head);
-        assert_ne!(first.tail, second.tail);
+        assert_eq!(first.signature, second.signature);
+        assert!(
+            first.head == second.tail || second.head == first.tail,
+            "Q and -Q copies of one even denominator must form one consistently routed power chain"
+        );
         assert_eq!(
             parsed
                 .node_name_to_internal
@@ -2307,21 +2737,61 @@ mod tests {
             three_dimensional_reps::validate_parsed_graph(&parsed)
                 .vertex_balance_violations
                 .is_empty(),
-            "reversing the opposite-sign segment must preserve momentum balance"
+            "canonical denominator spelling with source-owned routing must preserve momentum balance"
         );
         let offset = graph.underlying.n_edges();
         assert_eq!(
             source.energy_edge_index_map(&parsed).unwrap().internal,
             BTreeMap::from([(0, offset), (1, offset + 1), (2, offset + 2),])
         );
+        let expected_physical_map = source
+            .exact_local_to_original_occurrence
+            .iter()
+            .enumerate()
+            .map(|(local, original)| {
+                (
+                    offset + local,
+                    usize::from(denominators[*original].source_edge),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
         assert_eq!(
             source.physical_energy_edge_index_map().unwrap().internal,
-            BTreeMap::from([
-                (offset, usize::from(EdgeIndex(0))),
-                (offset + 1, usize::from(EdgeIndex(0))),
-                (offset + 2, usize::from(EdgeIndex(1))),
-            ])
+            expected_physical_map
         );
+
+        // D(Q) and D(-Q) are the same even denominator. Their canonical CFF
+        // energy is therefore identical, while recovering the odd physical
+        // numerator Q^0 must compose the literal and denominator->canonical
+        // signs rather than inherit either sign separately.
+        let mapper = source
+            .exact_source_energy_mapper()
+            .expect("exact source has an energy mapper");
+        let mapped_energy = Atom::var(symbolica::symbol!(
+            "three_d_source_test::canonical_odd_energy"
+        ));
+        let numerator = GS.emr_mom(EdgeIndex(0), GS.cind(0));
+        for original in [0, 1] {
+            let local = source
+                .exact_local_to_original_occurrence
+                .iter()
+                .position(|candidate| *candidate == original)
+                .expect("both source-edge occurrences survive canonicalization");
+            let occurrence = graph.underlying.n_edges() + local;
+            let mut edge_energy_map =
+                vec![LinearEnergyExpr::zero(); graph.underlying.n_edges() + denominators.len()];
+            edge_energy_map[occurrence].constant = mapped_energy.clone();
+            assert_eq!(
+                mapper.map_numerator_factor(
+                    &[LinearEnergyExpr::zero()],
+                    &edge_energy_map,
+                    &numerator,
+                    &BTreeMap::from([(EdgeIndex(0), occurrence)]),
+                )?,
+                -mapped_energy.clone(),
+                "literal +Q and -Q denominator spellings must recover the same physical odd numerator energy",
+            );
+        }
         Ok(())
     }
 
@@ -2425,7 +2895,10 @@ mod tests {
             let denominator = &denominators[*original];
             assert_eq!(
                 exact_edge.signature,
-                production_parsed.internal_edges[usize::from(denominator.source_edge)].signature
+                production_parsed.internal_edges[usize::from(denominator.source_edge)]
+                    .signature
+                    .canonical_up_to_sign()
+                    .0
             );
         }
 
@@ -2443,7 +2916,10 @@ mod tests {
             let denominator = &reversed_denominators[*original];
             assert_eq!(
                 exact_edge.signature,
-                production_parsed.internal_edges[usize::from(denominator.source_edge)].signature
+                production_parsed.internal_edges[usize::from(denominator.source_edge)]
+                    .signature
+                    .canonical_up_to_sign()
+                    .0
             );
         }
         Ok(())
@@ -2474,7 +2950,8 @@ mod tests {
         let options = graph.denominator_only_cff_3d_expression_options();
         let forward_source = GraphThreeDSource::from_exact_denominators(&graph, &denominators)?;
         let forward = graph
-            .generate_3d_expression_for_4d_term(&forward_source, &options, &Atom::one())?
+            .generate_3d_expression_for_4d_term(&forward_source, &options, &Atom::one(), None)?
+            .0
             .expression
             .remap_energy_edge_indices(
                 &forward_source
@@ -2486,7 +2963,8 @@ mod tests {
         let reversed_source =
             GraphThreeDSource::from_exact_denominators(&graph, &reversed_denominators)?;
         let reversed = graph
-            .generate_3d_expression_for_4d_term(&reversed_source, &options, &Atom::one())?
+            .generate_3d_expression_for_4d_term(&reversed_source, &options, &Atom::one(), None)?
+            .0
             .expression
             .remap_energy_edge_indices(
                 &reversed_source
@@ -2551,7 +3029,9 @@ mod tests {
             mass_squared: graph.underlying[EdgeIndex(0)].particle.mass_atom().pow(2),
             full_expr: Atom::one(),
         };
-        let raw_signature = denominator.momentum_signature(&graph)?.loop_signature;
+        let raw_signature = denominator
+            .momentum_signature(&graph, false)?
+            .loop_signature;
         let denominators = [denominator];
         let source = GraphThreeDSource::from_exact_denominators(&graph, &denominators)?;
         assert_eq!(source.inner_loop_count, 1);
@@ -2686,9 +3166,6 @@ mod tests {
                 vec![Rational::from(0), Rational::from(-1)],
                 vec![(external_edge, SignOrZero::Plus)],
             )],
-            // The carrier occurrence is valid metadata but its edge-energy
-            // slot is absent, so the mapper must use the loop-map fallback.
-            source_loop_carrier_occurrences: vec![0],
             exact_literal_edge_occurrences: BTreeMap::new(),
             cut_alias_edges: AHashSet::new(),
             exact_ose_replacements: vec![Replacement::new(
@@ -2772,24 +3249,28 @@ mod tests {
             parent_loop_coordinates: Vec::new(),
             parent_loop_edges: Vec::new(),
             edge_coordinates: Vec::new(),
-            source_loop_carrier_occurrences: Vec::new(),
-            exact_literal_edge_occurrences: BTreeMap::from([(unique_edge, vec![12])]),
+            exact_literal_edge_occurrences: BTreeMap::from([(unique_edge, vec![(12, 1)])]),
             cut_alias_edges: AHashSet::new(),
             exact_ose_replacements: Vec::new(),
         };
 
-        assert_eq!(
-            mapper
-                .map_energy_degree_bounds(&[(usize::from(unique_edge), 2)])
-                .unwrap(),
-            vec![(12, 2)]
-        );
+        let candidates = mapper.equivalent_energy_candidates([unique_edge]).unwrap();
+        let numerator = GS.emr_mom(unique_edge, GS.cind(0)).pow(2);
+        let plan = EnergyPowerAnalyzer::for_physical_emr_edges([unique_edge])
+            .plan_atom_assignment(&numerator, &candidates)
+            .unwrap();
+        assert_eq!(plan.energy_degree_bounds(), &[(12, 2)]);
 
-        let missing = mapper
-            .map_energy_degree_bounds(&[(5, 3)])
+        let missing_edge = EdgeIndex(5);
+        let candidates = mapper.equivalent_energy_candidates([missing_edge]).unwrap();
+        let missing = EnergyPowerAnalyzer::for_physical_emr_edges([missing_edge])
+            .plan_atom_assignment(&GS.emr_mom(missing_edge, GS.cind(0)).pow(3), &candidates)
             .expect_err("an absent literal EMR occurrence must not use an affine fallback");
-        assert!(missing.to_string().contains("no exact occurrence"));
-        assert!(missing.to_string().contains("general-affine"));
+        assert!(
+            missing
+                .to_string()
+                .contains("no certified equivalent exact-energy candidates")
+        );
     }
 
     #[test]
@@ -2805,10 +3286,13 @@ mod tests {
             parent_loop_coordinates: Vec::new(),
             parent_loop_edges: Vec::new(),
             edge_coordinates: Vec::new(),
-            source_loop_carrier_occurrences: Vec::new(),
             exact_literal_edge_occurrences: BTreeMap::from([(
                 repeated_edge,
-                occurrences.iter().copied().map(usize::from).collect(),
+                occurrences
+                    .iter()
+                    .copied()
+                    .map(|occurrence| (usize::from(occurrence), 1))
+                    .collect(),
             )]),
             cut_alias_edges: AHashSet::new(),
             exact_ose_replacements: occurrences
@@ -2822,15 +3306,21 @@ mod tests {
                 .collect(),
         };
 
+        let candidates = mapper.equivalent_energy_candidates([repeated_edge])?;
+        let plan = EnergyPowerAnalyzer::for_physical_emr_edges([repeated_edge])
+            .plan_atom_assignment(&GS.emr_mom(repeated_edge, GS.cind(0)).pow(4), &candidates)?;
         assert_eq!(
-            mapper.map_energy_degree_bounds(&[(usize::from(repeated_edge), 4)])?,
-            vec![(usize::from(occurrences[0]), 4)]
+            plan.energy_degree_bounds(),
+            &[
+                (usize::from(occurrences[0]), 2),
+                (usize::from(occurrences[1]), 2),
+            ]
         );
         Ok(())
     }
 
     #[test]
-    fn exact_energy_bounds_reject_disagreeing_literal_occurrences() -> Result<()> {
+    fn exact_energy_bounds_choose_the_canonical_largest_energy_class() -> Result<()> {
         test_initialise()?;
         let repeated_edge = EdgeIndex(4);
         let occurrences = [EdgeIndex(13), EdgeIndex(14)];
@@ -2839,10 +3329,13 @@ mod tests {
             parent_loop_coordinates: Vec::new(),
             parent_loop_edges: Vec::new(),
             edge_coordinates: Vec::new(),
-            source_loop_carrier_occurrences: Vec::new(),
             exact_literal_edge_occurrences: BTreeMap::from([(
                 repeated_edge,
-                occurrences.iter().copied().map(usize::from).collect(),
+                occurrences
+                    .iter()
+                    .copied()
+                    .map(|occurrence| (usize::from(occurrence), 1))
+                    .collect(),
             )]),
             cut_alias_edges: AHashSet::new(),
             exact_ose_replacements: occurrences
@@ -2857,11 +3350,72 @@ mod tests {
                 .collect(),
         };
 
-        let error = mapper
-            .map_energy_degree_bounds(&[(usize::from(repeated_edge), 4)])
-            .expect_err("different exact energies must not share one degree bound");
-        assert!(error.to_string().contains("energies disagree"));
-        assert!(error.to_string().contains("on-shell-energy replacement"));
+        let candidates = mapper.equivalent_energy_candidates([repeated_edge])?;
+        let plan = EnergyPowerAnalyzer::for_physical_emr_edges([repeated_edge])
+            .plan_atom_assignment(&GS.emr_mom(repeated_edge, GS.cind(0)).pow(4), &candidates)?;
+        assert_eq!(
+            plan.energy_degree_bounds(),
+            &[(usize::from(occurrences[0]), 4)]
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_energy_bounds_balance_across_routing_signs_of_one_energy_channel() -> Result<()> {
+        test_initialise()?;
+        let repeated_edge = EdgeIndex(4);
+        let occurrences = [EdgeIndex(13), EdgeIndex(14), EdgeIndex(15)];
+        let energy = Atom::var(symbolica::symbol!(
+            "three_d_source_test::signed_class_energy"
+        ));
+
+        for signs in [[1, -1, -1], [1, 1, -1]] {
+            let mapper = ExactSourceEnergyMapper {
+                inactive_loop_count: 0,
+                parent_loop_coordinates: Vec::new(),
+                parent_loop_edges: Vec::new(),
+                edge_coordinates: vec![(repeated_edge, Vec::new(), Vec::new())],
+                exact_literal_edge_occurrences: BTreeMap::from([(
+                    repeated_edge,
+                    occurrences
+                        .iter()
+                        .zip(signs)
+                        .map(|(occurrence, sign)| (usize::from(*occurrence), sign))
+                        .collect(),
+                )]),
+                cut_alias_edges: AHashSet::new(),
+                exact_ose_replacements: occurrences
+                    .iter()
+                    .map(|occurrence| {
+                        Replacement::new(
+                            crate::utils::ose_atom_from_index(*occurrence).to_pattern(),
+                            energy.to_pattern(),
+                        )
+                    })
+                    .collect(),
+            };
+            let candidates = mapper.equivalent_energy_candidates([repeated_edge])?;
+            let numerator = GS.emr_mom(repeated_edge, GS.cind(0)).pow(2);
+            let plan = EnergyPowerAnalyzer::for_physical_emr_edges([repeated_edge])
+                .plan_atom_assignment(&numerator, &candidates)?;
+            assert_eq!(
+                plan.energy_degree_bounds(),
+                &occurrences[..2]
+                    .iter()
+                    .map(|occurrence| (usize::from(*occurrence), 1))
+                    .collect::<Vec<_>>()
+            );
+
+            let mut edge_energy_map = vec![LinearEnergyExpr::zero(); 16];
+            for (occurrence, sign) in occurrences.iter().zip(signs) {
+                edge_energy_map[usize::from(*occurrence)] =
+                    LinearEnergyExpr::ose(*occurrence, sign);
+            }
+            assert_eq!(
+                mapper.map_planned_numerator(&[], &edge_energy_map, &plan)?,
+                energy.pow(2)
+            );
+        }
         Ok(())
     }
 
@@ -2878,10 +3432,13 @@ mod tests {
             parent_loop_coordinates: Vec::new(),
             parent_loop_edges: Vec::new(),
             edge_coordinates: vec![(repeated_edge, Vec::new(), Vec::new())],
-            source_loop_carrier_occurrences: Vec::new(),
             exact_literal_edge_occurrences: BTreeMap::from([(
                 repeated_edge,
-                occurrences.iter().copied().map(usize::from).collect(),
+                occurrences
+                    .iter()
+                    .copied()
+                    .map(|occurrence| (usize::from(occurrence), 1))
+                    .collect(),
             )]),
             cut_alias_edges: AHashSet::new(),
             exact_ose_replacements: occurrences
@@ -2932,10 +3489,13 @@ mod tests {
             parent_loop_coordinates: Vec::new(),
             parent_loop_edges: Vec::new(),
             edge_coordinates: vec![(repeated_edge, Vec::new(), Vec::new())],
-            source_loop_carrier_occurrences: Vec::new(),
             exact_literal_edge_occurrences: BTreeMap::from([(
                 repeated_edge,
-                occurrences.iter().copied().map(usize::from).collect(),
+                occurrences
+                    .iter()
+                    .copied()
+                    .map(|occurrence| (usize::from(occurrence), 1))
+                    .collect(),
             )]),
             cut_alias_edges: AHashSet::new(),
             exact_ose_replacements: occurrences
@@ -2963,7 +3523,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_energy_mapper_prefers_source_edge_maps() -> Result<()> {
+    fn exact_energy_mapper_uses_loop_maps_for_source_coordinates() -> Result<()> {
         test_initialise()?;
         let literal_edge = EdgeIndex(3);
         let reconstructed_edge = EdgeIndex(5);
@@ -2973,7 +3533,6 @@ mod tests {
         let duplicate_ose = EdgeIndex(14);
         let fallback = EdgeIndex(17);
         let external_edge = EdgeIndex(19);
-        let carrier_energy = Atom::var(symbolica::symbol!("three_d_source_test::carrier_energy"));
         let literal_energy = Atom::var(symbolica::symbol!("three_d_source_test::literal_energy"));
         let mut mapper = ExactSourceEnergyMapper {
             inactive_loop_count: 0,
@@ -2983,19 +3542,18 @@ mod tests {
                 (literal_edge, vec![Rational::from(1)], Vec::new()),
                 (reconstructed_edge, vec![Rational::from(1)], Vec::new()),
             ],
-            source_loop_carrier_occurrences: vec![usize::from(carrier_occurrence)],
             exact_literal_edge_occurrences: BTreeMap::from([(
                 literal_edge,
-                vec![usize::from(literal_occurrence)],
+                vec![(usize::from(literal_occurrence), 1)],
             )]),
             cut_alias_edges: AHashSet::new(),
             exact_ose_replacements: vec![
                 Replacement::new(
-                    crate::utils::ose_atom_from_index(carrier_occurrence).to_pattern(),
-                    carrier_energy.to_pattern(),
+                    crate::utils::ose_atom_from_index(literal_occurrence).to_pattern(),
+                    literal_energy.to_pattern(),
                 ),
                 Replacement::new(
-                    crate::utils::ose_atom_from_index(literal_occurrence).to_pattern(),
+                    crate::utils::ose_atom_from_index(duplicate_occurrence).to_pattern(),
                     literal_energy.to_pattern(),
                 ),
                 Replacement::new(
@@ -3032,10 +3590,7 @@ mod tests {
             * (GS.emr_mom(reconstructed_edge, GS.cind(0)) + &factor_b)
             * (loop_temporal + &factor_c);
         let mapped = mapper.map_numerator(&loop_energy_map, &edge_energy_map, &numerator)?;
-        let carrier_sample = Atom::num(2) * &carrier_energy
-            + Atom::num(3) * crate::utils::external_energy_atom_from_index(external_edge)
-            - Atom::num(5) * Atom::var(GS.numerator_sampling_scale)
-            + Atom::num(7);
+        let source_sample = crate::utils::ose_atom_from_index(fallback);
         let literal_sample = Atom::num(3) * &literal_energy
             - Atom::num(2) * crate::utils::external_energy_atom_from_index(external_edge)
             + Atom::num(4) * Atom::var(GS.numerator_sampling_scale)
@@ -3043,8 +3598,8 @@ mod tests {
         assert_eq!(
             mapped,
             (literal_sample.clone() + &factor_a)
-                * (carrier_sample.clone() + &factor_b)
-                * (carrier_sample + &factor_c)
+                * (source_sample.clone() + &factor_b)
+                * (source_sample.clone() + &factor_c)
         );
 
         edge_energy_map[usize::from(carrier_occurrence)] = LinearEnergyExpr::zero();
@@ -3054,7 +3609,7 @@ mod tests {
                 &edge_energy_map,
                 &GS.emr_mom(reconstructed_edge, GS.cind(0)).pow(2),
             )?,
-            Atom::Zero
+            source_sample.clone().pow(2)
         );
 
         edge_energy_map[usize::from(carrier_occurrence)] =
@@ -3063,7 +3618,7 @@ mod tests {
             .exact_literal_edge_occurrences
             .get_mut(&literal_edge)
             .unwrap()
-            .push(usize::from(duplicate_occurrence));
+            .push((usize::from(duplicate_occurrence), 1));
         edge_energy_map[usize::from(duplicate_occurrence)] = LinearEnergyExpr {
             internal_terms: vec![(duplicate_ose, Atom::num(3))],
             external_terms: vec![(external_edge, Atom::num(-2))],
@@ -3072,17 +3627,32 @@ mod tests {
         };
         assert_eq!(
             mapper.map_numerator(&loop_energy_map, &edge_energy_map, &numerator)?,
-            (literal_sample + &factor_a)
-                * (Atom::num(2) * &carrier_energy + &factor_b)
-                * (Atom::num(2) * &carrier_energy + &factor_c)
+            (literal_sample.clone() + &factor_a)
+                * (source_sample.clone() + &factor_b)
+                * (source_sample + &factor_c)
         );
 
         edge_energy_map[usize::from(duplicate_occurrence)].internal_terms[0].1 = Atom::num(-3);
-        let error = mapper
-            .map_numerator(&loop_energy_map, &edge_energy_map, &numerator)
-            .unwrap_err();
-        assert!(error.to_string().contains("source occurrences"));
-        assert!(error.to_string().contains("disagree"));
+        let factorized_literal_numerator = (GS.emr_mom(literal_edge, GS.cind(0)) + &factor_a)
+            * (GS.emr_mom(literal_edge, GS.cind(0)) + &factor_b);
+        let candidates = mapper.equivalent_energy_candidates([literal_edge])?;
+        let plan = EnergyPowerAnalyzer::for_physical_emr_edges([literal_edge])
+            .plan_atom_assignment(&factorized_literal_numerator, &candidates)?;
+        assert_eq!(
+            plan.energy_degree_bounds(),
+            &[
+                (usize::from(literal_occurrence), 1),
+                (usize::from(duplicate_occurrence), 1),
+            ]
+        );
+        let duplicate_sample = -Atom::num(3) * &literal_energy
+            - Atom::num(2) * crate::utils::external_energy_atom_from_index(external_edge)
+            + Atom::num(4) * Atom::var(GS.numerator_sampling_scale)
+            - Atom::num(1);
+        assert_eq!(
+            mapper.map_planned_numerator(&loop_energy_map, &edge_energy_map, &plan)?,
+            (literal_sample + factor_a) * (duplicate_sample + factor_b)
+        );
         Ok(())
     }
 
@@ -3101,8 +3671,7 @@ mod tests {
                 vec![Rational::from(0)],
                 vec![(external_edge, SignOrZero::Minus)],
             )],
-            source_loop_carrier_occurrences: vec![0],
-            exact_literal_edge_occurrences: BTreeMap::from([(cut_edge, vec![1, 2])]),
+            exact_literal_edge_occurrences: BTreeMap::from([(cut_edge, vec![(1, 1), (2, 1)])]),
             cut_alias_edges: AHashSet::from([cut_edge]),
             exact_ose_replacements: Vec::new(),
         };
@@ -3154,7 +3723,7 @@ mod tests {
         let occurrence = EdgeIndex(graph.underlying.n_edges());
         assert_eq!(
             mapper.exact_literal_edge_occurrences[&carrier],
-            vec![usize::from(occurrence)]
+            vec![(usize::from(occurrence), -1)]
         );
         let mut edge_energy_map = vec![LinearEnergyExpr::zero(); usize::from(occurrence) + 1];
         edge_energy_map[usize::from(occurrence)] = LinearEnergyExpr::ose(occurrence, 2);
@@ -3171,9 +3740,9 @@ mod tests {
     }
 
     #[test]
-    fn exact_uv_carriers_from_one_source_edge_have_unique_loop_names() -> Result<()> {
+    fn exact_uv_component_inherits_source_minor_and_rejects_wrong_provenance() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_uv_names {
+        let graph: Graph = dot!(digraph exact_uv_source_minor {
             edge [num=1 mass=1]
             node [num=1]
 
@@ -3184,70 +3753,377 @@ mod tests {
             d -> e [id=4]
             e -> c [id=5 lmb_id=1]
         })?;
-        let denominators = graph
-            .loop_momentum_basis
-            .loop_edges
+        let uv_edges = (0..graph.underlying.n_edges())
+            .map(EdgeIndex)
+            .collect::<Vec<_>>();
+        let uv_mass = Atom::var(GS.m_uv_expansion).pow(2);
+        let denominators = uv_edges
             .iter()
-            .map(|carrier| FourDDenominator {
-                source_edge: EdgeIndex(0),
+            .copied()
+            .map(|source_edge| FourDDenominator {
+                source_edge,
                 momentum: FunctionBuilder::new(GS.emr_mom)
-                    .add_arg(usize::from(*carrier))
+                    .add_arg(usize::from(source_edge))
                     .finish(),
-                mass_squared: Atom::var(GS.m_uv_expansion).pow(2),
+                mass_squared: uv_mass.clone(),
                 full_expr: Atom::one(),
             })
             .collect::<Vec<_>>();
-        let source = GraphThreeDSource::from_exact_denominators(&graph, &denominators)?;
+        let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
+            &graph,
+            &denominators,
+            uv_edges.iter().copied(),
+        )?;
         let parsed = source.to_three_d_parsed_graph()?;
 
-        assert_eq!(parsed.loop_names.len(), 2);
-        assert_eq!(
-            parsed.loop_names.iter().collect::<BTreeSet<_>>().len(),
-            parsed.loop_names.len()
-        );
-        assert_eq!(
-            parsed
-                .internal_edges
-                .iter()
-                .map(|edge| (edge.tail, edge.head))
-                .collect::<BTreeSet<_>>()
-                .len(),
-            1,
-            "same-owner UV carriers with different signatures retain their shared physical incidence"
+        assert!(
+            three_dimensional_reps::validate_parsed_graph(&parsed).ok,
+            "the complete UV component must retain its source-graph momentum balance"
         );
         assert!(
             parsed
                 .node_name_to_internal
                 .keys()
                 .all(|name| !name.starts_with("__gammaloop_exact_power_")),
-            "different momentum signatures must not be serialized as one power"
+            "unraised source edges must not acquire power-chain vertices"
         );
-        for (variable, loop_name) in parsed.loop_names.iter().enumerate() {
-            let matching_edges = parsed
-                .internal_edges
-                .iter()
-                .filter(|edge| edge.label == *loop_name)
-                .collect::<Vec<_>>();
-            assert_eq!(matching_edges.len(), 1);
+        for (occurrence, original) in source
+            .exact_local_to_original_occurrence
+            .iter()
+            .copied()
+            .enumerate()
+        {
+            let source_edge = denominators[original].source_edge;
+            let (
+                _,
+                HedgePair::Paired {
+                    source: tail,
+                    sink: head,
+                },
+            ) = graph[&source_edge]
+            else {
+                unreachable!("the fixture contains only paired source edges")
+            };
+            let (_, source_routing_sign) = MomentumSignature {
+                loop_signature: source.outer_loop_signature(source_edge)?,
+                external_signature: Vec::new(),
+            }
+            .canonical_up_to_sign();
+            let (tail, head) = if source_routing_sign == 1 {
+                (tail, head)
+            } else {
+                (head, tail)
+            };
             assert_eq!(
-                matching_edges[0].edge_id,
-                parsed
-                    .internal_edges
-                    .iter()
-                    .position(|edge| {
-                        edge.signature.loop_signature.iter().enumerate().all(
-                            |(candidate, coefficient)| {
-                                if candidate == variable {
-                                    coefficient.abs() == 1
-                                } else {
-                                    *coefficient == 0
-                                }
-                            },
-                        )
-                    })
-                    .unwrap()
+                (
+                    parsed.internal_edges[occurrence].tail,
+                    parsed.internal_edges[occurrence].head
+                ),
+                (
+                    parsed.node_name_to_internal
+                        [&format!("uv{}", usize::from(graph.node_id(tail)))],
+                    parsed.node_name_to_internal
+                        [&format!("uv{}", usize::from(graph.node_id(head)))],
+                ),
+                "each exact UV denominator must inherit its own source-edge endpoints"
             );
         }
+
+        let omitted_edge = EdgeIndex(1);
+        let contracted_denominators = denominators
+            .iter()
+            .filter(|denominator| denominator.source_edge != omitted_edge)
+            .cloned()
+            .collect::<Vec<_>>();
+        let contracted = GraphThreeDSource::from_exact_denominators_in_uv_edges(
+            &graph,
+            &contracted_denominators,
+            uv_edges.iter().copied(),
+        )?
+        .to_three_d_parsed_graph()?;
+        let (
+            _,
+            HedgePair::Paired {
+                source: tail,
+                sink: head,
+            },
+        ) = graph[&omitted_edge]
+        else {
+            unreachable!("the omitted UV source edge is paired")
+        };
+        assert_eq!(
+            contracted.node_name_to_internal[&format!("uv{}", usize::from(graph.node_id(tail)))],
+            contracted.node_name_to_internal[&format!("uv{}", usize::from(graph.node_id(head)))],
+            "an absent UV denominator is contracted in the known source minor"
+        );
+        assert!(three_dimensional_reps::validate_parsed_graph(&contracted).ok);
+
+        let mut malformed = denominators.clone();
+        malformed[0].momentum = FunctionBuilder::new(GS.emr_mom).add_arg(3).finish();
+        let error = match GraphThreeDSource::from_exact_denominators_in_uv_edges(
+            &graph, &malformed, uv_edges,
+        ) {
+            Ok(_) => panic!("wrong provenance must not be repaired by changing source incidence"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("has no unique routing for rewritten exact signature"),
+            "unexpected provenance-validation error: {error}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_source_routes_a_hard_uv_row_modulo_the_soft_cograph_span() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph exact_uv_hard_soft_routing {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> v5 [id=0]
+            v0 -> v2 [id=1 lmb_id=0]
+            v3 -> v0 [id=2]
+            v0 -> v5 [id=3]
+            v2 -> v1 [id=4]
+            v1 -> v3 [id=5 lmb_id=1]
+            v1 -> v4 [id=6]
+            v2 -> v3 [id=7]
+            v4 -> outgoing [id=8]
+        })?;
+        let cograph_edges = [EdgeIndex(1), EdgeIndex(2)];
+        let uv_edges = [EdgeIndex(4), EdgeIndex(5), EdgeIndex(7)];
+        let hard_carrier = EdgeIndex(5);
+        let physical_denominators = cograph_edges.map(|source_edge| FourDDenominator {
+            source_edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(source_edge))
+                .finish(),
+            mass_squared: graph.underlying[source_edge].particle.mass_atom().pow(2),
+            full_expr: Atom::one(),
+        });
+        let uv_mass = Atom::var(GS.m_uv_expansion).pow(2);
+        let uv_denominators = uv_edges.map(|source_edge| FourDDenominator {
+            source_edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(hard_carrier))
+                .finish(),
+            mass_squared: uv_mass.clone(),
+            full_expr: Atom::one(),
+        });
+        let denominators = physical_denominators
+            .into_iter()
+            .chain(uv_denominators)
+            .collect::<Vec<_>>();
+        let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
+            &graph,
+            &denominators,
+            uv_edges,
+        )?;
+
+        let hard_soft_owner = uv_edges
+            .into_iter()
+            .find(|owner| {
+                source.outer_loop_signature(*owner).is_ok_and(|row| {
+                    row.iter().filter(|coefficient| **coefficient != 0).count() > 1
+                })
+            })
+            .expect("one source UV edge carries both the hard and soft loop directions");
+        let original = denominators
+            .iter()
+            .position(|denominator| denominator.source_edge == hard_soft_owner)
+            .expect("the mixed source owner retains one rewritten denominator");
+        let exact_signature = source.exact_signatures[original].canonical_up_to_sign().0;
+        assert_eq!(
+            exact_signature
+                .loop_signature
+                .iter()
+                .filter(|coefficient| **coefficient != 0)
+                .count(),
+            1,
+            "the UV Taylor rewrite retains only the hard loop direction",
+        );
+        let routing_sign =
+            source.exact_source_routing_sign(hard_soft_owner, true, &exact_signature)?;
+        let soft_rows = cograph_edges
+            .into_iter()
+            .map(|edge| source.outer_loop_signature(edge))
+            .collect::<three_dimensional_reps::graph_io::Result<Vec<_>>>()?;
+        let soft_rank = exact_integer_rank(&soft_rows);
+        let source_row = source.outer_loop_signature(hard_soft_owner)?;
+        let residual = |sign: i32| {
+            exact_signature
+                .loop_signature
+                .iter()
+                .zip(&source_row)
+                .map(|(exact, original)| exact - sign * original)
+                .collect::<Vec<_>>()
+        };
+        let mut compatible = soft_rows.clone();
+        compatible.push(residual(routing_sign));
+        assert_eq!(exact_integer_rank(&compatible), soft_rank);
+        let mut incompatible = soft_rows;
+        incompatible.push(residual(-routing_sign));
+        assert!(exact_integer_rank(&incompatible) > soft_rank);
+        assert!(
+            three_dimensional_reps::validate_parsed_graph(&source.to_three_d_parsed_graph()?).ok,
+            "routing in the quotient must preserve the source-minor endpoint balance",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_uv_triangle_reuses_only_three_and_four_edge_cff_topologies() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph exact_uv_triangle_cache {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> v5 [id=0]
+            v0 -> v2 [id=1 lmb_id=0]
+            v3 -> v0 [id=2]
+            v0 -> v5 [id=3]
+            v2 -> v1 [id=4]
+            v1 -> v3 [id=5 lmb_id=1]
+            v1 -> v4 [id=6]
+            v2 -> v3 [id=7]
+            v4 -> outgoing [id=8]
+        })?;
+        let owners = [EdgeIndex(4), EdgeIndex(5), EdgeIndex(7)];
+        let carrier = EdgeIndex(5);
+        let momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(carrier))
+            .finish();
+        let mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
+        let base = owners
+            .iter()
+            .copied()
+            .map(|source_edge| FourDDenominator {
+                source_edge,
+                momentum: if source_edge == EdgeIndex(7) {
+                    -momentum.clone()
+                } else {
+                    momentum.clone()
+                },
+                mass_squared: mass_squared.clone(),
+                full_expr: Atom::one(),
+            })
+            .collect::<Vec<_>>();
+        let mut terms = vec![base.clone()];
+        terms.extend((0..owners.len()).map(|dotted_owner| {
+            let mut denominators = base.clone();
+            denominators.push(base[dotted_owner].clone());
+            denominators
+        }));
+
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let mut cache = crate::cff::generation::ExactCffGenerationCache::default();
+        let mut edge_counts = Vec::new();
+        for denominators in &terms {
+            let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
+                &graph,
+                denominators,
+                owners,
+            )?;
+            graph.register_3d_expression_for_4d_term(
+                &source,
+                &options,
+                &Atom::one(),
+                &mut cache,
+            )?;
+        }
+        for denominators in terms {
+            let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
+                &graph,
+                &denominators,
+                owners,
+            )?;
+            edge_counts.push(source.to_three_d_parsed_graph()?.internal_edges.len());
+            graph.generate_3d_expression_for_4d_term(
+                &source,
+                &options,
+                &Atom::one(),
+                Some(&mut cache),
+            )?;
+        }
+
+        assert_eq!(edge_counts, vec![3, 4, 4, 4]);
+        assert_eq!(
+            cache.len(),
+            2,
+            "the numerator hit and all three denominator hits require only the three-edge and four-edge vacuum CFF topologies"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_uv_source_retains_a_non_vacuum_two_point_shift() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph exact_uv_two_point {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> a [id=0]
+            a -> b [id=1 lmb_id=0]
+            a -> b [id=2]
+            b -> outgoing [id=3]
+        })?;
+        let loop_carrier = FunctionBuilder::new(GS.emr_mom).add_arg(1).finish();
+        let mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
+        let denominators = [
+            FourDDenominator {
+                source_edge: EdgeIndex(1),
+                momentum: loop_carrier.clone(),
+                mass_squared: mass_squared.clone(),
+                full_expr: Atom::one(),
+            },
+            FourDDenominator {
+                source_edge: EdgeIndex(2),
+                momentum: FunctionBuilder::new(GS.emr_mom).add_arg(2).finish(),
+                mass_squared,
+                full_expr: Atom::one(),
+            },
+        ];
+        let uv_boundary_hedges = [EdgeIndex(0), EdgeIndex(3)].map(|edge_id| {
+            let (_, HedgePair::Unpaired { hedge, .. }) = graph[&edge_id] else {
+                panic!("two-point boundary edge must be external")
+            };
+            hedge
+        });
+        let parsed = GraphThreeDSource::from_exact_denominators_in_uv_edges_and_boundaries(
+            &graph,
+            &denominators,
+            [EdgeIndex(1), EdgeIndex(2)],
+            uv_boundary_hedges,
+        )?
+        .to_three_d_parsed_graph()?;
+
+        assert_eq!(parsed.internal_edges.len(), 2);
+        assert_eq!(
+            parsed
+                .internal_edges
+                .iter()
+                .flat_map(|edge| [edge.tail, edge.head])
+                .collect::<BTreeSet<_>>()
+                .len(),
+            2
+        );
+        assert_eq!(parsed.external_edges.len(), 2);
+        assert!(parsed.external_edges.iter().all(|edge| {
+            edge.external_coefficients
+                .iter()
+                .any(|coefficient| *coefficient != 0)
+        }));
+        let validation = three_dimensional_reps::validate_parsed_graph(&parsed);
+        assert!(validation.ok);
+        assert!(validation.vertex_external_balance_info.is_empty());
         Ok(())
     }
 
@@ -3286,8 +4162,8 @@ mod tests {
             full_expr: Atom::one(),
         };
 
-        assert!(loop_denominator.depends_on_loop(&graph)?);
-        assert!(!tree_denominator.depends_on_loop(&graph)?);
+        assert!(loop_denominator.depends_on_loop(&graph, false)?);
+        assert!(!tree_denominator.depends_on_loop(&graph, false)?);
 
         let external_edge = *graph
             .loop_momentum_basis
@@ -3303,7 +4179,7 @@ mod tests {
             mass_squared: Atom::var(GS.m_uv_expansion).pow(2),
             full_expr: Atom::one(),
         };
-        let shifted_signature = shifted.momentum_signature(&graph)?;
+        let shifted_signature = shifted.momentum_signature(&graph, false)?;
         assert_eq!(shifted_signature.loop_signature, vec![1]);
         assert_eq!(
             shifted_signature.external_signature,
@@ -3334,7 +4210,7 @@ mod tests {
                 mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
                 full_expr: Atom::one(),
             };
-            assert!(!denominator.depends_on_loop(&graph)?);
+            assert!(!denominator.depends_on_loop(&graph, false)?);
         }
         Ok(())
     }

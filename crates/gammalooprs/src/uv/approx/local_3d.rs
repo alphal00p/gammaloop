@@ -4,7 +4,7 @@ use eyre::eyre;
 
 use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, HedgePair, Orientation},
-    subgraph::{SuBitGraph, SubSetLike, SubSetOps},
+    subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps},
 };
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder, Symbol},
@@ -290,6 +290,8 @@ impl<'a> Localizer<'a> {
                 analysis_numerator,
             )?
         };
+        self.orientation
+            .record_energy_degree_bound_report(&cff.energy_degree_bound_report);
         Ok((cff, contract_subgraph))
     }
 
@@ -725,6 +727,8 @@ impl<'a> Localizer<'a> {
     ) -> Result<Local3DCts> {
         let indices = self.cutset.residue_selector.generate_allowed_keys();
         let mut projected = DeferredIntegrands::from_indices(indices.iter().copied());
+        let mut exact_cff_generation_cache =
+            crate::cff::generation::ExactCffGenerationCache::default();
         let reduced = graph
             .full_filter()
             .subtract(current_spinney)
@@ -734,6 +738,24 @@ impl<'a> Localizer<'a> {
             .get_single_atom()
             .expect("Graph numerator should be available")
             * graph.global_atom();
+
+        struct ExactProjectionTerm {
+            analysis_numerator: Atom,
+            active_denominators: Vec<crate::graph::FourDDenominator>,
+            residual_factor: Atom,
+            frozen_localizer: Atom,
+        }
+
+        let options = self.orientation.cff_options(graph);
+        let uv_edges = graph
+            .underlying
+            .iter_edges()
+            .filter_map(|(pair, edge_id, edge)| {
+                (pair.is_paired() && !edge.data.is_dummy && current_spinney.includes(&pair))
+                    .then_some(edge_id)
+            })
+            .collect::<Vec<_>>();
+        let mut exact_terms = Vec::new();
 
         for sector in source.sectors() {
             let frozen_localizer = sector
@@ -750,7 +772,8 @@ impl<'a> Localizer<'a> {
                 let mut active_denominators = Vec::new();
                 let mut residual_factor = Atom::one();
                 for denominator in term.denominators {
-                    if denominator.depends_on_loop(graph)? {
+                    let is_uv = current_spinney.includes(&graph[&denominator.source_edge].1);
+                    if denominator.depends_on_loop(graph, is_uv)? {
                         active_denominators.push(denominator);
                     } else {
                         // Keep each exact occurrence. This deliberately does not
@@ -780,23 +803,24 @@ impl<'a> Localizer<'a> {
                     let cff_external_edges = graph
                         .iter_edges_of(&graph.initial_state_cut)
                         .chain(graph.iter_edges_of(&graph.tree_edges))
-                        .map(|(_, edge_id, _)| edge_id);
-                    let energy_degree_bounds = graph
-                        .automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
+                        .map(|(_, edge_id, _)| edge_id)
+                        .collect::<Vec<_>>();
+                    let mapper = exact_source
+                        .exact_source_energy_mapper()
+                        .expect("empty exact source has an owned parent-energy mapper");
+                    let candidates = mapper.equivalent_energy_candidates(std::iter::empty())?;
+                    let plan = graph
+                        .plan_numerator_energy_assignment_in_atom_excluding(
                             &analysis_numerator,
                             cff_external_edges,
-                            1,
-                        )?;
-                    if !energy_degree_bounds.is_empty() {
-                        return Err(eyre!(
-                            "denominatorless exact 4D term has nonconstant numerator EMR energy-degree bounds {:?}, but no denominator residue or affine numerator-only source map can carry them",
-                            energy_degree_bounds,
-                        ));
-                    }
-                    let mapped_numerator = exact_source
-                        .exact_source_energy_mapper()
-                        .expect("empty exact source has an owned parent-energy mapper")
-                        .map_numerator(&[], &[], &analysis_numerator)?;
+                            &candidates,
+                        )
+                        .map_err(|error| {
+                            eyre!(
+                                "denominatorless exact 4D term has an active numerator EMR energy but no denominator residue can carry it: {error}"
+                            )
+                        })?;
+                    let mapped_numerator = mapper.map_planned_numerator(&[], &[], &plan)?;
                     projected.push(
                         CutCFFIndex::new_all_none(),
                         mapped_numerator * &residual_factor * &frozen_localizer,
@@ -804,43 +828,83 @@ impl<'a> Localizer<'a> {
                     continue;
                 }
 
-                let options = self.orientation.cff_options(graph);
-                // The exact source CFF resolves contracted directions internally.
-                // Its orientations are an explicit source-local sum, so a
-                // production orientation pattern is deliberately never applied.
-                let (cff, _contract_subgraph) = graph.cff_from_4d_denominators(
-                    &active_denominators,
-                    self.cutset,
-                    &options,
-                    &analysis_numerator,
-                )?;
-                let production_prefactor = Atom::num(cff.production_prefactor_factor());
+                exact_terms.push(ExactProjectionTerm {
+                    analysis_numerator,
+                    active_denominators,
+                    residual_factor,
+                    frozen_localizer: frozen_localizer.clone(),
+                });
+            }
+        }
 
-                for (index, cff_term) in cff.terms {
-                    for orientation in &cff_term.orientations {
-                        let mapped_numerator = cff_term
-                            .map_exact_source_numerator(
-                                &orientation.orientation,
-                                &analysis_numerator,
+        // Plan every term before generating any CFF. Canonically equivalent
+        // UV topologies can require different sparse numerator supports; the
+        // cache joins those requirements by algebraic energy channel and
+        // supplies one minimax capacity envelope to their shared generation.
+        for term in &exact_terms {
+            let exact_source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
+                graph,
+                &term.active_denominators,
+                uv_edges.iter().copied(),
+            )?;
+            graph.register_3d_expression_for_4d_term(
+                &exact_source,
+                &options,
+                &term.analysis_numerator,
+                &mut exact_cff_generation_cache,
+            )?;
+        }
+
+        for term in exact_terms {
+            debug_tags!(#generation, #uv, #cff, #term, #inspect;
+                graph = %graph.name,
+                denominator_count = term.active_denominators.len(),
+                log.numerator = term.analysis_numerator,
+                file.denominators = ?term.active_denominators,
+                "Projecting exact 4D counterterm sector"
+            );
+
+            // The exact source CFF resolves contracted directions internally.
+            // Its orientations are an explicit source-local sum, so a
+            // production orientation pattern is deliberately never applied.
+            let (cff, _contract_subgraph) = graph.cff_from_4d_denominators_in_uv_edges(
+                &term.active_denominators,
+                uv_edges.iter().copied(),
+                self.cutset,
+                &options,
+                &term.analysis_numerator,
+                Some(&mut exact_cff_generation_cache),
+            )?;
+            self.orientation
+                .record_energy_degree_bound_report(&cff.energy_degree_bound_report);
+            let production_prefactor = Atom::num(cff.production_prefactor_factor());
+
+            for (index, cff_term) in cff.terms {
+                for orientation in &cff_term.orientations {
+                    let mapped_numerator = cff_term
+                        .map_exact_source_numerator(&orientation.orientation)
+                        .map_err(|error| {
+                            eyre!(
+                                "{error}; exact 4D term active denominators are {:?}",
+                                term.active_denominators
                             )
-                            .map_err(|error| {
-                                eyre!(
-                                    "{error}; exact 4D term active denominators are {:?}",
-                                    active_denominators
-                                )
-                            })?;
-                        projected.push(
-                            index,
-                            orientation.expression.clone()
-                                * &production_prefactor
-                                * mapped_numerator
-                                * &residual_factor
-                                * &frozen_localizer,
-                        )?;
-                    }
+                        })?;
+                    projected.push(
+                        index,
+                        orientation.expression.clone()
+                            * &production_prefactor
+                            * mapped_numerator
+                            * &term.residual_factor
+                            * &term.frozen_localizer,
+                    )?;
                 }
             }
         }
+
+        debug_tags!(#generation, #uv, #cff, #summary;
+            distinct_exact_topologies = exact_cff_generation_cache.len(),
+            "Reused canonically equivalent exact 4D CFF topologies"
+        );
 
         Ok(Local3DCts::from_projected(Integrands::from_deferred(
             projected,
@@ -1894,13 +1958,16 @@ mod tests {
         let powered = localizer.projected_cff(&mut graph, &contract, &numerator)?;
         let mut explicit_sum = Atom::Zero;
         for (selector_id, source_map, integrands) in powered.iter_orientations() {
-            assert!(source_map.is_none());
             let mapped = localizer.map_numerator(&graph, selector_id, source_map, &numerator)?;
             explicit_sum += integrands
                 .iter()
                 .fold(Atom::Zero, |sum, (_, term)| sum + term * &mapped);
         }
-        let mut selected_production = edgevec([1, 1]).select(&explicit_sum);
+        // The two parallel physical edges carry opposite routing signs. Their
+        // acyclic production sectors are therefore (+,-) and (-,+); (+,+) is
+        // not a production orientation. The under-resolved cancellation
+        // contact is deterministically hosted once in the former sector.
+        let mut selected_production = edgevec([1, -1]).select(&explicit_sum);
         let momentum = FunctionBuilder::new(GS.emr_mom)
             .add_arg(usize::from(edge))
             .finish();
@@ -1921,24 +1988,31 @@ mod tests {
         ];
         let (exact_powered, _) =
             graph.cff_from_4d_denominators(&denominators, &cutset, &options, &numerator)?;
-        let occurrence_offset = graph.underlying.n_edges();
-        let remaining_powered_occurrence = EdgeIndex(occurrence_offset + 1);
-        let mut exact_powered_sum = Atom::Zero;
-        for term in exact_powered.terms.values() {
-            for orientation in term.orientations.iter().filter(|orientation| {
-                orientation.orientation.data.orientation[remaining_powered_occurrence]
-                    == Orientation::Default
-            }) {
-                exact_powered_sum += &orientation.expression
-                    * term.map_exact_source_numerator(&orientation.orientation, &numerator)?;
-            }
-        }
-        exact_powered_sum *= Atom::num(exact_powered.production_prefactor_factor());
+        // A projected post-4D source owns its complete orientation sum. Once
+        // the numerator cancels an occurrence, that provenance slot can be
+        // undirected and must not be used to filter the surviving contact.
+        let mut exact_powered_sum = exact_powered
+            .terms
+            .values()
+            .flat_map(|term| {
+                term.orientations.iter().map(|orientation| {
+                    Ok::<_, eyre::Error>(
+                        &orientation.expression
+                            * term.map_exact_source_numerator(&orientation.orientation)?,
+                    )
+                })
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .sum::<Atom>()
+            * Atom::num(exact_powered.production_prefactor_factor());
         let (exact_lower, _) =
             graph.cff_from_4d_denominators(&denominators[1..], &cutset, &options, &Atom::one())?;
         // The exact one-denominator source enumerates both contour directions.
-        // Compare the remaining-edge direction selected by the (+,+) production sector.
-        let remaining_lower_occurrence = EdgeIndex(occurrence_offset);
+        // Compare the remaining-edge direction selected by the (+,-)
+        // production sector. Denominator-routing signs and physical selector
+        // signs are separate conventions.
+        let remaining_lower_occurrence = EdgeIndex(graph.underlying.n_edges());
         let mut exact_lower_sum = exact_lower
             .terms
             .values()
@@ -1972,7 +2046,7 @@ mod tests {
         let exact_difference = (&exact_powered_sum - &exact_lower_sum).together();
         assert!(
             exact_difference.is_zero(),
-            "exact-source powered and lower channels differ: powered={exact_powered_sum}, lower={exact_lower_sum}, difference={exact_difference}"
+            "summed exact-source powered and selected lower channels differ: powered={exact_powered_sum}, lower={exact_lower_sum}, difference={exact_difference}"
         );
         let production_difference = (&selected_production - &exact_lower_sum).together();
         assert!(
@@ -2894,7 +2968,7 @@ mod tests {
             .expect("the baseline has one exact 4D term")
             .denominators
         {
-            if denominator.depends_on_loop(&graph)? {
+            if denominator.depends_on_loop(&graph, false)? {
                 active_denominators.push(denominator);
             }
         }
@@ -2907,9 +2981,7 @@ mod tests {
                 let mapped = term
                     .orientations
                     .iter()
-                    .map(|orientation| {
-                        term.map_exact_source_numerator(&orientation.orientation, &finite_ct)
-                    })
+                    .map(|orientation| term.map_exact_source_numerator(&orientation.orientation))
                     .collect::<Result<Vec<_>>>()?;
                 Ok((*index, mapped))
             })
@@ -2965,7 +3037,7 @@ mod tests {
         assert!(
             error
                 .to_string()
-                .contains("could not analyze numerator in the contracted-source loop basis")
+                .contains("could not analyze numerator in physical EMR energy variables")
         );
         Ok(())
     }

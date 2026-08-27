@@ -1,5 +1,6 @@
 use crate::{
     cff::{
+        CffEnergyDegreeBoundReport,
         esurface::Esurface,
         expression::{
             GammaLoopOrientationExpression, OrientationExpression, OrientationID,
@@ -29,7 +30,7 @@ use color_eyre::Result;
 use eyre::eyre;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 
-use std::hash::Hash;
+use std::{hash::Hash, sync::Mutex};
 
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView},
@@ -268,6 +269,7 @@ enum OrientationProjectionSource<'a> {
 pub(crate) struct OrientationProjection<'a> {
     source: OrientationProjectionSource<'a>,
     options: Option<&'a Generate3DExpressionOptions>,
+    energy_degree_bound_reports: Option<&'a Mutex<Vec<CffEnergyDegreeBoundReport>>>,
     pub(crate) orientation_pattern: &'a OrientationPattern,
     pub(crate) explicit_orientation_sum_only: bool,
 }
@@ -282,6 +284,7 @@ impl<'a> OrientationProjection<'a> {
         Self {
             source: OrientationProjectionSource::Coarse(valid_orientations),
             options: None,
+            energy_degree_bound_reports: None,
             orientation_pattern,
             explicit_orientation_sum_only: false,
         }
@@ -300,6 +303,7 @@ impl<'a> OrientationProjection<'a> {
                 root_expression: None,
             },
             options: Some(options),
+            energy_degree_bound_reports: None,
             orientation_pattern,
             explicit_orientation_sum_only,
         }
@@ -317,8 +321,32 @@ impl<'a> OrientationProjection<'a> {
                 root_expression: Some(expression),
             },
             options: Some(options),
+            energy_degree_bound_reports: None,
             orientation_pattern,
             explicit_orientation_sum_only,
+        }
+    }
+
+    pub(crate) fn with_energy_degree_bound_reports(
+        mut self,
+        reports: &'a Mutex<Vec<CffEnergyDegreeBoundReport>>,
+    ) -> Self {
+        self.energy_degree_bound_reports = Some(reports);
+        self
+    }
+
+    pub(crate) fn record_energy_degree_bound_report(self, report: &CffEnergyDegreeBoundReport) {
+        let Some(reports) = self.energy_degree_bound_reports else {
+            return;
+        };
+        let mut report = report.clone();
+        report.physical_parent_bounds.sort_unstable();
+        report.assigned_cff_source_bounds.sort_unstable();
+        let mut reports = reports
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if !reports.contains(&report) {
+            reports.push(report);
         }
     }
 

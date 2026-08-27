@@ -116,10 +116,42 @@ identify, cap, or substitute an energy power. Production capacity analysis
 accepts physical `Q(edge, index)` atoms and rejects `K(loop, index)` until its
 producer normalizes it with physical edge provenance.
 
+Completed local-4D terms with raised propagators are represented by source-backed
+occurrence graphs. The original `EdgeIndex` survives the Taylor operator in the
+typed denominator wrapper. Disjoint-set contraction of absent edges in the
+original graph then constructs the cograph and UV source minors, and every
+occurrence inherits the endpoints of its `source_edge` in the appropriate
+minor. Only repeated occurrences of that same source edge subdivide its
+incidence into a serial dotted chain. Exact momentum signatures are normalized
+up to sign to validate denominator equality and expose repeated CFF channels;
+they never infer endpoints or merge physical owners. The only nearby rank solve
+selects a unique `+/-` routing sign modulo the opposite source domain on those
+already fixed endpoints. There is no incidence/Kirchhoff reconstruction and no
+external-balance synthesis. The raw `+/-Q` sign remains available to the
+numerator mapper, while a post-construction Graphica pass canonically relabels
+nodes and exact edges for deterministic cache keys.
+
+Projection first plans all additive Taylor terms, then generates once per
+canonical topology. Every term keeps its own factorized minimax assignment. A
+shared generator envelope takes the maximum **total** degree within each
+repeated algebraic energy channel and redistributes that total by the same
+minimax rule; non-repeated bounds use componentwise maxima. The real degree-one
+triangle regression has four Taylor terms but exactly two generator calls: the
+base three-denominator UV source and its four-denominator dotted source.
+Non-vacuum exact sources retain pure-external boundaries as explicit
+source-crown hedges. Future on-shell two-point insertions such as `(m,0,0,0)`
+require an explicit fixed-boundary payload, not topology reconstruction.
+The full design, sign argument for `D(Q)=D(-Q)`, and concrete production fixtures
+are documented in
+[`exact-powered-denominator-cff-lifting.md`](exact-powered-denominator-cff-lifting.md).
+
 The production numerator remains factorized. Degree analysis traverses its
 factors without expanding them, each UV step attaches only newly owned factors,
 and final assembly attaches outside and global factors exactly once. For higher
-powers, interpolation may replace an EMR energy by `a*M`, where `a` is a signed
+power projection, the term parser distributes only sums containing typed
+`GS.den` provenance so it can cancel matching positive and negative denominator
+occurrences; ordinary numerator sums remain unexpanded. For higher powers,
+interpolation may replace an EMR energy by `a*M`, where `a` is a signed
 integer and `M` is the common auxiliary CFF numerator-sampling scale. This is an
 EMR substitution, never an LMB rewrite. Only finalized evaluators that use `M`
 require `M != 0`, and the physical result is invariant under changing its

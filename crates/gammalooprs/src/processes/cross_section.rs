@@ -5,6 +5,7 @@ use std::{
     io::Write,
     ops::{Index, IndexMut},
     path::{Path, PathBuf},
+    sync::Mutex,
 };
 
 // use bincode::{Decode, Encode};
@@ -22,7 +23,7 @@ use vakint::Vakint;
 use crate::{
     DependentMomentaConstructor, GammaLoopContext, GammaLoopContextContainer,
     cff::{
-        CutCFFIndex,
+        CffEnergyDegreeBoundReport, CutCFFIndex,
         esurface::{RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
         expression::{
             OrientationID, normalize_cut_edge_support_with_raised_edge_groups,
@@ -1429,7 +1430,8 @@ impl CrossSectionGraph {
 
         let vk = crate::utils::vakint()?;
         debug_tags!(#generation; "building parametric integrand");
-        self.build_parametric_integrand(settings, vk)?;
+        let cff_energy_degree_bound_reports = Mutex::new(Vec::new());
+        self.build_parametric_integrand(settings, vk, &cff_energy_degree_bound_reports)?;
         //self.build_parametric_integrand_cut_groups(settings)?;
 
         let (threshold_candidates, topological_threshold_esurfaces) =
@@ -1448,8 +1450,13 @@ impl CrossSectionGraph {
                 &runtime_settings,
                 &threshold_candidates,
                 vk,
+                &cff_energy_degree_bound_reports,
             )?;
         }
+
+        stats.cff_energy_degree_bound_reports = cff_energy_degree_bound_reports
+            .into_inner()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         stats.total_time += preprocess_started.elapsed();
         Ok(stats)
@@ -1697,8 +1704,10 @@ impl CrossSectionGraph {
         &mut self,
         settings: &GenerationSettings,
         vakint: &Vakint,
+        cff_energy_degree_bound_reports: &Mutex<Vec<CffEnergyDegreeBoundReport>>,
     ) -> Result<()> {
-        self.derived_data.cut_paramatric_integrand = self.build_integrand(settings, vakint)?;
+        self.derived_data.cut_paramatric_integrand =
+            self.build_integrand(settings, vakint, cff_energy_degree_bound_reports)?;
         Ok(())
     }
 
@@ -1706,6 +1715,7 @@ impl CrossSectionGraph {
         &mut self,
         settings: &GenerationSettings,
         vakint: &Vakint,
+        cff_energy_degree_bound_reports: &Mutex<Vec<CffEnergyDegreeBoundReport>>,
     ) -> Result<TiVec<CutGroupId, ParametricIntegrands>> {
         let started = std::time::Instant::now();
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -1782,7 +1792,8 @@ impl CrossSectionGraph {
                 &cff_options,
                 &settings.orientation_pattern,
                 settings.explicit_orientation_sum_only,
-            ),
+            )
+            .with_energy_degree_bound_reports(cff_energy_degree_bound_reports),
             &settings.uv,
         )?;
         crate::debug_tags!(#generation, #profile, #uv, #graph, #summary;
@@ -2691,6 +2702,7 @@ impl CrossSectionGraph {
         runtime_settings: &RuntimeSettings,
         all_possible_thresholds: &[TopologicalThresholdCandidate],
         vakint: &Vakint,
+        cff_energy_degree_bound_reports: &Mutex<Vec<CffEnergyDegreeBoundReport>>,
     ) -> Result<()> {
         // Thresholds are topology-discovered independently of whether a CT association survives
         // the structural and optional current-model checks below.
@@ -3066,7 +3078,8 @@ impl CrossSectionGraph {
                     &cff_options,
                     &settings.orientation_pattern,
                     settings.explicit_orientation_sum_only,
-                ),
+                )
+                .with_energy_degree_bound_reports(cff_energy_degree_bound_reports),
                 &settings.uv,
             )?
             .into_iter();

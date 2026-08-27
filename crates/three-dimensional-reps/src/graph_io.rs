@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::graph_signatures::MomentumSignature;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ParsedGraphInternalEdge {
     pub edge_id: usize,
     pub tail: usize,
@@ -17,7 +17,7 @@ pub struct ParsedGraphInternalEdge {
     pub had_pow: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct ParsedGraphExternalEdge {
     pub edge_id: usize,
     pub source: Option<usize>,
@@ -26,14 +26,14 @@ pub struct ParsedGraphExternalEdge {
     pub external_coefficients: Vec<i32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ParsedGraphInitialStateCutEdge {
     pub edge_id: usize,
     pub external_id: usize,
     pub external_sign: i32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct ParsedGraph {
     pub internal_edges: Vec<ParsedGraphInternalEdge>,
     pub external_edges: Vec<ParsedGraphExternalEdge>,

@@ -341,23 +341,31 @@ impl FourDTerm {
     }
 
     fn from_view(view: AtomView<'_>) -> Result<Vec<Self>> {
+        Self::from_view_with_provenance(view)?
+            .into_iter()
+            .map(Self::cancel_positive_denominator_factors)
+            .collect()
+    }
+
+    fn from_view_with_provenance(view: AtomView<'_>) -> Result<Vec<Self>> {
         match view {
             AtomView::Add(add) => {
-                let terms = add
-                    .iter()
-                    .map(Self::from_view)
-                    .collect::<Result<Vec<_>>>()
-                    .map(|terms| terms.into_iter().flatten().collect::<Vec<_>>())?;
-                if terms.iter().all(|term| term.denominators.is_empty()) {
-                    Ok(vec![Self::numerator(view.to_owned())])
-                } else {
-                    Ok(terms)
+                // A collected Taylor coefficient can contain provenance
+                // wrappers in its additive numerator which cancel different
+                // powers of the surrounding common denominator. Distribute
+                // only such sums; ordinary numerator sums remain factorized.
+                if !view.to_owned().contains_symbol(GS.den) {
+                    return Ok(vec![Self::numerator(view.to_owned())]);
                 }
+                add.iter()
+                    .map(Self::from_view_with_provenance)
+                    .collect::<Result<Vec<_>>>()
+                    .map(|terms| terms.into_iter().flatten().collect())
             }
             AtomView::Mul(mul) => {
                 let mut terms = vec![Self::numerator(Atom::one())];
                 for factor in mul.iter() {
-                    let factor_terms = Self::from_view(factor)?;
+                    let factor_terms = Self::from_view_with_provenance(factor)?;
                     terms = terms
                         .into_iter()
                         .flat_map(|left| {
@@ -393,6 +401,72 @@ impl FourDTerm {
             }
             _ => Ok(vec![Self::numerator(view.to_owned())]),
         }
+    }
+
+    fn cancel_positive_denominator_factors(self) -> Result<Self> {
+        let Self {
+            numerator,
+            mut denominators,
+        } = self;
+        let factors = match numerator.as_view() {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            factor => vec![factor],
+        };
+        let mut retained_factors = Vec::new();
+        for factor in factors {
+            let positive_denominator = match factor {
+                AtomView::Fun(_) => {
+                    FourDDenominator::from_view(factor)?.map(|denominator| (denominator, 1))
+                }
+                AtomView::Pow(power) => {
+                    let (base, exponent) = power.get_base_exp();
+                    let Some(denominator) = FourDDenominator::from_view(base)? else {
+                        retained_factors.push(factor.to_owned());
+                        continue;
+                    };
+                    let Ok(exponent) = i64::try_from(exponent) else {
+                        return Err(eyre!(
+                            "4D denominator has non-integer numerator power `{}`",
+                            exponent.to_owned()
+                        ));
+                    };
+                    if exponent > 0 {
+                        Some((
+                            denominator,
+                            usize::try_from(exponent).map_err(|_| {
+                                eyre!("4D denominator numerator power does not fit in memory")
+                            })?,
+                        ))
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            };
+            let Some((positive_denominator, multiplicity)) = positive_denominator else {
+                retained_factors.push(factor.to_owned());
+                continue;
+            };
+            for _ in 0..multiplicity {
+                if let Some(position) = denominators
+                    .iter()
+                    .position(|denominator| denominator == &positive_denominator)
+                {
+                    denominators.remove(position);
+                } else {
+                    retained_factors.push(positive_denominator.full_expr.clone());
+                }
+            }
+        }
+        let numerator = retained_factors
+            .into_iter()
+            .fold(Atom::one(), |product, factor| product * factor)
+            .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+            .with(W_.d_);
+        Ok(Self {
+            numerator,
+            denominators,
+        })
     }
 }
 
@@ -704,11 +778,14 @@ pub(crate) fn uv_limit<S: ForestNodeLike, M: ForestNodeLike>(
 mod tests {
     use super::*;
     use crate::{
+        cff::generation::ExactCffGenerationCache,
         dot,
-        graph::{Graph, parse::IntoGraph},
+        graph::{Graph, GraphThreeDSource, parse::IntoGraph},
         initialisation::test_initialise,
+        uv::{Spinney, UVgenerationSettings, hedge_poset::OwnedForestNode},
     };
     use linnet::half_edge::involution::EdgeIndex;
+    use linnet::half_edge::subgraph::{InternalSubGraph, SubSetOps};
     use symbolica::{function, symbol};
 
     #[test]
@@ -764,6 +841,178 @@ mod tests {
                 .filter(|denominator| denominator.full_expr == second_full)
                 .count(),
             1
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn term_projection_cancels_provenance_without_expanding_ordinary_sums() -> Result<()> {
+        test_initialise()?;
+        let first_full = Atom::var(symbol!("local_4d_test::first_cancellable_full"));
+        let second_full = Atom::var(symbol!("local_4d_test::second_cancellable_full"));
+        let first = GS.den(
+            0,
+            FunctionBuilder::new(GS.emr_mom).add_arg(0).finish(),
+            0,
+            &first_full,
+        );
+        let second = GS.den(
+            1,
+            FunctionBuilder::new(GS.emr_mom).add_arg(1).finish(),
+            0,
+            &second_full,
+        );
+        let left = Atom::var(symbol!("local_4d_test::left"));
+        let right = Atom::var(symbol!("local_4d_test::right"));
+        let ordinary_sum = left + right;
+        let collected = (&ordinary_sum * &first + &second) * first.pow(-1) * second.pow(-1);
+
+        let mut terms = FourDTerm::from_view(collected.as_view())?;
+        terms.sort_by_key(|term| usize::from(term.denominators[0].source_edge));
+        assert_eq!(terms.len(), 2);
+        assert_eq!(
+            terms[0].denominators,
+            vec![FourDDenominator::from_view(first.as_view())?.unwrap()]
+        );
+        assert_eq!(terms[0].numerator, Atom::one());
+        assert_eq!(
+            terms[1].denominators,
+            vec![FourDDenominator::from_view(second.as_view())?.unwrap()]
+        );
+        assert_eq!(terms[1].numerator, ordinary_sum);
+        assert!(
+            terms
+                .iter()
+                .all(|term| !term.numerator.contains_symbol(GS.den))
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn dod_one_triangle_taylor_terms_keep_source_owners_and_reuse_two_cffs() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph exact_uv_triangle_taylor {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> v5 [id=0]
+            v0 -> v2 [id=1 lmb_id=0]
+            v3 -> v0 [id=2]
+            v0 -> v5 [id=3]
+            v2 -> v1 [id=4]
+            v1 -> v3 [id=5 lmb_id=1]
+            v1 -> v4 [id=6]
+            v2 -> v3 [id=7]
+            v4 -> outgoing [id=8]
+        })?;
+        let owners = [EdgeIndex(4), EdgeIndex(5), EdgeIndex(7)];
+        let uv_filter = owners
+            .into_iter()
+            .map(|edge| graph.get_edge_subgraph(edge))
+            .reduce(|left, right| left.union(&right))
+            .expect("the UV triangle has three source edges");
+        let uv_subgraph =
+            InternalSubGraph::cleaned_filter_optimist(uv_filter.clone(), graph.as_ref());
+        let current = OwnedForestNode {
+            spinney: Spinney::with_scheme(
+                uv_subgraph,
+                &graph,
+                &graph.loop_momentum_basis,
+                ApproximationType::MUV,
+                1,
+            )
+            .expect("the source triangle has a compatible loop-momentum basis"),
+            topo_order: 0,
+        };
+        let given = OwnedForestNode {
+            spinney: Spinney::empty(&graph),
+            topo_order: 0,
+        };
+        let numerator = owners.into_iter().fold(Atom::one(), |product, edge| {
+            product * GS.emr_mom(edge, GS.cind(0))
+        });
+        let integrand = numerator / graph.denominator(&uv_filter, |_| 1);
+        let settings = UVgenerationSettings::default();
+        let expanded = t(&integrand, &UVCtx::new(&graph, &settings), &current, &given)?;
+        let cograph = graph
+            .get_edge_subgraph(EdgeIndex(1))
+            .union(&graph.get_edge_subgraph(EdgeIndex(2)));
+        let terms = Full4dCts::from_coefficient(&expanded, &graph, &cograph).terms()?;
+
+        let mut owner_multiplicities = terms
+            .iter()
+            .map(|term| {
+                owners.map(|owner| {
+                    term.denominators
+                        .iter()
+                        .filter(|denominator| denominator.source_edge == owner)
+                        .count()
+                })
+            })
+            .collect::<Vec<_>>();
+        owner_multiplicities.sort_unstable();
+        assert_eq!(
+            owner_multiplicities,
+            vec![[1, 1, 1], [1, 1, 1], [1, 1, 2], [2, 1, 1]],
+            "the real Taylor coefficient must retain one base topology and one dotted topology for each shifted source owner",
+        );
+
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let mut cache = ExactCffGenerationCache::default();
+        let mut exact_bounds = Vec::new();
+        let active_terms = terms
+            .iter()
+            .map(|term| {
+                term.denominators
+                    .iter()
+                    .map(|denominator| {
+                        let is_uv = uv_filter.includes(&graph[&denominator.source_edge].1);
+                        Ok(denominator
+                            .depends_on_loop(&graph, is_uv)?
+                            .then(|| denominator.clone()))
+                    })
+                    .collect::<Result<Vec<_>>>()
+                    .map(|denominators| {
+                        denominators
+                            .into_iter()
+                            .flatten()
+                            .collect::<Vec<FourDDenominator>>()
+                    })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for (term, active_denominators) in terms.iter().zip(&active_terms) {
+            let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
+                &graph,
+                active_denominators,
+                owners,
+            )?;
+            graph.register_3d_expression_for_4d_term(
+                &source,
+                &options,
+                &term.numerator,
+                &mut cache,
+            )?;
+        }
+        for (term, active_denominators) in terms.iter().zip(&active_terms) {
+            let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
+                &graph,
+                active_denominators,
+                owners,
+            )?;
+            let (_, _, plan, _) = graph.generate_3d_expression_for_4d_term(
+                &source,
+                &options,
+                &term.numerator,
+                Some(&mut cache),
+            )?;
+            exact_bounds.push(plan.energy_degree_bounds().to_vec());
+        }
+        assert_eq!(
+            cache.len(),
+            2,
+            "the actual numerator-hit and denominator-hit Taylor terms must generate only the base and dotted canonical CFF topologies; exact bounds: {exact_bounds:?}",
         );
         Ok(())
     }

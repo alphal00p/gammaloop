@@ -1,7 +1,10 @@
-use std::{collections::BTreeMap, fmt::Display};
+use std::{collections::BTreeMap, fmt::Display, sync::Arc};
 
 use bincode_trait_derive::{Decode, Encode};
-use linnet::half_edge::subgraph::{SubGraphLike, SubSetLike, SubSetOps};
+use linnet::half_edge::{
+    involution::EdgeIndex,
+    subgraph::{SubGraphLike, SubSetLike, SubSetOps},
+};
 use serde::{Deserialize, Serialize};
 use symbolica::atom::{Atom, AtomCore};
 
@@ -19,6 +22,7 @@ use crate::{
         FeynmanGraph, FourDDenominator, Graph, GraphThreeDSource, cuts::CutSet,
         get_cff_inverse_energy_product_impl, three_d_source::ExactSourceEnergyMapper,
     },
+    numerator::energy_degree::EnergyPowerAssignmentPlan,
     settings::global::OrientationPattern,
     utils::GS,
     uv::Integrands,
@@ -50,23 +54,28 @@ pub struct CFFTerm {
     // Ordinary CFF maps retain production identity for direct-3D localization;
     // exact 4D maps instead remain source-local and share their parent mapper.
     pub(crate) orientations: Vec<CFFOrientationTerm>,
-    exact_source_energy_mapper: Option<ExactSourceEnergyMapper>,
+    exact_source_numerator: Option<Arc<PlannedExactSourceNumerator>>,
+}
+
+struct PlannedExactSourceNumerator {
+    mapper: ExactSourceEnergyMapper,
+    assignment: EnergyPowerAssignmentPlan,
 }
 
 impl CFFTerm {
     pub(crate) fn map_exact_source_numerator(
         &self,
         orientation: &OrientationExpression,
-        numerator: &Atom,
     ) -> Result<Atom> {
-        self.exact_source_energy_mapper
+        let planned = self
+            .exact_source_numerator
             .as_ref()
-            .ok_or_else(|| eyre::eyre!("ordinary CFF term has no exact-source energy mapper"))?
-            .map_numerator(
-                &orientation.loop_energy_map,
-                &orientation.edge_energy_map,
-                numerator,
-            )
+            .ok_or_else(|| eyre::eyre!("ordinary CFF term has no exact-source numerator plan"))?;
+        planned.mapper.map_planned_numerator(
+            &orientation.loop_energy_map,
+            &orientation.edge_energy_map,
+            &planned.assignment,
+        )
     }
 
     pub fn expression_with_selectors(&self) -> Atom {
@@ -123,8 +132,32 @@ impl Display for CutCFFIndex {
     }
 }
 
+/// Namespace used by the energy-degree bounds supplied to a CFF source.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CffEnergyBoundSourceKind {
+    /// Source IDs are physical graph-edge IDs.
+    PhysicalGraph,
+    /// Source IDs are exact four-dimensional denominator-occurrence IDs.
+    ExactFourD,
+}
+
+/// Transient diagnostic record for one CFF generation source.
+///
+/// Exact four-dimensional Taylor terms can contain several denominator
+/// occurrences owned by one physical edge. The CFF generator must receive the
+/// minimax assignment in that occurrence namespace, while the physical-parent
+/// bounds remain useful for checking the numerator analysis. Keeping both
+/// explicitly prevents occurrence IDs from being mistaken for physical edges.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct CffEnergyDegreeBoundReport {
+    pub source_kind: CffEnergyBoundSourceKind,
+    pub physical_parent_bounds: Vec<(usize, usize)>,
+    pub assigned_cff_source_bounds: Vec<(usize, usize)>,
+}
+
 pub struct CutCFF {
     pub terms: BTreeMap<CutCFFIndex, CFFTerm>,
+    pub(crate) energy_degree_bound_report: CffEnergyDegreeBoundReport,
     // Terms retain the shared-core contour convention for exact-CFF users and
     // normalization oracles. GammaLoop production consumes this typed bridge
     // only when localizing either the direct-3D or exact-4D route.
@@ -150,11 +183,26 @@ impl CutCFF {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum CutCffResidueAxis {
     RightThreshold,
     LeftThreshold,
     LuCut,
+}
+
+#[derive(Clone, Copy, Default)]
+struct SelectedCffResidueAxisParity {
+    all: bool,
+    variant_local: bool,
+}
+
+impl SelectedCffResidueAxisParity {
+    fn select(self, variant_local: bool) -> Self {
+        Self {
+            all: !self.all,
+            variant_local: self.variant_local != variant_local,
+        }
+    }
 }
 
 impl CutCffResidueAxis {
@@ -168,32 +216,54 @@ impl CutCffResidueAxis {
 }
 
 fn apply_indexed_residue_selection<F>(
-    residues: Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>,
+    residues: Vec<(
+        CutCFFIndex,
+        ThreeDExpression<OrientationID>,
+        SelectedCffResidueAxisParity,
+    )>,
     axis: CutCffResidueAxis,
+    variant_local: bool,
     mut select: F,
-) -> Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>
+) -> Vec<(
+    CutCFFIndex,
+    ThreeDExpression<OrientationID>,
+    SelectedCffResidueAxisParity,
+)>
 where
     F: FnMut(ThreeDExpression<OrientationID>) -> Vec<ThreeDExpression<OrientationID>>,
 {
     residues
         .into_iter()
-        .flat_map(|(index, expression)| {
+        .flat_map(|(index, expression, selected_axis_parity)| {
             select(expression)
                 .into_iter()
                 .enumerate()
                 .map(move |(i, residue)| {
                     let mut new_index = index;
                     axis.set_order(&mut new_index, i + 1);
-                    (new_index, residue)
+                    // One causal coordinate has been consumed regardless of
+                    // which raised-order branch `i` labels.
+                    (
+                        new_index,
+                        residue,
+                        selected_axis_parity.select(variant_local),
+                    )
                 })
         })
         .collect()
 }
 
-fn select_indexed_cff_residues(
+fn select_indexed_cff_residues_with_variant_local_axes(
     cff: ThreeDExpression<OrientationID>,
     cutset: &CutSet,
-) -> Result<Vec<(CutCFFIndex, ThreeDExpression<OrientationID>)>> {
+    variant_local_axes: &BTreeMap<CutCffResidueAxis, bool>,
+) -> Result<
+    Vec<(
+        CutCFFIndex,
+        ThreeDExpression<OrientationID>,
+        SelectedCffResidueAxisParity,
+    )>,
+> {
     if let Some(lu) = cutset.residue_selector.lu.as_ref()
         && (lu.cut_edge_alternatives.is_empty()
             || lu.cut_edge_alternatives.iter().any(Vec::is_empty))
@@ -202,12 +272,24 @@ fn select_indexed_cff_residues(
             "LU residue selection requires at least one non-empty physical cut alternative"
         ));
     }
-    let mut residues = vec![(CutCFFIndex::new_all_none(), cff)];
+    // Carry selected causal coordinates through the operation pipeline rather
+    // than reconstructing them later from raised-order labels in
+    // `CutCFFIndex`. The component-local parity distinguishes coordinates
+    // whose on-shell-energy factors remain attached to generalized variants.
+    let mut residues = vec![(
+        CutCFFIndex::new_all_none(),
+        cff,
+        SelectedCffResidueAxisParity::default(),
+    )];
 
     if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
         residues = apply_indexed_residue_selection(
             residues,
             CutCffResidueAxis::RightThreshold,
+            variant_local_axes
+                .get(&CutCffResidueAxis::RightThreshold)
+                .copied()
+                .unwrap_or(false),
             |expression| expression.select_esurface_residue(right_threshold),
         );
     }
@@ -216,6 +298,10 @@ fn select_indexed_cff_residues(
         residues = apply_indexed_residue_selection(
             residues,
             CutCffResidueAxis::LeftThreshold,
+            variant_local_axes
+                .get(&CutCffResidueAxis::LeftThreshold)
+                .copied()
+                .unwrap_or(false),
             // Powered poles are completed in the canonical causal basis, so
             // left- and right-threshold selections use the same positive-
             // energy Cutkosky convention as ordinary CFF terms.
@@ -224,8 +310,14 @@ fn select_indexed_cff_residues(
     }
 
     if let Some(lu) = cutset.residue_selector.lu.as_ref() {
-        residues =
-            apply_indexed_residue_selection(residues, CutCffResidueAxis::LuCut, |expression| {
+        residues = apply_indexed_residue_selection(
+            residues,
+            CutCffResidueAxis::LuCut,
+            variant_local_axes
+                .get(&CutCffResidueAxis::LuCut)
+                .copied()
+                .unwrap_or(false),
+            |expression| {
                 // Physical support selection is independent of the 3D
                 // representation. CFF then consumes the selected surface in
                 // GammaLoop's positive-energy Cutkosky convention; future LTD
@@ -233,10 +325,69 @@ fn select_indexed_cff_residues(
                 expression
                     .restrict_to_cut_alternatives(&lu.cut_edge_alternatives)
                     .select_esurface_residue(&lu.raised_group)
-            });
+            },
+        );
     }
 
     Ok(residues)
+}
+
+fn select_indexed_cff_residues(
+    cff: ThreeDExpression<OrientationID>,
+    cutset: &CutSet,
+) -> Result<Vec<(CutCFFIndex, ThreeDExpression<OrientationID>, bool)>> {
+    Ok(
+        select_indexed_cff_residues_with_variant_local_axes(cff, cutset, &BTreeMap::new())?
+            .into_iter()
+            .map(|(index, expression, parity)| (index, expression, parity.all))
+            .collect(),
+    )
+}
+
+fn variant_local_residue_axes(
+    cutset: &CutSet,
+    surface_ownership: &BTreeMap<esurface::EsurfaceID, CffEnergyFactorOwnership>,
+) -> Result<BTreeMap<CutCffResidueAxis, bool>> {
+    let group_is_variant_local = |axis: CutCffResidueAxis,
+                                  group: &esurface::RaisedEsurfaceGroup|
+     -> Result<bool> {
+        let mut ownership = None;
+        for surface_id in &group.esurface_ids {
+            let Some(candidate) = surface_ownership.get(surface_id).copied() else {
+                continue;
+            };
+            if let Some(previous) = ownership
+                && previous != candidate
+            {
+                return Err(eyre::eyre!(
+                    "exact CFF residue axis {axis:?} spans energy-factor components with incompatible ownership"
+                ));
+            }
+            ownership = Some(candidate);
+        }
+        Ok(ownership == Some(CffEnergyFactorOwnership::VariantLocal))
+    };
+
+    let mut axes = BTreeMap::new();
+    if let Some(group) = cutset.residue_selector.right_th_cut.as_ref() {
+        axes.insert(
+            CutCffResidueAxis::RightThreshold,
+            group_is_variant_local(CutCffResidueAxis::RightThreshold, group)?,
+        );
+    }
+    if let Some(group) = cutset.residue_selector.left_th_cut.as_ref() {
+        axes.insert(
+            CutCffResidueAxis::LeftThreshold,
+            group_is_variant_local(CutCffResidueAxis::LeftThreshold, group)?,
+        );
+    }
+    if let Some(lu) = cutset.residue_selector.lu.as_ref() {
+        axes.insert(
+            CutCffResidueAxis::LuCut,
+            group_is_variant_local(CutCffResidueAxis::LuCut, &lu.raised_group)?,
+        );
+    }
+    Ok(axes)
 }
 
 impl Graph {
@@ -276,7 +427,7 @@ impl Graph {
         };
 
         let mut terms = BTreeMap::new();
-        for (cut_cff_index, expr) in residues {
+        for (cut_cff_index, expr, _) in residues {
             let replacement_rules = if cutset.canonicalize_external_shifts {
                 expr.surfaces
                     .get_all_replacements_gs_in_lmb(&[], &self.loop_momentum_basis)
@@ -285,7 +436,7 @@ impl Graph {
             };
             let mut cff_term = CFFTerm {
                 orientations: Vec::new(),
-                exact_source_energy_mapper: None,
+                exact_source_numerator: None,
             };
             for (orientation_index, orientation) in expr.orientations.into_iter().enumerate() {
                 if !orientation_pattern.filter_orientation(&orientation.data.orientation) {
@@ -307,10 +458,16 @@ impl Graph {
 
         Ok(CutCFF {
             terms,
+            energy_degree_bound_report: CffEnergyDegreeBoundReport {
+                source_kind: CffEnergyBoundSourceKind::PhysicalGraph,
+                physical_parent_bounds: production.source_energy_degree_bounds.clone(),
+                assigned_cff_source_bounds: production.source_energy_degree_bounds.clone(),
+            },
             production_prefactor_bridge,
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn cff_from_4d_denominators(
         &mut self,
         denominators: &[FourDDenominator],
@@ -318,18 +475,51 @@ impl Graph {
         options: &Generate3DExpressionOptions,
         analysis_numerator: &Atom,
     ) -> Result<(CutCFF, linnet::half_edge::subgraph::SuBitGraph)> {
+        self.cff_from_4d_denominators_in_uv_edges(
+            denominators,
+            [],
+            cutset,
+            options,
+            analysis_numerator,
+            None,
+        )
+    }
+
+    pub(crate) fn cff_from_4d_denominators_in_uv_edges(
+        &mut self,
+        denominators: &[FourDDenominator],
+        uv_edges: impl IntoIterator<Item = EdgeIndex>,
+        cutset: &CutSet,
+        options: &Generate3DExpressionOptions,
+        analysis_numerator: &Atom,
+        generation_cache: Option<&mut generation::ExactCffGenerationCache>,
+    ) -> Result<(CutCFF, linnet::half_edge::subgraph::SuBitGraph)> {
         let (
             generated,
             physical_surfaces,
             physical_energy_edges,
-            exact_source_energy_mapper,
+            exact_source_numerator,
             inverse_energy_product,
             cff_loop_number,
             contract_subgraph,
+            energy_degree_bound_report,
         ) = {
-            let source = GraphThreeDSource::from_exact_denominators(self, denominators)?;
-            let generated =
-                self.generate_3d_expression_for_4d_term(&source, options, analysis_numerator)?;
+            let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
+                self,
+                denominators,
+                uv_edges,
+            )?;
+            let (
+                generated,
+                exact_source_energy_mapper,
+                energy_assignment,
+                energy_degree_bound_report,
+            ) = self.generate_3d_expression_for_4d_term(
+                &source,
+                options,
+                analysis_numerator,
+                generation_cache,
+            )?;
             let physical_surfaces = generated
                 .expression
                 .surfaces
@@ -343,19 +533,29 @@ impl Graph {
                 source
                     .physical_energy_edge_index_map()
                     .expect("exact 4D source has a physical energy-edge projection"),
-                source
-                    .exact_source_energy_mapper()
-                    .expect("exact 4D source has an owned parent-energy mapper"),
+                Arc::new(PlannedExactSourceNumerator {
+                    mapper: exact_source_energy_mapper,
+                    assignment: energy_assignment,
+                }),
                 source
                     .exact_inverse_energy_product()
                     .expect("exact 4D source has an occurrence-local energy product"),
                 source.active_loop_count(),
                 source.contract_subgraph(),
+                energy_degree_bound_report,
             )
         };
-        let generated = self.convert_4d_expression_surfaces(generated, &physical_surfaces)?;
+        let (generated, surface_ownership) =
+            self.convert_4d_expression_surfaces(generated, &physical_surfaces)?;
         let energy_factor_ownership = generated.energy_factor_ownership;
         let production_prefactor_bridge = generated.core_global_prefactor_sign;
+        crate::debug_tags!(#generation, #cff, #inspect;
+            denominator_count = denominators.len(),
+            aggregate_ownership = ?energy_factor_ownership,
+            components = ?generated.energy_factor_components,
+            surface_ownership = ?surface_ownership,
+            "Exact CFF energy-factor component metadata"
+        );
         let mut cff = generated.expression;
         // Residue support belongs to physical Cutkosky alternatives even
         // though exact numerator maps and half-edge energies remain
@@ -402,16 +602,51 @@ impl Graph {
             &mut cff,
             &self.get_raised_edge_groups(),
         );
-        let residues = select_indexed_cff_residues(cff, cutset)?;
+        let variant_local_axes = variant_local_residue_axes(cutset, &surface_ownership)?;
+        crate::debug_tags!(#generation, #cff, #inspect;
+            variant_local_axes = ?variant_local_axes,
+            residue_selector = ?cutset.residue_selector,
+            "Exact CFF component-local residue ownership"
+        );
+        let residues =
+            select_indexed_cff_residues_with_variant_local_axes(cff, cutset, &variant_local_axes)?;
         let cff_phase = (-Atom::i()).pow(cff_loop_number as i64);
         let cff_normalization = cff_phase / (Atom::var(GS.pi) * 2).pow(3 * cff_loop_number as i64);
-        let cff_energy_factor = match energy_factor_ownership {
-            CffEnergyFactorOwnership::GlobalSourceProduct => inverse_energy_product,
-            CffEnergyFactorOwnership::VariantLocal => Atom::one(),
-        };
-
         let mut terms = BTreeMap::new();
-        for (cut_cff_index, expr) in residues {
+        for (cut_cff_index, expr, selected_residue_axis_parity) in residues {
+            let cff_energy_factor = match energy_factor_ownership {
+                CffEnergyFactorOwnership::GlobalSourceProduct => inverse_energy_product.clone(),
+                CffEnergyFactorOwnership::VariantLocal => {
+                    // Exact 4D sources define every active occurrence through
+                    // 1/(-2E). Generalized CFF variants own the corresponding
+                    // magnitudes locally as 1/(+2E), so retain the parity of
+                    // the otherwise-discarded parent source product here.
+                    // Each selected causal residue consumes one linear
+                    // denominator sign, independently of its raised order,
+                    // only in the component whose energy factors remain
+                    // variant-local. A residue in a separate ordinary CFF
+                    // component has already been handled by that component's
+                    // pure-CFF selection and must not cancel this source sign.
+                    // This also makes a numerator cancellation agree with the
+                    // separately generated lower source, whose occurrence
+                    // parity changes.
+                    let source_parity = !denominators.len().is_multiple_of(2);
+                    Atom::num(
+                        if source_parity == selected_residue_axis_parity.variant_local {
+                            1
+                        } else {
+                            -1
+                        },
+                    )
+                }
+            };
+            crate::debug_tags!(#generation, #cff, #inspect;
+                cut_index = ?cut_cff_index,
+                selected_all_axis_parity = selected_residue_axis_parity.all,
+                selected_variant_local_axis_parity = selected_residue_axis_parity.variant_local,
+                log.cff_energy_factor = cff_energy_factor,
+                "Exact CFF component-local energy-factor bridge"
+            );
             let replacement_rules = if cutset.canonicalize_external_shifts {
                 expr.surfaces
                     .get_all_replacements_gs_in_lmb(&[], &self.loop_momentum_basis)
@@ -420,13 +655,13 @@ impl Graph {
             };
             let mut cff_term = CFFTerm {
                 orientations: Vec::new(),
-                exact_source_energy_mapper: Some(exact_source_energy_mapper.clone()),
+                exact_source_numerator: Some(exact_source_numerator.clone()),
             };
             for orientation in expr.orientations {
                 let expression = orientation
                     .to_atom_gs()
                     .replace_multiple(&replacement_rules)
-                    .replace_multiple(exact_source_energy_mapper.exact_ose_replacements())
+                    .replace_multiple(exact_source_numerator.mapper.exact_ose_replacements())
                     * &cff_energy_factor
                     * &cff_normalization;
                 // Distinct exact factors remain in `expression`. The
@@ -444,6 +679,7 @@ impl Graph {
         Ok((
             CutCFF {
                 terms,
+                energy_degree_bound_report,
                 production_prefactor_bridge,
             },
             contract_subgraph,
@@ -481,6 +717,7 @@ impl Graph {
             analysis_numerator,
         )?;
         let energy_factor_ownership = generated.energy_factor_ownership;
+        let source_energy_degree_bounds = generated.source_energy_degree_bounds.clone();
         let production_prefactor_bridge = generated.core_global_prefactor_sign;
         let mut cff = generated.expression;
         normalize_three_d_expression_cut_support_with_raised_edge_groups(
@@ -522,7 +759,7 @@ impl Graph {
 
         let mut terms = BTreeMap::new();
 
-        for (cut_cff_index, expr) in residues {
+        for (cut_cff_index, expr, _) in residues {
             let replacement_rules = if cutset.canonicalize_external_shifts {
                 expr.surfaces
                     .get_all_replacements_gs_in_lmb(&[], &self.loop_momentum_basis)
@@ -531,7 +768,7 @@ impl Graph {
             };
             let mut cff_term = CFFTerm {
                 orientations: vec![],
-                exact_source_energy_mapper: None,
+                exact_source_numerator: None,
             };
             for orientation in expr.orientations.iter().filter(|orientation| {
                 orientation_pattern.filter_orientation(&orientation.data.orientation)
@@ -560,6 +797,11 @@ impl Graph {
 
         let cut_cff = CutCFF {
             terms,
+            energy_degree_bound_report: CffEnergyDegreeBoundReport {
+                source_kind: CffEnergyBoundSourceKind::PhysicalGraph,
+                physical_parent_bounds: source_energy_degree_bounds.clone(),
+                assigned_cff_source_bounds: source_energy_degree_bounds,
+            },
             production_prefactor_bridge,
         };
         Ok(cut_cff)
@@ -568,11 +810,15 @@ impl Graph {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::*;
     use crate::{dot, graph::parse::IntoGraph, initialisation::test_initialise, utils::W_};
+    use itertools::Itertools;
     use linnet::half_edge::involution::{EdgeIndex, Orientation};
     use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
     use symbolica::atom::FunctionBuilder;
+    use three_dimensional_reps::ThreeDGraphSource;
 
     #[test]
     fn lu_residue_selection_rejects_missing_physical_cut_support() {
@@ -586,6 +832,121 @@ mod tests {
         });
 
         assert!(select_indexed_cff_residues(ThreeDExpression::new_empty(), &cutset).is_err());
+    }
+
+    #[test]
+    fn indexed_residue_selection_tracks_axis_parity_independent_of_order() -> Result<()> {
+        let raised_group = crate::cff::esurface::RaisedEsurfaceGroup {
+            esurface_ids: vec![crate::cff::esurface::EsurfaceID::from(0)],
+            max_occurence: 2,
+        };
+        for selected_axis_count in 0usize..=3 {
+            let mut cutset = CutSet::empty(1);
+            if selected_axis_count >= 1 {
+                cutset.residue_selector.right_th_cut = Some(raised_group.clone());
+            }
+            if selected_axis_count >= 2 {
+                cutset.residue_selector.left_th_cut = Some(raised_group.clone());
+            }
+            if selected_axis_count >= 3 {
+                cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+                    raised_group: raised_group.clone(),
+                    cut_edge_alternatives: vec![vec![EdgeIndex(0)]],
+                });
+            }
+
+            let residues = select_indexed_cff_residues(ThreeDExpression::new_empty(), &cutset)?;
+            assert_eq!(residues.len(), 1usize << selected_axis_count);
+            assert!(residues.iter().all(|(index, _, parity)| {
+                let present_axes = [
+                    index.right_threshold_order,
+                    index.left_threshold_order,
+                    index.lu_cut_order,
+                ]
+                .into_iter()
+                .flatten()
+                .count();
+                present_axes == selected_axis_count
+                    && *parity == !selected_axis_count.is_multiple_of(2)
+            }));
+            if selected_axis_count != 0 {
+                assert!(
+                    residues.iter().any(|(index, _, _)| {
+                        [
+                            index.right_threshold_order,
+                            index.left_threshold_order,
+                            index.lu_cut_order,
+                        ]
+                        .into_iter()
+                        .flatten()
+                        .any(|order| order == 2)
+                    }),
+                    "raised order two must retain the same selected-axis parity"
+                );
+            }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn indexed_residue_selection_tracks_only_variant_local_component_axes() -> Result<()> {
+        let raised_group = crate::cff::esurface::RaisedEsurfaceGroup {
+            esurface_ids: vec![crate::cff::esurface::EsurfaceID::from(0)],
+            max_occurence: 2,
+        };
+        let mut cutset = CutSet::empty(1);
+        cutset.residue_selector.right_th_cut = Some(raised_group.clone());
+        cutset.residue_selector.left_th_cut = Some(raised_group.clone());
+        cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+            raised_group,
+            cut_edge_alternatives: vec![vec![EdgeIndex(0)]],
+        });
+        let variant_local_axes = BTreeMap::from([
+            (CutCffResidueAxis::RightThreshold, true),
+            (CutCffResidueAxis::LeftThreshold, false),
+            (CutCffResidueAxis::LuCut, true),
+        ]);
+
+        let residues = select_indexed_cff_residues_with_variant_local_axes(
+            ThreeDExpression::new_empty(),
+            &cutset,
+            &variant_local_axes,
+        )?;
+        assert_eq!(residues.len(), 8);
+        assert!(
+            residues
+                .iter()
+                .all(|(_, _, parity)| { parity.all && !parity.variant_local })
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_residue_axis_ownership_rejects_cross_component_groups() -> Result<()> {
+        let global = crate::cff::esurface::EsurfaceID::from(0);
+        let variant_local = crate::cff::esurface::EsurfaceID::from(1);
+        let group = |esurface_ids| crate::cff::esurface::RaisedEsurfaceGroup {
+            esurface_ids,
+            max_occurence: 1,
+        };
+        let mut cutset = CutSet::empty(1);
+        cutset.residue_selector.right_th_cut = Some(group(vec![global]));
+        cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+            raised_group: group(vec![variant_local]),
+            cut_edge_alternatives: vec![vec![EdgeIndex(0)]],
+        });
+        let ownership = BTreeMap::from([
+            (global, CffEnergyFactorOwnership::GlobalSourceProduct),
+            (variant_local, CffEnergyFactorOwnership::VariantLocal),
+        ]);
+
+        let axes = variant_local_residue_axes(&cutset, &ownership)?;
+        assert_eq!(axes[&CutCffResidueAxis::RightThreshold], false);
+        assert_eq!(axes[&CutCffResidueAxis::LuCut], true);
+
+        cutset.residue_selector.left_th_cut = Some(group(vec![global, variant_local]));
+        assert!(variant_local_residue_axes(&cutset, &ownership).is_err());
+        Ok(())
     }
 
     #[test]
@@ -729,7 +1090,7 @@ mod tests {
             .flat_map(|term| {
                 term.orientations.iter().map(|orientation| {
                     Ok(orientation.expression.clone()
-                        * term.map_exact_source_numerator(&orientation.orientation, &numerator)?)
+                        * term.map_exact_source_numerator(&orientation.orientation)?)
                 })
             })
             .collect::<Result<Vec<_>>>()?
@@ -749,10 +1110,7 @@ mod tests {
             .flat_map(|term| {
                 term.orientations.iter().map(|orientation| {
                     Ok(orientation.expression.clone()
-                        * term.map_exact_source_numerator(
-                            &orientation.orientation,
-                            &retained_factor,
-                        )?)
+                        * term.map_exact_source_numerator(&orientation.orientation)?)
                 })
             })
             .collect::<Result<Vec<_>>>()?
@@ -971,8 +1329,7 @@ mod tests {
                 .iter()
                 .map(|orientation| {
                     Ok(orientation.expression.clone()
-                        * powered_term
-                            .map_exact_source_numerator(&orientation.orientation, &numerator)?)
+                        * powered_term.map_exact_source_numerator(&orientation.orientation)?)
                 })
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
@@ -987,10 +1344,7 @@ mod tests {
                 .iter()
                 .map(|orientation| {
                     Ok(orientation.expression.clone()
-                        * lower_term.map_exact_source_numerator(
-                            &orientation.orientation,
-                            &retained_factor,
-                        )?)
+                        * lower_term.map_exact_source_numerator(&orientation.orientation)?)
                 })
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
@@ -1171,8 +1525,7 @@ mod tests {
                 .iter()
                 .map(|orientation| {
                     Ok(orientation.expression.clone()
-                        * exact_term
-                            .map_exact_source_numerator(&orientation.orientation, &numerator)?)
+                        * exact_term.map_exact_source_numerator(&orientation.orientation)?)
                 })
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
@@ -1232,6 +1585,240 @@ mod tests {
                     "exact alias-edge and ordinary LU residues differ for index {index}: {difference}"
                 );
             }
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn exact_cff_cubic_uv_rewrite_matches_production_convention() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_cubic_uv_rewrite {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> v5 [id=0]
+            v0 -> v2 [id=1 lmb_id=0]
+            v3 -> v0 [id=2]
+            v0 -> v5 [id=3]
+            v2 -> v1 [id=4]
+            v1 -> v3 [id=5 lmb_id=1]
+            v1 -> v4 [id=6]
+            v2 -> v3 [id=7]
+            v4 -> outgoing [id=8]
+        })?;
+        let owner_edges = [EdgeIndex(4), EdgeIndex(5), EdgeIndex(7)];
+        assert_eq!(
+            owner_edges
+                .iter()
+                .map(|edge| &graph.loop_momentum_basis.edge_signatures[*edge])
+                .collect::<BTreeSet<_>>()
+                .len(),
+            owner_edges.len(),
+            "the exact UV owners must have genuinely different physical routings"
+        );
+
+        let carrier = EdgeIndex(5);
+        let momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(carrier))
+            .finish();
+        let mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
+        let full_expr = GS.emr_mom(carrier, GS.cind(0)).pow(2)
+            - (1..=3).fold(mass_squared.clone(), |norm_squared, spatial_index| {
+                norm_squared + GS.emr_mom(carrier, GS.cind(spatial_index)).pow(2)
+            });
+        let denominator_records = owner_edges
+            .into_iter()
+            .zip([1, 1, -1])
+            .map(|(source_edge, routing_sign)| FourDDenominator {
+                source_edge,
+                momentum: Atom::num(routing_sign) * &momentum,
+                mass_squared: mass_squared.clone(),
+                full_expr: full_expr.clone(),
+            })
+            .collect::<Vec<_>>();
+        let mut reference_parsed: Option<three_dimensional_reps::ParsedGraph> = None;
+        let mut reference_orientation_sum: Option<Atom> = None;
+        let mut reference_quadratic_sum: Option<Atom> = None;
+        for denominators in denominator_records.iter().cloned().permutations(3) {
+            let source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
+                &graph,
+                &denominators,
+                owner_edges,
+            )?;
+            let parsed = source.to_three_d_parsed_graph()?;
+            if let Some(reference) = &reference_parsed {
+                assert_eq!(
+                    &parsed, reference,
+                    "canonical exact topology must be invariant under denominator-factor order"
+                );
+            } else {
+                reference_parsed = Some(parsed.clone());
+            }
+
+            let validation = three_dimensional_reps::validate_parsed_graph(&parsed);
+            assert!(
+                validation.ok,
+                "the cubic UV source must remain momentum-balanced: {validation:?}"
+            );
+            let nodes = parsed
+                .internal_edges
+                .iter()
+                .flat_map(|edge| [edge.tail, edge.head])
+                .collect::<BTreeSet<_>>();
+            assert_eq!(
+                parsed.internal_edges.len() + 1 - nodes.len(),
+                1,
+                "the cubic UV source must retain one topological loop"
+            );
+            assert_eq!(parsed.loop_names.len(), 1);
+            assert!(
+                parsed.external_edges.is_empty(),
+                "zero-denominator cograph components must not create causal surfaces"
+            );
+
+            let options = graph.denominator_only_cff_3d_expression_options();
+            let cutset = CutSet::empty(graph.n_hedges());
+            let (cff, _) = graph.cff_from_4d_denominators_in_uv_edges(
+                &denominators,
+                owner_edges,
+                &cutset,
+                &options,
+                &Atom::one(),
+                None,
+            )?;
+            assert_eq!(cff.terms.len(), 1);
+            let term = cff
+                .terms
+                .values()
+                .next()
+                .expect("the empty cutset has one exact CFF term");
+            let orientation_sum = term
+                .orientations
+                .iter()
+                .fold(Atom::Zero, |sum, orientation| sum + &orientation.expression)
+                * Atom::num(cff.production_prefactor_factor());
+            let energy = (1..=3)
+                .fold(mass_squared.clone(), |norm_squared, spatial_index| {
+                    norm_squared + GS.emr_mom(carrier, GS.cind(spatial_index)).pow(2)
+                })
+                .sqrt();
+            // The raw mathematical q0 contour of (q0²-E²)^-3 is
+            // -3i/(128π³E⁵), including the spatial (2π)^-3 normalization.
+            // GammaLoop production shares the ordinary CFF convention
+            // 1/prod(-2E), whose odd three-denominator product supplies the
+            // additional minus sign. This test locks that production convention;
+            // it does not choose a physical phase convention.
+            let production_contour = Atom::num(3) * Atom::i()
+                / (Atom::num(128) * Atom::var(GS.pi).pow(3) * energy.pow(5));
+            let difference = (&orientation_sum - &production_contour).together();
+            assert!(
+                difference.is_zero(),
+                "the cubic exact UV CFF differs from the production convention: {difference}"
+            );
+            if let Some(reference) = &reference_orientation_sum {
+                let provenance_difference = (&orientation_sum - reference).together();
+                assert!(
+                    provenance_difference.is_zero(),
+                    "the bare cubic exact UV CFF depends on denominator-factor order: {provenance_difference}"
+                );
+            } else {
+                reference_orientation_sum = Some(orientation_sum.clone());
+            }
+
+            let quadratic_numerator = GS.emr_mom(carrier, GS.cind(0)).pow(2);
+            let (quadratic_cff, _) = graph.cff_from_4d_denominators_in_uv_edges(
+                &denominators,
+                owner_edges,
+                &cutset,
+                &options,
+                &quadratic_numerator,
+                None,
+            )?;
+            let quadratic_plan = quadratic_cff
+                .terms
+                .values()
+                .next()
+                .and_then(|term| term.exact_source_numerator.as_ref())
+                .expect("the exact quadratic CFF term retains its numerator plan");
+            assert_eq!(
+                quadratic_plan
+                    .assignment
+                    .energy_degree_bounds()
+                    .iter()
+                    .map(|(_, degree)| *degree)
+                    .collect::<Vec<_>>(),
+                vec![1, 1],
+                "the quadratic energy must stay factorized over two equivalent occurrences"
+            );
+            let quadratic_sum = quadratic_cff
+                .terms
+                .values()
+                .flat_map(|term| {
+                    term.orientations.iter().map(|orientation| {
+                        Ok(orientation.expression.clone()
+                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(quadratic_cff.production_prefactor_factor());
+            // Under the parent three-occurrence convention, q0² = D + E²
+            // combines the double- and triple-pole sectors with their relative
+            // occurrence parity. The result is -i/(128 pi³ E³), not their
+            // unsigned sum 7i/(128 pi³ E³).
+            let quadratic_contour =
+                -Atom::i() / (Atom::num(128) * Atom::var(GS.pi).pow(3) * energy.pow(3));
+            let quadratic_difference = (&quadratic_sum - &quadratic_contour).together();
+            assert!(
+                quadratic_difference.is_zero(),
+                "the quadratic cubic-pole exact CFF loses its lower-sector occurrence parity: {quadratic_difference}"
+            );
+            if let Some(reference) = &reference_quadratic_sum {
+                let provenance_difference = (&quadratic_sum - reference).together();
+                assert!(
+                    provenance_difference.is_zero(),
+                    "the q0^2 cubic exact UV CFF depends on denominator-factor order: {provenance_difference}"
+                );
+            } else {
+                reference_quadratic_sum = Some(quadratic_sum.clone());
+            }
+
+            let spatial_norm = (1..=3).fold(Atom::Zero, |norm_squared, spatial_index| {
+                norm_squared + GS.emr_mom(carrier, GS.cind(spatial_index)).pow(2)
+            });
+            let momentum_squared_numerator = &quadratic_numerator - &spatial_norm;
+            let (momentum_squared_cff, _) = graph.cff_from_4d_denominators_in_uv_edges(
+                &denominators,
+                owner_edges,
+                &cutset,
+                &options,
+                &momentum_squared_numerator,
+                None,
+            )?;
+            let momentum_squared_sum = momentum_squared_cff
+                .terms
+                .values()
+                .flat_map(|term| {
+                    term.orientations.iter().map(|orientation| {
+                        Ok(orientation.expression.clone()
+                            * term.map_exact_source_numerator(&orientation.orientation)?)
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(momentum_squared_cff.production_prefactor_factor());
+            let momentum_squared_contour = &quadratic_contour - &spatial_norm * &production_contour;
+            let momentum_squared_difference = (momentum_squared_sum - momentum_squared_contour)
+                .together()
+                .expand();
+            assert!(
+                momentum_squared_difference.is_zero(),
+                "the full momentum-square numerator must retain its temporal/spatial cancellation: {momentum_squared_difference}"
+            );
         }
         Ok(())
     }
@@ -1348,8 +1935,7 @@ mod tests {
                     .iter()
                     .map(|orientation| {
                         Ok(orientation.expression.clone()
-                            * exact_term
-                                .map_exact_source_numerator(&orientation.orientation, &numerator)?)
+                            * exact_term.map_exact_source_numerator(&orientation.orientation)?)
                     })
                     .collect::<Result<Vec<_>>>()?
                     .into_iter()
@@ -1472,8 +2058,7 @@ mod tests {
                 .iter()
                 .map(|orientation| {
                     Ok(orientation.expression.clone()
-                        * exact_term
-                            .map_exact_source_numerator(&orientation.orientation, &numerator)?)
+                        * exact_term.map_exact_source_numerator(&orientation.orientation)?)
                 })
                 .collect::<Result<Vec<_>>>()?
                 .into_iter()
@@ -1503,7 +2088,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_cff_handles_opposite_repeated_routing_without_a_sign_bridge() -> Result<()> {
+    fn exact_cff_keeps_opposite_source_routing_without_a_sign_bridge() -> Result<()> {
         test_initialise()?;
         let mut graph: Graph = dot!(digraph exact_opposite_routing {
             edge [num=1 mass=1]
@@ -1556,7 +2141,7 @@ mod tests {
             let orientation = &term.orientation.data.orientation;
             assert_ne!(orientation[first_occurrence], Orientation::Undirected);
             assert_ne!(orientation[second_occurrence], Orientation::Undirected);
-            assert_eq!(
+            assert_ne!(
                 orientation[second_occurrence],
                 orientation[first_occurrence]
             );
@@ -1624,7 +2209,326 @@ mod tests {
     }
 
     #[test]
-    fn exact_original_source_matches_production_affine_maps_after_projection() -> Result<()> {
+    fn exact_cff_lu_residue_factorizes_from_quadratic_cubic_spectator() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph exact_lu_cubic_product {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+            b -> c [id=4]
+            c -> d [id=2 lmb_id=1]
+            c -> d [id=3]
+        })?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[EdgeIndex(4)],
+            &canonization,
+            &options,
+            Some(&Atom::one()),
+        )?;
+        let lu_surface = graph
+            .determine_raised_esurfaces_from_expression(&production.expression)
+            .raised_groups
+            .into_iter()
+            .find(|group| {
+                group.esurface_ids.iter().any(|surface_id| {
+                    production.expression.surfaces.esurface_cache[*surface_id]
+                        .energies
+                        .iter()
+                        .copied()
+                        .collect::<BTreeSet<_>>()
+                        == BTreeSet::from([EdgeIndex(0), EdgeIndex(1)])
+                })
+            })
+            .expect("the cograph bubble supplies an LU residue surface");
+        let mut lu_cutset = CutSet::empty(graph.n_hedges());
+        lu_cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+            raised_group: lu_surface,
+            cut_edge_alternatives: vec![vec![EdgeIndex(0), EdgeIndex(1)]],
+        });
+
+        let cograph_denominators = [EdgeIndex(0), EdgeIndex(1)].map(|edge| FourDDenominator {
+            source_edge: edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(edge))
+                .finish(),
+            mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
+            full_expr: Atom::one(),
+        });
+        let uv_edge = EdgeIndex(2);
+        let uv_momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(uv_edge))
+            .finish();
+        let uv_mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
+        let uv_full_expr = GS.emr_mom(uv_edge, GS.cind(0)).pow(2)
+            - (1..=3).fold(uv_mass_squared.clone(), |norm_squared, spatial_index| {
+                norm_squared + GS.emr_mom(uv_edge, GS.cind(spatial_index)).pow(2)
+            });
+        let uv_denominators = [1, 1, -1].map(|sign| FourDDenominator {
+            source_edge: uv_edge,
+            momentum: Atom::num(sign) * &uv_momentum,
+            mass_squared: uv_mass_squared.clone(),
+            full_expr: uv_full_expr.clone(),
+        });
+        let quadratic_numerator = GS.emr_mom(uv_edge, GS.cind(0)).pow(2);
+        let combined_denominators = cograph_denominators
+            .iter()
+            .cloned()
+            .chain(uv_denominators.iter().cloned())
+            .collect::<Vec<_>>();
+
+        let (combined, _) = graph.cff_from_4d_denominators(
+            &combined_denominators,
+            &lu_cutset,
+            &options,
+            &quadratic_numerator,
+        )?;
+        let (cograph, _) = graph.cff_from_4d_denominators(
+            &cograph_denominators,
+            &lu_cutset,
+            &options,
+            &Atom::one(),
+        )?;
+        let (uv, _) = graph.cff_from_4d_denominators(
+            &uv_denominators,
+            &CutSet::empty(graph.n_hedges()),
+            &options,
+            &quadratic_numerator,
+        )?;
+        let combined_term = combined
+            .terms
+            .values()
+            .next()
+            .expect("the combined source retains the selected LU residue");
+        let combined_sum = combined_term
+            .orientations
+            .iter()
+            .map(|orientation| {
+                Ok(orientation.expression.clone()
+                    * combined_term.map_exact_source_numerator(&orientation.orientation)?)
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .fold(Atom::Zero, |sum, term| sum + term)
+            * Atom::num(combined.production_prefactor_factor());
+        let cograph_term = cograph
+            .terms
+            .values()
+            .next()
+            .expect("the cograph source retains the selected LU residue");
+        let cograph_sum = cograph_term
+            .orientations
+            .iter()
+            .map(|orientation| {
+                Ok(orientation.expression.clone()
+                    * cograph_term.map_exact_source_numerator(&orientation.orientation)?)
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .fold(Atom::Zero, |sum, term| sum + term)
+            * Atom::num(cograph.production_prefactor_factor());
+        let uv_term = uv
+            .terms
+            .values()
+            .next()
+            .expect("the cubic source has its uncut residue sector");
+        let uv_sum = uv_term
+            .orientations
+            .iter()
+            .map(|orientation| {
+                Ok(orientation.expression.clone()
+                    * uv_term.map_exact_source_numerator(&orientation.orientation)?)
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter()
+            .fold(Atom::Zero, |sum, term| sum + term)
+            * Atom::num(uv.production_prefactor_factor());
+        let difference = (combined_sum - cograph_sum * uv_sum).together();
+        assert!(
+            difference.is_zero(),
+            "an LU residue in one exact component must factorize from a quadratic cubic spectator: {difference}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_cff_quartic_lu_component_factorizes_from_muv_bubble() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(
+            digraph exact_quartic_lu_muv_product {
+                node [num=1]
+
+                a -> b [id=0 lmb_id=0 particle=scalar_1]
+                a -> b [id=1 particle=scalar_2]
+                b -> c [id=4 particle=scalar_0]
+                c -> d [id=2 lmb_id=1 particle=scalar_0]
+                c -> d [id=3 particle=scalar_0]
+            },
+            "scalars"
+        )?;
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let production = graph.generate_3d_expression_for_integrand(
+            &[EdgeIndex(4)],
+            &canonization,
+            &options,
+            Some(&Atom::one()),
+        )?;
+        let lu_surface = graph
+            .determine_raised_esurfaces_from_expression(&production.expression)
+            .raised_groups
+            .into_iter()
+            .find(|group| {
+                group.esurface_ids.iter().any(|surface_id| {
+                    production.expression.surfaces.esurface_cache[*surface_id]
+                        .energies
+                        .iter()
+                        .copied()
+                        .collect::<BTreeSet<_>>()
+                        == BTreeSet::from([EdgeIndex(0), EdgeIndex(1)])
+                })
+            })
+            .expect("the nonrepeated cograph bubble supplies an LU residue surface");
+        let mut lu_cutset = CutSet::empty(graph.n_hedges());
+        lu_cutset.residue_selector.lu = Some(crate::graph::cuts::LuCutSelection {
+            raised_group: lu_surface,
+            cut_edge_alternatives: vec![vec![EdgeIndex(0), EdgeIndex(1)]],
+        });
+
+        let cograph_denominators = [EdgeIndex(0), EdgeIndex(1)].map(|edge| FourDDenominator {
+            source_edge: edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(edge))
+                .finish(),
+            mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
+            full_expr: Atom::one(),
+        });
+        let muv_mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
+        let muv_denominators = [EdgeIndex(2), EdgeIndex(3)].map(|edge| FourDDenominator {
+            source_edge: edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(edge))
+                .finish(),
+            mass_squared: muv_mass_squared.clone(),
+            full_expr: Atom::one(),
+        });
+        let quartic_numerator = GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(4);
+        let combined_denominators = cograph_denominators
+            .iter()
+            .cloned()
+            .chain(muv_denominators.iter().cloned())
+            .collect::<Vec<_>>();
+        let uv_edges = [EdgeIndex(2), EdgeIndex(3)];
+
+        let cograph_source =
+            GraphThreeDSource::from_exact_denominators(&graph, &cograph_denominators)?;
+        assert!(
+            three_dimensional_reps::repeated_groups(&cograph_source.to_three_d_parsed_graph()?)
+                .is_empty(),
+            "the quartic LU component must exercise a nonrepeated energy"
+        );
+        let combined_source = GraphThreeDSource::from_exact_denominators_in_uv_edges(
+            &graph,
+            &combined_denominators,
+            uv_edges,
+        )?;
+        let (generated, _, _, _) = graph.generate_3d_expression_for_4d_term(
+            &combined_source,
+            &options,
+            &quartic_numerator,
+            None,
+        )?;
+        assert_eq!(
+            generated.energy_factor_ownership,
+            CffEnergyFactorOwnership::VariantLocal
+        );
+        assert_eq!(
+            generated
+                .energy_factor_components
+                .iter()
+                .filter(|component| {
+                    component.ownership == CffEnergyFactorOwnership::VariantLocal
+                })
+                .count(),
+            1,
+            "only the quartic LU component owns variant-local energy factors"
+        );
+        assert_eq!(
+            generated
+                .energy_factor_components
+                .iter()
+                .filter(|component| {
+                    component.ownership == CffEnergyFactorOwnership::GlobalSourceProduct
+                })
+                .count(),
+            1,
+            "the uncut MUV bubble remains a pure/global CFF component"
+        );
+        assert_eq!(
+            generated
+                .source_energy_degree_bounds
+                .iter()
+                .map(|(_, degree)| *degree)
+                .collect::<Vec<_>>(),
+            vec![4],
+            "the nonrepeated cograph energy keeps the physical quartic bound"
+        );
+
+        let (combined, _) = graph.cff_from_4d_denominators_in_uv_edges(
+            &combined_denominators,
+            uv_edges,
+            &lu_cutset,
+            &options,
+            &quartic_numerator,
+            None,
+        )?;
+        let (cograph, _) = graph.cff_from_4d_denominators(
+            &cograph_denominators,
+            &lu_cutset,
+            &options,
+            &quartic_numerator,
+        )?;
+        let (muv, _) = graph.cff_from_4d_denominators_in_uv_edges(
+            &muv_denominators,
+            uv_edges,
+            &CutSet::empty(graph.n_hedges()),
+            &options,
+            &Atom::one(),
+            None,
+        )?;
+        let exact_sum = |cff: &CutCFF| -> Result<Atom> {
+            assert_eq!(cff.terms.len(), 1);
+            let term = cff
+                .terms
+                .values()
+                .next()
+                .expect("the selected exact source has one residue sector");
+            Ok(term
+                .orientations
+                .iter()
+                .map(|orientation| {
+                    Ok(orientation.expression.clone()
+                        * term.map_exact_source_numerator(&orientation.orientation)?)
+                })
+                .collect::<Result<Vec<_>>>()?
+                .into_iter()
+                .fold(Atom::Zero, |sum, term| sum + term)
+                * Atom::num(cff.production_prefactor_factor()))
+        };
+        let difference =
+            (exact_sum(&combined)? - exact_sum(&cograph)? * exact_sum(&muv)?).together();
+        assert!(
+            difference.is_zero(),
+            "a nonrepeated quartic LU component must factorize from its pure MUV bubble: {difference}"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_original_source_matches_production_cff_after_projection() -> Result<()> {
         test_initialise()?;
         let mut graph: Graph = dot!(digraph exact_root {
             edge [num=1 mass=1]
@@ -1655,10 +2559,6 @@ mod tests {
             mass_squared: graph.underlying[edge].particle.mass_atom().pow(2),
             full_expr: Atom::one(),
         });
-        let physical_energy_edges =
-            GraphThreeDSource::from_exact_denominators(&graph, &denominators)?
-                .physical_energy_edge_index_map()
-                .expect("exact source has a physical energy-edge projection");
         let (exact, _) =
             graph.cff_from_4d_denominators(&denominators, &cutset, &options, &Atom::one())?;
         assert_eq!(
@@ -1666,30 +2566,68 @@ mod tests {
             ordinary.production_prefactor_factor(),
             "direct and exact CFF routes must carry the same production convention bridge"
         );
-        let ordinary = ordinary
+        let ordinary_sum = ordinary
             .terms
             .values()
             .flat_map(|term| &term.orientations)
-            .collect::<Vec<_>>();
-
-        for exact in exact.terms.values().flat_map(|term| &term.orientations) {
-            let mut exact_orientation = exact.orientation.clone();
-            exact_orientation.remap_energy_edge_indices(&physical_energy_edges);
+            .fold(Atom::Zero, |sum, orientation| sum + &orientation.expression)
+            * Atom::num(ordinary.production_prefactor_factor());
+        let exact_sum = exact
+            .terms
+            .values()
+            .flat_map(|term| &term.orientations)
+            .fold(Atom::Zero, |sum, orientation| sum + &orientation.expression)
+            * Atom::num(exact.production_prefactor_factor());
+        // The ordinary route keeps its inverse-energy product in OSE notation,
+        // while an exact 4D source derives square roots from each literal
+        // denominator. Compare them at two exact rational on-shell points.
+        // This avoids Symbolica's polynomial divider, which is not robust for
+        // function-valued square-root indeterminates, without introducing any
+        // floating-point tolerance.
+        let rational =
+            |numerator: i64, denominator: i64| Atom::num(numerator) / Atom::num(denominator);
+        for (spatial_0, energy_0, spatial_1, energy_1, external_energy) in [
+            (
+                Atom::Zero,
+                Atom::one(),
+                Atom::Zero,
+                Atom::one(),
+                rational(1, 3),
+            ),
+            (
+                rational(3, 4),
+                rational(5, 4),
+                rational(4, 3),
+                rational(5, 3),
+                rational(2, 5),
+            ),
+        ] {
+            let at_point = |mut expression: Atom| {
+                for (edge, spatial, energy) in [
+                    (EdgeIndex(0), spatial_0.clone(), energy_0.clone()),
+                    (EdgeIndex(1), spatial_1.clone(), energy_1.clone()),
+                ] {
+                    expression = expression
+                        .replace(GS.ose(edge))
+                        .with(energy)
+                        .replace(GS.emr_mom(edge, GS.cind(1)))
+                        .with(spatial);
+                    for spatial_index in 2..=3 {
+                        expression = expression
+                            .replace(GS.emr_mom(edge, GS.cind(spatial_index)))
+                            .with(Atom::Zero);
+                    }
+                }
+                expression
+                    .replace(GS.emr_mom(EdgeIndex(3), GS.cind(0)))
+                    .with(external_energy.clone())
+                    .expand()
+            };
+            let difference =
+                (at_point(exact_sum.clone()) - at_point(ordinary_sum.clone())).expand();
             assert!(
-                ordinary.iter().any(|ordinary| {
-                    ordinary.orientation.data.orientation == exact_orientation.data.orientation
-                        && ordinary.orientation.edge_energy_map == exact_orientation.edge_energy_map
-                }),
-                "exact map {:?} with energies {:?} is absent from ordinary maps {:?}",
-                exact_orientation.data.orientation,
-                exact_orientation.edge_energy_map,
-                ordinary
-                    .iter()
-                    .map(|term| (
-                        &term.orientation.data.orientation,
-                        &term.orientation.edge_energy_map,
-                    ))
-                    .collect::<Vec<_>>()
+                difference.is_zero(),
+                "source-local canonical orientations must reproduce the ordinary CFF at exact on-shell points: {difference}"
             );
         }
         Ok(())

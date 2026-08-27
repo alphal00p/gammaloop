@@ -1215,6 +1215,120 @@ mod tests {
     }
 
     #[test]
+    fn repeated_cubic_pole_with_squared_denominator_numerator_pinches_to_simple_pole() {
+        let repeated = crate::graph_io::test_graphs::box_pow3_graph();
+        let simple = crate::graph_io::test_graphs::box_graph();
+        let repeated_expression = generate_3d_expression_from_parsed(
+            &repeated,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(vec![(3, 4)]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let simple_expression = generate_3d_expression_from_parsed(
+            &simple,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(Vec::new()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let repeated_input = EvaluationInput::deterministic(
+            &repeated,
+            1337,
+            &BTreeMap::from([
+                ("m1".to_string(), 0.41),
+                ("m2".to_string(), 0.53),
+                ("m3".to_string(), 0.67),
+                ("m4".to_string(), 0.7),
+            ]),
+            None,
+        )
+        .unwrap();
+        let simple_input = EvaluationInput {
+            masses: repeated_input.masses[..4].to_vec(),
+            ..repeated_input.clone()
+        };
+        let repeated_value = evaluate_expression(
+            &repeated,
+            &repeated_expression,
+            "(dot(edges[3],edges[3])-0.49)**2",
+            &repeated_input,
+        )
+        .unwrap()
+        .value;
+        let simple_value = evaluate_expression(&simple, &simple_expression, "1", &simple_input)
+            .unwrap()
+            .value;
+        let scale = repeated_value
+            .abs()
+            .max(simple_value.abs())
+            .max(f64::MIN_POSITIVE);
+
+        assert!(
+            (repeated_value - simple_value).abs() <= 1.0e-11 * scale,
+            "D(q)^2 / D(q)^3 did not pinch to 1 / D(q): repeated={repeated_value:e}, simple={simple_value:e}"
+        );
+    }
+
+    #[test]
+    fn repeated_quadratic_channel_evaluates_independently_of_occurrence_assignment() {
+        let mut parsed = crate::graph_io::test_graphs::box_pow3_graph();
+        parsed.internal_edges[5]
+            .signature
+            .loop_signature
+            .iter_mut()
+            .for_each(|coefficient| *coefficient = -*coefficient);
+        parsed.internal_edges[5]
+            .signature
+            .external_signature
+            .iter_mut()
+            .for_each(|coefficient| *coefficient = -*coefficient);
+
+        let cases = [
+            (vec![(3, 2)], "edges[3][0]**2"),
+            (vec![(3, 1), (4, 1)], "edges[3][0]*edges[4][0]"),
+            (vec![(3, 1), (5, 1)], "-edges[3][0]*edges[5][0]"),
+            (vec![(4, 1), (5, 1)], "-edges[4][0]*edges[5][0]"),
+        ]
+        .map(|(bounds, numerator)| {
+            (
+                generate_3d_expression_from_parsed(
+                    &parsed,
+                    &Generate3DExpressionOptions {
+                        energy_degree_bounds: Some(bounds),
+                        ..Default::default()
+                    },
+                )
+                .unwrap(),
+                numerator,
+            )
+        });
+
+        for seed in [17, 1337, 9100] {
+            let input =
+                EvaluationInput::deterministic(&parsed, seed, &BTreeMap::new(), None).unwrap();
+            let values = cases
+                .iter()
+                .map(|(expression, numerator)| {
+                    evaluate_expression(&parsed, expression, numerator, &input)
+                        .unwrap()
+                        .value
+                })
+                .collect::<Vec<_>>();
+            let reference = values[0];
+            for (case, value) in values.iter().enumerate().skip(1) {
+                let scale = reference.abs().max(value.abs()).max(f64::MIN_POSITIVE);
+                assert!(
+                    (reference - value).abs() <= 1.0e-11 * scale,
+                    "repeated-channel occurrence assignment {case} changed the evaluated quadratic CFF at seed {seed}: reference={reference:e}, actual={value:e}"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn lower_sector_powered_pole_contact_reconstructs_numerator_derivatives() {
         let edge = |edge_id: usize,
                     tail: usize,
@@ -1507,5 +1621,172 @@ mod tests {
 
         assert!(residual_value.abs() > 1.0e-12);
         assert!((projected_value - residual_value).abs() < 1.0e-13);
+    }
+
+    #[test]
+    fn gl24_rank_four_contact_preserves_denominator_cancellation() {
+        let edge = |edge_id: usize,
+                    tail: usize,
+                    head: usize,
+                    loop_signature: [i32; 2],
+                    external_signature: i32,
+                    mass_key: &str| {
+            ParsedGraphInternalEdge {
+                edge_id,
+                tail,
+                head,
+                label: format!("q{edge_id}"),
+                mass_key: Some(mass_key.to_string()),
+                signature: MomentumSignature {
+                    loop_signature: loop_signature.to_vec(),
+                    external_signature: vec![external_signature],
+                },
+                had_pow: false,
+            }
+        };
+        let parent = ParsedGraph {
+            internal_edges: vec![
+                edge(0, 0, 2, [-1, 1], -1, "m0"),
+                edge(1, 0, 4, [0, -1], 0, "m1"),
+                edge(2, 1, 0, [-1, 0], -1, "m0"),
+                edge(3, 2, 1, [-1, 0], 0, "m0"),
+                edge(4, 3, 2, [0, -1], 1, "m0"),
+                edge(5, 4, 3, [0, -1], 0, "m0"),
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["k0".to_string(), "k1".to_string()],
+            external_names: vec!["p0".to_string()],
+            node_name_to_internal: (0..5).map(|node| (format!("v{node}"), node)).collect(),
+        };
+        let parent_expression = generate_3d_expression_from_parsed(
+            &parent,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(vec![(0, 4)]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+
+        let residual = ParsedGraph {
+            // Contracting edge 0 identifies parent nodes 0 and 2.
+            internal_edges: vec![
+                edge(0, 0, 3, [0, -1], 0, "m1"),
+                edge(1, 1, 0, [-1, 0], -1, "m0"),
+                edge(2, 0, 1, [-1, 0], 0, "m0"),
+                edge(3, 2, 0, [0, -1], 1, "m0"),
+                edge(4, 3, 2, [0, -1], 0, "m0"),
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: parent.loop_names.clone(),
+            external_names: parent.external_names.clone(),
+            node_name_to_internal: (0..4).map(|node| (format!("r{node}"), node)).collect(),
+        };
+        let residual_expression =
+            generate_3d_expression_from_parsed(&residual, &Generate3DExpressionOptions::default())
+                .unwrap();
+        let bounded_residual_expression = generate_3d_expression_from_parsed(
+            &residual,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(vec![(0, 2), (1, 2)]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let parent_input = EvaluationInput {
+            external_momenta: vec![[1.3, 0.11, -0.17, 0.07]],
+            loop_spatial_momenta: vec![[0.13, -0.09, 0.21], [-0.16, 0.19, 0.08]],
+            masses: vec![0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
+            uniform_scale: None,
+        };
+        let parent_value = evaluate_expression(
+            &parent,
+            &parent_expression,
+            "dot(edges[0],edges[0])**2",
+            &parent_input,
+        )
+        .unwrap()
+        .value;
+        let quadratic_parent_expression = generate_3d_expression_from_parsed(
+            &parent,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(vec![(0, 2)]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let quadratic_parent_value = evaluate_expression(
+            &parent,
+            &quadratic_parent_expression,
+            "dot(edges[0],edges[0])",
+            &parent_input,
+        )
+        .unwrap()
+        .value;
+        let scalar_residual_value = evaluate_expression(
+            &residual,
+            &residual_expression,
+            "1",
+            &EvaluationInput {
+                masses: parent_input.masses[1..].to_vec(),
+                ..parent_input.clone()
+            },
+        )
+        .unwrap()
+        .value;
+        let residual_value = evaluate_expression(
+            &residual,
+            &residual_expression,
+            "(-loops[0][0]+loops[1][0]-ext[0][0])**2\
+             -(-loops[0][1]+loops[1][1]-ext[0][1])**2\
+             -(-loops[0][2]+loops[1][2]-ext[0][2])**2\
+             -(-loops[0][3]+loops[1][3]-ext[0][3])**2",
+            &EvaluationInput {
+                masses: parent_input.masses[1..].to_vec(),
+                ..parent_input.clone()
+            },
+        )
+        .unwrap()
+        .value;
+        let bounded_residual_value = evaluate_expression(
+            &residual,
+            &bounded_residual_expression,
+            "(-loops[0][0]+loops[1][0]-ext[0][0])**2\
+             -(-loops[0][1]+loops[1][1]-ext[0][1])**2\
+             -(-loops[0][2]+loops[1][2]-ext[0][2])**2\
+             -(-loops[0][3]+loops[1][3]-ext[0][3])**2",
+            &EvaluationInput {
+                masses: parent_input.masses[1..].to_vec(),
+                ..parent_input.clone()
+            },
+        )
+        .unwrap()
+        .value;
+        let quadratic_scale = quadratic_parent_value
+            .abs()
+            .max(scalar_residual_value.abs())
+            .max(f64::MIN_POSITIVE);
+        assert!(
+            (quadratic_parent_value - scalar_residual_value).abs() <= 1.0e-11 * quadratic_scale,
+            "the quadratic D0/D0 control must reproduce the scalar lower sector: parent={quadratic_parent_value:e}, residual={scalar_residual_value:e}"
+        );
+        let residual_scale = bounded_residual_value
+            .abs()
+            .max(residual_value.abs())
+            .max(f64::MIN_POSITIVE);
+        assert!(
+            (bounded_residual_value - residual_value).abs() <= 1.0e-11 * residual_scale,
+            "the bounded quadratic residual must agree with its convergent pure CFF: bounded={bounded_residual_value:e}, pure={residual_value:e}"
+        );
+        let scale = parent_value
+            .abs()
+            .max(residual_value.abs())
+            .max(f64::MIN_POSITIVE);
+
+        assert!(
+            (parent_value - residual_value).abs() <= 1.0e-11 * scale,
+            "D0^2/D0 rank-four contact failed to reproduce the residual D0 numerator: parent={parent_value:e}, residual={residual_value:e}"
+        );
     }
 }

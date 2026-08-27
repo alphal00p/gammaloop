@@ -323,6 +323,7 @@ test_gammaloop *args:
         spenso
         spenso-hep-lib
         spenso-macros
+        three-dimensional-reps
         vakint
         gammaloop-integration-tests
     )
@@ -522,6 +523,7 @@ _test-ci TEST_NAME="" NEXTEST_FILTERSET="":
         spenso
         spenso-hep-lib
         spenso-macros
+        three-dimensional-reps
         vakint
         gammaloop-integration-tests
     )
