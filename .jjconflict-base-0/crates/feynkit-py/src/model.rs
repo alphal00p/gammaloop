@@ -13,7 +13,7 @@ use pyo3::{
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
 
-use crate::error;
+use crate::{display::escape_html, error};
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
@@ -36,66 +36,183 @@ impl From<Particle> for PyParticle {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyParticle {
+    /// Return the particle name used by the model.
+    ///
+    /// Examples
+    /// --------
+    /// >>> particle.name
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
 
+    /// Return the name of the corresponding antiparticle.
+    ///
+    /// Examples
+    /// --------
+    /// >>> particle.antiname
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn antiname(&self) -> &str {
         &self.inner.antiname
     }
 
+    /// Return the particle's PDG code.
+    ///
+    /// Examples
+    /// --------
+    /// >>> particle.pdg_code
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn pdg_code(&self) -> i64 {
         self.inner.pdg_code
     }
 
+    /// Return the UFO spin representation code.
+    ///
+    /// Examples
+    /// --------
+    /// >>> particle.spin
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn spin(&self) -> i64 {
         self.inner.spin
     }
 
+    /// Return the UFO color representation code.
+    ///
+    /// Examples
+    /// --------
+    /// >>> particle.color
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn color(&self) -> i64 {
         self.inner.color
     }
 
+    /// Return the name of the particle's mass parameter.
+    ///
+    /// Examples
+    /// --------
+    /// >>> particle.mass_parameter
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn mass_parameter(&self) -> &str {
         &self.inner.mass
     }
 
+    /// Return the name of the particle's width parameter.
+    ///
+    /// Examples
+    /// --------
+    /// >>> particle.width_parameter
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn width_parameter(&self) -> &str {
         &self.inner.width
     }
 
+    /// Return the particle's electric charge.
+    ///
+    /// Examples
+    /// --------
+    /// >>> particle.charge
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn charge(&self) -> f64 {
         self.inner.charge
     }
 
+    /// Report whether this object represents an antiparticle.
+    ///
+    /// Examples
+    /// --------
+    /// >>> particle.is_antiparticle
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn is_antiparticle(&self) -> bool {
         self.inner.is_antiparticle()
     }
 
+    /// Report whether the particle is its own antiparticle.
+    ///
+    /// Examples
+    /// --------
+    /// >>> particle.is_self_antiparticle
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn is_self_antiparticle(&self) -> bool {
         self.inner.is_self_antiparticle()
     }
 
+    /// Report whether the particle has fermionic spin.
+    ///
+    /// Examples
+    /// --------
+    /// >>> particle.is_fermion
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn is_fermion(&self) -> bool {
         self.inner.is_fermion()
     }
 
+    /// Report whether the particle's mass parameter is zero.
+    ///
+    /// Examples
+    /// --------
+    /// >>> particle.is_massless
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn is_massless(&self) -> bool {
         self.inner.is_massless()
     }
 
+    /// Return a concise representation containing the name and PDG code.
+    ///
+    /// Examples
+    /// --------
+    /// >>> repr(particle)
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     fn __repr__(&self) -> String {
         format!(
             "Particle(name='{}', pdg_code={})",
@@ -173,41 +290,113 @@ impl From<Parameter> for PyParameter {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyParameter {
+    /// Return the parameter name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> parameter.name
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
 
+    /// Return the Les Houches block name, when defined.
+    ///
+    /// Examples
+    /// --------
+    /// >>> parameter.lhablock
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn lhablock(&self) -> Option<String> {
         self.inner.lhablock.clone()
     }
 
+    /// Return the Les Houches entry indices, when defined.
+    ///
+    /// Examples
+    /// --------
+    /// >>> parameter.lhacode
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn lhacode(&self) -> Option<Vec<usize>> {
         self.inner.lhacode.clone()
     }
 
+    /// Return whether the parameter is external or internal.
+    ///
+    /// Examples
+    /// --------
+    /// >>> parameter.nature
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn nature(&self) -> PyParameterNature {
         self.inner.nature.clone().into()
     }
 
+    /// Return whether the parameter is real or complex.
+    ///
+    /// Examples
+    /// --------
+    /// >>> parameter.parameter_type
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn parameter_type(&self) -> PyParameterType {
         self.inner.parameter_type.clone().into()
     }
 
+    /// Return the evaluated complex value, when available.
+    ///
+    /// Examples
+    /// --------
+    /// >>> parameter.value
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn value(&self) -> Option<(f64, f64)> {
         self.inner.value.map(Into::into)
     }
 
+    /// Return the defining expression for an internal parameter.
+    ///
+    /// Examples
+    /// --------
+    /// >>> parameter.expression
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn expression(&self) -> Option<String> {
         self.inner.expression.clone()
     }
 
+    /// Return a concise representation containing the parameter name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> repr(parameter)
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     fn __repr__(&self) -> String {
         format!("Parameter(name='{}')", self.inner.name)
     }
@@ -234,26 +423,71 @@ impl From<Coupling> for PyCoupling {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyCoupling {
+    /// Return the coupling name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> coupling.name
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
 
+    /// Return the expression defining the coupling.
+    ///
+    /// Examples
+    /// --------
+    /// >>> coupling.expression
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn expression(&self) -> &str {
         &self.inner.expression
     }
 
+    /// Return the coupling-order powers keyed by order name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> coupling.orders
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn orders(&self) -> BTreeMap<String, usize> {
         self.inner.orders.clone()
     }
 
+    /// Return the evaluated complex coupling value, when available.
+    ///
+    /// Examples
+    /// --------
+    /// >>> coupling.value
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn value(&self) -> Option<(f64, f64)> {
         self.inner.value.map(Into::into)
     }
 
+    /// Return a concise representation containing the coupling name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> repr(coupling)
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     fn __repr__(&self) -> String {
         format!("Coupling(name='{}')", self.inner.name)
     }
@@ -280,37 +514,101 @@ impl From<VertexRule> for PyVertexRule {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyVertexRule {
+    /// Return the vertex-rule name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> vertex.name
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
 
+    /// Return the ordered particle names attached to the vertex.
+    ///
+    /// Examples
+    /// --------
+    /// >>> vertex.particles
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn particles(&self) -> Vec<String> {
         self.inner.particles.clone()
     }
 
+    /// Return the color structures used by the vertex.
+    ///
+    /// Examples
+    /// --------
+    /// >>> vertex.color_structures
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn color_structures(&self) -> Vec<String> {
         self.inner.color_structures.clone()
     }
 
+    /// Return the Lorentz-structure names used by the vertex.
+    ///
+    /// Examples
+    /// --------
+    /// >>> vertex.lorentz_structures
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn lorentz_structures(&self) -> Vec<String> {
         self.inner.lorentz_structures.clone()
     }
 
+    /// Return the coupling-name matrix indexed by color and Lorentz structure.
+    ///
+    /// Examples
+    /// --------
+    /// >>> vertex.couplings
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn couplings(&self) -> Vec<Vec<Option<String>>> {
         self.inner.couplings.clone()
     }
 
+    /// Combine the coupling-order powers referenced by this vertex.
+    ///
+    /// Examples
+    /// --------
+    /// >>> vertex.coupling_orders(model)
+    ///
+    /// Parameters
+    /// ----------
+    /// model : Model
+    ///     Model containing the referenced couplings.
     fn coupling_orders(&self, model: &PyModel) -> PyResult<BTreeMap<String, usize>> {
         self.inner
             .coupling_orders(&model.inner)
             .map_err(error::model)
     }
 
+    /// Return a concise representation containing the vertex-rule name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> repr(vertex)
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     fn __repr__(&self) -> String {
         format!("VertexRule(name='{}')", self.inner.name)
     }
@@ -337,21 +635,57 @@ impl From<LorentzStructure> for PyLorentzStructure {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyLorentzStructure {
+    /// Return the Lorentz-structure name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> lorentz.name
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
 
+    /// Return the spin codes of the structure's particle slots.
+    ///
+    /// Examples
+    /// --------
+    /// >>> lorentz.spins
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn spins(&self) -> Vec<i64> {
         self.inner.spins.clone()
     }
 
+    /// Return the symbolic Lorentz expression.
+    ///
+    /// Examples
+    /// --------
+    /// >>> lorentz.structure
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn structure(&self) -> &str {
         &self.inner.structure
     }
 
+    /// Return a concise representation containing the structure name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> repr(lorentz)
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     fn __repr__(&self) -> String {
         format!("LorentzStructure(name='{}')", self.inner.name)
     }
@@ -378,26 +712,71 @@ impl From<Propagator> for PyPropagator {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyPropagator {
+    /// Return the propagator name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> propagator.name
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
 
+    /// Return the name of the particle using this propagator.
+    ///
+    /// Examples
+    /// --------
+    /// >>> propagator.particle
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn particle(&self) -> &str {
         &self.inner.particle
     }
 
+    /// Return the symbolic propagator numerator.
+    ///
+    /// Examples
+    /// --------
+    /// >>> propagator.numerator
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn numerator(&self) -> &str {
         &self.inner.numerator
     }
 
+    /// Return the symbolic propagator denominator.
+    ///
+    /// Examples
+    /// --------
+    /// >>> propagator.denominator
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn denominator(&self) -> &str {
         &self.inner.denominator
     }
 
+    /// Return a concise representation containing the propagator name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> repr(propagator)
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     fn __repr__(&self) -> String {
         format!("Propagator(name='{}')", self.inner.name)
     }
@@ -424,21 +803,57 @@ impl From<ModelFunction> for PyModelFunction {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyModelFunction {
+    /// Return the function name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> function.name
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
 
+    /// Return the ordered argument names.
+    ///
+    /// Examples
+    /// --------
+    /// >>> function.arguments
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn arguments(&self) -> Vec<String> {
         self.inner.arguments.clone()
     }
 
+    /// Return the function body, when one is defined by the model.
+    ///
+    /// Examples
+    /// --------
+    /// >>> function.expression
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn expression(&self) -> Option<String> {
         self.inner.expression.clone()
     }
 
+    /// Return a concise representation containing the function name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> repr(function)
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     fn __repr__(&self) -> String {
         format!("ModelFunction(name='{}')", self.inner.name)
     }
@@ -465,21 +880,57 @@ impl From<ModelFormFactor> for PyFormFactor {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyFormFactor {
+    /// Return the form-factor name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> form_factor.name
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
 
+    /// Return the model-defined form-factor type, when present.
+    ///
+    /// Examples
+    /// --------
+    /// >>> form_factor.type_name
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn type_name(&self) -> Option<String> {
         self.inner.type_name.clone()
     }
 
+    /// Return the symbolic form-factor value, when present.
+    ///
+    /// Examples
+    /// --------
+    /// >>> form_factor.value
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn value(&self) -> Option<String> {
         self.inner.value.clone()
     }
 
+    /// Return a concise representation containing the form-factor name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> repr(form_factor)
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     fn __repr__(&self) -> String {
         format!("FormFactor(name='{}')", self.inner.name)
     }
@@ -506,11 +957,29 @@ impl From<ModelExpression> for PyModelExpression {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyModelExpression {
+    /// Return the name assigned to the expression.
+    ///
+    /// Examples
+    /// --------
+    /// >>> expression.name
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
 
+    /// Return the symbolic expression text.
+    ///
+    /// Examples
+    /// --------
+    /// >>> expression.expression
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn expression(&self) -> &str {
         &self.inner.expression
@@ -538,6 +1007,15 @@ impl From<EvaluationRequest> for PyEvaluationRequest {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyEvaluationRequest {
+    /// Return the known parameter values keyed by name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> request.known_parameters
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn known_parameters(&self) -> BTreeMap<String, (f64, f64)> {
         self.inner
@@ -547,6 +1025,15 @@ impl PyEvaluationRequest {
             .collect()
     }
 
+    /// Return the internal expressions that must be evaluated.
+    ///
+    /// Examples
+    /// --------
+    /// >>> request.internal_parameters
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn internal_parameters(&self) -> Vec<PyModelExpression> {
         self.inner
@@ -557,6 +1044,15 @@ impl PyEvaluationRequest {
             .collect()
     }
 
+    /// Return the coupling expressions that must be evaluated.
+    ///
+    /// Examples
+    /// --------
+    /// >>> request.couplings
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn couplings(&self) -> Vec<PyModelExpression> {
         self.inner
@@ -567,6 +1063,15 @@ impl PyEvaluationRequest {
             .collect()
     }
 
+    /// Return the function definitions available during evaluation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> request.functions
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn functions(&self) -> Vec<PyModelFunction> {
         self.inner
@@ -577,6 +1082,15 @@ impl PyEvaluationRequest {
             .collect()
     }
 
+    /// Return the form-factor definitions available during evaluation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> request.form_factors
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn form_factors(&self) -> Vec<PyFormFactor> {
         self.inner
@@ -603,6 +1117,18 @@ pub struct PyEvaluatedValues {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyEvaluatedValues {
+    /// Create values returned by a custom model evaluator.
+    ///
+    /// Examples
+    /// --------
+    /// >>> values = EvaluatedValues(couplings={"GC_1": (1.0, 0.0)})
+    ///
+    /// Parameters
+    /// ----------
+    /// internal_parameters : dict[str, tuple[float, float]] or None
+    ///     Evaluated internal parameters keyed by name.
+    /// couplings : dict[str, tuple[float, float]] or None
+    ///     Evaluated couplings keyed by name.
     #[new]
     #[pyo3(signature = (*, internal_parameters=None, couplings=None))]
     fn new(
@@ -625,6 +1151,15 @@ impl PyEvaluatedValues {
         }
     }
 
+    /// Return the evaluated internal parameters keyed by name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> values.internal_parameters
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn internal_parameters(&self) -> BTreeMap<String, (f64, f64)> {
         self.inner
@@ -634,6 +1169,15 @@ impl PyEvaluatedValues {
             .collect()
     }
 
+    /// Return the evaluated couplings keyed by name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> values.couplings
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn couplings(&self) -> BTreeMap<String, (f64, f64)> {
         self.inner
@@ -680,11 +1224,30 @@ impl From<ParameterCard> for PyParameterCard {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyParameterCard {
+    /// Create an empty parameter card.
+    ///
+    /// Examples
+    /// --------
+    /// >>> card = ParameterCard()
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[new]
     fn new() -> Self {
         Self::default()
     }
 
+    /// Parse a parameter card from its JSON representation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> card = ParameterCard.from_json('{"mass": [1.0, 0.0]}')
+    ///
+    /// Parameters
+    /// ----------
+    /// json : str
+    ///     Serialized parameter-card object.
     #[staticmethod]
     fn from_json(json: &str) -> PyResult<Self> {
         ParameterCard::from_json(json)
@@ -692,6 +1255,16 @@ impl PyParameterCard {
             .map_err(error::model)
     }
 
+    /// Load a parameter card from a JSON file.
+    ///
+    /// Examples
+    /// --------
+    /// >>> card = ParameterCard.from_path("parameters.json")
+    ///
+    /// Parameters
+    /// ----------
+    /// path : str or os.PathLike
+    ///     Path to the JSON parameter card.
     #[staticmethod]
     fn from_path(py: Python<'_>, path: PathBuf) -> PyResult<Self> {
         py.detach(move || ParameterCard::from_path(path))
@@ -699,19 +1272,62 @@ impl PyParameterCard {
             .map_err(error::model)
     }
 
+    /// Return a parameter's complex value, or ``None`` when it is absent.
+    ///
+    /// Examples
+    /// --------
+    /// >>> card.get("mass")
+    ///
+    /// Parameters
+    /// ----------
+    /// name : str
+    ///     Parameter name to look up.
     fn get(&self, name: &str) -> Option<(f64, f64)> {
         self.inner.get(name).copied().map(Into::into)
     }
 
+    /// Store a complex parameter value.
+    ///
+    /// Examples
+    /// --------
+    /// >>> card.set("mass", 1.0)
+    ///
+    /// Parameters
+    /// ----------
+    /// name : str
+    ///     Parameter name to store.
+    /// real : float
+    ///     Real component of the value.
+    /// imaginary : float
+    ///     Imaginary component of the value.
     #[pyo3(signature = (name, real, imaginary=0.0))]
     fn set(&mut self, name: String, real: f64, imaginary: f64) {
         self.inner.insert(name, ComplexValue::new(real, imaginary));
     }
 
+    /// Remove and return a parameter value, if present.
+    ///
+    /// Examples
+    /// --------
+    /// >>> card.remove("mass")
+    ///
+    /// Parameters
+    /// ----------
+    /// name : str
+    ///     Parameter name to remove.
     fn remove(&mut self, name: &str) -> Option<(f64, f64)> {
         self.inner.remove(name).map(Into::into)
     }
 
+    /// Return all parameter-card entries.
+    ///
+    /// Examples
+    /// --------
+    /// >>> card.items()
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     fn items(&self) -> Vec<(String, (f64, f64))> {
         self.inner
             .iter()
@@ -719,6 +1335,16 @@ impl PyParameterCard {
             .collect()
     }
 
+    /// Serialize the parameter card as JSON.
+    ///
+    /// Examples
+    /// --------
+    /// >>> card.to_json(pretty=False)
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : bool
+    ///     Indent the output when true.
     #[pyo3(signature = (pretty=true))]
     fn to_json(&self, pretty: bool) -> PyResult<String> {
         if pretty {
@@ -729,12 +1355,31 @@ impl PyParameterCard {
         .map_err(error::model)
     }
 
+    /// Write the parameter card to a JSON file.
+    ///
+    /// Examples
+    /// --------
+    /// >>> card.write_json("parameters.json")
+    ///
+    /// Parameters
+    /// ----------
+    /// path : str or os.PathLike
+    ///     Destination for the JSON parameter card.
     fn write_json(&self, py: Python<'_>, path: PathBuf) -> PyResult<()> {
         let card = self.inner.clone();
         py.detach(move || card.write_json(path))
             .map_err(error::model)
     }
 
+    /// Return the number of entries in the parameter card.
+    ///
+    /// Examples
+    /// --------
+    /// >>> len(card)
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     fn __len__(&self) -> usize {
         self.inner.len()
     }
@@ -770,11 +1415,31 @@ impl From<Arc<Model>> for PyModel {
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyModel {
+    /// Parse a model from its JSON representation.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model = Model.from_json(model_json)
+    ///
+    /// Parameters
+    /// ----------
+    /// json : str
+    ///     Serialized model object.
     #[staticmethod]
     fn from_json(json: &str) -> PyResult<Self> {
         Model::from_json(json).map(Self::from).map_err(error::model)
     }
 
+    /// Load a model from a JSON file.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model = Model.from_path("model.json")
+    ///
+    /// Parameters
+    /// ----------
+    /// path : str or os.PathLike
+    ///     Path to the JSON model.
     #[staticmethod]
     fn from_path(py: Python<'_>, path: PathBuf) -> PyResult<Self> {
         py.detach(move || Model::from_path(path))
@@ -782,16 +1447,43 @@ impl PyModel {
             .map_err(error::model)
     }
 
+    /// Return the model name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.name
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn name(&self) -> &str {
         self.inner.name()
     }
 
+    /// Return the applied restriction name, when present.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.restriction
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn restriction(&self) -> Option<String> {
         self.inner.restriction().map(str::to_owned)
     }
 
+    /// Return all particles in model order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.particles
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn particles(&self) -> Vec<PyParticle> {
         self.inner
@@ -802,6 +1494,16 @@ impl PyModel {
             .collect()
     }
 
+    /// Look up a particle by name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> particle = model.particle("electron")
+    ///
+    /// Parameters
+    /// ----------
+    /// name : str
+    ///     Particle name or antiname.
     fn particle(&self, name: &str) -> PyResult<PyParticle> {
         self.inner
             .particle(name)
@@ -810,6 +1512,16 @@ impl PyModel {
             .map_err(error::model)
     }
 
+    /// Look up a particle by PDG code.
+    ///
+    /// Examples
+    /// --------
+    /// >>> particle = model.particle_by_pdg(11)
+    ///
+    /// Parameters
+    /// ----------
+    /// pdg : int
+    ///     Signed PDG particle code.
     fn particle_by_pdg(&self, pdg: i64) -> PyResult<PyParticle> {
         self.inner
             .particle_by_pdg(pdg)
@@ -818,6 +1530,15 @@ impl PyModel {
             .map_err(error::model)
     }
 
+    /// Return all parameters in model order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.parameters
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn parameters(&self) -> Vec<PyParameter> {
         self.inner
@@ -828,6 +1549,16 @@ impl PyModel {
             .collect()
     }
 
+    /// Look up a parameter by name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> parameter = model.parameter("mass")
+    ///
+    /// Parameters
+    /// ----------
+    /// name : str
+    ///     Parameter name.
     fn parameter(&self, name: &str) -> PyResult<PyParameter> {
         self.inner
             .parameter(name)
@@ -836,6 +1567,15 @@ impl PyModel {
             .map_err(error::model)
     }
 
+    /// Return all couplings in model order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.couplings
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn couplings(&self) -> Vec<PyCoupling> {
         self.inner
@@ -846,6 +1586,16 @@ impl PyModel {
             .collect()
     }
 
+    /// Look up a coupling by name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> coupling = model.coupling("GC_1")
+    ///
+    /// Parameters
+    /// ----------
+    /// name : str
+    ///     Coupling name.
     fn coupling(&self, name: &str) -> PyResult<PyCoupling> {
         self.inner
             .coupling(name)
@@ -854,6 +1604,15 @@ impl PyModel {
             .map_err(error::model)
     }
 
+    /// Return all vertex rules in model order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.vertex_rules
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn vertex_rules(&self) -> Vec<PyVertexRule> {
         self.inner
@@ -864,6 +1623,16 @@ impl PyModel {
             .collect()
     }
 
+    /// Look up a vertex rule by name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> vertex = model.vertex_rule("V_1")
+    ///
+    /// Parameters
+    /// ----------
+    /// name : str
+    ///     Vertex-rule name.
     fn vertex_rule(&self, name: &str) -> PyResult<PyVertexRule> {
         self.inner
             .vertex_rule(name)
@@ -872,6 +1641,15 @@ impl PyModel {
             .map_err(error::model)
     }
 
+    /// Return all Lorentz structures in model order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.lorentz_structures
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn lorentz_structures(&self) -> Vec<PyLorentzStructure> {
         self.inner
@@ -882,6 +1660,16 @@ impl PyModel {
             .collect()
     }
 
+    /// Look up a Lorentz structure by name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> lorentz = model.lorentz_structure("FFV1")
+    ///
+    /// Parameters
+    /// ----------
+    /// name : str
+    ///     Lorentz-structure name.
     fn lorentz_structure(&self, name: &str) -> PyResult<PyLorentzStructure> {
         self.inner
             .lorentz_structure(name)
@@ -890,6 +1678,15 @@ impl PyModel {
             .map_err(error::model)
     }
 
+    /// Return all propagators in model order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.propagators
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn propagators(&self) -> Vec<PyPropagator> {
         self.inner
@@ -900,6 +1697,16 @@ impl PyModel {
             .collect()
     }
 
+    /// Look up a propagator by name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> propagator = model.propagator("electron")
+    ///
+    /// Parameters
+    /// ----------
+    /// name : str
+    ///     Propagator name.
     fn propagator(&self, name: &str) -> PyResult<PyPropagator> {
         self.inner
             .propagator(name)
@@ -908,6 +1715,15 @@ impl PyModel {
             .map_err(error::model)
     }
 
+    /// Return all model functions in model order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.functions
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn functions(&self) -> Vec<PyModelFunction> {
         self.inner
@@ -918,6 +1734,16 @@ impl PyModel {
             .collect()
     }
 
+    /// Look up a model function by name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> function = model.function("complexconjugate")
+    ///
+    /// Parameters
+    /// ----------
+    /// name : str
+    ///     Function name.
     fn function(&self, name: &str) -> PyResult<PyModelFunction> {
         self.inner
             .function(name)
@@ -926,6 +1752,15 @@ impl PyModel {
             .map_err(error::model)
     }
 
+    /// Return all form factors in model order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.form_factors
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     #[getter]
     fn form_factors(&self) -> Vec<PyFormFactor> {
         self.inner
@@ -936,6 +1771,16 @@ impl PyModel {
             .collect()
     }
 
+    /// Look up a form factor by name.
+    ///
+    /// Examples
+    /// --------
+    /// >>> form_factor = model.form_factor("FF_1")
+    ///
+    /// Parameters
+    /// ----------
+    /// name : str
+    ///     Form-factor name.
     fn form_factor(&self, name: &str) -> PyResult<PyFormFactor> {
         self.inner
             .form_factor(name)
@@ -944,6 +1789,15 @@ impl PyModel {
             .map_err(error::model)
     }
 
+    /// Build a parameter card from the model's current external values.
+    ///
+    /// Examples
+    /// --------
+    /// >>> card = model.default_parameter_card()
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     fn default_parameter_card(&self) -> PyResult<PyParameterCard> {
         self.inner
             .default_parameter_card()
@@ -951,6 +1805,18 @@ impl PyModel {
             .map_err(error::model)
     }
 
+    /// Return a copy with a parameter card applied atomically.
+    ///
+    /// Examples
+    /// --------
+    /// >>> updated = model.with_parameter_card(card)
+    ///
+    /// Parameters
+    /// ----------
+    /// card : ParameterCard
+    ///     External parameter values to apply.
+    /// evaluator : Callable[[EvaluationRequest], EvaluatedValues] or None
+    ///     Optional evaluator used to recompute dependent values.
     #[pyo3(signature = (card, evaluator=None))]
     fn with_parameter_card(
         &self,
@@ -975,6 +1841,16 @@ impl PyModel {
         Ok(model.into())
     }
 
+    /// Return a copy with all dependent values recomputed by a callback.
+    ///
+    /// Examples
+    /// --------
+    /// >>> recomputed = model.recompute_with(evaluate)
+    ///
+    /// Parameters
+    /// ----------
+    /// evaluator : Callable[[EvaluationRequest], EvaluatedValues]
+    ///     Callback that evaluates every expression in a request.
     fn recompute_with(
         &self,
         #[gen_stub(override_type(
@@ -993,6 +1869,16 @@ impl PyModel {
         Ok(model.into())
     }
 
+    /// Serialize the model as JSON.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.to_json(pretty=False)
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : bool
+    ///     Indent the output when true.
     #[pyo3(signature = (pretty=true))]
     fn to_json(&self, pretty: bool) -> PyResult<String> {
         if pretty {
@@ -1003,18 +1889,99 @@ impl PyModel {
         .map_err(error::model)
     }
 
+    /// Write the model to a JSON file.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model.write_json("model.json")
+    ///
+    /// Parameters
+    /// ----------
+    /// path : str or os.PathLike
+    ///     Destination for the JSON model.
     fn write_json(&self, py: Python<'_>, path: PathBuf) -> PyResult<()> {
         let model = self.inner.clone();
         py.detach(move || model.write_json(path))
             .map_err(error::model)
     }
 
+    /// Return a concise representation containing the name and particle count.
+    ///
+    /// Examples
+    /// --------
+    /// >>> repr(model)
+    ///
+    /// Parameters
+    /// ----------
+    /// None
     fn __repr__(&self) -> String {
         format!(
             "Model(name='{}', particles={})",
             self.inner.name(),
             self.inner.particles().len()
         )
+    }
+
+    /// Render a compact inventory of the model in notebook frontends.
+    ///
+    /// Examples
+    /// --------
+    /// Leave ``model`` as the final expression in a notebook cell to display
+    /// its particle-content and interaction counts.
+    ///
+    /// Parameters
+    /// ----------
+    /// None
+    fn _repr_html_(&self) -> String {
+        let restriction = self
+            .inner
+            .restriction()
+            .map_or_else(|| "none".to_owned(), escape_html);
+        format!(
+            "<div class=\"feynkit-model\" style=\"display:inline-block;max-width:100%;\
+             overflow-x:auto\"><strong>{}</strong><span style=\"margin-left:.45rem;\
+             opacity:.7\">restriction: {restriction}</span><table style=\"border-collapse:\
+             collapse;margin-top:.35rem\"><thead><tr><th style=\"padding:.2rem .65rem;\
+             text-align:right\">particles</th><th style=\"padding:.2rem .65rem;text-align:\
+             right\">parameters</th><th style=\"padding:.2rem .65rem;text-align:right\">\
+             couplings</th><th style=\"padding:.2rem .65rem;text-align:right\">vertex rules\
+             </th><th style=\"padding:.2rem .65rem;text-align:right\">Lorentz structures\
+             </th></tr></thead><tbody><tr><td style=\"padding:.2rem .65rem;text-align:right\">\
+             {}</td><td style=\"padding:.2rem .65rem;text-align:right\">{}</td><td style=\"\
+             padding:.2rem .65rem;text-align:right\">{}</td><td style=\"padding:.2rem .65rem;\
+             text-align:right\">{}</td><td style=\"padding:.2rem .65rem;text-align:right\">\
+             {}</td></tr></tbody></table></div>",
+            escape_html(self.inner.name()),
+            self.inner.particles().len(),
+            self.inner.parameters().len(),
+            self.inner.couplings().len(),
+            self.inner.vertex_rules().len(),
+            self.inner.lorentz_structures().len(),
+        )
+    }
+
+    /// Write the concise model summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// IPython invokes this method when only a text representation is supported.
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty
+    ///     The IPython pretty-printer object.
+    /// cycle : bool
+    ///     Whether this object is part of a recursive formatting cycle.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "...".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
