@@ -207,8 +207,7 @@ class CffGenerator:
         Examples
         --------
         >>> result = generator.generate(diagram)
-        >>> len(result) >= 0
-        True
+        >>> result.to_expression()
 
         Parameters
         ----------
@@ -227,8 +226,8 @@ class CffOrientation:
     Examples
     --------
     >>> orientation = result.orientations[0]
-    >>> orientation.id >= 0
-    True
+    >>> for product in orientation.denominator_products():
+    ...     print([surface.symbol_name for surface in product])
     """
     @property
     def id(self) -> builtins.int:
@@ -239,11 +238,6 @@ class CffOrientation:
     def edge_orientations(self) -> builtins.list[tuple[builtins.int, builtins.str]]:
         r"""
         Return each edge ID and its selected orientation.
-
-        Examples
-        --------
-        >>> orientation.edge_orientations
-        [(0, 'default'), (1, 'reversed')]
         """
     def denominator_products(self) -> builtins.list[builtins.list[CffSurface]]:
         r"""
@@ -252,8 +246,9 @@ class CffOrientation:
         Examples
         --------
         >>> products = orientation.denominator_products()
-        >>> products[0][0].kind
-        'energy'
+        >>> denominator_variables = [
+        ...     [surface.symbol_name for surface in product] for product in products
+        ... ]
         """
 
 @typing.final
@@ -296,8 +291,7 @@ class CffReport:
 
         Examples
         --------
-        >>> repr(result.report).startswith("CffReport(")
-        True
+        >>> print(result.report)
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -341,11 +335,6 @@ class CffResult:
     def report(self) -> CffReport:
         r"""
         Return generation statistics for this CFF result.
-
-        Examples
-        --------
-        >>> result.report.candidate_orientations >= result.report.acyclic_orientations
-        True
         """
     @property
     def orientations(self) -> builtins.list[CffOrientation]:
@@ -356,12 +345,6 @@ class CffResult:
     def surfaces(self) -> builtins.list[CffSurface]:
         r"""
         Return all unique energy and H surfaces in this result.
-
-        Examples
-        --------
-        >>> surfaces = result.surfaces
-        >>> all(surface.kind in {"energy", "h"} for surface in surfaces)
-        True
         """
     def to_expression(self) -> Expression:
         r"""
@@ -373,8 +356,7 @@ class CffResult:
         Examples
         --------
         >>> expression = result.to_expression()
-        >>> expression is not None
-        True
+        >>> expression  # native Symbolica display in a notebook
         """
     def __len__(self) -> builtins.int:
         r"""
@@ -382,8 +364,7 @@ class CffResult:
 
         Examples
         --------
-        >>> len(result) == result.report.unfolded_terms
-        True
+        >>> denominator_term_count = len(result)
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -391,8 +372,7 @@ class CffResult:
 
         Examples
         --------
-        >>> repr(result).startswith("CffResult(")
-        True
+        >>> print(result)
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -433,18 +413,12 @@ class CffSurface:
     Examples
     --------
     >>> surface = result.surfaces[0]
-    >>> surface.kind in {"energy", "h"}
-    True
+    >>> print(surface, surface.positive_energies, surface.external_shift)
     """
     @property
     def kind(self) -> builtins.str:
         r"""
         Return the surface category: energy, h, unit, or infinite.
-
-        Examples
-        --------
-        >>> surface.kind
-        'energy'
         """
     @property
     def index(self) -> typing.Optional[builtins.int]:
@@ -455,51 +429,30 @@ class CffSurface:
     def symbol_name(self) -> typing.Optional[builtins.str]:
         r"""
         Return the Symbolica variable name assigned to this surface.
-
-        Examples
-        --------
-        >>> surface.symbol_name
-        'feynkit::E0'
         """
     @property
     def positive_energies(self) -> builtins.list[builtins.int]:
         r"""
         Return edge IDs whose on-shell energies enter with positive sign.
-
-        Examples
-        --------
-        >>> surface.positive_energies
-        [0, 2]
         """
     @property
     def negative_energies(self) -> builtins.list[builtins.int]:
         r"""
         Return edge IDs whose on-shell energies enter with negative sign.
-
-        Examples
-        --------
-        >>> surface.negative_energies
-        []
         """
     @property
     def external_shift(self) -> builtins.list[tuple[builtins.int, builtins.int]]:
         r"""
         Return external edge IDs and their integer shift coefficients.
-
-        Examples
-        --------
-        >>> surface.external_shift
-        [(3, -1)]
         """
     @property
     def vertices(self) -> builtins.list[builtins.int]:
         r"""
-        Return the diagram vertex IDs enclosed by this surface.
+        Return the dense CFF vertex IDs enclosed by this surface.
 
-        Examples
-        --------
-        >>> surface.vertices
-        [0, 1]
+        CFF generation remaps the diagram's internal vertices to a compact
+        zero-based range. These IDs therefore index the contracted CFF graph;
+        they are not the original ``diagram.vertices`` identifiers.
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -507,17 +460,16 @@ class CffSurface:
 
         Examples
         --------
-        >>> repr(surface)
-        'feynkit::E0'
+        >>> print(surface)  # Symbolica denominator variable, for example feynkit::E0
         """
 
 @typing.final
 class ClusteringResult:
     r"""
-    The jets and unclustered inputs from one clustering operation.
+    The selected jets from one clustering operation.
 
-    Besides the selected jets, the result preserves which supplied momenta were
-    removed by the transverse-momentum cut.
+    Jets are ordered by decreasing transverse momentum, and each jet's
+    ``constituent_indices`` map back to positions in the supplied momentum list.
 
     Examples
     --------
@@ -542,8 +494,7 @@ class ClusteringResult:
 
         Examples
         --------
-        >>> len(result) == len(result.jets)
-        True
+        >>> jet_multiplicity = len(result)
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -551,8 +502,7 @@ class ClusteringResult:
 
         Examples
         --------
-        >>> repr(result).startswith("ClusteringResult(")
-        True
+        >>> print(result)
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -600,12 +550,6 @@ class Coupling:
     def name(self) -> builtins.str:
         r"""
         Return the coupling name.
-
-        Examples
-        --------
-        >>> coupling = model.couplings[0]
-        >>> model.coupling(coupling.name).name == coupling.name
-        True
         """
     @property
     def expression(self) -> builtins.str:
@@ -632,7 +576,7 @@ class Coupling:
 
         Examples
         --------
-        >>> repr(coupling)
+        >>> print(next(c for c in model.couplings if c.orders.get("QED", 0) > 0))
         """
 
 @typing.final
@@ -653,12 +597,6 @@ class DiagramEdge:
     def id(self) -> builtins.int:
         r"""
         Return this edge's integer ID within the diagram.
-
-        Examples
-        --------
-        >>> edge = diagram.edges[0]
-        >>> diagram.edges[edge.id].particle_pdg == edge.particle_pdg
-        True
         """
     @property
     def source(self) -> builtins.int:
@@ -684,12 +622,6 @@ class DiagramEdge:
     def particle_name(self) -> builtins.str:
         r"""
         Return the particle name associated with this propagator edge.
-
-        Examples
-        --------
-        >>> edge = diagram.edges[0]
-        >>> model.particle(edge.particle_name).pdg_code == edge.particle_pdg
-        True
         """
     @property
     def particle_pdg(self) -> builtins.int:
@@ -722,9 +654,9 @@ class DiagramEdge:
         Examples
         --------
         >>> edge = diagram.edges[0]
-        >>> numerator = edge.numerator_expression()
-        >>> if numerator is not None:
-        ...     numerator  # rich Symbolica output in a notebook
+        >>> propagator_factor = edge.numerator_expression()
+        >>> if propagator_factor is not None:
+        ...     weighted_propagator = diagram.overall_factor_expression() * propagator_factor
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -733,8 +665,7 @@ class DiagramEdge:
         Examples
         --------
         >>> edge = diagram.edges[0]
-        >>> repr(edge).startswith("DiagramEdge(")
-        True
+        >>> print(edge)  # shows particle identity, endpoints, and flow direction
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -788,11 +719,6 @@ class DiagramGroup:
     def members(self) -> builtins.list[GroupMember]:
         r"""
         Return the deterministically ordered group members, including the master.
-
-        Examples
-        --------
-        >>> result.groups[0].members[0].ratio
-        '1'
         """
 
 @typing.final
@@ -815,12 +741,6 @@ class DiagramVertex:
     def id(self) -> builtins.int:
         r"""
         Return this vertex's integer ID within the diagram.
-
-        Examples
-        --------
-        >>> vertex = diagram.vertices[0]
-        >>> diagram.vertices[vertex.id].name == vertex.name
-        True
         """
     @property
     def name(self) -> builtins.str:
@@ -857,12 +777,6 @@ class DiagramVertex:
     def external_state(self) -> typing.Optional[builtins.str]:
         r"""
         Return ``"incoming"`` or ``"outgoing"`` for an external vertex.
-
-        Examples
-        --------
-        >>> vertex = next(vertex for vertex in diagram.vertices if vertex.is_external)
-        >>> vertex.external_state in {"incoming", "outgoing"}
-        True
         """
     @property
     def is_external(self) -> builtins.bool:
@@ -880,9 +794,9 @@ class DiagramVertex:
         Examples
         --------
         >>> vertex = diagram.vertices[0]
-        >>> numerator = vertex.numerator_expression()
-        >>> if numerator is not None:
-        ...     numerator  # rich Symbolica output in a notebook
+        >>> vertex_factor = vertex.numerator_expression()
+        >>> if vertex_factor is not None:
+        ...     weighted_vertex_factor = diagram.overall_factor_expression() * vertex_factor
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -891,8 +805,7 @@ class DiagramVertex:
         Examples
         --------
         >>> vertex = diagram.vertices[0]
-        >>> repr(vertex).startswith("DiagramVertex(")
-        True
+        >>> print(vertex)  # includes its external state or interaction rule
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -934,23 +847,11 @@ class EvaluatedValues:
     def internal_parameters(self) -> builtins.dict[builtins.str, tuple[builtins.float, builtins.float]]:
         r"""
         Return the evaluated internal parameters keyed by name.
-
-        Examples
-        --------
-        >>> values = fk.EvaluatedValues(internal_parameters={"aEW": (0.0073, 0.0)})
-        >>> values.internal_parameters["aEW"]
-        (0.0073, 0.0)
         """
     @property
     def couplings(self) -> builtins.dict[builtins.str, tuple[builtins.float, builtins.float]]:
         r"""
         Return the evaluated couplings keyed by name.
-
-        Examples
-        --------
-        >>> values = fk.EvaluatedValues(couplings={"GC_1": (0.3, 0.0)})
-        >>> values.couplings["GC_1"]
-        (0.3, 0.0)
         """
     def __new__(cls, *, internal_parameters: typing.Optional[typing.Mapping[builtins.str, tuple[builtins.float, builtins.float]]] = None, couplings: typing.Optional[typing.Mapping[builtins.str, tuple[builtins.float, builtins.float]]] = None) -> EvaluatedValues:
         r"""
@@ -1107,12 +1008,6 @@ class FeynmanDiagram:
     def vertices(self) -> builtins.list[DiagramVertex]:
         r"""
         Return the diagram vertices with stable integer identifiers.
-
-        Examples
-        --------
-        >>> vertices = diagram.vertices
-        >>> all(vertex.id == index for index, vertex in enumerate(vertices))
-        True
         """
     @property
     def edges(self) -> builtins.list[DiagramEdge]:
@@ -1121,10 +1016,13 @@ class FeynmanDiagram:
 
         Examples
         --------
-        >>> edges = diagram.edges
-        >>> vertex_ids = {vertex.id for vertex in diagram.vertices}
-        >>> all(edge.source in vertex_ids and edge.target in vertex_ids for edge in edges)
-        True
+        Select the internal propagators before constructing an integrand:
+
+        >>> internal_edges = [
+        ...     edge for edge in diagram.edges
+        ...     if not diagram.vertices[edge.source].is_external
+        ...     and not diagram.vertices[edge.target].is_external
+        ... ]
         """
     @staticmethod
     def from_json(json: builtins.str) -> FeynmanDiagram:
@@ -1135,8 +1033,8 @@ class FeynmanDiagram:
         --------
         >>> encoded = diagram.to_json()
         >>> restored = FeynmanDiagram.from_json(encoded)
-        >>> restored.name == diagram.name
-        True
+        >>> restored.validate(model)
+        >>> restored  # render the recovered graph in a notebook
 
         Parameters
         ----------
@@ -1153,8 +1051,8 @@ class FeynmanDiagram:
         --------
         >>> dot = diagram.to_dot()
         >>> restored = FeynmanDiagram.from_dot(dot)
-        >>> restored.loop_count == diagram.loop_count
-        True
+        >>> restored.validate(model)
+        >>> restored  # preserve topology through a Graphviz workflow
 
         Parameters
         ----------
@@ -1169,7 +1067,8 @@ class FeynmanDiagram:
         --------
         >>> numerator = diagram.numerator_expression()
         >>> if numerator is not None:
-        ...     numerator  # native Symbolica rich display in a notebook
+        ...     integrand_numerator = diagram.overall_factor_expression() * numerator
+        ...     integrand_numerator  # native Symbolica algebra and rich display
         """
     def overall_factor_expression(self) -> Expression:
         r"""
@@ -1186,11 +1085,10 @@ class FeynmanDiagram:
 
         Examples
         --------
-        Validation returns ``None`` and raises ``DiagramError`` for invalid
+        Validation raises ``DiagramError`` for invalid particle or interaction
         references:
 
-        >>> diagram.validate(model) is None
-        True
+        >>> diagram.validate(model)
 
         Parameters
         ----------
@@ -1205,8 +1103,8 @@ class FeynmanDiagram:
         Examples
         --------
         >>> encoded = diagram.to_json()
-        >>> encoded.lstrip().startswith("{")
-        True
+        >>> restored = FeynmanDiagram.from_json(encoded)
+        >>> restored.validate(model)
         """
     def to_dot(self) -> builtins.str:
         r"""
@@ -1215,8 +1113,8 @@ class FeynmanDiagram:
         Examples
         --------
         >>> dot = diagram.to_dot()
-        >>> "graph" in dot.lower()
-        True
+        >>> restored = FeynmanDiagram.from_dot(dot)
+        >>> restored.validate(model)
         """
     def to_linnest(self) -> builtins.str:
         r"""
@@ -1228,9 +1126,8 @@ class FeynmanDiagram:
 
         Examples
         --------
-        >>> source = diagram.to_linnest()
-        >>> "graph.build" in source and "layout.layout" in source
-        True
+        >>> from pathlib import Path
+        >>> Path("one_loop_diagram.typ").write_text(diagram.to_linnest())
         """
     def to_svg(self) -> builtins.str:
         r"""
@@ -1238,9 +1135,8 @@ class FeynmanDiagram:
 
         Examples
         --------
-        >>> svg = diagram.to_svg()
-        >>> svg.startswith("<svg")
-        True
+        >>> import marimo as mo
+        >>> mo.Html(diagram.to_svg())
         """
     def to_html(self) -> builtins.str:
         r"""
@@ -1250,9 +1146,8 @@ class FeynmanDiagram:
         --------
         Embed the returned markup in a web page or notebook component:
 
-        >>> html = diagram.to_html()
-        >>> "<figure" in html and "<svg" in html
-        True
+        >>> import marimo as mo
+        >>> mo.Html(diagram.to_html())
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -1268,8 +1163,8 @@ class FeynmanDiagram:
 
         Examples
         --------
-        >>> "<svg" in diagram._repr_svg_()
-        True
+        >>> from IPython.display import SVG
+        >>> SVG(diagram._repr_svg_())
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -1294,9 +1189,11 @@ class FeynmanDiagram:
         --------
         Limit exploratory calculations to the first basis:
 
-        >>> bases = diagram.loop_momentum_bases(limit=1)
-        >>> len(bases) <= 1
-        True
+        >>> basis = diagram.loop_momentum_bases(limit=1)[0]
+        >>> routing = {
+        ...     edge_id: signature.format_momentum()
+        ...     for edge_id, signature in basis.edge_signatures
+        ... }
 
         Parameters
         ----------
@@ -1310,8 +1207,7 @@ class FeynmanDiagram:
 
         Examples
         --------
-        >>> repr(diagram).startswith("FeynmanDiagram(")
-        True
+        >>> print(diagram)
         """
 
 @typing.final
@@ -1332,12 +1228,6 @@ class FormFactor:
     def name(self) -> builtins.str:
         r"""
         Return the form-factor name.
-
-        Examples
-        --------
-        >>> form_factor = model.form_factors[0]
-        >>> model.form_factor(form_factor.name).name == form_factor.name
-        True
         """
     @property
     def type_name(self) -> typing.Optional[builtins.str]:
@@ -1355,7 +1245,7 @@ class FormFactor:
 
         Examples
         --------
-        >>> repr(form_factor)
+        >>> print(model.form_factors[0])
         """
 
 @typing.final
@@ -1530,8 +1420,8 @@ class FourMomentum:
 
         Examples
         --------
-        >>> first.delta_r(second) >= 0.0
-        True
+        >>> separation = first.delta_r(second)
+        >>> same_jet = separation < 0.4
 
         Parameters
         ----------
@@ -1572,8 +1462,8 @@ class FourMomentum:
 
         Examples
         --------
-        >>> repr(FourMomentum(5.0, 3.0, 4.0, 0.0))
-        'FourMomentum(5, 3, 4, 0)'
+        >>> muon_momentum = FourMomentum(5.0, 3.0, 4.0, 0.0)
+        >>> print(f"muon four-momentum: {muon_momentum!r}")
         """
     def _repr_latex_(self) -> builtins.str:
         r"""
@@ -2006,8 +1896,7 @@ class GenerationReport:
     Examples
     --------
     >>> report = result.report
-    >>> report.retained_count == len(result.diagrams)
-    True
+    >>> print(report)
     """
     @property
     def topology_count(self) -> builtins.int:
@@ -2023,11 +1912,6 @@ class GenerationReport:
     def retained_count(self) -> builtins.int:
         r"""
         Return the number of diagrams retained after removing zero numerators.
-
-        Examples
-        --------
-        >>> result.report.retained_count == len(result)
-        True
         """
     @property
     def zero_numerator_count(self) -> builtins.int:
@@ -2045,8 +1929,7 @@ class GenerationReport:
 
         Examples
         --------
-        >>> repr(result.report).startswith("GenerationReport(")
-        True
+        >>> print(result.report)
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -2090,31 +1973,16 @@ class GenerationResult:
     def diagrams(self) -> builtins.list[FeynmanDiagram]:
         r"""
         Return every retained diagram in generated order.
-
-        Examples
-        --------
-        >>> len(result.diagrams) == len(result)
-        True
         """
     @property
     def groups(self) -> builtins.list[DiagramGroup]:
         r"""
         Return the numerator groups in deterministic master-index order.
-
-        Examples
-        --------
-        >>> all(group.members for group in result.groups)
-        True
         """
     @property
     def report(self) -> GenerationReport:
         r"""
         Return generation counts and completion status.
-
-        Examples
-        --------
-        >>> result.report.retained_count == len(result)
-        True
         """
     def __len__(self) -> builtins.int:
         r"""
@@ -2122,8 +1990,7 @@ class GenerationResult:
 
         Examples
         --------
-        >>> len(result) == len(result.diagrams)
-        True
+        >>> number_of_diagrams = len(result)
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -2131,8 +1998,7 @@ class GenerationResult:
 
         Examples
         --------
-        >>> repr(result).startswith("GenerationResult(")
-        True
+        >>> print(result)
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -2168,7 +2034,10 @@ class Generator:
     Generate Feynman diagrams from a particle model and a process definition.
 
     The generator combines model interactions with graph topologies at the
-    requested loop orders and returns typed diagrams ready for CFF operations.
+    requested loop orders. It instantiates the selected Feynman rules as
+    numerator annotations on interaction vertices and propagator edges, and
+    stores their product as the diagram-wide numerator. The resulting typed
+    diagrams are ready for symbolic manipulation and CFF operations.
 
     Examples
     --------
@@ -2185,11 +2054,6 @@ class Generator:
     def model(self) -> Model:
         r"""
         Return the particle model used by this generator.
-
-        Examples
-        --------
-        >>> generator.model.name == model.name
-        True
         """
     def __new__(cls, model: Model) -> Generator:
         r"""
@@ -2208,9 +2072,15 @@ class Generator:
         r"""
         Generate and optionally group all diagrams matching a process.
 
+        Model Feynman rules are instantiated into each returned diagram: inspect
+        ``vertex.numerator_expression()`` and ``edge.numerator_expression()`` for
+        individual factors, or ``diagram.numerator_expression()`` for their
+        combined numerator.
+
         Examples
         --------
         >>> result = generator.generate(process, options)
+        >>> combined_numerator = result.diagrams[0].numerator_expression()
 
         Parameters
         ----------
@@ -2251,11 +2121,6 @@ class GroupMember:
     def ratio(self) -> builtins.str:
         r"""
         Return the member numerator divided by the group master numerator.
-
-        Examples
-        --------
-        >>> result.groups[0].members[0].ratio
-        '1'
         """
     def ratio_expression(self) -> Expression:
         r"""
@@ -2380,8 +2245,7 @@ class Helicity:
 
         Examples
         --------
-        >>> repr(Helicity.PLUS)
-        'Helicity(1)'
+        >>> print(f"selected external helicity: {Helicity.PLUS!r}")
         """
 
 @typing.final
@@ -2396,8 +2260,7 @@ class Jet:
     --------
     >>> jets = fk.JetDefinition.anti_kt(0.4).cluster(particles).jets
     >>> leading_jet = jets[0]
-    >>> leading_jet.pt >= 0.0
-    True
+    >>> leading_jet.momentum
     """
     @property
     def momentum(self) -> FourMomentum:
@@ -2408,11 +2271,6 @@ class Jet:
     def constituent_indices(self) -> builtins.list[builtins.int]:
         r"""
         Return sorted positions of the input momenta assigned to this jet.
-
-        Examples
-        --------
-        >>> jet.constituent_indices
-        [0, 2]
         """
     @property
     def pt(self) -> builtins.float:
@@ -2435,8 +2293,7 @@ class Jet:
 
         Examples
         --------
-        >>> repr(jet).startswith("Jet(")
-        True
+        >>> print(jet)
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -2573,8 +2430,8 @@ class JetDefinition:
         Examples
         --------
         >>> result = JetDefinition.anti_kt(0.4).cluster(momenta)
-        >>> len(result) >= 0
-        True
+        >>> leading_jet = result.jets[0]
+        >>> leading_jet.momentum
 
         Parameters
         ----------
@@ -2629,12 +2486,6 @@ class LoadedModel:
     def diagnostics(self) -> UfoLoadDiagnostics:
         r"""
         Return counts and options recorded while loading the UFO model.
-
-        Examples
-        --------
-        >>> diagnostics = loaded.diagnostics
-        >>> diagnostics.particle_count == len(loaded.model.particles)
-        True
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -2642,8 +2493,7 @@ class LoadedModel:
 
         Examples
         --------
-        >>> repr(loaded).startswith("LoadedModel(")
-        True
+        >>> print(loaded)
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -2729,8 +2579,8 @@ class LoopMomentumBasis:
         ...     edge_id: signature.format_momentum()
         ...     for edge_id, signature in basis.edge_signatures
         ... }
-        >>> set(momentum_by_edge) == {edge.id for edge in diagram.edges}
-        True
+        >>> for edge in diagram.edges:
+        ...     print(edge.particle_name, momentum_by_edge[edge.id])
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -2739,8 +2589,7 @@ class LoopMomentumBasis:
         Examples
         --------
         >>> basis = diagram.loop_momentum_bases(limit=1)[0]
-        >>> repr(basis).startswith("LoopMomentumBasis(")
-        True
+        >>> print(basis)
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -2748,11 +2597,8 @@ class LoopMomentumBasis:
 
         Examples
         --------
-        Leave ``basis`` as the final expression in a Jupyter or Marimo cell, or
-        obtain the HTML explicitly:
-
-        >>> "<table" in basis._repr_html_()
-        True
+        Leave ``basis`` as the final expression in a Jupyter or Marimo cell to
+        inspect every propagator's loop- and external-momentum assignment.
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -2788,12 +2634,6 @@ class LorentzStructure:
     def name(self) -> builtins.str:
         r"""
         Return the Lorentz-structure name.
-
-        Examples
-        --------
-        >>> lorentz = model.lorentz_structures[0]
-        >>> model.lorentz_structure(lorentz.name).name == lorentz.name
-        True
         """
     @property
     def spins(self) -> builtins.list[builtins.int]:
@@ -2818,7 +2658,8 @@ class LorentzStructure:
 
         Examples
         --------
-        >>> repr(lorentz)
+        >>> vertex = model.vertex_rules[0]
+        >>> print(model.lorentz_structure(vertex.lorentz_structures[0]))
         """
 
 @typing.final
@@ -2852,9 +2693,7 @@ class Model:
 
         Examples
         --------
-        >>> pdg_codes = {particle.pdg_code for particle in model.particles}
-        >>> 11 in pdg_codes  # electron in a Standard Model UFO
-        True
+        >>> fermions = [particle for particle in model.particles if particle.is_fermion]
         """
     @property
     def parameters(self) -> builtins.list[Parameter]:
@@ -3132,7 +2971,7 @@ class Model:
 
         Examples
         --------
-        >>> repr(model)
+        >>> print(model)
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -3182,21 +3021,14 @@ class ModelExpression:
 
     Examples
     --------
-    >>> expression = request.couplings[0]
-    >>> expression.name
-    'GC_1'
+    >>> coupling_formulas = {
+    ...     item.name: item.expression for item in request.couplings
+    ... }
     """
     @property
     def name(self) -> builtins.str:
         r"""
         Return the name assigned to the expression.
-
-        Examples
-        --------
-        >>> expression = request.couplings[0]
-        >>> coupling_names = {coupling.name for coupling in model.couplings}
-        >>> expression.name in coupling_names
-        True
         """
     @property
     def expression(self) -> builtins.str:
@@ -3222,12 +3054,6 @@ class ModelFunction:
     def name(self) -> builtins.str:
         r"""
         Return the function name.
-
-        Examples
-        --------
-        >>> function = model.functions[0]
-        >>> model.function(function.name).name == function.name
-        True
         """
     @property
     def arguments(self) -> builtins.list[builtins.str]:
@@ -3250,7 +3076,7 @@ class ModelFunction:
 
         Examples
         --------
-        >>> repr(function)
+        >>> print(model.functions[0])
         """
 
 @typing.final
@@ -3285,8 +3111,7 @@ class MomentumSignature:
         --------
         >>> _, signature = basis.edge_signatures[0]
         >>> loops, external = signature.integer_coefficients()
-        >>> (loops, external) == (signature.loops, signature.external)
-        True
+        >>> print("loop coefficients:", loops, "external coefficients:", external)
         """
     def format_momentum(self) -> builtins.str:
         r"""
@@ -3294,9 +3119,10 @@ class MomentumSignature:
 
         Examples
         --------
-        >>> _, signature = basis.edge_signatures[0]
-        >>> isinstance(signature.format_momentum(), str)
-        True
+        Print the momentum routing assigned to every propagator:
+
+        >>> for edge_id, signature in basis.edge_signatures:
+        ...     print(edge_id, signature.format_momentum())
         """
     def __str__(self) -> builtins.str:
         r"""
@@ -3305,8 +3131,7 @@ class MomentumSignature:
         Examples
         --------
         >>> _, signature = basis.edge_signatures[0]
-        >>> str(signature) == signature.format_momentum()
-        True
+        >>> print(f"propagator momentum: {signature}")
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -3314,9 +3139,8 @@ class MomentumSignature:
 
         Examples
         --------
-        >>> _, signature = basis.edge_signatures[0]
-        >>> repr(signature).startswith("MomentumSignature(")
-        True
+        >>> edge_id, signature = basis.edge_signatures[0]
+        >>> print(f"edge {edge_id}: {signature!r}")
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
         r"""
@@ -3352,12 +3176,6 @@ class Parameter:
     def name(self) -> builtins.str:
         r"""
         Return the parameter name.
-
-        Examples
-        --------
-        >>> parameter = model.parameter(model.particle_by_pdg(13).mass_parameter)
-        >>> parameter.name == model.particle_by_pdg(13).mass_parameter
-        True
         """
     @property
     def lhablock(self) -> typing.Optional[builtins.str]:
@@ -3407,12 +3225,6 @@ class Parameter:
     def value(self) -> typing.Optional[tuple[builtins.float, builtins.float]]:
         r"""
         Return the evaluated value as ``(real, imaginary)``, when available.
-
-        Examples
-        --------
-        >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
-        >>> mass.value is None or len(mass.value) == 2
-        True
         """
     @property
     def expression(self) -> typing.Optional[builtins.str]:
@@ -3430,7 +3242,7 @@ class Parameter:
 
         Examples
         --------
-        >>> repr(parameter)
+        >>> print(model.parameter(model.particle_by_pdg(13).mass_parameter))
         """
 
 @typing.final
@@ -3566,7 +3378,7 @@ class ParameterCard:
 
         Examples
         --------
-        >>> len(card)
+        >>> number_of_external_inputs = len(model.default_parameter_card())
         """
 
 @typing.final
@@ -3588,21 +3400,11 @@ class Particle:
     def name(self) -> builtins.str:
         r"""
         Return the particle name used by the model.
-
-        Examples
-        --------
-        >>> model.particle_by_pdg(11).name
-        'e-'
         """
     @property
     def antiname(self) -> builtins.str:
         r"""
         Return the name of the corresponding antiparticle.
-
-        Examples
-        --------
-        >>> model.particle_by_pdg(11).antiname
-        'e+'
         """
     @property
     def pdg_code(self) -> builtins.int:
@@ -3710,7 +3512,7 @@ class Particle:
 
         Examples
         --------
-        >>> repr(particle)
+        >>> print(model.particle_by_pdg(11))
         """
 
 @typing.final
@@ -3792,8 +3594,7 @@ class ParticleSelector:
 
         Examples
         --------
-        >>> repr(fk.ParticleSelector.by_pdg(11))
-        'ParticleSelector.by_pdg(11)'
+        >>> print(fk.ParticleSelector.by_pdg(11))  # electron selector in a process
         """
     def __eq__(self, other: typing.Any) -> builtins.bool:
         r"""
@@ -3998,12 +3799,6 @@ class Propagator:
     def name(self) -> builtins.str:
         r"""
         Return the propagator name.
-
-        Examples
-        --------
-        >>> propagator = model.propagators[0]
-        >>> model.propagator(propagator.name).name == propagator.name
-        True
         """
     @property
     def particle(self) -> builtins.str:
@@ -4031,7 +3826,7 @@ class Propagator:
 
         Examples
         --------
-        >>> repr(propagator)
+        >>> print(model.propagators[0])
         """
 
 @typing.final
@@ -4291,8 +4086,8 @@ class ThreeMomentum:
 
         Examples
         --------
-        >>> first.delta_r(second) >= 0.0
-        True
+        >>> separation = first.delta_r(second)
+        >>> passes_isolation = separation > 0.4
 
         Parameters
         ----------
@@ -4319,8 +4114,8 @@ class ThreeMomentum:
 
         Examples
         --------
-        >>> repr(ThreeMomentum(1.0, 2.0, 3.0))
-        'ThreeMomentum(1, 2, 3)'
+        >>> track_momentum = ThreeMomentum(1.0, 2.0, 3.0)
+        >>> print(f"track momentum: {track_momentum!r}")
         """
     def _repr_latex_(self) -> builtins.str:
         r"""
@@ -4358,28 +4153,17 @@ class UfoLoadDiagnostics:
     Examples
     --------
     >>> diagnostics = loaded.diagnostics
-    >>> diagnostics.particle_count > 0
-    True
+    >>> print(diagnostics.source, diagnostics.particle_count, diagnostics.vertex_rule_count)
     """
     @property
     def source(self) -> pathlib.Path:
         r"""
         Return the UFO source directory.
-
-        Examples
-        --------
-        >>> loaded.diagnostics.source
-        PosixPath('/models/scalars')
         """
     @property
     def restriction_name(self) -> typing.Optional[builtins.str]:
         r"""
         Return the applied restriction-card name, if any.
-
-        Examples
-        --------
-        >>> loaded.diagnostics.restriction_name
-        'massless'
         """
     @property
     def simplify_model(self) -> builtins.bool:
@@ -4400,91 +4184,46 @@ class UfoLoadDiagnostics:
     def model_parameter_count(self) -> builtins.int:
         r"""
         Return the number of model parameters loaded.
-
-        Examples
-        --------
-        >>> loaded.diagnostics.model_parameter_count == len(loaded.model.parameters)
-        True
         """
     @property
     def particle_count(self) -> builtins.int:
         r"""
         Return the number of particles loaded.
-
-        Examples
-        --------
-        >>> loaded.diagnostics.particle_count == len(loaded.model.particles)
-        True
         """
     @property
     def propagator_count(self) -> builtins.int:
         r"""
         Return the number of propagators loaded.
-
-        Examples
-        --------
-        >>> loaded.diagnostics.propagator_count == len(loaded.model.propagators)
-        True
         """
     @property
     def lorentz_structure_count(self) -> builtins.int:
         r"""
         Return the number of Lorentz structures loaded.
-
-        Examples
-        --------
-        >>> loaded.diagnostics.lorentz_structure_count == len(loaded.model.lorentz_structures)
-        True
         """
     @property
     def coupling_count(self) -> builtins.int:
         r"""
         Return the number of couplings loaded.
-
-        Examples
-        --------
-        >>> loaded.diagnostics.coupling_count == len(loaded.model.couplings)
-        True
         """
     @property
     def vertex_rule_count(self) -> builtins.int:
         r"""
         Return the number of vertex rules loaded.
-
-        Examples
-        --------
-        >>> loaded.diagnostics.vertex_rule_count == len(loaded.model.vertex_rules)
-        True
         """
     @property
     def function_count(self) -> builtins.int:
         r"""
         Return the number of model functions loaded.
-
-        Examples
-        --------
-        >>> loaded.diagnostics.function_count == len(loaded.model.functions)
-        True
         """
     @property
     def form_factor_count(self) -> builtins.int:
         r"""
         Return the number of form factors loaded.
-
-        Examples
-        --------
-        >>> loaded.diagnostics.form_factor_count == len(loaded.model.form_factors)
-        True
         """
     @property
     def parameter_value_count(self) -> builtins.int:
         r"""
         Return the number of parameter values loaded into the parameter card.
-
-        Examples
-        --------
-        >>> loaded.diagnostics.parameter_value_count == len(loaded.parameters)
-        True
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -4492,8 +4231,7 @@ class UfoLoadDiagnostics:
 
         Examples
         --------
-        >>> repr(loaded.diagnostics).startswith("UfoLoadDiagnostics(")
-        True
+        >>> print(loaded.diagnostics)
         """
     def _repr_html_(self) -> builtins.str:
         r"""
@@ -4618,12 +4356,6 @@ class VertexRule:
     def name(self) -> builtins.str:
         r"""
         Return the vertex-rule name.
-
-        Examples
-        --------
-        >>> vertex = model.vertex_rules[0]
-        >>> model.vertex_rule(vertex.name).name == vertex.name
-        True
         """
     @property
     def particles(self) -> builtins.list[builtins.str]:
@@ -4680,7 +4412,7 @@ class VertexRule:
 
         Examples
         --------
-        >>> repr(vertex)
+        >>> print(next(v for v in model.vertex_rules if "e-" in v.particles))
         """
 
 @typing.final
@@ -4808,8 +4540,7 @@ def build_cff(diagram: FeynmanDiagram, *, max_orientations: typing.Optional[buil
 
     >>> cff = fk.build_cff(diagram, fixed_orientations={0: False})
     >>> expression = cff.to_expression()
-    >>> len(cff.orientations) >= 0
-    True
+    >>> expression  # native Symbolica display in a notebook
 
     Parameters
     ----------
@@ -4838,8 +4569,8 @@ def cluster_jets(momenta: typing.Sequence[FourMomentum], *, radius: builtins.flo
     Cluster final-state partons into anti-kT jets of radius 0.4:
 
     >>> jets = fk.cluster_jets(parton_momenta, radius=0.4, minimum_pt=20.0)
-    >>> all(jet.momentum.pt >= 20.0 for jet in jets.jets)
-    True
+    >>> leading_jet = jets.jets[0]
+    >>> leading_jet.momentum
 
     Parameters
     ----------
@@ -4859,7 +4590,9 @@ def generate_diagrams(model: Model, incoming: typing.Sequence[ParticleSelector |
 
     Particle names, signed PDG codes, and :class:`ParticleSelector` objects may
     be mixed in the external states. An integer loop order selects exactly that
-    order; a pair such as ``(0, 1)`` selects an inclusive range.
+    order; a pair such as ``(0, 1)`` selects an inclusive range. Each generated
+    graph carries the instantiated model Feynman rules on its vertices and
+    propagator edges, together with their combined diagram numerator.
 
     Examples
     --------
@@ -4870,8 +4603,13 @@ def generate_diagrams(model: Model, incoming: typing.Sequence[ParticleSelector |
     ...     model, ["scalar_0"], ["scalar_0", "scalar_0"],
     ...     loops=1, options=options,
     ... )
-    >>> all(diagram.loop_count == 1 for diagram in result.diagrams)
-    True
+    >>> one_loop_diagram = result.diagrams[0]
+    >>> combined_numerator = one_loop_diagram.numerator_expression()
+    >>> vertex_numerators = [
+    ...     vertex.numerator_expression() for vertex in one_loop_diagram.vertices
+    ...     if vertex.interaction is not None
+    ... ]
+    >>> one_loop_diagram  # rendered graph in a notebook
 
     Parameters
     ----------
@@ -4905,8 +4643,8 @@ def load_ufo_model(path: builtins.str | os.PathLike | pathlib.Path, *, restricti
 
     >>> loaded = fk.load_ufo_model("models/sm", restriction="massless")
     >>> electron = loaded.model.particle("e-")
-    >>> loaded.diagnostics.particle_count == len(loaded.model.particles)
-    True
+    >>> electron.pdg_code
+    11
 
     Parameters
     ----------

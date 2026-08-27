@@ -228,8 +228,7 @@ impl PyParticleSelector {
     ///
     /// Examples
     /// --------
-    /// >>> repr(fk.ParticleSelector.by_pdg(11))
-    /// 'ParticleSelector.by_pdg(11)'
+    /// >>> print(fk.ParticleSelector.by_pdg(11))  # electron selector in a process
     ///
     fn __repr__(&self) -> String {
         match &self.inner {
@@ -1235,8 +1234,7 @@ impl PyGenerationOptions {
 /// Examples
 /// --------
 /// >>> report = result.report
-/// >>> report.retained_count == len(result.diagrams)
-/// True
+/// >>> print(report)
 ///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
@@ -1264,12 +1262,6 @@ impl PyGenerationReport {
         self.inner.interaction_assignment_count
     }
     /// Return the number of diagrams retained after removing zero numerators.
-    ///
-    /// Examples
-    /// --------
-    /// >>> result.report.retained_count == len(result)
-    /// True
-    ///
     #[getter]
     fn retained_count(&self) -> usize {
         self.inner.retained_count
@@ -1289,8 +1281,7 @@ impl PyGenerationReport {
     ///
     /// Examples
     /// --------
-    /// >>> repr(result.report).startswith("GenerationReport(")
-    /// True
+    /// >>> print(result.report)
     ///
     fn __repr__(&self) -> String {
         format!(
@@ -1398,12 +1389,6 @@ impl PyGroupMember {
         self.inner.diagram
     }
     /// Return the member numerator divided by the group master numerator.
-    ///
-    /// Examples
-    /// --------
-    /// >>> result.groups[0].members[0].ratio
-    /// '1'
-    ///
     #[getter]
     fn ratio(&self) -> &str {
         &self.inner.ratio
@@ -1455,12 +1440,6 @@ impl PyDiagramGroup {
         self.inner.master
     }
     /// Return the deterministically ordered group members, including the master.
-    ///
-    /// Examples
-    /// --------
-    /// >>> result.groups[0].members[0].ratio
-    /// '1'
-    ///
     #[getter]
     fn members(&self) -> Vec<PyGroupMember> {
         self.inner
@@ -1499,12 +1478,6 @@ pub struct PyGenerationResult {
 #[pymethods]
 impl PyGenerationResult {
     /// Return every retained diagram in generated order.
-    ///
-    /// Examples
-    /// --------
-    /// >>> len(result.diagrams) == len(result)
-    /// True
-    ///
     #[getter]
     fn diagrams(&self) -> Vec<PyFeynmanDiagram> {
         self.inner
@@ -1516,12 +1489,6 @@ impl PyGenerationResult {
     }
 
     /// Return the numerator groups in deterministic master-index order.
-    ///
-    /// Examples
-    /// --------
-    /// >>> all(group.members for group in result.groups)
-    /// True
-    ///
     #[getter]
     fn groups(&self) -> Vec<PyDiagramGroup> {
         self.inner
@@ -1533,12 +1500,6 @@ impl PyGenerationResult {
     }
 
     /// Return generation counts and completion status.
-    ///
-    /// Examples
-    /// --------
-    /// >>> result.report.retained_count == len(result)
-    /// True
-    ///
     #[getter]
     fn report(&self) -> PyGenerationReport {
         PyGenerationReport {
@@ -1550,8 +1511,7 @@ impl PyGenerationResult {
     ///
     /// Examples
     /// --------
-    /// >>> len(result) == len(result.diagrams)
-    /// True
+    /// >>> number_of_diagrams = len(result)
     ///
     fn __len__(&self) -> usize {
         self.inner.diagrams.len()
@@ -1561,8 +1521,7 @@ impl PyGenerationResult {
     ///
     /// Examples
     /// --------
-    /// >>> repr(result).startswith("GenerationResult(")
-    /// True
+    /// >>> print(result)
     ///
     fn __repr__(&self) -> String {
         format!(
@@ -1652,7 +1611,10 @@ impl PyGenerationResult {
 /// Generate Feynman diagrams from a particle model and a process definition.
 ///
 /// The generator combines model interactions with graph topologies at the
-/// requested loop orders and returns typed diagrams ready for CFF operations.
+/// requested loop orders. It instantiates the selected Feynman rules as
+/// numerator annotations on interaction vertices and propagator edges, and
+/// stores their product as the diagram-wide numerator. The resulting typed
+/// diagrams are ready for symbolic manipulation and CFF operations.
 ///
 /// Examples
 /// --------
@@ -1699,12 +1661,6 @@ impl PyGenerator {
     }
 
     /// Return the particle model used by this generator.
-    ///
-    /// Examples
-    /// --------
-    /// >>> generator.model.name == model.name
-    /// True
-    ///
     #[getter]
     fn model(&self) -> PyModel {
         self.model.clone().into()
@@ -1712,9 +1668,15 @@ impl PyGenerator {
 
     /// Generate and optionally group all diagrams matching a process.
     ///
+    /// Model Feynman rules are instantiated into each returned diagram: inspect
+    /// ``vertex.numerator_expression()`` and ``edge.numerator_expression()`` for
+    /// individual factors, or ``diagram.numerator_expression()`` for their
+    /// combined numerator.
+    ///
     /// Examples
     /// --------
     /// >>> result = generator.generate(process, options)
+    /// >>> combined_numerator = result.diagrams[0].numerator_expression()
     ///
     /// Parameters
     /// ----------
@@ -1742,7 +1704,9 @@ impl PyGenerator {
 ///
 /// Particle names, signed PDG codes, and :class:`ParticleSelector` objects may
 /// be mixed in the external states. An integer loop order selects exactly that
-/// order; a pair such as ``(0, 1)`` selects an inclusive range.
+/// order; a pair such as ``(0, 1)`` selects an inclusive range. Each generated
+/// graph carries the instantiated model Feynman rules on its vertices and
+/// propagator edges, together with their combined diagram numerator.
 ///
 /// Examples
 /// --------
@@ -1753,8 +1717,13 @@ impl PyGenerator {
 /// ...     model, ["scalar_0"], ["scalar_0", "scalar_0"],
 /// ...     loops=1, options=options,
 /// ... )
-/// >>> all(diagram.loop_count == 1 for diagram in result.diagrams)
-/// True
+/// >>> one_loop_diagram = result.diagrams[0]
+/// >>> combined_numerator = one_loop_diagram.numerator_expression()
+/// >>> vertex_numerators = [
+/// ...     vertex.numerator_expression() for vertex in one_loop_diagram.vertices
+/// ...     if vertex.interaction is not None
+/// ... ]
+/// >>> one_loop_diagram  # rendered graph in a notebook
 ///
 /// Parameters
 /// ----------

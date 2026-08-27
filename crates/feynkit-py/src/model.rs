@@ -48,24 +48,12 @@ impl From<Particle> for PyParticle {
 #[pymethods]
 impl PyParticle {
     /// Return the particle name used by the model.
-    ///
-    /// Examples
-    /// --------
-    /// >>> model.particle_by_pdg(11).name
-    /// 'e-'
-    ///
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
 
     /// Return the name of the corresponding antiparticle.
-    ///
-    /// Examples
-    /// --------
-    /// >>> model.particle_by_pdg(11).antiname
-    /// 'e+'
-    ///
     #[getter]
     fn antiname(&self) -> &str {
         &self.inner.antiname
@@ -195,7 +183,7 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
-    /// >>> repr(particle)
+    /// >>> print(model.particle_by_pdg(11))
     ///
     fn __repr__(&self) -> String {
         format!(
@@ -300,13 +288,6 @@ impl From<Parameter> for PyParameter {
 #[pymethods]
 impl PyParameter {
     /// Return the parameter name.
-    ///
-    /// Examples
-    /// --------
-    /// >>> parameter = model.parameter(model.particle_by_pdg(13).mass_parameter)
-    /// >>> parameter.name == model.particle_by_pdg(13).mass_parameter
-    /// True
-    ///
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
@@ -365,13 +346,6 @@ impl PyParameter {
     }
 
     /// Return the evaluated value as ``(real, imaginary)``, when available.
-    ///
-    /// Examples
-    /// --------
-    /// >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
-    /// >>> mass.value is None or len(mass.value) == 2
-    /// True
-    ///
     #[getter]
     fn value(&self) -> Option<(f64, f64)> {
         self.inner.value.map(Into::into)
@@ -393,7 +367,7 @@ impl PyParameter {
     ///
     /// Examples
     /// --------
-    /// >>> repr(parameter)
+    /// >>> print(model.parameter(model.particle_by_pdg(13).mass_parameter))
     ///
     fn __repr__(&self) -> String {
         format!("Parameter(name='{}')", self.inner.name)
@@ -432,13 +406,6 @@ impl From<Coupling> for PyCoupling {
 #[pymethods]
 impl PyCoupling {
     /// Return the coupling name.
-    ///
-    /// Examples
-    /// --------
-    /// >>> coupling = model.couplings[0]
-    /// >>> model.coupling(coupling.name).name == coupling.name
-    /// True
-    ///
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
@@ -471,7 +438,7 @@ impl PyCoupling {
     ///
     /// Examples
     /// --------
-    /// >>> repr(coupling)
+    /// >>> print(next(c for c in model.couplings if c.orders.get("QED", 0) > 0))
     ///
     fn __repr__(&self) -> String {
         format!("Coupling(name='{}')", self.inner.name)
@@ -510,13 +477,6 @@ impl From<VertexRule> for PyVertexRule {
 #[pymethods]
 impl PyVertexRule {
     /// Return the vertex-rule name.
-    ///
-    /// Examples
-    /// --------
-    /// >>> vertex = model.vertex_rules[0]
-    /// >>> model.vertex_rule(vertex.name).name == vertex.name
-    /// True
-    ///
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
@@ -585,7 +545,7 @@ impl PyVertexRule {
     ///
     /// Examples
     /// --------
-    /// >>> repr(vertex)
+    /// >>> print(next(v for v in model.vertex_rules if "e-" in v.particles))
     ///
     fn __repr__(&self) -> String {
         format!("VertexRule(name='{}')", self.inner.name)
@@ -624,13 +584,6 @@ impl From<LorentzStructure> for PyLorentzStructure {
 #[pymethods]
 impl PyLorentzStructure {
     /// Return the Lorentz-structure name.
-    ///
-    /// Examples
-    /// --------
-    /// >>> lorentz = model.lorentz_structures[0]
-    /// >>> model.lorentz_structure(lorentz.name).name == lorentz.name
-    /// True
-    ///
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
@@ -660,7 +613,8 @@ impl PyLorentzStructure {
     ///
     /// Examples
     /// --------
-    /// >>> repr(lorentz)
+    /// >>> vertex = model.vertex_rules[0]
+    /// >>> print(model.lorentz_structure(vertex.lorentz_structures[0]))
     ///
     fn __repr__(&self) -> String {
         format!("LorentzStructure(name='{}')", self.inner.name)
@@ -699,13 +653,6 @@ impl From<Propagator> for PyPropagator {
 #[pymethods]
 impl PyPropagator {
     /// Return the propagator name.
-    ///
-    /// Examples
-    /// --------
-    /// >>> propagator = model.propagators[0]
-    /// >>> model.propagator(propagator.name).name == propagator.name
-    /// True
-    ///
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
@@ -739,7 +686,7 @@ impl PyPropagator {
     ///
     /// Examples
     /// --------
-    /// >>> repr(propagator)
+    /// >>> print(model.propagators[0])
     ///
     fn __repr__(&self) -> String {
         format!("Propagator(name='{}')", self.inner.name)
@@ -778,13 +725,6 @@ impl From<ModelFunction> for PyModelFunction {
 #[pymethods]
 impl PyModelFunction {
     /// Return the function name.
-    ///
-    /// Examples
-    /// --------
-    /// >>> function = model.functions[0]
-    /// >>> model.function(function.name).name == function.name
-    /// True
-    ///
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
@@ -812,7 +752,7 @@ impl PyModelFunction {
     ///
     /// Examples
     /// --------
-    /// >>> repr(function)
+    /// >>> print(model.functions[0])
     ///
     fn __repr__(&self) -> String {
         format!("ModelFunction(name='{}')", self.inner.name)
@@ -851,13 +791,6 @@ impl From<ModelFormFactor> for PyFormFactor {
 #[pymethods]
 impl PyFormFactor {
     /// Return the form-factor name.
-    ///
-    /// Examples
-    /// --------
-    /// >>> form_factor = model.form_factors[0]
-    /// >>> model.form_factor(form_factor.name).name == form_factor.name
-    /// True
-    ///
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
@@ -879,7 +812,7 @@ impl PyFormFactor {
     ///
     /// Examples
     /// --------
-    /// >>> repr(form_factor)
+    /// >>> print(model.form_factors[0])
     ///
     fn __repr__(&self) -> String {
         format!("FormFactor(name='{}')", self.inner.name)
@@ -893,9 +826,9 @@ impl PyFormFactor {
 ///
 /// Examples
 /// --------
-/// >>> expression = request.couplings[0]
-/// >>> expression.name
-/// 'GC_1'
+/// >>> coupling_formulas = {
+/// ...     item.name: item.expression for item in request.couplings
+/// ... }
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ModelExpression",
@@ -918,14 +851,6 @@ impl From<ModelExpression> for PyModelExpression {
 #[pymethods]
 impl PyModelExpression {
     /// Return the name assigned to the expression.
-    ///
-    /// Examples
-    /// --------
-    /// >>> expression = request.couplings[0]
-    /// >>> coupling_names = {coupling.name for coupling in model.couplings}
-    /// >>> expression.name in coupling_names
-    /// True
-    ///
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
@@ -1118,13 +1043,6 @@ impl PyEvaluatedValues {
     }
 
     /// Return the evaluated internal parameters keyed by name.
-    ///
-    /// Examples
-    /// --------
-    /// >>> values = fk.EvaluatedValues(internal_parameters={"aEW": (0.0073, 0.0)})
-    /// >>> values.internal_parameters["aEW"]
-    /// (0.0073, 0.0)
-    ///
     #[getter]
     fn internal_parameters(&self) -> BTreeMap<String, (f64, f64)> {
         self.inner
@@ -1135,13 +1053,6 @@ impl PyEvaluatedValues {
     }
 
     /// Return the evaluated couplings keyed by name.
-    ///
-    /// Examples
-    /// --------
-    /// >>> values = fk.EvaluatedValues(couplings={"GC_1": (0.3, 0.0)})
-    /// >>> values.couplings["GC_1"]
-    /// (0.3, 0.0)
-    ///
     #[getter]
     fn couplings(&self) -> BTreeMap<String, (f64, f64)> {
         self.inner
@@ -1343,7 +1254,7 @@ impl PyParameterCard {
     ///
     /// Examples
     /// --------
-    /// >>> len(card)
+    /// >>> number_of_external_inputs = len(model.default_parameter_card())
     ///
     fn __len__(&self) -> usize {
         self.inner.len()
@@ -1438,9 +1349,7 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> pdg_codes = {particle.pdg_code for particle in model.particles}
-    /// >>> 11 in pdg_codes  # electron in a Standard Model UFO
-    /// True
+    /// >>> fermions = [particle for particle in model.particles if particle.is_fermion]
     ///
     #[getter]
     fn particles(&self) -> Vec<PyParticle> {
@@ -1843,7 +1752,7 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> repr(model)
+    /// >>> print(model)
     ///
     fn __repr__(&self) -> String {
         format!(
