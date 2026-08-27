@@ -1,6 +1,7 @@
 //! Python bindings installed as `symbolica.community.feynkit`.
 
 mod cff;
+mod display;
 mod error;
 mod generation;
 mod graph;
@@ -163,6 +164,9 @@ assert options.disable_numerator_grouping() is None
 generated = fk.Generator(model).generate(process, options)
 assert len(generated) > 0
 assert generated.report.completed
+assert "Generation result" in generated._repr_html_()
+assert "retained diagrams" in generated.report._repr_html_()
+assert "particles" in model._repr_html_()
 
 loop_diagram = next(
     diagram
@@ -171,6 +175,10 @@ loop_diagram = next(
     and all(edge.source != edge.target for edge in diagram.edges)
 )
 loop_diagram.validate(model)
+assert loop_diagram.to_svg().startswith("<svg")
+assert loop_diagram.to_html() == loop_diagram._repr_html_()
+assert "<svg" in loop_diagram._repr_svg_()
+assert "Feynman diagram" in loop_diagram._repr_html_()
 
 json_diagram = fk.FeynmanDiagram.from_json(loop_diagram.to_json())
 dot_diagram = fk.FeynmanDiagram.from_dot(loop_diagram.to_dot())
@@ -182,13 +190,18 @@ bases = json_diagram.loop_momentum_bases()
 assert bases
 assert len(bases[0].loop_edges) == 1
 assert len(bases[0].edge_signatures) == len(json_diagram.edges)
+assert "Loop-momentum basis" in bases[0]._repr_html_()
 
 cff = fk.CffGenerator().generate(json_diagram)
 assert len(cff) > 0
 expression = cff.to_expression()
+assert "Cross-free family" in cff._repr_html_()
+assert "candidate orientations" in cff.report._repr_html_()
 
 momentum = fk.ThreeMomentum(3.0, 4.0, 0.0)
 assert momentum.on_shell().components() == (5.0, 3.0, 4.0, 0.0)
+assert r"\vec{p}" in momentum._repr_latex_()
+assert r"p^\mu" in momentum.on_shell()._repr_latex_()
 rotated = fk.Rotation.quarter_turn(fk.Axis.Z).apply_three(
     fk.ThreeMomentum(1.0, 0.0, 0.0)
 )
@@ -202,6 +215,8 @@ clustered = fk.JetDefinition.anti_kt(0.4).cluster([
 assert len(clustered) == 1
 assert clustered.jets[0].constituent_indices == [0, 1]
 assert clustered.jets[0].momentum.components() == (15.0, 15.0, 0.0, 0.0)
+assert "Clustered jets" in clustered._repr_html_()
+assert "constituents" in clustered.jets[0]._repr_html_()
 assert "_gammaloop" not in sys.modules
 "#,
             )

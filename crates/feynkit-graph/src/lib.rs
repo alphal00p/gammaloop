@@ -6,6 +6,8 @@
 
 #![forbid(unsafe_code)]
 
+mod display;
+
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     fmt::Write,
