@@ -170,8 +170,7 @@ impl PyHelicity {
     ///
     /// Examples
     /// --------
-    /// >>> repr(Helicity.PLUS)
-    /// 'Helicity(1)'
+    /// >>> print(f"selected external helicity: {Helicity.PLUS!r}")
     ///
     fn __repr__(&self) -> String {
         format!("Helicity({})", self.inner.integer())
@@ -429,8 +428,8 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> first.delta_r(second) >= 0.0
-    /// True
+    /// >>> separation = first.delta_r(second)
+    /// >>> passes_isolation = separation > 0.4
     ///
     /// Parameters
     /// ----------
@@ -460,8 +459,8 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> repr(ThreeMomentum(1.0, 2.0, 3.0))
-    /// 'ThreeMomentum(1, 2, 3)'
+    /// >>> track_momentum = ThreeMomentum(1.0, 2.0, 3.0)
+    /// >>> print(f"track momentum: {track_momentum!r}")
     ///
     fn __repr__(&self) -> String {
         format!(
@@ -706,8 +705,8 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> first.delta_r(second) >= 0.0
-    /// True
+    /// >>> separation = first.delta_r(second)
+    /// >>> same_jet = separation < 0.4
     ///
     /// Parameters
     /// ----------
@@ -749,8 +748,8 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> repr(FourMomentum(5.0, 3.0, 4.0, 0.0))
-    /// 'FourMomentum(5, 3, 4, 0)'
+    /// >>> muon_momentum = FourMomentum(5.0, 3.0, 4.0, 0.0)
+    /// >>> print(f"muon four-momentum: {muon_momentum!r}")
     ///
     fn __repr__(&self) -> String {
         let (energy, px, py, pz): (f64, f64, f64, f64) = self.inner.into();
@@ -1017,8 +1016,7 @@ impl PyBoost {
 /// --------
 /// >>> jets = fk.JetDefinition.anti_kt(0.4).cluster(particles).jets
 /// >>> leading_jet = jets[0]
-/// >>> leading_jet.pt >= 0.0
-/// True
+/// >>> leading_jet.momentum
 ///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
@@ -1041,12 +1039,6 @@ impl PyJet {
         self.inner.momentum.into()
     }
     /// Return sorted positions of the input momenta assigned to this jet.
-    ///
-    /// Examples
-    /// --------
-    /// >>> jet.constituent_indices
-    /// [0, 2]
-    ///
     #[getter]
     fn constituent_indices(&self) -> Vec<usize> {
         self.inner.constituent_indices().to_vec()
@@ -1071,8 +1063,7 @@ impl PyJet {
     ///
     /// Examples
     /// --------
-    /// >>> repr(jet).startswith("Jet(")
-    /// True
+    /// >>> print(jet)
     ///
     fn __repr__(&self) -> String {
         format!(
@@ -1134,10 +1125,10 @@ impl PyJet {
     }
 }
 
-/// The jets and unclustered inputs from one clustering operation.
+/// The selected jets from one clustering operation.
 ///
-/// Besides the selected jets, the result preserves which supplied momenta were
-/// removed by the transverse-momentum cut.
+/// Jets are ordered by decreasing transverse momentum, and each jet's
+/// ``constituent_indices`` map back to positions in the supplied momentum list.
 ///
 /// Examples
 /// --------
@@ -1181,8 +1172,7 @@ impl PyClusteringResult {
     ///
     /// Examples
     /// --------
-    /// >>> len(result) == len(result.jets)
-    /// True
+    /// >>> jet_multiplicity = len(result)
     ///
     fn __len__(&self) -> usize {
         self.inner.len()
@@ -1192,8 +1182,7 @@ impl PyClusteringResult {
     ///
     /// Examples
     /// --------
-    /// >>> repr(result).startswith("ClusteringResult(")
-    /// True
+    /// >>> print(result)
     ///
     fn __repr__(&self) -> String {
         format!("ClusteringResult(jets={})", self.inner.len())
@@ -1412,8 +1401,8 @@ impl PyJetDefinition {
     /// Examples
     /// --------
     /// >>> result = JetDefinition.anti_kt(0.4).cluster(momenta)
-    /// >>> len(result) >= 0
-    /// True
+    /// >>> leading_jet = result.jets[0]
+    /// >>> leading_jet.momentum
     ///
     /// Parameters
     /// ----------
@@ -1446,8 +1435,8 @@ impl PyJetDefinition {
 /// Cluster final-state partons into anti-kT jets of radius 0.4:
 ///
 /// >>> jets = fk.cluster_jets(parton_momenta, radius=0.4, minimum_pt=20.0)
-/// >>> all(jet.momentum.pt >= 20.0 for jet in jets.jets)
-/// True
+/// >>> leading_jet = jets.jets[0]
+/// >>> leading_jet.momentum
 ///
 /// Parameters
 /// ----------
