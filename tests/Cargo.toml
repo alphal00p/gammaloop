@@ -20,6 +20,7 @@ feynkit-generator = { workspace = true }
 feynkit-model = { workspace = true }
 gammaloop-api = { workspace = true }
 gammalooprs = { workspace = true }
+idenso = { workspace = true }
 insta = { workspace = true, features = ["json", "ron", "serde", "toml"] }
 itertools = { workspace = true }
 momtrop = { workspace = true }
