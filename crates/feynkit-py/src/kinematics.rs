@@ -3,16 +3,13 @@ use feynkit_kinematics::{
     Rotation, ThreeMomentum,
 };
 use pyo3::{
-    exceptions::PyValueError,
+    exceptions::PyIndexError,
     prelude::*,
-    types::{PyAny, PyModule},
-    wrap_pyfunction,
+    types::{PyAny, PyList, PyModule},
 };
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::derive::{
-    gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pyfunction, gen_stub_pymethods,
-};
+use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
 
 use crate::error;
 
@@ -336,9 +333,10 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> ThreeMomentum(3.0, 4.0, 0.0).norm_squared()
+    /// >>> ThreeMomentum(3.0, 4.0, 0.0).norm_squared
     /// 25.0
     ///
+    #[getter]
     fn norm_squared(&self) -> f64 {
         self.inner.norm_squared()
     }
@@ -346,9 +344,10 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> ThreeMomentum(3.0, 4.0, 0.0).norm()
+    /// >>> ThreeMomentum(3.0, 4.0, 0.0).norm
     /// 5.0
     ///
+    #[getter]
     fn norm(&self) -> f64 {
         self.inner.norm()
     }
@@ -356,9 +355,10 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> ThreeMomentum(3.0, 4.0, 12.0).pt()
+    /// >>> ThreeMomentum(3.0, 4.0, 12.0).pt
     /// 5.0
     ///
+    #[getter]
     fn pt(&self) -> f64 {
         self.inner.pt()
     }
@@ -366,9 +366,10 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> ThreeMomentum(1.0, 0.0, 0.0).phi()
+    /// >>> ThreeMomentum(1.0, 0.0, 0.0).phi
     /// 0.0
     ///
+    #[getter]
     fn phi(&self) -> f64 {
         self.inner.phi()
     }
@@ -376,9 +377,10 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> ThreeMomentum(1.0, 0.0, 0.0).pseudorapidity()
+    /// >>> ThreeMomentum(1.0, 0.0, 0.0).pseudorapidity
     /// 0.0
     ///
+    #[getter]
     fn pseudorapidity(&self) -> f64 {
         self.inner.pseudorapidity()
     }
@@ -437,6 +439,72 @@ impl PyThreeMomentum {
     ///     Momentum to compare with this one.
     fn delta_r(&self, other: &Self) -> f64 {
         self.inner.delta_r(&other.inner)
+    }
+
+    /// Add two spatial momenta component by component.
+    ///
+    /// Examples
+    /// --------
+    /// >>> total = first + second
+    ///
+    /// Parameters
+    /// ----------
+    /// other : ThreeMomentum
+    ///     Momentum to add.
+    fn __add__(&self, other: &Self) -> Self {
+        (self.inner + other.inner).into()
+    }
+
+    /// Subtract another spatial momentum component by component.
+    ///
+    /// Examples
+    /// --------
+    /// >>> transfer = incoming - outgoing
+    ///
+    /// Parameters
+    /// ----------
+    /// other : ThreeMomentum
+    ///     Momentum to subtract.
+    fn __sub__(&self, other: &Self) -> Self {
+        (self.inner - other.inner).into()
+    }
+
+    /// Reverse every spatial momentum component.
+    ///
+    /// Examples
+    /// --------
+    /// >>> outgoing_convention = -incoming_convention
+    ///
+    fn __neg__(&self) -> Self {
+        (-self.inner).into()
+    }
+
+    /// Scale every spatial momentum component.
+    ///
+    /// Examples
+    /// --------
+    /// >>> half_momentum = momentum * 0.5
+    ///
+    /// Parameters
+    /// ----------
+    /// scalar : float
+    ///     Multiplicative scale factor.
+    fn __mul__(&self, scalar: f64) -> Self {
+        (self.inner * scalar).into()
+    }
+
+    /// Scale every spatial momentum component from the left.
+    ///
+    /// Examples
+    /// --------
+    /// >>> half_momentum = 0.5 * momentum
+    ///
+    /// Parameters
+    /// ----------
+    /// scalar : float
+    ///     Multiplicative scale factor.
+    fn __rmul__(&self, scalar: f64) -> Self {
+        (self.inner * scalar).into()
     }
 
     /// Lift this spatial momentum to an on-shell four-momentum.
@@ -631,9 +699,10 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> FourMomentum(5.0, 3.0, 4.0, 0.0).mass_squared()
+    /// >>> FourMomentum(5.0, 3.0, 4.0, 0.0).mass_squared
     /// 0.0
     ///
+    #[getter]
     fn mass_squared(&self) -> f64 {
         self.inner.mass_squared()
     }
@@ -641,9 +710,10 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> FourMomentum(5.0, 0.0, 0.0, 0.0).mass()
+    /// >>> FourMomentum(5.0, 0.0, 0.0, 0.0).mass
     /// 5.0
     ///
+    #[getter]
     fn mass(&self) -> f64 {
         self.inner.mass()
     }
@@ -651,9 +721,10 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> FourMomentum(13.0, 3.0, 4.0, 12.0).pt()
+    /// >>> FourMomentum(13.0, 3.0, 4.0, 12.0).pt
     /// 5.0
     ///
+    #[getter]
     fn pt(&self) -> f64 {
         self.inner.pt()
     }
@@ -661,9 +732,10 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> FourMomentum(1.0, 1.0, 0.0, 0.0).phi()
+    /// >>> FourMomentum(1.0, 1.0, 0.0, 0.0).phi
     /// 0.0
     ///
+    #[getter]
     fn phi(&self) -> f64 {
         self.inner.phi()
     }
@@ -671,9 +743,10 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> FourMomentum(1.0, 1.0, 0.0, 0.0).pseudorapidity()
+    /// >>> FourMomentum(1.0, 1.0, 0.0, 0.0).pseudorapidity
     /// 0.0
     ///
+    #[getter]
     fn pseudorapidity(&self) -> f64 {
         self.inner.pseudorapidity()
     }
@@ -681,9 +754,10 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> FourMomentum(1.0, 1.0, 0.0, 0.0).rapidity()
+    /// >>> FourMomentum(1.0, 1.0, 0.0, 0.0).rapidity
     /// 0.0
     ///
+    #[getter]
     fn rapidity(&self) -> f64 {
         self.inner.rapidity()
     }
@@ -742,6 +816,44 @@ impl PyFourMomentum {
     ///     Momentum to subtract.
     fn __sub__(&self, other: &Self) -> Self {
         (self.inner - other.inner).into()
+    }
+
+    /// Reverse the four-momentum flow convention.
+    ///
+    /// Examples
+    /// --------
+    /// >>> outgoing_convention = -incoming_convention
+    ///
+    fn __neg__(&self) -> Self {
+        (-self.inner).into()
+    }
+
+    /// Scale every four-momentum component.
+    ///
+    /// Examples
+    /// --------
+    /// >>> half_momentum = momentum * 0.5
+    ///
+    /// Parameters
+    /// ----------
+    /// scalar : float
+    ///     Multiplicative scale factor.
+    fn __mul__(&self, scalar: f64) -> Self {
+        (self.inner * scalar).into()
+    }
+
+    /// Scale every four-momentum component from the left.
+    ///
+    /// Examples
+    /// --------
+    /// >>> half_momentum = 0.5 * momentum
+    ///
+    /// Parameters
+    /// ----------
+    /// scalar : float
+    ///     Multiplicative scale factor.
+    fn __rmul__(&self, scalar: f64) -> Self {
+        (self.inner * scalar).into()
     }
 
     /// Return a constructor-style representation of the components.
@@ -1178,6 +1290,41 @@ impl PyClusteringResult {
         self.inner.len()
     }
 
+    /// Return one jet by decreasing-transverse-momentum index.
+    ///
+    /// Examples
+    /// --------
+    /// >>> leading_jet = result[0]
+    ///
+    /// Parameters
+    /// ----------
+    /// index : int
+    ///     Zero-based index; negative indices count from the end.
+    fn __getitem__(&self, index: isize) -> PyResult<PyJet> {
+        let length = self.inner.jets.len() as isize;
+        let index = if index < 0 { length + index } else { index };
+        if !(0..length).contains(&index) {
+            return Err(PyIndexError::new_err("jet index out of range"));
+        }
+        Ok(PyJet {
+            inner: self.inner.jets[index as usize].clone(),
+        })
+    }
+
+    /// Iterate over jets from highest to lowest transverse momentum.
+    ///
+    /// Examples
+    /// --------
+    /// >>> transverse_momenta = [jet.pt for jet in result]
+    ///
+    #[gen_stub(override_return_type(
+        type_repr = "collections.abc.Iterator[Jet]",
+        imports = ("collections.abc")
+    ))]
+    fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        PyList::new(py, self.jets())?.call_method0("__iter__")
+    }
+
     /// Return a concise summary of the clustered jet collection.
     ///
     /// Examples
@@ -1424,64 +1571,6 @@ impl PyJetDefinition {
     }
 }
 
-/// Cluster collider four-momenta with a generalized-kT jet algorithm.
-///
-/// This convenience function returns the same native :class:`ClusteringResult`
-/// as :meth:`JetDefinition.cluster`; input and output momenta retain the
-/// caller's energy units.
-///
-/// Examples
-/// --------
-/// Cluster final-state partons into anti-kT jets of radius 0.4:
-///
-/// >>> jets = fk.cluster_jets(parton_momenta, radius=0.4, minimum_pt=20.0)
-/// >>> leading_jet = jets.jets[0]
-/// >>> leading_jet.momentum
-///
-/// Parameters
-/// ----------
-/// momenta : sequence[FourMomentum]
-///     Particle or parton four-momenta to cluster.
-/// radius : float, optional
-///     Jet-radius parameter in rapidity--azimuth space.
-/// algorithm : {"anti_kt", "cambridge_aachen", "kt"}, optional
-///     Generalized-kT exponent choice; common hyphenated aliases are accepted.
-/// minimum_pt : float, optional
-///     Minimum transverse momentum of retained inclusive jets.
-#[cfg_attr(
-    feature = "python_stubgen",
-    gen_stub_pyfunction(module = "symbolica.community.feynkit")
-)]
-#[pyfunction]
-#[pyo3(signature = (momenta, *, radius=0.4, algorithm="anti_kt", minimum_pt=0.0))]
-fn cluster_jets(
-    py: Python<'_>,
-    momenta: Vec<PyFourMomentum>,
-    radius: f64,
-    algorithm: &str,
-    minimum_pt: f64,
-) -> PyResult<PyClusteringResult> {
-    let normalized = algorithm.to_ascii_lowercase().replace(['-', '/'], "_");
-    let algorithm = match normalized.as_str() {
-        "anti_kt" | "antikt" => JetAlgorithm::AntiKt,
-        "cambridge_aachen" | "cambridgeaachen" | "ca" => JetAlgorithm::CambridgeAachen,
-        "kt" | "k_t" => JetAlgorithm::Kt,
-        _ => {
-            return Err(PyValueError::new_err(
-                "algorithm must be 'anti_kt', 'cambridge_aachen', or 'kt'",
-            ));
-        }
-    };
-    let definition = JetDefinition::new(algorithm, radius).with_minimum_pt(minimum_pt);
-    let momenta = momenta
-        .into_iter()
-        .map(|momentum| momentum.inner)
-        .collect::<Vec<_>>();
-    py.detach(move || definition.cluster(&momenta))
-        .map(|inner| PyClusteringResult { inner })
-        .map_err(error::kinematics)
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyHelicity>()?;
     module.add_class::<PyAxis>()?;
@@ -1493,8 +1582,5 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyJet>()?;
     module.add_class::<PyClusteringResult>()?;
     module.add_class::<PyJetDefinition>()?;
-    let cluster_jets = wrap_pyfunction!(cluster_jets, module)?;
-    cluster_jets.setattr("__module__", "symbolica.community.feynkit")?;
-    module.add_function(cluster_jets)?;
     Ok(())
 }

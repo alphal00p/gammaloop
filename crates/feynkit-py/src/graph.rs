@@ -1,18 +1,27 @@
+use std::collections::BTreeMap;
+
 use feynkit_graph::{
     DiagramEdge, DiagramVertex, FeynmanDiagram, LoopMomentumBasis, MomentumSignature,
 };
 use pyo3::{
+    exceptions::PyTypeError,
     prelude::*,
     types::{PyAny, PyModule},
 };
 use symbolica::{api::python::PythonExpression, atom::Atom, parser::ParseSettings, wrap_input};
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
+use pyo3_stub_gen::{
+    PyStubType, TypeInfo,
+    derive::{gen_methods_from_python, gen_stub_pyclass, gen_stub_pymethods},
+    inventory::submit,
+};
 
 use crate::{
+    cff::{PyCffResult, build_cff_for_diagram},
     display::{escape_html, render_diagram_html, render_diagram_svg},
     error,
+    kinematics::{PyFourMomentum, PyThreeMomentum},
     model::PyModel,
 };
 
@@ -58,7 +67,11 @@ impl PyDiagramVertex {
         &self.inner.name
     }
 
-    /// Return the interaction name for an internal vertex, if present.
+    /// Return the interaction name for an internal vertex.
+    ///
+    /// Raises :class:`DiagramError` when called on an external vertex or on an
+    /// incomplete imported diagram. Use :attr:`is_external` to distinguish the
+    /// two vertex kinds.
     ///
     /// Examples
     /// --------
@@ -66,35 +79,45 @@ impl PyDiagramVertex {
     /// >>> rule = model.vertex_rule(vertex.interaction)
     ///
     #[getter]
-    fn interaction(&self) -> Option<String> {
-        self.inner.interaction.clone()
+    fn interaction(&self) -> PyResult<String> {
+        self.inner.interaction.clone().ok_or_else(|| {
+            error::DiagramError::new_err(format!(
+                "vertex {} has no interaction annotation",
+                self.id
+            ))
+        })
     }
 
-    /// Return the symbolic numerator annotation as source text, if present.
+    /// Return the symbolic numerator annotation as source text.
+    ///
+    /// Raises :class:`DiagramError` when the diagram does not carry an
+    /// instantiated Feynman-rule numerator for this vertex.
     #[getter]
-    fn numerator(&self) -> Option<String> {
-        self.inner.numerator.clone()
+    fn numerator(&self) -> PyResult<String> {
+        self.inner.numerator.clone().ok_or_else(|| {
+            error::DiagramError::new_err(format!("vertex {} has no numerator annotation", self.id))
+        })
     }
 
-    /// Parse the optional numerator annotation as a Symbolica expression.
+    /// Parse the numerator annotation as a Symbolica expression.
     ///
     /// Examples
     /// --------
-    /// >>> vertex = diagram.vertices[0]
+    /// >>> vertex = next(v for v in diagram.vertices if not v.is_external)
     /// >>> vertex_factor = vertex.numerator_expression()
-    /// >>> if vertex_factor is not None:
-    /// ...     weighted_vertex_factor = diagram.overall_factor_expression() * vertex_factor
+    /// >>> weighted_vertex_factor = diagram.overall_factor_expression() * vertex_factor
     ///
-    fn numerator_expression(&self) -> PyResult<Option<PythonExpression>> {
-        self.inner
-            .numerator
-            .as_deref()
-            .map(parse_symbolic_annotation)
-            .transpose()
-            .map_err(error::DiagramError::new_err)
+    fn numerator_expression(&self) -> PyResult<PythonExpression> {
+        let numerator = self.inner.numerator.as_deref().ok_or_else(|| {
+            error::DiagramError::new_err(format!("vertex {} has no numerator annotation", self.id))
+        })?;
+        parse_symbolic_annotation(numerator).map_err(error::DiagramError::new_err)
     }
 
-    /// Return the external-leg index, or ``None`` for an internal vertex.
+    /// Return the external-leg index.
+    ///
+    /// Raises :class:`DiagramError` for an internal vertex. Use
+    /// :attr:`is_external` before accessing external-state metadata.
     ///
     /// Examples
     /// --------
@@ -103,17 +126,31 @@ impl PyDiagramVertex {
     /// True
     ///
     #[getter]
-    fn external_index(&self) -> Option<usize> {
-        self.inner.external.as_ref().map(|leg| leg.index)
+    fn external_index(&self) -> PyResult<usize> {
+        self.inner
+            .external
+            .as_ref()
+            .map(|leg| leg.index)
+            .ok_or_else(|| {
+                error::DiagramError::new_err(format!("vertex {} is not external", self.id))
+            })
     }
 
     /// Return ``"incoming"`` or ``"outgoing"`` for an external vertex.
+    ///
+    /// Raises :class:`DiagramError` for an internal vertex.
     #[getter]
-    fn external_state(&self) -> Option<&'static str> {
-        self.inner.external.as_ref().map(|leg| match leg.state {
-            feynkit_graph::ExternalState::Incoming => "incoming",
-            feynkit_graph::ExternalState::Outgoing => "outgoing",
-        })
+    fn external_state(&self) -> PyResult<&'static str> {
+        self.inner
+            .external
+            .as_ref()
+            .map(|leg| match leg.state {
+                feynkit_graph::ExternalState::Incoming => "incoming",
+                feynkit_graph::ExternalState::Outgoing => "outgoing",
+            })
+            .ok_or_else(|| {
+                error::DiagramError::new_err(format!("vertex {} is not external", self.id))
+            })
     }
 
     /// Report whether this vertex represents an external particle state.
@@ -162,9 +199,9 @@ impl PyDiagramVertex {
     ///
     /// Parameters
     /// ----------
-    /// pretty:
+    /// pretty : Any
     ///     The IPython pretty-printer object.
-    /// cycle:
+    /// cycle : bool
     ///     Whether this object is part of a recursive formatting cycle.
     fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
         pretty.call_method1(
@@ -182,7 +219,7 @@ impl PyDiagramVertex {
 /// A particle propagator joining two vertices in a Feynman diagram.
 ///
 /// Edges retain their particle identity, endpoints, flow direction, and an
-/// optional symbolic numerator contribution.
+/// symbolic numerator contribution when Feynman rules have been instantiated.
 ///
 /// Examples
 /// --------
@@ -254,28 +291,30 @@ impl PyDiagramEdge {
         self.inner.directed
     }
 
-    /// Return the symbolic numerator annotation as source text, if present.
+    /// Return the symbolic numerator annotation as source text.
+    ///
+    /// Raises :class:`DiagramError` for an incomplete imported diagram that has
+    /// no instantiated propagator numerator.
     #[getter]
-    fn numerator(&self) -> Option<String> {
-        self.inner.numerator.clone()
+    fn numerator(&self) -> PyResult<String> {
+        self.inner.numerator.clone().ok_or_else(|| {
+            error::DiagramError::new_err(format!("edge {} has no numerator annotation", self.id))
+        })
     }
 
-    /// Parse the optional numerator annotation as a Symbolica expression.
+    /// Parse the numerator annotation as a Symbolica expression.
     ///
     /// Examples
     /// --------
     /// >>> edge = diagram.edges[0]
     /// >>> propagator_factor = edge.numerator_expression()
-    /// >>> if propagator_factor is not None:
-    /// ...     weighted_propagator = diagram.overall_factor_expression() * propagator_factor
+    /// >>> weighted_propagator = diagram.overall_factor_expression() * propagator_factor
     ///
-    fn numerator_expression(&self) -> PyResult<Option<PythonExpression>> {
-        self.inner
-            .numerator
-            .as_deref()
-            .map(parse_symbolic_annotation)
-            .transpose()
-            .map_err(error::DiagramError::new_err)
+    fn numerator_expression(&self) -> PyResult<PythonExpression> {
+        let numerator = self.inner.numerator.as_deref().ok_or_else(|| {
+            error::DiagramError::new_err(format!("edge {} has no numerator annotation", self.id))
+        })?;
+        parse_symbolic_annotation(numerator).map_err(error::DiagramError::new_err)
     }
 
     /// Return a concise description of the edge and its endpoints.
@@ -306,9 +345,9 @@ impl PyDiagramEdge {
     ///
     /// Parameters
     /// ----------
-    /// pretty:
+    /// pretty : Any
     ///     The IPython pretty-printer object.
-    /// cycle:
+    /// cycle : bool
     ///     Whether this object is part of a recursive formatting cycle.
     fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
         pretty.call_method1(
@@ -331,7 +370,7 @@ impl PyDiagramEdge {
 /// Examples
 /// --------
 /// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
-/// >>> edge_id, signature = basis.edge_signatures[0]
+/// >>> edge_id, signature = next(iter(basis.edge_signatures.items()))
 /// >>> print(f"q_{edge_id} = {signature.format_momentum()}")
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
@@ -349,6 +388,47 @@ impl From<MomentumSignature> for PyMomentumSignature {
     fn from(inner: MomentumSignature) -> Self {
         Self { inner }
     }
+}
+
+#[derive(FromPyObject)]
+enum MomentumInput {
+    Three(PyThreeMomentum),
+    Four(PyFourMomentum),
+}
+
+#[derive(IntoPyObject)]
+enum RoutedMomentum {
+    Three(PyThreeMomentum),
+    Four(PyFourMomentum),
+}
+
+#[cfg(feature = "python_stubgen")]
+impl PyStubType for MomentumInput {
+    fn type_input() -> TypeInfo {
+        PyThreeMomentum::type_input() | PyFourMomentum::type_input()
+    }
+
+    fn type_output() -> TypeInfo {
+        PyThreeMomentum::type_output() | PyFourMomentum::type_output()
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+impl PyStubType for RoutedMomentum {
+    fn type_input() -> TypeInfo {
+        PyThreeMomentum::type_input() | PyFourMomentum::type_input()
+    }
+
+    fn type_output() -> TypeInfo {
+        PyThreeMomentum::type_output() | PyFourMomentum::type_output()
+    }
+}
+
+fn components_close<const N: usize>(left: [f64; N], right: [f64; N]) -> bool {
+    left.into_iter().zip(right).all(|(left, right)| {
+        let scale = 1.0 + left.abs().max(right.abs());
+        (left - right).abs() <= 1.0e-10 * scale
+    })
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
@@ -370,7 +450,7 @@ impl PyMomentumSignature {
     ///
     /// Examples
     /// --------
-    /// >>> _, signature = basis.edge_signatures[0]
+    /// >>> signature = next(iter(basis.edge_signatures.values()))
     /// >>> loops, external = signature.integer_coefficients()
     /// >>> print("loop coefficients:", loops, "external coefficients:", external)
     ///
@@ -384,7 +464,7 @@ impl PyMomentumSignature {
     /// --------
     /// Print the momentum routing assigned to every propagator:
     ///
-    /// >>> for edge_id, signature in basis.edge_signatures:
+    /// >>> for edge_id, signature in basis.edge_signatures.items():
     /// ...     print(edge_id, signature.format_momentum())
     ///
     fn format_momentum(&self) -> String {
@@ -395,7 +475,7 @@ impl PyMomentumSignature {
     ///
     /// Examples
     /// --------
-    /// >>> _, signature = basis.edge_signatures[0]
+    /// >>> signature = next(iter(basis.edge_signatures.values()))
     /// >>> print(f"propagator momentum: {signature}")
     ///
     fn __str__(&self) -> String {
@@ -406,7 +486,7 @@ impl PyMomentumSignature {
     ///
     /// Examples
     /// --------
-    /// >>> edge_id, signature = basis.edge_signatures[0]
+    /// >>> edge_id, signature = next(iter(basis.edge_signatures.items()))
     /// >>> print(f"edge {edge_id}: {signature!r}")
     ///
     fn __repr__(&self) -> String {
@@ -421,9 +501,9 @@ impl PyMomentumSignature {
     ///
     /// Parameters
     /// ----------
-    /// pretty:
+    /// pretty : Any
     ///     The IPython pretty-printer object.
-    /// cycle:
+    /// cycle : bool
     ///     Whether this object is part of a recursive formatting cycle.
     fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
         pretty.call_method1(
@@ -448,7 +528,7 @@ impl PyMomentumSignature {
 /// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
 /// >>> len(basis.loop_edges) == diagram.loop_count
 /// True
-/// >>> assignments = dict(basis.edge_signatures)
+/// >>> assignments = basis.edge_signatures
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "LoopMomentumBasis",
@@ -512,25 +592,156 @@ impl PyLoopMomentumBasis {
             .collect()
     }
 
-    /// Return each edge identifier together with its momentum signature.
+    /// Return momentum signatures keyed by stable diagram edge ID.
     ///
     /// Examples
     /// --------
     /// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
     /// >>> momentum_by_edge = {
     /// ...     edge_id: signature.format_momentum()
-    /// ...     for edge_id, signature in basis.edge_signatures
+    /// ...     for edge_id, signature in basis.edge_signatures.items()
     /// ... }
     /// >>> for edge in diagram.edges:
     /// ...     print(edge.particle_name, momentum_by_edge[edge.id])
     ///
     #[getter]
-    fn edge_signatures(&self) -> Vec<(usize, PyMomentumSignature)> {
+    fn edge_signatures(&self) -> BTreeMap<usize, PyMomentumSignature> {
         self.inner
             .edge_signatures
             .iter()
             .map(|(edge, signature)| (edge.0, signature.clone().into()))
             .collect()
+    }
+
+    /// Route loop and external momenta through every diagram edge.
+    ///
+    /// Inputs must be uniformly :class:`ThreeMomentum` or uniformly
+    /// :class:`FourMomentum`. Loop momenta follow :attr:`loop_edges`; external
+    /// momenta follow :attr:`external_edges`. The result is keyed by stable edge
+    /// ID. FeynKit checks the supplied external momenta against momentum
+    /// conservation, including each dependent external leg.
+    ///
+    /// Examples
+    /// --------
+    /// Route a one-loop spatial momentum through the complete graph:
+    ///
+    /// >>> routed = basis.route([loop_momentum], external_spatial_momenta)
+    /// >>> internal_momentum = routed[basis.loop_edges[0]]
+    ///
+    /// Parameters
+    /// ----------
+    /// loop_momenta : sequence[ThreeMomentum] or sequence[FourMomentum]
+    ///     Independent loop momenta in :attr:`loop_edges` order.
+    /// external_momenta : sequence[ThreeMomentum] or sequence[FourMomentum]
+    ///     External momenta in :attr:`external_edges` order.
+    #[gen_stub(skip)]
+    fn route(
+        &self,
+        loop_momenta: Vec<MomentumInput>,
+        external_momenta: Vec<MomentumInput>,
+    ) -> PyResult<BTreeMap<usize, RoutedMomentum>> {
+        let use_four_momenta = loop_momenta
+            .iter()
+            .chain(&external_momenta)
+            .next()
+            .map(|momentum| matches!(momentum, MomentumInput::Four(_)))
+            .ok_or_else(|| {
+                PyTypeError::new_err(
+                    "cannot infer momentum dimension when both basis inputs are empty",
+                )
+            })?;
+
+        if use_four_momenta {
+            let loops = loop_momenta
+                .into_iter()
+                .map(|momentum| match momentum {
+                    MomentumInput::Four(momentum) => Ok(momentum.inner),
+                    MomentumInput::Three(_) => Err(PyTypeError::new_err(
+                        "loop_momenta and external_momenta must use one momentum dimension",
+                    )),
+                })
+                .collect::<PyResult<Vec<_>>>()?;
+            let external = external_momenta
+                .into_iter()
+                .map(|momentum| match momentum {
+                    MomentumInput::Four(momentum) => Ok(momentum.inner),
+                    MomentumInput::Three(_) => Err(PyTypeError::new_err(
+                        "loop_momenta and external_momenta must use one momentum dimension",
+                    )),
+                })
+                .collect::<PyResult<Vec<_>>>()?;
+            let mut routed = BTreeMap::new();
+            for (edge, signature) in &self.inner.edge_signatures {
+                let momentum = signature
+                    .apply(&loops, &external)
+                    .map_err(|error| error::DiagramError::new_err(error.to_string()))?
+                    .ok_or_else(|| {
+                        error::DiagramError::new_err(format!(
+                            "edge {} has an all-zero momentum signature",
+                            edge.0
+                        ))
+                    })?;
+                if let Some(index) = self
+                    .inner
+                    .external_edges
+                    .iter()
+                    .position(|external_edge| external_edge == edge)
+                    && !components_close(<[f64; 4]>::from(momentum), external[index].into())
+                {
+                    return Err(error::DiagramError::new_err(format!(
+                        "external momentum at edge {} violates the basis momentum-conservation relation",
+                        edge.0
+                    )));
+                }
+                routed.insert(edge.0, RoutedMomentum::Four(momentum.into()));
+            }
+            Ok(routed)
+        } else {
+            let loops = loop_momenta
+                .into_iter()
+                .map(|momentum| match momentum {
+                    MomentumInput::Three(momentum) => Ok(momentum.inner),
+                    MomentumInput::Four(_) => Err(PyTypeError::new_err(
+                        "loop_momenta and external_momenta must use one momentum dimension",
+                    )),
+                })
+                .collect::<PyResult<Vec<_>>>()?;
+            let external = external_momenta
+                .into_iter()
+                .map(|momentum| match momentum {
+                    MomentumInput::Three(momentum) => Ok(momentum.inner),
+                    MomentumInput::Four(_) => Err(PyTypeError::new_err(
+                        "loop_momenta and external_momenta must use one momentum dimension",
+                    )),
+                })
+                .collect::<PyResult<Vec<_>>>()?;
+            let mut routed = BTreeMap::new();
+            for (edge, signature) in &self.inner.edge_signatures {
+                let momentum = signature
+                    .apply(&loops, &external)
+                    .map_err(|error| error::DiagramError::new_err(error.to_string()))?
+                    .ok_or_else(|| {
+                        error::DiagramError::new_err(format!(
+                            "edge {} has an all-zero momentum signature",
+                            edge.0
+                        ))
+                    })?;
+                if let Some(index) = self
+                    .inner
+                    .external_edges
+                    .iter()
+                    .position(|external_edge| external_edge == edge)
+                    && !components_close(<[f64; 3]>::from(momentum), external[index].into())
+                {
+                    return Err(error::DiagramError::new_err(format!(
+                        "external momentum at edge {} violates the basis momentum-conservation relation",
+                        edge.0
+                    )));
+                }
+                routed.insert(edge.0, RoutedMomentum::Three(momentum.into()));
+            }
+            Ok(routed)
+        }
     }
 
     /// Return a concise description of the selected momentum basis.
@@ -600,9 +811,9 @@ impl PyLoopMomentumBasis {
     ///
     /// Parameters
     /// ----------
-    /// pretty:
+    /// pretty : Any
     ///     The IPython pretty-printer object.
-    /// cycle:
+    /// cycle : bool
     ///     Whether this object is part of a recursive formatting cycle.
     fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
         pretty.call_method1(
@@ -614,6 +825,58 @@ impl PyLoopMomentumBasis {
             },),
         )?;
         Ok(())
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+submit! {
+    gen_methods_from_python! {
+        r#"
+        import typing
+
+        class PyLoopMomentumBasis:
+            @typing.overload
+            def route(
+                self,
+                loop_momenta: typing.Sequence[ThreeMomentum],
+                external_momenta: typing.Sequence[ThreeMomentum],
+            ) -> dict[int, ThreeMomentum]:
+                """Route three-momenta through every diagram edge.
+
+                Examples
+                --------
+                >>> routed = basis.route([loop_momentum], external_spatial_momenta)
+                >>> internal_momentum = routed[basis.loop_edges[0]]
+
+                Parameters
+                ----------
+                loop_momenta : sequence[ThreeMomentum]
+                    Independent loop momenta in ``basis.loop_edges`` order.
+                external_momenta : sequence[ThreeMomentum]
+                    External momenta in ``basis.external_edges`` order.
+                """
+
+            @typing.overload
+            def route(
+                self,
+                loop_momenta: typing.Sequence[FourMomentum],
+                external_momenta: typing.Sequence[FourMomentum],
+            ) -> dict[int, FourMomentum]:
+                """Route four-momenta through every diagram edge.
+
+                Examples
+                --------
+                >>> routed = basis.route([loop_momentum], external_four_momenta)
+                >>> internal_momentum = routed[basis.loop_edges[0]]
+
+                Parameters
+                ----------
+                loop_momenta : sequence[FourMomentum]
+                    Independent loop momenta in ``basis.loop_edges`` order.
+                external_momenta : sequence[FourMomentum]
+                    External momenta in ``basis.external_edges`` order.
+                """
+        "#
     }
 }
 
@@ -659,7 +922,7 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// json:
+    /// json : str
     ///     JSON text produced by :meth:`FeynmanDiagram.to_json` or another
     ///     schema-compatible producer.
     #[staticmethod]
@@ -680,7 +943,7 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// dot:
+    /// dot : str
     ///     DOT text containing the diagram topology and FeynKit annotations.
     #[staticmethod]
     fn from_dot(dot: &str) -> PyResult<Self> {
@@ -723,27 +986,36 @@ impl PyFeynmanDiagram {
         self.inner.overall_factor()
     }
 
-    /// Return the diagram numerator annotation as source text, if present.
+    /// Return the diagram numerator annotation as source text.
+    ///
+    /// Raises :class:`DiagramError` for an imported or partially constructed
+    /// diagram whose Feynman rules have not supplied a numerator.
     #[getter]
-    fn numerator(&self) -> Option<String> {
-        self.inner.numerator().map(str::to_owned)
+    fn numerator(&self) -> PyResult<String> {
+        self.inner.numerator().map(str::to_owned).ok_or_else(|| {
+            error::DiagramError::new_err(format!(
+                "diagram {:?} has no numerator annotation",
+                self.inner.name()
+            ))
+        })
     }
 
-    /// Parse the optional diagram numerator as a Symbolica expression.
+    /// Parse the diagram numerator as a Symbolica expression.
     ///
     /// Examples
     /// --------
     /// >>> numerator = diagram.numerator_expression()
-    /// >>> if numerator is not None:
-    /// ...     integrand_numerator = diagram.overall_factor_expression() * numerator
-    /// ...     integrand_numerator  # native Symbolica algebra and rich display
+    /// >>> integrand_numerator = diagram.overall_factor_expression() * numerator
+    /// >>> integrand_numerator  # native Symbolica algebra and rich display
     ///
-    fn numerator_expression(&self) -> PyResult<Option<PythonExpression>> {
-        self.inner
-            .numerator()
-            .map(parse_symbolic_annotation)
-            .transpose()
-            .map_err(error::DiagramError::new_err)
+    fn numerator_expression(&self) -> PyResult<PythonExpression> {
+        let numerator = self.inner.numerator().ok_or_else(|| {
+            error::DiagramError::new_err(format!(
+                "diagram {:?} has no numerator annotation",
+                self.inner.name()
+            ))
+        })?;
+        parse_symbolic_annotation(numerator).map_err(error::DiagramError::new_err)
     }
 
     /// Parse the diagram-wide factor as a Symbolica expression.
@@ -782,22 +1054,68 @@ impl PyFeynmanDiagram {
             .collect()
     }
 
-    /// Return the diagram edges with their endpoint identifiers.
-    ///
-    /// Examples
-    /// --------
-    /// Select the internal propagators before constructing an integrand:
-    ///
-    /// >>> internal_edges = [
-    /// ...     edge for edge in diagram.edges
-    /// ...     if not diagram.vertices[edge.source].is_external
-    /// ...     and not diagram.vertices[edge.target].is_external
-    /// ... ]
-    ///
+    /// Return all diagram edges with their endpoint identifiers.
     #[getter]
     fn edges(&self) -> Vec<PyDiagramEdge> {
         self.inner
             .edges()
+            .map(|(id, endpoints, inner)| PyDiagramEdge {
+                id: id.0,
+                source: endpoints.source.0,
+                target: endpoints.target.0,
+                inner: inner.clone(),
+            })
+            .collect()
+    }
+
+    /// Return propagator edges whose endpoints are both internal vertices.
+    ///
+    /// Examples
+    /// --------
+    /// >>> propagators = diagram.internal_edges
+    /// >>> on_shell = {edge.id: energy[edge.id] for edge in propagators}
+    ///
+    #[getter]
+    fn internal_edges(&self) -> Vec<PyDiagramEdge> {
+        self.inner
+            .edges()
+            .filter(|(_, endpoints, _)| {
+                self.inner
+                    .vertex(endpoints.source)
+                    .is_some_and(|vertex| !vertex.is_external())
+                    && self
+                        .inner
+                        .vertex(endpoints.target)
+                        .is_some_and(|vertex| !vertex.is_external())
+            })
+            .map(|(id, endpoints, inner)| PyDiagramEdge {
+                id: id.0,
+                source: endpoints.source.0,
+                target: endpoints.target.0,
+                inner: inner.clone(),
+            })
+            .collect()
+    }
+
+    /// Return edges attached to incoming or outgoing external states.
+    ///
+    /// Examples
+    /// --------
+    /// >>> external_particles = [edge.particle_name for edge in diagram.external_edges]
+    ///
+    #[getter]
+    fn external_edges(&self) -> Vec<PyDiagramEdge> {
+        self.inner
+            .edges()
+            .filter(|(_, endpoints, _)| {
+                self.inner
+                    .vertex(endpoints.source)
+                    .is_some_and(DiagramVertex::is_external)
+                    || self
+                        .inner
+                        .vertex(endpoints.target)
+                        .is_some_and(DiagramVertex::is_external)
+            })
             .map(|(id, endpoints, inner)| PyDiagramEdge {
                 id: id.0,
                 source: endpoints.source.0,
@@ -818,11 +1136,53 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// model:
+    /// model : Model
     ///     The :class:`Model` whose particle and interaction definitions should
     ///     be used for validation.
     fn validate(&self, model: &PyModel) -> PyResult<()> {
         self.inner.validate(&model.inner).map_err(error::diagram)
+    }
+
+    /// Build the diagram's Cross-Free Family representation.
+    ///
+    /// Edge constraints use the stable integer IDs exposed by
+    /// ``diagram.edges``. ``False`` fixes an edge in its stored direction and
+    /// ``True`` reverses it.
+    ///
+    /// Examples
+    /// --------
+    /// Construct and display the causal denominators of a one-loop diagram:
+    ///
+    /// >>> cff = diagram.build_cff(max_orientations=10_000)
+    /// >>> cff.to_expression()  # native Symbolica display in a notebook
+    ///
+    /// Parameters
+    /// ----------
+    /// max_orientations : int or None, optional
+    ///     Maximum number of candidate orientations to inspect.
+    /// fixed_orientations : mapping[int, bool] or None, optional
+    ///     Edge IDs mapped to stored (false) or reversed (true) directions.
+    /// contracted_edges : iterable[int], optional
+    ///     Edge IDs to contract before constructing denominator surfaces.
+    /// initial_state_edges : iterable[int], optional
+    ///     Edge IDs to classify as incoming external lines.
+    #[pyo3(signature = (*, max_orientations=None, fixed_orientations=None, contracted_edges=None, initial_state_edges=None))]
+    fn build_cff(
+        &self,
+        py: Python<'_>,
+        max_orientations: Option<usize>,
+        fixed_orientations: Option<BTreeMap<usize, bool>>,
+        contracted_edges: Option<Vec<usize>>,
+        initial_state_edges: Option<Vec<usize>>,
+    ) -> PyResult<PyCffResult> {
+        build_cff_for_diagram(
+            py,
+            self,
+            max_orientations,
+            fixed_orientations,
+            contracted_edges,
+            initial_state_edges,
+        )
     }
 
     /// Serialize the complete diagram to JSON text.
@@ -912,9 +1272,9 @@ impl PyFeynmanDiagram {
     ///
     /// Parameters
     /// ----------
-    /// pretty:
+    /// pretty : Any
     ///     The IPython pretty-printer object.
-    /// cycle:
+    /// cycle : bool
     ///     Whether this object is part of a recursive formatting cycle.
     fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
         let text = if cycle {
@@ -941,12 +1301,12 @@ impl PyFeynmanDiagram {
     /// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
     /// >>> routing = {
     /// ...     edge_id: signature.format_momentum()
-    /// ...     for edge_id, signature in basis.edge_signatures
+    /// ...     for edge_id, signature in basis.edge_signatures.items()
     /// ... }
     ///
     /// Parameters
     /// ----------
-    /// limit:
+    /// limit : int or None
     ///     Maximum number of bases to return. Pass ``None`` to enumerate every
     ///     valid basis.
     #[pyo3(signature = (limit=None))]

@@ -7,12 +7,11 @@ use feynkit_cff::{
 use pyo3::{
     prelude::*,
     types::{PyAny, PyModule},
-    wrap_pyfunction,
 };
 use symbolica::{api::python::PythonExpression, atom::Atom, symbol};
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyfunction, gen_stub_pymethods};
+use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 
 use crate::{error, graph::PyFeynmanDiagram};
 
@@ -72,19 +71,32 @@ impl PyCffSurface {
     }
 
     /// Return the index of an energy or H surface.
+    ///
+    /// Raises :class:`CffError` for the special unit or infinite sentinels.
     #[getter]
-    fn index(&self) -> Option<usize> {
+    fn index(&self) -> PyResult<usize> {
         match self.id {
-            SurfaceId::Energy(id) => Some(id.index()),
-            SurfaceId::H(id) => Some(id.index()),
-            SurfaceId::Unit | SurfaceId::Infinite => None,
+            SurfaceId::Energy(id) => Ok(id.index()),
+            SurfaceId::H(id) => Ok(id.index()),
+            SurfaceId::Unit | SurfaceId::Infinite => Err(error::CffError::new_err(format!(
+                "the {} CFF sentinel has no surface index",
+                self.kind()
+            ))),
         }
     }
 
     /// Return the Symbolica variable name assigned to this surface.
+    ///
+    /// Raises :class:`CffError` for the special unit or infinite sentinels,
+    /// which are not denominator variables.
     #[getter]
-    fn symbol_name(&self) -> Option<String> {
-        Self::symbol_name_for(self.id)
+    fn symbol_name(&self) -> PyResult<String> {
+        Self::symbol_name_for(self.id).ok_or_else(|| {
+            error::CffError::new_err(format!(
+                "the {} CFF sentinel has no Symbolica variable",
+                self.kind()
+            ))
+        })
     }
 
     /// Return edge IDs whose on-shell energies enter with positive sign.
@@ -151,7 +163,7 @@ impl PyCffSurface {
     /// >>> print(surface)  # Symbolica denominator variable, for example feynkit::E0
     ///
     fn __repr__(&self) -> String {
-        self.symbol_name().unwrap_or_else(|| self.kind().to_owned())
+        Self::symbol_name_for(self.id).unwrap_or_else(|| self.kind().to_owned())
     }
 }
 
@@ -661,39 +673,7 @@ impl PyCffGenerator {
     }
 }
 
-/// Build a Cross-Free Family representation of a Feynman diagram.
-///
-/// Edge constraints use the stable integer IDs exposed by
-/// ``diagram.edges``. ``False`` fixes an edge in its stored direction and
-/// ``True`` reverses it.
-///
-/// Examples
-/// --------
-/// Construct the causal denominators for a one-loop diagram:
-///
-/// >>> cff = fk.build_cff(diagram, fixed_orientations={0: False})
-/// >>> expression = cff.to_expression()
-/// >>> expression  # native Symbolica display in a notebook
-///
-/// Parameters
-/// ----------
-/// diagram : FeynmanDiagram
-///     Diagram whose acyclic energy-flow orientations are enumerated.
-/// max_orientations : int or None, optional
-///     Maximum number of candidate orientations to inspect.
-/// fixed_orientations : mapping[int, bool] or None, optional
-///     Edge IDs mapped to stored (false) or reversed (true) directions.
-/// contracted_edges : iterable[int], optional
-///     Edge IDs to contract before constructing denominator surfaces.
-/// initial_state_edges : iterable[int], optional
-///     Edge IDs to classify as incoming external lines.
-#[cfg_attr(
-    feature = "python_stubgen",
-    gen_stub_pyfunction(module = "symbolica.community.feynkit")
-)]
-#[pyfunction]
-#[pyo3(signature = (diagram, *, max_orientations=None, fixed_orientations=None, contracted_edges=None, initial_state_edges=None))]
-fn build_cff(
+pub(crate) fn build_cff_for_diagram(
     py: Python<'_>,
     diagram: &PyFeynmanDiagram,
     max_orientations: Option<usize>,
@@ -737,8 +717,5 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyCffReport>()?;
     module.add_class::<PyCffResult>()?;
     module.add_class::<PyCffGenerator>()?;
-    let build_cff = wrap_pyfunction!(build_cff, module)?;
-    build_cff.setattr("__module__", "symbolica.community.feynkit")?;
-    module.add_function(build_cff)?;
     Ok(())
 }

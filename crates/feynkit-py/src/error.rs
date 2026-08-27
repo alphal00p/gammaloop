@@ -4,7 +4,7 @@ create_exception!(
     symbolica.community.feynkit,
     FeynkitError,
     PyException,
-    "Base exception for native FeynKit operations.\n\nExamples\n--------\nCatch any model, diagram, generation, CFF, or kinematics failure:\n\n>>> try:\n...     result = fk.generate_diagrams(model, incoming, outgoing)\n... except fk.FeynkitError as error:\n...     print(error)"
+    "Base exception for native FeynKit operations.\n\nExamples\n--------\nCatch any model, diagram, generation, CFF, or kinematics failure:\n\n>>> try:\n...     result = model.generate_diagrams(incoming, outgoing)\n... except fk.FeynkitError as error:\n...     print(error)"
 );
 create_exception!(
     symbolica.community.feynkit,
@@ -22,26 +22,26 @@ create_exception!(
     symbolica.community.feynkit,
     GenerationError,
     FeynkitError,
-    "Invalid process configuration or Feynman-diagram generation failure.\n\nExamples\n--------\nProcess and topology failures share one public exception type:\n\n>>> try:\n...     result = fk.generate_diagrams(model, incoming, outgoing, loops=1)\n... except fk.GenerationError as error:\n...     print(error)"
+    "Invalid process configuration or Feynman-diagram generation failure.\n\nExamples\n--------\nProcess and topology failures share one public exception type:\n\n>>> try:\n...     result = model.generate_diagrams(incoming, outgoing, loops=1)\n... except fk.GenerationError as error:\n...     print(error)"
 );
 create_exception!(
     symbolica.community.feynkit,
     CffError,
     FeynkitError,
-    "Failure while constructing a Cross-Free Family representation.\n\nExamples\n--------\nCatch incompatible edge constraints at the CFF boundary:\n\n>>> try:\n...     cff = fk.build_cff(diagram, contracted_edges=[edge_id])\n... except fk.CffError as error:\n...     print(error)"
+    "Failure while constructing a Cross-Free Family representation.\n\nExamples\n--------\nCatch incompatible edge constraints at the CFF boundary:\n\n>>> try:\n...     cff = diagram.build_cff(contracted_edges=[edge_id])\n... except fk.CffError as error:\n...     print(error)"
 );
 create_exception!(
     symbolica.community.feynkit,
     KinematicsError,
     FeynkitError,
-    "Invalid Lorentz transformation, momentum, or jet-clustering request.\n\nExamples\n--------\nKinematic-domain failures remain distinct from model errors:\n\n>>> try:\n...     jets = fk.cluster_jets(momenta, radius=-0.4)\n... except fk.KinematicsError as error:\n...     print(error)"
+    "Invalid Lorentz transformation, momentum, or jet-clustering request.\n\nExamples\n--------\nKinematic-domain failures remain distinct from model errors:\n\n>>> try:\n...     jets = fk.JetDefinition.anti_kt(-0.4).cluster(momenta)\n... except fk.KinematicsError as error:\n...     print(error)"
 );
 #[cfg(feature = "ufo")]
 create_exception!(
     symbolica.community.feynkit,
     UfoLoadError,
     FeynkitError,
-    "Failure while importing or normalizing a UFO model.\n\nExamples\n--------\nReport a missing or malformed UFO directory cleanly:\n\n>>> try:\n...     loaded = fk.load_ufo_model(\"models/sm\")\n... except fk.UfoLoadError as error:\n...     print(error)"
+    "Failure while importing or normalizing a UFO model.\n\nExamples\n--------\nReport a missing or malformed UFO directory cleanly:\n\n>>> try:\n...     loaded = fk.UfoLoader().load(\"models/sm\")\n... except fk.UfoLoadError as error:\n...     print(error)"
 );
 
 #[cfg(feature = "python_stubgen")]
@@ -70,7 +70,7 @@ macro_rules! register_exception_stub {
 register_exception_stub!(
     FeynkitError,
     pyo3_stub_gen::TypeInfo::builtin("Exception"),
-    "Base exception for native FeynKit operations.\n\nExamples\n--------\n>>> try:\n...     result = fk.generate_diagrams(model, incoming, outgoing)\n... except fk.FeynkitError as error:\n...     print(error)"
+    "Base exception for native FeynKit operations.\n\nExamples\n--------\n>>> try:\n...     result = model.generate_diagrams(incoming, outgoing)\n... except fk.FeynkitError as error:\n...     print(error)"
 );
 #[cfg(feature = "python_stubgen")]
 register_exception_stub!(
@@ -88,25 +88,25 @@ register_exception_stub!(
 register_exception_stub!(
     GenerationError,
     pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
-    "Invalid process configuration or Feynman-diagram generation failure.\n\nExamples\n--------\n>>> fk.generate_diagrams(model, incoming, outgoing, loops=1)"
+    "Invalid process configuration or Feynman-diagram generation failure.\n\nExamples\n--------\n>>> model.generate_diagrams(incoming, outgoing, loops=1)"
 );
 #[cfg(feature = "python_stubgen")]
 register_exception_stub!(
     CffError,
     pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
-    "Failure while constructing a Cross-Free Family representation.\n\nExamples\n--------\n>>> fk.build_cff(diagram)"
+    "Failure while constructing a Cross-Free Family representation.\n\nExamples\n--------\n>>> diagram.build_cff()"
 );
 #[cfg(feature = "python_stubgen")]
 register_exception_stub!(
     KinematicsError,
     pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
-    "Invalid Lorentz transformation, momentum, or jet-clustering request.\n\nExamples\n--------\n>>> fk.cluster_jets(momenta, radius=0.4)"
+    "Invalid Lorentz transformation, momentum, or jet-clustering request.\n\nExamples\n--------\n>>> fk.JetDefinition.anti_kt(0.4).cluster(momenta)"
 );
 #[cfg(all(feature = "python_stubgen", feature = "ufo"))]
 register_exception_stub!(
     UfoLoadError,
     pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
-    "Failure while importing or normalizing a UFO model.\n\nExamples\n--------\n>>> fk.load_ufo_model(\"models/sm\")"
+    "Failure while importing or normalizing a UFO model.\n\nExamples\n--------\n>>> fk.UfoLoader().load(\"models/sm\")"
 );
 
 pub(crate) fn model(error: feynkit_model::ModelError) -> PyErr {

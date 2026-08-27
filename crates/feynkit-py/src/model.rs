@@ -7,13 +7,24 @@ use feynkit_model::{
 };
 use pyo3::{
     prelude::*,
-    types::{PyAny, PyModule},
+    types::{PyAny, PyComplex, PyModule},
 };
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
 
-use crate::{display::escape_html, error};
+use crate::{
+    display::escape_html,
+    error,
+    generation::{
+        LoopOrderInput, PyGenerationOptions, PyGenerationResult, SelectorInput,
+        generate_diagrams_for_model,
+    },
+};
+
+fn complex_value<'py>(py: Python<'py>, value: ComplexValue) -> Bound<'py, PyComplex> {
+    PyComplex::from_doubles(py, value.re, value.im)
+}
 
 /// A particle species in a loaded interaction model.
 ///
@@ -345,10 +356,26 @@ impl PyParameter {
         self.inner.parameter_type.clone().into()
     }
 
-    /// Return the evaluated value as ``(real, imaginary)``, when available.
+    /// Return the evaluated value as a native Python complex number.
+    ///
+    /// Raises :class:`ModelError` when this parameter has not been evaluated.
+    ///
+    /// Examples
+    /// --------
+    /// >>> mass_value = model.parameter("MMU").value
+    /// >>> print("mass:", mass_value.real, "width component:", mass_value.imag)
+    ///
     #[getter]
-    fn value(&self) -> Option<(f64, f64)> {
-        self.inner.value.map(Into::into)
+    fn value<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyComplex>> {
+        self.inner
+            .value
+            .map(|value| complex_value(py, value))
+            .ok_or_else(|| {
+                error::ModelError::new_err(format!(
+                    "parameter {:?} has not been evaluated",
+                    self.inner.name
+                ))
+            })
     }
 
     /// Return the defining expression for an internal parameter.
@@ -428,10 +455,26 @@ impl PyCoupling {
         self.inner.orders.clone()
     }
 
-    /// Return the evaluated coupling as ``(real, imaginary)``, when available.
+    /// Return the evaluated coupling as a native Python complex number.
+    ///
+    /// Raises :class:`ModelError` when this coupling has not been evaluated.
+    ///
+    /// Examples
+    /// --------
+    /// >>> coupling_value = model.couplings[0].value
+    /// >>> print("coupling:", coupling_value.real, coupling_value.imag)
+    ///
     #[getter]
-    fn value(&self) -> Option<(f64, f64)> {
-        self.inner.value.map(Into::into)
+    fn value<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyComplex>> {
+        self.inner
+            .value
+            .map(|value| complex_value(py, value))
+            .ok_or_else(|| {
+                error::ModelError::new_err(format!(
+                    "coupling {:?} has not been evaluated",
+                    self.inner.name
+                ))
+            })
     }
 
     /// Return a concise representation containing the coupling name.
@@ -1268,9 +1311,16 @@ impl PyParameterCard {
 ///
 /// Examples
 /// --------
+/// Load a raw UFO model while retaining its parameter card and diagnostics:
+///
 /// >>> loaded = fk.UfoLoader().load("path/to/MyUFO")
 /// >>> model = loaded.model
 /// >>> electron = model.particle_by_pdg(11)
+///
+/// Or open a previously normalized FeynKit JSON model directly:
+///
+/// >>> model = fk.Model.from_path("models/sm.json")
+/// >>> photon = model.particle("a")
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Model",
@@ -1331,6 +1381,64 @@ impl PyModel {
         py.detach(move || Model::from_path(path))
             .map(Self::from)
             .map_err(error::model)
+    }
+
+    /// Generate amplitude or cross-section diagrams from this model.
+    ///
+    /// Particle names, signed PDG codes, and :class:`ParticleSelector` objects
+    /// may be mixed in the external states. An integer loop order selects that
+    /// exact order; a pair such as ``(0, 1)`` selects an inclusive range. The
+    /// selected model Feynman rules are instantiated on every returned vertex
+    /// and propagator edge and combined in each diagram numerator.
+    ///
+    /// Examples
+    /// --------
+    /// Generate one-loop scalar amplitudes directly from their model:
+    ///
+    /// >>> options = fk.GenerationOptions(max_vertices=3, allow_self_loops=True)
+    /// >>> result = model.generate_diagrams(
+    /// ...     ["scalar_0"], ["scalar_0", "scalar_0"],
+    /// ...     loops=1, options=options,
+    /// ... )
+    /// >>> diagram = result.diagrams[0]
+    /// >>> diagram.numerator_expression()
+    ///
+    /// Parameters
+    /// ----------
+    /// incoming : sequence[ParticleSelector | str | int]
+    ///     Incoming particles in external-leg order.
+    /// outgoing : sequence[ParticleSelector | str | int]
+    ///     Primary outgoing state in external-leg order.
+    /// kind : {"amplitude", "cross_section"}, optional
+    ///     Graph structure to generate.
+    /// loops : int or tuple[int, int], optional
+    ///     Exact loop order or inclusive minimum and maximum.
+    /// options : GenerationOptions or None, optional
+    ///     Generation filters and limits; defaults to standard options.
+    /// final_state_alternatives : sequence[sequence[ParticleSelector | str | int]] or None, optional
+    ///     Extra outgoing states for a cross section.
+    #[pyo3(signature = (incoming, outgoing, *, kind="amplitude", loops=LoopOrderInput::default(), options=None, final_state_alternatives=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn generate_diagrams(
+        &self,
+        py: Python<'_>,
+        incoming: Vec<SelectorInput>,
+        outgoing: Vec<SelectorInput>,
+        kind: &str,
+        loops: LoopOrderInput,
+        options: Option<&PyGenerationOptions>,
+        final_state_alternatives: Option<Vec<Vec<SelectorInput>>>,
+    ) -> PyResult<PyGenerationResult> {
+        generate_diagrams_for_model(
+            py,
+            self,
+            incoming,
+            outgoing,
+            kind,
+            loops,
+            options,
+            final_state_alternatives,
+        )
     }
 
     /// Return the model name.
@@ -1910,7 +2018,7 @@ assert mass.lhablock == "MASS"
 assert mass.lhacode == [1]
 assert mass.nature == fk.ParameterNature.EXTERNAL
 assert mass.parameter_type == fk.ParameterType.REAL
-assert mass.value == (1.0, 0.0)
+assert mass.value == 1.0 + 0.0j
 try:
     mass.name = "changed"
 except AttributeError:
@@ -1926,7 +2034,7 @@ assert internal.expression == "2*mass"
 coupling = model.coupling("GC1")
 assert isinstance(coupling, fk.Coupling)
 assert coupling.orders == {"QED": 1}
-assert coupling.value == (2.0, 0.0)
+assert coupling.value == 2.0 + 0.0j
 
 vertex = model.vertex_rule("V1")
 assert isinstance(vertex, fk.VertexRule)
@@ -1985,22 +2093,32 @@ def evaluate(request):
 
 recomputed = model.recompute_with(evaluate)
 assert isinstance(recomputed, fk.Model)
-assert recomputed.parameter("double_mass").value == (2.0, 0.0)
-assert recomputed.coupling("GC1").value == (2.0, 0.0)
-assert model.parameter("double_mass").value == (2.0, 0.0)
+assert recomputed.parameter("double_mass").value == 2.0 + 0.0j
+assert recomputed.coupling("GC1").value == 2.0 + 0.0j
+assert model.parameter("double_mass").value == 2.0 + 0.0j
 
 card = fk.ParameterCard()
 card.set("mass", 3.0, 0.5)
 updated = model.with_parameter_card(card, evaluator=evaluate)
-assert updated.parameter("mass").value == (3.0, 0.5)
-assert updated.parameter("double_mass").value == (6.0, 1.0)
-assert updated.coupling("GC1").value == (6.0, 1.0)
+assert updated.parameter("mass").value == 3.0 + 0.5j
+assert updated.parameter("double_mass").value == 6.0 + 1.0j
+assert updated.coupling("GC1").value == 6.0 + 1.0j
 assert requests[-1].known_parameters["mass"] == (3.0, 0.5)
 
 invalidated = model.with_parameter_card(card)
-assert invalidated.parameter("mass").value == (3.0, 0.5)
-assert invalidated.parameter("double_mass").value is None
-assert invalidated.coupling("GC1").value is None
+assert invalidated.parameter("mass").value == 3.0 + 0.5j
+try:
+    invalidated.parameter("double_mass").value
+except fk.ModelError:
+    pass
+else:
+    raise AssertionError("invalidated parameters must reject value access")
+try:
+    invalidated.coupling("GC1").value
+except fk.ModelError:
+    pass
+else:
+    raise AssertionError("invalidated couplings must reject value access")
 
 before = model.to_json(pretty=False)
 def fail(_request):
