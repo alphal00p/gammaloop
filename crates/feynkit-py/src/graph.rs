@@ -548,6 +548,7 @@ impl From<LoopMomentumBasis> for PyLoopMomentumBasis {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyLoopMomentumBasis {
     /// Return the edge identifiers belonging to the spanning tree.

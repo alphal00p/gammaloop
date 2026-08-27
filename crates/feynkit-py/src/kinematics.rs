@@ -1261,6 +1261,7 @@ pub struct PyClusteringResult {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyClusteringResult {
     /// Return inclusive jets ordered by decreasing transverse momentum.
