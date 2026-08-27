@@ -123,23 +123,15 @@ mod tests {
                     "missing Python class {class}"
                 );
             }
-            for function in [
+            for removed_function in [
                 "generate_diagrams",
                 "build_cff",
                 "cluster_jets",
                 "load_ufo_model",
             ] {
-                let function = module
-                    .getattr(function)
-                    .unwrap_or_else(|_| panic!("missing Python function {function}"));
-                assert!(function.is_callable());
-                assert_eq!(
-                    function
-                        .getattr("__module__")
-                        .unwrap()
-                        .extract::<String>()
-                        .unwrap(),
-                    "symbolica.community.feynkit"
+                assert!(
+                    module.getattr(removed_function).is_err(),
+                    "redundant module-level function {removed_function} must not be exported"
                 );
             }
         });
@@ -180,14 +172,14 @@ options.set_loop_count_range(0, 1)
 options.set_fermion_loop_count_range(0, 0)
 options.set_factorized_loop_topologies_count_range(0, 1)
 assert options.disable_numerator_grouping() is None
-generated = fk.generate_diagrams(
-    model,
+generated = model.generate_diagrams(
     ["scalar_0"],
     [1000, "scalar_0"],
     loops=(0, 1),
     options=options,
 )
 assert len(generated) > 0
+assert generated[0].name == next(iter(generated)).name
 assert generated.report.completed
 assert "Generation result" in generated._repr_html_()
 assert "retained diagrams" in generated.report._repr_html_()
@@ -217,7 +209,18 @@ assert len(bases[0].loop_edges) == 1
 assert len(bases[0].edge_signatures) == len(json_diagram.edges)
 assert "Loop-momentum basis" in bases[0]._repr_html_()
 
-cff = fk.build_cff(json_diagram)
+external_spatial = [
+    fk.ThreeMomentum(0.0, 0.0, 10.0),
+    fk.ThreeMomentum(0.0, 0.0, 4.0),
+    fk.ThreeMomentum(0.0, 0.0, 6.0),
+]
+routed = bases[0].route(
+    [fk.ThreeMomentum(1.0, 2.0, 3.0)],
+    external_spatial,
+)
+assert set(routed) == {edge.id for edge in json_diagram.edges}
+
+cff = json_diagram.build_cff()
 assert len(cff) > 0
 expression = cff.to_expression()
 assert "Cross-free family" in cff._repr_html_()
@@ -233,13 +236,13 @@ rotated = fk.Rotation.quarter_turn(fk.Axis.Z).apply_three(
 assert abs(rotated.px) < 1.0e-12
 assert abs(rotated.py - 1.0) < 1.0e-12
 
-clustered = fk.cluster_jets([
+clustered = fk.JetDefinition.anti_kt(0.4).cluster([
     fk.FourMomentum(10.0, 10.0, 0.0, 0.0),
     fk.FourMomentum(5.0, 5.0, 0.0, 0.0),
 ])
 assert len(clustered) == 1
-assert clustered.jets[0].constituent_indices == [0, 1]
-assert clustered.jets[0].momentum.components() == (15.0, 15.0, 0.0, 0.0)
+assert clustered[0].constituent_indices == [0, 1]
+assert next(iter(clustered)).momentum.components() == (15.0, 15.0, 0.0, 0.0)
 assert "Clustered jets" in clustered._repr_html_()
 assert "constituents" in clustered.jets[0]._repr_html_()
 assert "_gammaloop" not in sys.modules

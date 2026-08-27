@@ -123,7 +123,7 @@ class CffError(FeynkitError):
 
     Examples
     --------
-    >>> fk.build_cff(diagram)
+    >>> diagram.build_cff()
     """
     ...
 
@@ -421,14 +421,19 @@ class CffSurface:
         Return the surface category: energy, h, unit, or infinite.
         """
     @property
-    def index(self) -> typing.Optional[builtins.int]:
+    def index(self) -> builtins.int:
         r"""
         Return the index of an energy or H surface.
+
+        Raises :class:`CffError` for the special unit or infinite sentinels.
         """
     @property
-    def symbol_name(self) -> typing.Optional[builtins.str]:
+    def symbol_name(self) -> builtins.str:
         r"""
         Return the Symbolica variable name assigned to this surface.
+
+        Raises :class:`CffError` for the special unit or infinite sentinels,
+        which are not denominator variables.
         """
     @property
     def positive_energies(self) -> builtins.list[builtins.int]:
@@ -495,6 +500,27 @@ class ClusteringResult:
         Examples
         --------
         >>> jet_multiplicity = len(result)
+        """
+    def __getitem__(self, index: builtins.int) -> Jet:
+        r"""
+        Return one jet by decreasing-transverse-momentum index.
+
+        Examples
+        --------
+        >>> leading_jet = result[0]
+
+        Parameters
+        ----------
+        index : int
+            Zero-based index; negative indices count from the end.
+        """
+    def __iter__(self) -> collections.abc.Iterator[Jet]:
+        r"""
+        Iterate over jets from highest to lowest transverse momentum.
+
+        Examples
+        --------
+        >>> transverse_momenta = [jet.pt for jet in result]
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -566,9 +592,16 @@ class Coupling:
         >>> qed_couplings = [c for c in model.couplings if c.orders.get("QED", 0) > 0]
         """
     @property
-    def value(self) -> typing.Optional[tuple[builtins.float, builtins.float]]:
+    def value(self) -> complex:
         r"""
-        Return the evaluated coupling as ``(real, imaginary)``, when available.
+        Return the evaluated coupling as a native Python complex number.
+
+        Raises :class:`ModelError` when this coupling has not been evaluated.
+
+        Examples
+        --------
+        >>> coupling_value = model.couplings[0].value
+        >>> print("coupling:", coupling_value.real, coupling_value.imag)
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -585,7 +618,7 @@ class DiagramEdge:
     A particle propagator joining two vertices in a Feynman diagram.
 
     Edges retain their particle identity, endpoints, flow direction, and an
-    optional symbolic numerator contribution.
+    symbolic numerator contribution when Feynman rules have been instantiated.
 
     Examples
     --------
@@ -643,20 +676,22 @@ class DiagramEdge:
         >>> fermion_edges = [edge for edge in diagram.edges if edge.directed]
         """
     @property
-    def numerator(self) -> typing.Optional[builtins.str]:
+    def numerator(self) -> builtins.str:
         r"""
-        Return the symbolic numerator annotation as source text, if present.
+        Return the symbolic numerator annotation as source text.
+
+        Raises :class:`DiagramError` for an incomplete imported diagram that has
+        no instantiated propagator numerator.
         """
-    def numerator_expression(self) -> typing.Optional[Expression]:
+    def numerator_expression(self) -> Expression:
         r"""
-        Parse the optional numerator annotation as a Symbolica expression.
+        Parse the numerator annotation as a Symbolica expression.
 
         Examples
         --------
         >>> edge = diagram.edges[0]
         >>> propagator_factor = edge.numerator_expression()
-        >>> if propagator_factor is not None:
-        ...     weighted_propagator = diagram.overall_factor_expression() * propagator_factor
+        >>> weighted_propagator = diagram.overall_factor_expression() * propagator_factor
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -677,9 +712,9 @@ class DiagramEdge:
 
         Parameters
         ----------
-        pretty:
+        pretty : Any
             The IPython pretty-printer object.
-        cycle:
+        cycle : bool
             Whether this object is part of a recursive formatting cycle.
         """
 
@@ -748,9 +783,13 @@ class DiagramVertex:
         Return the stable vertex label stored in the diagram.
         """
     @property
-    def interaction(self) -> typing.Optional[builtins.str]:
+    def interaction(self) -> builtins.str:
         r"""
-        Return the interaction name for an internal vertex, if present.
+        Return the interaction name for an internal vertex.
+
+        Raises :class:`DiagramError` when called on an external vertex or on an
+        incomplete imported diagram. Use :attr:`is_external` to distinguish the
+        two vertex kinds.
 
         Examples
         --------
@@ -758,14 +797,20 @@ class DiagramVertex:
         >>> rule = model.vertex_rule(vertex.interaction)
         """
     @property
-    def numerator(self) -> typing.Optional[builtins.str]:
+    def numerator(self) -> builtins.str:
         r"""
-        Return the symbolic numerator annotation as source text, if present.
+        Return the symbolic numerator annotation as source text.
+
+        Raises :class:`DiagramError` when the diagram does not carry an
+        instantiated Feynman-rule numerator for this vertex.
         """
     @property
-    def external_index(self) -> typing.Optional[builtins.int]:
+    def external_index(self) -> builtins.int:
         r"""
-        Return the external-leg index, or ``None`` for an internal vertex.
+        Return the external-leg index.
+
+        Raises :class:`DiagramError` for an internal vertex. Use
+        :attr:`is_external` before accessing external-state metadata.
 
         Examples
         --------
@@ -774,9 +819,11 @@ class DiagramVertex:
         True
         """
     @property
-    def external_state(self) -> typing.Optional[builtins.str]:
+    def external_state(self) -> builtins.str:
         r"""
         Return ``"incoming"`` or ``"outgoing"`` for an external vertex.
+
+        Raises :class:`DiagramError` for an internal vertex.
         """
     @property
     def is_external(self) -> builtins.bool:
@@ -787,16 +834,15 @@ class DiagramVertex:
         --------
         >>> external_vertices = [vertex for vertex in diagram.vertices if vertex.is_external]
         """
-    def numerator_expression(self) -> typing.Optional[Expression]:
+    def numerator_expression(self) -> Expression:
         r"""
-        Parse the optional numerator annotation as a Symbolica expression.
+        Parse the numerator annotation as a Symbolica expression.
 
         Examples
         --------
-        >>> vertex = diagram.vertices[0]
+        >>> vertex = next(v for v in diagram.vertices if not v.is_external)
         >>> vertex_factor = vertex.numerator_expression()
-        >>> if vertex_factor is not None:
-        ...     weighted_vertex_factor = diagram.overall_factor_expression() * vertex_factor
+        >>> weighted_vertex_factor = diagram.overall_factor_expression() * vertex_factor
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -817,9 +863,9 @@ class DiagramVertex:
 
         Parameters
         ----------
-        pretty:
+        pretty : Any
             The IPython pretty-printer object.
-        cycle:
+        cycle : bool
             Whether this object is part of a recursive formatting cycle.
         """
 
@@ -939,7 +985,7 @@ class FeynkitError(builtins.Exception):
     Examples
     --------
     >>> try:
-    ...     result = fk.generate_diagrams(model, incoming, outgoing)
+    ...     result = model.generate_diagrams(incoming, outgoing)
     ... except fk.FeynkitError as error:
     ...     print(error)
     """
@@ -989,9 +1035,12 @@ class FeynmanDiagram:
         >>> factor  # rich Symbolica output in a notebook
         """
     @property
-    def numerator(self) -> typing.Optional[builtins.str]:
+    def numerator(self) -> builtins.str:
         r"""
-        Return the diagram numerator annotation as source text, if present.
+        Return the diagram numerator annotation as source text.
+
+        Raises :class:`DiagramError` for an imported or partially constructed
+        diagram whose Feynman rules have not supplied a numerator.
         """
     @property
     def loop_count(self) -> builtins.int:
@@ -1012,17 +1061,26 @@ class FeynmanDiagram:
     @property
     def edges(self) -> builtins.list[DiagramEdge]:
         r"""
-        Return the diagram edges with their endpoint identifiers.
+        Return all diagram edges with their endpoint identifiers.
+        """
+    @property
+    def internal_edges(self) -> builtins.list[DiagramEdge]:
+        r"""
+        Return propagator edges whose endpoints are both internal vertices.
 
         Examples
         --------
-        Select the internal propagators before constructing an integrand:
+        >>> propagators = diagram.internal_edges
+        >>> on_shell = {edge.id: energy[edge.id] for edge in propagators}
+        """
+    @property
+    def external_edges(self) -> builtins.list[DiagramEdge]:
+        r"""
+        Return edges attached to incoming or outgoing external states.
 
-        >>> internal_edges = [
-        ...     edge for edge in diagram.edges
-        ...     if not diagram.vertices[edge.source].is_external
-        ...     and not diagram.vertices[edge.target].is_external
-        ... ]
+        Examples
+        --------
+        >>> external_particles = [edge.particle_name for edge in diagram.external_edges]
         """
     @staticmethod
     def from_json(json: builtins.str) -> FeynmanDiagram:
@@ -1038,7 +1096,7 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        json:
+        json : str
             JSON text produced by :meth:`FeynmanDiagram.to_json` or another
             schema-compatible producer.
         """
@@ -1056,19 +1114,18 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        dot:
+        dot : str
             DOT text containing the diagram topology and FeynKit annotations.
         """
-    def numerator_expression(self) -> typing.Optional[Expression]:
+    def numerator_expression(self) -> Expression:
         r"""
-        Parse the optional diagram numerator as a Symbolica expression.
+        Parse the diagram numerator as a Symbolica expression.
 
         Examples
         --------
         >>> numerator = diagram.numerator_expression()
-        >>> if numerator is not None:
-        ...     integrand_numerator = diagram.overall_factor_expression() * numerator
-        ...     integrand_numerator  # native Symbolica algebra and rich display
+        >>> integrand_numerator = diagram.overall_factor_expression() * numerator
+        >>> integrand_numerator  # native Symbolica algebra and rich display
         """
     def overall_factor_expression(self) -> Expression:
         r"""
@@ -1092,9 +1149,35 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        model:
+        model : Model
             The :class:`Model` whose particle and interaction definitions should
             be used for validation.
+        """
+    def build_cff(self, *, max_orientations: typing.Optional[builtins.int] = None, fixed_orientations: typing.Optional[typing.Mapping[builtins.int, builtins.bool]] = None, contracted_edges: typing.Optional[typing.Sequence[builtins.int]] = None, initial_state_edges: typing.Optional[typing.Sequence[builtins.int]] = None) -> CffResult:
+        r"""
+        Build the diagram's Cross-Free Family representation.
+
+        Edge constraints use the stable integer IDs exposed by
+        ``diagram.edges``. ``False`` fixes an edge in its stored direction and
+        ``True`` reverses it.
+
+        Examples
+        --------
+        Construct and display the causal denominators of a one-loop diagram:
+
+        >>> cff = diagram.build_cff(max_orientations=10_000)
+        >>> cff.to_expression()  # native Symbolica display in a notebook
+
+        Parameters
+        ----------
+        max_orientations : int or None, optional
+            Maximum number of candidate orientations to inspect.
+        fixed_orientations : mapping[int, bool] or None, optional
+            Edge IDs mapped to stored (false) or reversed (true) directions.
+        contracted_edges : iterable[int], optional
+            Edge IDs to contract before constructing denominator surfaces.
+        initial_state_edges : iterable[int], optional
+            Edge IDs to classify as incoming external lines.
         """
     def to_json(self) -> builtins.str:
         r"""
@@ -1176,9 +1259,9 @@ class FeynmanDiagram:
 
         Parameters
         ----------
-        pretty:
+        pretty : Any
             The IPython pretty-printer object.
-        cycle:
+        cycle : bool
             Whether this object is part of a recursive formatting cycle.
         """
     def loop_momentum_bases(self, limit: typing.Optional[builtins.int] = None) -> builtins.list[LoopMomentumBasis]:
@@ -1192,12 +1275,12 @@ class FeynmanDiagram:
         >>> basis = diagram.loop_momentum_bases(limit=1)[0]
         >>> routing = {
         ...     edge_id: signature.format_momentum()
-        ...     for edge_id, signature in basis.edge_signatures
+        ...     for edge_id, signature in basis.edge_signatures.items()
         ... }
 
         Parameters
         ----------
-        limit:
+        limit : int or None
             Maximum number of bases to return. Pass ``None`` to enumerate every
             valid basis.
         """
@@ -1304,6 +1387,66 @@ class FourMomentum:
         >>> FourMomentum(5.0, 3.0, 4.0, 0.0).spatial.pt
         5.0
         """
+    @property
+    def mass_squared(self) -> builtins.float:
+        r"""
+        Return the invariant mass squared.
+
+        Examples
+        --------
+        >>> FourMomentum(5.0, 3.0, 4.0, 0.0).mass_squared
+        0.0
+        """
+    @property
+    def mass(self) -> builtins.float:
+        r"""
+        Return the invariant mass.
+
+        Examples
+        --------
+        >>> FourMomentum(5.0, 0.0, 0.0, 0.0).mass
+        5.0
+        """
+    @property
+    def pt(self) -> builtins.float:
+        r"""
+        Return the transverse-momentum magnitude.
+
+        Examples
+        --------
+        >>> FourMomentum(13.0, 3.0, 4.0, 12.0).pt
+        5.0
+        """
+    @property
+    def phi(self) -> builtins.float:
+        r"""
+        Return the azimuthal angle in radians.
+
+        Examples
+        --------
+        >>> FourMomentum(1.0, 1.0, 0.0, 0.0).phi
+        0.0
+        """
+    @property
+    def pseudorapidity(self) -> builtins.float:
+        r"""
+        Return the pseudorapidity of the spatial momentum.
+
+        Examples
+        --------
+        >>> FourMomentum(1.0, 1.0, 0.0, 0.0).pseudorapidity
+        0.0
+        """
+    @property
+    def rapidity(self) -> builtins.float:
+        r"""
+        Return the longitudinal rapidity.
+
+        Examples
+        --------
+        >>> FourMomentum(1.0, 1.0, 0.0, 0.0).rapidity
+        0.0
+        """
     def __new__(cls, energy: builtins.float, px: builtins.float, py: builtins.float, pz: builtins.float) -> FourMomentum:
         r"""
         Construct a four-momentum from energy and Cartesian spatial components.
@@ -1345,60 +1488,6 @@ class FourMomentum:
         ----------
         other : FourMomentum
             Momentum to contract with this one.
-        """
-    def mass_squared(self) -> builtins.float:
-        r"""
-        Return the invariant mass squared.
-
-        Examples
-        --------
-        >>> FourMomentum(5.0, 3.0, 4.0, 0.0).mass_squared()
-        0.0
-        """
-    def mass(self) -> builtins.float:
-        r"""
-        Return the invariant mass.
-
-        Examples
-        --------
-        >>> FourMomentum(5.0, 0.0, 0.0, 0.0).mass()
-        5.0
-        """
-    def pt(self) -> builtins.float:
-        r"""
-        Return the transverse-momentum magnitude.
-
-        Examples
-        --------
-        >>> FourMomentum(13.0, 3.0, 4.0, 12.0).pt()
-        5.0
-        """
-    def phi(self) -> builtins.float:
-        r"""
-        Return the azimuthal angle in radians.
-
-        Examples
-        --------
-        >>> FourMomentum(1.0, 1.0, 0.0, 0.0).phi()
-        0.0
-        """
-    def pseudorapidity(self) -> builtins.float:
-        r"""
-        Return the pseudorapidity of the spatial momentum.
-
-        Examples
-        --------
-        >>> FourMomentum(1.0, 1.0, 0.0, 0.0).pseudorapidity()
-        0.0
-        """
-    def rapidity(self) -> builtins.float:
-        r"""
-        Return the longitudinal rapidity.
-
-        Examples
-        --------
-        >>> FourMomentum(1.0, 1.0, 0.0, 0.0).rapidity()
-        0.0
         """
     def delta_phi(self, other: FourMomentum) -> builtins.float:
         r"""
@@ -1456,6 +1545,40 @@ class FourMomentum:
         other : FourMomentum
             Momentum to subtract.
         """
+    def __neg__(self) -> FourMomentum:
+        r"""
+        Reverse the four-momentum flow convention.
+
+        Examples
+        --------
+        >>> outgoing_convention = -incoming_convention
+        """
+    def __mul__(self, scalar: builtins.float) -> FourMomentum:
+        r"""
+        Scale every four-momentum component.
+
+        Examples
+        --------
+        >>> half_momentum = momentum * 0.5
+
+        Parameters
+        ----------
+        scalar : float
+            Multiplicative scale factor.
+        """
+    def __rmul__(self, scalar: builtins.float) -> FourMomentum:
+        r"""
+        Scale every four-momentum component from the left.
+
+        Examples
+        --------
+        >>> half_momentum = 0.5 * momentum
+
+        Parameters
+        ----------
+        scalar : float
+            Multiplicative scale factor.
+        """
     def __repr__(self) -> builtins.str:
         r"""
         Return a constructor-style representation of the components.
@@ -1496,7 +1619,7 @@ class GenerationError(FeynkitError):
 
     Examples
     --------
-    >>> fk.generate_diagrams(model, incoming, outgoing, loops=1)
+    >>> model.generate_diagrams(incoming, outgoing, loops=1)
     """
     ...
 
@@ -1992,6 +2115,27 @@ class GenerationResult:
         --------
         >>> number_of_diagrams = len(result)
         """
+    def __getitem__(self, index: builtins.int) -> FeynmanDiagram:
+        r"""
+        Return one retained diagram by generated-order index.
+
+        Examples
+        --------
+        >>> first_diagram = result[0]
+
+        Parameters
+        ----------
+        index : int
+            Zero-based index; negative indices count from the end.
+        """
+    def __iter__(self) -> collections.abc.Iterator[FeynmanDiagram]:
+        r"""
+        Iterate over retained diagrams in deterministic generated order.
+
+        Examples
+        --------
+        >>> one_loop = [diagram for diagram in result if diagram.loop_count == 1]
+        """
     def __repr__(self) -> builtins.str:
         r"""
         Return a concise summary of the retained diagrams and groups.
@@ -2445,7 +2589,7 @@ class KinematicsError(FeynkitError):
 
     Examples
     --------
-    >>> fk.cluster_jets(momenta, radius=0.4)
+    >>> fk.JetDefinition.anti_kt(0.4).cluster(momenta)
     """
     ...
 
@@ -2533,7 +2677,7 @@ class LoopMomentumBasis:
     >>> basis = diagram.loop_momentum_bases(limit=1)[0]
     >>> len(basis.loop_edges) == diagram.loop_count
     True
-    >>> assignments = dict(basis.edge_signatures)
+    >>> assignments = basis.edge_signatures
     """
     @property
     def tree_edges(self) -> builtins.list[builtins.int]:
@@ -2568,16 +2712,16 @@ class LoopMomentumBasis:
         True
         """
     @property
-    def edge_signatures(self) -> builtins.list[tuple[builtins.int, MomentumSignature]]:
+    def edge_signatures(self) -> builtins.dict[builtins.int, MomentumSignature]:
         r"""
-        Return each edge identifier together with its momentum signature.
+        Return momentum signatures keyed by stable diagram edge ID.
 
         Examples
         --------
         >>> basis = diagram.loop_momentum_bases(limit=1)[0]
         >>> momentum_by_edge = {
         ...     edge_id: signature.format_momentum()
-        ...     for edge_id, signature in basis.edge_signatures
+        ...     for edge_id, signature in basis.edge_signatures.items()
         ... }
         >>> for edge in diagram.edges:
         ...     print(edge.particle_name, momentum_by_edge[edge.id])
@@ -2610,10 +2754,44 @@ class LoopMomentumBasis:
 
         Parameters
         ----------
-        pretty:
+        pretty : Any
             The IPython pretty-printer object.
-        cycle:
+        cycle : bool
             Whether this object is part of a recursive formatting cycle.
+        """
+    @typing.overload
+    def route(self, loop_momenta: typing.Sequence[ThreeMomentum], external_momenta: typing.Sequence[ThreeMomentum]) -> dict[int, ThreeMomentum]:
+        r"""
+        Route three-momenta through every diagram edge.
+
+        Examples
+        --------
+        >>> routed = basis.route([loop_momentum], external_spatial_momenta)
+        >>> internal_momentum = routed[basis.loop_edges[0]]
+
+        Parameters
+        ----------
+        loop_momenta : sequence[ThreeMomentum]
+            Independent loop momenta in ``basis.loop_edges`` order.
+        external_momenta : sequence[ThreeMomentum]
+            External momenta in ``basis.external_edges`` order.
+        """
+    @typing.overload
+    def route(self, loop_momenta: typing.Sequence[FourMomentum], external_momenta: typing.Sequence[FourMomentum]) -> dict[int, FourMomentum]:
+        r"""
+        Route four-momenta through every diagram edge.
+
+        Examples
+        --------
+        >>> routed = basis.route([loop_momentum], external_four_momenta)
+        >>> internal_momentum = routed[basis.loop_edges[0]]
+
+        Parameters
+        ----------
+        loop_momenta : sequence[FourMomentum]
+            Independent loop momenta in ``basis.loop_edges`` order.
+        external_momenta : sequence[FourMomentum]
+            External momenta in ``basis.external_edges`` order.
         """
 
 @typing.final
@@ -2672,9 +2850,16 @@ class Model:
 
     Examples
     --------
+    Load a raw UFO model while retaining its parameter card and diagnostics:
+
     >>> loaded = fk.UfoLoader().load("path/to/MyUFO")
     >>> model = loaded.model
     >>> electron = model.particle_by_pdg(11)
+
+    Or open a previously normalized FeynKit JSON model directly:
+
+    >>> model = fk.Model.from_path("models/sm.json")
+    >>> photon = model.particle("a")
     """
     @property
     def name(self) -> builtins.str:
@@ -2785,6 +2970,43 @@ class Model:
         ----------
         path : str or os.PathLike
             Path to the JSON model.
+        """
+    def generate_diagrams(self, incoming: typing.Sequence[ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[ParticleSelector | builtins.str | builtins.int], *, kind: builtins.str = 'amplitude', loops: builtins.int | tuple[builtins.int, builtins.int] = 0, options: typing.Optional[GenerationOptions] = None, final_state_alternatives: typing.Optional[typing.Sequence[typing.Sequence[ParticleSelector | builtins.str | builtins.int]]] = None) -> GenerationResult:
+        r"""
+        Generate amplitude or cross-section diagrams from this model.
+
+        Particle names, signed PDG codes, and :class:`ParticleSelector` objects
+        may be mixed in the external states. An integer loop order selects that
+        exact order; a pair such as ``(0, 1)`` selects an inclusive range. The
+        selected model Feynman rules are instantiated on every returned vertex
+        and propagator edge and combined in each diagram numerator.
+
+        Examples
+        --------
+        Generate one-loop scalar amplitudes directly from their model:
+
+        >>> options = fk.GenerationOptions(max_vertices=3, allow_self_loops=True)
+        >>> result = model.generate_diagrams(
+        ...     ["scalar_0"], ["scalar_0", "scalar_0"],
+        ...     loops=1, options=options,
+        ... )
+        >>> diagram = result.diagrams[0]
+        >>> diagram.numerator_expression()
+
+        Parameters
+        ----------
+        incoming : sequence[ParticleSelector | str | int]
+            Incoming particles in external-leg order.
+        outgoing : sequence[ParticleSelector | str | int]
+            Primary outgoing state in external-leg order.
+        kind : {"amplitude", "cross_section"}, optional
+            Graph structure to generate.
+        loops : int or tuple[int, int], optional
+            Exact loop order or inclusive minimum and maximum.
+        options : GenerationOptions or None, optional
+            Generation filters and limits; defaults to standard options.
+        final_state_alternatives : sequence[sequence[ParticleSelector | str | int]] or None, optional
+            Extra outgoing states for a cross section.
         """
     def particle(self, name: builtins.str) -> Particle:
         r"""
@@ -3090,7 +3312,7 @@ class MomentumSignature:
     Examples
     --------
     >>> basis = diagram.loop_momentum_bases(limit=1)[0]
-    >>> edge_id, signature = basis.edge_signatures[0]
+    >>> edge_id, signature = next(iter(basis.edge_signatures.items()))
     >>> print(f"q_{edge_id} = {signature.format_momentum()}")
     """
     @property
@@ -3109,7 +3331,7 @@ class MomentumSignature:
 
         Examples
         --------
-        >>> _, signature = basis.edge_signatures[0]
+        >>> signature = next(iter(basis.edge_signatures.values()))
         >>> loops, external = signature.integer_coefficients()
         >>> print("loop coefficients:", loops, "external coefficients:", external)
         """
@@ -3121,7 +3343,7 @@ class MomentumSignature:
         --------
         Print the momentum routing assigned to every propagator:
 
-        >>> for edge_id, signature in basis.edge_signatures:
+        >>> for edge_id, signature in basis.edge_signatures.items():
         ...     print(edge_id, signature.format_momentum())
         """
     def __str__(self) -> builtins.str:
@@ -3130,7 +3352,7 @@ class MomentumSignature:
 
         Examples
         --------
-        >>> _, signature = basis.edge_signatures[0]
+        >>> signature = next(iter(basis.edge_signatures.values()))
         >>> print(f"propagator momentum: {signature}")
         """
     def __repr__(self) -> builtins.str:
@@ -3139,7 +3361,7 @@ class MomentumSignature:
 
         Examples
         --------
-        >>> edge_id, signature = basis.edge_signatures[0]
+        >>> edge_id, signature = next(iter(basis.edge_signatures.items()))
         >>> print(f"edge {edge_id}: {signature!r}")
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
@@ -3152,9 +3374,9 @@ class MomentumSignature:
 
         Parameters
         ----------
-        pretty:
+        pretty : Any
             The IPython pretty-printer object.
-        cycle:
+        cycle : bool
             Whether this object is part of a recursive formatting cycle.
         """
 
@@ -3222,9 +3444,16 @@ class Parameter:
         True
         """
     @property
-    def value(self) -> typing.Optional[tuple[builtins.float, builtins.float]]:
+    def value(self) -> complex:
         r"""
-        Return the evaluated value as ``(real, imaginary)``, when available.
+        Return the evaluated value as a native Python complex number.
+
+        Raises :class:`ModelError` when this parameter has not been evaluated.
+
+        Examples
+        --------
+        >>> mass_value = model.parameter("MMU").value
+        >>> print("mass:", mass_value.real, "width component:", mass_value.imag)
         """
     @property
     def expression(self) -> typing.Optional[builtins.str]:
@@ -3530,14 +3759,20 @@ class ParticleSelector:
     >>> positron = fk.ParticleSelector.by_name("e+")
     """
     @property
-    def name(self) -> typing.Optional[builtins.str]:
+    def name(self) -> builtins.str:
         r"""
-        Return the selected particle name, or ``None`` for a PDG selector.
+        Return the selected particle name.
+
+        Raises :class:`TypeError` for a PDG selector. Use :attr:`is_name` to
+        distinguish the selector variants before accessing their payloads.
         """
     @property
-    def pdg(self) -> typing.Optional[builtins.int]:
+    def pdg(self) -> builtins.int:
         r"""
-        Return the selected PDG code, or ``None`` for a name selector.
+        Return the selected PDG code.
+
+        Raises :class:`TypeError` for a name selector. Use :attr:`is_pdg` to
+        distinguish the selector variants before accessing their payloads.
         """
     @property
     def is_name(self) -> builtins.bool:
@@ -3976,6 +4211,56 @@ class ThreeMomentum:
         r"""
         Return the z component.
         """
+    @property
+    def norm_squared(self) -> builtins.float:
+        r"""
+        Return the squared Euclidean norm.
+
+        Examples
+        --------
+        >>> ThreeMomentum(3.0, 4.0, 0.0).norm_squared
+        25.0
+        """
+    @property
+    def norm(self) -> builtins.float:
+        r"""
+        Return the Euclidean norm.
+
+        Examples
+        --------
+        >>> ThreeMomentum(3.0, 4.0, 0.0).norm
+        5.0
+        """
+    @property
+    def pt(self) -> builtins.float:
+        r"""
+        Return the transverse-momentum magnitude.
+
+        Examples
+        --------
+        >>> ThreeMomentum(3.0, 4.0, 12.0).pt
+        5.0
+        """
+    @property
+    def phi(self) -> builtins.float:
+        r"""
+        Return the azimuthal angle in radians.
+
+        Examples
+        --------
+        >>> ThreeMomentum(1.0, 0.0, 0.0).phi
+        0.0
+        """
+    @property
+    def pseudorapidity(self) -> builtins.float:
+        r"""
+        Return the pseudorapidity derived from the momentum direction.
+
+        Examples
+        --------
+        >>> ThreeMomentum(1.0, 0.0, 0.0).pseudorapidity
+        0.0
+        """
     def __new__(cls, px: builtins.float, py: builtins.float, pz: builtins.float) -> ThreeMomentum:
         r"""
         Construct a Cartesian three-momentum.
@@ -3992,51 +4277,6 @@ class ThreeMomentum:
             Momentum along the y axis.
         pz : float
             Momentum along the z axis.
-        """
-    def norm_squared(self) -> builtins.float:
-        r"""
-        Return the squared Euclidean norm.
-
-        Examples
-        --------
-        >>> ThreeMomentum(3.0, 4.0, 0.0).norm_squared()
-        25.0
-        """
-    def norm(self) -> builtins.float:
-        r"""
-        Return the Euclidean norm.
-
-        Examples
-        --------
-        >>> ThreeMomentum(3.0, 4.0, 0.0).norm()
-        5.0
-        """
-    def pt(self) -> builtins.float:
-        r"""
-        Return the transverse-momentum magnitude.
-
-        Examples
-        --------
-        >>> ThreeMomentum(3.0, 4.0, 12.0).pt()
-        5.0
-        """
-    def phi(self) -> builtins.float:
-        r"""
-        Return the azimuthal angle in radians.
-
-        Examples
-        --------
-        >>> ThreeMomentum(1.0, 0.0, 0.0).phi()
-        0.0
-        """
-    def pseudorapidity(self) -> builtins.float:
-        r"""
-        Return the pseudorapidity derived from the momentum direction.
-
-        Examples
-        --------
-        >>> ThreeMomentum(1.0, 0.0, 0.0).pseudorapidity()
-        0.0
         """
     def dot(self, other: ThreeMomentum) -> builtins.float:
         r"""
@@ -4093,6 +4333,66 @@ class ThreeMomentum:
         ----------
         other : ThreeMomentum
             Momentum to compare with this one.
+        """
+    def __add__(self, other: ThreeMomentum) -> ThreeMomentum:
+        r"""
+        Add two spatial momenta component by component.
+
+        Examples
+        --------
+        >>> total = first + second
+
+        Parameters
+        ----------
+        other : ThreeMomentum
+            Momentum to add.
+        """
+    def __sub__(self, other: ThreeMomentum) -> ThreeMomentum:
+        r"""
+        Subtract another spatial momentum component by component.
+
+        Examples
+        --------
+        >>> transfer = incoming - outgoing
+
+        Parameters
+        ----------
+        other : ThreeMomentum
+            Momentum to subtract.
+        """
+    def __neg__(self) -> ThreeMomentum:
+        r"""
+        Reverse every spatial momentum component.
+
+        Examples
+        --------
+        >>> outgoing_convention = -incoming_convention
+        """
+    def __mul__(self, scalar: builtins.float) -> ThreeMomentum:
+        r"""
+        Scale every spatial momentum component.
+
+        Examples
+        --------
+        >>> half_momentum = momentum * 0.5
+
+        Parameters
+        ----------
+        scalar : float
+            Multiplicative scale factor.
+        """
+    def __rmul__(self, scalar: builtins.float) -> ThreeMomentum:
+        r"""
+        Scale every spatial momentum component from the left.
+
+        Examples
+        --------
+        >>> half_momentum = 0.5 * momentum
+
+        Parameters
+        ----------
+        scalar : float
+            Multiplicative scale factor.
         """
     def on_shell(self, mass: typing.Optional[builtins.float] = None) -> FourMomentum:
         r"""
@@ -4264,7 +4564,7 @@ class UfoLoadError(FeynkitError):
 
     Examples
     --------
-    >>> fk.load_ufo_model("models/sm")
+    >>> fk.UfoLoader().load("models/sm")
     """
     ...
 
@@ -4525,135 +4825,3 @@ class ParameterType(enum.Enum):
     """
     REAL = ...
     COMPLEX = ...
-
-def build_cff(diagram: FeynmanDiagram, *, max_orientations: typing.Optional[builtins.int] = None, fixed_orientations: typing.Optional[typing.Mapping[builtins.int, builtins.bool]] = None, contracted_edges: typing.Optional[typing.Sequence[builtins.int]] = None, initial_state_edges: typing.Optional[typing.Sequence[builtins.int]] = None) -> CffResult:
-    r"""
-    Build a Cross-Free Family representation of a Feynman diagram.
-
-    Edge constraints use the stable integer IDs exposed by
-    ``diagram.edges``. ``False`` fixes an edge in its stored direction and
-    ``True`` reverses it.
-
-    Examples
-    --------
-    Construct the causal denominators for a one-loop diagram:
-
-    >>> cff = fk.build_cff(diagram, fixed_orientations={0: False})
-    >>> expression = cff.to_expression()
-    >>> expression  # native Symbolica display in a notebook
-
-    Parameters
-    ----------
-    diagram : FeynmanDiagram
-        Diagram whose acyclic energy-flow orientations are enumerated.
-    max_orientations : int or None, optional
-        Maximum number of candidate orientations to inspect.
-    fixed_orientations : mapping[int, bool] or None, optional
-        Edge IDs mapped to stored (false) or reversed (true) directions.
-    contracted_edges : iterable[int], optional
-        Edge IDs to contract before constructing denominator surfaces.
-    initial_state_edges : iterable[int], optional
-        Edge IDs to classify as incoming external lines.
-    """
-
-def cluster_jets(momenta: typing.Sequence[FourMomentum], *, radius: builtins.float = 0.4, algorithm: builtins.str = 'anti_kt', minimum_pt: builtins.float = 0.0) -> ClusteringResult:
-    r"""
-    Cluster collider four-momenta with a generalized-kT jet algorithm.
-
-    This convenience function returns the same native :class:`ClusteringResult`
-    as :meth:`JetDefinition.cluster`; input and output momenta retain the
-    caller's energy units.
-
-    Examples
-    --------
-    Cluster final-state partons into anti-kT jets of radius 0.4:
-
-    >>> jets = fk.cluster_jets(parton_momenta, radius=0.4, minimum_pt=20.0)
-    >>> leading_jet = jets.jets[0]
-    >>> leading_jet.momentum
-
-    Parameters
-    ----------
-    momenta : sequence[FourMomentum]
-        Particle or parton four-momenta to cluster.
-    radius : float, optional
-        Jet-radius parameter in rapidity--azimuth space.
-    algorithm : {"anti_kt", "cambridge_aachen", "kt"}, optional
-        Generalized-kT exponent choice; common hyphenated aliases are accepted.
-    minimum_pt : float, optional
-        Minimum transverse momentum of retained inclusive jets.
-    """
-
-def generate_diagrams(model: Model, incoming: typing.Sequence[ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[ParticleSelector | builtins.str | builtins.int], *, kind: builtins.str = 'amplitude', loops: builtins.int | tuple[builtins.int, builtins.int] = 0, options: typing.Optional[GenerationOptions] = None, final_state_alternatives: typing.Optional[typing.Sequence[typing.Sequence[ParticleSelector | builtins.str | builtins.int]]] = None) -> GenerationResult:
-    r"""
-    Generate Feynman diagrams for a standard amplitude or cross-section workflow.
-
-    Particle names, signed PDG codes, and :class:`ParticleSelector` objects may
-    be mixed in the external states. An integer loop order selects exactly that
-    order; a pair such as ``(0, 1)`` selects an inclusive range. Each generated
-    graph carries the instantiated model Feynman rules on its vertices and
-    propagator edges, together with their combined diagram numerator.
-
-    Examples
-    --------
-    Generate one-loop scalar amplitudes directly from a loaded model:
-
-    >>> options = fk.GenerationOptions(max_vertices=3, allow_self_loops=True)
-    >>> result = fk.generate_diagrams(
-    ...     model, ["scalar_0"], ["scalar_0", "scalar_0"],
-    ...     loops=1, options=options,
-    ... )
-    >>> one_loop_diagram = result.diagrams[0]
-    >>> combined_numerator = one_loop_diagram.numerator_expression()
-    >>> vertex_numerators = [
-    ...     vertex.numerator_expression() for vertex in one_loop_diagram.vertices
-    ...     if vertex.interaction is not None
-    ... ]
-    >>> one_loop_diagram  # rendered graph in a notebook
-
-    Parameters
-    ----------
-    model : Model
-        Particle model supplying propagators and interaction vertices.
-    incoming : sequence[ParticleSelector | str | int]
-        Incoming particles in external-leg order.
-    outgoing : sequence[ParticleSelector | str | int]
-        Primary outgoing state in external-leg order.
-    kind : {"amplitude", "cross_section"}, optional
-        Graph structure to generate.
-    loops : int or tuple[int, int], optional
-        Exact loop order or inclusive minimum and maximum.
-    options : GenerationOptions or None, optional
-        Generation filters and limits; defaults to standard options.
-    final_state_alternatives : sequence[sequence[ParticleSelector | str | int]] or None, optional
-        Extra outgoing states for a cross section.
-    """
-
-def load_ufo_model(path: builtins.str | os.PathLike | pathlib.Path, *, restriction: typing.Optional[builtins.str] = None, simplify: builtins.bool = True, wrap_lorentz_indices: builtins.bool = True) -> LoadedModel:
-    r"""
-    Load and normalize a Universal FeynRules Output model.
-
-    The returned native :class:`LoadedModel` bundles the normalized model,
-    parameter card, and diagnostics. Use :meth:`Model.from_path` instead when a
-    model has already been normalized to FeynKit JSON.
-
-    Examples
-    --------
-    Load a UFO directory and inspect its particle content:
-
-    >>> loaded = fk.load_ufo_model("models/sm", restriction="massless")
-    >>> electron = loaded.model.particle("e-")
-    >>> electron.pdg_code
-    11
-
-    Parameters
-    ----------
-    path : str or os.PathLike
-        Directory containing the UFO Python modules.
-    restriction : str or None, optional
-        Restriction-card name to apply while loading.
-    simplify : bool, optional
-        Simplify normalized symbolic model expressions.
-    wrap_lorentz_indices : bool, optional
-        Wrap normalized indices in Lorentz structures.
-    """

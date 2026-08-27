@@ -71,17 +71,17 @@ the invalidation-only behavior.
 
 ## Native particle-physics workflows and notebook figures
 
-The common notebook workflows are compiled PyO3 functions, not a Python
-facade. They return the same native types as the corresponding configurable
-classes:
+The common notebook workflows are native PyO3 methods, not a Python facade.
+Each operation lives on the object that owns its configuration:
 
 ```python
 import symbolica.community.feynkit as fk
 
-result = fk.generate_diagrams(model, ["e-", "e+"], ["mu-", "mu+"], loops=1)
+result = model.generate_diagrams(["e-", "e+"], ["mu-", "mu+"], loops=1)
 diagram = result.diagrams[0]
-cff = fk.build_cff(diagram)
-jets = fk.cluster_jets(final_state_momenta, radius=0.4)
+cff = diagram.build_cff()
+jets = fk.JetDefinition.anti_kt(0.4).cluster(final_state_momenta)
+loaded = fk.UfoLoader(restriction_name="massless").load("models/sm")
 ```
 
 `FeynmanDiagram.to_linnest()` emits the complete Typst/Linnest source used for
