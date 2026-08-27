@@ -4,11 +4,10 @@ use feynkit_ufo::{LoadedModel, UfoLoadDiagnostics, UfoLoadOptions, UfoLoader};
 use pyo3::{
     prelude::*,
     types::{PyAny, PyModule},
-    wrap_pyfunction,
 };
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyfunction, gen_stub_pymethods};
+use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 
 use crate::{
     display::escape_html,
@@ -423,61 +422,10 @@ impl PyUfoLoader {
     }
 }
 
-/// Load and normalize a Universal FeynRules Output model.
-///
-/// The returned native :class:`LoadedModel` bundles the normalized model,
-/// parameter card, and diagnostics. Use :meth:`Model.from_path` instead when a
-/// model has already been normalized to FeynKit JSON.
-///
-/// Examples
-/// --------
-/// Load a UFO directory and inspect its particle content:
-///
-/// >>> loaded = fk.load_ufo_model("models/sm", restriction="massless")
-/// >>> electron = loaded.model.particle("e-")
-/// >>> electron.pdg_code
-/// 11
-///
-/// Parameters
-/// ----------
-/// path : str or os.PathLike
-///     Directory containing the UFO Python modules.
-/// restriction : str or None, optional
-///     Restriction-card name to apply while loading.
-/// simplify : bool, optional
-///     Simplify normalized symbolic model expressions.
-/// wrap_lorentz_indices : bool, optional
-///     Wrap normalized indices in Lorentz structures.
-#[cfg_attr(
-    feature = "python_stubgen",
-    gen_stub_pyfunction(module = "symbolica.community.feynkit")
-)]
-#[pyfunction]
-#[pyo3(signature = (path, *, restriction=None, simplify=true, wrap_lorentz_indices=true))]
-fn load_ufo_model(
-    py: Python<'_>,
-    path: PathBuf,
-    restriction: Option<String>,
-    simplify: bool,
-    wrap_lorentz_indices: bool,
-) -> PyResult<PyLoadedModel> {
-    UfoLoader::with_options(UfoLoadOptions {
-        restriction_name: restriction,
-        simplify_model: simplify,
-        wrap_indices_in_lorentz_structures: wrap_lorentz_indices,
-    })
-    .load(py, path)
-    .map(|inner| PyLoadedModel { inner })
-    .map_err(error::ufo)
-}
-
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyUfoLoadDiagnostics>()?;
     module.add_class::<PyLoadedModel>()?;
     module.add_class::<PyUfoLoader>()?;
-    let load_ufo_model = wrap_pyfunction!(load_ufo_model, module)?;
-    load_ufo_model.setattr("__module__", "symbolica.community.feynkit")?;
-    module.add_function(load_ufo_model)?;
     Ok(())
 }
 
