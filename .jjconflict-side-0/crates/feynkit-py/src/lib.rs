@@ -123,6 +123,25 @@ mod tests {
                     "missing Python class {class}"
                 );
             }
+            for function in [
+                "generate_diagrams",
+                "build_cff",
+                "cluster_jets",
+                "load_ufo_model",
+            ] {
+                let function = module
+                    .getattr(function)
+                    .unwrap_or_else(|_| panic!("missing Python function {function}"));
+                assert!(function.is_callable());
+                assert_eq!(
+                    function
+                        .getattr("__module__")
+                        .unwrap()
+                        .extract::<String>()
+                        .unwrap(),
+                    "symbolica.community.feynkit"
+                );
+            }
         });
     }
 
@@ -161,7 +180,13 @@ options.set_loop_count_range(0, 1)
 options.set_fermion_loop_count_range(0, 0)
 options.set_factorized_loop_topologies_count_range(0, 1)
 assert options.disable_numerator_grouping() is None
-generated = fk.Generator(model).generate(process, options)
+generated = fk.generate_diagrams(
+    model,
+    ["scalar_0"],
+    [1000, "scalar_0"],
+    loops=(0, 1),
+    options=options,
+)
 assert len(generated) > 0
 assert generated.report.completed
 assert "Generation result" in generated._repr_html_()
@@ -192,7 +217,7 @@ assert len(bases[0].loop_edges) == 1
 assert len(bases[0].edge_signatures) == len(json_diagram.edges)
 assert "Loop-momentum basis" in bases[0]._repr_html_()
 
-cff = fk.CffGenerator().generate(json_diagram)
+cff = fk.build_cff(json_diagram)
 assert len(cff) > 0
 expression = cff.to_expression()
 assert "Cross-free family" in cff._repr_html_()
@@ -208,7 +233,7 @@ rotated = fk.Rotation.quarter_turn(fk.Axis.Z).apply_three(
 assert abs(rotated.px) < 1.0e-12
 assert abs(rotated.py - 1.0) < 1.0e-12
 
-clustered = fk.JetDefinition.anti_kt(0.4).cluster([
+clustered = fk.cluster_jets([
     fk.FourMomentum(10.0, 10.0, 0.0, 0.0),
     fk.FourMomentum(5.0, 5.0, 0.0, 0.0),
 ])
