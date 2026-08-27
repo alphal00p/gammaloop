@@ -9,16 +9,15 @@ use feynkit_generator::{
 use feynkit_model::Model;
 use pyo3::{
     FromPyObject, IntoPyObjectExt,
-    exceptions::{PyTypeError, PyValueError},
+    exceptions::{PyIndexError, PyTypeError, PyValueError},
     prelude::*,
-    types::{PyAny, PyBool, PyModule},
-    wrap_pyfunction,
+    types::{PyAny, PyBool, PyList, PyModule},
 };
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{
     PyStubType, TypeInfo,
-    derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pyfunction, gen_stub_pymethods},
+    derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods},
 };
 
 use crate::{
@@ -183,21 +182,31 @@ impl PyParticleSelector {
         }
     }
 
-    /// Return the selected particle name, or ``None`` for a PDG selector.
+    /// Return the selected particle name.
+    ///
+    /// Raises :class:`TypeError` for a PDG selector. Use :attr:`is_name` to
+    /// distinguish the selector variants before accessing their payloads.
     #[getter]
-    fn name(&self) -> Option<&str> {
+    fn name(&self) -> PyResult<&str> {
         match &self.inner {
-            ParticleSelector::Name(name) => Some(name),
-            ParticleSelector::Pdg(_) => None,
+            ParticleSelector::Name(name) => Ok(name),
+            ParticleSelector::Pdg(_) => Err(PyTypeError::new_err(
+                "a PDG particle selector does not carry a name",
+            )),
         }
     }
 
-    /// Return the selected PDG code, or ``None`` for a name selector.
+    /// Return the selected PDG code.
+    ///
+    /// Raises :class:`TypeError` for a name selector. Use :attr:`is_pdg` to
+    /// distinguish the selector variants before accessing their payloads.
     #[getter]
-    fn pdg(&self) -> Option<i64> {
+    fn pdg(&self) -> PyResult<i64> {
         match &self.inner {
-            ParticleSelector::Name(_) => None,
-            ParticleSelector::Pdg(pdg) => Some(*pdg),
+            ParticleSelector::Name(_) => Err(PyTypeError::new_err(
+                "a named particle selector does not carry a PDG code",
+            )),
+            ParticleSelector::Pdg(pdg) => Ok(*pdg),
         }
     }
 
@@ -262,14 +271,14 @@ impl PyParticleSelector {
 }
 
 #[derive(FromPyObject)]
-enum SelectorInput {
+pub(crate) enum SelectorInput {
     Selector(PyParticleSelector),
     Name(String),
     Pdg(i64),
 }
 
 #[derive(Default)]
-struct LoopOrderInput {
+pub(crate) struct LoopOrderInput {
     minimum: usize,
     maximum: usize,
 }
@@ -1517,6 +1526,39 @@ impl PyGenerationResult {
         self.inner.diagrams.len()
     }
 
+    /// Return one retained diagram by generated-order index.
+    ///
+    /// Examples
+    /// --------
+    /// >>> first_diagram = result[0]
+    ///
+    /// Parameters
+    /// ----------
+    /// index : int
+    ///     Zero-based index; negative indices count from the end.
+    fn __getitem__(&self, index: isize) -> PyResult<PyFeynmanDiagram> {
+        let length = self.inner.diagrams.len() as isize;
+        let index = if index < 0 { length + index } else { index };
+        if !(0..length).contains(&index) {
+            return Err(PyIndexError::new_err("diagram index out of range"));
+        }
+        Ok(self.inner.diagrams[index as usize].clone().into())
+    }
+
+    /// Iterate over retained diagrams in deterministic generated order.
+    ///
+    /// Examples
+    /// --------
+    /// >>> one_loop = [diagram for diagram in result if diagram.loop_count == 1]
+    ///
+    #[gen_stub(override_return_type(
+        type_repr = "collections.abc.Iterator[FeynmanDiagram]",
+        imports = ("collections.abc")
+    ))]
+    fn __iter__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        PyList::new(py, self.diagrams())?.call_method0("__iter__")
+    }
+
     /// Return a concise summary of the retained diagrams and groups.
     ///
     /// Examples
@@ -1700,55 +1742,8 @@ impl PyGenerator {
     }
 }
 
-/// Generate Feynman diagrams for a standard amplitude or cross-section workflow.
-///
-/// Particle names, signed PDG codes, and :class:`ParticleSelector` objects may
-/// be mixed in the external states. An integer loop order selects exactly that
-/// order; a pair such as ``(0, 1)`` selects an inclusive range. Each generated
-/// graph carries the instantiated model Feynman rules on its vertices and
-/// propagator edges, together with their combined diagram numerator.
-///
-/// Examples
-/// --------
-/// Generate one-loop scalar amplitudes directly from a loaded model:
-///
-/// >>> options = fk.GenerationOptions(max_vertices=3, allow_self_loops=True)
-/// >>> result = fk.generate_diagrams(
-/// ...     model, ["scalar_0"], ["scalar_0", "scalar_0"],
-/// ...     loops=1, options=options,
-/// ... )
-/// >>> one_loop_diagram = result.diagrams[0]
-/// >>> combined_numerator = one_loop_diagram.numerator_expression()
-/// >>> vertex_numerators = [
-/// ...     vertex.numerator_expression() for vertex in one_loop_diagram.vertices
-/// ...     if vertex.interaction is not None
-/// ... ]
-/// >>> one_loop_diagram  # rendered graph in a notebook
-///
-/// Parameters
-/// ----------
-/// model : Model
-///     Particle model supplying propagators and interaction vertices.
-/// incoming : sequence[ParticleSelector | str | int]
-///     Incoming particles in external-leg order.
-/// outgoing : sequence[ParticleSelector | str | int]
-///     Primary outgoing state in external-leg order.
-/// kind : {"amplitude", "cross_section"}, optional
-///     Graph structure to generate.
-/// loops : int or tuple[int, int], optional
-///     Exact loop order or inclusive minimum and maximum.
-/// options : GenerationOptions or None, optional
-///     Generation filters and limits; defaults to standard options.
-/// final_state_alternatives : sequence[sequence[ParticleSelector | str | int]] or None, optional
-///     Extra outgoing states for a cross section.
-#[cfg_attr(
-    feature = "python_stubgen",
-    gen_stub_pyfunction(module = "symbolica.community.feynkit")
-)]
-#[pyfunction]
-#[pyo3(signature = (model, incoming, outgoing, *, kind="amplitude", loops=LoopOrderInput::default(), options=None, final_state_alternatives=None))]
 #[allow(clippy::too_many_arguments)]
-fn generate_diagrams(
+pub(crate) fn generate_diagrams_for_model(
     py: Python<'_>,
     model: &PyModel,
     incoming: Vec<SelectorInput>,
@@ -1828,9 +1823,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyDiagramGroup>()?;
     module.add_class::<PyGenerationResult>()?;
     module.add_class::<PyGenerator>()?;
-    let generate_diagrams = wrap_pyfunction!(generate_diagrams, module)?;
-    generate_diagrams.setattr("__module__", "symbolica.community.feynkit")?;
-    module.add_function(generate_diagrams)?;
     Ok(())
 }
 
@@ -1856,9 +1848,19 @@ by_name = fk.ParticleSelector.by_name("1")
 by_pdg = fk.ParticleSelector.by_pdg(1)
 
 assert by_name.name == "1"
-assert by_name.pdg is None
+try:
+    by_name.pdg
+except TypeError:
+    pass
+else:
+    raise AssertionError("named selectors must reject PDG access")
 assert by_name.is_name and not by_name.is_pdg
-assert by_pdg.name is None
+try:
+    by_pdg.name
+except TypeError:
+    pass
+else:
+    raise AssertionError("PDG selectors must reject name access")
 assert by_pdg.pdg == 1
 assert by_pdg.is_pdg and not by_pdg.is_name
 assert by_name == "1"
