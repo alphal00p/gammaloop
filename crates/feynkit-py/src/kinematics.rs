@@ -3,15 +3,35 @@ use feynkit_kinematics::{
     Rotation, ThreeMomentum,
 };
 use pyo3::{
+    exceptions::PyValueError,
     prelude::*,
     types::{PyAny, PyModule},
+    wrap_pyfunction,
 };
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
+use pyo3_stub_gen::derive::{
+    gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pyfunction, gen_stub_pymethods,
+};
 
 use crate::error;
 
+/// A spin projection along a particle's direction of motion.
+///
+/// FeynKit represents the physical minus, longitudinal, and plus helicity
+/// states by the integers -1, 0, and 1.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> incoming_fermion_helicity = fk.Helicity(-1)
+/// >>> incoming_fermion_helicity == fk.Helicity.MINUS
+/// True
+///
+/// Parameters
+/// ----------
+/// value : int
+///     Helicity value; must be -1, 0, or 1.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Helicity",
@@ -70,9 +90,6 @@ impl PyHelicity {
     /// >>> int(Helicity.MINUS)
     /// -1
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[classattr]
     #[pyo3(name = "MINUS")]
     fn minus() -> PyHelicity {
@@ -88,9 +105,6 @@ impl PyHelicity {
     /// >>> int(Helicity.ZERO)
     /// 0
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[classattr]
     #[pyo3(name = "ZERO")]
     fn zero() -> PyHelicity {
@@ -106,9 +120,6 @@ impl PyHelicity {
     /// >>> int(Helicity.PLUS)
     /// 1
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[classattr]
     #[pyo3(name = "PLUS")]
     fn plus() -> PyHelicity {
@@ -124,9 +135,6 @@ impl PyHelicity {
     /// >>> Helicity.PLUS.value
     /// 1
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn value(&self) -> i8 {
         self.inner.integer()
@@ -139,9 +147,6 @@ impl PyHelicity {
     /// >>> int(Helicity.MINUS)
     /// -1
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __int__(&self) -> i8 {
         self.inner.integer()
     }
@@ -168,18 +173,24 @@ impl PyHelicity {
     /// >>> repr(Helicity.PLUS)
     /// 'Helicity(1)'
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!("Helicity({})", self.inner.integer())
     }
 }
 
+/// A Cartesian axis used to specify spatial rotations.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> beam_axis = fk.Axis.Z
+/// >>> rotation = fk.Rotation.quarter_turn(beam_axis)
+///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     name = "Axis",
     module = "symbolica.community.feynkit",
+    frozen,
     eq,
     eq_int,
     from_py_object
@@ -201,10 +212,21 @@ impl From<PyAxis> for Axis {
     }
 }
 
+/// A sequential-recombination algorithm for collider jet clustering.
+///
+/// The available choices are kT, Cambridge--Aachen, and anti-kT.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> algorithm = fk.JetAlgorithm.AntiKt
+/// >>> definition = fk.JetDefinition(algorithm, radius=0.4)
+///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     name = "JetAlgorithm",
     module = "symbolica.community.feynkit",
+    frozen,
     eq,
     eq_int,
     from_py_object
@@ -236,6 +258,26 @@ impl From<JetAlgorithm> for PyJetAlgorithm {
     }
 }
 
+/// A Cartesian spatial momentum ``(px, py, pz)``.
+///
+/// Three-momenta are used for boost velocities, spatial rotations, and the
+/// three-vector part of a relativistic four-momentum.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> p = fk.ThreeMomentum(30.0, 40.0, 10.0)
+/// >>> p.pt
+/// 50.0
+///
+/// Parameters
+/// ----------
+/// px : float
+///     Momentum component along the x axis.
+/// py : float
+///     Momentum component along the y axis.
+/// pz : float
+///     Momentum component along the z axis.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ThreeMomentum",
@@ -277,43 +319,16 @@ impl PyThreeMomentum {
     }
 
     /// Return the x component.
-    ///
-    /// Examples
-    /// --------
-    /// >>> ThreeMomentum(1.0, 2.0, 3.0).px
-    /// 1.0
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn px(&self) -> f64 {
         self.inner.px
     }
     /// Return the y component.
-    ///
-    /// Examples
-    /// --------
-    /// >>> ThreeMomentum(1.0, 2.0, 3.0).py
-    /// 2.0
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn py(&self) -> f64 {
         self.inner.py
     }
     /// Return the z component.
-    ///
-    /// Examples
-    /// --------
-    /// >>> ThreeMomentum(1.0, 2.0, 3.0).pz
-    /// 3.0
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn pz(&self) -> f64 {
         self.inner.pz
@@ -325,9 +340,6 @@ impl PyThreeMomentum {
     /// >>> ThreeMomentum(3.0, 4.0, 0.0).norm_squared()
     /// 25.0
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn norm_squared(&self) -> f64 {
         self.inner.norm_squared()
     }
@@ -338,9 +350,6 @@ impl PyThreeMomentum {
     /// >>> ThreeMomentum(3.0, 4.0, 0.0).norm()
     /// 5.0
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn norm(&self) -> f64 {
         self.inner.norm()
     }
@@ -351,9 +360,6 @@ impl PyThreeMomentum {
     /// >>> ThreeMomentum(3.0, 4.0, 12.0).pt()
     /// 5.0
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn pt(&self) -> f64 {
         self.inner.pt()
     }
@@ -364,9 +370,6 @@ impl PyThreeMomentum {
     /// >>> ThreeMomentum(1.0, 0.0, 0.0).phi()
     /// 0.0
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn phi(&self) -> f64 {
         self.inner.phi()
     }
@@ -377,9 +380,6 @@ impl PyThreeMomentum {
     /// >>> ThreeMomentum(1.0, 0.0, 0.0).pseudorapidity()
     /// 0.0
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn pseudorapidity(&self) -> f64 {
         self.inner.pseudorapidity()
     }
@@ -463,9 +463,6 @@ impl PyThreeMomentum {
     /// >>> repr(ThreeMomentum(1.0, 2.0, 3.0))
     /// 'ThreeMomentum(1, 2, 3)'
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!(
             "ThreeMomentum({}, {}, {})",
@@ -480,9 +477,6 @@ impl PyThreeMomentum {
     /// Leave ``momentum`` as the final expression in a notebook cell to render
     /// its Cartesian components.
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn _repr_latex_(&self) -> String {
         format!(
             r"$\vec{{p}}=\left({},{},{}\right)$",
@@ -515,6 +509,28 @@ impl PyThreeMomentum {
     }
 }
 
+/// A relativistic four-momentum in ``(energy, px, py, pz)`` order.
+///
+/// The class provides collider observables, invariant products, rotations, and
+/// boosts while keeping the component convention explicit.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> p = fk.FourMomentum(50.0, 30.0, 40.0, 0.0)
+/// >>> p.mass_squared
+/// 0.0
+///
+/// Parameters
+/// ----------
+/// energy : float
+///     Energy component.
+/// px : float
+///     Momentum component along the x axis.
+/// py : float
+///     Momentum component along the y axis.
+/// pz : float
+///     Momentum component along the z axis.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "FourMomentum",
@@ -558,57 +574,21 @@ impl PyFourMomentum {
     }
 
     /// Return the energy component.
-    ///
-    /// Examples
-    /// --------
-    /// >>> FourMomentum(5.0, 3.0, 4.0, 0.0).energy
-    /// 5.0
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn energy(&self) -> f64 {
         self.inner.temporal.value
     }
     /// Return the x component of spatial momentum.
-    ///
-    /// Examples
-    /// --------
-    /// >>> FourMomentum(5.0, 3.0, 4.0, 0.0).px
-    /// 3.0
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn px(&self) -> f64 {
         self.inner.spatial.px
     }
     /// Return the y component of spatial momentum.
-    ///
-    /// Examples
-    /// --------
-    /// >>> FourMomentum(5.0, 3.0, 4.0, 0.0).py
-    /// 4.0
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn py(&self) -> f64 {
         self.inner.spatial.py
     }
     /// Return the z component of spatial momentum.
-    ///
-    /// Examples
-    /// --------
-    /// >>> FourMomentum(5.0, 3.0, 4.0, 0.0).pz
-    /// 0.0
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn pz(&self) -> f64 {
         self.inner.spatial.pz
@@ -617,12 +597,9 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> FourMomentum(5.0, 3.0, 4.0, 0.0).spatial.pt()
+    /// >>> FourMomentum(5.0, 3.0, 4.0, 0.0).spatial.pt
     /// 5.0
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn spatial(&self) -> PyThreeMomentum {
         self.inner.spatial.into()
@@ -634,9 +611,6 @@ impl PyFourMomentum {
     /// >>> FourMomentum(5.0, 3.0, 4.0, 0.0).components()
     /// (5.0, 3.0, 4.0, 0.0)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn components(&self) -> (f64, f64, f64, f64) {
         self.inner.into()
     }
@@ -661,9 +635,6 @@ impl PyFourMomentum {
     /// >>> FourMomentum(5.0, 3.0, 4.0, 0.0).mass_squared()
     /// 0.0
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn mass_squared(&self) -> f64 {
         self.inner.mass_squared()
     }
@@ -674,9 +645,6 @@ impl PyFourMomentum {
     /// >>> FourMomentum(5.0, 0.0, 0.0, 0.0).mass()
     /// 5.0
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn mass(&self) -> f64 {
         self.inner.mass()
     }
@@ -687,9 +655,6 @@ impl PyFourMomentum {
     /// >>> FourMomentum(13.0, 3.0, 4.0, 12.0).pt()
     /// 5.0
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn pt(&self) -> f64 {
         self.inner.pt()
     }
@@ -700,9 +665,6 @@ impl PyFourMomentum {
     /// >>> FourMomentum(1.0, 1.0, 0.0, 0.0).phi()
     /// 0.0
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn phi(&self) -> f64 {
         self.inner.phi()
     }
@@ -713,9 +675,6 @@ impl PyFourMomentum {
     /// >>> FourMomentum(1.0, 1.0, 0.0, 0.0).pseudorapidity()
     /// 0.0
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn pseudorapidity(&self) -> f64 {
         self.inner.pseudorapidity()
     }
@@ -726,9 +685,6 @@ impl PyFourMomentum {
     /// >>> FourMomentum(1.0, 1.0, 0.0, 0.0).rapidity()
     /// 0.0
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn rapidity(&self) -> f64 {
         self.inner.rapidity()
     }
@@ -796,9 +752,6 @@ impl PyFourMomentum {
     /// >>> repr(FourMomentum(5.0, 3.0, 4.0, 0.0))
     /// 'FourMomentum(5, 3, 4, 0)'
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         let (energy, px, py, pz): (f64, f64, f64, f64) = self.inner.into();
         format!("FourMomentum({energy}, {px}, {py}, {pz})")
@@ -811,9 +764,6 @@ impl PyFourMomentum {
     /// Leave ``momentum`` as the final expression in a notebook cell to render
     /// its energy and Cartesian momentum components.
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn _repr_latex_(&self) -> String {
         let (energy, px, py, pz): (f64, f64, f64, f64) = self.inner.into();
         format!(r"$p^\mu=\left({energy},{px},{py},{pz}\right)$")
@@ -844,6 +794,17 @@ impl PyFourMomentum {
     }
 }
 
+/// A spatial rotation acting on three- and four-momenta.
+///
+/// Rotations may be built from Euler angles, an identity transformation, or a
+/// quarter turn around a Cartesian axis.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> rotation = fk.Rotation.quarter_turn(fk.Axis.Z)
+/// >>> rotated = rotation.apply_three(fk.ThreeMomentum(1.0, 0.0, 0.0))
+///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Rotation",
@@ -865,9 +826,6 @@ impl PyRotation {
     /// --------
     /// >>> rotation = Rotation.identity()
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[staticmethod]
     fn identity() -> Self {
         Self {
@@ -970,6 +928,21 @@ impl PyRotation {
     }
 }
 
+/// A proper Lorentz boost specified by a three-velocity ``beta``.
+///
+/// Use boosts to move four-momenta between the laboratory frame and a useful
+/// rest frame, with units chosen so that the speed of light is one.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> boost = fk.Boost(fk.ThreeMomentum(0.0, 0.0, 0.5))
+/// >>> boosted = boost.apply(fk.FourMomentum(10.0, 0.0, 0.0, 0.0))
+///
+/// Parameters
+/// ----------
+/// beta : ThreeMomentum
+///     Dimensionless boost velocity, whose magnitude must be smaller than one.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Boost",
@@ -1003,15 +976,6 @@ impl PyBoost {
     }
 
     /// Return the dimensionless boost velocity.
-    ///
-    /// Examples
-    /// --------
-    /// >>> Boost(ThreeMomentum(0.0, 0.0, 0.5)).beta.pz
-    /// 0.5
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn beta(&self) -> PyThreeMomentum {
         self.inner.beta().to_owned().into()
@@ -1044,6 +1008,18 @@ impl PyBoost {
     }
 }
 
+/// A reconstructed collider jet and its input-particle constituents.
+///
+/// Jets are returned by ``JetDefinition.cluster`` and expose the recombined
+/// four-momentum together with the indices of their original inputs.
+///
+/// Examples
+/// --------
+/// >>> jets = fk.JetDefinition.anti_kt(0.4).cluster(particles).jets
+/// >>> leading_jet = jets[0]
+/// >>> leading_jet.pt >= 0.0
+/// True
+///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Jet",
@@ -1060,69 +1036,32 @@ pub struct PyJet {
 #[pymethods]
 impl PyJet {
     /// Return the recombined four-momentum of this jet.
-    ///
-    /// Examples
-    /// --------
-    /// >>> jet.momentum.energy > 0.0
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn momentum(&self) -> PyFourMomentum {
         self.inner.momentum.into()
     }
-    /// Return indices of input momenta assigned to this jet.
+    /// Return sorted positions of the input momenta assigned to this jet.
     ///
     /// Examples
     /// --------
     /// >>> jet.constituent_indices
     /// [0, 2]
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn constituent_indices(&self) -> Vec<usize> {
         self.inner.constituent_indices().to_vec()
     }
     /// Return the jet transverse momentum.
-    ///
-    /// Examples
-    /// --------
-    /// >>> jet.pt >= 0.0
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn pt(&self) -> f64 {
         self.inner.pt()
     }
     /// Return the jet rapidity.
-    ///
-    /// Examples
-    /// --------
-    /// >>> rapidity = jet.rapidity
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn rapidity(&self) -> f64 {
         self.inner.rapidity()
     }
     /// Return the jet azimuthal angle in radians.
-    ///
-    /// Examples
-    /// --------
-    /// >>> phi = jet.phi
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn phi(&self) -> f64 {
         self.inner.phi()
@@ -1135,9 +1074,6 @@ impl PyJet {
     /// >>> repr(jet).startswith("Jet(")
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!(
             "Jet(pt={}, rapidity={}, phi={}, constituents={})",
@@ -1155,9 +1091,6 @@ impl PyJet {
     /// Leave ``jet`` as the final expression in a notebook cell to display its
     /// transverse momentum, rapidity, azimuth, and constituents.
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn _repr_html_(&self) -> String {
         format!(
             "<table class=\"feynkit-jet\" style=\"border-collapse:collapse\"><thead><tr>\
@@ -1201,6 +1134,17 @@ impl PyJet {
     }
 }
 
+/// The jets and unclustered inputs from one clustering operation.
+///
+/// Besides the selected jets, the result preserves which supplied momenta were
+/// removed by the transverse-momentum cut.
+///
+/// Examples
+/// --------
+/// >>> definition = fk.JetDefinition.anti_kt(0.4, minimum_pt=20.0)
+/// >>> clustering = definition.cluster(particles)
+/// >>> jets = clustering.jets
+///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ClusteringResult",
@@ -1216,15 +1160,14 @@ pub struct PyClusteringResult {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyClusteringResult {
-    /// Return jets ordered by the native clustering result.
+    /// Return inclusive jets ordered by decreasing transverse momentum.
     ///
     /// Examples
     /// --------
     /// >>> jets = result.jets
+    /// >>> all(left.pt >= right.pt for left, right in zip(jets, jets[1:]))
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn jets(&self) -> Vec<PyJet> {
         self.inner
@@ -1241,9 +1184,6 @@ impl PyClusteringResult {
     /// >>> len(result) == len(result.jets)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __len__(&self) -> usize {
         self.inner.len()
     }
@@ -1255,9 +1195,6 @@ impl PyClusteringResult {
     /// >>> repr(result).startswith("ClusteringResult(")
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!("ClusteringResult(jets={})", self.inner.len())
     }
@@ -1272,9 +1209,6 @@ impl PyClusteringResult {
     /// Leave ``result`` as the final expression in a notebook cell to display
     /// the jet collection.
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn _repr_html_(&self) -> String {
         const DISPLAY_LIMIT: usize = 20;
         let rows = self
@@ -1341,6 +1275,25 @@ impl PyClusteringResult {
     }
 }
 
+/// A generalized-kT jet definition for sequential recombination.
+///
+/// The definition selects the distance measure, jet radius, and transverse-
+/// momentum threshold used to reconstruct jets from final-state momenta.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> definition = fk.JetDefinition.anti_kt(radius=0.4, minimum_pt=20.0)
+/// >>> result = definition.cluster(particles)
+///
+/// Parameters
+/// ----------
+/// algorithm : JetAlgorithm
+///     Generalized-kT algorithm to use.
+/// radius : float
+///     Jet-radius parameter.
+/// minimum_pt : float, optional
+///     Minimum transverse momentum of returned jets.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "JetDefinition",
@@ -1439,43 +1392,16 @@ impl PyJetDefinition {
     }
 
     /// Return the selected clustering algorithm.
-    ///
-    /// Examples
-    /// --------
-    /// >>> JetDefinition.anti_kt(0.4).algorithm == JetAlgorithm.AntiKt
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn algorithm(&self) -> PyJetAlgorithm {
         self.inner.algorithm().into()
     }
     /// Return the jet-radius parameter.
-    ///
-    /// Examples
-    /// --------
-    /// >>> JetDefinition.anti_kt(0.4).radius
-    /// 0.4
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn radius(&self) -> f64 {
         *self.inner.radius()
     }
     /// Return the minimum transverse momentum for retained jets.
-    ///
-    /// Examples
-    /// --------
-    /// >>> JetDefinition.anti_kt(0.4, minimum_pt=20.0).minimum_pt
-    /// 20.0
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn minimum_pt(&self) -> f64 {
         *self.inner.minimum_pt()
@@ -1509,6 +1435,64 @@ impl PyJetDefinition {
     }
 }
 
+/// Cluster collider four-momenta with a generalized-kT jet algorithm.
+///
+/// This convenience function returns the same native :class:`ClusteringResult`
+/// as :meth:`JetDefinition.cluster`; input and output momenta retain the
+/// caller's energy units.
+///
+/// Examples
+/// --------
+/// Cluster final-state partons into anti-kT jets of radius 0.4:
+///
+/// >>> jets = fk.cluster_jets(parton_momenta, radius=0.4, minimum_pt=20.0)
+/// >>> all(jet.momentum.pt >= 20.0 for jet in jets.jets)
+/// True
+///
+/// Parameters
+/// ----------
+/// momenta : sequence[FourMomentum]
+///     Particle or parton four-momenta to cluster.
+/// radius : float, optional
+///     Jet-radius parameter in rapidity--azimuth space.
+/// algorithm : {"anti_kt", "cambridge_aachen", "kt"}, optional
+///     Generalized-kT exponent choice; common hyphenated aliases are accepted.
+/// minimum_pt : float, optional
+///     Minimum transverse momentum of retained inclusive jets.
+#[cfg_attr(
+    feature = "python_stubgen",
+    gen_stub_pyfunction(module = "symbolica.community.feynkit")
+)]
+#[pyfunction]
+#[pyo3(signature = (momenta, *, radius=0.4, algorithm="anti_kt", minimum_pt=0.0))]
+fn cluster_jets(
+    py: Python<'_>,
+    momenta: Vec<PyFourMomentum>,
+    radius: f64,
+    algorithm: &str,
+    minimum_pt: f64,
+) -> PyResult<PyClusteringResult> {
+    let normalized = algorithm.to_ascii_lowercase().replace(['-', '/'], "_");
+    let algorithm = match normalized.as_str() {
+        "anti_kt" | "antikt" => JetAlgorithm::AntiKt,
+        "cambridge_aachen" | "cambridgeaachen" | "ca" => JetAlgorithm::CambridgeAachen,
+        "kt" | "k_t" => JetAlgorithm::Kt,
+        _ => {
+            return Err(PyValueError::new_err(
+                "algorithm must be 'anti_kt', 'cambridge_aachen', or 'kt'",
+            ));
+        }
+    };
+    let definition = JetDefinition::new(algorithm, radius).with_minimum_pt(minimum_pt);
+    let momenta = momenta
+        .into_iter()
+        .map(|momentum| momentum.inner)
+        .collect::<Vec<_>>();
+    py.detach(move || definition.cluster(&momenta))
+        .map(|inner| PyClusteringResult { inner })
+        .map_err(error::kinematics)
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyHelicity>()?;
     module.add_class::<PyAxis>()?;
@@ -1520,5 +1504,8 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyJet>()?;
     module.add_class::<PyClusteringResult>()?;
     module.add_class::<PyJetDefinition>()?;
+    let cluster_jets = wrap_pyfunction!(cluster_jets, module)?;
+    cluster_jets.setattr("__module__", "symbolica.community.feynkit")?;
+    module.add_function(cluster_jets)?;
     Ok(())
 }
