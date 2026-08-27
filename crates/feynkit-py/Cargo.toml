@@ -21,9 +21,11 @@ feynkit-graph = { version = "0.1.0", path = "../feynkit-graph" }
 feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics" }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
 feynkit-ufo = { version = "0.1.0", path = "../feynkit-ufo", optional = true }
+include_dir = { workspace = true }
 pyo3 = { workspace = true }
 pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
 pyo3-stub-gen-derive = { workspace = true }
+tempfile = "3.8"
 
 [dev-dependencies]
 spynso3 = { path = "../spynso3" }

@@ -69,6 +69,27 @@ and returns `EvaluatedValues`; incomplete or unexpected results raise
 published on failure. Omitting `evaluator` from `with_parameter_card()` keeps
 the invalidation-only behavior.
 
+## Native particle-physics workflows and notebook figures
+
+The common notebook workflows are compiled PyO3 functions, not a Python
+facade. They return the same native types as the corresponding configurable
+classes:
+
+```python
+import symbolica.community.feynkit as fk
+
+result = fk.generate_diagrams(model, ["e-", "e+"], ["mu-", "mu+"], loops=1)
+diagram = result.diagrams[0]
+cff = fk.build_cff(diagram)
+jets = fk.cluster_jets(final_state_momenta, radius=0.4)
+```
+
+`FeynmanDiagram.to_linnest()` emits the complete Typst/Linnest source used for
+figures. `to_svg()`, `to_html()`, `_repr_svg_()`, and `_repr_html_()` compile
+that source with the Python package `typst>=0.15,<0.16`; Linnest and Kurvst are
+embedded in the native module. The community host should declare `typst` as a
+Python dependency so diagrams render automatically in Jupyter and Marimo.
+
 ## Installed import smoke test
 
 This repository can validate registration in-process, but cannot perform an

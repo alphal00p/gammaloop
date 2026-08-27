@@ -3,3 +3,4 @@
 from ..feynkit_native import *
 
 initialize_module()
+del initialize_module

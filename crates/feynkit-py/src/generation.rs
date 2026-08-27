@@ -8,24 +8,39 @@ use feynkit_generator::{
 };
 use feynkit_model::Model;
 use pyo3::{
-    FromPyObject,
+    FromPyObject, IntoPyObjectExt,
+    exceptions::{PyTypeError, PyValueError},
     prelude::*,
-    types::{PyAny, PyModule},
+    types::{PyAny, PyBool, PyModule},
+    wrap_pyfunction,
 };
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{
     PyStubType, TypeInfo,
-    derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods},
+    derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pyfunction, gen_stub_pymethods},
 };
 
 use crate::{
+    display::render_diagram_html,
     error,
     graph::{PyFeynmanDiagram, parse_symbolic_annotation},
     model::PyModel,
 };
 use symbolica::api::python::PythonExpression;
 
+/// Select whether diagrams describe an amplitude or a squared cross section.
+///
+/// The generation type determines which graph construction and external-state
+/// conventions are applied to a particle-physics process.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> kind = fk.GenerationType.AMPLITUDE
+/// >>> kind.value
+/// 'amplitude'
+///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     name = "GenerationType",
@@ -59,9 +74,6 @@ impl PyGenerationType {
     /// >>> fk.GenerationType.AMPLITUDE.value
     /// 'amplitude'
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn value(&self) -> &'static str {
         match self {
@@ -77,9 +89,6 @@ impl PyGenerationType {
     /// >>> str(fk.GenerationType.CROSS_SECTION)
     /// 'cross_section'
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __str__(&self) -> &'static str {
         self.value()
     }
@@ -106,6 +115,17 @@ impl PyGenerationType {
     }
 }
 
+/// A model-independent way to identify an external particle.
+///
+/// Selectors may use a UFO particle name or a signed PDG code, making process
+/// definitions convenient while deferring validation to a concrete model.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> electron = fk.ParticleSelector.by_pdg(11)
+/// >>> positron = fk.ParticleSelector.by_name("e+")
+///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ParticleSelector",
@@ -164,15 +184,6 @@ impl PyParticleSelector {
     }
 
     /// Return the selected particle name, or ``None`` for a PDG selector.
-    ///
-    /// Examples
-    /// --------
-    /// >>> fk.ParticleSelector.by_name("e-").name
-    /// 'e-'
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn name(&self) -> Option<&str> {
         match &self.inner {
@@ -182,15 +193,6 @@ impl PyParticleSelector {
     }
 
     /// Return the selected PDG code, or ``None`` for a name selector.
-    ///
-    /// Examples
-    /// --------
-    /// >>> fk.ParticleSelector.by_pdg(-11).pdg
-    /// -11
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn pdg(&self) -> Option<i64> {
         match &self.inner {
@@ -200,30 +202,12 @@ impl PyParticleSelector {
     }
 
     /// Report whether this selector identifies a particle by name.
-    ///
-    /// Examples
-    /// --------
-    /// >>> fk.ParticleSelector.by_name("e-").is_name
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn is_name(&self) -> bool {
         matches!(&self.inner, ParticleSelector::Name(_))
     }
 
     /// Report whether this selector identifies a particle by PDG code.
-    ///
-    /// Examples
-    /// --------
-    /// >>> fk.ParticleSelector.by_pdg(11).is_pdg
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn is_pdg(&self) -> bool {
         matches!(&self.inner, ParticleSelector::Pdg(_))
@@ -236,9 +220,6 @@ impl PyParticleSelector {
     /// >>> str(fk.ParticleSelector.by_pdg(11))
     /// '11'
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __str__(&self) -> String {
         self.inner.to_string()
     }
@@ -250,9 +231,6 @@ impl PyParticleSelector {
     /// >>> repr(fk.ParticleSelector.by_pdg(11))
     /// 'ParticleSelector.by_pdg(11)'
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         match &self.inner {
             ParticleSelector::Name(name) => format!("ParticleSelector.by_name('{name}')"),
@@ -291,6 +269,53 @@ enum SelectorInput {
     Pdg(i64),
 }
 
+#[derive(Default)]
+struct LoopOrderInput {
+    minimum: usize,
+    maximum: usize,
+}
+
+impl<'py> IntoPyObject<'py> for LoopOrderInput {
+    type Target = PyAny;
+    type Output = Bound<'py, PyAny>;
+    type Error = PyErr;
+
+    fn into_pyobject(self, py: Python<'py>) -> PyResult<Self::Output> {
+        if self.minimum == self.maximum {
+            self.minimum.into_bound_py_any(py)
+        } else {
+            (self.minimum, self.maximum).into_bound_py_any(py)
+        }
+    }
+}
+
+impl<'a, 'py> FromPyObject<'a, 'py> for LoopOrderInput {
+    type Error = PyErr;
+
+    fn extract(value: pyo3::Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
+        if value.is_instance_of::<PyBool>() {
+            return Err(PyTypeError::new_err(
+                "loops must be a non-negative integer or a (minimum, maximum) pair",
+            ));
+        }
+        let (minimum, maximum) = if let Ok(exact) = value.extract::<usize>() {
+            (exact, exact)
+        } else if let Ok(range) = value.extract::<(usize, usize)>() {
+            range
+        } else {
+            return Err(PyTypeError::new_err(
+                "loops must be a non-negative integer or a (minimum, maximum) pair",
+            ));
+        };
+        if maximum < minimum {
+            return Err(PyValueError::new_err(
+                "loop bounds must satisfy minimum <= maximum",
+            ));
+        }
+        Ok(Self { minimum, maximum })
+    }
+}
+
 impl From<SelectorInput> for ParticleSelector {
     fn from(value: SelectorInput) -> Self {
         match value {
@@ -312,6 +337,28 @@ impl PyStubType for SelectorInput {
     }
 }
 
+#[cfg(feature = "python_stubgen")]
+impl PyStubType for LoopOrderInput {
+    fn type_input() -> TypeInfo {
+        usize::type_input() | <(usize, usize)>::type_input()
+    }
+
+    fn type_output() -> TypeInfo {
+        usize::type_output() | <(usize, usize)>::type_output()
+    }
+}
+
+/// A scattering or decay process to pass to the diagram generator.
+///
+/// A process records its incoming and outgoing particles, loop-order range,
+/// and optional external-state symmetrizations.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> process = fk.Process.amplitude(["e-", "e+"], ["mu-", "mu+"])
+/// >>> one_loop = process.with_loop_count(1, 1)
+///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Process",
@@ -459,9 +506,6 @@ impl PyProcess {
     /// >>> process.generation_type == fk.GenerationType.AMPLITUDE
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn generation_type(&self) -> PyGenerationType {
         self.inner.generation_type().into()
@@ -474,9 +518,6 @@ impl PyProcess {
     /// >>> [selector.pdg for selector in process.incoming]
     /// [11, -11]
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn incoming(&self) -> Vec<PyParticleSelector> {
         self.inner
@@ -488,15 +529,6 @@ impl PyProcess {
     }
 
     /// Return every allowed ordered final-state alternative.
-    ///
-    /// Examples
-    /// --------
-    /// >>> len(process.outgoing_alternatives)
-    /// 1
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn outgoing_alternatives(&self) -> Vec<Vec<PyParticleSelector>> {
         self.inner
@@ -513,9 +545,6 @@ impl PyProcess {
     /// >>> process.with_loop_count(1, 2).loop_count
     /// (1, 2)
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn loop_count(&self) -> (usize, usize) {
         let range = self.inner.loop_count();
@@ -529,9 +558,6 @@ impl PyProcess {
     /// >>> process.with_symmetrization(initial=True).symmetrizes_initial
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn symmetrizes_initial(&self) -> bool {
         self.inner.symmetrizes_initial()
@@ -544,9 +570,6 @@ impl PyProcess {
     /// >>> process.with_symmetrization(final_state=True).symmetrizes_final
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn symmetrizes_final(&self) -> bool {
         self.inner.symmetrizes_final()
@@ -559,9 +582,6 @@ impl PyProcess {
     /// >>> process.with_symmetrization(left_right=True).symmetrizes_left_right
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn symmetrizes_left_right(&self) -> bool {
         self.inner.symmetrizes_left_right()
@@ -574,20 +594,28 @@ impl PyProcess {
     /// >>> process.with_symmetrization(external_fermions=True).symmetrizes_external_fermions
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn symmetrizes_external_fermions(&self) -> bool {
         self.inner.symmetrizes_external_fermions()
     }
 }
 
+/// A thread-safe signal for cancelling a long diagram-generation job.
+///
+/// Share one token through ``GenerationOptions`` and call ``cancel`` from a
+/// controlling thread when a large topology search should stop early.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> token = fk.CancellationToken()
+/// >>> token.is_cancelled
+/// False
+///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "CancellationToken",
     module = "symbolica.community.feynkit",
-    frozen,
     from_py_object
 )]
 #[derive(Clone, Default)]
@@ -604,9 +632,6 @@ impl PyCancellationToken {
     /// --------
     /// >>> token = fk.CancellationToken()
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[new]
     fn new() -> Self {
         Self::default()
@@ -618,9 +643,6 @@ impl PyCancellationToken {
     /// --------
     /// >>> token.cancel()
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn cancel(&self) {
         self.inner.cancel();
     }
@@ -629,18 +651,39 @@ impl PyCancellationToken {
     ///
     /// Examples
     /// --------
+    /// >>> token = fk.CancellationToken()
+    /// >>> token.cancel()
     /// >>> token.is_cancelled
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn is_cancelled(&self) -> bool {
         self.inner.is_cancelled()
     }
 }
 
+/// Configuration for Feynman-diagram generation and filtering.
+///
+/// Options control parallelism, topology limits, graph filters, numerator
+/// grouping, and cancellation without changing the physical process itself.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> options = fk.GenerationOptions(threads=4, max_vertices=8)
+///
+/// Parameters
+/// ----------
+/// threads : int, optional
+///     Number of worker threads used during generation.
+/// max_vertices : int, optional
+///     Maximum number of interaction vertices in a generated topology.
+/// allow_self_loops : bool, optional
+///     Permit propagators that start and end on the same vertex.
+/// allow_zero_flow_edges : bool, optional
+///     Permit internal edges with identically zero momentum flow.
+/// graph_prefix : str, optional
+///     Prefix assigned to generated diagram names.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "GenerationOptions",
@@ -1043,9 +1086,6 @@ impl PyGenerationOptions {
     /// --------
     /// >>> options.disable_numerator_grouping()
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn disable_numerator_grouping(&mut self) {
         self.inner = self
             .inner
@@ -1059,9 +1099,6 @@ impl PyGenerationOptions {
     /// --------
     /// >>> options.detect_zero_numerators()
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn detect_zero_numerators(&mut self) {
         self.inner = self
             .inner
@@ -1190,6 +1227,17 @@ impl PyGenerationOptions {
     }
 }
 
+/// Counts and completion status from a diagram-generation run.
+///
+/// The report distinguishes explored topologies and interaction assignments
+/// from the physical diagrams retained after numerator checks.
+///
+/// Examples
+/// --------
+/// >>> report = result.report
+/// >>> report.retained_count == len(result.diagrams)
+/// True
+///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "GenerationReport",
@@ -1206,29 +1254,11 @@ pub struct PyGenerationReport {
 #[pymethods]
 impl PyGenerationReport {
     /// Return the number of distinct topologies considered during generation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> result.report.topology_count >= 0
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn topology_count(&self) -> usize {
         self.inner.topology_count
     }
     /// Return the number of interaction assignments examined.
-    ///
-    /// Examples
-    /// --------
-    /// >>> result.report.interaction_assignment_count >= 0
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn interaction_assignment_count(&self) -> usize {
         self.inner.interaction_assignment_count
@@ -1240,37 +1270,16 @@ impl PyGenerationReport {
     /// >>> result.report.retained_count == len(result)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn retained_count(&self) -> usize {
         self.inner.retained_count
     }
     /// Return the number of diagrams removed for having an exact zero numerator.
-    ///
-    /// Examples
-    /// --------
-    /// >>> result.report.zero_numerator_count >= 0
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn zero_numerator_count(&self) -> usize {
         self.inner.zero_numerator_count
     }
     /// Report whether generation finished without cancellation.
-    ///
-    /// Examples
-    /// --------
-    /// >>> isinstance(result.report.completed, bool)
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn completed(&self) -> bool {
         self.inner.completed
@@ -1283,9 +1292,6 @@ impl PyGenerationReport {
     /// >>> repr(result.report).startswith("GenerationReport(")
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!(
             "GenerationReport(topology_count={}, interaction_assignment_count={}, retained_count={}, zero_numerator_count={}, completed={})",
@@ -1303,9 +1309,6 @@ impl PyGenerationReport {
     /// --------
     /// Leave ``result.report`` as the final expression in a notebook cell.
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn _repr_html_(&self) -> String {
         let status = if self.inner.completed {
             "completed"
@@ -1354,6 +1357,16 @@ impl PyGenerationReport {
     }
 }
 
+/// One diagram and its numerator ratio inside a grouped result.
+///
+/// A group member points into ``GenerationResult.diagrams`` and expresses its
+/// numerator relative to the group's master diagram.
+///
+/// Examples
+/// --------
+/// >>> member = result.groups[0].members[0]
+/// >>> diagram = result.diagrams[member.diagram]
+///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "GroupMember",
@@ -1370,15 +1383,6 @@ pub struct PyGroupMember {
 #[pymethods]
 impl PyGroupMember {
     /// Return the generated-order index from before zero-numerator removal.
-    ///
-    /// Examples
-    /// --------
-    /// >>> result.groups[0].members[0].source_diagram >= 0
-    /// True
-    ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn source_diagram(&self) -> usize {
         self.inner.source_diagram
@@ -1389,9 +1393,6 @@ impl PyGroupMember {
     /// --------
     /// >>> result.diagrams[result.groups[0].members[0].diagram]
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn diagram(&self) -> usize {
         self.inner.diagram
@@ -1403,9 +1404,6 @@ impl PyGroupMember {
     /// >>> result.groups[0].members[0].ratio
     /// '1'
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn ratio(&self) -> &str {
         &self.inner.ratio
@@ -1416,14 +1414,21 @@ impl PyGroupMember {
     /// --------
     /// >>> ratio = result.groups[0].members[0].ratio_expression()
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn ratio_expression(&self) -> PyResult<PythonExpression> {
         parse_symbolic_annotation(&self.inner.ratio).map_err(error::GenerationError::new_err)
     }
 }
 
+/// Diagrams whose numerators are related by known scalar factors.
+///
+/// Grouping lets amplitude calculations evaluate one master numerator and
+/// reconstruct related diagrams from each member's symbolic ratio.
+///
+/// Examples
+/// --------
+/// >>> group = result.groups[0]
+/// >>> master_diagram = result.diagrams[group.master]
+///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "DiagramGroup",
@@ -1445,9 +1450,6 @@ impl PyDiagramGroup {
     /// --------
     /// >>> result.diagrams[result.groups[0].master]
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn master(&self) -> usize {
         self.inner.master
@@ -1459,9 +1461,6 @@ impl PyDiagramGroup {
     /// >>> result.groups[0].members[0].ratio
     /// '1'
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn members(&self) -> Vec<PyGroupMember> {
         self.inner
@@ -1473,6 +1472,17 @@ impl PyDiagramGroup {
     }
 }
 
+/// Feynman diagrams and diagnostics produced for one process.
+///
+/// The result retains generated diagrams in deterministic order and may also
+/// contain numerator-equivalence groups for efficient downstream evaluation.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> result = fk.Generator(model).generate(process)
+/// >>> diagrams = result.diagrams
+///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "GenerationResult",
@@ -1495,9 +1505,6 @@ impl PyGenerationResult {
     /// >>> len(result.diagrams) == len(result)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn diagrams(&self) -> Vec<PyFeynmanDiagram> {
         self.inner
@@ -1515,9 +1522,6 @@ impl PyGenerationResult {
     /// >>> all(group.members for group in result.groups)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn groups(&self) -> Vec<PyDiagramGroup> {
         self.inner
@@ -1535,9 +1539,6 @@ impl PyGenerationResult {
     /// >>> result.report.retained_count == len(result)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn report(&self) -> PyGenerationReport {
         PyGenerationReport {
@@ -1552,9 +1553,6 @@ impl PyGenerationResult {
     /// >>> len(result) == len(result.diagrams)
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __len__(&self) -> usize {
         self.inner.diagrams.len()
     }
@@ -1566,9 +1564,6 @@ impl PyGenerationResult {
     /// >>> repr(result).startswith("GenerationResult(")
     /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     fn __repr__(&self) -> String {
         format!(
             "GenerationResult(diagrams={}, groups={}, completed={})",
@@ -1588,10 +1583,7 @@ impl PyGenerationResult {
     /// --------
     /// Leave ``result`` as the final expression in a notebook cell.
     ///
-    /// Parameters
-    /// ----------
-    /// None
-    fn _repr_html_(&self) -> String {
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
         const PREVIEW_LIMIT: usize = 6;
 
         let report = PyGenerationReport {
@@ -1604,12 +1596,11 @@ impl PyGenerationResult {
             .iter()
             .take(PREVIEW_LIMIT)
             .map(|diagram| {
-                format!(
-                    "<div style=\"min-width:0;overflow-x:auto\">{}</div>",
-                    diagram.to_html()
-                )
+                render_diagram_html(py, diagram).map(|html| {
+                    format!("<div style=\"min-width:0;overflow-x:auto\">{}</div>", html)
+                })
             })
-            .collect::<String>();
+            .collect::<PyResult<String>>()?;
         let gallery = if diagrams.is_empty() {
             "<p style=\"margin:.5rem 0;opacity:.75\">No diagrams retained.</p>".to_owned()
         } else {
@@ -1627,10 +1618,10 @@ impl PyGenerationResult {
             )
         };
 
-        format!(
+        Ok(format!(
             "<section class=\"feynkit-generation-result\" style=\"max-width:100%\">\
              <h3 style=\"margin:.25rem 0\">Generation result</h3>{report}{gallery}{omitted}</section>"
-        )
+        ))
     }
 
     /// Write a concise result summary to an IPython pretty printer.
@@ -1658,6 +1649,21 @@ impl PyGenerationResult {
     }
 }
 
+/// Generate Feynman diagrams from a particle model and a process definition.
+///
+/// The generator combines model interactions with graph topologies at the
+/// requested loop orders and returns typed diagrams ready for CFF operations.
+///
+/// Examples
+/// --------
+/// >>> import symbolica.community.feynkit as fk
+/// >>> generator = fk.Generator(model)
+/// >>> result = generator.generate(process)
+///
+/// Parameters
+/// ----------
+/// model : Model
+///     Particle model supplying fields, propagators, and interaction vertices.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Generator",
@@ -1696,11 +1702,9 @@ impl PyGenerator {
     ///
     /// Examples
     /// --------
-    /// >>> generator.model
+    /// >>> generator.model.name == model.name
+    /// True
     ///
-    /// Parameters
-    /// ----------
-    /// None
     #[getter]
     fn model(&self) -> PyModel {
         self.model.clone().into()
@@ -1734,6 +1738,116 @@ impl PyGenerator {
     }
 }
 
+/// Generate Feynman diagrams for a standard amplitude or cross-section workflow.
+///
+/// Particle names, signed PDG codes, and :class:`ParticleSelector` objects may
+/// be mixed in the external states. An integer loop order selects exactly that
+/// order; a pair such as ``(0, 1)`` selects an inclusive range.
+///
+/// Examples
+/// --------
+/// Generate one-loop scalar amplitudes directly from a loaded model:
+///
+/// >>> options = fk.GenerationOptions(max_vertices=3, allow_self_loops=True)
+/// >>> result = fk.generate_diagrams(
+/// ...     model, ["scalar_0"], ["scalar_0", "scalar_0"],
+/// ...     loops=1, options=options,
+/// ... )
+/// >>> all(diagram.loop_count == 1 for diagram in result.diagrams)
+/// True
+///
+/// Parameters
+/// ----------
+/// model : Model
+///     Particle model supplying propagators and interaction vertices.
+/// incoming : sequence[ParticleSelector | str | int]
+///     Incoming particles in external-leg order.
+/// outgoing : sequence[ParticleSelector | str | int]
+///     Primary outgoing state in external-leg order.
+/// kind : {"amplitude", "cross_section"}, optional
+///     Graph structure to generate.
+/// loops : int or tuple[int, int], optional
+///     Exact loop order or inclusive minimum and maximum.
+/// options : GenerationOptions or None, optional
+///     Generation filters and limits; defaults to standard options.
+/// final_state_alternatives : sequence[sequence[ParticleSelector | str | int]] or None, optional
+///     Extra outgoing states for a cross section.
+#[cfg_attr(
+    feature = "python_stubgen",
+    gen_stub_pyfunction(module = "symbolica.community.feynkit")
+)]
+#[pyfunction]
+#[pyo3(signature = (model, incoming, outgoing, *, kind="amplitude", loops=LoopOrderInput::default(), options=None, final_state_alternatives=None))]
+#[allow(clippy::too_many_arguments)]
+fn generate_diagrams(
+    py: Python<'_>,
+    model: &PyModel,
+    incoming: Vec<SelectorInput>,
+    outgoing: Vec<SelectorInput>,
+    kind: &str,
+    loops: LoopOrderInput,
+    options: Option<&PyGenerationOptions>,
+    final_state_alternatives: Option<Vec<Vec<SelectorInput>>>,
+) -> PyResult<PyGenerationResult> {
+    let LoopOrderInput { minimum, maximum } = loops;
+    let incoming = incoming
+        .into_iter()
+        .map(ParticleSelector::from)
+        .collect::<Vec<_>>();
+    let outgoing = outgoing
+        .into_iter()
+        .map(ParticleSelector::from)
+        .collect::<Vec<_>>();
+    let alternatives = final_state_alternatives
+        .unwrap_or_default()
+        .into_iter()
+        .map(|alternative| {
+            alternative
+                .into_iter()
+                .map(ParticleSelector::from)
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    let process = match kind {
+        "amplitude" => {
+            if !alternatives.is_empty() {
+                return Err(PyValueError::new_err(
+                    "final_state_alternatives is only supported for cross sections",
+                ));
+            }
+            Process::amplitude(incoming, outgoing)
+                .with_loop_count(minimum, maximum)
+                .map_err(error::process)?
+        }
+        "cross_section" => {
+            let mut process = Process::cross_section(incoming, outgoing.clone())
+                .with_loop_count(minimum, maximum)
+                .map_err(error::process)?;
+            if !alternatives.is_empty() {
+                let mut final_states = Vec::with_capacity(alternatives.len() + 1);
+                final_states.push(outgoing);
+                final_states.extend(alternatives);
+                process = process
+                    .with_final_state_alternatives(final_states)
+                    .map_err(error::process)?;
+            }
+            process
+        }
+        _ => {
+            return Err(PyValueError::new_err(
+                "kind must be 'amplitude' or 'cross_section'",
+            ));
+        }
+    };
+
+    let generator = Generator::new(model.inner.clone());
+    let options = options.cloned().unwrap_or_default().inner;
+    py.detach(move || generator.generate(&process, &options))
+        .map(|inner| PyGenerationResult { inner })
+        .map_err(error::generation)
+}
+
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyGenerationType>()?;
     module.add_class::<PyParticleSelector>()?;
@@ -1745,6 +1859,9 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyDiagramGroup>()?;
     module.add_class::<PyGenerationResult>()?;
     module.add_class::<PyGenerator>()?;
+    let generate_diagrams = wrap_pyfunction!(generate_diagrams, module)?;
+    generate_diagrams.setattr("__module__", "symbolica.community.feynkit")?;
+    module.add_function(generate_diagrams)?;
     Ok(())
 }
 
