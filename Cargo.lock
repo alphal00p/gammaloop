@@ -1924,11 +1924,13 @@ dependencies = [
  "feynkit-kinematics",
  "feynkit-model",
  "feynkit-ufo",
+ "include_dir",
  "pyo3",
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
  "spynso3",
  "symbolica",
+ "tempfile",
 ]
 
 [[package]]
