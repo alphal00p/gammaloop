@@ -4,6 +4,9 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
+    # Keep generated documentation assets stable across general Nixpkgs updates.
+    nixpkgs-docs.url = "github:NixOS/nixpkgs/716c7a2664ca8325617b8a7fbb609273f2c4cae7";
+
     crane = {
       url = "github:ipetkov/crane";
     };
@@ -21,6 +24,7 @@
     {
       self,
       nixpkgs,
+      nixpkgs-docs,
       crane,
       fenix,
       flake-utils,
@@ -39,13 +43,14 @@
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
+        docsPkgs = nixpkgs-docs.legacyPackages.${system};
         inherit (pkgs) lib;
 
         typst015 =
           assert lib.assertMsg (
-            pkgs.typst.version == "0.15.0"
-          ) "the documentation build requires Typst 0.15.0, but nixpkgs provides ${pkgs.typst.version}";
-          pkgs.typst;
+            docsPkgs.typst.version == "0.15.0"
+          ) "the documentation build requires Typst 0.15.0, but the documentation package set provides ${docsPkgs.typst.version}";
+          docsPkgs.typst;
 
         docsTypst = typst015.withPackages (
           typstPackages: with typstPackages; [
@@ -55,7 +60,7 @@
           ]
         );
 
-        docsFontPath = "${pkgs.roboto}/share/fonts/truetype";
+        docsFontPath = "${docsPkgs.roboto}/share/fonts/truetype";
 
         nixCiBarrierRevision =
           if self ? dirtyRev then
@@ -1787,7 +1792,7 @@
             nickel
             nls
             docsTypst
-            roboto
+            docsPkgs.roboto
             cargo-nextest
             pkg-config
             cargo-deny
@@ -3082,7 +3087,7 @@
             docsTypst
             pkgs.gitMinimal
             pkgs.maturin
-            pkgs.roboto
+            docsPkgs.roboto
             pkgs.uv
           ];
           TYPST_FONT_PATHS = docsFontPath;
