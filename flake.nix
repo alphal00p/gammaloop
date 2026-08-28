@@ -458,10 +458,17 @@
       };
 
       workspacePackageTestCompileTimeExtraSourceRoots = {
+        "feynkit-cff" = [
+          "crates/feynkit-model/tests/fixtures"
+        ];
+        "feynkit-generator" = [
+          "crates/feynkit-model/tests/fixtures"
+        ];
         "feynkit-model" = [
           "crates/feynkit-model/tests/fixtures"
         ];
         "feynkit-py" = [
+          "crates/feynkit-model/tests/fixtures"
           "crates/feynkit-py/python/symbolica/community/feynkit/__init__.py"
           "crates/feynkit-py/tests/fixtures"
         ];
