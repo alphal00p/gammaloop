@@ -1,21 +1,24 @@
+use feynkit_cff::{CffError, CffOptions, CffResult, HedgeGraphCffExt, SurfaceCache};
 use gammaloop_tracing_filter::LogFormat;
 use gammalooprs::{
-    feyngen::diagram_generator::evaluate_overall_factor,
-    graph::{FeynmanGraph, Graph, LMBext},
+    graph::{self, FeynmanGraph, Graph, LMBext},
     integrands::evaluation::{
         BatchSampleEvaluationResult, SampleEvaluationResult, SingleSampleEvaluationResult,
     },
-    model::Model,
     observables::{
         AdditionalWeightKey, DiscreteBinOrdering, Event, EventGroup, GenericAdditionalWeightInfo,
         HistogramAccumulatorState, HistogramSnapshot, HistogramStatisticsSnapshot,
     },
     processes::{DotExportSettings, ProcessCollection},
-    settings::RuntimeSettings,
+    settings::{global::OrientationPattern, RuntimeSettings},
     utils::tracing::LogLevel,
 };
-use idenso::shorthands::{metric::to_dots_impl, schoonschip::Schoonschip};
-use linnet::half_edge::involution::Orientation;
+use idenso::shorthands::schoonschip::Schoonschip;
+use linnet::half_edge::{
+    involution::{EdgeIndex, Orientation},
+    subgraph::{ModifySubSet, SuBitGraph},
+};
+use linnet::parser::{set::DotGraphSet, DotGraph};
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 
 use crate::{
@@ -2807,15 +2810,167 @@ enum CffDotInputError {
     Parse { message: String },
     #[error("CFF DOT input does not contain a graph")]
     EmptyGraph,
+    #[error("edge {edge} has invalid `{attribute}` value `{value}`: {message}")]
+    InvalidEdgeAttribute {
+        edge: EdgeIndex,
+        attribute: &'static str,
+        value: String,
+        message: String,
+    },
+    #[error("could not generate CFF expression: {0}")]
+    Generation(#[from] CffError),
 }
 
-fn parse_cff_dot_graph(dot: &str, model: &Model) -> Result<Graph, CffDotInputError> {
-    Graph::from_string(dot, model)
+fn parse_cff_dot_graph(dot: &str) -> Result<DotGraph, CffDotInputError> {
+    DotGraphSet::from_string(dot)
         .map_err(|error| CffDotInputError::Parse {
             message: error.to_string(),
         })?
-        .pop()
+        .into_iter()
+        .last()
         .ok_or(CffDotInputError::EmptyGraph)
+}
+
+fn select_cff_dot_subgraph(graph: &DotGraph, subgraph_nodes: &[String]) -> SuBitGraph {
+    if subgraph_nodes.is_empty() {
+        return graph.full_filter();
+    }
+
+    let mut selected: SuBitGraph = graph.empty_subgraph();
+    for (node, neighbors, vertex) in graph.iter_nodes() {
+        let name = vertex
+            .name()
+            .map(str::to_owned)
+            .unwrap_or_else(|| node.to_string());
+        if subgraph_nodes.contains(&name) {
+            neighbors.for_each(|hedge| selected.add(hedge));
+        }
+    }
+    selected
+}
+
+fn cff_dot_options(graph: &DotGraph) -> Result<CffOptions, CffDotInputError> {
+    let mut options = CffOptions::default();
+    for (_, edge, data) in graph.iter_edges() {
+        let Some(value) = data.data.statements.get("is_cut") else {
+            continue;
+        };
+        value
+            .parse::<usize>()
+            .map_err(|error| CffDotInputError::InvalidEdgeAttribute {
+                edge,
+                attribute: "is_cut",
+                value: value.clone(),
+                message: error.to_string(),
+            })?;
+        options = options.with_initial_state_edge(edge);
+    }
+    Ok(options)
+}
+
+fn build_cff_dot_topology(
+    dot: &str,
+    subgraph_nodes: &[String],
+    reversed_dangling: &[usize],
+) -> Result<(DotGraph, SuBitGraph, CffResult), CffDotInputError> {
+    let graph = parse_cff_dot_graph(dot)?;
+    let subgraph = select_cff_dot_subgraph(&graph, subgraph_nodes);
+    let reversed_dangling = reversed_dangling
+        .iter()
+        .copied()
+        .map(EdgeIndex::from)
+        .collect_vec();
+    let mut surface_cache = SurfaceCache::default();
+    let cff = graph.build_cff_from_subgraph(
+        &subgraph,
+        cff_dot_options(&graph)?,
+        &reversed_dangling,
+        &mut surface_cache,
+    )?;
+    Ok((graph, subgraph, cff))
+}
+
+#[cfg(test)]
+mod cff_dot_topology_tests {
+    use super::*;
+    use linnet::half_edge::subgraph::SubGraphLike;
+
+    const RAW_TOPOLOGY: &str = r#"
+        digraph raw_triangle {
+            ext_in [style=invis]
+            ext_out [style=invis]
+            A [id=0]
+            B [id=1]
+            C [id=2]
+            A -> C [id=0]
+            B -> C [id=1 is_cut=0]
+            A -> B [id=2]
+            C -> ext_out [id=3]
+            ext_in -> A [id=4]
+        }
+    "#;
+
+    #[test]
+    fn raw_dot_cff_needs_only_topology() {
+        let (graph, selected, cff) =
+            build_cff_dot_topology(RAW_TOPOLOGY, &["B".to_owned(), "C".to_owned()], &[2]).unwrap();
+
+        assert_eq!(graph.global_data.name, "raw_triangle");
+        // Linnet counts only the fully selected paired edge here; the three
+        // boundary/external edges are verified through the padded orientation.
+        assert_eq!(selected.nedges(&graph.graph), 1);
+        assert!(!cff.orientations().is_empty());
+        for orientation in cff.orientations() {
+            assert_eq!(
+                orientation.data.orientation[EdgeIndex(2)],
+                Orientation::Reversed
+            );
+            assert_eq!(
+                orientation.data.orientation[EdgeIndex(4)],
+                Orientation::Undirected
+            );
+            assert_ne!(
+                orientation.data.orientation[EdgeIndex(1)],
+                Orientation::Undirected
+            );
+        }
+        assert!(cff.surfaces.energy_surfaces().iter().all(|surface| {
+            !surface.energies.contains(&EdgeIndex(1))
+                && surface
+                    .vertex_set
+                    .iter()
+                    .all(|vertex| [1, 2].contains(&vertex.0))
+        }));
+        assert!(
+            cff.surfaces
+                .energy_surfaces()
+                .iter()
+                .any(|surface| surface.external_shift.get(EdgeIndex(1)) != 0)
+                || cff
+                    .surfaces
+                    .h_surfaces()
+                    .iter()
+                    .any(|surface| surface.external_shift.get(EdgeIndex(1)) != 0)
+        );
+    }
+
+    #[test]
+    fn malformed_dot_and_cut_attributes_are_structured_errors() {
+        assert!(matches!(
+            parse_cff_dot_graph("digraph broken { A ->"),
+            Err(CffDotInputError::Parse { .. })
+        ));
+
+        let invalid_cut = RAW_TOPOLOGY.replace("is_cut=0", "is_cut=left");
+        assert!(matches!(
+            build_cff_dot_topology(&invalid_cut, &[], &[]),
+            Err(CffDotInputError::InvalidEdgeAttribute {
+                edge: EdgeIndex(1),
+                attribute: "is_cut",
+                ..
+            })
+        ));
+    }
 }
 
 // TODO: Improve error broadcasting to Python everywhere so as to show rust backtrace
@@ -3283,8 +3438,11 @@ impl GammaLoopAPI {
                 let process_name = process_name
                     .unwrap_or(dot_path.file_stem().unwrap().to_string_lossy().into_owned());
 
-                let graphs = Graph::from_path(&dot_path, &self.gammaloop_state.model)
-                    .map_err(|e| eyre!("Could not parse graphs from path: {}", e.to_string()))?;
+                let graphs =
+                    Graph::from_finalized_runtime_path(&dot_path, &self.gammaloop_state.model)
+                        .map_err(|e| {
+                            eyre!("Could not parse graphs from path: {}", e.to_string())
+                        })?;
                 (graphs, Some(process_name))
             }
             "string" => {
@@ -3294,8 +3452,11 @@ impl GammaLoopAPI {
                     ));
                 }
 
-                let graphs = Graph::from_string(&graphs, &self.gammaloop_state.model)
-                    .map_err(|e| eyre!("Could not parse graphs from string: {}", e.to_string()))?;
+                let graphs =
+                    Graph::from_finalized_runtime_string(&graphs, &self.gammaloop_state.model)
+                        .map_err(|e| {
+                            eyre!("Could not parse graphs from string: {}", e.to_string())
+                        })?;
                 (graphs, process_name)
             }
             other => {
@@ -3355,13 +3516,19 @@ impl GammaLoopAPI {
                     return Err(eyre!("Path does not exist: {}", dot_path.display()));
                 }
 
-                let graphs = Graph::from_path(&dot_path, &self.gammaloop_state.model)
-                    .map_err(|e| eyre!("Could not parse graphs from path: {}", e.to_string()))?;
+                let graphs =
+                    Graph::from_finalized_runtime_path(&dot_path, &self.gammaloop_state.model)
+                        .map_err(|e| {
+                            eyre!("Could not parse graphs from path: {}", e.to_string())
+                        })?;
                 graphs
             }
             "string" => {
-                let graphs = Graph::from_string(&graphs, &self.gammaloop_state.model)
-                    .map_err(|e| eyre!("Could not parse graphs from string: {}", e.to_string()))?;
+                let graphs =
+                    Graph::from_finalized_runtime_string(&graphs, &self.gammaloop_state.model)
+                        .map_err(|e| {
+                            eyre!("Could not parse graphs from string: {}", e.to_string())
+                        })?;
                 graphs
             }
             other => {
@@ -3512,8 +3679,7 @@ impl GammaLoopAPI {
     ///     JSON representation of the model currently owned by this session.
     #[pyo3(name = "get_model")]
     pub(crate) fn get_model(&self) -> PyResult<String> {
-        let serializable_model = self.gammaloop_state.model.to_serializable();
-        serde_json::to_string(&serializable_model).map_err(|e| {
+        serde_json::to_string(&self.gammaloop_state.model).map_err(|e| {
             exceptions::PyException::new_err(format!("Could not serialize model: {}", e))
         })
     }
@@ -4008,6 +4174,122 @@ impl GammaLoopAPI {
                 ))
             })
             .map(|_| ())
+    }
+
+    /// Build a causal-flow expression from an inline DOT graph or one of its subgraphs.
+    ///
+    /// Parameters
+    /// ----------
+    /// dot_string : str
+    ///     Inline DOT graph using particles from the active model.
+    /// subgraph_nodes : Sequence[str]
+    ///     Vertex names retained in the subgraph; an empty sequence selects all nodes.
+    /// reverse_dangling : Sequence[int]
+    ///     Dangling edge ids whose orientation is reversed.
+    /// orientation_pattern : str, optional
+    ///     Pattern restricting returned causal-flow orientations.
+    ///
+    /// Returns
+    /// -------
+    /// list[tuple[dict[int, int], str]]
+    ///     Edge-direction maps paired with their energy-denominator expressions.
+    #[pyo3(name = "generate_cff", signature = (dot_string, subgraph_nodes, reverse_dangling,orientation_pattern=None))]
+    pub(crate) fn generate_cff(
+        &self,
+        dot_string: String,
+        subgraph_nodes: Vec<String>,
+        reverse_dangling: Vec<usize>,
+        orientation_pattern: Option<String>,
+    ) -> PyResult<Vec<(HashMap<usize, i32>, String)>> {
+        let (graph, subgraph, cff) =
+            build_cff_dot_topology(&dot_string, &subgraph_nodes, &reverse_dangling)
+                .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
+
+        let or_pattern = orientation_pattern
+            .as_deref()
+            .map(OrientationPattern::from_user_pattern)
+            .transpose()
+            .map_err(|error| exceptions::PyException::new_err(error.to_string()))?
+            .unwrap_or_default();
+
+        let atoms = cff.orientations().iter().map(|orientation| {
+            let atom = if or_pattern.filter(&orientation.data.orientation) {
+                orientation.expression.to_atom_inverse()
+            } else {
+                symbolica::atom::Atom::Zero
+            };
+            (atom, orientation.data.clone())
+        });
+        let replacements = cff.surfaces.replacements_with(
+            gammalooprs::utils::ose_atom_from_index,
+            gammalooprs::utils::external_energy_atom_from_index,
+        );
+        let inverse_energies =
+            graph::get_cff_inverse_energy_product_impl(&graph.graph, &subgraph, &[]);
+
+        let result = atoms
+            .into_iter()
+            .map(|(atom, orientation_data)| {
+                let energy_sub = atom.replace_multiple(&replacements) * &inverse_energies;
+                let string_atom = energy_sub.to_string();
+
+                let mut orientation_as_hashmap = HashMap::new();
+                for (edge_id, direction) in orientation_data.orientation.into_iter() {
+                    let direction = match direction {
+                        Orientation::Default => 1,
+                        Orientation::Reversed => -1,
+                        Orientation::Undirected => 0,
+                    };
+                    orientation_as_hashmap.insert(edge_id.0, direction);
+                }
+                (orientation_as_hashmap, string_atom)
+            })
+            .collect_vec();
+
+        Ok(result)
+    }
+
+    /// Serialize a causal-flow expression and its surfaces as JSON.
+    ///
+    /// This accepts the same graph, subgraph, and dangling-edge inputs as
+    /// ``generate_cff``. The current JSON representation is intended for GammaLoop
+    /// tooling and may contain internal structural details.
+    ///
+    /// Parameters
+    /// ----------
+    /// dot_string : str
+    ///     Inline DOT graph using particles from the active model.
+    /// subgraph_nodes : Sequence[str]
+    ///     Vertex names retained in the subgraph; an empty sequence selects all nodes.
+    /// reverse_dangling : Sequence[int]
+    ///     Dangling edge ids whose orientation is reversed.
+    /// orientation_pattern : str, optional
+    ///     Pattern restricting returned causal-flow orientations.
+    ///
+    /// Returns
+    /// -------
+    /// str
+    ///     JSON representation of the causal-flow expression and E-surfaces.
+    #[pyo3(
+        name = "generate_cff_as_json_string",
+        signature = (dot_string, subgraph_nodes, reverse_dangling, orientation_pattern = None)
+    )]
+    pub(crate) fn generate_cff_as_json_string(
+        &self,
+        dot_string: String,
+        subgraph_nodes: Vec<String>,
+        reverse_dangling: Vec<usize>,
+        orientation_pattern: Option<String>,
+    ) -> PyResult<String> {
+        let _ = orientation_pattern;
+        let (_, _, cff) = build_cff_dot_topology(&dot_string, &subgraph_nodes, &reverse_dangling)
+            .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
+
+        let json_string = serde_json::to_string(&cff).map_err(|e| {
+            exceptions::PyException::new_err(format!("Could not serialize cff to json: {}", e))
+        })?;
+
+        Ok(json_string)
     }
 
     /*

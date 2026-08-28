@@ -222,19 +222,21 @@ mod tests {
 
     use super::*;
     use crate::{
-        cff::surface::LinearEnergyExpr, dot, graph::parse::from_dot::IntoGraph,
-        initialisation::test_initialise, utils::external_energy_atom_from_index,
+        cff::surface::LinearEnergyExpr, finalized_runtime_dot,
+        graph::parse::from_dot::IntoFinalizedRuntimeGraph, initialisation::test_initialise,
+        utils::external_energy_atom_from_index,
     };
 
     #[test]
     fn affine_energy_map_keeps_two_numerator_factors_under_one_map() -> color_eyre::Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph affine_map {
+                graph [projector="1"]
                 edge [num=1 mass=0]
                 node [num=1]
-                A -> B [id=0]
-                A -> B [id=1]
+                A -> B [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
+                A -> B [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
             }
         )?;
         let energy_map = LinearEnergyExpr {
@@ -277,19 +279,20 @@ mod tests {
     fn padded_external_energy_slots_do_not_erase_factorized_external_momenta()
     -> color_eyre::Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph padded_external_energy_slots {
+        let graph: Graph = finalized_runtime_dot!(digraph padded_external_energy_slots {
+            graph [projector="1"]
             edge [num=1 mass=0]
             node [num=1]
             ext [style=invis]
             v0;
             v1;
             v2;
-            ext -> v0 [id=0]
-            ext -> v1 [id=1]
-            v2 -> ext [id=2]
-            v0 -> v2 [id=3 lmb_id=0]
-            v1 -> v0 [id=4]
-            v2 -> v1 [id=5]
+            ext -> v0 [sink="{ufo_order:0}" id=0]
+            ext -> v1 [sink="{ufo_order:0}" id=1]
+            v2 -> ext [source="{ufo_order:0}" id=2]
+            v0 -> v2 [source="{ufo_order:1}" sink="{ufo_order:1}" id=3 lmb_id=0]
+            v1 -> v0 [source="{ufo_order:1}" sink="{ufo_order:2}" id=4]
+            v2 -> v1 [source="{ufo_order:2}" sink="{ufo_order:2}" id=5]
         })?;
         let mapped_internal_energy = LinearEnergyExpr {
             internal_terms: vec![(EdgeIndex(3), 2.into())],

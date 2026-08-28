@@ -11,6 +11,7 @@ use crate::{
         cuts::{CutSet, ResidueSelector},
     },
     integrands::process::ProcessIntegrand,
+    model::Model,
     processes::DotExportSettings,
     settings::global::GenerationSettings,
     uv::{
@@ -64,6 +65,7 @@ pub(crate) struct UVForestNodeExpression {
 impl ProcessIntegrand {
     pub(crate) fn export_uv_forest_graph(
         &self,
+        model: &Model,
         graph_id: usize,
         orientation: Option<OrientationProjection<'_>>,
         generation_settings: &GenerationSettings,
@@ -81,6 +83,7 @@ impl ProcessIntegrand {
                 let cut_structure = CutStructure::empty(&term.graph);
                 export_graph(
                     &term.graph,
+                    model,
                     cut_structure,
                     orientation,
                     generation_settings,
@@ -127,6 +130,7 @@ impl ProcessIntegrand {
 
                 export_graph(
                     &term.graph,
+                    model,
                     cut_structure,
                     orientation,
                     generation_settings,
@@ -140,6 +144,7 @@ impl ProcessIntegrand {
 
 fn export_graph(
     graph: &Graph,
+    model: &Model,
     cut_structure: CutStructure,
     orientation: Option<OrientationProjection<'_>>,
     generation_settings: &GenerationSettings,
@@ -166,6 +171,7 @@ fn export_graph(
                 forest_index,
                 &forest_name,
                 &mut graph,
+                model,
                 single_cut,
                 orientation,
                 generation_settings,
@@ -178,6 +184,7 @@ fn export_graph(
                 forest_index,
                 &forest_name,
                 &mut graph,
+                model,
                 single_cut,
                 orientation,
                 generation_settings,
@@ -202,6 +209,7 @@ fn export_legacy_forest(
     forest_index: usize,
     forest_name: &str,
     graph: &mut Graph,
+    model: &Model,
     cut_structure: CutStructure,
     orientation: Option<OrientationProjection<'_>>,
     generation_settings: &GenerationSettings,
@@ -210,7 +218,7 @@ fn export_legacy_forest(
     forest_dot: &mut String,
     node_terms: &mut Vec<UVForestNodeTerm>,
 ) -> Result<()> {
-    let cut_woods = CutWoods::new(cut_structure, graph, &generation_settings.uv);
+    let cut_woods = CutWoods::new(cut_structure, graph, model, &generation_settings.uv);
     let mut cut_forests = cut_woods.unfold(graph);
     let Some(forest) = cut_forests.forests.first_mut() else {
         return Err(eyre!("Legacy UV exporter produced no forest"));
@@ -225,7 +233,13 @@ fn export_legacy_forest(
     let orientation = orientation.ok_or_else(|| {
         eyre!("Computed UV forest export requires its stored production CFF expression")
     })?;
-    compute_legacy_forest(graph, &mut cut_forests, orientation, generation_settings)?;
+    compute_legacy_forest(
+        graph,
+        model,
+        &mut cut_forests,
+        orientation,
+        generation_settings,
+    )?;
     let forest = cut_forests
         .forests
         .first()
@@ -242,12 +256,14 @@ fn export_legacy_forest(
 
 fn compute_legacy_forest(
     graph: &mut Graph,
+    model: &Model,
     cut_forests: &mut CutForests,
     orientation: OrientationProjection<'_>,
     generation_settings: &GenerationSettings,
 ) -> Result<()> {
     cut_forests.compute(
         graph,
+        model,
         crate::utils::vakint()?,
         orientation,
         &generation_settings.uv,
@@ -259,6 +275,7 @@ fn export_hedge_poset_forest(
     forest_index: usize,
     forest_name: &str,
     graph: &mut Graph,
+    model: &Model,
     cut_structure: CutStructure,
     orientation: Option<OrientationProjection<'_>>,
     generation_settings: &GenerationSettings,
@@ -267,7 +284,7 @@ fn export_hedge_poset_forest(
     forest_dot: &mut String,
     node_terms: &mut Vec<UVForestNodeTerm>,
 ) -> Result<()> {
-    let wood = HedgePosetWood::new(cut_structure, graph, &generation_settings.uv);
+    let wood = HedgePosetWood::new(cut_structure, graph, model, &generation_settings.uv);
     let mut forests = wood.unfold();
     forest_dot.push_str(&name_dot_graph(forests.dot_serialize(), forest_name));
     forest_dot.push('\n');
@@ -278,6 +295,7 @@ fn export_hedge_poset_forest(
 
     forests.compute(
         graph,
+        model,
         crate::utils::vakint()?,
         orientation.ok_or_else(|| {
             eyre!("Computed UV forest export requires its stored production CFF expression")
@@ -406,8 +424,8 @@ mod tests {
     };
     use crate::{
         cff::CutCFFIndex,
-        dot,
-        graph::{FeynmanGraph, Graph, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::{Graph, parse::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         settings::global::GenerationSettings,
         utils::GS,
@@ -460,16 +478,18 @@ mod tests {
     #[test]
     fn computed_node_full_numerator_is_a_spenso_aware_typst_fragment() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph G {
+        let graph: Graph = finalized_runtime_dot!(digraph G {
+            graph [projector=1]
             ext [style=invis]
             node [num=1]
-            ext -> A
-            C -> A
-            A -> D
-            D -> B
-            B -> C
-            C -> D
-            B -> ext
+            edge [mass=0 num=1]
+            ext -> A [sink="{ufo_order:0}"]
+            C -> A [lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:1}"]
+            A -> D [source="{ufo_order:2}" sink="{ufo_order:0}"]
+            D -> B [source="{ufo_order:1}" sink="{ufo_order:0}"]
+            B -> C [source="{ufo_order:1}" sink="{ufo_order:1}"]
+            C -> D [lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:2}"]
+            B -> ext [source="{ufo_order:2}"]
         })
         .unwrap();
         let term = UVForestNodeExpression {

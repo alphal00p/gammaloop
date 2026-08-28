@@ -1802,11 +1802,11 @@ mod tests {
     use super::*;
     use crate::{
         cff::{expression::GammaLoopOrientationExpression, surface::GammaLoopSurfaceCache},
-        dot,
+        finalized_runtime_dot,
         graph::{
             ExactUvSubLmbFrame, FeynmanGraph, FourDDenominator,
             cuts::{CutSet, LuCutSelection},
-            parse::from_dot::IntoGraph,
+            parse::from_dot::IntoFinalizedRuntimeGraph,
         },
         initialisation::test_initialise,
         settings::global::{GenerationSettings, OrientationPattern},
@@ -2092,11 +2092,12 @@ mod tests {
     #[test]
     fn exact_cff_cache_preserves_occurrence_capacities() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_occurrence_cache {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_occurrence_cache {
+            graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            b -> a [id=1]
+            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
+            b -> a [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
         })?;
         let owners = [EdgeIndex(0), EdgeIndex(1)];
         let denominators = owners.map(|source_edge| FourDDenominator {
@@ -2157,19 +2158,20 @@ mod tests {
     #[test]
     fn exact_cff_batch_reuses_owner_relabelled_sub_lmb_topology() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph exact_owner_relabelled_cache {
+        let graph: Graph = finalized_runtime_dot!(digraph exact_owner_relabelled_cache {
+            graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1]
+            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
+            a -> b [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
         })?;
         let denominators = [EdgeIndex(0), EdgeIndex(1)].map(|source_edge| FourDDenominator {
             source_edge,
             momentum: FunctionBuilder::new(GS.emr_mom)
                 .add_arg(usize::from(source_edge))
                 .finish(),
-            mass_squared: graph.underlying[source_edge].mass_atom().pow(2),
+            mass_squared: graph.underlying[source_edge].mass_atom(&graph.model).pow(2),
             full_expr: Atom::one(),
         });
         let mut relabelled = denominators.clone();
@@ -2249,13 +2251,14 @@ mod tests {
         use three_dimensional_reps::CffGlobalPrefactorSign;
 
         test_initialise()?;
-        let graph: Graph = dot!(digraph bounded_exact_dispatch {
+        let graph: Graph = finalized_runtime_dot!(digraph bounded_exact_dispatch {
+            graph [projector="1"]
             edge [num=1 mass=2]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0]
-            b -> a [id=1]
-            a -> a [id=2 lmb_id=1]
+            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
+            b -> a [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
+            a -> a [source="{ufo_order:2}" sink="{ufo_order:3}" id=2 lmb_id=1]
         })?;
         let owners = [EdgeIndex(0), EdgeIndex(1), EdgeIndex(2)];
         let base = owners.map(|source_edge| FourDDenominator {
@@ -2266,7 +2269,7 @@ mod tests {
                 &[],
                 true,
             ),
-            mass_squared: graph.underlying[source_edge].mass_atom().pow(2),
+            mass_squared: graph.underlying[source_edge].mass_atom(&graph.model).pow(2),
             full_expr: Atom::one(),
         });
         let options = Generate3DExpressionOptions {
@@ -2384,7 +2387,7 @@ mod tests {
                     for physical in owners {
                         let on_shell_energy = (1..=3)
                             .fold(
-                                graph.underlying[physical].mass_atom().pow(2),
+                                graph.underlying[physical].mass_atom(&graph.model).pow(2),
                                 |square, spatial_index| {
                                     square
                                         + graph
@@ -2416,12 +2419,13 @@ mod tests {
     #[test]
     fn direct_cff_matches_signed_bubble_and_contracted_unit_contours() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph direct_duplicate_sign {
+        let mut graph: Graph = finalized_runtime_dot!(digraph direct_duplicate_sign {
+            graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1]
+            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
+            a -> b [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let cutset = CutSet::empty(graph.n_hedges());
@@ -2479,13 +2483,14 @@ mod tests {
     #[test]
     fn two_loop_cff_matches_signed_theta_contour() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph direct_two_loop_sign {
+        let mut graph: Graph = finalized_runtime_dot!(digraph direct_two_loop_sign {
+            graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
 
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1 lmb_id=1]
-            b -> a [id=2]
+            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
+            a -> b [source="{ufo_order:1}" sink="{ufo_order:1}" id=1 lmb_id=1]
+            b -> a [source="{ufo_order:2}" sink="{ufo_order:2}" id=2]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let cutset = CutSet::empty(graph.n_hedges());
@@ -2521,18 +2526,19 @@ mod tests {
     #[test]
     fn contracted_raised_generation_rejects_absent_emr_bound_without_aliasing() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph factorized_source_bounds {
+                graph [projector="1"]
                 edge [pdg=1000 num=1 mass=0]
                 node [num=1]
                 ext_in [style=invis]
                 ext_out [style=invis]
-                ext_in -> A [id=4]
-                C -> ext_out [id=5]
-                A -> B [id=0 num="Q(0,spenso::cind(0))+1"]
-                B -> C [id=1 num="Q(1,spenso::cind(0))+2"]
-                C -> D [id=2]
-                D -> A [id=3]
+                ext_in -> A [sink="{ufo_order:0}" id=4]
+                C -> ext_out [source="{ufo_order:0}" id=5]
+                A -> B [source="{ufo_order:1}" sink="{ufo_order:0}" id=0 lmb_id=0 num="Q(0,spenso::cind(0))+1"]
+                B -> C [source="{ufo_order:1}" sink="{ufo_order:1}" id=1 num="Q(1,spenso::cind(0))+2"]
+                C -> D [source="{ufo_order:2}" sink="{ufo_order:0}" id=2]
+                D -> A [source="{ufo_order:1}" sink="{ufo_order:2}" id=3]
             },
             "scalars"
         )?;
@@ -2561,12 +2567,13 @@ mod tests {
     #[test]
     fn selected_raw_cff_matches_normal_generation_after_discarding_a_trial() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph selected_raw_cff {
+        let mut graph: Graph = finalized_runtime_dot!(digraph selected_raw_cff {
+            graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
-            a -> b [id=0 lmb_id=0]
-            a -> b [id=1]
-            b -> b [id=2 lmb_id=1]
+            a -> b [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
+            a -> b [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
+            b -> b [source="{ufo_order:2}" sink="{ufo_order:3}" id=2 lmb_id=1]
         })?;
         let mut ordinary_graph = graph.clone();
         let contract = graph.get_edge_subgraph(EdgeIndex(2));
@@ -2642,17 +2649,18 @@ mod tests {
     #[test]
     fn raised_lu_cff_preserves_complete_production_residues() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph raised_lu {
+        let mut graph: Graph = finalized_runtime_dot!(digraph raised_lu {
+            graph [projector="1"]
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v1 [id=0]
-            v1 -> v2 [id=1 lmb_id=0]
-            v2 -> v3 [id=2]
-            v1 -> v3 [id=3]
-            v3 -> outgoing [id=4]
+            incoming -> v1 [sink="{ufo_order:0}" id=0]
+            v1 -> v2 [source="{ufo_order:1}" sink="{ufo_order:0}" id=1 lmb_id=0]
+            v2 -> v3 [source="{ufo_order:1}" sink="{ufo_order:0}" id=2]
+            v1 -> v3 [source="{ufo_order:2}" sink="{ufo_order:1}" id=3]
+            v3 -> outgoing [source="{ufo_order:2}" id=4]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let numerator = GS.emr_mom(EdgeIndex(1), GS.cind(0)).pow(2);
@@ -2738,17 +2746,18 @@ mod tests {
     #[test]
     fn exact_massless_raised_lu_cff_retains_selected_residue() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph exact_massless_raised_lu {
+        let mut graph: Graph = finalized_runtime_dot!(digraph exact_massless_raised_lu {
+            graph [projector="1"]
             edge [num=1 mass="UFO::ZERO"]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v1 [id=0]
-            v1 -> v2 [id=1 lmb_id=0]
-            v2 -> v3 [id=2]
-            v1 -> v3 [id=3]
-            v3 -> outgoing [id=4]
+            incoming -> v1 [sink="{ufo_order:0}" id=0]
+            v1 -> v2 [source="{ufo_order:1}" sink="{ufo_order:0}" id=1 lmb_id=0]
+            v2 -> v3 [source="{ufo_order:1}" sink="{ufo_order:0}" id=2]
+            v1 -> v3 [source="{ufo_order:2}" sink="{ufo_order:1}" id=3]
+            v3 -> outgoing [source="{ufo_order:2}" id=4]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let numerator = GS.emr_mom(EdgeIndex(1), GS.cind(0)).pow(2);
@@ -2789,7 +2798,7 @@ mod tests {
                 momentum: FunctionBuilder::new(GS.emr_mom)
                     .add_arg(usize::from(edge))
                     .finish(),
-                mass_squared: graph.underlying[edge].mass_atom().pow(2),
+                mass_squared: graph.underlying[edge].mass_atom(&graph.model).pow(2),
                 full_expr: Atom::one(),
             }
         });

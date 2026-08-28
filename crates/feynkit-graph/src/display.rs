@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, fmt::Write};
 
 use crate::{DiagramVertex, ExternalState, FeynmanDiagram, VertexId};
+use symbolica::atom::AtomCore;
 
 const EXTERNAL_Y_SCALE: f64 = 10.0;
 
@@ -23,10 +24,6 @@ fn typst_string(value: &str) -> String {
     }
     output.push('"');
     output
-}
-
-fn typst_optional_string(value: Option<&str>) -> String {
-    value.map_or_else(|| "none".to_owned(), typst_string)
 }
 
 fn centered_external_y(count: usize, rank: usize) -> f64 {
@@ -123,18 +120,27 @@ impl FeynmanDiagram {
 
         for (id, vertex) in &internal_vertices {
             let dense_id = internal_ids[id];
+            let interaction = vertex
+                .interaction
+                .and_then(|rule| self.model().vertex_rule_by_id(rule).ok())
+                .map(|rule| typst_string(&rule.name))
+                .unwrap_or_else(|| "none".to_owned());
             writeln!(
                 output,
                 "    node(<v{dense_id}>, id: {dense_id}, label: none, feynkit-id: {}, feynkit-name: {}, interaction: {}, numerator: {})",
                 id.0,
                 typst_string(&vertex.name),
-                typst_optional_string(vertex.interaction.as_deref()),
-                typst_optional_string(vertex.numerator.as_deref()),
+                interaction,
+                typst_string(&vertex.numerator.to_canonical_string()),
             )
             .expect("writing to a string cannot fail");
         }
 
         for (id, endpoints, edge) in self.edges() {
+            let particle = self
+                .model()
+                .particle_by_id(edge.particle)
+                .expect("validated diagram particle IDs resolve in the owned model");
             let source_internal = internal_ids.get(&endpoints.source).copied();
             let target_internal = internal_ids.get(&endpoints.target).copied();
             match (source_internal, target_internal) {
@@ -149,11 +155,11 @@ impl FeynmanDiagram {
                         "    edge(source(<v{source}>), <e{}>, sink(<v{target}>), id: {}, orientation: {orientation:?}, label: text({}), particle: {}, pdg: {}, directed: {}, numerator: {}, feynkit-source: {}, feynkit-target: {})",
                         id.0,
                         id.0,
-                        typst_string(&edge.particle.name),
-                        typst_string(&edge.particle.name),
-                        edge.particle.pdg,
+                        typst_string(&particle.name),
+                        typst_string(&particle.name),
+                        particle.pdg_code,
                         edge.directed,
-                        typst_optional_string(edge.numerator.as_deref()),
+                        typst_string(&edge.numerator.to_canonical_string()),
                         endpoints.source.0,
                         endpoints.target.0,
                     )
@@ -196,8 +202,7 @@ impl FeynmanDiagram {
                         ),
                     };
                     let y = centered_external_y(count, rank);
-                    let display_label =
-                        format!("{} ({})", edge.particle.name, external_vertex.name);
+                    let display_label = format!("{} ({})", particle.name, external_vertex.name);
                     let endpoint_spec = match external.state {
                         ExternalState::Incoming => format!("<e{}>, sink(<v{internal}>)", id.0),
                         ExternalState::Outgoing => format!("source(<v{internal}>), <e{}>", id.0),
@@ -207,10 +212,10 @@ impl FeynmanDiagram {
                         "    edge({endpoint_spec}, id: {}, orientation: {orientation:?}, label: text({}), label-anchor: {label_anchor:?}, particle: {}, pdg: {}, directed: {}, numerator: {}, external-state: {:?}, external-index: {}, external-name: {}, feynkit-source: {}, feynkit-target: {}, pos: graph.pos(x: graph.group({side:?}, side: {side_constraint:?}), y: graph.start({y:.1})))",
                         id.0,
                         typst_string(&display_label),
-                        typst_string(&edge.particle.name),
-                        edge.particle.pdg,
+                        typst_string(&particle.name),
+                        particle.pdg_code,
                         edge.directed,
-                        typst_optional_string(edge.numerator.as_deref()),
+                        typst_string(&edge.numerator.to_canonical_string()),
                         external.state.as_str(),
                         external.index,
                         typst_string(&external_vertex.name),
@@ -235,8 +240,8 @@ impl FeynmanDiagram {
             "  }}, name: {}, data: (symmetry-factor: {}, overall-factor: {}, numerator: {}, loop-count: {}))",
             typst_string(self.name()),
             self.symmetry_factor(),
-            typst_string(self.overall_factor()),
-            typst_optional_string(self.numerator()),
+            typst_string(&self.overall_factor().to_canonical_string()),
+            typst_string(&self.numerator().to_canonical_string()),
             self.loop_count(),
         )
         .expect("writing to a string cannot fail");
@@ -310,17 +315,47 @@ impl FeynmanDiagram {
 
 #[cfg(test)]
 mod tests {
-    use crate::{DiagramEdge, DiagramVertex, ExternalState, FeynmanDiagram, ParticleReference};
+    use std::sync::Arc;
+
+    use crate::{DiagramEdge, DiagramVertex, ExternalState, FeynmanDiagram};
+    use feynkit_model::Model;
+
+    fn display_model() -> Arc<Model> {
+        Arc::new(Model::from_json(
+            r#"{
+                "name":"display","restriction":null,"orders":[],
+                "parameters":[
+                    {"name":"ZERO","lhablock":null,"lhacode":null,"nature":"internal","parameter_type":"real","value":[0.0,0.0],"expression":null},
+                    {"name":"M","lhablock":"MASS","lhacode":[25],"nature":"external","parameter_type":"real","value":[1.0,0.0],"expression":null}
+                ],
+                "particles":[{"pdg_code":25,"name":"phi","antiname":"phi","spin":1,"color":1,"mass":"M","width":"ZERO","texname":"phi","antitexname":"phi","charge":0.0,"ghost_number":0,"lepton_number":0,"y_charge":0}],
+                "propagators":[{"name":"phi_prop","particle":"phi","numerator":"1","denominator":"P^2-M^2"}],
+                "lorentz_structures":[
+                    {"name":"L3","spins":[1,1,1],"structure":"1"},
+                    {"name":"L1","spins":[1],"structure":"1"}
+                ],
+                "couplings":[],
+                "vertex_rules":[
+                    {"name":"V_1","particles":["phi","phi","phi"],"color_structures":["1"],"lorentz_structures":["L3"],"couplings":[[null]]},
+                    {"name":"V_3","particles":["phi","phi","phi"],"color_structures":["1"],"lorentz_structures":["L3"],"couplings":[[null]]},
+                    {"name":"V\"1","particles":["phi"],"color_structures":["1"],"lorentz_structures":["L1"],"couplings":[[null]]}
+                ]
+            }"#,
+        ).unwrap())
+    }
 
     fn one_loop() -> FeynmanDiagram {
-        let mut builder = FeynmanDiagram::builder("bubble");
+        let model = display_model();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "bubble");
         let incoming =
             builder.add_vertex(DiagramVertex::external("p1", 0, ExternalState::Incoming));
         let outgoing =
             builder.add_vertex(DiagramVertex::external("p2", 1, ExternalState::Outgoing));
-        let left = builder.add_vertex(DiagramVertex::interaction("left", "V_1"));
-        let right = builder.add_vertex(DiagramVertex::interaction("right", "V_1"));
-        let scalar = || DiagramEdge::new(ParticleReference::new("phi", 25), false);
+        let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
+        let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
+        let scalar = || DiagramEdge::new(particle, false);
         builder.add_edge(incoming, left, scalar()).unwrap();
         builder.add_edge(left, right, scalar()).unwrap();
         builder.add_edge(left, right, scalar()).unwrap();
@@ -356,7 +391,10 @@ mod tests {
 
     #[test]
     fn sorts_external_legs_and_centers_each_side() {
-        let mut builder = FeynmanDiagram::builder("one-to-two");
+        let model = display_model();
+        let rule = model.vertex_rule_id("V_3").unwrap();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "one-to-two");
         let incoming =
             builder.add_vertex(DiagramVertex::external("in", 0, ExternalState::Incoming));
         let outgoing_high = builder.add_vertex(DiagramVertex::external(
@@ -369,8 +407,8 @@ mod tests {
             1,
             ExternalState::Outgoing,
         ));
-        let interaction = builder.add_vertex(DiagramVertex::interaction("v", "V_3"));
-        let scalar = || DiagramEdge::new(ParticleReference::new("phi", 25), false);
+        let interaction = builder.add_vertex(DiagramVertex::interaction("v", rule));
+        let scalar = || DiagramEdge::new(particle, false);
         builder.add_edge(incoming, interaction, scalar()).unwrap();
         builder
             .add_edge(interaction, outgoing_high, scalar())
@@ -389,16 +427,15 @@ mod tests {
 
     #[test]
     fn escapes_typst_strings_and_preserves_directed_orientation() {
-        let mut builder = FeynmanDiagram::builder("quote \" and \\ slash");
+        let model = display_model();
+        let rule = model.vertex_rule_id("V\"1").unwrap();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "quote \" and \\ slash");
         let incoming =
             builder.add_vertex(DiagramVertex::external("p\n1", 0, ExternalState::Incoming));
-        let interaction = builder.add_vertex(DiagramVertex::interaction("v", "V\"1"));
+        let interaction = builder.add_vertex(DiagramVertex::interaction("v", rule));
         builder
-            .add_edge(
-                interaction,
-                incoming,
-                DiagramEdge::new(ParticleReference::new("f\\\"", 1), true),
-            )
+            .add_edge(interaction, incoming, DiagramEdge::new(particle, true))
             .unwrap();
         let source = builder.build().unwrap().to_linnest();
 

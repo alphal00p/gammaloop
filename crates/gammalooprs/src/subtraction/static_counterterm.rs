@@ -10,7 +10,7 @@ use symbolica::domains::float::{NumericalFloatLike, Real};
 const MAX_ITERATIONS: usize = 40;
 const TOLERANCE: f64 = 1.0;
 
-use crate::cff::esurface::Esurface;
+use feynkit_cff::{EnergySurface, EnergySurfaceId};
 use crate::graph::BareGraph;
 use crate::momentum::{Rotatable, Rotation};
 
@@ -18,7 +18,7 @@ use crate::numerator::{Evaluators, Numerator};
 use crate::{
     cff::{
         esurface::{
-            compute_esurface_cache, EsurfaceCache, EsurfaceCollection, EsurfaceID,
+            compute_esurface_cache, EnergySurfaceCache, EnergySurfaceCollection,
             ExistingEsurfaceId, ExistingEsurfaces,
         },
         expression::CFFLimit,
@@ -54,7 +54,7 @@ pub struct CounterTerm {
 impl CounterTerm {
     pub(crate) fn print_debug_data(
         &self,
-        esurfaces: &EsurfaceCollection,
+        esurfaces: &EnergySurfaceCollection,
         external_momenta: &[FourMomentum<F<f64>>],
         lmb: &LoopMomentumBasis,
         real_mass_vector: &[F<f64>],
@@ -103,11 +103,11 @@ impl CounterTerm {
             .overlap_groups
             .iter()
             .map(|overlap_group| {
-                let esurface_ids = &overlap_group.existing_esurfaces;
+                let surface_ids = &overlap_group.existing_esurfaces;
                 existing_esurfaces
                     .iter_enumerated()
                     .map(|a| a.0)
-                    .filter(|id| !esurface_ids.contains(id))
+                    .filter(|id| !surface_ids.contains(id))
                     .collect_vec()
             })
             .collect_vec();
@@ -148,9 +148,9 @@ impl CounterTerm {
     // the multichanneling denominator will be evaluated at r*, so we can not use the cache.
     fn evaluate_multichanneling_denominator<T: FloatLike>(
         &self,
-        esurface_cache: &EsurfaceCache<F<T>>,
+        esurface_cache: &EnergySurfaceCache<F<T>>,
     ) -> F<T> {
-        let const_builder = &esurface_cache[EsurfaceID::from(0usize)];
+        let const_builder = &esurface_cache[EnergySurfaceId::from(0usize)];
 
         self.complements_of_overlap
             .iter()
@@ -169,7 +169,7 @@ impl CounterTerm {
     pub(crate) fn evaluate<T: FloatLike>(
         sample: &DefaultSample<T>,
         graph: &BareGraph,
-        esurfaces: &EsurfaceCollection,
+        esurfaces: &EnergySurfaceCollection,
         counterterm: &CounterTerm,
         numerator: &mut Numerator<Evaluators>,
         rotation_for_overlap: &Rotation,
@@ -314,7 +314,7 @@ struct CounterTermBuilder<'a, T: FloatLike> {
     counterterm: &'a CounterTerm,
     rotation_for_overlap: &'a Rotation,
     settings: &'a Settings,
-    esurface_collection: &'a EsurfaceCollection,
+    esurface_collection: &'a EnergySurfaceCollection,
     sample: &'a DefaultSample<T>,
     prefactor: Complex<F<T>>,
 }
@@ -322,7 +322,7 @@ struct CounterTermBuilder<'a, T: FloatLike> {
 impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
     fn new(
         graph: &'a BareGraph,
-        esurface_collection: &'a EsurfaceCollection,
+        esurface_collection: &'a EnergySurfaceCollection,
         counterterm: &'a CounterTerm,
         rotation_for_overlap: &'a Rotation,
         settings: &'a Settings,
@@ -446,7 +446,7 @@ impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
 struct EsurfaceCTBuilder<'a, T: FloatLike> {
     overlap_builder: &'a OverlapBuilder<'a, T>,
     existing_esurface_id: ExistingEsurfaceId,
-    esurface: &'a Esurface,
+    esurface: &'a EnergySurface,
 }
 
 impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {

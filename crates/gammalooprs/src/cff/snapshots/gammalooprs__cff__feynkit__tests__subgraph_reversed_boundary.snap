@@ -4,128 +4,118 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
 ---
 {
   "expression": {
-    "orientations": [
-      {
-        "data": {
-          "orientation": [
-            "Reversed",
-            "Default",
-            "Default",
-            "Undirected",
-            "Default"
-          ]
+    "expression": {
+      "orientations": [
+        {
+          "data": {
+            "orientation": [
+              "Reversed",
+              "Default",
+              "Default",
+              "Undirected",
+              "Default"
+            ]
+          },
+          "expression": {
+            "nodes": [
+              {
+                "children": [],
+                "data": {
+                  "H": 0
+                },
+                "id": 0,
+                "parent": null
+              }
+            ]
+          },
+          "id": 0
         },
-        "expression": {
-          "nodes": [
-            {
-              "children": [],
-              "data": {
-                "Hsurface": 0
-              },
-              "node_id": 0,
-              "parent": null
-            }
-          ]
+        {
+          "data": {
+            "orientation": [
+              "Reversed",
+              "Default",
+              "Reversed",
+              "Undirected",
+              "Default"
+            ]
+          },
+          "expression": {
+            "nodes": [
+              {
+                "children": [],
+                "data": {
+                  "Energy": 0
+                },
+                "id": 0,
+                "parent": null
+              }
+            ]
+          },
+          "id": 1
         }
-      },
-      {
-        "data": {
-          "orientation": [
-            "Reversed",
-            "Default",
-            "Reversed",
-            "Undirected",
-            "Default"
-          ]
-        },
-        "expression": {
-          "nodes": [
-            {
-              "children": [],
-              "data": {
-                "Esurface": 0
-              },
-              "node_id": 0,
-              "parent": null
-            }
-          ]
-        }
-      }
-    ],
+      ]
+    },
+    "report": {
+      "acyclic_orientations": 2,
+      "candidate_orientations": 2,
+      "interned_surfaces": 2,
+      "unfolded_terms": 2
+    },
     "surfaces": {
-      "esurface_cache": [
+      "energy_surfaces": [
         {
           "energies": [
             0,
             2
           ],
-          "external_shift": [
-            [
-              4,
-              1
-            ]
-          ],
-          "vertex_set": {
-            "vertex_set": 1
-          }
+          "external_shift": {
+            "4": 1
+          },
+          "vertex_set": 1
         }
       ],
-      "hsurface_cache": [
+      "h_surfaces": [
         {
-          "external_shift": [
-            [
-              4,
-              -1
-            ]
-          ],
+          "external_shift": {
+            "4": -1
+          },
           "negative_energies": [
             0
           ],
           "positive_energies": [
             2
           ],
-          "vertex_set": {
-            "vertex_set": 1
-          }
+          "vertex_set": 1
         }
       ]
     }
   },
   "surface_cache": {
-    "esurface_cache": [
+    "energy_surfaces": [
       {
         "energies": [
           0,
           2
         ],
-        "external_shift": [
-          [
-            4,
-            1
-          ]
-        ],
-        "vertex_set": {
-          "vertex_set": 1
-        }
+        "external_shift": {
+          "4": 1
+        },
+        "vertex_set": 1
       }
     ],
-    "hsurface_cache": [
+    "h_surfaces": [
       {
-        "external_shift": [
-          [
-            4,
-            -1
-          ]
-        ],
+        "external_shift": {
+          "4": -1
+        },
         "negative_energies": [
           0
         ],
         "positive_energies": [
           2
         ],
-        "vertex_set": {
-          "vertex_set": 1
-        }
+        "vertex_set": 1
       }
     ]
   }

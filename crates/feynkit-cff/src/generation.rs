@@ -1,22 +1,29 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use feynkit_graph::FeynmanDiagram;
+use linnet::half_edge::{
+    HedgeGraph, NodeIndex,
+    involution::{EdgeIndex, Flow, HedgePair, Orientation},
+    nodestore::NodeStorageOps,
+    subgraph::SubGraphLike,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    CffError, CffExpression, CffGraph, EdgeFlow, EdgeId, EdgeKind, EdgeOrientation, EnergySurface,
-    ExpressionTree, ExternalShift, GraphOrientation, HSurface, OrientationExpression,
-    OrientationId, Surface, SurfaceCache, SurfaceId, VertexId, VertexSet,
+    CffEdge, CffError, CffExpression, CffGraph, EdgeFlow, EdgeId, EdgeKind, EdgeOrientation,
+    EnergySurface, ExpressionTree, ExternalShift, GraphOrientation, HSurface, OrientationData,
+    OrientationExpression, OrientationId, Surface, SurfaceCache, SurfaceId, VertexId, VertexSet,
 };
 
 /// Replace one dependent external momentum by a canonical linear combination.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct ShiftRewrite {
     pub dependent_momentum: EdgeId,
     pub replacement: ExternalShift,
 }
 
 /// Explicit controls for topology-only CFF generation.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct CffOptions {
     fixed_orientations: BTreeMap<EdgeId, EdgeOrientation>,
     contracted_edges: BTreeSet<EdgeId>,
@@ -86,7 +93,18 @@ impl CffOptions {
 }
 
 /// Summary of the finite combinatorial search performed by a generator call.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode::Encode,
+    bincode::Decode,
+)]
 pub struct CffReport {
     pub candidate_orientations: usize,
     pub acyclic_orientations: usize,
@@ -95,20 +113,351 @@ pub struct CffReport {
 }
 
 /// Typed CFF expression together with its generation-local surfaces and report.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct CffResult {
     pub expression: CffExpression,
     pub surfaces: SurfaceCache,
     pub report: CffReport,
 }
 
+impl std::ops::Deref for CffResult {
+    type Target = CffExpression;
+
+    fn deref(&self) -> &Self::Target {
+        &self.expression
+    }
+}
+
+impl std::ops::DerefMut for CffResult {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.expression
+    }
+}
+
+impl CffResult {
+    /// Select every non-zero residue order while retaining this result's arena.
+    pub fn select_energy_surface_residue(
+        &self,
+        group: &crate::RaisedEnergySurfaceGroup,
+    ) -> Vec<Self> {
+        self.expression
+            .select_energy_surface_residue(group)
+            .into_iter()
+            .map(|expression| Self {
+                expression,
+                surfaces: self.surfaces.clone(),
+                report: self.report,
+            })
+            .collect()
+    }
+
+    pub fn normalize_raised_surfaces(&mut self, raised: &crate::RaisedEnergySurfaceData) {
+        self.expression.normalize_raised_surfaces(raised);
+    }
+}
+
+/// A generated expression whose IDs refer to a caller-owned [`SurfaceCache`].
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+pub struct CffGeneration {
+    pub expression: CffExpression,
+    pub report: CffReport,
+}
+
 /// Reusable CFF generator configuration.
 ///
-/// Surface caches are intentionally not stored here. Every call creates a new
-/// cache, so identifiers in a result cannot depend on earlier generations.
+/// Surface caches are intentionally not stored here. [`Self::generate`] creates
+/// a fresh arena, while [`Self::generate_into`] makes reuse of a caller-owned
+/// arena explicit.
 #[derive(Clone, Debug, Default)]
 pub struct CffGenerator {
     options: CffOptions,
+}
+
+/// CFF construction directly on FeynKit diagrams without wrapping the graph type.
+pub trait FeynmanDiagramCffExt {
+    fn build_cff(&self, options: CffOptions) -> Result<CffResult, CffError>;
+}
+
+impl FeynmanDiagramCffExt for FeynmanDiagram {
+    fn build_cff(&self, options: CffOptions) -> Result<CffResult, CffError> {
+        let graph = CffGraph::try_from(self)?;
+        CffGenerator::new(options).generate(&graph)
+    }
+}
+
+/// CFF construction directly on a selected Linnet topology.
+///
+/// The selected vertices retain their original Linnet identities in every
+/// generated surface, and orientations remain indexed by the original edge
+/// IDs. `reversed_dangling` changes the flow of boundary edges produced by the
+/// selection. Initial-state edges and shift rewrites are supplied through
+/// [`CffOptions`]. The caller owns `cache`; the returned result contains a
+/// snapshot of that arena after generation.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HedgeEdgeRole {
+    /// Include the edge with the role implied by its Linnet topology.
+    #[default]
+    Standard,
+    /// Leave the edge out of CFF topology and return it as undirected.
+    Omitted,
+    /// Include an unpaired external edge in CFF surfaces but leave its output
+    /// orientation undirected.
+    UnorientedExternal,
+    /// Treat a paired edge as a sewn initial-state connection.
+    InitialState,
+}
+
+pub trait HedgeGraphCffExt {
+    fn build_cff_from_subgraph<S: SubGraphLike>(
+        &self,
+        subgraph: &S,
+        options: CffOptions,
+        reversed_dangling: &[EdgeId],
+        cache: &mut SurfaceCache,
+    ) -> Result<CffResult, CffError>;
+
+    /// Build CFF while assigning application-specific roles to selected edges.
+    ///
+    /// The callback classifies original Linnet edge IDs without constructing an
+    /// intermediate graph wrapper. This is useful for finalized runtime graphs
+    /// that retain bookkeeping edges which must not participate in CFF, or sewn
+    /// initial-state edges which contribute shifts but no generated orientation.
+    fn build_cff_from_subgraph_with_edge_roles<S, F>(
+        &self,
+        subgraph: &S,
+        options: CffOptions,
+        reversed_dangling: &[EdgeId],
+        edge_role: F,
+        cache: &mut SurfaceCache,
+    ) -> Result<CffResult, CffError>
+    where
+        S: SubGraphLike,
+        F: FnMut(EdgeId) -> HedgeEdgeRole;
+}
+
+impl<E, V, H, N> HedgeGraphCffExt for HedgeGraph<E, V, H, N>
+where
+    N: NodeStorageOps<NodeData = V>,
+{
+    fn build_cff_from_subgraph<S: SubGraphLike>(
+        &self,
+        subgraph: &S,
+        options: CffOptions,
+        reversed_dangling: &[EdgeId],
+        cache: &mut SurfaceCache,
+    ) -> Result<CffResult, CffError> {
+        self.build_cff_from_subgraph_with_edge_roles(
+            subgraph,
+            options,
+            reversed_dangling,
+            |_| HedgeEdgeRole::Standard,
+            cache,
+        )
+    }
+
+    fn build_cff_from_subgraph_with_edge_roles<S, F>(
+        &self,
+        subgraph: &S,
+        options: CffOptions,
+        reversed_dangling: &[EdgeId],
+        edge_role: F,
+        cache: &mut SurfaceCache,
+    ) -> Result<CffResult, CffError>
+    where
+        S: SubGraphLike,
+        F: FnMut(EdgeId) -> HedgeEdgeRole,
+    {
+        let input = HedgeSubgraphCffInput::new(self, subgraph, reversed_dangling, edge_role)?;
+        let contracted_edges = options.contracted_edges().clone();
+        let generation = CffGenerator::new(options).generate_into(&input.graph, cache)?;
+        let mut expression = generation.expression;
+
+        for orientation in expression.orientations_mut() {
+            for edge in &input.internal_edges {
+                if contracted_edges.contains(edge) {
+                    continue;
+                }
+                match orientation.data.orientation.get(*edge) {
+                    Some(EdgeOrientation::Default | EdgeOrientation::Reversed) => {}
+                    Some(EdgeOrientation::Undirected) | None => {
+                        return Err(CffError::Invariant(format!(
+                            "generated orientation does not direct represented edge {edge}"
+                        )));
+                    }
+                }
+            }
+
+            orientation.data.orientation = self.new_edgevec(|_, edge, _| {
+                if !input.represented_edges.contains(&edge) {
+                    return Orientation::Undirected;
+                }
+                if contracted_edges.contains(&edge)
+                    || input.unoriented_external_edges.contains(&edge)
+                {
+                    return Orientation::Undirected;
+                }
+                if input.reversed_boundary_edges.contains(&edge) {
+                    return Orientation::Reversed;
+                }
+                match orientation.data.orientation.get(edge) {
+                    Some(EdgeOrientation::Reversed) if input.internal_edges.contains(&edge) => {
+                        Orientation::Reversed
+                    }
+                    _ => Orientation::Default,
+                }
+            });
+        }
+
+        Ok(CffResult {
+            expression,
+            surfaces: cache.clone(),
+            report: generation.report,
+        })
+    }
+}
+
+struct HedgeSubgraphCffInput {
+    graph: CffGraph,
+    represented_edges: BTreeSet<EdgeIndex>,
+    internal_edges: BTreeSet<EdgeIndex>,
+    reversed_boundary_edges: BTreeSet<EdgeIndex>,
+    unoriented_external_edges: BTreeSet<EdgeIndex>,
+}
+
+impl HedgeSubgraphCffInput {
+    fn new<E, V, H, N, S, F>(
+        graph: &HedgeGraph<E, V, H, N>,
+        subgraph: &S,
+        reversed_dangling: &[EdgeId],
+        mut edge_role: F,
+    ) -> Result<Self, CffError>
+    where
+        N: NodeStorageOps<NodeData = V>,
+        S: SubGraphLike,
+        F: FnMut(EdgeId) -> HedgeEdgeRole,
+    {
+        let mut original_vertices = graph
+            .iter_nodes_of(subgraph)
+            .map(|(vertex, _, _)| vertex)
+            .collect::<Vec<_>>();
+        original_vertices.sort_unstable();
+        if let Some(vertex) = original_vertices
+            .iter()
+            .find(|vertex| vertex.0 >= u64::BITS as usize)
+        {
+            return Err(CffError::VertexIdentityOutOfRange {
+                vertex: *vertex,
+                maximum: u64::BITS as usize - 1,
+            });
+        }
+
+        let dense_vertices = original_vertices
+            .iter()
+            .enumerate()
+            .map(|(dense, original)| (*original, VertexId::new(dense)))
+            .collect::<BTreeMap<_, _>>();
+        let dense_vertex = |vertex: NodeIndex, edge: EdgeIndex| {
+            dense_vertices
+                .get(&vertex)
+                .copied()
+                .ok_or(CffError::SubgraphEndpointOutsideSelection { edge, vertex })
+        };
+
+        let reversed_dangling = reversed_dangling.iter().copied().collect::<BTreeSet<_>>();
+        let mut edges = Vec::new();
+        let mut represented_edges = BTreeSet::new();
+        let mut internal_edges = BTreeSet::new();
+        let mut reversed_boundary_edges = BTreeSet::new();
+        let mut unoriented_external_edges = BTreeSet::new();
+        for (pair, edge, _) in graph.iter_edges_of(subgraph) {
+            let role = edge_role(edge);
+            if role == HedgeEdgeRole::Omitted {
+                continue;
+            }
+            represented_edges.insert(edge);
+            let cff_edge = match (role, pair) {
+                (HedgeEdgeRole::Standard, HedgePair::Unpaired { hedge, flow }) => {
+                    CffEdge::external(
+                        edge,
+                        dense_vertex(graph.node_id(hedge), edge)?,
+                        match flow {
+                            Flow::Sink => EdgeFlow::Incoming,
+                            Flow::Source => EdgeFlow::Outgoing,
+                        },
+                    )
+                }
+                (HedgeEdgeRole::UnorientedExternal, HedgePair::Unpaired { hedge, flow }) => {
+                    unoriented_external_edges.insert(edge);
+                    CffEdge::external(
+                        edge,
+                        dense_vertex(graph.node_id(hedge), edge)?,
+                        match flow {
+                            Flow::Sink => EdgeFlow::Incoming,
+                            Flow::Source => EdgeFlow::Outgoing,
+                        },
+                    )
+                }
+                (HedgeEdgeRole::Standard, HedgePair::Paired { source, sink }) => {
+                    internal_edges.insert(edge);
+                    CffEdge::internal(
+                        edge,
+                        dense_vertex(graph.node_id(source), edge)?,
+                        dense_vertex(graph.node_id(sink), edge)?,
+                    )
+                }
+                (
+                    HedgeEdgeRole::Standard,
+                    HedgePair::Split {
+                        source,
+                        sink,
+                        split,
+                    },
+                ) => {
+                    let reversed = reversed_dangling.contains(&edge);
+                    if reversed {
+                        reversed_boundary_edges.insert(edge);
+                    }
+                    let (vertex, flow) = match (split, reversed) {
+                        (Flow::Source, false) => (graph.node_id(source), EdgeFlow::Outgoing),
+                        (Flow::Source, true) => (graph.node_id(source), EdgeFlow::Incoming),
+                        (Flow::Sink, false) => (graph.node_id(sink), EdgeFlow::Incoming),
+                        (Flow::Sink, true) => (graph.node_id(sink), EdgeFlow::Outgoing),
+                    };
+                    CffEdge::boundary(edge, dense_vertex(vertex, edge)?, flow)
+                }
+                (HedgeEdgeRole::InitialState, HedgePair::Paired { source, sink }) => {
+                    CffEdge::initial_state(
+                        edge,
+                        dense_vertex(graph.node_id(source), edge)?,
+                        dense_vertex(graph.node_id(sink), edge)?,
+                    )
+                }
+                (HedgeEdgeRole::InitialState, _) => {
+                    return Err(CffError::Invariant(format!(
+                        "initial-state edge {edge} is not paired"
+                    )));
+                }
+                (HedgeEdgeRole::UnorientedExternal, _) => {
+                    return Err(CffError::Invariant(format!(
+                        "unoriented external edge {edge} is not unpaired"
+                    )));
+                }
+                (HedgeEdgeRole::Omitted, _) => unreachable!("omitted edges are skipped"),
+            };
+            edges.push(cff_edge);
+        }
+
+        let vertex_sets = original_vertices
+            .iter()
+            .map(|vertex| VertexSet::from_usize(vertex.0));
+        Ok(Self {
+            graph: CffGraph::with_vertex_sets(vertex_sets, edges)?,
+            represented_edges,
+            internal_edges,
+            reversed_boundary_edges,
+            unoriented_external_edges,
+        })
+    }
 }
 
 impl CffGenerator {
@@ -121,18 +470,35 @@ impl CffGenerator {
     }
 
     pub fn generate(&self, graph: &CffGraph) -> Result<CffResult, CffError> {
-        self.validate_options(graph)?;
+        let mut surfaces = SurfaceCache::default();
+        let generation = self.generate_into(graph, &mut surfaces)?;
+        Ok(CffResult {
+            expression: generation.expression,
+            surfaces,
+            report: generation.report,
+        })
+    }
 
-        let mut seed_orientation = graph
-            .edges()
-            .iter()
-            .map(|edge| (edge.id, EdgeOrientation::Default))
-            .collect::<BTreeMap<_, _>>();
-        let mut seed =
-            WorkingGraph::from_graph(graph, GraphOrientation::new(seed_orientation.clone()));
+    /// Generate into a caller-owned arena so related expressions can share surface IDs.
+    pub fn generate_into(
+        &self,
+        graph: &CffGraph,
+        cache: &mut SurfaceCache,
+    ) -> Result<CffGeneration, CffError> {
+        self.validate_options(graph)?;
+        let initial_surface_count = cache.len();
+
+        let mut seed_orientation = GraphOrientation::from_iter(std::iter::repeat_n(
+            EdgeOrientation::Undirected,
+            graph.edge_count(),
+        ));
+        for edge in graph.edges() {
+            seed_orientation[edge.id] = EdgeOrientation::Default;
+        }
+        let mut seed = WorkingGraph::from_graph(graph, seed_orientation.clone());
         for edge in &self.options.contracted_edges {
             seed.contract_edge(*edge)?;
-            seed_orientation.insert(*edge, EdgeOrientation::Undirected);
+            seed_orientation[*edge] = EdgeOrientation::Undirected;
         }
 
         let remaining_internal = seed.internal_edge_ids();
@@ -153,12 +519,11 @@ impl CffGenerator {
             });
         }
 
-        let mut cache = SurfaceCache::default();
         let mut orientations = Vec::new();
         for identifier in 0..candidate_count {
             let mut orientation = seed_orientation.clone();
             for (edge, fixed) in &self.options.fixed_orientations {
-                orientation.insert(*edge, *fixed);
+                orientation[*edge] = *fixed;
             }
             for (bit, edge) in free_edges.iter().enumerate() {
                 let direction = if identifier & (1_usize << bit) == 0 {
@@ -166,10 +531,9 @@ impl CffGenerator {
                 } else {
                     EdgeOrientation::Reversed
                 };
-                orientation.insert(*edge, direction);
+                orientation[*edge] = direction;
             }
 
-            let orientation = GraphOrientation::new(orientation);
             let mut oriented_graph = seed.clone();
             oriented_graph.apply_orientation(orientation.clone());
             if oriented_graph.has_directed_cycle() {
@@ -177,10 +541,10 @@ impl CffGenerator {
             }
 
             let id = OrientationId(orientations.len());
-            let expression = self.generate_tree(oriented_graph, &mut cache, identifier)?;
+            let expression = self.generate_tree(oriented_graph, cache, identifier)?;
             orientations.push(OrientationExpression {
                 id,
-                orientation,
+                data: OrientationData { orientation },
                 expression,
             });
         }
@@ -190,13 +554,9 @@ impl CffGenerator {
             candidate_orientations: candidate_count,
             acyclic_orientations: expression.orientations().len(),
             unfolded_terms: expression.unfolded_term_count(),
-            interned_surfaces: cache.len(),
+            interned_surfaces: cache.len() - initial_surface_count,
         };
-        Ok(CffResult {
-            expression,
-            surfaces: cache,
-            report,
-        })
+        Ok(CffGeneration { expression, report })
     }
 
     fn validate_options(&self, graph: &CffGraph) -> Result<(), CffError> {
@@ -231,8 +591,8 @@ impl CffGenerator {
                 return Err(CffError::UnknownEdge(rewrite.dependent_momentum));
             }
             for (edge, _) in rewrite.replacement.iter() {
-                if graph.edge(edge).is_none() {
-                    return Err(CffError::UnknownEdge(edge));
+                if graph.edge(*edge).is_none() {
+                    return Err(CffError::UnknownEdge(*edge));
                 }
             }
         }
@@ -416,9 +776,12 @@ struct WorkingGraph {
 
 impl WorkingGraph {
     fn from_graph(graph: &CffGraph, orientation: GraphOrientation) -> Self {
-        let mut vertices = (0..graph.vertex_count())
-            .map(|vertex| WorkingVertex {
-                vertices: VertexSet::singleton(VertexId::new(vertex)),
+        let mut vertices = graph
+            .vertex_sets()
+            .iter()
+            .copied()
+            .map(|vertices| WorkingVertex {
+                vertices,
                 incoming: Vec::new(),
                 outgoing: Vec::new(),
             })
@@ -454,6 +817,14 @@ impl WorkingGraph {
                         flow,
                     );
                 }
+                EdgeKind::InitialState { source, sink } => {
+                    let edge = WorkingEdge {
+                        id: edge.id,
+                        kind: WorkingEdgeKind::External,
+                    };
+                    Self::attach(&mut vertices[source.index()], edge, EdgeFlow::Outgoing);
+                    Self::attach(&mut vertices[sink.index()], edge, EdgeFlow::Incoming);
+                }
             }
         }
         Self {
@@ -471,7 +842,7 @@ impl WorkingGraph {
 
     fn apply_orientation(&mut self, orientation: GraphOrientation) {
         for (edge, direction) in orientation.iter() {
-            if direction != EdgeOrientation::Reversed {
+            if *direction != EdgeOrientation::Reversed {
                 continue;
             }
             for vertex in &mut self.vertices {
@@ -775,7 +1146,7 @@ impl WorkingGraph {
             return Ok(Surface::Energy(EnergySurface {
                 energies: positive_energies,
                 external_shift,
-                vertices: vertex.vertices,
+                vertex_set: vertex.vertices,
             }));
         }
 
@@ -822,7 +1193,7 @@ impl WorkingGraph {
             positive_energies,
             negative_energies,
             external_shift,
-            vertices: vertex.vertices,
+            vertex_set: vertex.vertices,
         }))
     }
 }
@@ -874,7 +1245,7 @@ fn move_initial_state_energies(
                 Ok(Surface::Energy(EnergySurface {
                     energies: surface.positive_energies,
                     external_shift: surface.external_shift,
-                    vertices: surface.vertices,
+                    vertex_set: surface.vertex_set,
                 }))
             } else {
                 Ok(Surface::H(surface))
@@ -886,10 +1257,15 @@ fn move_initial_state_energies(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
-    use crate::CffEdge;
-    use feynkit_graph::{
-        DiagramEdge, DiagramVertex, ExternalState, FeynmanDiagram, ParticleReference,
+    use crate::{CffEdge, VertexId};
+    use feynkit_graph::{DiagramEdge, DiagramVertex, ExternalState, FeynmanDiagram};
+    use feynkit_model::Model;
+    use linnet::{
+        half_edge::subgraph::{ModifySubSet, SuBitGraph},
+        parser::DotGraph,
     };
 
     fn edge(index: usize) -> EdgeId {
@@ -980,6 +1356,58 @@ mod tests {
     }
 
     #[test]
+    fn shared_arena_preserves_existing_expression_ids_and_raised_data() {
+        let generator = CffGenerator::default();
+        let mut surfaces = SurfaceCache::default();
+        let first = generator.generate_into(&bubble(), &mut surfaces).unwrap();
+        let first_expression = first.expression.clone();
+        let first_ids = first_expression
+            .orientations()
+            .iter()
+            .flat_map(|orientation| orientation.expression.nodes())
+            .map(|node| node.data)
+            .collect::<BTreeSet<_>>();
+        let first_resolved = first_ids
+            .iter()
+            .map(|id| (*id, surfaces.get(*id).unwrap()))
+            .collect::<Vec<_>>();
+        let representative = |edge| {
+            if edge == EdgeId::new(3) {
+                EdgeId::new(2)
+            } else {
+                edge
+            }
+        };
+        let raised_before = first_expression
+            .raised_energy_surfaces(&surfaces, representative)
+            .unwrap();
+        let first_surface_count = surfaces.len();
+
+        let triangle = CffGraph::new(
+            3,
+            [
+                CffEdge::internal(edge(4), vertex(0), vertex(1)),
+                CffEdge::internal(edge(5), vertex(1), vertex(2)),
+                CffEdge::internal(edge(6), vertex(0), vertex(2)),
+            ],
+        )
+        .unwrap();
+        generator.generate_into(&triangle, &mut surfaces).unwrap();
+
+        assert!(surfaces.len() > first_surface_count);
+        assert_eq!(first.expression, first_expression);
+        assert_eq!(
+            first_expression
+                .raised_energy_surfaces(&surfaces, representative)
+                .unwrap(),
+            raised_before
+        );
+        for (id, surface) in first_resolved {
+            assert_eq!(surfaces.get(id), Some(surface));
+        }
+    }
+
+    #[test]
     fn boundary_edges_generate_h_surfaces() {
         let graph = CffGraph::new(
             2,
@@ -1060,25 +1488,155 @@ mod tests {
 
     #[test]
     fn generates_from_a_feynman_diagram_conversion() {
-        let mut builder = FeynmanDiagram::builder("bubble");
+        let model = Arc::new(
+            Model::from_json(include_str!(
+                "../../feynkit-model/tests/fixtures/scalars_2p_3p.json"
+            ))
+            .unwrap(),
+        );
+        let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "bubble");
         let incoming =
             builder.add_vertex(DiagramVertex::external("p1", 0, ExternalState::Incoming));
         let outgoing =
             builder.add_vertex(DiagramVertex::external("p2", 1, ExternalState::Outgoing));
-        let left = builder.add_vertex(DiagramVertex::interaction("left", "V_1"));
-        let right = builder.add_vertex(DiagramVertex::interaction("right", "V_1"));
-        let scalar = || DiagramEdge::new(ParticleReference::new("phi", 25), false);
+        let rule = model.vertex_rule_id("V_3_SCALAR_000").unwrap();
+        let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
+        let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
+        let scalar = || DiagramEdge::new(model.particle_id("scalar_0").unwrap(), false);
         builder.add_edge(incoming, left, scalar()).unwrap();
         builder.add_edge(left, right, scalar()).unwrap();
         builder.add_edge(left, right, scalar()).unwrap();
         builder.add_edge(right, outgoing, scalar()).unwrap();
         let diagram = builder.build().unwrap();
 
-        let graph = CffGraph::try_from(&diagram).unwrap();
-        let result = CffGenerator::default().generate(&graph).unwrap();
+        let result = diagram.build_cff(CffOptions::default()).unwrap();
 
         assert_eq!(result.report.candidate_orientations, 4);
         assert_eq!(result.report.acyclic_orientations, 2);
         assert_eq!(result.report.unfolded_terms, 2);
+    }
+
+    #[test]
+    fn linnet_subgraph_keeps_original_ids_boundary_flow_and_caller_cache() {
+        let graph: DotGraph = DotGraph::from_string(
+            r#"
+            digraph triangle {
+                ext_in [style=invis]
+                ext_out [style=invis]
+                A [id=0]
+                B [id=1]
+                C [id=2]
+                A -> C [id=0]
+                B -> C [id=1]
+                A -> B [id=2]
+                C -> ext_out [id=3]
+                ext_in -> A [id=4]
+            }
+            "#,
+        )
+        .unwrap();
+        let mut selected: SuBitGraph = graph.empty_subgraph();
+        for (_, neighbours, vertex) in graph.iter_nodes() {
+            if matches!(vertex.name(), Some("B" | "C")) {
+                neighbours.for_each(|hedge| selected.add(hedge));
+            }
+        }
+
+        let mut cache = SurfaceCache::default();
+        cache.intern(Surface::Energy(EnergySurface {
+            energies: vec![edge(99)],
+            external_shift: ExternalShift::default(),
+            vertex_set: VertexSet::dummy(),
+        }));
+        let result = graph
+            .build_cff_from_subgraph(
+                &selected,
+                CffOptions::default().with_initial_state_edge(edge(1)),
+                &[edge(2)],
+                &mut cache,
+            )
+            .unwrap();
+
+        assert_eq!(result.surfaces, cache);
+        assert!(cache.len() > 1);
+        for orientation in result.orientations() {
+            assert_eq!(orientation.data.orientation[edge(2)], Orientation::Reversed);
+            assert_eq!(
+                orientation.data.orientation[edge(4)],
+                Orientation::Undirected
+            );
+            assert_ne!(
+                orientation.data.orientation[edge(1)],
+                Orientation::Undirected
+            );
+        }
+        assert!(cache.energy_surfaces().iter().skip(1).all(|surface| {
+            !surface.energies.contains(&edge(1))
+                && surface
+                    .vertex_set
+                    .iter()
+                    .all(|vertex| [1, 2].contains(&vertex.0))
+        }));
+        assert!(cache.h_surfaces().iter().all(|surface| {
+            !surface.positive_energies.contains(&edge(1))
+                && !surface.negative_energies.contains(&edge(1))
+                && surface
+                    .vertex_set
+                    .iter()
+                    .all(|vertex| [1, 2].contains(&vertex.0))
+        }));
+        assert!(
+            cache
+                .energy_surfaces()
+                .iter()
+                .skip(1)
+                .any(|surface| surface.external_shift.get(edge(1)) != 0)
+                || cache
+                    .h_surfaces()
+                    .iter()
+                    .any(|surface| surface.external_shift.get(edge(1)) != 0)
+        );
+    }
+
+    #[test]
+    fn linnet_edge_roles_cover_runtime_bookkeeping_without_an_adapter_graph() {
+        let graph: DotGraph = DotGraph::from_string(
+            r#"
+            digraph bubble {
+                ext_in [style=invis]
+                ext_out [style=invis]
+                ext_in -> A [id=2]
+                B -> ext_out [id=3]
+                A -> B [id=0]
+                A -> B [id=1]
+                A -> B [id=4]
+            }
+            "#,
+        )
+        .unwrap();
+        let mut cache = SurfaceCache::default();
+        let result = graph
+            .build_cff_from_subgraph_with_edge_roles(
+                &graph.full_filter(),
+                CffOptions::default().with_contracted_edge(edge(0)),
+                &[],
+                |id| match id.index() {
+                    1 => HedgeEdgeRole::InitialState,
+                    2 | 3 => HedgeEdgeRole::UnorientedExternal,
+                    4 => HedgeEdgeRole::Omitted,
+                    _ => HedgeEdgeRole::Standard,
+                },
+                &mut cache,
+            )
+            .unwrap();
+
+        assert_eq!(result.report.candidate_orientations, 1);
+        assert_eq!(result.orientations().len(), 1);
+        let orientation = &result.orientations()[0].data.orientation;
+        assert_eq!(orientation[edge(0)], Orientation::Undirected);
+        assert_eq!(orientation[edge(1)], Orientation::Default);
+        assert_eq!(orientation[edge(2)], Orientation::Undirected);
+        assert_eq!(orientation[edge(3)], Orientation::Undirected);
+        assert_eq!(orientation[edge(4)], Orientation::Undirected);
     }
 }

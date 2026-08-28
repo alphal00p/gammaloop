@@ -1,8 +1,9 @@
 //! Standalone particle-physics model types.
 //!
 //! This crate owns the validated, serializable model representation shared by
-//! feynkit consumers. Expressions intentionally remain strings here: parsing
-//! them into a particular symbolic algebra belongs to downstream crates.
+//! feynkit consumers. Import DTOs retain the strings used by UFO/JSON files,
+//! while validated model records own parsed Symbolica expressions and typed
+//! identifiers for every cross-reference.
 
 #![forbid(unsafe_code)]
 
@@ -14,10 +15,12 @@ mod model;
 pub use card::{ComplexValue, ParameterCard};
 pub use error::{EntityKind, ModelError, ModelValidationError};
 pub use evaluation::{
-    EvaluatedValues, EvaluationRequest, ModelEvaluator, ModelExpression, RecomputeError,
+    EvaluatedValues, EvaluationFormFactor, EvaluationFunction, EvaluationRequest, ModelEvaluator,
+    ModelExpression, RecomputeError,
 };
 pub use model::{
-    Coupling, LorentzStructure, Model, ModelDefinition, ModelFormFactor, ModelFunction, Order,
-    Parameter, ParameterNature, ParameterType, Particle, ParticleId, Propagator, VertexRule,
-    VertexRuleId,
+    Coupling, CouplingId, LorentzStructure, LorentzStructureId, Model, ModelFingerprint,
+    ModelFormFactor, ModelFormFactorId, ModelFunction, ModelFunctionId, Order, OrderId, Parameter,
+    ParameterId, ParameterNature, ParameterType, Particle, ParticleId, Propagator, PropagatorId,
+    VertexRule, VertexRuleId,
 };

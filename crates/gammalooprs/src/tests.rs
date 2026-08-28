@@ -364,7 +364,7 @@ mod tests_integral {
         settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
         assert!(compare_integration(
             &mut settings,
-            &Model::default(),
+            &Model::empty("unit-volume-test"),
             IntegratedPhase::Real,
             SymComplex::new_one().into(),
             None
@@ -394,7 +394,7 @@ mod tests_integral {
         settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
         assert!(compare_integration(
             &mut settings,
-            &Model::default(),
+            &Model::empty("unit-volume-test"),
             IntegratedPhase::Real,
             SymComplex::new_one().into(),
             None
@@ -422,7 +422,7 @@ mod tests_integral {
         settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
         assert!(compare_integration(
             &mut settings,
-            &Model::default(),
+            &Model::empty("unit-volume-test"),
             IntegratedPhase::Real,
             SymComplex::new_one().into(),
             None
@@ -449,7 +449,7 @@ mod tests_integral {
         settings.hard_coded_integrand = Some(IntegrandSettings::HFunctionTest(itg.clone()));
         assert!(compare_integration(
             &mut settings,
-            &Model::default(),
+            &Model::empty("h-function-test"),
             IntegratedPhase::Real,
             SymComplex::new_one().into(),
             None
@@ -492,7 +492,7 @@ mod tests_inspect {
             settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
             assert!(compare_inspect(
                 &mut settings,
-                &Model::default(),
+                &Model::empty("unit-volume-test"),
                 vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
                 &[0],
                 true,
@@ -511,7 +511,7 @@ mod tests_inspect {
             settings.hard_coded_integrand = Some(IntegrandSettings::UnitVolume(itg.clone()));
             assert!(compare_inspect(
                 &mut settings,
-                &Model::default(),
+                &Model::empty("unit-volume-test"),
                 vec![0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9],
                 &[0],
                 true,
@@ -535,7 +535,7 @@ mod tests_inspect {
             settings.hard_coded_integrand = Some(IntegrandSettings::HFunctionTest(itg.clone()));
             assert!(compare_inspect(
                 &mut settings,
-                &Model::default(),
+                &Model::empty("h-function-test"),
                 vec![0.2188450233532342,],
                 &[0],
                 false,
@@ -551,7 +551,7 @@ mod tests_inspect {
             settings.hard_coded_integrand = Some(IntegrandSettings::HFunctionTest(itg.clone()));
             assert!(compare_inspect(
                 &mut settings,
-                &Model::default(),
+                &Model::empty("h-function-test"),
                 vec![0.2188450233532342,],
                 &[0],
                 false,

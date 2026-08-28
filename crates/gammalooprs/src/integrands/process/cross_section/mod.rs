@@ -5,8 +5,8 @@ use crate::{
         surface::HybridSurfaceID,
     },
     graph::{
-        ExternalConnection, FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis,
-        parse::complete_group_parsing,
+        ExternalConnection, FeynmanGraph, FinalizedCut, Graph, GraphGroup, GroupId, LmbIndex,
+        LoopMomentumBasis, parse::complete_group_parsing,
     },
     integrands::{
         HasIntegrand,
@@ -19,14 +19,14 @@ use crate::{
             prepare_buffered_event,
         },
     },
-    model::Model,
+    model::{Model, ParticleIdGammaLoopExt},
     momentum::{
         Energy, FourMomentum, Rotation, RotationMethod, ThreeMomentum,
         sample::{ExternalIndex, LoopMomenta, MomentumSample, Subspace},
     },
     observables::{AdditionalWeightKey, EventProcessingRuntime, GenericEvent, GenericEventGroup},
     processes::{
-        self, CrossSectionCut, CrossSectionGraph, CutGroupData, CutGroupId, CutId,
+        self, CrossSectionGraph, CutGroupData, CutGroupId, CutId,
         CutThresholdCountertermAssociations, GraphGenerationStats, GraphGroupSelectionPlan,
         IteratedCtCollection, TopologicalThresholdId,
     },
@@ -56,6 +56,7 @@ use bincode_trait_derive::Decode;
 use color_eyre::{Result, owo_colors::OwoColorize};
 use eyre::Context;
 use eyre::eyre;
+use feynkit_cff::{EnergySurface, EnergySurfaceId, OrientationId, SurfaceId};
 use std::{
     collections::{BTreeMap, HashSet},
     time::{Duration, Instant},
@@ -573,7 +574,7 @@ pub struct CrossSectionGraphTerm {
     pub integrand: TiVec<CutGroupId, BTreeMap<CutCFFIndex, EvaluatorStack>>,
     pub graph: Graph,
     pub cut_esurface: TiVec<CutId, Esurface>,
-    pub cuts: TiVec<CutId, CrossSectionCut>,
+    pub cuts: TiVec<CutId, FinalizedCut>,
     pub covariant_cut_representatives: BTreeMap<isize, isize>,
     pub topological_threshold_esurfaces: TiVec<TopologicalThresholdId, Esurface>,
     pub cut_threshold_associations: TiVec<CutId, CutThresholdCountertermAssociations>,
@@ -681,7 +682,7 @@ impl CrossSectionGraphTerm {
             .map(|cut_group| {
                 cut_group
                     .related_esurface_group
-                    .esurface_ids
+                    .surface_ids
                     .iter()
                     .any(|esurface_id| selected_generation_esurfaces.contains(esurface_id))
             })
@@ -956,7 +957,7 @@ impl CrossSectionGraphTerm {
                 ct_data,
                 graph.derived_data.cut_group_data.cut_groups[cut_group_id]
                     .related_esurface_group
-                    .max_occurence,
+                    .max_occurrence,
                 threshold_helpers,
                 &graph.graph.param_builder,
                 settings,
@@ -1007,7 +1008,7 @@ impl CrossSectionGraphTerm {
                 generate_rstar_t_dependence_evaluator(
                     cut_group
                         .related_esurface_group
-                        .max_occurence
+                        .max_occurrence
                         .saturating_sub(1),
                 )
             })
@@ -1166,7 +1167,7 @@ impl CrossSectionGraphTerm {
         t_scaling_solution: &NewtonIterationResult<T>,
         momentum_sample: &MomentumSample<T>,
         cut_id: CutId,
-        cut: &CrossSectionCut,
+        cut: &FinalizedCut,
     ) -> Result<GenericEvent<T>> {
         let rescaled_momenta =
             momentum_sample.rescaled_loop_momenta(&t_scaling_solution.solution, Subspace::None);
@@ -1208,7 +1209,14 @@ impl CrossSectionGraphTerm {
                 edge_data
                     .data
                     .particle()
-                    .map(|particle| (edge_index, particle.pdg_code))
+                    .map(|particle| {
+                        let pdg = particle
+                            .resolve(event_context.model)
+                            .pdg_code
+                            .try_into()
+                            .expect("PDG code must fit in an isize");
+                        (edge_index, pdg)
+                    })
                     .ok_or_else(|| {
                         eyre!(
                             "Initial-state cut edge {edge_index:?} in graph {} has no particle specifier",
@@ -1253,19 +1261,25 @@ impl CrossSectionGraphTerm {
                     momentum_sample.external_moms(),
                 );
 
-            let edge_pdg = d.data.particle().map(|p| p.pdg_code).ok_or_else(|| {
+            let particle = d.data.particle().ok_or_else(|| {
                 eyre!("Cut legs in Local Unitarity must have a particle specifier.")
             })?;
+            let edge_pdg: isize = particle
+                .resolve(event_context.model)
+                .pdg_code
+                .try_into()
+                .expect("PDG code must fit in an isize");
 
             let cut_pdg = match cut_flow {
                 Flow::Source => edge_pdg,
                 Flow::Sink => {
                     edge_spatial_momentum = -edge_spatial_momentum;
-                    event_context
-                        .model
-                        .get_particle_from_pdg(edge_pdg)
-                        .get_anti_particle(event_context.model)
+                    particle
+                        .antiparticle(event_context.model)
+                        .resolve(event_context.model)
                         .pdg_code
+                        .try_into()
+                        .expect("PDG code must fit in an isize")
                 }
             };
 
@@ -1523,7 +1537,7 @@ impl GraphTerm for CrossSectionGraphTerm {
         );
 
         for (cut_group_id, cut_group) in self.cut_group_data.cut_groups.iter_enumerated() {
-            let max_occurrence = cut_group.related_esurface_group.max_occurence;
+            let max_occurrence = cut_group.related_esurface_group.max_occurrence;
             if !self.counterterm.cut_group_is_active(cut_group_id) {
                 let zero = Complex::new_re(momentum_sample.zero());
                 for _ in 1..=max_occurrence {

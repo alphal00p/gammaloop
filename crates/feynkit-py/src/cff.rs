@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use feynkit_cff::{
-    CffGenerator, CffGraph, CffOptions, CffReport, CffResult, EdgeOrientation,
+    CffGenerator, CffOptions, CffReport, CffResult, EdgeOrientation, FeynmanDiagramCffExt,
     OrientationExpression, Surface, SurfaceCache, SurfaceId,
 };
 use pyo3::{
@@ -136,7 +136,7 @@ impl PyCffSurface {
             Some(Surface::H(surface)) => surface.external_shift.iter(),
             Some(Surface::Unit | Surface::Infinite) | None => return Vec::new(),
         }
-        .map(|(edge, coefficient)| (edge.index(), coefficient))
+        .map(|(edge, coefficient)| (edge.index(), *coefficient))
         .collect()
     }
 
@@ -148,8 +148,8 @@ impl PyCffSurface {
     #[getter]
     fn vertices(&self) -> Vec<usize> {
         match &self.surface {
-            Some(Surface::Energy(surface)) => surface.vertices.iter(),
-            Some(Surface::H(surface)) => surface.vertices.iter(),
+            Some(Surface::Energy(surface)) => surface.vertex_set.iter(),
+            Some(Surface::H(surface)) => surface.vertex_set.iter(),
             Some(Surface::Unit | Surface::Infinite) | None => return Vec::new(),
         }
         .map(|vertex| vertex.index())
@@ -204,6 +204,7 @@ impl PyCffOrientation {
     #[getter]
     fn edge_orientations(&self) -> Vec<(usize, &'static str)> {
         self.inner
+            .data
             .orientation
             .iter()
             .map(|(edge, orientation)| {
@@ -358,7 +359,7 @@ impl PyCffReport {
 /// Examples
 /// --------
 /// >>> import symbolica.community.feynkit as fk
-/// >>> result = fk.CffGenerator().generate(diagram)
+/// >>> result = diagram.build_cff()
 /// >>> expression = result.to_expression()
 ///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -662,14 +663,11 @@ impl PyCffGenerator {
     /// diagram : FeynmanDiagram
     ///     Diagram whose energy-flow orientations are enumerated.
     fn generate(&self, py: Python<'_>, diagram: &PyFeynmanDiagram) -> PyResult<PyCffResult> {
-        let generator = self.inner.clone();
+        let options = self.inner.options().clone();
         let diagram = diagram.inner.clone();
-        py.detach(move || {
-            let graph = CffGraph::try_from(&diagram)?;
-            generator.generate(&graph)
-        })
-        .map(|inner| PyCffResult { inner })
-        .map_err(error::cff)
+        py.detach(move || diagram.build_cff(options))
+            .map(|inner| PyCffResult { inner })
+            .map_err(error::cff)
     }
 }
 
@@ -701,14 +699,10 @@ pub(crate) fn build_cff_for_diagram(
         options = options.with_initial_state_edge(feynkit_cff::EdgeId::new(edge));
     }
 
-    let generator = CffGenerator::new(options);
     let diagram = diagram.inner.clone();
-    py.detach(move || {
-        let graph = CffGraph::try_from(&diagram)?;
-        generator.generate(&graph)
-    })
-    .map(|inner| PyCffResult { inner })
-    .map_err(error::cff)
+    py.detach(move || diagram.build_cff(options))
+        .map(|inner| PyCffResult { inner })
+        .map_err(error::cff)
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {

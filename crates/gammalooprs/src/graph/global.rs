@@ -1,13 +1,59 @@
 use eyre::Context;
 use linnet::parser::GlobalData;
-use symbolica::atom::Atom;
+use symbolica::{
+    atom::{Atom, AtomCore, AtomView},
+    function, symbol,
+};
 
-use crate::{feyngen::diagram_generator::evaluate_overall_factor, graph::GroupId};
+use crate::graph::GroupId;
 
 use super::{
     Graph,
     parse::{ParseGraph, StripParse, ToQuoted},
 };
+
+/// Evaluate the bookkeeping heads in a finalized diagram's overall factor.
+pub fn evaluate_overall_factor(factor: AtomView<'_>) -> Atom {
+    let mut result = factor.to_owned();
+    for head in [
+        "AutG",
+        "CouplingsMultiplicity",
+        "InternalFermionLoopSign",
+        "ExternalFermionOrderingSign",
+        "AntiFermionSpinSumSign",
+        "NumeratorIndependentSymmetryGrouping",
+    ] {
+        for symbol in [
+            symbol!(head),
+            symbol!(&format!("feynkit_generator_factor::{head}")),
+        ] {
+            result = result
+                .replace(function!(symbol, Atom::var(symbol!("x_"))).to_pattern())
+                .with(Atom::var(symbol!("x_")).to_pattern());
+        }
+    }
+    for head in [
+        symbol!("NumeratorDependentGrouping"),
+        symbol!("feynkit_generator::NumeratorDependentGrouping"),
+        symbol!("feynkit_generator_factor::NumeratorDependentGrouping"),
+    ] {
+        result = result
+            .replace(
+                function!(
+                    head,
+                    Atom::var(symbol!("GraphId_")),
+                    Atom::var(symbol!("ratio_")),
+                    Atom::var(symbol!("GraphSymmetryFactor_"))
+                )
+                .to_pattern(),
+            )
+            .with(
+                (Atom::var(symbol!("ratio_")) * Atom::var(symbol!("GraphSymmetryFactor_")))
+                    .to_pattern(),
+            );
+    }
+    result.expand()
+}
 
 #[derive(Clone, Debug)]
 pub struct ParseData {
@@ -152,6 +198,16 @@ impl Graph {
             evaluate_overall_factor(self.overall_factor.as_view()).to_quoted(),
         );
 
+        if !self.finalized_cuts.is_empty() {
+            // Runtime DOT intentionally does not serialize canonical physical
+            // cuts. Cross-section artifacts must round-trip through
+            // FeynmanDiagram DOT, which owns the typed cut partitions.
+            g.statements.insert(
+                "canonical_cuts_required".to_owned(),
+                "feynkit_diagram_dot".to_owned(),
+            );
+        }
+
         if !self.param_builder.pairs.additional_params.params.is_empty() {
             let params = self
                 .param_builder
@@ -213,31 +269,52 @@ mod tests {
         half_edge::nodestore::NodeStorageVec,
         parser::{DotGraph, DotVertexData},
     };
+    use symbolica::{atom::Atom, parser::ParseSettings};
+
+    use super::evaluate_overall_factor;
 
     use crate::{
-        dot,
-        graph::{Graph, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::{Graph, parse::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         processes::DotExportSettings,
     };
 
     #[test]
+    fn evaluates_canonical_feynkit_factor_namespace() {
+        test_initialise().unwrap();
+        let factor = Atom::parse(
+            "InternalFermionLoopSign(-1)*CouplingsMultiplicity(2)/AutG(4)\
+             +NumeratorDependentGrouping(7,2,3)",
+            "feynkit_generator_factor",
+            ParseSettings::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            evaluate_overall_factor(factor.as_view()),
+            Atom::parse("11/2", "factor_expected", ParseSettings::default()).unwrap()
+        );
+    }
+
+    #[test]
     fn params_roundtrip_in_global_data() {
         test_initialise().unwrap();
-        match dot!(digraph params_roundtrip {
+        match finalized_runtime_dot!(digraph params_roundtrip {
             graph [
                 overall_factor = 1;
                 multiplicity_factor = 1;
                 params = "a;b;c";
+                projector = 1;
             ]
-            edge [pdg=1000]
+            edge [pdg=1000 num=1]
+            node [num=1]
             ext [style=invis]
-            ext -> v4
-            ext -> v5
-            v6 -> ext
-            v5 -> v4 [lmb_index=0];
-            v6 -> v5;
-            v4 -> v6;
+            ext -> v4 [sink="{ufo_order:0}"]
+            ext -> v5 [sink="{ufo_order:0}"]
+            v6 -> ext [source="{ufo_order:0}"]
+            v5 -> v4 [lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"];
+            v6 -> v5 [source="{ufo_order:1}" sink="{ufo_order:2}"];
+            v4 -> v6 [source="{ufo_order:2}" sink="{ufo_order:2}"];
         },"scalars")
         {
             Ok(g) => {

@@ -30,6 +30,7 @@ use clap::ValueEnum;
 use color_eyre::{Result, eyre::Context};
 use colored::Colorize;
 use eyre::eyre;
+use feynkit_cff::OrientationData;
 use itertools::Itertools;
 use linnet::half_edge::PowersetIterator;
 use linnet::half_edge::involution::{EdgeIndex, HedgePair, SignOrZero};
@@ -2202,7 +2203,13 @@ impl<'a> UVProfileRunner<'a> {
                     .par_iter()
                     .map(|(orientation, integrand)| {
                         g.graph
-                            .all_limits(&g.graph.full_filter(), integrand, symbol!("lambd"), lmb)
+                            .all_limits(
+                                self.model,
+                                &g.graph.full_filter(),
+                                integrand,
+                                symbol!("lambd"),
+                                lmb,
+                            )
                             .into_iter()
                             .map(|(limit, value)| (limit, orientation.clone(), value))
                             .collect::<Vec<_>>()
