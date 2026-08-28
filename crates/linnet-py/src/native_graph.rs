@@ -1,6 +1,8 @@
 use std::ops::{Index, IndexMut};
 
-use linnet::half_edge::builder::HedgeGraphBuilder;
+use std::cell::RefCell;
+
+use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
 use linnet::half_edge::involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::nodestore::{NodeStorage, NodeStorageVec};
 use linnet::half_edge::subgraph::{
@@ -258,6 +260,75 @@ impl PyHedgeGraph {
         }
     }
 
+    pub(crate) fn add_dangling_edge(
+        self,
+        endpoint: HedgeData<HalfEdgeRecord>,
+        edge: EdgeRecord,
+        flow: Flow,
+        orientation: Orientation,
+    ) -> Result<(Hedge, Self), HedgeGraphError> {
+        match self {
+            Self::Vec(graph) => graph
+                .add_dangling_edge(endpoint, edge, flow, orientation)
+                .map(|(hedge, graph)| (hedge, Self::Vec(graph))),
+            Self::Forest(graph) => graph
+                .add_dangling_edge(endpoint, edge, flow, orientation)
+                .map(|(hedge, graph)| (hedge, Self::Forest(graph))),
+        }
+    }
+
+    pub(crate) fn add_pair(
+        self,
+        source: HedgeData<HalfEdgeRecord>,
+        sink: HedgeData<HalfEdgeRecord>,
+        edge: EdgeRecord,
+        orientation: Orientation,
+    ) -> Result<(Hedge, Hedge, Self), HedgeGraphError> {
+        match self {
+            Self::Vec(graph) => graph
+                .add_pair(source, sink, edge, orientation)
+                .map(|(source, sink, graph)| (source, sink, Self::Vec(graph))),
+            Self::Forest(graph) => graph
+                .add_pair(source, sink, edge, orientation)
+                .map(|(source, sink, graph)| (source, sink, Self::Forest(graph))),
+        }
+    }
+
+    pub(crate) fn split_edge(
+        &mut self,
+        hedge: Hedge,
+        edge: EdgeData<EdgeRecord>,
+    ) -> Result<(), HedgeGraphError> {
+        match self {
+            Self::Vec(graph) => graph.split_edge(hedge, edge),
+            Self::Forest(graph) => graph.split_edge(hedge, edge),
+        }
+    }
+
+    pub(crate) fn connect_identities(
+        &mut self,
+        source: Hedge,
+        sink: Hedge,
+        flow: Flow,
+        edge: EdgeData<EdgeRecord>,
+    ) {
+        let edge = RefCell::new(Some(edge));
+        match self {
+            Self::Vec(graph) => graph.connect_identities(source, sink, |_, _, _, _| {
+                (
+                    flow,
+                    edge.borrow_mut().take().expect("merge is called once"),
+                )
+            }),
+            Self::Forest(graph) => graph.connect_identities(source, sink, |_, _, _, _| {
+                (
+                    flow,
+                    edge.borrow_mut().take().expect("merge is called once"),
+                )
+            }),
+        }
+    }
+
     pub(crate) fn complement(&self, subgraph: &SuBitGraph) -> SuBitGraph {
         match self {
             Self::Vec(graph) => subgraph.complement(graph),
@@ -304,6 +375,18 @@ impl PyHedgeGraph {
         match self {
             Self::Vec(graph) => graph.all_spanning_forests_of(subgraph),
             Self::Forest(graph) => graph.all_spanning_forests_of(subgraph),
+        }
+    }
+
+    pub(crate) fn all_bonds_of(
+        &self,
+        subgraph: &SuBitGraph,
+        minimum_size: usize,
+        maximum_size: usize,
+    ) -> Vec<SuBitGraph> {
+        match self {
+            Self::Vec(graph) => graph.all_bonds_of(subgraph, &(minimum_size..=maximum_size)),
+            Self::Forest(graph) => graph.all_bonds_of(subgraph, &(minimum_size..=maximum_size)),
         }
     }
 
