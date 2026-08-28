@@ -81,10 +81,13 @@ anchor = "pub mod cff;"
 digest = "25cda2dff8fd5a5c01f6b00c42311089a120e503"
 
 [[section.note.scope]]
+# No-impact attestation 2026-08-28: tadpole-filter validation failures now
+# warn and reject the candidate instead of panicking; generation ownership and
+# the documented filtering pipeline are unchanged.
 path = "crates/gammalooprs/src/feyngen/diagram_generator.rs"
 symbol = "gammalooprs::feyngen::DiagramGenerator::generate"
 anchor = "pub fn generate("
-digest = "9dfe1cebc820269c5784de100912053bf605613f"
+digest = "427e8b01ddfcf6d71cd2add4e8e16a0f92126caf"
 
 [[section.note]]
 id = "integration-dashboard"
@@ -385,12 +388,15 @@ review_triggers = ["crates/linnet/src/lib.rs", "crates/linnet/src/half_edge.rs",
 # Documentation-impact attestation 2026-08-26: the architecture note now
 # documents exact node-store conversion, retained-history rejection, and
 # explicit empty-crown extraction.
+# Documentation-impact attestation 2026-08-28: the architecture note now
+# documents selectable directedness, history-safe topological traversal, and
+# bounded cycle/tadpole enumeration.
 path = "crates/linnet/src/half_edge.rs"
 symbol = "linnet::half_edge::HedgeGraph"
 anchor = "pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {"
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
 # public graph-invariant and DOT parsing documentation without changing behavior.
-digest = "a2ee8ed749578bab2a539a59b2a2c774224d5ef8"
+digest = "a1c12db2c1f4cdd31650a2232b6b7a5831dfcf18"
 
 [[section.note.scope]]
 path = "crates/linnet/src/half_edge/involution.rs"

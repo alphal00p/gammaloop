@@ -206,7 +206,7 @@ fn threeloop() {
 
     assert_eq!(3, cycles.len());
 
-    let all_cycles = graph.all_cycles();
+    let all_cycles = graph.all_cycles(3).unwrap();
 
     assert_eq!(6, all_cycles.len());
 
@@ -371,7 +371,7 @@ fn cube() {
 //         let rand_graph = HedgeGraph::<(), ()>::random(6, 9, s);
 
 //         let all_cycles = rand_graph.read_tarjan();
-//         let all_cycles_alt = rand_graph.all_cycles();
+//         let all_cycles_alt = rand_graph.all_cycles(4).unwrap();
 
 //         assert_eq!(
 //             all_cycles.len(),
@@ -392,7 +392,7 @@ fn cube() {
 //         rand_graph.base_dot()
 //     );
 
-//     for c in rand_graph.all_cycles() {
+//     for c in rand_graph.all_cycles(4).unwrap() {
 //         println!(" {}", rand_graph.dot(&c));
 //     }
 
@@ -483,7 +483,13 @@ fn K33() {
         );
     }
 
-    // assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
+    // assert_eq!(
+    //     graph.all_spinneys().len(),
+    //     graph
+    //         .all_spinneys_alt(graph.cycle_basis().0.len())
+    //         .unwrap()
+    //         .len()
+    // );
 }
 
 #[test]
@@ -527,10 +533,20 @@ fn petersen() {
 
     println!("{}", graph.base_dot());
 
-    // assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
+    // assert_eq!(
+    //     graph.all_spinneys().len(),
+    //     graph
+    //         .all_spinneys_alt(graph.cycle_basis().0.len())
+    //         .unwrap()
+    //         .len()
+    // );
 
-    println!("loop count {}", graph.cycle_basis().0.len());
-    println!("cycle count {}", graph.all_cycles().len());
+    let cycle_rank = graph.cycle_basis().0.len();
+    println!("loop count {cycle_rank}");
+    println!(
+        "cycle count {}",
+        graph.all_cycles(cycle_rank).unwrap().len()
+    );
     println!(
         "loop count alt {}",
         graph.cyclotomatic_number(&graph.full_node().internal_graph)
@@ -592,10 +608,20 @@ fn wagner_graph() {
 
     println!("{}", graph.base_dot());
 
-    // assert_eq!(graph.all_spinneys().len(), graph.all_spinneys_alt().len());
+    // assert_eq!(
+    //     graph.all_spinneys().len(),
+    //     graph
+    //         .all_spinneys_alt(graph.cycle_basis().0.len())
+    //         .unwrap()
+    //         .len()
+    // );
 
-    println!("loop count {}", graph.cycle_basis().0.len());
-    println!("cycle count {}", graph.all_cycles().len());
+    let cycle_rank = graph.cycle_basis().0.len();
+    println!("loop count {cycle_rank}");
+    println!(
+        "cycle count {}",
+        graph.all_cycles(cycle_rank).unwrap().len()
+    );
     if let Some((s, v)) = graph
         .all_spinneys()
         .iter()
@@ -691,7 +717,7 @@ fn flower_snark() {
 
     assert_eq!(11, graph.cyclotomatic_number(&graph.full_graph()));
     // Keep a concrete regression check here instead of the much slower debug-only spinney dump.
-    assert_eq!(1444, graph.all_cycles().len());
+    assert_eq!(1444, graph.all_cycles(11).unwrap().len());
     assert_eq!(
         11,
         graph
@@ -766,6 +792,7 @@ use dot_parser::ast::CompassPt;
 use insta::assert_snapshot;
 use nodestore::NodeStorageVec;
 
+use crate::tree::{child_vec::ChildVecStore, Forest};
 use crate::{dot, half_edge::swap::Swap, parser::DotGraph};
 
 use super::*;
@@ -790,6 +817,164 @@ fn double_triangle() {
     for cut in cuts {
         assert!(!(cut.1.is_empty()))
     }
+}
+
+#[test]
+fn bounded_all_cycles_are_subgraph_capable_and_backend_neutral() {
+    type ForestStore = Forest<(), ChildVecStore<()>>;
+
+    let mut builder = HedgeGraphBuilder::new();
+    let a = builder.add_node(());
+    let b = builder.add_node(());
+    let c = builder.add_node(());
+    let d = builder.add_node(());
+    builder.add_edge(a, b, (), false);
+    builder.add_edge(b, c, (), false);
+    builder.add_edge(c, d, (), false);
+    builder.add_edge(d, a, (), false);
+    builder.add_edge(b, d, (), false);
+
+    let graph: HedgeGraph<(), (), NoData, NodeStorageVec<()>> = builder.build();
+    let mut triangle = graph.empty_subgraph::<SuBitGraph>();
+    for edge in [1, 2, 4] {
+        triangle.add(graph.hedge_pair(Hedge(2 * edge)));
+    }
+
+    let triangle_cycles = graph.all_cycles_of(&triangle, 1).unwrap();
+    assert_eq!(triangle_cycles.len(), 1);
+    assert!(matches!(
+        graph.all_cycles(1),
+        Err(CycleEnumerationError::RankLimitExceeded {
+            rank: 2,
+            max_cycle_rank: 1
+        })
+    ));
+    let cycles = graph.all_cycles(2).unwrap();
+    assert_eq!(cycles.len(), 3);
+    assert!(cycles.windows(2).all(|pair| pair[0] <= pair[1]));
+
+    let graph: HedgeGraph<_, _, _, ForestStore> = graph.into_node_store().unwrap();
+    assert_eq!(graph.all_cycles_of(&triangle, 1).unwrap(), triangle_cycles);
+    assert_eq!(graph.all_cycles(2).unwrap(), cycles);
+}
+
+#[test]
+fn all_cycles_rejects_unrepresentable_cycle_rank() {
+    let mut builder = HedgeGraphBuilder::new();
+    let node = builder.add_node(());
+    for _ in 0..usize::BITS {
+        builder.add_edge(node, node, (), false);
+    }
+    let graph: HedgeGraph<(), (), NoData, NodeStorageVec<()>> = builder.build();
+
+    assert!(matches!(
+        graph.all_cycles(usize::MAX),
+        Err(CycleEnumerationError::RankNotRepresentable {
+            rank,
+            max_supported
+        }) if rank == usize::BITS as usize && max_supported == usize::BITS as usize - 1
+    ));
+}
+
+#[test]
+fn tadpoles_validate_terminals_and_are_backend_neutral() {
+    type ForestStore = Forest<(), ChildVecStore<()>>;
+
+    let mut builder = HedgeGraphBuilder::new();
+    let terminal = builder.add_node(());
+    let a = builder.add_node(());
+    let b = builder.add_node(());
+    let c = builder.add_node(());
+    let d = builder.add_node(());
+    let e = builder.add_node(());
+    let f = builder.add_node(());
+    let isolated = builder.add_node(());
+    builder.add_edge(terminal, a, (), false);
+    builder.add_edge(a, b, (), false);
+    builder.add_edge(b, c, (), false);
+    builder.add_edge(c, a, (), false);
+    builder.add_edge(d, e, (), false);
+    builder.add_edge(e, f, (), false);
+    builder.add_edge(f, d, (), false);
+
+    let graph: HedgeGraph<(), (), NoData, NodeStorageVec<()>> = builder.build();
+    let invalid = NodeIndex(graph.n_nodes());
+    assert_eq!(graph.tadpoles(&[]), Err(TadpoleError::EmptyTerminals));
+    assert_eq!(
+        graph.tadpoles(&[terminal, invalid]),
+        Err(TadpoleError::InvalidTerminal {
+            terminal: invalid,
+            n_nodes: graph.n_nodes(),
+        })
+    );
+    assert_eq!(
+        graph.tadpoles(&[terminal, terminal]),
+        Err(TadpoleError::DuplicateTerminal(terminal))
+    );
+    assert_eq!(
+        graph.tadpoles(&[isolated]),
+        Err(TadpoleError::TerminalWithoutIncidentHalfEdge(isolated))
+    );
+    let tadpoles = graph.tadpoles(&[terminal]).unwrap();
+    assert_eq!(tadpoles.len(), 2);
+    assert!(tadpoles.windows(2).all(|pair| pair[0] <= pair[1]));
+
+    let graph: HedgeGraph<_, _, _, ForestStore> = graph.into_node_store().unwrap();
+    assert_eq!(graph.tadpoles(&[]), Err(TadpoleError::EmptyTerminals));
+    assert_eq!(
+        graph.tadpoles(&[terminal, invalid]),
+        Err(TadpoleError::InvalidTerminal {
+            terminal: invalid,
+            n_nodes: graph.n_nodes(),
+        })
+    );
+    assert_eq!(
+        graph.tadpoles(&[terminal, terminal]),
+        Err(TadpoleError::DuplicateTerminal(terminal))
+    );
+    assert_eq!(
+        graph.tadpoles(&[isolated]),
+        Err(TadpoleError::TerminalWithoutIncidentHalfEdge(isolated))
+    );
+    assert_eq!(graph.tadpoles(&[terminal]).unwrap(), tadpoles);
+
+    let mut builder = HedgeGraphBuilder::new();
+    let bridge_terminal = builder.add_node(());
+    let left_terminal = builder.add_node(());
+    let right_terminal = builder.add_node(());
+    let a = builder.add_node(());
+    let b = builder.add_node(());
+    let c = builder.add_node(());
+    let d = builder.add_node(());
+    let e = builder.add_node(());
+    builder.add_edge(left_terminal, a, (), false);
+    builder.add_edge(right_terminal, b, (), false);
+    builder.add_edge(a, b, (), false);
+    builder.add_edge(bridge_terminal, c, (), false);
+    builder.add_edge(c, d, (), false);
+    builder.add_edge(d, e, (), false);
+    builder.add_edge(e, c, (), false);
+
+    let graph: HedgeGraph<(), (), NoData, NodeStorageVec<()>> = builder.build();
+    let mut expected = graph.empty_subgraph::<SuBitGraph>();
+    for (pair, _, _) in graph.iter_edges().skip(3) {
+        expected.add(pair);
+    }
+    let terminals = [bridge_terminal, left_terminal, right_terminal];
+    assert_eq!(graph.tadpoles(&terminals).unwrap(), vec![expected.clone()]);
+
+    let mut graph: HedgeGraph<_, _, _, ForestStore> = graph.into_node_store().unwrap();
+    assert_eq!(graph.tadpoles(&terminals).unwrap(), vec![expected]);
+
+    let canonical = graph.identify_nodes(&[left_terminal, right_terminal], ());
+    assert_eq!(
+        graph.tadpoles(&[right_terminal]).unwrap(),
+        graph.tadpoles(&[canonical]).unwrap()
+    );
+    assert_eq!(
+        graph.tadpoles(&[canonical, right_terminal]),
+        Err(TadpoleError::DuplicateTerminal(right_terminal))
+    );
 }
 
 #[test]
@@ -1001,7 +1186,9 @@ fn tadpoles() {
     )
     .unwrap();
 
-    let tads = graph.tadpoles(&[NodeIndex(0), NodeIndex(4), NodeIndex(6), NodeIndex(7)]);
+    let tads = graph
+        .tadpoles(&[NodeIndex(0), NodeIndex(4), NodeIndex(6), NodeIndex(7)])
+        .unwrap();
 
     for t in tads {
         println!("//Tadpole: \n{}", graph.dot(&t));

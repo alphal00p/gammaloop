@@ -1,11 +1,11 @@
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use crate::half_edge::{
-    involution::Flow, nodestore::NodeStorageOps, subgraph::SubSetLike, swap::Swap, HedgeGraph,
-    NodeIndex,
+    involution::Flow, nodestore::NodeStorageOps, subgraph::SubSetLike, HedgeGraph, NodeIndex,
 };
-use ahash::AHashMap;
 use thiserror::Error;
+
+use super::DirectionBasis;
 
 #[derive(Error, Debug)]
 pub enum TopoError {
@@ -18,106 +18,98 @@ pub enum TopoError {
 }
 
 impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
+    /// Returns a topological ordering of the nodes touched by `subgraph`.
+    ///
+    /// An internal edge contributes only when both half-edges are selected.
+    /// Identity and split-boundary edges therefore do not affect the ordering.
     pub fn topo_sort_kahn_of<S: SubSetLike>(
         &self,
         subgraph: &S,
+        basis: DirectionBasis,
     ) -> Result<Vec<NodeIndex>, TopoError> {
-        let mut indeg: AHashMap<NodeIndex, usize> = self
+        let nodes = self
             .iter_nodes_of(subgraph)
-            .map(|(i, neighs, _)| (i, neighs.filter(|h| self.flow(*h) == Flow::Sink).count()))
-            .collect();
-
-        let mut q = VecDeque::new();
-        for (i, d) in indeg.iter() {
-            if *d == 0 {
-                q.push_back(*i);
-            }
-        }
-
-        let mut order = Vec::with_capacity(indeg.len());
-        while let Some(v) = q.pop_front() {
-            order.push(v);
-            for u in self.iter_crown_in(subgraph, v) {
-                if self.flow(u) == Flow::Sink {
-                    continue;
-                }
-                let invh = self.inv(u);
-                if invh == u || !subgraph.includes(&invh) {
-                    continue;
-                }
-
-                let n = self.node_id(invh);
-                indeg.entry(n).and_modify(|d| *d -= 1);
-                if indeg[&n] == 0 {
-                    q.push_back(n);
-                }
-            }
-        }
-
-        if order.len() != indeg.len() {
-            let remaining_nodes: Vec<(NodeIndex, usize)> = indeg
-                .iter()
-                .filter_map(|(&node, &degree)| {
-                    if degree > 0 {
-                        Some((node, degree))
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            return Err(TopoError::NotDag {
-                nodes_processed: order.len(),
-                total_nodes: indeg.len(),
-                remaining_nodes,
-            });
-        }
-        Ok(order)
+            .map(|(node, _, _)| node)
+            .collect::<BTreeSet<_>>();
+        self.topo_sort_kahn_nodes(subgraph, nodes, basis)
     }
 
-    pub fn topo_sort_kahn(&self) -> Result<Vec<NodeIndex>, TopoError> {
-        let mut indeg = self
-            .new_nodevec(|_i, neighs, _| neighs.filter(|h| self.flow(*h) == Flow::Sink).count());
+    /// Returns a topological ordering in the selected direction basis.
+    /// Identification-history aliases that share incidence are processed once.
+    pub fn topo_sort_kahn(&self, basis: DirectionBasis) -> Result<Vec<NodeIndex>, TopoError> {
+        let full = self.full_filter();
+        let structural_nodes = self.iter_nodes_of(&full).map(|(node, _, _)| node).chain(
+            self.iter_nodes()
+                .filter_map(|(node, mut crown, _)| crown.next().is_none().then_some(node)),
+        );
+        self.topo_sort_kahn_nodes(&full, structural_nodes, basis)
+    }
 
-        let mut q = VecDeque::new();
-        for (i, d) in indeg.iter() {
-            if *d == 0 {
-                q.push_back(i);
+    fn topo_sort_kahn_nodes<S: SubSetLike>(
+        &self,
+        subgraph: &S,
+        nodes: impl IntoIterator<Item = NodeIndex>,
+        basis: DirectionBasis,
+    ) -> Result<Vec<NodeIndex>, TopoError> {
+        let nodes = nodes.into_iter().collect::<BTreeSet<_>>();
+        let mut indegrees = nodes
+            .iter()
+            .map(|&node| {
+                let degree = self
+                    .iter_crown(node)
+                    .filter(|&hedge| {
+                        if !subgraph.includes(&hedge) {
+                            return false;
+                        }
+                        let inverse = self.inv(hedge);
+                        inverse != hedge
+                            && subgraph.includes(&inverse)
+                            && basis.flow(self, hedge) == Some(Flow::Sink)
+                    })
+                    .count();
+                (node, degree)
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        let mut queue = indegrees
+            .iter()
+            .filter_map(|(&node, &degree)| (degree == 0).then_some(node))
+            .collect::<VecDeque<_>>();
+        let mut order = Vec::with_capacity(indegrees.len());
+        while let Some(node) = queue.pop_front() {
+            order.push(node);
+            for hedge in self.iter_crown(node) {
+                if !subgraph.includes(&hedge) {
+                    continue;
+                }
+                let inverse = self.inv(hedge);
+                if inverse == hedge
+                    || !subgraph.includes(&inverse)
+                    || basis.flow(self, hedge) != Some(Flow::Source)
+                {
+                    continue;
+                }
+
+                let target = self.node_id(inverse);
+                let degree = indegrees
+                    .get_mut(&target)
+                    .expect("both endpoints of an active edge are selected");
+                *degree -= 1;
+                if *degree == 0 {
+                    queue.push_back(target);
+                }
             }
         }
 
-        let mut order = Vec::with_capacity(indeg.len().0);
-        while let Some(v) = q.pop_front() {
-            order.push(v);
-            for u in self.iter_crown(v) {
-                if self.flow(u) == Flow::Sink {
-                    continue;
-                }
-                let Some(u) = self.involved_node_id(u) else {
-                    continue;
-                };
-                indeg[u] -= 1;
-                if indeg[u] == 0 {
-                    q.push_back(u);
-                }
-            }
-        }
-
-        if order.len() != indeg.len().0 {
-            let remaining_nodes: Vec<(NodeIndex, usize)> = indeg
-                .iter()
-                .filter_map(|(node, &degree)| {
-                    if degree > 0 {
-                        Some((node, degree))
-                    } else {
-                        None
-                    }
-                })
+        if order.len() != indegrees.len() {
+            let remaining_nodes = indegrees
+                .into_iter()
+                .filter(|(_, degree)| *degree > 0)
                 .collect();
 
             return Err(TopoError::NotDag {
                 nodes_processed: order.len(),
-                total_nodes: indeg.len().0,
+                total_nodes: nodes.len(),
                 remaining_nodes,
             });
         }
@@ -128,7 +120,17 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
 #[cfg(test)]
 mod test {
     use super::TopoError;
-    use crate::{dot, parser::DotGraph};
+    use crate::{
+        dot,
+        half_edge::{
+            algorithms::DirectionBasis,
+            builder::HedgeGraphBuilder,
+            involution::{Flow, HedgePair, Orientation},
+            subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
+            HedgeGraph,
+        },
+        parser::DotGraph,
+    };
 
     #[test]
     fn topo_sort_valid_dag() {
@@ -198,7 +200,10 @@ mod test {
         )
         .unwrap();
 
-        let order = graph.graph.topo_sort_kahn().unwrap();
+        let order = graph
+            .graph
+            .topo_sort_kahn(DirectionBasis::Underlying)
+            .unwrap();
         insta::assert_ron_snapshot!(order);
     }
 
@@ -218,7 +223,7 @@ mod test {
         )
         .unwrap();
 
-        let result = graph.graph.topo_sort_kahn();
+        let result = graph.graph.topo_sort_kahn(DirectionBasis::Underlying);
         assert!(result.is_err());
 
         if let Err(TopoError::NotDag {
@@ -309,7 +314,7 @@ mod test {
         )
         .unwrap();
 
-        let result = graph.graph.topo_sort_kahn();
+        let result = graph.graph.topo_sort_kahn(DirectionBasis::Underlying);
         assert!(result.is_err());
 
         if let Err(TopoError::NotDag {
@@ -339,5 +344,127 @@ mod test {
                 assert_eq!(degree, 1);
             }
         }
+    }
+
+    #[test]
+    fn direction_basis_distinguishes_reversed_and_undirected_edges() {
+        let mut reversed = HedgeGraphBuilder::<(), ()>::new();
+        let left = reversed.add_node(());
+        let right = reversed.add_node(());
+        reversed.add_edge(left, right, (), Orientation::Reversed);
+        let reversed: HedgeGraph<(), ()> = reversed.build();
+
+        assert_eq!(
+            reversed.topo_sort_kahn(DirectionBasis::Underlying).unwrap(),
+            vec![left, right]
+        );
+        assert_eq!(
+            reversed
+                .topo_sort_kahn(DirectionBasis::Superficial)
+                .unwrap(),
+            vec![right, left]
+        );
+
+        let mut undirected = HedgeGraphBuilder::<(), ()>::new();
+        let target = undirected.add_node(());
+        let source = undirected.add_node(());
+        undirected.add_edge(source, target, (), Orientation::Undirected);
+        let undirected: HedgeGraph<(), ()> = undirected.build();
+
+        assert_eq!(
+            undirected
+                .topo_sort_kahn(DirectionBasis::Underlying)
+                .unwrap(),
+            vec![source, target]
+        );
+        assert_eq!(
+            undirected
+                .topo_sort_kahn(DirectionBasis::Superficial)
+                .unwrap(),
+            vec![target, source]
+        );
+    }
+
+    #[test]
+    fn dangling_and_split_boundary_edges_do_not_add_indegree() {
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let first = builder.add_node(());
+        let middle = builder.add_node(());
+        let last = builder.add_node(());
+        builder.add_edge(first, middle, (), Orientation::Default);
+        builder.add_edge(middle, last, (), Orientation::Default);
+        builder.add_external_edge(middle, (), Orientation::Default, Flow::Sink);
+        let graph: HedgeGraph<(), ()> = builder.build();
+
+        assert_eq!(
+            graph.topo_sort_kahn(DirectionBasis::Underlying).unwrap(),
+            vec![first, middle, last]
+        );
+
+        let first_pair = graph.iter_edges().next().unwrap().0;
+        let second_pair = graph.iter_edges().nth(1).unwrap().0;
+        let HedgePair::Paired { sink, .. } = first_pair else {
+            panic!("builder created a non-paired edge")
+        };
+        let mut selected = SuBitGraph::empty(graph.n_hedges());
+        selected.add(sink);
+        selected.add(second_pair);
+
+        assert_eq!(
+            graph
+                .topo_sort_kahn_of(&selected, DirectionBasis::Underlying)
+                .unwrap(),
+            vec![middle, last]
+        );
+    }
+
+    #[test]
+    fn cycles_are_evaluated_in_the_selected_direction_basis() {
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let first = builder.add_node(());
+        let second = builder.add_node(());
+        builder.add_edge(first, second, (), Orientation::Default);
+        builder.add_edge(second, first, (), Orientation::Undirected);
+        let graph: HedgeGraph<(), ()> = builder.build();
+
+        assert!(graph.topo_sort_kahn(DirectionBasis::Underlying).is_err());
+        assert_eq!(
+            graph.topo_sort_kahn(DirectionBasis::Superficial).unwrap(),
+            vec![first, second]
+        );
+    }
+
+    #[test]
+    fn full_sort_canonicalizes_identification_history() {
+        use crate::{
+            half_edge::nodestore::NodeStorageVec,
+            tree::{child_vec::ChildVecStore, Forest},
+        };
+
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let first = builder.add_node(());
+        let historical = builder.add_node(());
+        let target = builder.add_node(());
+        let isolated = builder.add_node(());
+        builder.add_edge(first, target, (), Orientation::Default);
+        builder.add_edge(historical, target, (), Orientation::Default);
+        let mut vec_graph: HedgeGraph<_, _, _, NodeStorageVec<()>> = builder.clone().build();
+        let merged = vec_graph.identify_nodes(&[first, historical], ());
+
+        assert_eq!(
+            vec_graph
+                .topo_sort_kahn(DirectionBasis::Underlying)
+                .unwrap(),
+            vec![merged, isolated, target]
+        );
+
+        let mut forest_graph: HedgeGraph<_, _, _, Forest<(), ChildVecStore<()>>> = builder.build();
+        let merged = forest_graph.identify_nodes(&[first, historical], ());
+        assert_eq!(
+            forest_graph
+                .topo_sort_kahn(DirectionBasis::Underlying)
+                .unwrap(),
+            vec![merged, isolated, target]
+        );
     }
 }

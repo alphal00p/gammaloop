@@ -16,6 +16,7 @@ __all__ = [
     "Cycle",
     "Dash",
     "DebugLevel",
+    "DirectionBasis",
     "DotCodec",
     "DotEdgeData",
     "DotHalfEdgeData",
@@ -546,10 +547,38 @@ class Graph:
     def nodes_of(self, subgraph: Subgraph) -> builtins.list[Node]: ...
     def edges_of(self, subgraph: Subgraph) -> builtins.list[Edge]: ...
     def half_edges_of(self, subgraph: Subgraph) -> builtins.list[HalfEdge]: ...
+    def internal_boundary(self, subgraph: Subgraph) -> Subgraph:
+        r"""
+        Return selected half-edges that lie on the selection's internal boundary.
+        """
+    def boundary(self, subgraph: Subgraph) -> Subgraph:
+        r"""
+        Return all boundary half-edges incident to nodes touched by the selection.
+        """
+    def external_half_edges(self) -> Subgraph:
+        r"""
+        Return dangling/external half-edges as a composable structural selection.
+        """
     def connected_components(self, subgraph: typing.Optional[Subgraph] = None) -> builtins.list[Subgraph]: ...
     def count_connected_components(self, subgraph: typing.Optional[Subgraph] = None) -> builtins.int: ...
     def is_connected(self, subgraph: typing.Optional[Subgraph] = None) -> builtins.bool: ...
     def cyclomatic_number(self, subgraph: typing.Optional[Subgraph] = None) -> builtins.int: ...
+    def is_reachable(self, source: Node | builtins.int | builtins.str, target: Node | builtins.int | builtins.str, *, subgraph: typing.Optional[Subgraph] = None, direction: DirectionBasis = DirectionBasis.Underlying) -> builtins.bool:
+        r"""
+        Test directed reachability within an optional structural selection.
+
+        Both endpoints must belong to the selected subgraph; otherwise this raises `ValueError`.
+        """
+    def topological_order(self, *, subgraph: typing.Optional[Subgraph] = None, direction: DirectionBasis = DirectionBasis.Underlying) -> builtins.list[Node]:
+        r"""
+        Return a deterministic topological order for the selected directed graph.
+
+        Explicitly selected zero-crown nodes appear first in ascending graph order.
+        """
+    def transitive_reduction(self, *, direction: DirectionBasis = DirectionBasis.Underlying) -> Graph:
+        r"""
+        Return a new graph with directionally redundant DAG edges removed.
+        """
     def depth_first_traverse(self, root: builtins.int | builtins.str, *, subgraph: typing.Optional[Subgraph] = None, include: typing.Optional[builtins.int] = None) -> TraversalTree: ...
     def breadth_first_traverse(self, root: builtins.int | builtins.str, *, subgraph: typing.Optional[Subgraph] = None, include: typing.Optional[builtins.int] = None) -> TraversalTree: ...
     def bridges(self, subgraph: typing.Optional[Subgraph] = None) -> Subgraph: ...
@@ -560,6 +589,21 @@ class Graph:
         Enumerate inclusion-minimal cutsets with an inclusive boundary-size range.
 
         Bounds default to `[1, unbounded]`; `min_size=0` is rejected because a bond is non-empty.
+        """
+    def find_bond(self, *, subgraph: typing.Optional[Subgraph] = None, min_size: typing.Optional[builtins.int] = None, max_size: typing.Optional[builtins.int] = None) -> typing.Optional[Subgraph]:
+        r"""
+        Find one native inclusion-minimal cutset within an inclusive size range.
+        """
+    def all_cycles(self, *, max_results: builtins.int, subgraph: typing.Optional[Subgraph] = None) -> builtins.list[Cycle]:
+        r"""
+        Enumerate circuits only when the complete cycle-space candidate count fits the bound.
+
+        `max_results` bounds all non-empty combinations of a cycle basis, not only
+        the combinations that ultimately form circuits.
+        """
+    def tadpoles(self, externals: typing.Sequence[Node | builtins.int | builtins.str]) -> builtins.list[Subgraph]:
+        r"""
+        Enumerate tadpole components after identifying a non-empty terminal node set.
         """
     def all_cuts(self, source: typing.Sequence[builtins.int | builtins.str], target: typing.Sequence[builtins.int | builtins.str]) -> builtins.list[CutPartition]:
         r"""
@@ -684,7 +728,20 @@ class OrientedCut:
     def left(self) -> Subgraph: ...
     @property
     def right(self) -> Subgraph: ...
+    @property
+    def edges(self) -> builtins.list[Edge]:
+        r"""
+        Return the cut edges in stable graph order.
+        """
     def side(self, left: builtins.bool) -> Subgraph: ...
+    def orientation(self, edge: Edge | builtins.int | builtins.str) -> Orientation:
+        r"""
+        Return one edge's orientation relative to this cut.
+        """
+    def winding_number(self, cycle: Cycle) -> builtins.int:
+        r"""
+        Return the signed intersection count with a cycle from the same graph revision.
+        """
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
@@ -1099,6 +1156,22 @@ class TraversalTree:
     @property
     def half_edges(self) -> builtins.list[HalfEdge]: ...
     def covers(self, subgraph: Subgraph) -> Subgraph: ...
+    def parent(self, node: Node | builtins.int | builtins.str) -> typing.Optional[Node]:
+        r"""
+        Return the immediate parent, or `None` for the traversal root.
+        """
+    def children(self, node: Node | builtins.int | builtins.str) -> builtins.list[Node]:
+        r"""
+        Return the immediate children in traversal discovery order.
+        """
+    def ancestors(self, node: Node | builtins.int | builtins.str) -> builtins.list[Node]:
+        r"""
+        Return strict ancestors from the immediate parent through the root.
+        """
+    def fundamental_cycle(self, half_edge: _HalfEdgeTarget) -> typing.Optional[Cycle]:
+        r"""
+        Return the fundamental cycle closed by an internal edge, or `None` for a tree edge.
+        """
 
 @typing.final
 class TypstBind:
@@ -1147,6 +1220,20 @@ class DebugLevel(enum.Enum):
     Off = ...
     Canvas = ...
     EdgePositions = ...
+
+@typing.final
+class DirectionBasis(enum.Enum):
+    r"""
+    Selects which notion of edge direction a directed algorithm follows.
+    """
+    Underlying = ...
+    r"""
+    Follow the source/sink roles stored by the half-edge involution.
+    """
+    Superficial = ...
+    r"""
+    Apply each edge's superficial orientation and ignore undirected edges.
+    """
 
 @typing.final
 class Flow(enum.Enum):

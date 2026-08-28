@@ -997,86 +997,106 @@ mod tests {
                 ("subgraph", all_hedges),
             ]),
         ]);
-        let config = |mode: &str, arrows: bool, cut_ids: bool, first_particle: &str| {
-            TypstConfig::new(std::collections::BTreeMap::from([
-                ("mode".to_owned(), TypstValue::String(mode.to_owned())),
-                ("layouts".to_owned(), layouts.clone()),
-                (
-                    "draw".to_owned(),
-                    value_dict([(
-                        "subgraph",
-                        TypstValue::Array(vec![
+        let config =
+            |mode: Option<&str>, arrows: Option<bool>, cut_ids: bool, first_particle: &str| {
+                let mut fields = std::collections::BTreeMap::from([
+                    ("layouts".to_owned(), layouts.clone()),
+                    (
+                        "draw".to_owned(),
+                        value_dict([(
+                            "subgraph",
                             TypstValue::Array(vec![
-                                TypstValue::Bool(true),
-                                TypstValue::Bool(false),
-                                TypstValue::Bool(true),
-                                TypstValue::Bool(false),
+                                TypstValue::Array(vec![
+                                    TypstValue::Bool(true),
+                                    TypstValue::Bool(false),
+                                    TypstValue::Bool(true),
+                                    TypstValue::Bool(false),
+                                ]),
+                                TypstValue::Array(vec![
+                                    TypstValue::Bool(false),
+                                    TypstValue::Bool(true),
+                                    TypstValue::Bool(false),
+                                    TypstValue::Bool(true),
+                                ]),
                             ]),
-                            TypstValue::Array(vec![
-                                TypstValue::Bool(false),
-                                TypstValue::Bool(true),
-                                TypstValue::Bool(false),
-                                TypstValue::Bool(true),
-                            ]),
+                        )]),
+                    ),
+                    ("elements".to_owned(), elements(cut_ids, first_particle)),
+                ]);
+                if let Some(mode) = mode {
+                    fields.insert("mode".to_owned(), TypstValue::String(mode.to_owned()));
+                }
+                if let Some(arrows) = arrows {
+                    fields.insert(
+                        "physics".to_owned(),
+                        value_dict([
+                            ("momentum-arrows", TypstValue::Bool(arrows)),
+                            ("show-edge-index", TypstValue::Bool(true)),
+                            ("show-node-index", TypstValue::Bool(true)),
+                            ("show-particle", TypstValue::Bool(true)),
                         ]),
-                    )]),
-                ),
-                (
-                    "physics".to_owned(),
-                    value_dict([
-                        ("momentum-arrows", TypstValue::Bool(arrows)),
-                        ("show-edge-index", TypstValue::Bool(true)),
-                        ("show-node-index", TypstValue::Bool(true)),
-                        ("show-particle", TypstValue::Bool(true)),
-                    ]),
-                ),
-                ("elements".to_owned(), elements(cut_ids, first_particle)),
-            ]))
-            .unwrap()
-        };
+                    );
+                }
+                TypstConfig::new(fields).unwrap()
+            };
+
+        let neutral = renderer
+            .to_svg(&TypstRenderRequest::new(
+                dot,
+                config(None, None, true, "e-"),
+            ))
+            .unwrap();
+        let explicit_neutral = renderer
+            .to_svg(&TypstRenderRequest::new(
+                dot,
+                config(Some("generic"), None, true, "e-"),
+            ))
+            .unwrap();
 
         let plain = renderer
             .to_svg(&TypstRenderRequest::new(
                 dot,
-                config("generic", false, true, "e-"),
+                config(Some("generic"), Some(false), true, "e-"),
             ))
             .unwrap();
         let amplitude = renderer
             .to_svg(&TypstRenderRequest::new(
                 dot,
-                config("amplitude", true, true, "e-"),
+                config(Some("amplitude"), Some(true), true, "e-"),
             ))
             .unwrap();
         let cross_section = renderer
             .to_svg(&TypstRenderRequest::new(
                 dot,
-                config("cross-section", true, true, "e-"),
+                config(Some("cross-section"), Some(true), true, "e-"),
             ))
             .unwrap();
         let automatic_cross_section = renderer
             .to_svg(&TypstRenderRequest::new(
                 dot,
-                config("auto", true, true, "e-"),
+                config(Some("auto"), Some(true), true, "e-"),
             ))
             .unwrap();
         let automatic_amplitude = renderer
             .to_svg(&TypstRenderRequest::new(
                 dot,
-                config("auto", true, false, "e-"),
+                config(Some("auto"), Some(true), false, "e-"),
             ))
             .unwrap();
         let explicit_amplitude = renderer
             .to_svg(&TypstRenderRequest::new(
                 dot,
-                config("amplitude", true, false, "e-"),
+                config(Some("amplitude"), Some(true), false, "e-"),
             ))
             .unwrap();
         let unknown_particle = renderer
             .to_svg(&TypstRenderRequest::new(
                 dot,
-                config("amplitude", true, false, "unknown"),
+                config(Some("amplitude"), Some(true), false, "unknown"),
             ))
             .unwrap();
+        assert_eq!(neutral, explicit_neutral);
+        assert_ne!(neutral, plain);
         assert!(plain.contains("<svg"));
         assert!(amplitude.contains("<svg"));
         assert!(cross_section.contains("<svg"));

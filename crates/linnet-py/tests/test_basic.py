@@ -1307,6 +1307,269 @@ class TestHedgeGraphTopology(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "at least 1"):
                     edgeless.all_bonds(min_size=0)
 
+    def test_boundaries_cycles_bonds_and_tadpoles_are_backend_neutral(self):
+        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
+            with self.subTest(node_store=node_store):
+                graph, _, _, _ = topology_graph(node_store=node_store)
+                triangle = graph.subgraph(edges=["ab", "bc", "ca"])
+                self.assertFalse(graph.internal_boundary(triangle))
+                self.assertEqual(
+                    {edge.name for edge in graph.edges_of(graph.boundary(triangle))},
+                    {"cd"},
+                )
+
+                split = graph.subgraph(half_edges=[graph.edge("cd").source.index])
+                self.assertEqual(graph.internal_boundary(split), split)
+
+                cycles = graph.all_cycles(max_results=1)
+                self.assertEqual(len(cycles), 1)
+                self.assertEqual(
+                    {edge.name for edge in graph.edges_of(cycles[0].filter)},
+                    {"ab", "bc", "ca"},
+                )
+                with self.assertRaisesRegex(
+                    ValueError, "1 candidate combinations.*max_results=0"
+                ):
+                    graph.all_cycles(max_results=0)
+                self.assertEqual(
+                    graph.all_cycles(
+                        max_results=0,
+                        subgraph=graph.subgraph(edges=["cd"]),
+                    ),
+                    [],
+                )
+                loop_node = lp.node("loop")
+                large_cycle_space = lp.build(
+                    loop_node,
+                    *[
+                        lp.edge(
+                            lp.source(loop_node),
+                            f"loop-{index}",
+                            lp.sink(loop_node),
+                        )
+                        for index in range(64)
+                    ],
+                    node_store=node_store,
+                )
+                with self.assertRaisesRegex(
+                    ValueError, "powerset at rank 64 is not representable"
+                ):
+                    large_cycle_space.all_cycles(max_results=2**64 - 1)
+
+                bond = graph.find_bond(min_size=1, max_size=1)
+                self.assertIsInstance(bond, lp.Subgraph)
+                self.assertEqual(bond.n_half_edges, 1)
+                self.assertIsNone(graph.find_bond(min_size=10, max_size=10))
+
+                terminal_names = ("terminal", "a", "b", "c", "d", "e", "f", "x")
+                nodes = {name: lp.node(name) for name in terminal_names}
+
+                def connection(source, sink, name):
+                    return lp.edge(
+                        lp.source(nodes[source]),
+                        name,
+                        lp.sink(nodes[sink]),
+                    )
+
+                tadpole_graph = lp.build(
+                    *nodes.values(),
+                    connection("terminal", "a", "ta"),
+                    connection("a", "b", "ab"),
+                    connection("b", "c", "bc"),
+                    connection("c", "a", "ca"),
+                    connection("d", "e", "de"),
+                    connection("e", "f", "ef"),
+                    connection("f", "d", "fd"),
+                    node_store=node_store,
+                )
+                tadpoles = tadpole_graph.tadpoles([tadpole_graph.node("terminal")])
+                self.assertEqual(len(tadpoles), 2)
+                self.assertEqual(
+                    [part.half_edge_indices() for part in tadpoles],
+                    sorted(part.half_edge_indices() for part in tadpoles),
+                )
+                with self.assertRaisesRegex(ValueError, "at least one"):
+                    tadpole_graph.tadpoles([])
+                with self.assertRaisesRegex(ValueError, "more than once"):
+                    tadpole_graph.tadpoles(["terminal", "terminal"])
+                with self.assertRaisesRegex(ValueError, "no incident"):
+                    tadpole_graph.tadpoles(["x"])
+
+                sample, _, _, _ = sample_graph(node_store=node_store)
+                external = sample.external_half_edges()
+                self.assertIsInstance(external, lp.Subgraph)
+                self.assertEqual(
+                    [half_edge.index for half_edge in external.to_half_edges()],
+                    [sample.edge("outgoing").source.index],
+                )
+
+    def test_traversal_relationships_and_cut_orientation_are_graph_bound(self):
+        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
+            with self.subTest(node_store=node_store):
+                graph, _, _, _ = topology_graph(node_store=node_store)
+                graph.add_edge(lp.edge(lp.source("d"), "external"))
+                tree = graph.depth_first_traverse("a")
+                root = tree.nodes[0]
+                self.assertEqual(root.name, "a")
+                self.assertIsNone(tree.parent(root))
+                self.assertEqual(tree.ancestors(root), [])
+
+                for node in tree.nodes[1:]:
+                    parent = tree.parent(node)
+                    self.assertIsNotNone(parent)
+                    self.assertIn(
+                        node.name,
+                        {child.name for child in tree.children(parent)},
+                    )
+                    self.assertEqual(tree.ancestors(node)[-1].name, "a")
+
+                with self.assertRaisesRegex(ValueError, "not part"):
+                    tree.parent(graph.node("e"))
+                foreign, _, _, _ = topology_graph(node_store=node_store)
+                with self.assertRaisesRegex(ValueError, "different graph revision"):
+                    tree.children(foreign.node("a"))
+
+                tree_indices = {half_edge.index for half_edge in tree.half_edges}
+                triangle_edges = [graph.edge(name) for name in ("ab", "bc", "ca")]
+                non_tree = next(
+                    edge
+                    for edge in triangle_edges
+                    if edge.source.index not in tree_indices
+                    and edge.sink.index not in tree_indices
+                )
+                tree_edge = next(
+                    edge for edge in triangle_edges if edge.source.index in tree_indices
+                )
+                cycle = tree.fundamental_cycle(non_tree.source)
+                self.assertIsInstance(cycle, lp.Cycle)
+                self.assertIsNone(tree.fundamental_cycle(tree_edge.source))
+                with self.assertRaisesRegex(ValueError, "external half-edge"):
+                    tree.fundamental_cycle(graph.edge("external").source)
+                with self.assertRaisesRegex(ValueError, "both edge endpoints"):
+                    tree.fundamental_cycle(graph.edge("ef").source)
+
+                partition = graph.all_cuts(["a"], ["d"])[0]
+                cut = partition.boundary
+                self.assertEqual(
+                    [edge.index for edge in cut.edges],
+                    sorted(edge.index for edge in cut.edges),
+                )
+                for edge in cut.edges:
+                    self.assertNotEqual(
+                        cut.orientation(edge), lp.Orientation.Undirected
+                    )
+                non_cut = next(
+                    edge
+                    for edge in graph.edges()
+                    if edge.index not in {cut_edge.index for cut_edge in cut.edges}
+                )
+                with self.assertRaisesRegex(ValueError, "not part of this cut"):
+                    cut.orientation(non_cut)
+                self.assertIsInstance(cut.winding_number(cycle), int)
+                foreign_cycle = foreign.all_cycles(max_results=1)[0]
+                with self.assertRaisesRegex(ValueError, "different graph revision"):
+                    cut.winding_number(foreign_cycle)
+
+                fresh = graph.add_node(lp.node("fresh"))
+                for relationship in (tree.parent, tree.children, tree.ancestors):
+                    with self.assertRaises(ReferenceError):
+                        relationship(fresh)
+                    with self.assertRaises(ReferenceError):
+                        relationship("fresh")
+                with self.assertRaises(ReferenceError):
+                    cut.orientation("no-longer-resolvable")
+                with self.assertRaises(ReferenceError):
+                    cut.winding_number(cycle)
+
+    def test_directed_algorithms_select_underlying_or_superficial_direction(self):
+        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
+            with self.subTest(node_store=node_store):
+                nodes = {
+                    name: lp.node(name, data=UserNodePayload(name)) for name in "abcx"
+                }
+                edge_data = {name: UserEdgePayload(name) for name in ("ab", "bc", "ac")}
+
+                def connection(source, sink, name, orientation=lp.Orientation.Default):
+                    return lp.edge(
+                        lp.source(nodes[source]),
+                        name,
+                        lp.sink(nodes[sink]),
+                        data=edge_data[name],
+                        orientation=orientation,
+                        label=f"label-{name}",
+                    )
+
+                graph = lp.build(
+                    *nodes.values(),
+                    connection("a", "b", "ab"),
+                    connection("b", "c", "bc"),
+                    connection("a", "c", "ac", lp.Orientation.Reversed),
+                    node_store=node_store,
+                )
+                source_view = graph.edge("ab")
+                self.assertFalse(graph.is_reachable("c", "a"))
+                self.assertTrue(
+                    graph.is_reachable(
+                        "c",
+                        "a",
+                        direction=lp.DirectionBasis.Superficial,
+                    )
+                )
+                self.assertEqual(
+                    [node.name for node in graph.topological_order()],
+                    ["x", "a", "b", "c"],
+                )
+                with self.assertRaisesRegex(ValueError, "Not a DAG"):
+                    graph.topological_order(direction=lp.DirectionBasis.Superficial)
+
+                selected = graph.subgraph(edges=["ab"])
+                self.assertTrue(graph.is_reachable("a", "b", subgraph=selected))
+                with self.assertRaisesRegex(ValueError, "target node"):
+                    graph.is_reachable("a", "c", subgraph=selected)
+                isolated = graph.subgraph(nodes=["x"])
+                self.assertTrue(graph.is_reachable("x", "x", subgraph=isolated))
+                self.assertEqual(
+                    [node.name for node in graph.topological_order(subgraph=isolated)],
+                    ["x"],
+                )
+
+                reduced = graph.transitive_reduction()
+                self.assertEqual({edge.name for edge in reduced.edges()}, {"ab", "bc"})
+                self.assertEqual(graph.n_edges, 3)
+                self.assertIs(source_view.data, edge_data["ab"])
+                self.assertIs(reduced.edge("ab").data, edge_data["ab"])
+                reduced.edge("ab").drawing.label = "changed"
+                self.assertEqual(graph.edge("ab").drawing.label, "label-ab")
+                with self.assertRaisesRegex(ValueError, "Not a DAG"):
+                    graph.transitive_reduction(direction=lp.DirectionBasis.Superficial)
+
+                left = lp.node("left")
+                right = lp.node("right")
+                reversed_graph = lp.build(
+                    left,
+                    right,
+                    lp.edge(
+                        lp.source(left),
+                        "edge",
+                        lp.sink(right),
+                        orientation=lp.Orientation.Reversed,
+                    ),
+                    node_store=node_store,
+                )
+                self.assertEqual(
+                    [node.name for node in reversed_graph.topological_order()],
+                    ["left", "right"],
+                )
+                self.assertEqual(
+                    [
+                        node.name
+                        for node in reversed_graph.topological_order(
+                            direction=lp.DirectionBasis.Superficial
+                        )
+                    ],
+                    ["right", "left"],
+                )
+
     def test_isolated_nodes_are_first_class_subgraph_members(self):
         a = lp.node("a", data=UserNodePayload("a"))
         b = lp.node("b", data=UserNodePayload("b"))
@@ -2680,6 +2943,65 @@ class TestRendering(unittest.TestCase):
             ),
         )
         self.assertIn("<svg", graph.to_svg())
+
+    @unittest.skipUnless(TYPST, "Typst 0.15 or newer is not available")
+    def test_notebook_display_is_generic_until_physics_is_enabled(self):
+        left = lp.node("left")
+        right = lp.node("right")
+        graph = lp.build(
+            left,
+            right,
+            lp.edge(lp.sink(left), "input", particle="e-"),
+            lp.edge(
+                lp.source(left),
+                "work",
+                lp.sink(right),
+                particle="photon",
+            ),
+            lp.edge(lp.source(right), "output", particle="e+"),
+            render_config=lp.RenderConfig(
+                typst_executable=TYPST,
+                layouts=lp.LayoutOptions(
+                    algorithm=lp.LayoutAlgorithm.Force,
+                    seed=19,
+                    steps=80,
+                    label_steps=20,
+                ),
+            ),
+        )
+
+        neutral = graph._repr_svg_()
+        explicit_neutral = graph.to_svg(
+            config=lp.RenderConfig(mode=lp.RenderMode.Generic, physics=None)
+        )
+        physics = lp.PhysicsOptions(
+            momentum_arrows=True,
+            show_edge_index=True,
+            show_particle=True,
+        )
+        generic_physics = graph.to_svg(
+            config=lp.RenderConfig(
+                mode=lp.RenderMode.Generic,
+                physics=physics,
+            )
+        )
+        automatic_physics = graph.to_svg(
+            config=lp.RenderConfig(
+                mode=lp.RenderMode.Auto,
+                physics=physics,
+            )
+        )
+
+        self.assertEqual(neutral, explicit_neutral)
+        self.assertNotEqual(neutral, generic_physics)
+        self.assertNotEqual(generic_physics, automatic_physics)
+
+        graph.render_config.physics = physics
+        self.assertEqual(graph._repr_svg_(), generic_physics)
+        self.assertEqual(
+            graph.to_svg(config=lp.RenderConfig(physics=None)),
+            neutral,
+        )
 
     @unittest.skipUnless(TYPST, "Typst 0.15 or newer is not available")
     def test_real_typst_preserves_structural_names_and_half_edge_fields(self):
