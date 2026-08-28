@@ -682,8 +682,8 @@ mod tests {
     use typed_index_collections::TiVec;
 
     use crate::{
-        DependentMomentaConstructor, dot,
-        graph::{FeynmanGraph, Graph, parse::IntoGraph},
+        DependentMomentaConstructor, finalized_runtime_dot,
+        graph::{FeynmanGraph, Graph, parse::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         model::Model,
         momentum::sample::ExternalIndex,
@@ -811,17 +811,20 @@ mod tests {
         fn test_photon_box() {
             test_initialise().unwrap();
 
-            let photon_box: Graph = dot!(
+            let photon_box: Graph = finalized_runtime_dot!(
                 digraph photon_box {
+                    graph [projector=1]
+                    node [num=1]
+                    edge [num=1]
                     ext [style=invis];
-                    ext -> v1:0 [particle = "a", id=0];
-                    ext -> v2:1 [particle = "a", id=1];
-                    v3:2 -> ext [particle = "a", id=2];
-                    v4:3 -> ext [particle = "a", id=3];
-                    v1 -> v2 [particle = "t", id=4];
-                    v2 -> v3 [particle = "t", id=5];
-                    v3 -> v4 [particle = "t", id=6];
-                    v4 -> v1 [particle = "t", id=7];
+                    ext -> v1:0 [particle = "a", id=0, sink="{ufo_order:0}"];
+                    ext -> v2:1 [particle = "a", id=1, sink="{ufo_order:0}"];
+                    v3:2 -> ext [particle = "a", id=2, source="{ufo_order:0}"];
+                    v4:3 -> ext [particle = "a", id=3, source="{ufo_order:0}"];
+                    v1 -> v2 [particle = "t", id=4, lmb_id=0, source="{ufo_order:1}", sink="{ufo_order:1}"];
+                    v2 -> v3 [particle = "t", id=5, source="{ufo_order:2}", sink="{ufo_order:1}"];
+                    v3 -> v4 [particle = "t", id=6, source="{ufo_order:2}", sink="{ufo_order:1}"];
+                    v4 -> v1 [particle = "t", id=7, source="{ufo_order:2}", sink="{ufo_order:2}"];
                 },
                 "sm"
             )
@@ -842,14 +845,17 @@ mod tests {
             let sm = load_generic_model("sm");
             let e_cm = F(600.0);
 
-            let aa_tt: Graph = dot!(
+            let aa_tt: Graph = finalized_runtime_dot!(
                 digraph aa_tt {
+                    graph [projector=1]
+                    node [num=1]
+                    edge [num=1]
                     ext [style=invis];
-                    ext -> v1:0 [particle = "a", id=0];
-                    ext -> v2:1 [particle = "a", id=1];
-                    v1:2 -> ext [particle = "t", id=2];
-                    v2:3 -> ext [particle = "t~", id=3];
-                    v2 -> v1 [particle = "t", id=4];
+                    ext -> v1:0 [particle = "a", id=0, sink="{ufo_order:0}"];
+                    ext -> v2:1 [particle = "a", id=1, sink="{ufo_order:0}"];
+                    v1:2 -> ext [particle = "t", id=2, source="{ufo_order:1}"];
+                    v2:3 -> ext [particle = "t~", id=3, source="{ufo_order:1}"];
+                    v2 -> v1 [particle = "t", id=4, source="{ufo_order:2}", sink="{ufo_order:2}"];
                 },
                 "sm"
             )
@@ -867,14 +873,17 @@ mod tests {
             let sm = load_generic_model("sm");
             let e_cm = F(700.0);
 
-            let gt_gt: Graph = dot!(
+            let gt_gt: Graph = finalized_runtime_dot!(
                 digraph gt_gt {
+                    graph [projector=1]
+                    node [num=1]
+                    edge [num=1]
                     ext [style=invis];
-                    ext -> v1:0 [particle = "g", id=0];
-                    ext -> v1:1 [particle = "t", id=1];
-                    v2:2 -> ext [particle = "g", id=2];
-                    v2:3 -> ext [particle = "t", id=3];
-                    v1 -> v2 [particle = "t", id=4];
+                    ext -> v1:0 [particle = "g", id=0, sink="{ufo_order:0}"];
+                    ext -> v1:1 [particle = "t", id=1, sink="{ufo_order:1}"];
+                    v2:2 -> ext [particle = "g", id=2, source="{ufo_order:0}"];
+                    v2:3 -> ext [particle = "t", id=3, source="{ufo_order:1}"];
+                    v1 -> v2 [particle = "t", id=4, source="{ufo_order:2}", sink="{ufo_order:2}"];
                 }, "sm"
             )
             .unwrap();

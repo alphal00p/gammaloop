@@ -9,6 +9,8 @@ keywords = ["feynman", "generator", "physics"]
 categories = ["science"]
 
 [dependencies]
+bincode-trait-derive = { workspace = true }
+bincode = { workspace = true, features = ["serde"] }
 feynkit-graph = { version = "0.1.0", path = "../feynkit-graph" }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
 idenso = { workspace = true }

@@ -1,12 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use feynkit_graph::{ExternalLeg, FeynmanDiagram, ParticleReference};
-use feynkit_model::{Model, ModelError};
+use feynkit_graph::{CanonicalCutSide, ExternalLeg, FeynmanDiagram};
+use feynkit_model::{Model, ModelError, ParameterId, ParticleId};
+#[cfg(test)]
+use symbolica::parser::ParseSettings;
 use symbolica::{
     atom::{Atom, AtomCore},
+    function,
     graph::Graph,
     id::Replacement,
-    parser::ParseSettings,
+    symbol,
 };
 use thiserror::Error;
 
@@ -16,16 +19,10 @@ use crate::{DiagramGroup, GraphGroupingOptions, GroupMember, NumeratorGrouping};
 pub enum GroupingError {
     #[error(transparent)]
     Model(#[from] ModelError),
-    #[error(
-        "failed to parse numerator of diagram '{diagram}': {message}; expression: {expression}"
-    )]
-    NumeratorParse {
-        diagram: String,
-        expression: String,
-        message: String,
-    },
     #[error("failed to construct a topology grouping key: {0}")]
     TopologyConstruction(String),
+    #[error("source diagram index {0} does not fit in a symbolic integer")]
+    SourceDiagramIndexOverflow(usize),
 }
 
 pub(crate) struct GroupingOutcome {
@@ -38,21 +35,28 @@ pub(crate) struct GroupingOutcome {
 enum TopologyVertex {
     Internal,
     External(ExternalLeg),
+    CutSide {
+        side: CanonicalCutSide,
+        coupling_orders: BTreeMap<String, usize>,
+        loop_count: usize,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum InternalParticleColor {
-    MassAndSpin { mass: String, spin: i64 },
-    Exact(ParticleReference),
+    MassAndSpin { mass: ParameterId, spin: i64 },
+    Exact(ParticleId),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum TopologyEdge {
     Internal(InternalParticleColor),
     External {
-        particle: ParticleReference,
+        particle: ParticleId,
         directed: bool,
     },
+    CutPair,
+    CutMembership,
 }
 
 type TopologyKey = Graph<TopologyVertex, TopologyEdge>;
@@ -60,6 +64,10 @@ type TopologyKey = Graph<TopologyVertex, TopologyEdge>;
 struct PreparedNumerator {
     exact: Atom,
     samples: Vec<Atom>,
+}
+
+struct CanonicalTopology {
+    key: TopologyKey,
 }
 
 #[derive(Clone, Copy)]
@@ -73,9 +81,10 @@ pub(crate) fn group_diagrams(
     diagrams: Vec<FeynmanDiagram>,
     model: &Model,
     grouping: &NumeratorGrouping,
+    symmetrize_left_right: bool,
 ) -> Result<GroupingOutcome, GroupingError> {
     if matches!(grouping, NumeratorGrouping::None) {
-        let groups = singleton_groups(&(0..diagrams.len()).collect::<Vec<_>>());
+        let groups = singleton_groups(&diagrams, &(0..diagrams.len()).collect::<Vec<_>>());
         return Ok(GroupingOutcome {
             diagrams,
             groups,
@@ -84,23 +93,27 @@ pub(crate) fn group_diagrams(
     }
 
     let scalar_names = scalar_names(model);
-    let options = grouping_options(grouping);
     let mut retained = Vec::with_capacity(diagrams.len());
     let mut source_diagrams = Vec::with_capacity(diagrams.len());
     let mut prepared = Vec::with_capacity(diagrams.len());
     let mut zero_numerator_count = 0;
     for (source_diagram, diagram) in diagrams.into_iter().enumerate() {
-        let exact = parse_numerator(&diagram)?;
-        if exact.expand().is_zero() {
+        // External wavefunctions carry diagram-local edge IDs. The topology
+        // key below already compares exact external particles and states, so
+        // including those IDs would split physically identical numerators.
+        // Keep the projector in the full zero check and on the retained master,
+        // but compare only the generated numerator and its common prefactor.
+        let exact = diagram.numerator() * diagram.numerator_prefactor();
+        if (&exact * diagram.projector()).expand().is_zero() {
             zero_numerator_count += 1;
             continue;
         }
-        let samples = options.map_or_else(Vec::new, |options| {
-            numerical_samples(&exact, options, &scalar_names)
-        });
         retained.push(diagram);
         source_diagrams.push(source_diagram);
-        prepared.push(PreparedNumerator { exact, samples });
+        prepared.push(PreparedNumerator {
+            exact,
+            samples: Vec::new(),
+        });
     }
 
     let (options, mode) = match grouping {
@@ -109,7 +122,7 @@ pub(crate) fn group_diagrams(
         NumeratorGrouping::UpToScalar(options) => (options, ComparisonMode::UpToScalar),
         NumeratorGrouping::None | NumeratorGrouping::OnlyDetectZeroes => {
             return Ok(GroupingOutcome {
-                groups: singleton_groups(&source_diagrams),
+                groups: singleton_groups(&retained, &source_diagrams),
                 diagrams: retained,
                 zero_numerator_count,
             });
@@ -117,13 +130,11 @@ pub(crate) fn group_diagrams(
     };
 
     let mut buckets = BTreeMap::<TopologyKey, Vec<usize>>::new();
-    for (index, diagram) in retained.iter().enumerate() {
-        buckets
-            .entry(topology_key(diagram, model, options)?)
-            .or_default()
-            .push(index);
+    for (index, (diagram, numerator)) in retained.iter().zip(&mut prepared).enumerate() {
+        let key = topology_key(diagram, model, options, symmetrize_left_right)?;
+        numerator.samples = numerical_samples(&numerator.exact, options, &scalar_names);
+        buckets.entry(key).or_default().push(index);
     }
-
     let mut groups = Vec::new();
     for indices in buckets.into_values() {
         let mut bucket_groups: Vec<DiagramGroup> = Vec::new();
@@ -145,16 +156,22 @@ pub(crate) fn group_diagrams(
             if let Some((group_index, ratio)) = matching_group {
                 bucket_groups[group_index].members.push(GroupMember {
                     source_diagram: source_diagrams[diagram],
+                    source_id: retained[diagram].id(),
+                    source_name: retained[diagram].name().to_owned(),
                     diagram,
                     ratio,
+                    overall_factor: retained[diagram].overall_factor().clone(),
                 });
             } else {
                 bucket_groups.push(DiagramGroup {
                     master: diagram,
                     members: vec![GroupMember {
                         source_diagram: source_diagrams[diagram],
+                        source_id: retained[diagram].id(),
+                        source_name: retained[diagram].name().to_owned(),
                         diagram,
-                        ratio: "1".to_owned(),
+                        ratio: Atom::one(),
+                        overall_factor: retained[diagram].overall_factor().clone(),
                     }],
                 });
             }
@@ -163,47 +180,73 @@ pub(crate) fn group_diagrams(
     }
     groups.sort_by_key(|group| group.master);
 
+    let (diagrams, groups) = collapse_groups(retained, groups)?;
     Ok(GroupingOutcome {
-        diagrams: retained,
+        diagrams,
         groups,
         zero_numerator_count,
     })
 }
 
-fn grouping_options(grouping: &NumeratorGrouping) -> Option<&GraphGroupingOptions> {
-    match grouping {
-        NumeratorGrouping::Identical(options)
-        | NumeratorGrouping::UpToSign(options)
-        | NumeratorGrouping::UpToScalar(options) => Some(options),
-        NumeratorGrouping::None | NumeratorGrouping::OnlyDetectZeroes => None,
+fn collapse_groups(
+    diagrams: Vec<FeynmanDiagram>,
+    groups: Vec<DiagramGroup>,
+) -> Result<(Vec<FeynmanDiagram>, Vec<DiagramGroup>), GroupingError> {
+    let mut masters = Vec::with_capacity(groups.len());
+    let mut collapsed_groups = Vec::with_capacity(groups.len());
+    for group in groups {
+        let output_index = masters.len();
+        let master = diagrams[group.master].clone();
+        let factor = if group.members.len() == 1 {
+            master.overall_factor().clone()
+        } else {
+            let mut factor = Atom::Zero;
+            for member in &group.members {
+                let source_diagram = i64::try_from(member.source_diagram).map_err(|_| {
+                    GroupingError::SourceDiagramIndexOverflow(member.source_diagram)
+                })?;
+                factor += function!(
+                    symbol!("NumeratorDependentGrouping"),
+                    Atom::num(source_diagram),
+                    member.ratio.clone(),
+                    member.overall_factor.clone()
+                );
+            }
+            factor
+        };
+        masters.push(master.with_overall_factor(factor));
+        collapsed_groups.push(DiagramGroup {
+            master: output_index,
+            members: group
+                .members
+                .into_iter()
+                .map(|mut member| {
+                    member.diagram = output_index;
+                    member
+                })
+                .collect(),
+        });
     }
+    Ok((masters, collapsed_groups))
 }
 
-fn singleton_groups(source_diagrams: &[usize]) -> Vec<DiagramGroup> {
-    source_diagrams
+fn singleton_groups(diagrams: &[FeynmanDiagram], source_diagrams: &[usize]) -> Vec<DiagramGroup> {
+    diagrams
         .iter()
-        .copied()
+        .zip(source_diagrams.iter().copied())
         .enumerate()
-        .map(|(diagram, source_diagram)| DiagramGroup {
+        .map(|(diagram, (source, source_diagram))| DiagramGroup {
             master: diagram,
             members: vec![GroupMember {
                 source_diagram,
+                source_id: source.id(),
+                source_name: source.name().to_owned(),
                 diagram,
-                ratio: "1".to_owned(),
+                ratio: Atom::one(),
+                overall_factor: source.overall_factor().clone(),
             }],
         })
         .collect()
-}
-
-fn parse_numerator(diagram: &FeynmanDiagram) -> Result<Atom, GroupingError> {
-    let expression = diagram.numerator().unwrap_or("1");
-    Atom::parse(expression, "feynkit_grouping", ParseSettings::default()).map_err(|message| {
-        GroupingError::NumeratorParse {
-            diagram: diagram.name().to_owned(),
-            expression: expression.to_owned(),
-            message,
-        }
-    })
 }
 
 fn scalar_names(model: &Model) -> BTreeSet<String> {
@@ -290,11 +333,11 @@ fn compare(
     mode: ComparisonMode,
     options: &GraphGroupingOptions,
     scalar_names: &BTreeSet<String>,
-) -> Option<String> {
+) -> Option<Atom> {
     if options.check_canonical_numerator
         && let Some(ratio) = compare_atoms(&candidate.exact, &master.exact, mode, scalar_names)
     {
-        return Some(ratio.to_canonical_string());
+        return Some(ratio);
     }
     let mut ratios = candidate
         .samples
@@ -303,7 +346,7 @@ fn compare(
         .map(|(candidate, master)| compare_atoms(candidate, master, mode, scalar_names));
     let first = ratios.next()??;
     if ratios.all(|ratio| ratio.is_some_and(|ratio| expressions_equal(&ratio, &first))) {
-        Some(first.to_canonical_string())
+        Some(first)
     } else {
         None
     }
@@ -349,15 +392,75 @@ fn topology_key(
     diagram: &FeynmanDiagram,
     model: &Model,
     options: &GraphGroupingOptions,
+    symmetrize_left_right: bool,
 ) -> Result<TopologyKey, GroupingError> {
+    canonical_topologies(diagram, model, options, symmetrize_left_right)?
+        .into_iter()
+        .map(|topology| topology.key)
+        .min()
+        .ok_or_else(|| GroupingError::TopologyConstruction("no canonical topology".to_owned()))
+}
+
+fn canonical_topologies(
+    diagram: &FeynmanDiagram,
+    model: &Model,
+    options: &GraphGroupingOptions,
+    symmetrize_left_right: bool,
+) -> Result<Vec<CanonicalTopology>, GroupingError> {
+    let mut topologies = vec![topology_key_variant(diagram, model, options, None)?];
+    if symmetrize_left_right && let Some(partners) = left_right_partners(diagram) {
+        topologies.push(topology_key_variant(
+            diagram,
+            model,
+            options,
+            Some(&partners),
+        )?);
+    }
+    Ok(topologies)
+}
+
+fn left_right_partners(diagram: &FeynmanDiagram) -> Option<BTreeMap<ExternalLeg, ExternalLeg>> {
+    let legs = diagram
+        .vertices()
+        .filter_map(|(_, vertex)| vertex.external.clone())
+        .collect::<Vec<_>>();
+    let by_connection = legs
+        .iter()
+        .cloned()
+        .map(|leg| ((leg.connection, leg.state), leg))
+        .collect::<BTreeMap<_, _>>();
+    if by_connection.len() != legs.len() {
+        return None;
+    }
+    legs.into_iter()
+        .map(|leg| {
+            let opposite = match leg.state {
+                feynkit_graph::ExternalState::Incoming => feynkit_graph::ExternalState::Outgoing,
+                feynkit_graph::ExternalState::Outgoing => feynkit_graph::ExternalState::Incoming,
+            };
+            by_connection
+                .get(&(leg.connection, opposite))
+                .cloned()
+                .map(|partner| (leg, partner))
+        })
+        .collect()
+}
+
+fn topology_key_variant(
+    diagram: &FeynmanDiagram,
+    model: &Model,
+    options: &GraphGroupingOptions,
+    left_right_partners: Option<&BTreeMap<ExternalLeg, ExternalLeg>>,
+) -> Result<CanonicalTopology, GroupingError> {
     let mut graph = Graph::new();
     for (_, vertex) in diagram.vertices() {
-        graph.add_node(
-            vertex
-                .external
-                .clone()
-                .map_or(TopologyVertex::Internal, TopologyVertex::External),
-        );
+        let external = vertex.external.clone().map(|leg| {
+            left_right_partners
+                .and_then(|partners| partners.get(&leg))
+                .cloned()
+                .unwrap_or(leg)
+        });
+        graph.add_node(external.map_or(TopologyVertex::Internal, TopologyVertex::External));
     }
     for (_, endpoints, edge) in diagram.edges() {
         let external = diagram
@@ -373,36 +476,102 @@ fn topology_key(
             (
                 edge.directed,
                 TopologyEdge::External {
-                    particle: edge.particle.clone(),
+                    particle: edge.particle,
                     directed: edge.directed,
                 },
             )
         } else {
-            let particle = model.particle_by_pdg(edge.particle.pdg)?;
+            let particle = model.particle_by_id(edge.particle)?;
             // Spin remains part of the reduced internal color so massless
             // fermions and vectors cannot be interchanged by canonicalization.
             let color = if options.differentiate_particle_masses_only {
                 InternalParticleColor::MassAndSpin {
-                    mass: particle.mass.clone(),
+                    mass: particle.mass,
                     spin: particle.spin,
                 }
             } else {
-                InternalParticleColor::Exact(edge.particle.clone())
+                InternalParticleColor::Exact(edge.particle)
             };
             (false, TopologyEdge::Internal(color))
         };
+        let (source, target) = if left_right_partners.is_some() && external && directed {
+            (endpoints.target.0, endpoints.source.0)
+        } else {
+            (endpoints.source.0, endpoints.target.0)
+        };
         graph
-            .add_edge(endpoints.source.0, endpoints.target.0, directed, color)
+            .add_edge(source, target, directed, color)
             .map_err(|error| GroupingError::TopologyConstruction(error.to_string()))?;
     }
-    Ok(graph.canonize().graph)
+    let endpoints = diagram
+        .edges()
+        .map(|(edge, endpoints, _)| (edge, endpoints))
+        .collect::<BTreeMap<_, _>>();
+    for cut in diagram.cuts() {
+        let left = graph.add_node(TopologyVertex::CutSide {
+            side: if left_right_partners.is_some() {
+                CanonicalCutSide::Right
+            } else {
+                CanonicalCutSide::Left
+            },
+            coupling_orders: cut.left.coupling_orders.clone(),
+            loop_count: cut.left.loop_count,
+        });
+        let right = graph.add_node(TopologyVertex::CutSide {
+            side: if left_right_partners.is_some() {
+                CanonicalCutSide::Left
+            } else {
+                CanonicalCutSide::Right
+            },
+            coupling_orders: cut.right.coupling_orders.clone(),
+            loop_count: cut.right.loop_count,
+        });
+        graph
+            .add_edge(left, right, false, TopologyEdge::CutPair)
+            .map_err(|error| GroupingError::TopologyConstruction(error.to_string()))?;
+        for (side, half_edges) in [(left, &cut.left.half_edges), (right, &cut.right.half_edges)] {
+            let vertices = half_edges
+                .iter()
+                .filter_map(|half_edge| {
+                    endpoints
+                        .get(&half_edge.edge)
+                        .map(|endpoints| match half_edge.endpoint {
+                            feynkit_graph::DiagramEndpoint::Source => endpoints.source,
+                            feynkit_graph::DiagramEndpoint::Target => endpoints.target,
+                        })
+                })
+                .collect::<BTreeSet<_>>();
+            for vertex in vertices {
+                graph
+                    .add_edge(side, vertex.0, false, TopologyEdge::CutMembership)
+                    .map_err(|error| GroupingError::TopologyConstruction(error.to_string()))?;
+            }
+        }
+    }
+    Ok(CanonicalTopology {
+        key: graph.canonize().graph,
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use feynkit_graph::{DiagramEdge, DiagramVertex, ExternalState, VertexId};
+    use std::sync::Arc;
+
+    use feynkit_graph::{
+        DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramHalfEdge, DiagramVertex,
+        ExternalState, VertexId,
+    };
 
     use super::*;
+
+    fn test_atom(expression: &str) -> Atom {
+        Atom::parse(
+            expression,
+            "feynkit_grouping_test",
+            ParseSettings::default(),
+        )
+        .unwrap()
+    }
 
     fn model() -> Model {
         Model::from_json(
@@ -421,9 +590,15 @@ mod tests {
                     {"pdg_code":45,"name":"eta","antiname":"eta","spin":1,"color":1,"mass":"N","width":"ZERO","texname":"eta","antitexname":"eta","charge":0.0,"ghost_number":0,"lepton_number":0,"y_charge":0}
                 ],
                 "propagators":[],
-                "lorentz_structures":[],
-                "couplings":[],
-                "vertex_rules":[],
+                "lorentz_structures":[
+                    {"name":"L","spins":[1,1],"structure":"1"}
+                ],
+                "couplings":[
+                    {"name":"GC","expression":"1","orders":[],"value":null}
+                ],
+                "vertex_rules":[
+                    {"name":"V","particles":["phi","phi"],"color_structures":["1"],"lorentz_structures":["L"],"couplings":[["GC"]]}
+                ],
                 "functions":[],
                 "form_factors":[]
             }"#,
@@ -431,22 +606,39 @@ mod tests {
         .unwrap()
     }
 
-    fn particle(model: &Model, pdg: i64) -> ParticleReference {
-        let particle = model.particle_by_pdg(pdg).unwrap();
-        ParticleReference::new(&particle.name, particle.pdg_code)
+    fn particle(model: &Model, pdg: i64) -> ParticleId {
+        model.particle_id_by_pdg(pdg).unwrap()
     }
 
     fn diagram(
-        model: &Model,
+        model: &Arc<Model>,
         name: &str,
         numerator: &str,
         internal_pdg: i64,
         external_pdg: i64,
     ) -> FeynmanDiagram {
-        let mut builder = FeynmanDiagram::builder(name).numerator(numerator);
+        diagram_with_projector(model, name, numerator, "1", internal_pdg, external_pdg)
+    }
+
+    fn diagram_with_projector(
+        model: &Arc<Model>,
+        name: &str,
+        numerator: &str,
+        projector: &str,
+        internal_pdg: i64,
+        external_pdg: i64,
+    ) -> FeynmanDiagram {
+        let numerator =
+            Atom::parse(numerator, "feynkit_grouping_test", ParseSettings::default()).unwrap();
+        let projector =
+            Atom::parse(projector, "feynkit_grouping_test", ParseSettings::default()).unwrap();
+        let mut builder = FeynmanDiagram::builder(Arc::clone(model), name)
+            .numerator(numerator)
+            .projector(projector);
         builder.add_vertex(DiagramVertex::external("in", 0, ExternalState::Incoming));
-        builder.add_vertex(DiagramVertex::interaction("left", "V"));
-        builder.add_vertex(DiagramVertex::interaction("right", "V"));
+        let interaction = model.vertex_rule_id("V").unwrap();
+        builder.add_vertex(DiagramVertex::interaction("left", interaction));
+        builder.add_vertex(DiagramVertex::interaction("right", interaction));
         builder.add_vertex(DiagramVertex::external("out", 1, ExternalState::Outgoing));
         builder
             .add_edge(
@@ -472,6 +664,129 @@ mod tests {
         builder.build().unwrap()
     }
 
+    fn cut_diagram(model: &Arc<Model>, mirrored: bool) -> FeynmanDiagram {
+        let mut builder = FeynmanDiagram::builder(Arc::clone(model), "cut-line");
+        let incoming = builder.add_vertex(DiagramVertex::external_in_connection(
+            "in",
+            0,
+            ExternalState::Incoming,
+            0,
+        ));
+        let interaction = builder.add_vertex(DiagramVertex::interaction(
+            "interaction",
+            model.vertex_rule_id("V").unwrap(),
+        ));
+        let outgoing = builder.add_vertex(DiagramVertex::external_in_connection(
+            "out",
+            1,
+            ExternalState::Outgoing,
+            0,
+        ));
+        let scalar = || DiagramEdge::new(particle(model, 25), false);
+        let incoming_edge = builder.add_edge(incoming, interaction, scalar()).unwrap();
+        let outgoing_edge = builder.add_edge(interaction, outgoing, scalar()).unwrap();
+        let incoming_source = DiagramHalfEdge {
+            edge: incoming_edge,
+            endpoint: DiagramEndpoint::Source,
+        };
+        let incoming_target = DiagramHalfEdge {
+            edge: incoming_edge,
+            endpoint: DiagramEndpoint::Target,
+        };
+        let outgoing_source = DiagramHalfEdge {
+            edge: outgoing_edge,
+            endpoint: DiagramEndpoint::Source,
+        };
+        let outgoing_target = DiagramHalfEdge {
+            edge: outgoing_edge,
+            endpoint: DiagramEndpoint::Target,
+        };
+        let side = |half_edges| DiagramCutSide {
+            half_edges,
+            coupling_orders: BTreeMap::new(),
+            loop_count: 0,
+        };
+        let mut cut = DiagramCut {
+            cut: vec![incoming_source],
+            left: side(vec![incoming_source]),
+            right: side(vec![incoming_target, outgoing_source, outgoing_target]),
+        };
+        if mirrored {
+            // The global transformation exchanges both physical sides at
+            // once. This is intentionally not just an independent relabeling
+            // of the cut nodes.
+            cut.cut = vec![outgoing_source];
+            cut.left = side(vec![incoming_source, incoming_target, outgoing_source]);
+            cut.right = side(vec![outgoing_target]);
+        }
+        let diagram = builder.cuts(vec![cut]).build().unwrap();
+        diagram.validate().unwrap();
+        diagram
+    }
+
+    #[derive(Clone, Copy)]
+    enum LeftRightAttachment {
+        Identity,
+        GlobalSwap,
+        PartialSwap,
+    }
+
+    fn left_right_diagram(model: &Arc<Model>, attachment: LeftRightAttachment) -> FeynmanDiagram {
+        let mut builder = FeynmanDiagram::builder(Arc::clone(model), "left-right");
+        let external = [
+            builder.add_vertex(DiagramVertex::external_in_connection(
+                "in0",
+                0,
+                ExternalState::Incoming,
+                0,
+            )),
+            builder.add_vertex(DiagramVertex::external_in_connection(
+                "in1",
+                1,
+                ExternalState::Incoming,
+                1,
+            )),
+            builder.add_vertex(DiagramVertex::external_in_connection(
+                "out0",
+                2,
+                ExternalState::Outgoing,
+                0,
+            )),
+            builder.add_vertex(DiagramVertex::external_in_connection(
+                "out1",
+                3,
+                ExternalState::Outgoing,
+                1,
+            )),
+        ];
+        let interaction = model.vertex_rule_id("V").unwrap();
+        let left = builder.add_vertex(DiagramVertex::interaction("left", interaction));
+        let right = builder.add_vertex(DiagramVertex::interaction("right", interaction));
+        let marker = builder.add_vertex(DiagramVertex::interaction("marker", interaction));
+        let targets = match attachment {
+            LeftRightAttachment::Identity => [left, left, right, right],
+            LeftRightAttachment::GlobalSwap => [right, right, left, left],
+            LeftRightAttachment::PartialSwap => [right, left, left, right],
+        };
+        for (index, (&external, &target)) in external.iter().zip(&targets).enumerate() {
+            let (source, target) = if index < 2 {
+                (external, target)
+            } else {
+                (target, external)
+            };
+            builder
+                .add_edge(source, target, DiagramEdge::new(particle(model, 25), false))
+                .unwrap();
+        }
+        builder
+            .add_edge(left, right, DiagramEdge::new(particle(model, 25), false))
+            .unwrap();
+        builder
+            .add_edge(left, marker, DiagramEdge::new(particle(model, 25), false))
+            .unwrap();
+        builder.build().unwrap()
+    }
+
     fn exact_options() -> GraphGroupingOptions {
         GraphGroupingOptions {
             check_canonical_numerator: true,
@@ -481,7 +796,7 @@ mod tests {
 
     #[test]
     fn groups_identical_numerators() {
-        let model = model();
+        let model = Arc::new(model());
         let grouped = group_diagrams(
             vec![
                 diagram(&model, "g0", "x+y", 25, 25),
@@ -489,16 +804,42 @@ mod tests {
             ],
             &model,
             &NumeratorGrouping::Identical(exact_options()),
+            false,
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 1);
         assert_eq!(grouped.groups[0].master, 0);
-        assert_eq!(grouped.groups[0].members[1].ratio, "1");
+        assert_eq!(grouped.groups[0].members[1].ratio, test_atom("1"));
+    }
+
+    #[test]
+    fn diagram_local_external_projector_ids_do_not_split_numerator_groups() {
+        let model = Arc::new(model());
+        let grouped = group_diagrams(
+            vec![
+                diagram_with_projector(&model, "g0", "x+y", "external_state(0)", 25, 25),
+                diagram_with_projector(&model, "g1", "y+x", "external_state(4)", 25, 25),
+            ],
+            &model,
+            &NumeratorGrouping::Identical(exact_options()),
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(grouped.groups.len(), 1);
+        assert_eq!(grouped.groups[0].members.len(), 2);
+        let expected = Atom::parse(
+            "external_state(0)",
+            "feynkit_grouping_test",
+            ParseSettings::default(),
+        )
+        .unwrap();
+        assert_eq!(grouped.diagrams[0].projector(), &expected);
     }
 
     #[test]
     fn groups_numerators_up_to_sign() {
-        let model = model();
+        let model = Arc::new(model());
         let grouped = group_diagrams(
             vec![
                 diagram(&model, "g0", "x+y", 25, 25),
@@ -506,15 +847,16 @@ mod tests {
             ],
             &model,
             &NumeratorGrouping::UpToSign(exact_options()),
+            false,
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 1);
-        assert_eq!(grouped.groups[0].members[1].ratio, "-1");
+        assert_eq!(grouped.groups[0].members[1].ratio, test_atom("-1"));
     }
 
     #[test]
     fn scalar_ratio_is_member_over_master() {
-        let model = model();
+        let model = Arc::new(model());
         let grouped = group_diagrams(
             vec![
                 diagram(&model, "g0", "x+y", 25, 25),
@@ -522,15 +864,16 @@ mod tests {
             ],
             &model,
             &NumeratorGrouping::UpToScalar(exact_options()),
+            false,
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 1);
-        assert_eq!(grouped.groups[0].members[1].ratio, "2");
+        assert_eq!(grouped.groups[0].members[1].ratio, test_atom("2"));
     }
 
     #[test]
     fn topology_uses_internal_mass_and_spin_but_exact_external_species() {
-        let model = model();
+        let model = Arc::new(model());
         let diagrams = vec![
             diagram(&model, "g0", "1", 25, 25),
             diagram(&model, "g1", "1", 35, 25),
@@ -541,13 +884,20 @@ mod tests {
             diagrams.clone(),
             &model,
             &NumeratorGrouping::Identical(exact_options()),
+            false,
         )
         .unwrap();
         assert_eq!(
             grouped
                 .groups
                 .iter()
-                .map(|group| group.members.iter().map(|member| member.diagram).collect())
+                .map(|group| {
+                    group
+                        .members
+                        .iter()
+                        .map(|member| member.source_diagram)
+                        .collect()
+                })
                 .collect::<Vec<Vec<_>>>(),
             vec![vec![0, 1], vec![2], vec![3]]
         );
@@ -560,14 +910,68 @@ mod tests {
             diagrams,
             &model,
             &NumeratorGrouping::Identical(exact_species),
+            false,
         )
         .unwrap();
         assert_eq!(grouped.groups.len(), 4);
     }
 
     #[test]
+    fn mirrored_cut_partitions_group_only_with_left_right_symmetry() {
+        let model = Arc::new(model());
+        let diagrams = vec![cut_diagram(&model, false), cut_diagram(&model, true)];
+        let grouped = group_diagrams(
+            diagrams.clone(),
+            &model,
+            &NumeratorGrouping::Identical(exact_options()),
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(grouped.groups.len(), 2);
+        assert!(grouped.groups.iter().all(|group| group.members.len() == 1));
+
+        let grouped = group_diagrams(
+            diagrams,
+            &model,
+            &NumeratorGrouping::Identical(exact_options()),
+            true,
+        )
+        .unwrap();
+        assert_eq!(grouped.groups.len(), 1);
+        assert_eq!(grouped.groups[0].members.len(), 2);
+    }
+
+    #[test]
+    fn only_one_global_left_right_swap_is_in_the_grouping_orbit() {
+        let model = Arc::new(model());
+        let identity = left_right_diagram(&model, LeftRightAttachment::Identity);
+        let global = left_right_diagram(&model, LeftRightAttachment::GlobalSwap);
+        let partial = left_right_diagram(&model, LeftRightAttachment::PartialSwap);
+
+        let grouped = group_diagrams(
+            vec![identity.clone(), global],
+            &model,
+            &NumeratorGrouping::Identical(exact_options()),
+            true,
+        )
+        .unwrap();
+        assert_eq!(grouped.groups.len(), 1);
+        assert_eq!(grouped.groups[0].members.len(), 2);
+
+        let grouped = group_diagrams(
+            vec![identity, partial],
+            &model,
+            &NumeratorGrouping::Identical(exact_options()),
+            true,
+        )
+        .unwrap();
+        assert_eq!(grouped.groups.len(), 2);
+    }
+
+    #[test]
     fn removes_only_proven_zero_numerators_and_preserves_source_ids() {
-        let model = model();
+        let model = Arc::new(model());
         let grouped = group_diagrams(
             vec![
                 diagram(&model, "g0", "x-x", 25, 25),
@@ -575,6 +979,7 @@ mod tests {
             ],
             &model,
             &NumeratorGrouping::OnlyDetectZeroes,
+            false,
         )
         .unwrap();
         assert_eq!(grouped.zero_numerator_count, 1);
@@ -585,15 +990,18 @@ mod tests {
     }
 
     #[test]
-    fn numerator_parse_failures_are_typed() {
-        let model = model();
-        assert!(matches!(
-            group_diagrams(
-                vec![diagram(&model, "bad", "(", 25, 25)],
-                &model,
-                &NumeratorGrouping::OnlyDetectZeroes,
-            ),
-            Err(GroupingError::NumeratorParse { diagram, .. }) if diagram == "bad"
-        ));
+    fn zero_projectors_are_removed_before_grouping() {
+        let model = Arc::new(model());
+        let grouped = group_diagrams(
+            vec![diagram_with_projector(&model, "zero", "1", "0", 25, 25)],
+            &model,
+            &NumeratorGrouping::OnlyDetectZeroes,
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(grouped.zero_numerator_count, 1);
+        assert!(grouped.diagrams.is_empty());
+        assert!(grouped.groups.is_empty());
     }
 }

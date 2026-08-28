@@ -3,6 +3,9 @@ use std::{collections::BTreeMap, path::Path, slice};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
+use feynkit_cff::{
+    EnergySurface, EnergySurfaceId, OrientationId, RaisedEnergySurfaceData, RaisedEnergySurfaceId,
+};
 use linnet::half_edge::involution::{EdgeVec, Orientation};
 use spenso::algebra::{algebraic_traits::IsZero, complex::Complex};
 use tracing::{debug, instrument, warn};
@@ -13,11 +16,9 @@ use crate::{
     cff::{
         CutCFFIndex,
         esurface::{
-            Esurface, EsurfaceCollection, EsurfaceID, ExistingEsurfaceId, ExistingEsurfaces,
-            GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceId,
-            esurface_value_is_strictly_inside,
+            EnergySurfaceCollection, EnergySurfaceExt, ExistingEsurfaceId, ExistingEsurfaces,
+            GroupEsurfaceId, esurface_value_is_strictly_inside,
         },
-        expression::OrientationID,
     },
     graph::{FeynmanGraph, Graph, GraphGroupPosition},
     integrands::{
@@ -77,19 +78,20 @@ fn multiply_dual_or_not_complex<T: FloatLike>(
 #[trait_decode(trait = GammaLoopContext)]
 pub struct AmplitudeCountertermData {
     pub overlap: OverlapStructure,
-    pub evaluators: TiVec<RaisedEsurfaceId, AmplitudeCountertermEvaluator>,
+    pub evaluators: TiVec<RaisedEnergySurfaceId, AmplitudeCountertermEvaluator>,
     pub helper_evaluators: Vec<GenericEvaluator>,
     // `generated_mask` tracks whether a threshold slot actually has symbolic content.
     // This is independent of any orientation filtering and reflects the underlying
     // threshold-generation logic itself.
-    pub generated_mask: TiVec<RaisedEsurfaceId, bool>,
+    pub generated_mask: TiVec<RaisedEnergySurfaceId, bool>,
     // `active_mask` is an additional generation-time gate coming from the selected
     // orientation subset. A slot can be generated in principle but inactive for the
     // current generated evaluator set, in which case we keep its index but compile it
     // to a zero/dummy evaluator and hard-fail if runtime ever reaches it.
-    pub active_mask: TiVec<RaisedEsurfaceId, bool>,
-    pub raised_data: RaisedEsurfaceData,
-    pub esurface_map: TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
+    pub active_mask: TiVec<RaisedEnergySurfaceId, bool>,
+    pub raised_data: RaisedEnergySurfaceData,
+    pub esurface_map:
+        TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEnergySurfaceId>>>,
     pub local_esurface_exists: TiVec<GroupEsurfaceId, bool>,
     pub own_group_position: GraphGroupPosition,
 }
@@ -115,7 +117,7 @@ impl AmplitudeCountertermAtom {
     pub(crate) fn to_evaluator_with_timings(
         &self,
         param_builder: &ParamBuilder,
-        orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+        orientations: &TiVec<OrientationId, EdgeVec<Orientation>>,
         global_settings: &GlobalSettings,
     ) -> (AmplitudeCountertermEvaluator, EvaluatorBuildTimings) {
         let _progress_guard =
@@ -165,7 +167,7 @@ impl AmplitudeCountertermEvaluator {
 
 #[derive(Debug, Clone)]
 pub struct AmplitudeLocalCountertermEvaluation<T: FloatLike> {
-    pub esurface_id: RaisedEsurfaceId,
+    pub esurface_id: RaisedEnergySurfaceId,
     pub overlap_group: usize,
     pub value: Complex<F<T>>,
 }
@@ -180,7 +182,7 @@ impl AmplitudeCountertermData {
     fn radial_root_identity(
         graph_name: &str,
         overlap_group: usize,
-        raised_esurface_id: RaisedEsurfaceId,
+        raised_esurface_id: RaisedEnergySurfaceId,
         rotation: &Rotation,
     ) -> RadialRootIdentity {
         RadialRootIdentity::new(format!(
@@ -217,17 +219,17 @@ impl AmplitudeCountertermData {
             helper_evaluators: vec![],
             generated_mask: TiVec::new(),
             active_mask: TiVec::new(),
-            raised_data: RaisedEsurfaceData {
-                raised_groups: TiVec::new(),
-                pass_two_evaluator: None,
-            },
+            raised_data: RaisedEnergySurfaceData::default(),
             esurface_map: TiVec::new(),
             local_esurface_exists: TiVec::new(),
             own_group_position,
         }
     }
 
-    fn ensure_active_raised_esurface(&self, raised_esurface_id: RaisedEsurfaceId) -> Result<()> {
+    fn ensure_active_raised_esurface(
+        &self,
+        raised_esurface_id: RaisedEnergySurfaceId,
+    ) -> Result<()> {
         if self.active_mask[raised_esurface_id] {
             return Ok(());
         }
@@ -326,11 +328,11 @@ impl AmplitudeCountertermData {
         momentum_sample: &MomentumSample<T>,
         graph: &Graph,
         model: &Model,
-        esurfaces: &EsurfaceCollection,
+        esurfaces: &EnergySurfaceCollection,
         rotation: &Rotation,
         settings: &RuntimeSettings,
         param_builder: &mut ParamBuilder<f64>,
-        orientation: SingleOrAllOrientations<'_, OrientationID>,
+        orientation: SingleOrAllOrientations<'_, OrientationId>,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
     ) -> Result<AmplitudeCountertermEvaluation<T>> {
@@ -451,7 +453,7 @@ impl AmplitudeCountertermData {
         momentum_sample: &MomentumSample<T>,
         graph: &Graph,
         model: &Model,
-        esurfaces: &EsurfaceCollection,
+        esurfaces: &EnergySurfaceCollection,
         rotation: &Rotation,
         settings: &RuntimeSettings,
     ) -> Result<OverlapStructureWithKinematics<T>> {
@@ -535,15 +537,16 @@ pub struct OverlapStructureWithKinematics<T: FloatLike> {
 
 struct CounterTermBuilder<'a, T: FloatLike> {
     overlap_structure: &'a OverlapStructure,
-    raised_data: &'a RaisedEsurfaceData,
+    raised_data: &'a RaisedEnergySurfaceData,
     own_group_position: GraphGroupPosition,
-    esurface_map: &'a TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
+    esurface_map:
+        &'a TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEnergySurfaceId>>>,
     real_mass_vector: EdgeVec<F<T>>,
     e_cm: F<T>,
     graph: &'a Graph,
     rotation_for_overlap: &'a Rotation,
     settings: &'a RuntimeSettings,
-    esurface_collection: &'a EsurfaceCollection,
+    esurface_collection: &'a EnergySurfaceCollection,
     sample: &'a MomentumSample<T>,
 }
 
@@ -554,14 +557,14 @@ impl<'a, T: FloatLike> CounterTermBuilder<'a, T> {
         model: &'a Model,
         rotation_for_overlap: &'a Rotation,
         settings: &'a RuntimeSettings,
-        esurface_collection: &'a EsurfaceCollection,
+        esurface_collection: &'a EnergySurfaceCollection,
         sample: &'a MomentumSample<T>,
         overlap_structure: &'a OverlapStructure,
-        raised_data: &'a RaisedEsurfaceData,
+        raised_data: &'a RaisedEnergySurfaceData,
         own_group_position: GraphGroupPosition,
         esurface_map: &'a TiVec<
             GroupEsurfaceId,
-            TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>,
+            TiVec<GraphGroupPosition, Option<RaisedEnergySurfaceId>>,
         >,
     ) -> Self {
         let real_mass_vector = graph.get_real_mass_vector(model);
@@ -632,9 +635,8 @@ impl<'a, T: FloatLike> OverlapBuilder<'a, T> {
             [self.counterterm_builder.own_group_position];
 
         raised_esurface_id.map(|raised_esurface_id| {
-            let esurface_id = self.counterterm_builder.raised_data.raised_groups
-                [raised_esurface_id]
-                .esurface_ids[0];
+            let esurface_id =
+                self.counterterm_builder.raised_data.groups[raised_esurface_id].surface_ids[0];
 
             EsurfaceCTBuilder {
                 overlap_builder: self,
@@ -652,9 +654,9 @@ struct EsurfaceCTBuilder<'a, T: FloatLike> {
     overlap_builder: &'a OverlapBuilder<'a, T>,
     _existing_esurface_id: ExistingEsurfaceId,
     group_esurface_id: GroupEsurfaceId,
-    esurface: &'a Esurface,
-    esurface_id: EsurfaceID,
-    raised_esurface_id: RaisedEsurfaceId,
+    esurface: &'a EnergySurface,
+    esurface_id: EnergySurfaceId,
+    raised_esurface_id: RaisedEnergySurfaceId,
 }
 
 impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
@@ -684,8 +686,8 @@ impl<'a, T: FloatLike> EsurfaceCTBuilder<'a, T> {
                             .overlap_builder
                             .counterterm_builder
                             .raised_data
-                            .raised_groups[raised_esurface_id]
-                            .esurface_ids[0];
+                            .groups[raised_esurface_id]
+                            .surface_ids[0];
                         let esurface =
                             &self.overlap_builder.counterterm_builder.esurface_collection
                                 [esurface_id];
@@ -889,7 +891,7 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
     fn evaluate<'b, 'c: 'b>(
         self,
         param_builder: &mut ParamBuilder<f64>,
-        orientations: SingleOrAllOrientations<'a, OrientationID>,
+        orientations: SingleOrAllOrientations<'a, OrientationId>,
         evaluation_metadata: &mut EvaluationMetaData,
         record_primary_timing: bool,
         ct_evaluator: &mut AmplitudeCountertermEvaluator,
@@ -963,16 +965,15 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
                     self.rstar_sample.external_moms(),
                 );
                 if value.abs() < coincidence_tolerance {
-                    let candidate_raised_esurface_id = ct_builder
-                        .raised_data
-                        .raised_groups
-                        .iter_enumerated()
-                        .find_map(|(raised_esurface_id, raised_group)| {
-                            raised_group
-                                .esurface_ids
-                                .contains(&candidate_esurface_id)
-                                .then_some(raised_esurface_id.0)
-                        });
+                    let candidate_raised_esurface_id =
+                        ct_builder.raised_data.groups.iter_enumerated().find_map(
+                            |(raised_esurface_id, raised_group)| {
+                                raised_group
+                                    .surface_ids
+                                    .contains(&candidate_esurface_id)
+                                    .then_some(raised_esurface_id.0)
+                            },
+                        );
                     let candidate_atom = candidate_esurface.to_atom(&[]).to_string();
                     crate::debug_tags!(#integration, #subtraction, #threshold, #inspect, #esurface;
                         stage = "amplitude_threshold_rstar_coincident_esurface",
@@ -1441,11 +1442,8 @@ impl<'a, T: FloatLike> RstarSample<'a, T> {
 #[cfg(test)]
 mod tests {
     use super::{AmplitudeCountertermAtom, AmplitudeCountertermData};
-    use crate::{
-        cff::{CutCFFIndex, esurface::RaisedEsurfaceId},
-        graph::GraphGroupPosition,
-        uv::Integrands,
-    };
+    use crate::{cff::CutCFFIndex, graph::GraphGroupPosition, uv::Integrands};
+    use feynkit_cff::RaisedEnergySurfaceId;
     use symbolica::{atom::Atom, symbol};
     use typed_index_collections::ti_vec;
 
@@ -1493,7 +1491,7 @@ mod tests {
         data.active_mask = ti_vec![false];
 
         let error = data
-            .ensure_active_raised_esurface(RaisedEsurfaceId(0))
+            .ensure_active_raised_esurface(RaisedEnergySurfaceId(0))
             .unwrap_err();
         assert!(error.to_string().contains("generation marked it inactive"));
     }

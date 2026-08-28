@@ -100,7 +100,7 @@ impl Import {
                     "Loading graphs from '{}'",
                     Self::display_graph_import_path(&resolved_path).display()
                 );
-                let graphs = Graph::from_path(&resolved_path, &state.model)?;
+                let graphs = Graph::from_finalized_runtime_path(&resolved_path, &state.model)?;
                 state.import_graphs(
                     graphs,
                     process_name,

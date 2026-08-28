@@ -3,7 +3,8 @@ use gammaloop_tracing_filter::LogMessage;
 use itertools::Itertools;
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 
-use crate::cff::{CutCFFIndex, esurface::RaisedEsurfaceGroup};
+use crate::cff::CutCFFIndex;
+use feynkit_cff::RaisedEnergySurfaceGroup;
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq, Hash, Eq, PartialOrd, Ord)]
 pub struct CutSet {
@@ -20,9 +21,9 @@ impl LogMessage for CutSet {
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq, Hash, Eq, PartialOrd, Ord)]
 pub struct ResidueSelector {
-    pub lu_cut: Option<RaisedEsurfaceGroup>,
-    pub left_th_cut: Option<RaisedEsurfaceGroup>,
-    pub right_th_cut: Option<RaisedEsurfaceGroup>,
+    pub lu_cut: Option<RaisedEnergySurfaceGroup>,
+    pub left_th_cut: Option<RaisedEnergySurfaceGroup>,
+    pub right_th_cut: Option<RaisedEnergySurfaceGroup>,
 }
 
 impl ResidueSelector {
@@ -32,7 +33,7 @@ impl ResidueSelector {
             .into_iter()
             .flat_map(|index| {
                 if let Some(lu_cut) = &self.lu_cut {
-                    (1..=lu_cut.max_occurence)
+                    (1..=lu_cut.max_occurrence)
                         .map(|lu_cut_index| {
                             let mut new_index = index;
                             new_index.lu_cut_order = Some(lu_cut_index);
@@ -45,7 +46,7 @@ impl ResidueSelector {
             })
             .flat_map(|index| {
                 if let Some(left_th_cut) = &self.left_th_cut {
-                    (1..=left_th_cut.max_occurence)
+                    (1..=left_th_cut.max_occurrence)
                         .map(|left_th_cut_index| {
                             let mut new_index = index;
                             new_index.left_threshold_order = Some(left_th_cut_index);
@@ -58,7 +59,7 @@ impl ResidueSelector {
             })
             .flat_map(|index| {
                 if let Some(right_th_cut) = &self.right_th_cut {
-                    (1..=right_th_cut.max_occurence)
+                    (1..=right_th_cut.max_occurrence)
                         .map(|right_th_cut_index| {
                             let mut new_index = index;
                             new_index.right_threshold_order = Some(right_th_cut_index);

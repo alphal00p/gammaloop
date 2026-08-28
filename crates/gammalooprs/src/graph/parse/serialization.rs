@@ -234,20 +234,21 @@ mod tests {
     use symbolica::{atom::Atom, function};
 
     use super::Graph;
-    use crate::{dot, graph::parse::IntoGraph, processes::DotExportSettings, utils::GS};
+    use crate::{
+        finalized_runtime_dot, graph::parse::IntoFinalizedRuntimeGraph,
+        processes::DotExportSettings, utils::GS,
+    };
 
     #[test]
     fn full_numerator_is_a_spenso_aware_typst_fragment() {
-        let graph: Graph = dot!(digraph G {
-            ext [style=invis]
+        let graph: Graph = finalized_runtime_dot!(digraph G {
+            graph [projector="1"]
             node [num=1]
-            ext -> A
-            C -> A
-            A -> D
-            D -> B
-            B -> C
-            C -> D
-            B -> ext
+            edge [particle=a num=1 dir=none]
+            ext_in [style=invis]
+            ext_out [style=invis]
+            ext_in -> A [sink="{ufo_order:0}"]
+            A -> ext_out [source="{ufo_order:1}"]
         })
         .unwrap();
         let graph = graph.with_global_numerator_only(

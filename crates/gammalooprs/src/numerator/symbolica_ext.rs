@@ -137,14 +137,7 @@ mod tests {
         function, parse_lit, symbol,
     };
 
-    use crate::{
-        dot,
-        graph::{FeynmanGraph, Graph, parse::IntoGraph},
-        initialisation::test_initialise,
-        numerator::aind::Aind,
-        utils::GS,
-        uv::UltravioletGraph,
-    };
+    use crate::{initialisation::test_initialise, numerator::aind::Aind, utils::GS};
 
     use super::NumeratorAtomExt;
 
@@ -171,63 +164,6 @@ mod tests {
         let net = a.parse_into_net().unwrap();
 
         println!("{}", net.dot_pretty())
-    }
-
-    #[test]
-    fn canonize_color() {
-        test_initialise().unwrap();
-        let gls: Vec<Graph> = dot!(
-            digraph{
-            num = "1";
-
-            ext0 [style=invis];
-            2:0-> ext0 [id=0 dir=none is_cut=0  particle="a"];
-            ext1 [style=invis];
-            ext1-> 3:1 [id=1 dir=none is_cut=0  particle="a"];
-            0:2-> 1:3 [id=2   particle="d"];
-            0:4-> 1:5 [id=3 dir=none   particle="g"];
-            3:6-> 0:7 [id=4   particle="d"];
-            1:8-> 2:9 [id=5   particle="d"];
-            2:10-> 3:11 [id=6   particle="d"];
-        }
-
-        digraph GL8{
-            num = 1;
-        0[int_id=V_74];
-        1[int_id=V_74];
-        2[int_id=V_71];
-        3[int_id=V_71];
-        ext0 [style=invis];
-        2:0-> ext0 [id=0 dir=none is_cut=0  particle=a];
-        ext1 [style=invis];
-        ext1-> 3:1 [id=1 dir=none is_cut=0  particle=a];
-        0:2-> 1:3 [id=2   particle=d];
-        0:4-> 1:5 [id=3 dir=none   particle=g];
-        0:6-> 3:7 [id=4 dir=back   particle="d~"];
-        1:8-> 2:9 [id=5   particle=d];
-        2:10-> 3:11 [id=6   particle=d];
-        }
-
-        )
-        .unwrap();
-
-        for g in gls {
-            let mut numerator = g.numerator(&g.no_dummy(), &g.empty_subgraph());
-
-            // TODO Check if we include overall factor in main
-            numerator.state.expr *= &g.global_prefactor.num * &g.global_prefactor.projector; // * &gl5.overall_factor;
-            // numerator.state.expr = numerator.state.expr.replace_multiple(&cpl_reps);
-
-            let numerator_color_simplified = numerator
-                .clone()
-                .color_simplify()
-                .get_single_atom()
-                .unwrap()
-                .canonize(Aind::Dummy);
-
-            println!("numerator_color_simplified:{numerator_color_simplified}");
-            println!("numerator:{}", numerator.state.expr);
-        }
     }
 
     #[test]

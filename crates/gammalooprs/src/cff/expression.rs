@@ -1,84 +1,19 @@
-#![allow(dead_code)]
+//! GammaLoop extensions for FeynKit-owned CFF expressions and orientations.
 
-use std::{borrow::Borrow, collections::HashMap, fmt::Display};
+use std::borrow::Borrow;
 
-use crate::{
-    cff::{
-        esurface::{EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup},
-        orientations::GraphOrientation,
-    },
-    settings::global::OrientationPattern,
-    utils::{W_, ose_atom_from_index},
-};
-use bincode_trait_derive::{Decode, Encode};
-use derive_more::{From, Into};
-use linnet::half_edge::{
-    GVEdgeAttrs, HedgeGraph,
-    involution::{EdgeVec, Orientation, SignOrZero},
-    nodestore::NodeStorageOps,
-};
-use serde::{Deserialize, Serialize};
+use feynkit_cff::{CffResult, OrientationData, OrientationExpression, OrientationId};
+use linnet::half_edge::involution::{EdgeVec, Orientation};
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, Symbol},
-    function,
+    atom::Atom,
     id::{Pattern, Replacement},
-    symbol,
 };
-use tabled::{builder::Builder, settings::Style};
 use typed_index_collections::TiVec;
 
-use super::{generation::SurfaceCache, surface::HybridSurfaceID, tree::Tree};
-
-#[derive(
-    Debug,
-    Clone,
-    Serialize,
-    Deserialize,
-    From,
-    Into,
-    Hash,
-    PartialEq,
-    Eq,
-    Copy,
-    Encode,
-    Decode,
-    PartialOrd,
-    Ord,
-)]
-pub struct OrientationID(pub usize);
-
-impl GraphOrientation for EdgeVec<Orientation> {
-    fn orientation(&self) -> &EdgeVec<Orientation> {
-        self
-    }
-}
-
-impl OrientationID {
-    pub fn symbol() -> Symbol {
-        symbol!("sigma")
-    }
-
-    pub fn atom(self) -> Atom {
-        let id: usize = self.into();
-        function!(Self::symbol(), id as i64)
-    }
-
-    pub fn select<'a>(self, atom: impl Into<AtomOrView<'a>>) -> Atom {
-        atom.into()
-            .as_view()
-            .replace(self.atom())
-            .with(Atom::num(1))
-            .replace(function!(Self::symbol(), W_.x_))
-            .with(Atom::Zero)
-    }
-}
-
-#[derive(
-    Clone, Debug, PartialOrd, Ord, Hash, PartialEq, Eq, Serialize, Deserialize, Encode, Decode,
-)]
-pub struct OrientationData {
-    pub orientation: EdgeVec<Orientation>,
-}
+use crate::{
+    cff::orientations::GraphOrientation, settings::global::OrientationPattern,
+    utils::ose_atom_from_index,
+};
 
 impl GraphOrientation for OrientationData {
     fn orientation(&self) -> &EdgeVec<Orientation> {
@@ -86,85 +21,10 @@ impl GraphOrientation for OrientationData {
     }
 }
 
-impl Display for OrientationData {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut table = Builder::new();
-
-        for (i, item) in self.orientation.iter() {
-            table.push_column(&[i.to_string(), SignOrZero::from(*item).to_string()]);
-        }
-        table.build().with(Style::rounded()).fmt(f)
+impl GraphOrientation for feynkit_cff::GraphOrientation {
+    fn orientation(&self) -> &EdgeVec<Orientation> {
+        self
     }
-}
-
-impl OrientationData {
-    pub(crate) fn dot<E, V, N: NodeStorageOps<NodeData = V>>(&self, graph: &HedgeGraph<E, V, N>) {
-        let mut writer = String::new();
-        writer.push_str("digraph {{");
-
-        writer.push_str(
-            "  node [shape=circle,height=0.1,label=\"\"];  overlap=\"scale\"; layout=\"neato\";",
-        );
-
-        for (hedge_pair, id, _) in graph.iter_edges() {
-            let attr = GVEdgeAttrs {
-                color: None,
-                label: None,
-                other: None,
-            };
-            writer.push_str("  ");
-
-            let attr = hedge_pair.fill_color(attr);
-            hedge_pair
-                .add_data(graph)
-                .dot_fmt(
-                    &mut writer,
-                    graph,
-                    id,
-                    |_| None,
-                    |a| a.to_string(),
-                    self.orientation[id],
-                    attr,
-                )
-                .unwrap();
-        }
-        writer.push_str("}}");
-    }
-
-    pub(crate) fn get_ose_replacements(&self) -> Vec<Replacement> {
-        self.orientation
-            .borrow()
-            .into_iter()
-            .filter_map(|(edge_index, orientation)| {
-                if matches!(orientation, Orientation::Reversed) {
-                    let energy_atom = ose_atom_from_index(edge_index);
-
-                    let neg_energy_atom = -&energy_atom;
-
-                    Some(Replacement::new(
-                        Pattern::from(energy_atom),
-                        Pattern::from(neg_energy_atom),
-                    ))
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
-pub struct OrientationExpression {
-    pub data: OrientationData,
-    pub expression: Tree<HybridSurfaceID>,
-}
-#[derive(Clone, Debug, Serialize, Deserialize, Encode, Decode)]
-pub struct CFFExpression<O>
-where
-    O: From<usize> + Into<usize>,
-{
-    pub orientations: TiVec<O, OrientationExpression>,
-    pub surfaces: SurfaceCache,
 }
 
 impl GraphOrientation for OrientationExpression {
@@ -173,168 +33,72 @@ impl GraphOrientation for OrientationExpression {
     }
 }
 
-impl<O: Clone + From<usize> + Into<usize>> CFFExpression<O>
-where
-    usize: From<O>,
-{
-    pub(crate) fn new_empty() -> Self {
-        Self {
-            orientations: TiVec::new(),
-            surfaces: SurfaceCache {
-                esurface_cache: TiVec::new(),
-                hsurface_cache: TiVec::new(),
-            },
-        }
-    }
+/// GammaLoop diagnostics and symbolic rewrites for a FeynKit orientation.
+pub trait OrientationDataExt {
+    fn get_ose_replacements(&self) -> Vec<Replacement>;
+}
 
-    pub fn to_atom(&self, pattern: OrientationPattern) -> Atom {
+impl OrientationDataExt for OrientationData {
+    fn get_ose_replacements(&self) -> Vec<Replacement> {
+        self.orientation
+            .borrow()
+            .into_iter()
+            .filter(|(_, orientation)| **orientation == Orientation::Reversed)
+            .map(|(edge, _)| {
+                let energy = ose_atom_from_index(edge);
+                Replacement::new(Pattern::from(energy.clone()), Pattern::from(-energy))
+            })
+            .collect()
+    }
+}
+
+/// GammaLoop's symbolic lowering and residue API over a canonical FeynKit result.
+pub trait CffExpressionExt {
+    fn to_atom(&self, pattern: OrientationPattern) -> Atom;
+    fn get_orientation_atoms(&self, pattern: OrientationPattern) -> TiVec<OrientationId, Atom>;
+    fn get_orientation_atoms_with_data(
+        &self,
+        pattern: OrientationPattern,
+    ) -> TiVec<OrientationId, (Atom, OrientationData)>;
+}
+
+impl CffExpressionExt for CffResult {
+    fn to_atom(&self, pattern: OrientationPattern) -> Atom {
         self.orientations
             .iter()
-            .filter_map(|orientation| {
-                if pattern.filter(orientation.orientation()) {
-                    Some(orientation.expression.to_atom_inv())
-                } else {
-                    None
-                }
-            })
-            .reduce(|a, b| a + b)
+            .filter(|orientation| pattern.filter(orientation.orientation()))
+            .map(|orientation| orientation.expression.to_atom_inverse())
+            .reduce(|sum, term| sum + term)
             .unwrap_or_default()
     }
 
-    pub(crate) fn get_orientation_atoms(
-        &self,
-        pattern: OrientationPattern,
-    ) -> TiVec<OrientationID, Atom> {
+    fn get_orientation_atoms(&self, pattern: OrientationPattern) -> TiVec<OrientationId, Atom> {
         self.orientations
             .iter()
             .map(|orientation| {
                 if pattern.filter(orientation.orientation()) {
-                    orientation.expression.to_atom_inv()
+                    orientation.expression.to_atom_inverse()
                 } else {
-                    Atom::new()
+                    Atom::Zero
                 }
             })
             .collect()
     }
 
-    pub fn get_orientation_atoms_with_data(
+    fn get_orientation_atoms_with_data(
         &self,
         pattern: OrientationPattern,
-    ) -> TiVec<OrientationID, (Atom, OrientationData)> {
+    ) -> TiVec<OrientationId, (Atom, OrientationData)> {
         self.orientations
             .iter()
             .map(|orientation| {
                 let atom = if pattern.filter(orientation.orientation()) {
-                    orientation.expression.to_atom_inv()
+                    orientation.expression.to_atom_inverse()
                 } else {
-                    Atom::new()
+                    Atom::Zero
                 };
-                let data = orientation.data.clone();
-                (atom, data)
+                (atom, orientation.data.clone())
             })
             .collect()
-    }
-
-    pub(crate) fn get_orientation_atom(&self, orientation_id: O) -> Atom {
-        self.orientations[orientation_id].expression.to_atom_inv()
-    }
-
-    pub(crate) fn num_unfolded_terms(&self) -> usize {
-        self.orientations
-            .iter()
-            .map(|o| o.expression.get_bottom_layer().len())
-            .sum()
-    }
-
-    pub(crate) fn get_orientations_with_esurface(&self, esurface_id: EsurfaceID) -> Vec<O> {
-        self.orientations
-            .iter_enumerated()
-            .filter_map(|(id, orientation)| {
-                if orientation
-                    .expression
-                    .iter_nodes()
-                    .any(|node| node.data == HybridSurfaceID::Esurface(esurface_id))
-                {
-                    Some(id)
-                } else {
-                    None
-                }
-            })
-            .collect()
-    }
-
-    pub(crate) fn select_esurface_residue(
-        mut self,
-        raised_esurface_group: &RaisedEsurfaceGroup,
-    ) -> Vec<CFFExpression<O>> {
-        self.normalize_single_raising(raised_esurface_group);
-
-        let reprentative_esurface_id = raised_esurface_group.esurface_ids[0];
-
-        let mut result = vec![];
-        for occurence in 1..=raised_esurface_group.max_occurence {
-            let mut new_expression = self.clone();
-
-            for orientation in new_expression.orientations.iter_mut() {
-                orientation.expression.keep_branches_with_value_count_mut(
-                    &HybridSurfaceID::Esurface(reprentative_esurface_id),
-                    occurence,
-                );
-
-                orientation
-                    .expression
-                    .map_mut(|hybrid_surface_id| match hybrid_surface_id {
-                        HybridSurfaceID::Esurface(esurface_id)
-                            if *esurface_id == reprentative_esurface_id =>
-                        {
-                            *hybrid_surface_id = HybridSurfaceID::Unit;
-                        }
-                        _ => (),
-                    });
-            }
-
-            result.push(new_expression);
-        }
-
-        result
-    }
-
-    pub(crate) fn normalize_single_raising(&mut self, raised_esurface_group: &RaisedEsurfaceGroup) {
-        let reprentative_esurface_id = raised_esurface_group.esurface_ids[0];
-
-        for orientation in self.orientations.iter_mut() {
-            orientation
-                .expression
-                .map_mut(|hybrid_surface_id| match hybrid_surface_id {
-                    HybridSurfaceID::Esurface(esurface_id)
-                        if raised_esurface_group.esurface_ids.contains(esurface_id) =>
-                    {
-                        *hybrid_surface_id = HybridSurfaceID::Esurface(reprentative_esurface_id);
-                    }
-                    _ => (),
-                });
-        }
-    }
-
-    pub(crate) fn normalize_wrt_all_raisings(&mut self, raised_data: &RaisedEsurfaceData) {
-        let mut esurface_mappings = HashMap::new();
-
-        for cut_group in raised_data.raised_groups.iter() {
-            let esurface_id_of_first = cut_group.esurface_ids[0];
-
-            for esurface_id in cut_group.esurface_ids.iter() {
-                esurface_mappings.insert(*esurface_id, esurface_id_of_first);
-            }
-        }
-
-        for orientation in self.orientations.iter_mut() {
-            orientation.expression.map_mut(|hybrid_surface_id| {
-                if let HybridSurfaceID::Esurface(esurface_id) = hybrid_surface_id
-                    && let Some(normalized_esurface_id) = esurface_mappings.get(esurface_id)
-                {
-                    *esurface_id = *normalized_esurface_id;
-                }
-            });
-        }
     }
 }

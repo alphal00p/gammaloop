@@ -1,8 +1,9 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, sync::Arc};
 
 use feynkit_graph::{
     DiagramEdge, DiagramVertex, FeynmanDiagram, LoopMomentumBasis, MomentumSignature,
 };
+use feynkit_model::Model;
 use pyo3::{
     exceptions::PyTypeError,
     prelude::*,
@@ -56,6 +57,7 @@ pub struct PyDiagramVertex {
     #[pyo3(get)]
     id: usize,
     inner: DiagramVertex,
+    model: Arc<Model>,
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
@@ -80,12 +82,16 @@ impl PyDiagramVertex {
     ///
     #[getter]
     fn interaction(&self) -> PyResult<String> {
-        self.inner.interaction.clone().ok_or_else(|| {
+        let interaction = self.inner.interaction.ok_or_else(|| {
             error::DiagramError::new_err(format!(
                 "vertex {} has no interaction annotation",
                 self.id
             ))
-        })
+        })?;
+        self.model
+            .vertex_rule_by_id(interaction)
+            .map(|rule| rule.name.clone())
+            .map_err(error::model)
     }
 
     /// Return the symbolic numerator annotation as source text.
@@ -94,9 +100,7 @@ impl PyDiagramVertex {
     /// instantiated Feynman-rule numerator for this vertex.
     #[getter]
     fn numerator(&self) -> PyResult<String> {
-        self.inner.numerator.clone().ok_or_else(|| {
-            error::DiagramError::new_err(format!("vertex {} has no numerator annotation", self.id))
-        })
+        Ok(self.inner.numerator.to_plain_string())
     }
 
     /// Parse the numerator annotation as a Symbolica expression.
@@ -108,10 +112,9 @@ impl PyDiagramVertex {
     /// >>> weighted_vertex_factor = diagram.overall_factor_expression() * vertex_factor
     ///
     fn numerator_expression(&self) -> PyResult<PythonExpression> {
-        let numerator = self.inner.numerator.as_deref().ok_or_else(|| {
-            error::DiagramError::new_err(format!("vertex {} has no numerator annotation", self.id))
-        })?;
-        parse_symbolic_annotation(numerator).map_err(error::DiagramError::new_err)
+        Ok(PythonExpression {
+            expr: self.inner.numerator.clone(),
+        })
     }
 
     /// Return the external-leg index.
@@ -257,6 +260,7 @@ pub struct PyDiagramEdge {
     #[pyo3(get)]
     target: usize,
     inner: DiagramEdge,
+    model: Arc<Model>,
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
@@ -264,8 +268,11 @@ pub struct PyDiagramEdge {
 impl PyDiagramEdge {
     /// Return the particle name associated with this propagator edge.
     #[getter]
-    fn particle_name(&self) -> &str {
-        &self.inner.particle.name
+    fn particle_name(&self) -> PyResult<String> {
+        self.model
+            .particle_by_id(self.inner.particle)
+            .map(|particle| particle.name.clone())
+            .map_err(error::model)
     }
 
     /// Return the PDG code of the particle carried by this edge.
@@ -276,8 +283,11 @@ impl PyDiagramEdge {
     /// >>> particle = model.particle_by_pdg(edge.particle_pdg)
     ///
     #[getter]
-    fn particle_pdg(&self) -> i64 {
-        self.inner.particle.pdg
+    fn particle_pdg(&self) -> PyResult<i64> {
+        self.model
+            .particle_by_id(self.inner.particle)
+            .map(|particle| particle.pdg_code)
+            .map_err(error::model)
     }
 
     /// Report whether the edge carries an oriented particle-flow arrow.
@@ -297,9 +307,7 @@ impl PyDiagramEdge {
     /// no instantiated propagator numerator.
     #[getter]
     fn numerator(&self) -> PyResult<String> {
-        self.inner.numerator.clone().ok_or_else(|| {
-            error::DiagramError::new_err(format!("edge {} has no numerator annotation", self.id))
-        })
+        Ok(self.inner.numerator.to_plain_string())
     }
 
     /// Parse the numerator annotation as a Symbolica expression.
@@ -311,10 +319,9 @@ impl PyDiagramEdge {
     /// >>> weighted_propagator = diagram.overall_factor_expression() * propagator_factor
     ///
     fn numerator_expression(&self) -> PyResult<PythonExpression> {
-        let numerator = self.inner.numerator.as_deref().ok_or_else(|| {
-            error::DiagramError::new_err(format!("edge {} has no numerator annotation", self.id))
-        })?;
-        parse_symbolic_annotation(numerator).map_err(error::DiagramError::new_err)
+        Ok(PythonExpression {
+            expr: self.inner.numerator.clone(),
+        })
     }
 
     /// Return a concise description of the edge and its endpoints.
@@ -326,14 +333,13 @@ impl PyDiagramEdge {
     ///
     fn __repr__(&self) -> String {
         let connector = if self.inner.directed { "->" } else { "--" };
+        let particle = self
+            .model
+            .particle_by_id(self.inner.particle)
+            .expect("diagram particle IDs are model-validated");
         format!(
             "DiagramEdge(id={}, {}{}{}, particle={:?}, pdg={})",
-            self.id,
-            self.source,
-            connector,
-            self.target,
-            self.inner.particle.name,
-            self.inner.particle.pdg,
+            self.id, self.source, connector, self.target, particle.name, particle.pdg_code,
         )
     }
 
@@ -889,7 +895,7 @@ submit! {
 /// Examples
 /// --------
 /// >>> diagram = result.diagrams[0]
-/// >>> diagram.validate(model)
+/// >>> diagram.validate()
 /// >>> diagram  # renders as a Linnest graph in Jupyter or Marimo
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
@@ -917,18 +923,20 @@ impl PyFeynmanDiagram {
     /// Examples
     /// --------
     /// >>> encoded = diagram.to_json()
-    /// >>> restored = FeynmanDiagram.from_json(encoded)
-    /// >>> restored.validate(model)
+    /// >>> restored = FeynmanDiagram.from_json(model, encoded)
+    /// >>> restored.validate()
     /// >>> restored  # render the recovered graph in a notebook
     ///
     /// Parameters
     /// ----------
+    /// model : Model
+    ///     Model whose stable IDs and fingerprint are referenced by the diagram.
     /// json : str
     ///     JSON text produced by :meth:`FeynmanDiagram.to_json` or another
     ///     schema-compatible producer.
     #[staticmethod]
-    fn from_json(json: &str) -> PyResult<Self> {
-        FeynmanDiagram::from_json(json)
+    fn from_json(model: &PyModel, json: &str) -> PyResult<Self> {
+        FeynmanDiagram::from_json(Arc::clone(&model.inner), json)
             .map(Into::into)
             .map_err(error::diagram)
     }
@@ -938,17 +946,19 @@ impl PyFeynmanDiagram {
     /// Examples
     /// --------
     /// >>> dot = diagram.to_dot()
-    /// >>> restored = FeynmanDiagram.from_dot(dot)
-    /// >>> restored.validate(model)
+    /// >>> restored = FeynmanDiagram.from_dot(model, dot)
+    /// >>> restored.validate()
     /// >>> restored  # preserve topology through a Graphviz workflow
     ///
     /// Parameters
     /// ----------
+    /// model : Model
+    ///     Model whose stable IDs and fingerprint are referenced by the diagram.
     /// dot : str
     ///     DOT text containing the diagram topology and FeynKit annotations.
     #[staticmethod]
-    fn from_dot(dot: &str) -> PyResult<Self> {
-        FeynmanDiagram::from_dot(dot)
+    fn from_dot(model: &PyModel, dot: &str) -> PyResult<Self> {
+        FeynmanDiagram::from_dot(Arc::clone(&model.inner), dot)
             .map(Into::into)
             .map_err(error::diagram)
     }
@@ -957,6 +967,12 @@ impl PyFeynmanDiagram {
     #[getter]
     fn name(&self) -> &str {
         self.inner.name()
+    }
+
+    /// Return the stable content-derived hexadecimal diagram ID.
+    #[getter]
+    fn id(&self) -> String {
+        self.inner.id().to_string()
     }
 
     /// Return the positive integer denominator of the graph symmetry factor.
@@ -983,22 +999,15 @@ impl PyFeynmanDiagram {
     /// >>> factor  # rich Symbolica output in a notebook
     ///
     #[getter]
-    fn overall_factor(&self) -> &str {
-        self.inner.overall_factor()
+    fn overall_factor(&self) -> String {
+        self.inner.overall_factor().to_plain_string()
     }
 
     /// Return the diagram numerator annotation as source text.
     ///
-    /// Raises :class:`DiagramError` for an imported or partially constructed
-    /// diagram whose Feynman rules have not supplied a numerator.
     #[getter]
-    fn numerator(&self) -> PyResult<String> {
-        self.inner.numerator().map(str::to_owned).ok_or_else(|| {
-            error::DiagramError::new_err(format!(
-                "diagram {:?} has no numerator annotation",
-                self.inner.name()
-            ))
-        })
+    fn numerator(&self) -> String {
+        self.inner.numerator().to_plain_string()
     }
 
     /// Parse the diagram numerator as a Symbolica expression.
@@ -1009,14 +1018,10 @@ impl PyFeynmanDiagram {
     /// >>> integrand_numerator = diagram.overall_factor_expression() * numerator
     /// >>> integrand_numerator  # native Symbolica algebra and rich display
     ///
-    fn numerator_expression(&self) -> PyResult<PythonExpression> {
-        let numerator = self.inner.numerator().ok_or_else(|| {
-            error::DiagramError::new_err(format!(
-                "diagram {:?} has no numerator annotation",
-                self.inner.name()
-            ))
-        })?;
-        parse_symbolic_annotation(numerator).map_err(error::DiagramError::new_err)
+    fn numerator_expression(&self) -> PythonExpression {
+        PythonExpression {
+            expr: self.inner.numerator().clone(),
+        }
     }
 
     /// Parse the diagram-wide factor as a Symbolica expression.
@@ -1026,8 +1031,44 @@ impl PyFeynmanDiagram {
     /// >>> factor = diagram.overall_factor_expression()
     /// >>> factor  # supports Symbolica algebra and native rich display
     ///
-    fn overall_factor_expression(&self) -> PyResult<PythonExpression> {
-        parse_symbolic_annotation(self.inner.overall_factor()).map_err(error::DiagramError::new_err)
+    fn overall_factor_expression(&self) -> PythonExpression {
+        PythonExpression {
+            expr: self.inner.overall_factor().clone(),
+        }
+    }
+
+    /// Return the request-wide numerator multiplier as a Symbolica expression.
+    ///
+    /// Examples
+    /// --------
+    /// >>> prefactor = diagram.numerator_prefactor_expression()
+    /// >>> weighted_numerator = prefactor * diagram.numerator_expression()
+    /// >>> weighted_numerator
+    ///
+    fn numerator_prefactor_expression(&self) -> PythonExpression {
+        PythonExpression {
+            expr: self.inner.numerator_prefactor().clone(),
+        }
+    }
+
+    /// Return the external-state projector as a Symbolica expression.
+    ///
+    /// Examples
+    /// --------
+    /// >>> projector = diagram.projector_expression()
+    /// >>> projected_numerator = projector * diagram.numerator_expression()
+    /// >>> projected_numerator
+    ///
+    fn projector_expression(&self) -> PythonExpression {
+        PythonExpression {
+            expr: self.inner.projector().clone(),
+        }
+    }
+
+    /// Return the loop-momentum routing selected during generation.
+    #[getter]
+    fn loop_momentum_basis(&self) -> PyLoopMomentumBasis {
+        self.inner.loop_momentum_basis().clone().into()
     }
 
     /// Return the number of independent loops in the diagram topology.
@@ -1046,11 +1087,13 @@ impl PyFeynmanDiagram {
     /// Return the diagram vertices with stable integer identifiers.
     #[getter]
     fn vertices(&self) -> Vec<PyDiagramVertex> {
+        let model = self.inner.model_arc();
         self.inner
             .vertices()
             .map(|(id, inner)| PyDiagramVertex {
                 id: id.0,
                 inner: inner.clone(),
+                model: Arc::clone(&model),
             })
             .collect()
     }
@@ -1058,6 +1101,7 @@ impl PyFeynmanDiagram {
     /// Return all diagram edges with their endpoint identifiers.
     #[getter]
     fn edges(&self) -> Vec<PyDiagramEdge> {
+        let model = self.inner.model_arc();
         self.inner
             .edges()
             .map(|(id, endpoints, inner)| PyDiagramEdge {
@@ -1065,6 +1109,7 @@ impl PyFeynmanDiagram {
                 source: endpoints.source.0,
                 target: endpoints.target.0,
                 inner: inner.clone(),
+                model: Arc::clone(&model),
             })
             .collect()
     }
@@ -1078,6 +1123,7 @@ impl PyFeynmanDiagram {
     ///
     #[getter]
     fn internal_edges(&self) -> Vec<PyDiagramEdge> {
+        let model = self.inner.model_arc();
         self.inner
             .edges()
             .filter(|(_, endpoints, _)| {
@@ -1094,6 +1140,7 @@ impl PyFeynmanDiagram {
                 source: endpoints.source.0,
                 target: endpoints.target.0,
                 inner: inner.clone(),
+                model: Arc::clone(&model),
             })
             .collect()
     }
@@ -1106,6 +1153,7 @@ impl PyFeynmanDiagram {
     ///
     #[getter]
     fn external_edges(&self) -> Vec<PyDiagramEdge> {
+        let model = self.inner.model_arc();
         self.inner
             .edges()
             .filter(|(_, endpoints, _)| {
@@ -1122,6 +1170,7 @@ impl PyFeynmanDiagram {
                 source: endpoints.source.0,
                 target: endpoints.target.0,
                 inner: inner.clone(),
+                model: Arc::clone(&model),
             })
             .collect()
     }
@@ -1133,15 +1182,9 @@ impl PyFeynmanDiagram {
     /// Validation raises ``DiagramError`` for invalid particle or interaction
     /// references:
     ///
-    /// >>> diagram.validate(model)
-    ///
-    /// Parameters
-    /// ----------
-    /// model : Model
-    ///     The :class:`Model` whose particle and interaction definitions should
-    ///     be used for validation.
-    fn validate(&self, model: &PyModel) -> PyResult<()> {
-        self.inner.validate(&model.inner).map_err(error::diagram)
+    /// >>> diagram.validate()
+    fn validate(&self) -> PyResult<()> {
+        self.inner.validate().map_err(error::diagram)
     }
 
     /// Build the diagram's Cross-Free Family representation.
@@ -1191,8 +1234,8 @@ impl PyFeynmanDiagram {
     /// Examples
     /// --------
     /// >>> encoded = diagram.to_json()
-    /// >>> restored = FeynmanDiagram.from_json(encoded)
-    /// >>> restored.validate(model)
+    /// >>> restored = FeynmanDiagram.from_json(model, encoded)
+    /// >>> restored.validate()
     ///
     fn to_json(&self) -> PyResult<String> {
         self.inner.to_json().map_err(error::diagram)
@@ -1203,8 +1246,8 @@ impl PyFeynmanDiagram {
     /// Examples
     /// --------
     /// >>> dot = diagram.to_dot()
-    /// >>> restored = FeynmanDiagram.from_dot(dot)
-    /// >>> restored.validate(model)
+    /// >>> restored = FeynmanDiagram.from_dot(model, dot)
+    /// >>> restored.validate()
     ///
     fn to_dot(&self) -> PyResult<String> {
         self.inner.to_dot().map_err(error::diagram)

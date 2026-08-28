@@ -34,16 +34,17 @@ Application Layer (`gammaloop-api`)
   -> state/load/save and logging control
 
 Domain Layer (`gammalooprs`)
-  -> adapters from standalone models and generated diagrams
-  -> GammaLoop computation graphs and process representations
-  -> preprocessing and CFF generation
+  -> one mechanical finalized-diagram to runtime-graph conversion
+  -> GammaLoop computation graphs and numerical process representations
+  -> numerical CFF evaluation, thresholds, and subtraction
   -> GL integrand construction + evaluator stacks
   -> differential event generation, selectors, and observables
   -> Monte Carlo integration and stability checks
 
 Standalone Physics Toolkit (`feynkit-*`)
-  -> normalized models + parameter cards + optional UFO loading
-  -> graph IR + amplitude/cross-section generation + CFF combinatorics
+  -> canonical rich models + parameter cards + optional UFO loading
+  -> finalized amplitude/cross-section generation and numerator construction
+  -> structural and symbolic CFF generation, including contracted and UV CFFs
   -> precision-generic kinematics + generalized-kT jet clustering
 
 Infrastructure
@@ -92,12 +93,12 @@ through GammaLoop's application state:
 
 | Crate | Owned boundary |
 |---|---|
-| `feynkit-model` | Validated normalized model schema, particles, parameters, interactions, parameter cards, JSON I/O, and indexed lookup |
+| `feynkit-model` | The canonical immutable runtime model, including particles, parameters, interactions, symbolic rule data, parameter cards, JSON I/O, and stable typed IDs |
 | `feynkit-ufo` | Attached-interpreter adapter for `ufo_model_loader`; it returns normalized model data and never owns Python process initialization or global stream/logging configuration |
 | `feynkit-kinematics` | Generic three-/four-momenta, boosts, rotations, momentum signatures, and generalized-\(k_T\) clustering |
-| `feynkit-graph` | Linnet-backed diagram IR, external legs, flow and factors, symbolic numerator annotations, DOT/serde support, model validation, and loop-momentum bases |
-| `feynkit-generator` | Typed processes and generation options, topology expansion, interaction assignment, filters, canonicalization, fermion signs/flow, numerator construction, and grouping |
-| `feynkit-cff` | Topology-level CFF orientations, surfaces, typed expression forests, and per-generation caches |
+| `feynkit-graph` | Linnet-backed finalized diagram IR, external/cut metadata, canonical symbolic numerators and factors, DOT/serde support, and selected loop-momentum routing |
+| `feynkit-generator` | The complete deterministic generation pipeline: topology expansion, interaction assignment, filters, canonicalization, fermion flow, numerator/projector construction, routing, zero detection, and tensor-aware grouping |
+| `feynkit-cff` | Canonical CFF topology, orientations, surfaces, shared caches, expression forests, residues, raised surfaces, and ordinary/contracted/UV generation |
 | `feynkit` | Feature-gated, zero-logic Rust facade; core generation is enabled by default and raw UFO loading uses the opt-in `ufo` feature |
 | `feynkit-py` | Symbolica community binding for `symbolica.community.feynkit`, including generated type stubs and direct Symbolica expression conversion |
 
@@ -117,26 +118,25 @@ progress/cancellation are callback- and token-based. The CI metadata guard also
 checks this direction transitively and rejects source references that bypass a
 Cargo dependency.
 
-Rust clients can load normalized JSON through `Model::from_path`, construct a
-`Process`, and call `Generator::generate`; enabling `feynkit/ufo` additionally
-exposes `UfoLoader` for hosts that attach Python. Python clients use the same
-ownership flow through `symbolica.community.feynkit`: a shared immutable model
-is passed to `Generator`, generation returns typed `FeynmanDiagram` objects, and
-`CffResult::to_expression` returns a native Symbolica expression. Blocking file
-I/O, loop-momentum-basis enumeration, graph generation, CFF construction, and
-jet clustering release the GIL.
+Rust clients load the canonical `Model`, construct a generation request, and
+receive finalized `FeynmanDiagram` values. Enabling `feynkit/ufo` exposes an
+attached-interpreter loader that returns the same model type directly. Python
+clients use this ownership flow through `symbolica.community.feynkit`; the
+curated PyO3 API does not expose GammaLoop runtime details.
 
-GammaLoop remains responsible for enriching standalone diagrams with evaluator
-caches, cuts, runtime surfaces, integrand state, and application persistence.
-Likewise, LU residues, runtime threshold classification, UV/subtraction
-machinery, events, observables, and histogramming do not cross into FeynKit.
-FeynKit's numerator grouping is structural and operates on symbolic annotations;
-the GammaLoop adapter retains tensor-evaluated comparisons,
-symmetric-polarization sampling, and gamma-closure validation.
+GammaLoop converts each finalized diagram once into its evaluator-oriented
+runtime graph. That conversion translates identifiers and builds derived caches;
+it does not repeat model loading, rule lookup, canonicalization, numerator
+construction, grouping, or momentum routing. GammaLoop consumes FeynKit CFF
+values directly. GammaLoop-only numerical behavior is implemented with
+extension traits on those types rather than wrapper IRs. Integrands, compiled
+evaluators, numerical threshold/subtraction machinery, events, observables, and
+histogramming remain downstream.
 
 ### 4. Domain Core (gammalooprs)
 - Root module wiring: `crates/gammalooprs/src/lib.rs`.
-- Model and parameters: `crates/gammalooprs/src/model/mod.rs`.
+- Canonical model and parameters: `crates/feynkit-model`; GammaLoop-specific
+  numerical operations are extension traits in `gammalooprs`.
 - Graph domain: `crates/gammalooprs/src/graph/mod.rs` and submodules.
 - Process orchestration: `crates/gammalooprs/src/processes/mod.rs`, `crates/gammalooprs/src/processes/process.rs`.
 - Amplitude and cross-section pipelines:
@@ -176,16 +176,20 @@ and backend-boundary invariants are documented in
 4. CLI settings/runtime defaults are loaded and synchronized with tracing filters.
 
 ### 2. Process Generation Flow
-1. `generate` command builds `ProcessDefinition` (from syntax or graph import).
-2. `State::generate_integrand(s)` creates a generation thread pool.
-3. `ProcessList::preprocess` delegates to amplitude/cross-section preprocessors.
-4. `ProcessList::generate_integrands` builds `ProcessIntegrand` instances from preprocessed graphs.
-5. Optional compile/export steps persist compiled evaluator artifacts and DOT/standalone outputs.
-6. Each generated integrand now embeds its frozen f64 backend choice in `integrand.bin`:
+1. `generate` resolves command syntax into a FeynKit `Process` and
+   `GenerationOptions`.
+2. FeynKit generates, canonicalizes, routes, constructs numerators, removes
+   zeroes, and groups diagrams before returning `GenerationResult`.
+3. Each final diagram is converted once into a GammaLoop runtime graph, which
+   adds only derived evaluator and integration state.
+4. `ProcessList::preprocess` delegates to amplitude/cross-section preprocessors.
+5. `ProcessList::generate_integrands` builds `ProcessIntegrand` instances from preprocessed graphs.
+6. Optional compile/export steps persist compiled evaluator artifacts and DOT/standalone outputs.
+7. Each generated integrand embeds its frozen f64 backend choice in `integrand.bin`:
    - `eager`
    - `symjit`
    - external `c++` / `assembly` plus the external compile options used
-7. Runtime-only evaluator backends are then activated from that frozen metadata:
+8. Runtime-only evaluator backends are then activated from that frozen metadata:
    - eager uses the saved eager evaluator directly
    - symjit is rebuilt after generation/load from the saved Symbolica evaluator
    - external compiled backends load their saved shared-library artifacts lazily
@@ -416,10 +420,14 @@ For local experimentation, prefer an isolated path such as `.local/scratch/<run>
 The persistence model is file-system based and intentionally human-editable for settings/run cards, mixed with binary artifacts for performance-heavy data.
 
 ### Persistence Compatibility Contract
-- State format is versioned with `state_manifest.toml` (`version = 1` currently).
-- `State::load` validates the manifest version and rejects states from newer binaries.
-- If no manifest is present, load falls back to a legacy compatibility path (`version = 0`) and runs migration checks on required layout entries before loading.
-- Process settings history now uses `settings_history.toml` consistently; loader still accepts legacy `settings_history.yaml` for backward compatibility and migration.
+- State format is versioned with `state_manifest.toml` (`version = 2` currently).
+- `State::load` validates the manifest version. Version-1 states predate the
+  unified FeynKit model and graph formats and must be regenerated; states from
+  newer binaries are rejected until GammaLoop is upgraded.
+- A saved state without a manifest is not loadable. Such folders are classified
+  separately so the CLI can explain the problem or deliberately replace them,
+  but no legacy model/graph migration path is retained.
+- Process settings history uses `settings_history.toml`.
 
 ## Configuration Architecture
 Configuration is split into:

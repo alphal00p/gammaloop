@@ -7,6 +7,7 @@ use color_eyre::{
     Result,
 };
 use gammalooprs::{
+    model::ModelGammaLoopExt,
     processes::{
         DotExportSettings, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
         StandaloneNumericTarget,
@@ -165,6 +166,7 @@ impl Save {
                     resolve_uv_forest_graph_ids(state, process_id, &integrand_name, &graph)?;
                 let settings = UVForestExportSettings { computed };
                 state.process_list.export_uv_forests(
+                    &state.model,
                     &target_dir,
                     process_id,
                     &integrand_name,

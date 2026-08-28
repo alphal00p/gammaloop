@@ -1450,8 +1450,8 @@ impl Integrate {
 
                 gloop_integrand.warm_up(model)?;
                 let full_group_count = gloop_integrand.graph_group_count();
-                let mut integration_view =
-                    gloop_integrand.clone_with_selected_graph_groups(&selected_graph_names)?;
+                let mut integration_view = gloop_integrand
+                    .clone_with_selected_graph_groups(model, &selected_graph_names)?;
                 info!(
                     "Runtime graph-group subset for {}: {} of {} groups [{}]",
                     slot.slot_meta.key().green().bold(),

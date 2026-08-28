@@ -148,7 +148,7 @@ impl PyHelicity {
         self.inner.integer()
     }
 
-    /// Compare two helicity values.
+    /// Compare with another helicity value.
     ///
     /// Examples
     /// --------
@@ -157,10 +157,12 @@ impl PyHelicity {
     ///
     /// Parameters
     /// ----------
-    /// other : Helicity
-    ///     Helicity to compare with this value.
-    fn __eq__(&self, other: &Self) -> bool {
-        self.inner == other.inner
+    /// other : object
+    ///     Object to compare with this helicity value.
+    fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
+        other
+            .cast::<Self>()
+            .is_ok_and(|other| self.inner == other.get().inner)
     }
 
     /// Return an evaluable-style representation of this helicity.

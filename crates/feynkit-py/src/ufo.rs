@@ -205,7 +205,8 @@ impl PyUfoLoadDiagnostics {
 /// Examples
 /// --------
 /// >>> loaded = fk.UfoLoader().load("path/to/MyUFO")
-/// >>> generator = fk.Generator(loaded.model)
+/// >>> model = loaded.model
+/// >>> particle_names = [particle.name for particle in model.particles]
 /// >>> parameters = loaded.parameters
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
@@ -226,7 +227,8 @@ impl PyLoadedModel {
     ///
     /// Examples
     /// --------
-    /// >>> generator = fk.Generator(loaded.model)
+    /// >>> model = loaded.model
+    /// >>> particles = model.particles
     ///
     #[getter]
     fn model(&self) -> PyModel {

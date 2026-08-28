@@ -8,7 +8,6 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use crate::DependentMomentaConstructor;
-use crate::cff::expression::OrientationData;
 use crate::cff::orientations::GraphOrientation;
 use crate::graph::parse::string_utils::ToOrderedSimple;
 use crate::graph::{Graph, LmbIndex};
@@ -30,6 +29,7 @@ use crate::{
 use color_eyre::{Result, eyre::Context};
 use colored::Colorize;
 use eyre::eyre;
+use feynkit_cff::OrientationData;
 use itertools::Itertools;
 use linnet::half_edge::PowersetIterator;
 use linnet::half_edge::involution::{EdgeIndex, SignOrZero};
@@ -55,6 +55,17 @@ use typed_index_collections::TiVec;
 type ExternalMomenta = TiVec<ExternalIndex, ThreeMomentum<F<f64>>>;
 type LoopMomentumSample = TiVec<LoopIndex, ThreeMomentum<F<f64>>>;
 const UV_PROFILE_RETRY_MAX_DOD: f64 = -0.9;
+// Symbolica evaluation is recursive. Match the generation workers' stack so
+// large explicit FeynKit numerators do not overflow Rayon's 2 MiB default.
+const UV_PROFILE_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
+
+fn profile_thread_pool(work_items: usize) -> Result<rayon::ThreadPool> {
+    rayon::ThreadPoolBuilder::new()
+        .num_threads(work_items.max(1).min(rayon::current_num_threads()))
+        .stack_size(UV_PROFILE_THREAD_STACK_SIZE_BYTES)
+        .build()
+        .wrap_err("failed to create UV profile worker pool")
+}
 
 pub struct ProfileSettings {
     pub n_points: usize,
@@ -288,16 +299,18 @@ impl UVProfileable for Amplitude {
             base_seed,
         };
 
-        let per_graph = self
-            .graphs
-            .par_iter()
-            .enumerate()
-            .map(|(i, g)| {
-                let res = runner.sample_graph(i, g)?;
-                profile_span.pb_inc(1);
-                Ok(res)
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let profile_pool = profile_thread_pool(self.graphs.len())?;
+        let per_graph = profile_pool.install(|| {
+            self.graphs
+                .par_iter()
+                .enumerate()
+                .map(|(i, g)| {
+                    let res = runner.sample_graph(i, g)?;
+                    profile_span.pb_inc(1);
+                    Ok(res)
+                })
+                .collect::<Result<Vec<_>>>()
+        })?;
 
         drop(_profile_span_enter);
         drop(profile_span);
@@ -374,15 +387,18 @@ impl UVProfileable for CrossSection {
             base_seed,
         };
 
-        let per_graph = graph_inputs
-            .par_iter()
-            .enumerate()
-            .map(|(i, (graph, lmbs))| {
-                let res = runner.sample_cross_section_graph(i, graph, lmbs)?;
-                profile_span.pb_inc(1);
-                Ok(res)
-            })
-            .collect::<Result<Vec<_>>>()?;
+        let profile_pool = profile_thread_pool(graph_inputs.len())?;
+        let per_graph = profile_pool.install(|| {
+            graph_inputs
+                .par_iter()
+                .enumerate()
+                .map(|(i, (graph, lmbs))| {
+                    let res = runner.sample_cross_section_graph(i, graph, lmbs)?;
+                    profile_span.pb_inc(1);
+                    Ok(res)
+                })
+                .collect::<Result<Vec<_>>>()
+        })?;
 
         drop(_profile_span_enter);
         drop(profile_span);
@@ -1088,7 +1104,13 @@ impl<'a> UVProfileRunner<'a> {
                         .map(|o| {
                             let oatom = o.data.orientation.select(integrand_expr);
                             g.graph
-                                .all_limits(&g.graph.full_filter(), &oatom, symbol!("lambd"), lmb)
+                                .all_limits(
+                                    self.model,
+                                    &g.graph.full_filter(),
+                                    &oatom,
+                                    symbol!("lambd"),
+                                    lmb,
+                                )
                                 .into_iter()
                                 .map(|(l, v)| (l, o.data.clone(), v))
                                 .collect::<Vec<_>>()

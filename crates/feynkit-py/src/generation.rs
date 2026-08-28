@@ -4,8 +4,9 @@ use feynkit_generator::{
     CancellationToken, DiagramGroup, GenerationFilter, GenerationOptions, GenerationReport,
     GenerationResult, GenerationType, Generator, GraphGroupingOptions, GroupMember,
     NumeratorGrouping, ParticleSelector, Process, SelfEnergyFilterOptions, SewnFilterOptions,
-    SnailFilterOptions, TadpoleFilterOptions,
+    SnailFilterOptions, TadpoleFilterOptions, VertexSelector,
 };
+use feynkit_graph::{DiagramId, EdgeId};
 use feynkit_model::Model;
 use pyo3::{
     FromPyObject, IntoPyObjectExt,
@@ -23,8 +24,8 @@ use pyo3_stub_gen::{
 use crate::{
     display::render_diagram_html,
     error,
-    graph::{PyFeynmanDiagram, parse_symbolic_annotation},
-    model::{PyModel, PyParticle},
+    graph::PyFeynmanDiagram,
+    model::{PyModel, PyParticle, PyVertexRule},
 };
 use symbolica::api::python::PythonExpression;
 
@@ -189,6 +190,9 @@ impl PyParticleSelector {
     #[getter]
     fn name(&self) -> PyResult<&str> {
         match &self.inner {
+            ParticleSelector::Id { .. } => Err(PyTypeError::new_err(
+                "an ID particle selector does not carry a name",
+            )),
             ParticleSelector::Name(name) => Ok(name),
             ParticleSelector::Pdg(_) => Err(PyTypeError::new_err(
                 "a PDG particle selector does not carry a name",
@@ -203,8 +207,8 @@ impl PyParticleSelector {
     #[getter]
     fn pdg(&self) -> PyResult<i64> {
         match &self.inner {
-            ParticleSelector::Name(_) => Err(PyTypeError::new_err(
-                "a named particle selector does not carry a PDG code",
+            ParticleSelector::Id { .. } | ParticleSelector::Name(_) => Err(PyTypeError::new_err(
+                "this particle selector does not carry a PDG code",
             )),
             ParticleSelector::Pdg(pdg) => Ok(*pdg),
         }
@@ -241,6 +245,9 @@ impl PyParticleSelector {
     ///
     fn __repr__(&self) -> String {
         match &self.inner {
+            ParticleSelector::Id { particle, model } => {
+                format!("ParticleSelector(<particle#{}@{model}>)", particle.index())
+            }
             ParticleSelector::Name(name) => format!("ParticleSelector.by_name('{name}')"),
             ParticleSelector::Pdg(pdg) => format!("ParticleSelector.by_pdg({pdg})"),
         }
@@ -270,29 +277,59 @@ impl PyParticleSelector {
     }
 }
 
-#[derive(Clone, Copy)]
-pub(crate) struct ParticlePdg(i64);
+#[derive(Clone)]
+pub(crate) struct ParticleInput(ParticleSelector);
 
-impl<'a, 'py> FromPyObject<'a, 'py> for ParticlePdg {
+impl<'a, 'py> FromPyObject<'a, 'py> for ParticleInput {
     type Error = PyErr;
 
     fn extract(value: pyo3::Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
-        Ok(Self(value.cast::<PyParticle>()?.get().signed_pdg()))
+        if let Ok(particle) = value.cast::<PyParticle>() {
+            Ok(Self(ParticleSelector::Pdg(particle.get().signed_pdg())))
+        } else if let Ok(pdg) = value.extract::<i64>() {
+            Ok(Self(ParticleSelector::Pdg(pdg)))
+        } else {
+            value
+                .extract::<String>()
+                .map(ParticleSelector::Name)
+                .map(Self)
+        }
     }
 }
 
 #[derive(FromPyObject)]
 pub(crate) enum SelectorInput {
-    Particle(ParticlePdg),
+    Particle(ParticleInput),
     Selector(PyParticleSelector),
     Name(String),
     Pdg(i64),
 }
 
 #[derive(FromPyObject)]
-enum ParticlePdgInput {
-    Particle(ParticlePdg),
-    Pdg(i64),
+enum VertexInput {
+    Vertex(PyVertexRule),
+    Name(String),
+}
+
+// PyO3 can extract the concrete pyclass here, but does not implement
+// `FromPyObject` for `Box<T>`, so boxing the large variant would break Python input.
+#[allow(clippy::large_enum_variant)]
+#[derive(FromPyObject)]
+enum DiagramSelectionInput {
+    Diagram(PyFeynmanDiagram),
+    Text(String),
+}
+
+impl DiagramSelectionInput {
+    fn split(self, ids: &mut Vec<DiagramId>, names: &mut Vec<String>) {
+        match self {
+            Self::Diagram(diagram) => ids.push(diagram.inner.id()),
+            Self::Text(text) => match text.parse() {
+                Ok(id) => ids.push(id),
+                Err(_) => names.push(text),
+            },
+        }
+    }
 }
 
 #[derive(Default)]
@@ -345,7 +382,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for LoopOrderInput {
 impl From<SelectorInput> for ParticleSelector {
     fn from(value: SelectorInput) -> Self {
         match value {
-            SelectorInput::Particle(particle) => Self::Pdg(particle.0),
+            SelectorInput::Particle(particle) => particle.0,
             SelectorInput::Selector(selector) => selector.inner,
             SelectorInput::Name(name) => Self::Name(name),
             SelectorInput::Pdg(pdg) => Self::Pdg(pdg),
@@ -353,11 +390,11 @@ impl From<SelectorInput> for ParticleSelector {
     }
 }
 
-impl From<ParticlePdgInput> for i64 {
-    fn from(value: ParticlePdgInput) -> Self {
+impl From<VertexInput> for VertexSelector {
+    fn from(value: VertexInput) -> Self {
         match value {
-            ParticlePdgInput::Particle(particle) => particle.0,
-            ParticlePdgInput::Pdg(pdg) => pdg,
+            VertexInput::Vertex(vertex) => Self::Name(vertex.vertex_rule_name().to_owned()),
+            VertexInput::Name(name) => Self::Name(name),
         }
     }
 }
@@ -380,13 +417,35 @@ impl PyStubType for SelectorInput {
 }
 
 #[cfg(feature = "python_stubgen")]
-impl PyStubType for ParticlePdgInput {
+impl PyStubType for ParticleInput {
     fn type_input() -> TypeInfo {
-        PyParticle::type_input() | i64::type_input()
+        PyParticle::type_input() | String::type_input() | i64::type_input()
     }
 
     fn type_output() -> TypeInfo {
-        PyParticle::type_output() | i64::type_output()
+        PyParticle::type_output() | String::type_output() | i64::type_output()
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+impl PyStubType for VertexInput {
+    fn type_input() -> TypeInfo {
+        PyVertexRule::type_input() | String::type_input()
+    }
+
+    fn type_output() -> TypeInfo {
+        PyVertexRule::type_output() | String::type_output()
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+impl PyStubType for DiagramSelectionInput {
+    fn type_input() -> TypeInfo {
+        PyFeynmanDiagram::type_input() | String::type_input()
+    }
+
+    fn type_output() -> TypeInfo {
+        PyFeynmanDiagram::type_output() | String::type_output()
     }
 }
 
@@ -847,11 +906,11 @@ impl PyGenerationOptions {
     ///
     /// Parameters
     /// ----------
-    /// particles : sequence[Particle | int]
-    ///     Particles or signed PDG codes forbidden on graph edges.
-    fn add_particle_veto(&mut self, particles: Vec<ParticlePdgInput>) {
+    /// particles : sequence[Particle | str | int]
+    ///     Particles, model names, or signed PDG codes forbidden on graph edges.
+    fn add_particle_veto(&mut self, particles: Vec<ParticleInput>) {
         self.add_graph_filter(GenerationFilter::ParticleVeto(
-            particles.into_iter().map(i64::from).collect(),
+            particles.into_iter().map(|particle| particle.0).collect(),
         ));
     }
 
@@ -863,10 +922,12 @@ impl PyGenerationOptions {
     ///
     /// Parameters
     /// ----------
-    /// vertices : sequence[str]
-    ///     Model vertex names allowed in generated graphs.
-    fn add_vertex_allow(&mut self, vertices: Vec<String>) {
-        self.add_graph_filter(GenerationFilter::VertexAllow(vertices));
+    /// vertices : sequence[VertexRule | str]
+    ///     Model vertex rules or names allowed in generated graphs.
+    fn add_vertex_allow(&mut self, vertices: Vec<VertexInput>) {
+        self.add_graph_filter(GenerationFilter::VertexAllow(
+            vertices.into_iter().map(Into::into).collect(),
+        ));
     }
 
     /// Reject graphs containing any listed interaction vertex.
@@ -877,10 +938,12 @@ impl PyGenerationOptions {
     ///
     /// Parameters
     /// ----------
-    /// vertices : sequence[str]
-    ///     Model vertex names forbidden in generated graphs.
-    fn add_vertex_veto(&mut self, vertices: Vec<String>) {
-        self.add_graph_filter(GenerationFilter::VertexVeto(vertices));
+    /// vertices : sequence[VertexRule | str]
+    ///     Model vertex rules or names forbidden in generated graphs.
+    fn add_vertex_veto(&mut self, vertices: Vec<VertexInput>) {
+        self.add_graph_filter(GenerationFilter::VertexVeto(
+            vertices.into_iter().map(Into::into).collect(),
+        ));
     }
 
     /// Reject graphs with more than the specified number of bridge edges.
@@ -1139,6 +1202,112 @@ impl PyGenerationOptions {
     ///     Maximum combined loop count, inclusive.
     fn set_cut_amplitude_loop_count_range(&mut self, minimum: usize, maximum: usize) {
         self.add_cut_amplitude_filter(GenerationFilter::LoopCountRange((minimum, maximum)));
+    }
+
+    /// Retain only diagrams with the listed finalized names.
+    ///
+    /// Examples
+    /// --------
+    /// >>> options.select_diagrams(["FK0"])
+    ///
+    /// Parameters
+    /// ----------
+    /// diagrams : sequence[FeynmanDiagram | str]
+    ///     Diagram objects, content-derived IDs, or deterministic names to retain.
+    fn select_diagrams(&mut self, diagrams: Vec<DiagramSelectionInput>) {
+        let (mut ids, mut names) = (Vec::new(), Vec::new());
+        for diagram in diagrams {
+            diagram.split(&mut ids, &mut names);
+        }
+        let mut options = self.inner.clone();
+        if !ids.is_empty() {
+            options = options.select_diagram_ids(ids);
+        }
+        if !names.is_empty() {
+            options = options.select_diagrams(names);
+        }
+        self.inner = options;
+    }
+
+    /// Remove diagrams with the listed finalized names.
+    ///
+    /// Examples
+    /// --------
+    /// >>> options.veto_diagrams(["FK2"])
+    ///
+    /// Parameters
+    /// ----------
+    /// diagrams : sequence[FeynmanDiagram | str]
+    ///     Diagram objects, content-derived IDs, or deterministic names to remove.
+    fn veto_diagrams(&mut self, diagrams: Vec<DiagramSelectionInput>) {
+        let (mut ids, mut names) = (Vec::new(), Vec::new());
+        for diagram in diagrams {
+            diagram.split(&mut ids, &mut names);
+        }
+        self.inner = self
+            .inner
+            .clone()
+            .veto_diagram_ids(ids)
+            .veto_diagrams(names);
+    }
+
+    /// Select the ordered loop-momentum edges for one diagram.
+    ///
+    /// Examples
+    /// --------
+    /// >>> options.set_loop_momentum_basis("FK0", [2])
+    ///
+    /// Parameters
+    /// ----------
+    /// diagram : str
+    ///     Finalized deterministic diagram name.
+    /// edges : sequence[int]
+    ///     Ordered stable edge IDs carrying independent loop momenta.
+    fn set_loop_momentum_basis(&mut self, diagram: DiagramSelectionInput, edges: Vec<usize>) {
+        let (mut ids, mut names) = (Vec::new(), Vec::new());
+        diagram.split(&mut ids, &mut names);
+        let edges = edges.into_iter().map(EdgeId).collect::<Vec<_>>();
+        self.inner = if let Some(id) = ids.into_iter().next() {
+            self.inner.clone().with_loop_momentum_basis(id, edges)
+        } else {
+            self.inner
+                .clone()
+                .with_named_loop_momentum_basis(names.pop().expect("one selector"), edges)
+        };
+    }
+
+    /// Multiply every generated numerator by a Symbolica expression.
+    ///
+    /// Examples
+    /// --------
+    /// >>> options.set_numerator_prefactor(model.parameter("aS").symbol)
+    ///
+    /// Parameters
+    /// ----------
+    /// expression : Expression
+    ///     Scalar numerator multiplier retained on every finalized diagram.
+    fn set_numerator_prefactor(&mut self, expression: &PythonExpression) {
+        self.inner = self
+            .inner
+            .clone()
+            .numerator_prefactor(expression.expr.clone());
+    }
+
+    /// Override the automatically generated external-state projector.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import S
+    /// >>> transverse_sum = S("g(mu,nu)-p(mu)*p(nu)/p2")
+    /// >>> options.set_projector(transverse_sum)
+    ///
+    /// Parameters
+    /// ----------
+    /// expression : Expression
+    ///     Symbolica tensor expression used for external-state contraction.
+    ///     Passing ``S("1")`` explicitly disables external wavefunctions.
+    fn set_projector(&mut self, expression: &PythonExpression) {
+        self.inner = self.inner.clone().projector(expression.expr.clone());
     }
 
     /// Disable numerator parsing, zero detection, and cross-diagram grouping.
@@ -1440,7 +1609,17 @@ impl PyGroupMember {
     fn source_diagram(&self) -> usize {
         self.inner.source_diagram
     }
-    /// Return the member's index in the retained ``GenerationResult.diagrams``.
+    /// Return the source diagram's stable content-derived ID.
+    #[getter]
+    fn source_id(&self) -> String {
+        self.inner.source_id.to_string()
+    }
+    /// Return the finalized display name assigned to the source diagram.
+    #[getter]
+    fn source_name(&self) -> &str {
+        &self.inner.source_name
+    }
+    /// Return the collapsed master index in ``GenerationResult.diagrams``.
     ///
     /// Examples
     /// --------
@@ -1452,8 +1631,8 @@ impl PyGroupMember {
     }
     /// Return the member numerator divided by the group master numerator.
     #[getter]
-    fn ratio(&self) -> &str {
-        &self.inner.ratio
+    fn ratio(&self) -> String {
+        self.inner.ratio.to_plain_string()
     }
     /// Parse the numerator ratio as a native Symbolica expression.
     ///
@@ -1461,8 +1640,27 @@ impl PyGroupMember {
     /// --------
     /// >>> ratio = result.groups[0].members[0].ratio_expression()
     ///
-    fn ratio_expression(&self) -> PyResult<PythonExpression> {
-        parse_symbolic_annotation(&self.inner.ratio).map_err(error::GenerationError::new_err)
+    fn ratio_expression(&self) -> PythonExpression {
+        PythonExpression {
+            expr: self.inner.ratio.clone(),
+        }
+    }
+    /// Parse the source diagram's numerator-independent factor.
+    ///
+    /// Examples
+    /// --------
+    /// >>> group = result.groups[0]
+    /// >>> member = group.members[0]
+    /// >>> master = result.diagrams[group.master]
+    /// >>> reconstructed = (member.overall_factor_expression()
+    /// ...                  * member.ratio_expression()
+    /// ...                  * master.numerator_expression())
+    /// >>> reconstructed
+    ///
+    fn overall_factor_expression(&self) -> PythonExpression {
+        PythonExpression {
+            expr: self.inner.overall_factor.clone(),
+        }
     }
 }
 
@@ -1902,6 +2100,12 @@ mod tests {
                     include_str!("../tests/fixtures/scalars_2p_3p.json"),
                 )
                 .unwrap();
+            locals
+                .set_item(
+                    "SM_MODEL_JSON",
+                    include_str!("../../feynkit-model/tests/fixtures/sm.json"),
+                )
+                .unwrap();
             let code = CString::new(
                 r#"
 by_name = fk.ParticleSelector.by_name("1")
@@ -1944,6 +2148,17 @@ assert [
     for selector in mixed_process.incoming
 ] == [1000, "1", "scalar_2", 1001]
 assert mixed_process.outgoing_alternatives[0][0].pdg == 1000
+
+sm_model = fk.Model.from_json(SM_MODEL_JSON)
+gluon = sm_model.particle_by_pdg(21)
+gluon_process = fk.Process.amplitude([gluon], [gluon.antiparticle])
+assert gluon_process.incoming[0].pdg == 21
+assert gluon_process.outgoing_alternatives[0][0].pdg == 21
+
+bottom = sm_model.particle_by_pdg(5)
+bottom_process = fk.Process.amplitude([bottom], [bottom.antiparticle])
+assert bottom_process.incoming[0].pdg == 5
+assert bottom_process.outgoing_alternatives[0][0].pdg == -5
 
 process = fk.Process.amplitude(
     [by_name, by_pdg],
@@ -1993,12 +2208,13 @@ assert cross_section.symmetrizes_external_fermions
 
 veto_options = fk.GenerationOptions()
 assert veto_options.add_particle_veto([particle, 1001]) is None
-try:
-    veto_options.add_particle_veto(["scalar_0"])
-except TypeError:
-    pass
-else:
-    raise AssertionError("particle vetoes accept Particle objects and signed PDG integers only")
+assert veto_options.add_particle_veto(["scalar_0"]) is None
+
+foreign_model = fk.Model.from_json(MODEL_JSON.replace("scalar_0", "foreign_scalar_0"))
+foreign_particle = foreign_model.particle("foreign_scalar_0")
+foreign_process = fk.Process.amplitude([foreign_particle], [foreign_particle.antiparticle])
+assert foreign_process.incoming[0].pdg == 1000
+assert foreign_process.outgoing_alternatives[0][0].pdg == 1000
 "#,
             )
             .unwrap();

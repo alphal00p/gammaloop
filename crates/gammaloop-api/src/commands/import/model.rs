@@ -7,12 +7,10 @@ use gammalooprs::utils::F;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
+use gammalooprs::model::{InputParamCard, Model, ModelGammaLoopExt};
+use include_dir::{include_dir, Dir, File};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use smartstring::{LazyCompact, SmartString};
-
-use gammalooprs::model::{InputParamCard, Model};
-use include_dir::{include_dir, Dir, File};
 use std::{env, fs, sync::OnceLock};
 use tracing::info;
 
@@ -69,15 +67,7 @@ pub(crate) fn load_ufo_model(
             .load(py, path)
             .wrap_err_with(|| format!("Failed to load UFO model from {}", path.display()))?;
 
-        // GammaLoop enriches the neutral schema with its application-specific model state.
-        let model_json = loaded.model.to_json()?;
-        let card_json = loaded.parameters.to_json()?;
-        let model: Model = Model::from_str(model_json, "json")
-            .map_err(|e| eyre::eyre!("Failed to deserialize JSON Model: {e}"))?;
-        let card: InputParamCard<F<f64>> = InputParamCard::<F<f64>>::from_str(card_json, "json")
-            .map_err(|e| eyre::eyre!("Failed to deserialize InputParamCard: {e}"))?;
-
-        Ok((model, card))
+        Ok((loaded.model, loaded.parameters.into()))
     })
 }
 
@@ -129,10 +119,8 @@ impl ImportModel {
                         format!("{model_name}-full").green(),
                     );
                 }
-                state.model = Model::from_str(json_model, "json")?;
-                state.model.restriction = restriction_name
-                    .as_ref()
-                    .map(SmartString::<LazyCompact>::from);
+                state.model = Model::from_json(&json_model)?;
+                state.model = state.model.with_restriction(restriction_name.clone())?;
                 state.model_parameters = if let Some(json_restriction) = json_restriction {
                     let mut param_card = InputParamCard::from_str(json_restriction, "json")?;
                     if self.simplify_model {
@@ -142,7 +130,7 @@ impl ImportModel {
                     }
                     param_card
                 } else {
-                    InputParamCard::default_from_model(&state.model)
+                    state.model.default_param_card()
                 };
             }
             ModelSpecification::UFOModelSpecification {
@@ -169,9 +157,7 @@ impl ImportModel {
                 }
                 (state.model, state.model_parameters) =
                     load_ufo_model(&ufo_path, restriction_name.clone(), self.simplify_model)?;
-                state.model.restriction = restriction_name
-                    .as_ref()
-                    .map(SmartString::<LazyCompact>::from);
+                state.model = state.model.with_restriction(restriction_name.clone())?;
             }
         }
 

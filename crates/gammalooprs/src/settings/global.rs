@@ -624,8 +624,8 @@ mod orientation_pattern_tests {
         assert_eq!(wrapped, tuple_only);
         assert_eq!(wrapped, bare_args);
         assert_eq!(
-            wrapped.pat.as_ref().unwrap().to_string(),
-            "orientation_delta(1,-1,0)"
+            wrapped.pat.as_ref().unwrap().0.to_plain_string(),
+            "gammalooprs::orientation_delta(1,-1,0)"
         );
         assert!(wrapped.filter(&edgevec([1, -1, 0])));
         assert!(!wrapped.filter(&edgevec([1, 1, 0])));

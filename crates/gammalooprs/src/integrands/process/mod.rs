@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use crate::cff::expression::OrientationID;
 use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
 use crate::integrands::evaluation::{
     EvaluationMetaData, EvaluationResult, GenericEvaluationResult, GraphEvaluationResult,
@@ -28,6 +27,7 @@ use colored::Colorize;
 use derive_more::{From, Into};
 use enum_dispatch::enum_dispatch;
 use eyre::{Context, eyre};
+use feynkit_cff::OrientationId;
 use gammaloop_sample::{DiscreteGraphSample, GammaLoopSample, parameterize};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
@@ -272,7 +272,11 @@ pub(crate) fn resolve_discrete_selection_for_sampling(
 }
 
 impl ProcessIntegrand {
-    pub fn clone_with_selected_graph_groups(&self, graph_names: &[String]) -> Result<Self> {
+    pub fn clone_with_selected_graph_groups(
+        &self,
+        model: &Model,
+        graph_names: &[String],
+    ) -> Result<Self> {
         if graph_names.is_empty() {
             return Ok(self.clone());
         }
@@ -297,23 +301,25 @@ impl ProcessIntegrand {
         let selection = GraphGroupSelectionSpec::from_master_graph_names(graph_names.to_vec());
         let mut selected = match self {
             Self::Amplitude(integrand) => {
-                let plan = selection.plan(&integrand.data.graph_group_structure, |graph_id| {
-                    integrand
-                        .data
-                        .graph_terms
-                        .get(graph_id)
-                        .map(|term| &term.graph)
-                })?;
+                let plan =
+                    selection.plan(model, &integrand.data.graph_group_structure, |graph_id| {
+                        integrand
+                            .data
+                            .graph_terms
+                            .get(graph_id)
+                            .map(|term| &term.graph)
+                    })?;
                 Self::Amplitude(integrand.clone_with_graph_group_selection(&plan)?)
             }
             Self::CrossSection(integrand) => {
-                let plan = selection.plan(&integrand.data.graph_group_structure, |graph_id| {
-                    integrand
-                        .data
-                        .graph_terms
-                        .get(graph_id)
-                        .map(|term| &term.graph)
-                })?;
+                let plan =
+                    selection.plan(model, &integrand.data.graph_group_structure, |graph_id| {
+                        integrand
+                            .data
+                            .graph_terms
+                            .get(graph_id)
+                            .map(|term| &term.graph)
+                    })?;
                 Self::CrossSection(integrand.clone_with_graph_group_selection(&plan)?)
             }
         };
@@ -1145,11 +1151,11 @@ fn format_orientation_label(signature: &EdgeVec<Orientation>) -> String {
 }
 
 pub(crate) fn resolve_visible_orientation_id(
-    orientation_filter: &SubSet<OrientationID>,
+    orientation_filter: &SubSet<OrientationId>,
     visible_orientation_id: usize,
-) -> Option<OrientationID> {
+) -> Option<OrientationId> {
     if orientation_filter.is_full() {
-        Some(OrientationID::from(visible_orientation_id))
+        Some(OrientationId::from(visible_orientation_id))
     } else {
         orientation_filter
             .included_iter()
@@ -1158,8 +1164,8 @@ pub(crate) fn resolve_visible_orientation_id(
 }
 
 pub(crate) fn filtered_orientation_count(
-    orientation_filter: &SubSet<OrientationID>,
-    orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+    orientation_filter: &SubSet<OrientationId>,
+    orientations: &TiVec<OrientationId, EdgeVec<Orientation>>,
 ) -> usize {
     if orientation_filter.is_full() {
         orientations.len()
@@ -4085,10 +4091,11 @@ mod tests {
         ChannelIndex, LmbChannelWeightingSettings, LmbMultiChannelingSetup, RuntimeCache,
         filtered_orientation_count, resolve_visible_orientation_id,
     };
-    use crate::cff::expression::OrientationID;
     use crate::{
-        dot,
-        graph::{Graph, LMBext, LmbIndex, LoopMomentumBasis, parse::from_dot::IntoGraph},
+        finalized_runtime_dot,
+        graph::{
+            Graph, LMBext, LmbIndex, LoopMomentumBasis, parse::from_dot::IntoFinalizedRuntimeGraph,
+        },
         initialisation::test_initialise,
         momentum::{
             ThreeMomentum,
@@ -4098,6 +4105,7 @@ mod tests {
         settings::runtime::{LmbChannelWeight, ParameterizationSettings},
         utils::{F, load_generic_model},
     };
+    use feynkit_cff::OrientationId;
     use linnet::half_edge::{
         involution::{EdgeIndex, EdgeVec, Orientation},
         subgraph::{ModifySubSet, SubSetLike, subset::SubSet},
@@ -4123,24 +4131,24 @@ mod tests {
 
     #[test]
     fn filtered_orientation_helpers_map_visible_indices_into_subset_order() {
-        let orientations = TiVec::<OrientationID, EdgeVec<Orientation>>::from_iter([
+        let orientations = TiVec::<OrientationId, EdgeVec<Orientation>>::from_iter([
             EdgeVec::from_iter([Orientation::Default]),
             EdgeVec::from_iter([Orientation::Reversed]),
             EdgeVec::from_iter([Orientation::Undirected]),
             EdgeVec::from_iter([Orientation::Default]),
         ]);
         let mut filter = SubSet::empty(orientations.len());
-        filter.add(OrientationID(1));
-        filter.add(OrientationID(3));
+        filter.add(OrientationId(1));
+        filter.add(OrientationId(3));
 
         assert_eq!(filtered_orientation_count(&filter, &orientations), 2);
         assert_eq!(
             resolve_visible_orientation_id(&filter, 0),
-            Some(OrientationID(1))
+            Some(OrientationId(1))
         );
         assert_eq!(
             resolve_visible_orientation_id(&filter, 1),
-            Some(OrientationID(3))
+            Some(OrientationId(3))
         );
         assert_eq!(resolve_visible_orientation_id(&filter, 2), None);
     }
@@ -4151,13 +4159,14 @@ mod tests {
         static GRAPH: OnceLock<Graph> = OnceLock::new();
         let graph = GRAPH
             .get_or_init(|| {
-                dot!(
+                finalized_runtime_dot!(
                     digraph lmb_basis_selection {
+                        graph [projector=1]
                         edge [num=1 mass=0]
                         node [num=1]
-                        A -> B [id=0]
-                        A -> B [id=1]
-                        A -> B [id=2]
+                        A -> B [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+                        A -> B [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                        A -> B [id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
                     }
                 )
                 .unwrap()
@@ -4225,15 +4234,16 @@ mod tests {
     #[test]
     fn lmb_channel_prefactors_form_a_partition_of_unity() {
         test_initialise().unwrap();
-        let mut graph: Graph = dot!(
+        let mut graph: Graph = finalized_runtime_dot!(
             digraph lmb_prefactor_partition {
+                graph [projector=1]
                 edge [num=1 mass=0]
                 node [num=1]
                 ext [style=invis]
-                ext -> A [id=0]
-                A -> B [id=1]
-                A -> B [id=2]
-                B -> ext [id=3]
+                ext -> A [id=0 sink="{ufo_order:0}"]
+                A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                A -> B [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                B -> ext [id=3 source="{ufo_order:2}"]
             }
         )
         .unwrap();

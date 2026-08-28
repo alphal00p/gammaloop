@@ -1,12 +1,11 @@
 use crate::GammaLoopContext;
-use crate::cff::esurface::EsurfaceCollection;
-use crate::cff::esurface::EsurfaceID;
+use crate::cff::esurface::EnergySurfaceCollection;
 use crate::cff::esurface::ExistingEsurfaceId;
 use crate::cff::esurface::ExistingEsurfaces;
 use crate::cff::esurface::GroupEsurfaceId;
-use crate::cff::esurface::RaisedEsurfaceData;
-use crate::cff::esurface::RaisedEsurfaceId;
-use crate::cff::esurface::{esurface_value_is_strictly_inside, get_representative};
+use crate::cff::esurface::{
+    EnergySurfaceExt, esurface_value_is_strictly_inside, get_representative,
+};
 use crate::graph::GraphGroupPosition;
 use crate::graph::LoopMomentumBasis;
 use crate::integrands::process::GenericEvaluator;
@@ -28,6 +27,7 @@ use bincode_trait_derive::Encode;
 use clarabel::algebra::*;
 use clarabel::solver::*;
 use eyre::{Result, eyre};
+use feynkit_cff::{EnergySurfaceId, RaisedEnergySurfaceData, RaisedEnergySurfaceId};
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
 use spenso::algebra::algebraic_traits::IsZero;
@@ -518,8 +518,8 @@ pub(crate) fn find_center(
 
 pub struct SingleGraphOverlapData<'a> {
     pub lmb: &'a LoopMomentumBasis,
-    pub esurfaces: &'a EsurfaceCollection,
-    pub raised_data: &'a RaisedEsurfaceData,
+    pub esurfaces: &'a EnergySurfaceCollection,
+    pub raised_data: &'a RaisedEnergySurfaceData,
     pub edge_masses: EdgeVec<F<f64>>,
 }
 
@@ -527,15 +527,15 @@ pub struct OverlapInput<'a> {
     pub graph_data: TiVec<GraphGroupPosition, SingleGraphOverlapData<'a>>,
     pub settings: &'a RuntimeSettings,
     pub group_esurface_map:
-        TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEsurfaceId>>>,
+        TiVec<GroupEsurfaceId, TiVec<GraphGroupPosition, Option<RaisedEnergySurfaceId>>>,
     pub local_esurface_exists: TiVec<GraphGroupPosition, TiVec<GroupEsurfaceId, bool>>,
 }
 
 fn representative_local_esurface_id(
     graph_data: &SingleGraphOverlapData,
-    raised_esurface_id: RaisedEsurfaceId,
-) -> EsurfaceID {
-    graph_data.raised_data.raised_groups[raised_esurface_id].esurface_ids[0]
+    raised_esurface_id: RaisedEnergySurfaceId,
+) -> EnergySurfaceId {
+    graph_data.raised_data.groups[raised_esurface_id].surface_ids[0]
 }
 
 fn check_center_for_group_esurfaces(
@@ -997,18 +997,13 @@ mod tests {
     use typed_index_collections::ti_vec;
 
     use crate::{
-        cff::{
-            cff_graph::VertexSet,
-            esurface::{
-                Esurface, EsurfaceExistence, EsurfaceID, RaisedEsurfaceData, RaisedEsurfaceGroup,
-                RaisedEsurfaceId,
-            },
-        },
-        graph::LoopMomentumBasis,
-        momentum::FourMomentum,
-        momentum::signature::LoopExtSignature,
-        settings::RuntimeSettings,
+        cff::esurface::EsurfaceExistence, graph::LoopMomentumBasis, momentum::FourMomentum,
+        momentum::signature::LoopExtSignature, settings::RuntimeSettings,
         utils::test_utils::dummy_hedge_graph,
+    };
+    use feynkit_cff::{
+        EnergySurface, EnergySurfaceId, RaisedEnergySurfaceData, RaisedEnergySurfaceGroup,
+        RaisedEnergySurfaceId, VertexSet,
     };
 
     #[test]
@@ -1074,8 +1069,8 @@ mod tests {
     struct HelperBoxStructure {
         external_momenta: ExternalFourMomenta<F<f64>>,
         lmb: LoopMomentumBasis,
-        esurfaces: EsurfaceCollection,
-        raised_data: RaisedEsurfaceData,
+        esurfaces: EnergySurfaceCollection,
+        raised_data: RaisedEnergySurfaceData,
         existing_esurfaces: ExistingEsurfaces,
         edge_masses: EdgeVec<F<f64>>,
     }
@@ -1083,21 +1078,20 @@ mod tests {
     struct HelperBananaStructure {
         external_momenta: ExternalFourMomenta<F<f64>>,
         lmb: LoopMomentumBasis,
-        esurfaces: EsurfaceCollection,
-        raised_data: RaisedEsurfaceData,
+        esurfaces: EnergySurfaceCollection,
+        raised_data: RaisedEnergySurfaceData,
         existing_esurfaces: ExistingEsurfaces,
         edge_masses: EdgeVec<F<f64>>,
     }
 
-    fn trivial_raised_data(num_esurfaces: usize) -> RaisedEsurfaceData {
-        RaisedEsurfaceData {
-            raised_groups: (0..num_esurfaces)
-                .map(|index| RaisedEsurfaceGroup {
-                    esurface_ids: vec![EsurfaceID::from(index)],
-                    max_occurence: 1,
+    fn trivial_raised_data(num_esurfaces: usize) -> RaisedEnergySurfaceData {
+        RaisedEnergySurfaceData {
+            groups: (0..num_esurfaces)
+                .map(|index| RaisedEnergySurfaceGroup {
+                    surface_ids: vec![EnergySurfaceId::from(index)],
+                    max_occurrence: 1,
                 })
                 .collect(),
-            pass_two_evaluator: None,
         }
     }
 
@@ -1133,31 +1127,32 @@ mod tests {
             };
 
             let esurfaces_array = [
-                Esurface {
+                EnergySurface {
                     energies: vec![EdgeIndex::from(5), EdgeIndex::from(6)],
-                    external_shift: vec![(EdgeIndex::from(1), 1)],
+                    external_shift: vec![(EdgeIndex::from(1), 1)].into(),
                     vertex_set: VertexSet::dummy(),
                     // subspace_graph: dummy_hedge_graph.full_graph(),
                 },
-                Esurface {
+                EnergySurface {
                     energies: vec![EdgeIndex::from(5), EdgeIndex::from(7)],
-                    external_shift: vec![(EdgeIndex::from(1), 1), (EdgeIndex::from(2), 1)],
+                    external_shift: vec![(EdgeIndex::from(1), 1), (EdgeIndex::from(2), 1)].into(),
                     vertex_set: VertexSet::dummy(),
                     //subspace_graph: dummy_hedge_graph.full_graph(),
                 },
-                Esurface {
+                EnergySurface {
                     energies: vec![EdgeIndex::from(4), EdgeIndex::from(6)],
-                    external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)],
+                    external_shift: vec![(EdgeIndex::from(0), 1), (EdgeIndex::from(1), 1)].into(),
                     vertex_set: VertexSet::dummy(),
                     //subspace_graph: dummy_hedge_graph.full_graph(),
                 },
-                Esurface {
+                EnergySurface {
                     energies: vec![EdgeIndex::from(4), EdgeIndex::from(7)],
                     external_shift: vec![
                         (EdgeIndex::from(0), 1),
                         (EdgeIndex::from(1), 1),
                         (EdgeIndex::from(2), 1),
-                    ],
+                    ]
+                    .into(),
                     vertex_set: VertexSet::dummy(),
                     //subspace_graph: dummy_hedge_graph.full_graph(),
                 },
@@ -1235,9 +1230,9 @@ mod tests {
                 edge_signatures: banana_edge_sigs,
             };
 
-            let only_esurface = Esurface {
+            let only_esurface = EnergySurface {
                 energies: vec![EdgeIndex::from(2), EdgeIndex::from(3), EdgeIndex::from(4)],
-                external_shift: vec![(EdgeIndex::from(0), -1)],
+                external_shift: vec![(EdgeIndex::from(0), -1)].into(),
                 vertex_set: VertexSet::dummy(),
                 //subspace_graph: dummy_hedge_graph.full_graph(),
             };
@@ -1330,7 +1325,7 @@ mod tests {
             }],
             settings: &RuntimeSettings::default(),
             group_esurface_map: (0..4)
-                .map(|i| ti_vec![Some(Into::<RaisedEsurfaceId>::into(i))])
+                .map(|i| ti_vec![Some(Into::<RaisedEnergySurfaceId>::into(i))])
                 .collect(),
             local_esurface_exists: ti_vec![ti_vec![true; 4]],
         };
@@ -1354,7 +1349,7 @@ mod tests {
             }],
             settings: &RuntimeSettings::default(),
             group_esurface_map: (0..4)
-                .map(|i| ti_vec![Some(Into::<RaisedEsurfaceId>::into(i))])
+                .map(|i| ti_vec![Some(Into::<RaisedEnergySurfaceId>::into(i))])
                 .collect(),
             local_esurface_exists: ti_vec![ti_vec![true; 4]],
         };
@@ -1381,7 +1376,7 @@ mod tests {
             }],
             settings: &RuntimeSettings::default(),
             group_esurface_map: (0..4)
-                .map(|i| ti_vec![Some(Into::<RaisedEsurfaceId>::into(i))])
+                .map(|i| ti_vec![Some(Into::<RaisedEnergySurfaceId>::into(i))])
                 .collect(),
             local_esurface_exists: ti_vec![ti_vec![true; 4]],
         };
@@ -1420,7 +1415,7 @@ mod tests {
             }],
             settings: &RuntimeSettings::default(),
             group_esurface_map: (0..4)
-                .map(|i| ti_vec![Some(Into::<RaisedEsurfaceId>::into(i))])
+                .map(|i| ti_vec![Some(Into::<RaisedEnergySurfaceId>::into(i))])
                 .collect(),
             local_esurface_exists: ti_vec![ti_vec![true; 4]],
         };
@@ -1445,8 +1440,7 @@ mod tests {
                 let raised_esurface_id = massless_overlap_input.group_esurface_map
                     [box4e.existing_esurfaces[*esurface]][GraphGroupPosition::from(0)]
                 .unwrap();
-                let esurface_id =
-                    box4e.raised_data.raised_groups[raised_esurface_id].esurface_ids[0];
+                let esurface_id = box4e.raised_data.groups[raised_esurface_id].surface_ids[0];
                 let esurfaec_val = box4e.esurfaces[esurface_id].compute_from_momenta(
                     &box4e.lmb,
                     &box4e.edge_masses,
@@ -1473,7 +1467,7 @@ mod tests {
             }],
             settings: &RuntimeSettings::default(),
             group_esurface_map: (0..4)
-                .map(|i| ti_vec![Some(Into::<RaisedEsurfaceId>::into(i))])
+                .map(|i| ti_vec![Some(Into::<RaisedEnergySurfaceId>::into(i))])
                 .collect(),
             local_esurface_exists: ti_vec![ti_vec![true; 4]],
         };
@@ -1497,8 +1491,7 @@ mod tests {
                 let raised_esurface_id = overlap_input.group_esurface_map
                     [box4e.existing_esurfaces[*esurface]][GraphGroupPosition::from(0)]
                 .unwrap();
-                let esurface_id =
-                    box4e.raised_data.raised_groups[raised_esurface_id].esurface_ids[0];
+                let esurface_id = box4e.raised_data.groups[raised_esurface_id].surface_ids[0];
                 let esurfaec_val = box4e.esurfaces[esurface_id].compute_from_momenta(
                     &box4e.lmb,
                     &box4e.edge_masses,
@@ -1517,7 +1510,7 @@ mod tests {
     fn test_banana() {
         let banana = HelperBananaStructure::new();
 
-        let classification = banana.esurfaces[EsurfaceID::from(0)].classify_existence(
+        let classification = banana.esurfaces[EnergySurfaceId::from(0)].classify_existence(
             &banana.external_momenta,
             &banana.lmb,
             &banana.edge_masses,
@@ -1534,7 +1527,7 @@ mod tests {
                 edge_masses: banana.edge_masses.clone(),
             }],
             settings: &RuntimeSettings::default(),
-            group_esurface_map: ti_vec![ti_vec![Some(Into::<RaisedEsurfaceId>::into(0)),]],
+            group_esurface_map: ti_vec![ti_vec![Some(Into::<RaisedEnergySurfaceId>::into(0)),]],
             local_esurface_exists: ti_vec![ti_vec![true]],
         };
 
@@ -1566,7 +1559,7 @@ mod tests {
                 edge_masses: banana.edge_masses.clone(),
             }],
             settings: &forced_settings,
-            group_esurface_map: ti_vec![ti_vec![Some(Into::<RaisedEsurfaceId>::into(0)),]],
+            group_esurface_map: ti_vec![ti_vec![Some(Into::<RaisedEnergySurfaceId>::into(0)),]],
             local_esurface_exists: ti_vec![ti_vec![true]],
         };
         assert!(

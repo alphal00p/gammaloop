@@ -9,7 +9,11 @@ keywords = ["feynman", "hep", "physics", "ufo"]
 categories = ["science"]
 
 [dependencies]
+bincode = { workspace = true, features = ["serde"] }
+bincode-trait-derive = { workspace = true }
+blake3 = "1.8.3"
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+symbolica = { workspace = true, default-features = false, features = ["serde"] }
 thiserror = { workspace = true }
 vectorize = "0.2.0"

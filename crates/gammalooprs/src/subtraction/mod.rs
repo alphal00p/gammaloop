@@ -1,5 +1,6 @@
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
+use feynkit_cff::EnergySurface;
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeVec;
 use spenso::algebra::complex::Complex;
@@ -14,7 +15,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     GammaLoopContext,
-    cff::esurface::Esurface,
+    cff::esurface::EnergySurfaceExt,
     graph::{LmbIndex, LoopMomentumBasis},
     integrands::process::GenericEvaluator,
     momentum::{
@@ -283,7 +284,7 @@ pub(crate) struct RstarTDependenceInput<'a, T: FloatLike> {
     pub subspace: &'a SubspaceData,
     pub unrescaled_momentum_sample: &'a MomentumSample<T>,
     pub masses: &'a EdgeVec<F<T>>,
-    pub threshold_esurface: &'a Esurface,
+    pub threshold_esurface: &'a EnergySurface,
     pub lmb: &'a LoopMomentumBasis,
     pub all_lmbs: &'a TiVec<LmbIndex, LoopMomentumBasis>,
 }

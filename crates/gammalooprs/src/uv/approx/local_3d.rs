@@ -17,6 +17,7 @@ use crate::{
     cff::{CutCFF, orientations::GraphOrientation},
     debug_tags,
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
+    model::Model,
     utils::{GS, W_},
     uv::{
         ApproximationType, Integrands, UVgenerationSettings, UltravioletGraph,
@@ -42,6 +43,7 @@ impl FrozenActiveCt {
 pub(crate) struct Localizer<'a> {
     cutset: &'a CutSet,
     orientation: OrientationProjection<'a>,
+    pub(crate) model: &'a Model,
 }
 
 impl<'a> Localizer<'a> {
@@ -55,10 +57,15 @@ impl<'a> Localizer<'a> {
         )
     }
 
-    pub(crate) fn new(cutset: &'a CutSet, orientation: OrientationProjection<'a>) -> Self {
+    pub(crate) fn new(
+        cutset: &'a CutSet,
+        orientation: OrientationProjection<'a>,
+        model: &'a Model,
+    ) -> Self {
         Self {
             cutset,
             orientation,
+            model,
         }
     }
     fn representative_orientations(
@@ -158,9 +165,11 @@ impl<'a> Localizer<'a> {
             self.orientation.orientation_pattern,
         )?;
 
-        let fourddenoms = GS.wrap_tree_denoms(
-            graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-        );
+        let fourddenoms = GS.wrap_tree_denoms(graph.denominator(
+            &graph.tree_edges.subtract(&graph.initial_state_cut),
+            self.model,
+            |_| -1,
+        ));
 
         let internal_edges = graph.paired_edges(to_contract);
         let localizing_integrand = GS.localizing_integrand(integrated_node.lmb());
@@ -234,7 +243,7 @@ impl<'a> Local3DApproximation<'a> {
             self.graph,
             given,
         )?;
-        let ctx = UVCtx::new(self.graph, self.settings);
+        let ctx = UVCtx::new(self.graph, self.localizer.model, self.settings);
         let marker = UvMarker::new(ctx.settings);
 
         if let Some(active_sectors) = local.active_sectors() {
@@ -298,7 +307,7 @@ impl<'a> Local3DApproximation<'a> {
         marker_current: &M,
         marker_given: &M,
     ) -> Result<Local3DCts> {
-        let ctx = UVCtx::new(self.graph, self.settings);
+        let ctx = UVCtx::new(self.graph, self.localizer.model, self.settings);
         let reduced_subgraph = current.reduced_subgraph(given);
         let active_sectors = match local.active_sectors() {
             Some(active_sectors) => active_sectors
@@ -355,7 +364,7 @@ impl<'a> Local3DApproximation<'a> {
             self.graph,
             integrated_node,
         )?;
-        let ctx = UVCtx::new(self.graph, self.settings);
+        let ctx = UVCtx::new(self.graph, self.localizer.model, self.settings);
         let active_subgraph = current.reduced_subgraph(given);
         let integrated = -(integrated
             .active
@@ -464,9 +473,11 @@ impl Local3DCts {
             .cff(graph, &graph.empty_subgraph::<SuBitGraph>())?
             .expression_with_selectors();
 
-        let fourddenoms = GS.wrap_tree_denoms(
-            graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-        );
+        let fourddenoms = GS.wrap_tree_denoms(graph.denominator(
+            &graph.tree_edges.subtract(&graph.initial_state_cut),
+            localizer.model,
+            |_| -1,
+        ));
 
         Ok(Local3DCts::from(cff * fourddenoms))
     }
@@ -518,7 +529,7 @@ pub(crate) fn t_tilde<S: super::ForestNodeLike>(
     let mut reps = Vec::new();
     for (p, eid, e) in graph.iter_edges_of(rescaled_subgraph) {
         if p.is_paired() {
-            let e_mass = e.data.mass_atom();
+            let e_mass = e.data.mass_atom(ctx.model);
             reps.push(GS.split_mom_pattern(eid, lmb_id, e_mass, settings.inner_products));
         }
     }
@@ -546,7 +557,7 @@ pub(crate) fn t_tilde<S: super::ForestNodeLike>(
             // set energies from inner_t on-shell
             atomarg = atomarg.replace(function!(GS.energy, eid)).with(GS.ose(ei));
 
-            let e_mass = e.data.mass_atom();
+            let e_mass = e.data.mass_atom(ctx.model);
             atomarg = atomarg.replace(GS.ose(ei)).with(GS.ose_full(
                 ei,
                 lmb_id,
@@ -656,7 +667,7 @@ pub(crate) fn start<S: super::ForestNodeLike>(
             // set energies from inner_t on-shell
             atomarg = atomarg.replace(function!(GS.energy, eid)).with(GS.ose(ei));
 
-            let e_mass = e.data.mass_atom();
+            let e_mass = e.data.mass_atom(ctx.model);
             atomarg = atomarg.replace(GS.ose(ei)).with(GS.ose_full(
                 ei,
                 lmb_id,
@@ -677,7 +688,7 @@ pub(crate) fn start<S: super::ForestNodeLike>(
     let mut reps = Vec::new();
     for (p, eid, e) in graph.iter_edges_of(rescaled_subgraph) {
         if p.is_paired() {
-            let e_mass = e.data.mass_atom();
+            let e_mass = e.data.mass_atom(ctx.model);
             let rep = GS.split_mom_pattern(eid, lmb_id, e_mass, settings.inner_products);
             debug_tags!(#uv, #local, #momentum, #trace;
                 stage = "local_3d_start_split_mom_pattern",
@@ -946,7 +957,8 @@ mod tests {
         let valid = vec![edgevec([1, 1, -1]), edgevec([1, -1, -1])];
         let pat = OrientationPattern::default();
         let cutset = CutSet::empty(1);
-        let loc = Localizer::new(&cutset, OrientationProjection::new(&valid, &pat));
+        let model = crate::utils::load_generic_model("scalars");
+        let loc = Localizer::new(&cutset, OrientationProjection::new(&valid, &pat), &model);
         let localized = loc
             .localized_orientation_term(
                 &reduced_expression,

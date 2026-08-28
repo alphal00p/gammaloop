@@ -1,12 +1,29 @@
-use std::{fmt, ops::RangeInclusive};
+use std::{fmt, ops::RangeInclusive, str::FromStr};
 
+use feynkit_model::{Model, ModelError, ModelFingerprint, ParticleId, VertexRuleId};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// Particle name or PDG selector accepted by process definitions.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
-#[serde(untagged)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
+#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
 pub enum ParticleSelector {
+    Id {
+        particle: ParticleId,
+        model: ModelFingerprint,
+    },
     Name(String),
     Pdg(i64),
 }
@@ -32,20 +49,186 @@ impl From<i64> for ParticleSelector {
 impl fmt::Display for ParticleSelector {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Id { particle, model } => {
+                write!(formatter, "particle#{}@{model}", particle.index())
+            }
             Self::Name(name) => formatter.write_str(name),
             Self::Pdg(pdg) => pdg.fmt(formatter),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+impl ParticleSelector {
+    pub fn by_id(model: &Model, particle: ParticleId) -> Result<Self, SelectorError> {
+        model.particle_by_id(particle)?;
+        Ok(Self::Id {
+            particle,
+            model: model.fingerprint(),
+        })
+    }
+
+    pub fn resolve(&self, model: &Model) -> Result<ParticleId, SelectorError> {
+        match self {
+            Self::Id {
+                particle,
+                model: selector_model,
+            } => {
+                let target_model = model.fingerprint();
+                if *selector_model != target_model {
+                    return Err(SelectorError::ModelMismatch {
+                        kind: "particle",
+                        selector_model: *selector_model,
+                        target_model,
+                    });
+                }
+                model.particle_by_id(*particle)?;
+                Ok(*particle)
+            }
+            Self::Name(name) => Ok(model.particle_id(name)?),
+            Self::Pdg(pdg) => Ok(model.particle_id_by_pdg(*pdg)?),
+        }
+    }
+}
+
+/// Vertex-rule selector accepted at import boundaries and resolved before generation.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
+#[serde(rename_all = "snake_case", tag = "kind", content = "value")]
+pub enum VertexSelector {
+    Id {
+        vertex: VertexRuleId,
+        model: ModelFingerprint,
+    },
+    Name(String),
+}
+
+impl From<&str> for VertexSelector {
+    fn from(value: &str) -> Self {
+        Self::Name(value.to_owned())
+    }
+}
+
+impl From<String> for VertexSelector {
+    fn from(value: String) -> Self {
+        Self::Name(value)
+    }
+}
+
+impl fmt::Display for VertexSelector {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Id { vertex, model } => {
+                write!(formatter, "vertex#{}@{model}", vertex.index())
+            }
+            Self::Name(name) => formatter.write_str(name),
+        }
+    }
+}
+
+impl VertexSelector {
+    pub fn by_id(model: &Model, vertex: VertexRuleId) -> Result<Self, SelectorError> {
+        model.vertex_rule_by_id(vertex)?;
+        Ok(Self::Id {
+            vertex,
+            model: model.fingerprint(),
+        })
+    }
+
+    pub fn resolve(&self, model: &Model) -> Result<VertexRuleId, SelectorError> {
+        match self {
+            Self::Id {
+                vertex,
+                model: selector_model,
+            } => {
+                let target_model = model.fingerprint();
+                if *selector_model != target_model {
+                    return Err(SelectorError::ModelMismatch {
+                        kind: "vertex rule",
+                        selector_model: *selector_model,
+                        target_model,
+                    });
+                }
+                model.vertex_rule_by_id(*vertex)?;
+                Ok(*vertex)
+            }
+            Self::Name(name) => Ok(model.vertex_rule_id(name)?),
+        }
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum SelectorError {
+    #[error(transparent)]
+    Model(#[from] ModelError),
+    #[error(
+        "{kind} selector belongs to model {selector_model}, but generation uses model {target_model}"
+    )]
+    ModelMismatch {
+        kind: &'static str,
+        selector_model: ModelFingerprint,
+        target_model: ModelFingerprint,
+    },
+}
+
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum GenerationType {
     Amplitude,
     CrossSection,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+impl fmt::Display for GenerationType {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Self::Amplitude => "Amplitude",
+            Self::CrossSection => "Cross-section",
+        })
+    }
+}
+
+impl FromStr for GenerationType {
+    type Err = ProcessError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value {
+            "amplitude" => Ok(Self::Amplitude),
+            "cross_section" => Ok(Self::CrossSection),
+            value => Err(ProcessError::InvalidGenerationType(value.to_owned())),
+        }
+    }
+}
+
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
 pub struct Process {
     generation_type: GenerationType,
     incoming: Vec<ParticleSelector>,
@@ -59,6 +242,8 @@ pub struct Process {
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum ProcessError {
+    #[error("invalid generation type '{0}'")]
+    InvalidGenerationType(String),
     #[error("a process must specify at least one final-state alternative")]
     MissingFinalState,
     #[error("amplitude generation accepts exactly one final-state alternative")]

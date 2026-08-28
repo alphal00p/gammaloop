@@ -6,7 +6,6 @@ use crate::momentum::sample::{
 use crate::momentum::signature::{ExternalSignature, LoopSignature};
 use crate::momentum::{FourMomentum, ThreeMomentum};
 use crate::numerator::aind::Aind;
-use crate::numerator::ufo::UFO;
 use crate::settings::runtime::ParameterizationSettings;
 use crate::settings::runtime::SamplingSettings;
 use crate::settings::runtime::kinematic::Externals;
@@ -15,7 +14,6 @@ use crate::utils::hyperdual_utils::new_constant;
 
 use bincode::{Decode, Encode};
 use colored::Colorize;
-use idenso::representations::initialize;
 use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
 
@@ -2701,19 +2699,6 @@ where
 {
 }
 
-pub(crate) fn parse_python_expression(expression: &str) -> Atom {
-    initialize();
-    let _ = UFO.metric;
-    let processed_string = String::from(expression)
-        .replace("**", "^")
-        .replace("cmath.sqrt", "sqrt")
-        .replace("cmath.pi", "pi")
-        .replace("math.sqrt", "sqrt")
-        .replace("math.pi", "pi");
-
-    parse!(processed_string)
-}
-
 /// Format a mean ± sdev as mean(sdev) with the correct number of digits.
 /// Based on the Python package gvar.
 pub fn format_uncertainty(mean: F<f64>, sdev: F<f64>) -> String {
@@ -5109,7 +5094,7 @@ static BUILTIN_MODELS: Dir = include_dir!("$CARGO_MANIFEST_DIR/../../assets/mode
 
 pub fn load_generic_model(name: &str) -> Model {
     if let Some(file) = BUILTIN_MODELS.get_file(format!("{}/{}.json", name, name)) {
-        Model::from_str(file.contents_utf8().unwrap().into(), "json").unwrap()
+        Model::from_json(file.contents_utf8().unwrap()).unwrap()
     } else {
         panic!("Model {} not found in built-in models.", name);
     }

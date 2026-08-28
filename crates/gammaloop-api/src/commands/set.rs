@@ -8,7 +8,7 @@ use figment::{
     Figment,
 };
 use gammalooprs::{
-    model::{ParameterNature, UFOSymbol},
+    model::{ModelGammaLoopExt, ParameterNature, UFOSymbol},
     processes::ProcessCollection,
     settings::RuntimeSettings,
     utils::F,
@@ -383,7 +383,7 @@ impl Set {
                                 )
                             });
                     }
-                    state.model_parameters.apply_to_model(&mut state.model)?;
+                    state.model.apply_param_card(&state.model_parameters)?;
                 }
             }
             Set::BaseDir { path } => {
@@ -1172,8 +1172,7 @@ mod test {
     use gammalooprs::{
         graph::Graph,
         initialisation::test_initialise,
-        model::InputParamCard,
-        model::{ParameterNature, ParameterType, UFOSymbol},
+        model::{ModelGammaLoopExt, ParameterNature, ParameterType, UFOSymbol},
         observables::{
             FilterQuantity, PairQuantity, QuantityComputation, QuantityOrder, QuantityOrdering,
             QuantitySettings, SelectorDefinitionSettings,
@@ -1204,10 +1203,10 @@ mod test {
         test_initialise().expect("test initialisation should succeed");
         let mut state = State::new_test();
         state.model = load_generic_model("scalars");
-        state.model_parameters = InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
         let graph_path =
             crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot");
-        let graphs = Graph::from_path(&graph_path, &state.model)
+        let graphs = Graph::from_finalized_runtime_path(&graph_path, &state.model)
             .expect("scalar bubble graph fixture should load");
 
         for process_name in process_names {
@@ -1279,7 +1278,7 @@ mod test {
             MODEL_REAL_VALUE_FORMAT_HINT
         );
         assert_eq!(
-            model_value_format_hint(Some(ParameterType::Imaginary)),
+            model_value_format_hint(Some(ParameterType::Complex)),
             MODEL_COMPLEX_VALUE_FORMAT_HINT
         );
         assert_eq!(
@@ -1306,7 +1305,7 @@ mod test {
     fn validate_model_parameter_type_accepts_complex_values_for_imaginary_parameters() {
         validate_model_parameter_type(
             "alpha",
-            ParameterType::Imaginary,
+            ParameterType::Complex,
             &Complex::new(F(1.0), F(2.0)),
         )
         .unwrap();
@@ -1358,15 +1357,16 @@ mod test {
     fn process_settings_reject_non_overridable_model_parameters() {
         let mut state = State::new_test();
         state.model = load_generic_model("sm");
-        state.model_parameters =
-            gammalooprs::model::InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
         let removable_parameter = state
             .model
-            .parameters
-            .values()
+            .parameters()
+            .iter()
             .find(|parameter| {
                 parameter.nature == ParameterNature::External
-                    && state.model_parameters.contains_key(&parameter.name)
+                    && state
+                        .model_parameters
+                        .contains_key(&UFOSymbol::from(parameter.name.as_str()))
             })
             .expect("SM model must contain at least one overridable external parameter")
             .name
@@ -1399,12 +1399,11 @@ mod test {
     fn process_settings_reject_invalid_model_value_types() {
         let mut state = State::new_test();
         state.model = load_generic_model("sm");
-        state.model_parameters =
-            gammalooprs::model::InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
         let parameter = state
             .model
-            .parameters
-            .values()
+            .parameters()
+            .iter()
             .find(|parameter| {
                 parameter.nature == ParameterNature::External
                     && parameter.parameter_type == ParameterType::Real
@@ -2438,8 +2437,8 @@ integrate = 10
     fn set_model_rejects_internal_parameters() {
         let model = load_generic_model("sm");
         let internal_param = model
-            .parameters
-            .values()
+            .parameters()
+            .iter()
             .find(|param| param.nature == ParameterNature::Internal)
             .expect("SM model must contain internal parameters")
             .name
@@ -2447,8 +2446,7 @@ integrate = 10
 
         let mut state = State::new_test();
         state.model = model;
-        state.model_parameters =
-            gammalooprs::model::InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
         assert!(!state
             .model_parameters
             .contains_key(&UFOSymbol::from(internal_param.as_str())));
@@ -2478,12 +2476,11 @@ integrate = 10
     fn set_model_rejects_imaginary_component_for_real_parameters() {
         let mut state = State::new_test();
         state.model = load_generic_model("sm");
-        state.model_parameters =
-            gammalooprs::model::InputParamCard::default_from_model(&state.model);
+        state.model_parameters = state.model.default_param_card();
         let parameter = state
             .model
-            .parameters
-            .values()
+            .parameters()
+            .iter()
             .find(|parameter| {
                 parameter.nature == ParameterNature::External
                     && parameter.parameter_type == ParameterType::Real

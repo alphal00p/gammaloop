@@ -3,7 +3,23 @@ use std::{collections::BTreeMap, error::Error};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::{ComplexValue, EntityKind, ModelError, ModelFormFactor, ModelFunction};
+use crate::{ComplexValue, EntityKind, ModelError};
+
+/// A callable UFO function supplied to an evaluator as a transport DTO.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EvaluationFunction {
+    pub name: String,
+    pub arguments: Vec<String>,
+    pub expression: Option<String>,
+}
+
+/// UFO form-factor metadata supplied to an evaluator as a transport DTO.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct EvaluationFormFactor {
+    pub name: String,
+    pub type_name: Option<String>,
+    pub value: Option<String>,
+}
 
 /// A named expression whose value must be recomputed.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -20,9 +36,9 @@ pub struct EvaluationRequest {
     pub internal_parameters: Vec<ModelExpression>,
     pub couplings: Vec<ModelExpression>,
     /// Callable UFO functions available while parsing expressions.
-    pub functions: Vec<ModelFunction>,
+    pub functions: Vec<EvaluationFunction>,
     /// Dynamic form-factor metadata referenced by Lorentz structures.
-    pub form_factors: Vec<ModelFormFactor>,
+    pub form_factors: Vec<EvaluationFormFactor>,
 }
 
 /// Owned values returned by a model evaluator.

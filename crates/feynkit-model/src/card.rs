@@ -6,38 +6,65 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use symbolica::domains::float::Complex;
 
 use crate::ModelError;
 
-/// A complex number encoded by UFO JSON as `[real, imaginary]`.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
-#[serde(from = "(f64, f64)", into = "(f64, f64)")]
-pub struct ComplexValue {
-    pub re: f64,
-    pub im: f64,
-}
+/// The complex scalar used by model parameters and couplings.
+pub type ComplexValue = Complex<f64>;
 
-impl ComplexValue {
-    pub const ZERO: Self = Self { re: 0.0, im: 0.0 };
+pub(crate) mod optional_complex {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-    pub const fn new(re: f64, im: f64) -> Self {
-        Self { re, im }
+    use super::ComplexValue;
+
+    pub fn serialize<S>(value: &Option<ComplexValue>, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        value
+            .map(|value| (value.re, value.im))
+            .serialize(serializer)
     }
 
-    pub fn is_zero(self) -> bool {
-        self == Self::ZERO
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<ComplexValue>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(Option::<(f64, f64)>::deserialize(deserializer)?
+            .map(|(re, im)| ComplexValue::new(re, im)))
     }
 }
 
-impl From<(f64, f64)> for ComplexValue {
-    fn from((re, im): (f64, f64)) -> Self {
-        Self { re, im }
-    }
-}
+mod complex_map {
+    use std::collections::BTreeMap;
 
-impl From<ComplexValue> for (f64, f64) {
-    fn from(value: ComplexValue) -> Self {
-        (value.re, value.im)
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use super::ComplexValue;
+
+    pub fn serialize<S>(
+        values: &BTreeMap<String, ComplexValue>,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        values
+            .iter()
+            .map(|(name, value)| (name, (value.re, value.im)))
+            .collect::<BTreeMap<_, _>>()
+            .serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<BTreeMap<String, ComplexValue>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        Ok(BTreeMap::<String, (f64, f64)>::deserialize(deserializer)?
+            .into_iter()
+            .map(|(name, (re, im))| (name, ComplexValue::new(re, im)))
+            .collect())
     }
 }
 
@@ -47,7 +74,7 @@ impl From<ComplexValue> for (f64, f64) {
 /// were fixed while simplifying a model.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct ParameterCard(BTreeMap<String, ComplexValue>);
+pub struct ParameterCard(#[serde(with = "complex_map")] BTreeMap<String, ComplexValue>);
 
 impl ParameterCard {
     /// Create an empty card.

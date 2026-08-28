@@ -1,4 +1,4 @@
-use crate::model::Model;
+use crate::model::{Model, ParticleGammaLoopExt};
 use crate::momentum::FourMomentum;
 use crate::settings::RuntimeSettings;
 use crate::utils::serde_utils::{
@@ -502,13 +502,18 @@ impl JetClusteringSettings {
 
     fn default_clustered_pdgs(model: &Model) -> Result<Vec<isize>> {
         Ok(model
-            .particles
+            .particles()
             .iter()
             .filter(|particle| particle.is_qcd_charged())
             .map(|particle| {
-                particle
-                    .has_zero_resolved_mass(model)
-                    .map(|has_zero_mass| has_zero_mass.then_some(particle.pdg_code))
+                particle.has_zero_resolved_mass(model).map(|has_zero_mass| {
+                    has_zero_mass.then(|| {
+                        particle
+                            .pdg_code
+                            .try_into()
+                            .expect("PDG code must fit in an isize")
+                    })
+                })
             })
             .collect::<Result<Vec<_>>>()?
             .into_iter()

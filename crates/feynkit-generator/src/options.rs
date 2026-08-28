@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt,
     ops::RangeInclusive,
     sync::{
@@ -8,7 +8,15 @@ use std::{
     },
 };
 
+use feynkit_graph::{DiagramId, EdgeId};
+use feynkit_model::Model;
 use serde::{Deserialize, Serialize};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    parser::ParseSettings,
+};
+
+use crate::{ParticleSelector, SelectorError, VertexSelector};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GraphGroupingOptions {
@@ -113,9 +121,9 @@ pub enum GenerationFilter {
     Tadpoles(TadpoleFilterOptions),
     ZeroSnails(SnailFilterOptions),
     Sewn(SewnFilterOptions),
-    ParticleVeto(Vec<i64>),
-    VertexAllow(Vec<String>),
-    VertexVeto(Vec<String>),
+    ParticleVeto(Vec<ParticleSelector>),
+    VertexAllow(Vec<VertexSelector>),
+    VertexVeto(Vec<VertexSelector>),
     MaxNumberOfBridges(usize),
     CouplingOrders(BTreeMap<String, (usize, Option<usize>)>),
     LoopCountRange((usize, usize)),
@@ -208,6 +216,12 @@ impl GenerationFilter {
     }
 }
 
+impl fmt::Display for GenerationFilter {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{self:?}")
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GenerationProgress {
     pub generated_graphs: usize,
@@ -251,10 +265,133 @@ pub struct GenerationOptions {
     pub(crate) cut_amplitude_filters: Vec<GenerationFilter>,
     pub(crate) numerator_grouping: NumeratorGrouping,
     pub(crate) graph_prefix: String,
+    pub(crate) selected_diagram_ids: Option<BTreeSet<DiagramId>>,
+    pub(crate) selected_diagram_names: Option<BTreeSet<String>>,
+    pub(crate) vetoed_diagram_ids: BTreeSet<DiagramId>,
+    pub(crate) vetoed_diagram_names: BTreeSet<String>,
+    pub(crate) loop_momentum_bases: BTreeMap<DiagramId, Vec<EdgeId>>,
+    pub(crate) named_loop_momentum_bases: BTreeMap<String, Vec<EdgeId>>,
+    pub(crate) forced_cuts: Vec<BTreeSet<EdgeId>>,
+    pub(crate) numerator_prefactor: Atom,
+    pub(crate) projector: Option<Atom>,
     pub(crate) cancellation: CancellationToken,
     pub(crate) cancellation_check: Option<CancellationCheck>,
     pub(crate) progress: Option<ProgressCallback>,
 }
+
+/// Stable persistent portion of [`GenerationOptions`]. Callbacks and
+/// cancellation state are deliberately runtime-only and are restored to their
+/// defaults after deserialization.
+#[derive(Serialize, Deserialize, PartialEq, Eq)]
+struct GenerationOptionsSerde {
+    threads: Option<usize>,
+    max_vertices: Option<usize>,
+    allow_self_loops: bool,
+    allow_zero_flow_edges: bool,
+    graph_filters: Vec<GenerationFilter>,
+    cut_amplitude_filters: Vec<GenerationFilter>,
+    numerator_grouping: NumeratorGrouping,
+    graph_prefix: String,
+    selected_diagram_ids: Option<BTreeSet<DiagramId>>,
+    selected_diagram_names: Option<BTreeSet<String>>,
+    vetoed_diagram_ids: BTreeSet<DiagramId>,
+    vetoed_diagram_names: BTreeSet<String>,
+    loop_momentum_bases: BTreeMap<DiagramId, Vec<EdgeId>>,
+    named_loop_momentum_bases: BTreeMap<String, Vec<EdgeId>>,
+    forced_cuts: Vec<BTreeSet<EdgeId>>,
+    numerator_prefactor: String,
+    projector: Option<String>,
+}
+
+impl From<&GenerationOptions> for GenerationOptionsSerde {
+    fn from(options: &GenerationOptions) -> Self {
+        Self {
+            threads: options.threads,
+            max_vertices: options.max_vertices,
+            allow_self_loops: options.allow_self_loops,
+            allow_zero_flow_edges: options.allow_zero_flow_edges,
+            graph_filters: options.graph_filters.clone(),
+            cut_amplitude_filters: options.cut_amplitude_filters.clone(),
+            numerator_grouping: options.numerator_grouping.clone(),
+            graph_prefix: options.graph_prefix.clone(),
+            selected_diagram_ids: options.selected_diagram_ids.clone(),
+            selected_diagram_names: options.selected_diagram_names.clone(),
+            vetoed_diagram_ids: options.vetoed_diagram_ids.clone(),
+            vetoed_diagram_names: options.vetoed_diagram_names.clone(),
+            loop_momentum_bases: options.loop_momentum_bases.clone(),
+            named_loop_momentum_bases: options.named_loop_momentum_bases.clone(),
+            forced_cuts: options.forced_cuts.clone(),
+            numerator_prefactor: options.numerator_prefactor.to_canonical_string(),
+            projector: options
+                .projector
+                .as_ref()
+                .map(AtomCore::to_canonical_string),
+        }
+    }
+}
+
+impl Serialize for GenerationOptions {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        GenerationOptionsSerde::from(self).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for GenerationOptions {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let persistent = GenerationOptionsSerde::deserialize(deserializer)?;
+        let parse = |expression: String, field: &str| {
+            Atom::parse(
+                &expression,
+                "feynkit_generation_options",
+                ParseSettings::default(),
+            )
+            .map_err(|message| {
+                serde::de::Error::custom(format!(
+                    "failed to parse {field} '{expression}': {message}"
+                ))
+            })
+        };
+        Ok(Self {
+            threads: persistent.threads,
+            max_vertices: persistent.max_vertices,
+            allow_self_loops: persistent.allow_self_loops,
+            allow_zero_flow_edges: persistent.allow_zero_flow_edges,
+            graph_filters: persistent.graph_filters,
+            cut_amplitude_filters: persistent.cut_amplitude_filters,
+            numerator_grouping: persistent.numerator_grouping,
+            graph_prefix: persistent.graph_prefix,
+            selected_diagram_ids: persistent.selected_diagram_ids,
+            selected_diagram_names: persistent.selected_diagram_names,
+            vetoed_diagram_ids: persistent.vetoed_diagram_ids,
+            vetoed_diagram_names: persistent.vetoed_diagram_names,
+            loop_momentum_bases: persistent.loop_momentum_bases,
+            named_loop_momentum_bases: persistent.named_loop_momentum_bases,
+            forced_cuts: persistent.forced_cuts,
+            numerator_prefactor: parse(persistent.numerator_prefactor, "numerator prefactor")?,
+            projector: persistent
+                .projector
+                .map(|projector| parse(projector, "projector"))
+                .transpose()?,
+            cancellation: CancellationToken::new(),
+            cancellation_check: None,
+            progress: None,
+        })
+    }
+}
+
+impl PartialEq for GenerationOptions {
+    fn eq(&self, other: &Self) -> bool {
+        GenerationOptionsSerde::from(self) == GenerationOptionsSerde::from(other)
+    }
+}
+
+impl Eq for GenerationOptions {}
 
 impl Default for GenerationOptions {
     fn default() -> Self {
@@ -267,10 +404,64 @@ impl Default for GenerationOptions {
             cut_amplitude_filters: Vec::new(),
             numerator_grouping: NumeratorGrouping::None,
             graph_prefix: "FK".to_owned(),
+            selected_diagram_ids: None,
+            selected_diagram_names: None,
+            vetoed_diagram_ids: BTreeSet::new(),
+            vetoed_diagram_names: BTreeSet::new(),
+            loop_momentum_bases: BTreeMap::new(),
+            named_loop_momentum_bases: BTreeMap::new(),
+            forced_cuts: Vec::new(),
+            numerator_prefactor: Atom::one(),
+            projector: None,
             cancellation: CancellationToken::new(),
             cancellation_check: None,
             progress: None,
         }
+    }
+}
+
+impl GenerationOptions {
+    /// Resolve all boundary selectors to stable model IDs exactly once.
+    pub(crate) fn resolve_selectors(&self, model: &Model) -> Result<Self, SelectorError> {
+        fn resolve_filter(
+            filter: &GenerationFilter,
+            model: &Model,
+        ) -> Result<GenerationFilter, SelectorError> {
+            Ok(match filter {
+                GenerationFilter::ParticleVeto(selectors) => GenerationFilter::ParticleVeto(
+                    selectors
+                        .iter()
+                        .map(|selector| ParticleSelector::by_id(model, selector.resolve(model)?))
+                        .collect::<Result<_, _>>()?,
+                ),
+                GenerationFilter::VertexAllow(selectors) => GenerationFilter::VertexAllow(
+                    selectors
+                        .iter()
+                        .map(|selector| VertexSelector::by_id(model, selector.resolve(model)?))
+                        .collect::<Result<_, _>>()?,
+                ),
+                GenerationFilter::VertexVeto(selectors) => GenerationFilter::VertexVeto(
+                    selectors
+                        .iter()
+                        .map(|selector| VertexSelector::by_id(model, selector.resolve(model)?))
+                        .collect::<Result<_, _>>()?,
+                ),
+                other => other.clone(),
+            })
+        }
+
+        let mut resolved = self.clone();
+        resolved.graph_filters = self
+            .graph_filters
+            .iter()
+            .map(|filter| resolve_filter(filter, model))
+            .collect::<Result<_, _>>()?;
+        resolved.cut_amplitude_filters = self
+            .cut_amplitude_filters
+            .iter()
+            .map(|filter| resolve_filter(filter, model))
+            .collect::<Result<_, _>>()?;
+        Ok(resolved)
     }
 }
 
@@ -286,6 +477,15 @@ impl fmt::Debug for GenerationOptions {
             .field("cut_amplitude_filters", &self.cut_amplitude_filters)
             .field("numerator_grouping", &self.numerator_grouping)
             .field("graph_prefix", &self.graph_prefix)
+            .field("selected_diagram_ids", &self.selected_diagram_ids)
+            .field("selected_diagram_names", &self.selected_diagram_names)
+            .field("vetoed_diagram_ids", &self.vetoed_diagram_ids)
+            .field("vetoed_diagram_names", &self.vetoed_diagram_names)
+            .field("loop_momentum_bases", &self.loop_momentum_bases)
+            .field("named_loop_momentum_bases", &self.named_loop_momentum_bases)
+            .field("forced_cuts", &self.forced_cuts)
+            .field("numerator_prefactor", &self.numerator_prefactor)
+            .field("projector", &self.projector)
             .field("cancelled", &self.cancellation.is_cancelled())
             .field("cancellation_check", &self.cancellation_check.is_some())
             .field("progress", &self.progress.is_some())
@@ -348,6 +548,92 @@ impl GenerationOptions {
         self
     }
 
+    /// Retain only diagrams with one of the finalized deterministic names.
+    pub fn select_diagrams<I, S>(mut self, names: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.selected_diagram_names = Some(names.into_iter().map(Into::into).collect());
+        self
+    }
+
+    /// Retain only diagrams with one of the stable content-derived IDs.
+    pub fn select_diagram_ids<I>(mut self, ids: I) -> Self
+    where
+        I: IntoIterator<Item = DiagramId>,
+    {
+        self.selected_diagram_ids = Some(ids.into_iter().collect());
+        self
+    }
+
+    /// Remove diagrams with one of the finalized deterministic names.
+    pub fn veto_diagrams<I, S>(mut self, names: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.vetoed_diagram_names = names.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Remove diagrams with one of the stable content-derived IDs.
+    pub fn veto_diagram_ids<I>(mut self, ids: I) -> Self
+    where
+        I: IntoIterator<Item = DiagramId>,
+    {
+        self.vetoed_diagram_ids = ids.into_iter().collect();
+        self
+    }
+
+    /// Select the ordered independent edges for one finalized diagram.
+    pub fn with_loop_momentum_basis<I>(mut self, diagram: DiagramId, edges: I) -> Self
+    where
+        I: IntoIterator<Item = EdgeId>,
+    {
+        self.loop_momentum_bases
+            .insert(diagram, edges.into_iter().collect());
+        self
+    }
+
+    /// Select a routing using the display name convenience key.
+    pub fn with_named_loop_momentum_basis<I>(mut self, diagram: impl Into<String>, edges: I) -> Self
+    where
+        I: IntoIterator<Item = EdgeId>,
+    {
+        self.named_loop_momentum_bases
+            .insert(diagram.into(), edges.into_iter().collect());
+        self
+    }
+
+    /// Retain only the listed physical cut-edge sets before diagram grouping.
+    pub fn forced_cuts<I, C>(mut self, cuts: I) -> Self
+    where
+        I: IntoIterator<Item = C>,
+        C: IntoIterator<Item = EdgeId>,
+    {
+        self.forced_cuts = cuts
+            .into_iter()
+            .map(|cut| cut.into_iter().collect())
+            .collect();
+        self
+    }
+
+    /// Multiply every generated numerator by an application-independent factor.
+    pub fn numerator_prefactor(mut self, prefactor: Atom) -> Self {
+        self.numerator_prefactor = prefactor;
+        self
+    }
+
+    /// Override the automatically generated external-state projector.
+    ///
+    /// Passing `1` explicitly disables external wavefunctions; leaving the
+    /// option unset generates the physical wavefunction for every external leg.
+    pub fn projector(mut self, projector: Atom) -> Self {
+        self.projector = Some(projector);
+        self
+    }
+
     pub fn cancellation_token(mut self, token: CancellationToken) -> Self {
         self.cancellation = token;
         self
@@ -380,5 +666,27 @@ impl GenerationOptions {
                 .cancellation_check
                 .as_ref()
                 .is_some_and(|check| check())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use symbolica::atom::Atom;
+
+    use super::GenerationOptions;
+
+    #[test]
+    fn projector_serde_distinguishes_automatic_from_explicit_one() {
+        let automatic = GenerationOptions::default();
+        let automatic_json = serde_json::to_string(&automatic).unwrap();
+        assert!(automatic_json.contains(r#""projector":null"#));
+        let automatic_roundtrip: GenerationOptions = serde_json::from_str(&automatic_json).unwrap();
+        assert!(automatic_roundtrip.projector.is_none());
+
+        let explicit = GenerationOptions::default().projector(Atom::one());
+        let explicit_json = serde_json::to_string(&explicit).unwrap();
+        assert!(explicit_json.contains(r#""projector":"1""#));
+        let explicit_roundtrip: GenerationOptions = serde_json::from_str(&explicit_json).unwrap();
+        assert_eq!(explicit_roundtrip.projector, Some(Atom::one()));
     }
 }

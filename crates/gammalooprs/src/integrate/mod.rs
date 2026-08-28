@@ -3771,7 +3771,7 @@ mod tests {
                 IntegrationSlot::new(
                     meta,
                     settings.clone(),
-                    Model::default(),
+                    Model::empty("unit-volume-test"),
                     Integrand::UnitVolume(UnitVolumeIntegrand::new(
                         settings,
                         UnitVolumeSettings { n_3d_momenta: 1 },
@@ -4015,7 +4015,7 @@ mod tests {
             0,
             8,
         );
-        let model = Model::default();
+        let model = Model::empty("unit-volume-test");
         let slot_settings = [&settings_a, &settings_b];
         let slot_models = [&model, &model];
         let current_max_evals = [Complex::new(F(0.0), F(0.0)), Complex::new(F(0.0), F(0.0))];
@@ -4677,7 +4677,7 @@ mod tests {
                 integrand_name: "default".to_string(),
             },
             settings.clone(),
-            Model::default(),
+            Model::empty("unit-volume-test"),
             Integrand::UnitVolume(UnitVolumeIntegrand::new(
                 settings,
                 UnitVolumeSettings { n_3d_momenta: 1 },
@@ -4720,7 +4720,7 @@ mod tests {
                 integrand_name: "default".to_string(),
             },
             settings.clone(),
-            Model::default(),
+            Model::empty("unit-volume-test"),
             Integrand::UnitVolume(UnitVolumeIntegrand::new(
                 settings,
                 UnitVolumeSettings { n_3d_momenta: 1 },

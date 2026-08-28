@@ -476,6 +476,7 @@ impl ProcessList {
 
     pub fn export_uv_forests(
         &self,
+        model: &Model,
         path: impl AsRef<Path>,
         process_id: usize,
         integrand_name: &str,
@@ -491,7 +492,7 @@ impl ProcessList {
                 self.processes.len()
             )
         })?;
-        process.export_uv_forests(&path, integrand_name, graph_ids, settings)
+        process.export_uv_forests(model, &path, integrand_name, graph_ids, settings)
     }
 
     pub fn export_standalone(
@@ -597,17 +598,11 @@ pub use cross_section::*;
 mod tests {
     use std::fs::OpenOptions;
 
-    use linnet::half_edge::{
-        involution::EdgeIndex,
-        subgraph::{SuBitGraph, SubSetLike},
-    };
-
     use symbolica::state::State;
 
     use crate::{
-        GammaLoopContextContainer, dot,
-        graph::{Graph, LoopMomentumBasis, parse::IntoGraph},
-        momentum::signature::LoopExtSignature,
+        GammaLoopContextContainer, finalized_runtime_dot,
+        graph::{Graph, parse::IntoFinalizedRuntimeGraph},
         settings::{
             RuntimeSettings,
             global::{
@@ -626,38 +621,26 @@ mod tests {
 
         #[test]
         fn test_encode_decode_amplitude_graph() {
+            crate::initialisation::test_initialise().unwrap();
             // load the model and hack the masses, go through serializable model since arc is not mutable
             let model = load_generic_model("sm");
 
-            let mut graph: Graph = dot!(
+            let graph: Graph = finalized_runtime_dot!(
                 digraph G{
-                    e1      [flow=sink]
-                    e2      [flow=source]
-                    e3      [flow=source]
-                    e1 -> n1  [particle=h]
-                    e2 -> n4    [particle=h]
-                    n1 -> n2    [particle=h]
-                    n1 -> n3    [particle=h]
-                    n2 -> n3    [particle=t]
-                    n3 -> n4    [particle=t]
-                    n4 -> n2    [particle=t]
+                    graph [projector=1]
+                    node [num=1]
+                    edge [num=1]
+                    ext [style=invis]
+                    ext -> n1  [particle=H sink="{ufo_order:0}"]
+                    ext -> n4  [particle=H sink="{ufo_order:0}"]
+                    n1 -> n2  [particle=H lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                    n1 -> n3  [particle=H source="{ufo_order:2}" sink="{ufo_order:0}"]
+                    n2 -> n3  [particle=t lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                    n3 -> n4  [particle=t source="{ufo_order:2}" sink="{ufo_order:1}"]
+                    n4 -> n2  [particle=t source="{ufo_order:2}" sink="{ufo_order:2}"]
                 }
             )
             .unwrap();
-            let loop_momentum_basis = LoopMomentumBasis {
-                tree: SuBitGraph::empty(0),
-                loop_edges: vec![EdgeIndex::from(0), EdgeIndex::from(4)].into(),
-                ext_edges: vec![EdgeIndex::from(5), EdgeIndex::from(6)].into(),
-                edge_signatures: graph
-                    .underlying
-                    .new_edgevec(|_, _, _| LoopExtSignature::from((vec![], vec![]))),
-            };
-
-            // loop_momentum_basis
-            //     .set_edge_signatures(&graph.underlying)
-            //     .unwrap();
-
-            graph.loop_momentum_basis = loop_momentum_basis;
 
             let mut amplitude: AmplitudeGraph = AmplitudeGraph::new(graph.clone());
 

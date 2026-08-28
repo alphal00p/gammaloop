@@ -84,7 +84,11 @@ fn amplitude_runtime_graph_subset_preserves_complete_group_metadata() -> Result<
         .clone();
     let source_fingerprint = source.resume_fingerprint()?;
     let source_backend = source.active_f64_backend();
-    let selected = source.clone_with_selected_graph_groups(std::slice::from_ref(&master_name))?;
+    let model = cli
+        .state
+        .resolve_model_for_integrand(process_id, &integrand_name)?;
+    let selected =
+        source.clone_with_selected_graph_groups(&model, std::slice::from_ref(&master_name))?;
 
     assert_eq!(source.resume_fingerprint()?, source_fingerprint);
     assert_eq!(selected.active_f64_backend(), source_backend);
@@ -197,7 +201,10 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
         .filter(|name| selected_in_input_order.contains(name))
         .cloned()
         .collect_vec();
-    let selected = source.clone_with_selected_graph_groups(&selected_in_input_order)?;
+    let model = cli
+        .state
+        .resolve_model_for_integrand(process_id, &integrand_name)?;
+    let selected = source.clone_with_selected_graph_groups(&model, &selected_in_input_order)?;
 
     assert_eq!(source.resume_fingerprint()?, source_fingerprint);
     assert_eq!(source.graph_count(), source_graph_count);
@@ -206,8 +213,10 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
         selected.get_settings().sampling.selected_graph_names(),
         expected_master_names
     );
-    let single_reduced =
-        source.clone_with_selected_graph_groups(std::slice::from_ref(&expected_master_names[0]))?;
+    let single_reduced = source.clone_with_selected_graph_groups(
+        &model,
+        std::slice::from_ref(&expected_master_names[0]),
+    )?;
     assert!(single_reduced.graph_count() < source.graph_count());
     assert_eq!(single_reduced.graph_group_count(), 1);
     let Grid::Discrete(selected_grid) = selected.create_grid() else {
@@ -221,7 +230,7 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
         panic!("expected cross-section integrands")
     };
     let unknown_error = source
-        .clone_with_selected_graph_groups(&["UNKNOWN_GRAPH".to_string()])
+        .clone_with_selected_graph_groups(&model, &["UNKNOWN_GRAPH".to_string()])
         .err()
         .expect("unknown graph name must be rejected");
     assert!(format!("{unknown_error:?}").contains("Unknown graph 'UNKNOWN_GRAPH'"));
@@ -282,9 +291,6 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
         .map(|term| term.graph.name.clone())
         .collect::<BTreeSet<_>>();
 
-    let model = cli
-        .state
-        .resolve_model_for_integrand(process_id, &integrand_name)?;
     let point = gammaloop_integration_tests::default_xspace_point(&cli)?;
     let mut selected = selected;
     selected.warm_up(&model)?;
@@ -306,7 +312,7 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
         selected_channel_sum += selected_effective / group_count as f64;
 
         let mut individual =
-            source.clone_with_selected_graph_groups(std::slice::from_ref(master_name))?;
+            source.clone_with_selected_graph_groups(&model, std::slice::from_ref(master_name))?;
         individual.warm_up(&model)?;
         let individual_sample = discrete_sample(0, 1.0, &point);
         let individual_result = individual.evaluate_sample(

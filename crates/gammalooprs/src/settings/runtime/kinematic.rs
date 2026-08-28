@@ -58,10 +58,10 @@ impl<'de> Deserialize<'de> for KinematicsSettings {
 }
 
 impl KinematicsSettings {
-    pub fn random(graph: &Graph, seed: u64) -> Self {
+    pub fn random(graph: &Graph, model: &crate::model::Model, seed: u64) -> Self {
         Self {
             e_cm: 64.,
-            externals: graph.random_externals(seed),
+            externals: graph.random_externals(model, seed),
         }
     }
 }

@@ -27,13 +27,13 @@ use thiserror::Error;
 use walkdir::WalkDir;
 
 use eyre::{eyre, Context};
-use gammalooprs::feyngen::{
-    FeynGenFilter, FeynGenFilters, GenerationType, GraphGroupingOptions,
-    NumeratorAwareGraphGroupingOption, SelfEnergyFilterOptions, SewedFilterOptions,
-    SnailFilterOptions, TadpolesFilterOptions,
+use feynkit_generator::{
+    FilterScope, GenerationFilter, GenerationOptions, GenerationType, GraphGroupingOptions,
+    NumeratorGrouping, ParticleSelector, Process as GenerationProcess, SelfEnergyFilterOptions,
+    SewnFilterOptions, SnailFilterOptions, TadpoleFilterOptions, VertexSelector,
 };
+use feynkit_graph::EdgeId;
 use gammalooprs::model::Model;
-use gammalooprs::numerator::GlobalPrefactor;
 use gammalooprs::processes::amplitude::Amplitude;
 use gammalooprs::processes::{
     merge_generated_graph_reports, CrossSection, GeneratedGraphReport, GraphGenerationStats,
@@ -93,7 +93,7 @@ impl GroupingChoice {
         fully_numerical_substitution_when_comparing_numerators: Option<bool>,
         test_canonized_numerator: Option<bool>,
         symmetric_polarizations: Option<bool>,
-    ) -> NumeratorAwareGraphGroupingOption {
+    ) -> NumeratorGrouping {
         let mut graph_grouping_options = GraphGroupingOptions::default();
         if let Some(seed) = seed {
             graph_grouping_options.numerical_sample_seed = seed;
@@ -106,30 +106,24 @@ impl GroupingChoice {
                 differentiate_particle_masses_only;
         }
         if let Some(test_canonized_numerator) = test_canonized_numerator {
-            graph_grouping_options.test_canonized_numerator = test_canonized_numerator;
+            graph_grouping_options.check_canonical_numerator = test_canonized_numerator;
         }
         if let Some(fully_numerical_substitution_when_comparing_numerators) =
             fully_numerical_substitution_when_comparing_numerators
         {
-            graph_grouping_options.fully_numerical_substitution_when_comparing_numerators =
+            graph_grouping_options.fully_numerical_substitution =
                 fully_numerical_substitution_when_comparing_numerators;
         }
-        if let Some(symmetric_polarizations) = symmetric_polarizations {
-            graph_grouping_options.symmetric_polarizations = symmetric_polarizations;
-        }
+        let _ = symmetric_polarizations;
         match self {
             GroupingChoice::GroupIdenticalGraphsUpToScalarRescaling => {
-                NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToScalarRescaling(
-                    graph_grouping_options,
-                )
+                NumeratorGrouping::UpToScalar(graph_grouping_options)
             }
             GroupingChoice::GroupIdenticalGraphsUpToSign => {
-                NumeratorAwareGraphGroupingOption::GroupIdenticalGraphUpToSign(
-                    graph_grouping_options,
-                )
+                NumeratorGrouping::UpToSign(graph_grouping_options)
             }
-            GroupingChoice::NoGrouping => NumeratorAwareGraphGroupingOption::NoGrouping,
-            GroupingChoice::OnlyDetectZeroes => NumeratorAwareGraphGroupingOption::OnlyDetectZeroes,
+            GroupingChoice::NoGrouping => NumeratorGrouping::None,
+            GroupingChoice::OnlyDetectZeroes => NumeratorGrouping::OnlyDetectZeroes,
         }
     }
 }
@@ -874,7 +868,7 @@ impl OrderRange {
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CouplingKey {
     pub name: String,
-    pub power: u32, // parsed, but dropped when building FeynGenFilter::CouplingOrders
+    pub power: u32, // parsed, but dropped when building GenerationFilter::CouplingOrders
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
@@ -911,10 +905,8 @@ pub struct ProcessSpec {
     pub final_sets: Vec<Vec<String>>,
 
     /// Generation options captured alongside the spec
+    #[schemars(with = "serde_json::Value")]
     pub process_definition: ProcessDefinition,
-
-    /// Parsed numerator-aware grouping mode (not part of FeynGenOptions)
-    pub numerator_grouping: NumeratorAwareGraphGroupingOption,
 }
 
 impl ProcessSpec {
@@ -1230,9 +1222,9 @@ pub fn parse_spec_with_model(
                 .collect::<Vec<_>>();
 
             let all_pdgs = model
-                .particles
+                .particles()
                 .iter()
-                .map(|p| p.pdg_code.abs() as i64)
+                .map(|p| p.pdg_code.abs())
                 .filter(|pdg| !only_pdgs.contains(pdg))
                 .collect::<Vec<_>>();
 
@@ -1243,7 +1235,6 @@ pub fn parse_spec_with_model(
     }
 
     // Build FeynGenOptions with filters and PDGs
-    let numerator_grouping = build_grouping_option(args);
     let process_definition = feyngen_from_spec_args(
         args,
         generation_type,
@@ -1268,7 +1259,6 @@ pub fn parse_spec_with_model(
         pert,
         final_sets: final_spec.sets,
         process_definition,
-        numerator_grouping,
     };
 
     if let Some(process_name) = &args.process_name {
@@ -1276,43 +1266,37 @@ pub fn parse_spec_with_model(
     } else {
         spec.process_definition.folder_name = spec.process_shell_name(true);
     }
-    spec.process_definition.numerator_grouping = spec.numerator_grouping.clone();
-    spec.process_definition.filter_self_loop = args.filter_self_loop.unwrap_or(false);
-    spec.process_definition.filter_zero_flow_edges = args.filter_zero_flow_edges.unwrap_or(true);
-
-    spec.process_definition.graph_prefix = args
-        .graph_prefix
+    let mut options = spec
+        .process_definition
+        .generation_options
         .clone()
-        .unwrap_or_else(|| "GL".to_string());
-    // spec.process_definition.selected_graphs =
-    //     args.select_graphs.as_ref().map(|s| parse_csv_list(s));
-    // spec.process_definition.vetoed_graphs = args.veto_graphs.as_ref().map(|s| parse_csv_list(s));
-    spec.process_definition.selected_graphs = args.select_graphs.clone();
-    spec.process_definition.vetoed_graphs = args.veto_graphs.clone();
-    spec.process_definition.loop_momentum_bases = args
-        .loop_momentum_bases
-        .as_deref()
-        .map(|kvs| {
-            kvs.iter()
-                .map(|kv| {
-                    parse_csv_list(&kv.value)
-                        .into_iter()
-                        .map(|s| s.parse::<usize>())
-                        .collect::<core::result::Result<Vec<_>, _>>()
-                        .map(|lst| (kv.key.clone(), lst))
-                })
-                .collect::<core::result::Result<HashMap<_, _>, _>>()
-        })
-        .transpose()
-        .map_err(ParseError::InvalidLmbSpec)?;
-    let mut prefactor = GlobalPrefactor::default();
+        .numerator_grouping(build_grouping_option(args))
+        .allow_self_loops(!args.filter_self_loop.unwrap_or(false))
+        .allow_zero_flow_edges(!args.filter_zero_flow_edges.unwrap_or(true))
+        .graph_prefix(args.graph_prefix.clone().unwrap_or_else(|| "GL".to_owned()));
+    if let Some(selected) = &args.select_graphs {
+        options = options.select_diagrams(selected.clone());
+    }
+    if let Some(vetoed) = &args.veto_graphs {
+        options = options.veto_diagrams(vetoed.clone());
+    }
+    if let Some(bases) = &args.loop_momentum_bases {
+        for basis in bases {
+            let edges = parse_csv_list(&basis.value)
+                .into_iter()
+                .map(|edge| edge.parse::<usize>().map(EdgeId))
+                .collect::<core::result::Result<Vec<_>, _>>()
+                .map_err(ParseError::InvalidLmbSpec)?;
+            options = options.with_named_loop_momentum_basis(&basis.key, edges);
+        }
+    }
     if let Some(projector) = &args.global_prefactor_projector {
-        prefactor.projector = parse!(projector);
+        options = options.projector(parse!(projector));
     }
-    if let Some(num) = &args.global_prefactor_num {
-        prefactor.num = parse!(num);
+    if let Some(numerator) = &args.global_prefactor_num {
+        options = options.numerator_prefactor(parse!(numerator));
     }
-    spec.process_definition.prefactor = prefactor;
+    spec.process_definition.generation_options = options;
 
     Ok(spec)
 }
@@ -1734,76 +1718,78 @@ fn feyngen_from_spec_args(
         .allow_symmetrization_of_external_fermions_in_amplitudes
         .unwrap_or(false);
 
-    // Base options
-    let mut fg = ProcessDefinition {
-        generation_type,
-        initial_pdgs: initial_pdgs.to_vec(),
-        final_pdgs_lists: if final_sets_pdgs.is_empty() {
-            vec![primary_final_pdgs.to_vec()]
-        } else if !primary_final_pdgs.is_empty() {
-            let mut sets = vec![primary_final_pdgs.to_vec()];
-            sets.extend_from_slice(final_sets_pdgs);
-            sets
-        } else {
-            final_sets_pdgs.to_vec()
-        },
-        loop_count_range: (1, 1), // may be overridden below
-        // (Blob/Spectator ranges are expressed through filters below)
-        symmetrize_initial_states: sym_init,
-        symmetrize_final_states: sym_final,
-        symmetrize_left_right_states: sym_left_right,
-        allow_symmetrization_of_external_fermions_in_amplitudes: allow_symferm,
-        amplitude_filters: FeynGenFilters(vec![]),
-        cross_section_filters: FeynGenFilters(vec![]),
-        ..Default::default()
+    let outgoing_alternatives = if final_sets_pdgs.is_empty() {
+        vec![primary_final_pdgs.to_vec()]
+    } else if !primary_final_pdgs.is_empty() {
+        let mut alternatives = vec![primary_final_pdgs.to_vec()];
+        alternatives.extend_from_slice(final_sets_pdgs);
+        alternatives
+    } else {
+        final_sets_pdgs.to_vec()
     };
+    let first_outgoing = outgoing_alternatives.first().cloned().unwrap_or_default();
+    let process = match generation_type {
+        GenerationType::Amplitude => {
+            GenerationProcess::amplitude(initial_pdgs.to_vec(), first_outgoing)
+        }
+        GenerationType::CrossSection => {
+            GenerationProcess::cross_section(initial_pdgs.to_vec(), first_outgoing)
+        }
+    }
+    .with_final_state_alternatives(outgoing_alternatives)
+    .expect("the parser produces a valid final-state specification")
+    .symmetrize_initial(sym_init)
+    .symmetrize_final(sym_final)
+    .symmetrize_left_right(sym_left_right)
+    .symmetrize_external_fermions(allow_symferm);
+    let mut loop_count = (1, 1);
 
     // Build filters
-    let mut amp_filters: Vec<FeynGenFilter> = Vec::new();
-    let mut xs_filters: Vec<FeynGenFilter> = Vec::new();
+    let mut amp_filters: Vec<GenerationFilter> = Vec::new();
+    let mut xs_filters: Vec<GenerationFilter> = Vec::new();
 
     // Loop counts
     if let Some(n) = pert.loops_sum_amp_or_sum {
-        amp_filters.push(FeynGenFilter::LoopCountRange((n as usize, n as usize)));
-        if fg.generation_type == GenerationType::Amplitude {
-            fg.loop_count_range = (n as usize, n as usize);
+        amp_filters.push(GenerationFilter::LoopCountRange((n as usize, n as usize)));
+        if generation_type == GenerationType::Amplitude {
+            loop_count = (n as usize, n as usize);
         }
     }
     if let Some(n) = pert.loops_forward_graph {
-        xs_filters.push(FeynGenFilter::LoopCountRange((n as usize, n as usize)));
-        if fg.generation_type == GenerationType::CrossSection {
-            fg.loop_count_range = (n as usize, n as usize);
+        xs_filters.push(GenerationFilter::LoopCountRange((n as usize, n as usize)));
+        if generation_type == GenerationType::CrossSection {
+            loop_count = (n as usize, n as usize);
         }
     }
 
     // Perturbative orders (only to matching container)
     if !pert.orders.is_empty() {
-        let map: HashMap<String, usize> = pert
+        let map: BTreeMap<String, usize> = pert
             .orders
             .iter()
             .map(|(k, v)| (k.clone(), *v as usize))
             .collect();
-        if fg.generation_type == GenerationType::Amplitude {
-            amp_filters.push(FeynGenFilter::PerturbativeOrders(map));
+        if generation_type == GenerationType::Amplitude {
+            amp_filters.push(GenerationFilter::PerturbativeOrders(map));
         } else {
-            xs_filters.push(FeynGenFilter::PerturbativeOrders(map));
+            xs_filters.push(GenerationFilter::PerturbativeOrders(map));
         }
     }
 
     // CouplingOrders
     if !amp_couplings.is_empty() {
         let cmap = coupling_orders_from_order_ranges_amp(amp_couplings);
-        amp_filters.push(FeynGenFilter::CouplingOrders(cmap));
+        amp_filters.push(GenerationFilter::CouplingOrders(cmap));
     }
     if !xs_couplings.is_empty() {
         let cmap = coupling_orders_from_order_ranges_xs(xs_couplings);
-        xs_filters.push(FeynGenFilter::CouplingOrders(cmap));
+        xs_filters.push(GenerationFilter::CouplingOrders(cmap));
     }
 
     // Factorized loop topologies → FactorizedLoopTopologiesCountRange((n,n))
     if let Some((n_min, n_max)) = number_of_factorized_loop_subtopologies {
-        let filt = FeynGenFilter::FactorizedLoopTopologiesCountRange((n_min, n_max));
-        if fg.generation_type == GenerationType::Amplitude {
+        let filt = GenerationFilter::FactorizedLoopTopologiesCountRange((n_min, n_max));
+        if generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
         } else {
             xs_filters.push(filt);
@@ -1812,8 +1798,8 @@ fn feyngen_from_spec_args(
 
     // Fermion loop count → FermionLoopCountRange((n,n))
     if let Some((n_min, n_max)) = number_of_fermion_loops {
-        let filt = FeynGenFilter::FermionLoopCountRange((n_min, n_max));
-        if fg.generation_type == GenerationType::Amplitude {
+        let filt = GenerationFilter::FermionLoopCountRange((n_min, n_max));
+        if generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
         } else {
             xs_filters.push(filt);
@@ -1822,8 +1808,8 @@ fn feyngen_from_spec_args(
 
     // MaxNumberOfBridges
     if let Some(n) = max_n_bridges {
-        let filt = FeynGenFilter::MaxNumberOfBridges(n);
-        if fg.generation_type == GenerationType::Amplitude {
+        let filt = GenerationFilter::MaxNumberOfBridges(n);
+        if generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
         } else {
             xs_filters.push(filt);
@@ -1832,8 +1818,14 @@ fn feyngen_from_spec_args(
 
     // Particle vetoes
     if !veto_pdgs.is_empty() {
-        let filt = FeynGenFilter::ParticleVeto(veto_pdgs.to_vec());
-        if fg.generation_type == GenerationType::Amplitude {
+        let filt = GenerationFilter::ParticleVeto(
+            veto_pdgs
+                .iter()
+                .copied()
+                .map(ParticleSelector::Pdg)
+                .collect(),
+        );
+        if generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
         } else {
             xs_filters.push(filt);
@@ -1841,25 +1833,25 @@ fn feyngen_from_spec_args(
     }
 
     // XS cut ranges
-    if fg.generation_type == GenerationType::CrossSection {
-        xs_filters.push(FeynGenFilter::BlobRange(blob_range));
-        xs_filters.push(FeynGenFilter::SpectatorRange(spectator_range));
+    if generation_type == GenerationType::CrossSection {
+        xs_filters.push(GenerationFilter::BlobRange(blob_range));
+        xs_filters.push(GenerationFilter::SpectatorRange(spectator_range));
     }
 
     // Self-energy / snails / tadpoles with detailed veto flags:
     if filter_selfenergies {
         let mut se = SelfEnergyFilterOptions::default();
         if let Some(opt) = a.veto_self_energy_of_massive_lines {
-            se.veto_self_energy_of_massive_lines = opt;
+            se.veto_massive = opt;
         }
         if let Some(opt) = a.veto_self_energy_of_massless_lines {
-            se.veto_self_energy_of_massless_lines = opt;
+            se.veto_massless = opt;
         }
         if let Some(opt) = a.veto_only_scaleless_self_energy {
-            se.veto_only_scaleless_self_energy = opt;
+            se.only_scaleless = opt;
         }
-        let filt = FeynGenFilter::SelfEnergyFilter(se);
-        if fg.generation_type == GenerationType::Amplitude {
+        let filt = GenerationFilter::SelfEnergy(se);
+        if generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
         } else {
             xs_filters.push(filt);
@@ -1868,34 +1860,34 @@ fn feyngen_from_spec_args(
     if filter_snails {
         let mut sn = SnailFilterOptions::default();
         if let Some(opt) = a.veto_snails_attached_to_massive_lines {
-            sn.veto_snails_attached_to_massive_lines = opt;
+            sn.veto_attached_to_massive = opt;
         }
         if let Some(opt) = a.veto_snails_attached_to_massless_lines {
-            sn.veto_snails_attached_to_massless_lines = opt;
+            sn.veto_attached_to_massless = opt;
         }
         if let Some(opt) = a.veto_only_scaleless_snails {
-            sn.veto_only_scaleless_snails = opt;
+            sn.only_scaleless = opt;
         }
-        let filt = FeynGenFilter::ZeroSnailsFilter(sn);
-        if fg.generation_type == GenerationType::Amplitude {
+        let filt = GenerationFilter::ZeroSnails(sn);
+        if generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
         } else {
             xs_filters.push(filt);
         }
     }
     if filter_tadpoles {
-        let mut td = TadpolesFilterOptions::default();
+        let mut td = TadpoleFilterOptions::default();
         if let Some(opt) = a.veto_tadpoles_attached_to_massive_lines {
-            td.veto_tadpoles_attached_to_massive_lines = opt;
+            td.veto_attached_to_massive = opt;
         }
         if let Some(opt) = a.veto_tadpoles_attached_to_massless_lines {
-            td.veto_tadpoles_attached_to_massless_lines = opt;
+            td.veto_attached_to_massless = opt;
         }
         if let Some(opt) = a.veto_only_scaleless_tadpoles {
-            td.veto_only_scaleless_tadpoles = opt;
+            td.only_scaleless = opt;
         }
-        let filt = FeynGenFilter::TadpolesFilter(td);
-        if fg.generation_type == GenerationType::Amplitude {
+        let filt = GenerationFilter::Tadpoles(td);
+        if generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
         } else {
             xs_filters.push(filt);
@@ -1903,11 +1895,11 @@ fn feyngen_from_spec_args(
     }
 
     // XS-only: sewed filter controlled separately
-    if fg.generation_type == GenerationType::CrossSection
+    if generation_type == GenerationType::CrossSection
         && a.filter_cross_section_tadpoles.unwrap_or(false)
     {
         if let Some(opt) = a.filter_cross_section_tadpoles {
-            xs_filters.push(FeynGenFilter::SewedFilter(SewedFilterOptions {
+            xs_filters.push(GenerationFilter::Sewn(SewnFilterOptions {
                 filter_tadpoles: opt,
             }));
         }
@@ -1915,8 +1907,14 @@ fn feyngen_from_spec_args(
 
     if let Some(vertex_interactions_allowed) = a.allowed_vertex_interactions.as_ref() {
         if !vertex_interactions_allowed.is_empty() {
-            let filt = FeynGenFilter::VertexAllow(vertex_interactions_allowed.clone());
-            if fg.generation_type == GenerationType::Amplitude {
+            let filt = GenerationFilter::VertexAllow(
+                vertex_interactions_allowed
+                    .iter()
+                    .cloned()
+                    .map(VertexSelector::Name)
+                    .collect(),
+            );
+            if generation_type == GenerationType::Amplitude {
                 amp_filters.push(filt);
             } else {
                 xs_filters.push(filt);
@@ -1924,24 +1922,52 @@ fn feyngen_from_spec_args(
         }
     }
     if let Some(vertex_interactions_vetoed) = a.veto_vertex_interactions.as_ref() {
-        let filt = FeynGenFilter::VertexVeto(vertex_interactions_vetoed.clone());
-        if fg.generation_type == GenerationType::Amplitude {
+        let filt = GenerationFilter::VertexVeto(
+            vertex_interactions_vetoed
+                .iter()
+                .cloned()
+                .map(VertexSelector::Name)
+                .collect(),
+        );
+        if generation_type == GenerationType::Amplitude {
             amp_filters.push(filt);
         } else {
             xs_filters.push(filt);
         }
     }
 
-    fg.amplitude_filters = FeynGenFilters(amp_filters);
-    fg.cross_section_filters = FeynGenFilters(xs_filters);
+    let process = process
+        .with_loop_count(loop_count.0, loop_count.1)
+        .expect("the parser produces a valid loop range");
+    let mut generation_options = GenerationOptions::default();
+    match generation_type {
+        GenerationType::Amplitude => {
+            for filter in amp_filters {
+                generation_options = generation_options.with_graph_filter(filter);
+            }
+        }
+        GenerationType::CrossSection => {
+            for filter in xs_filters {
+                generation_options = generation_options.with_graph_filter(filter);
+            }
+            for filter in amp_filters {
+                generation_options =
+                    generation_options.with_scoped_filter(FilterScope::CutAmplitude, filter);
+            }
+        }
+    }
 
-    fg
+    ProcessDefinition {
+        process,
+        generation_options,
+        ..Default::default()
+    }
 }
 
 fn coupling_orders_from_order_ranges_amp(
     orders: &BTreeMap<String, OrderRange>,
-) -> HashMap<String, (usize, Option<usize>)> {
-    let mut out = HashMap::default();
+) -> BTreeMap<String, (usize, Option<usize>)> {
+    let mut out = BTreeMap::new();
     for (name, r) in orders {
         if let Some(eq) = r.eq {
             out.insert(name.clone(), (eq as usize, Some(eq as usize)));
@@ -1956,7 +1982,7 @@ fn coupling_orders_from_order_ranges_amp(
 
 fn coupling_orders_from_order_ranges_xs(
     orders: &BTreeMap<CouplingKey, OrderRange>,
-) -> HashMap<String, (usize, Option<usize>)> {
+) -> BTreeMap<String, (usize, Option<usize>)> {
     // Drop the power and merge constraints per name.
     let mut merged: BTreeMap<String, OrderRange> = BTreeMap::new();
     for (k, r) in orders {
@@ -1974,7 +2000,7 @@ fn coupling_orders_from_order_ranges_xs(
     coupling_orders_from_order_ranges_amp(&merged)
 }
 
-fn build_grouping_option(a: &SpecArgs) -> NumeratorAwareGraphGroupingOption {
+fn build_grouping_option(a: &SpecArgs) -> NumeratorGrouping {
     a.numerator_aware_isomorphism_grouping
         .unwrap_or(GroupingChoice::GroupIdenticalGraphsUpToScalarRescaling)
         .to_strategy(
@@ -1991,7 +2017,7 @@ fn build_grouping_option(a: &SpecArgs) -> NumeratorAwareGraphGroupingOption {
 
 fn all_particle_names(model: &Model) -> Vec<String> {
     model
-        .particles
+        .particles()
         .iter()
         .map(|p| p.name.clone().to_string())
         .collect::<Vec<_>>()
@@ -2007,14 +2033,15 @@ fn resolve_pdgs(model: &Model, names: &[String]) -> Result<Vec<i64>, ParseError>
             continue;
         }
         // Try exact name lookup via model
-        if let Ok(p) = model.try_get_particle(n) {
-            out.push(p.pdg_code as i64);
+        if let Ok(p) = model.particle(n) {
+            out.push(p.pdg_code);
             continue;
         }
-        // Case-insensitive fallback against both names and antinames
-        for part in model.particles.iter() {
-            if part.name.eq_ignore_ascii_case(n) || part.antiname.eq_ignore_ascii_case(n) {
-                out.push(part.pdg_code as i64);
+        // Particle and antiparticle names are canonical model entries, so the
+        // fallback only needs to compare the one stable name on each entry.
+        for part in model.particles() {
+            if part.name.eq_ignore_ascii_case(n) {
+                out.push(part.pdg_code);
                 continue 'outer;
             }
         }
@@ -2034,7 +2061,7 @@ fn validate_coupling_names(
     pert: &Perturbative,
 ) -> Result<(), ParseError> {
     // If the model has no coupling metadata, skip validation entirely.
-    let has_orders_info = !model.orders.is_empty();
+    let has_orders_info = !model.orders().is_empty();
 
     if !has_orders_info {
         return Ok(());
@@ -2058,7 +2085,7 @@ fn validate_coupling_names(
 
     // Known couplings (case-insensitive compare)
     let known: Vec<String> = model
-        .orders
+        .orders()
         .iter()
         .map(|o| o.name.to_string())
         .collect::<Vec<_>>();
@@ -2122,8 +2149,8 @@ mod tests {
     use super::*;
     use crate::{commands::Commands, Repl};
     use clap::Parser;
+    use gammalooprs::initialisation::test_initialise;
     use gammalooprs::utils::load_generic_model;
-    use gammalooprs::{feyngen::GenerationType, initialisation::test_initialise};
     use std::time::Duration;
 
     #[test]
@@ -2290,13 +2317,16 @@ mod tests {
 
         assert!(spec
             .process_definition
-            .amplitude_filters
-            .0
+            .generation_options
+            .filters(FilterScope::Graph)
             .iter()
             .any(|filter| matches!(
                 filter,
-                FeynGenFilter::VertexAllow(vertex_names)
-                    if vertex_names == &vec!["V_6".to_string(), "V_9".to_string()]
+                GenerationFilter::VertexAllow(vertices)
+                    if vertices == &vec![
+                        VertexSelector::Name("V_6".to_owned()),
+                        VertexSelector::Name("V_9".to_owned()),
+                    ]
             )));
     }
 
@@ -2399,7 +2429,7 @@ mod tests {
         test_initialise().unwrap();
         let ps = parse_ok_amp("e+ e- > mu+ mu-");
         assert_eq!(
-            ps.process_definition.generation_type,
+            ps.process_definition.process.generation_type(),
             GenerationType::Amplitude
         );
     }
@@ -2429,27 +2459,31 @@ mod tests {
         test_initialise().unwrap();
         let ps = parse_ok_xs("{} to {}");
         assert_eq!(
-            ps.process_definition.generation_type,
+            ps.process_definition.process.generation_type(),
             GenerationType::CrossSection
         );
 
-        let xs_filters = &ps.process_definition.cross_section_filters.0;
+        let xs_filters = ps
+            .process_definition
+            .generation_options
+            .filters(FilterScope::Graph);
 
         // Smart defaults for vacuum-like graphs
         assert!(xs_filters
             .iter()
-            .any(|f| matches!(f, FeynGenFilter::MaxNumberOfBridges(0))));
-        assert!(xs_filters
-            .iter()
-            .any(|f| matches!(f, FeynGenFilter::FactorizedLoopTopologiesCountRange((1, 1)))));
+            .any(|f| matches!(f, GenerationFilter::MaxNumberOfBridges(0))));
+        assert!(xs_filters.iter().any(|f| matches!(
+            f,
+            GenerationFilter::FactorizedLoopTopologiesCountRange((1, 1))
+        )));
 
         // Default cut ranges present
         assert!(xs_filters
             .iter()
-            .any(|f| matches!(f, FeynGenFilter::BlobRange(r) if r.clone()==(1..=1))));
+            .any(|f| matches!(f, GenerationFilter::BlobRange(r) if r.clone()==(1..=1))));
         assert!(xs_filters
             .iter()
-            .any(|f| matches!(f, FeynGenFilter::SpectatorRange(r) if r.clone()==(0..=0))));
+            .any(|f| matches!(f, GenerationFilter::SpectatorRange(r) if r.clone()==(0..=0))));
     }
 
     #[test]
@@ -2458,16 +2492,25 @@ mod tests {
         test_initialise().unwrap();
         // Veto both particles and anti-particles, plus a charged lepton
         let ps = parse_ok_xs("e+ e- > mu+ mu- / u d u~ e+");
-        let xs_filters = &ps.process_definition.cross_section_filters.0;
+        let xs_filters = ps
+            .process_definition
+            .generation_options
+            .filters(FilterScope::Graph);
 
         let veto_pdgs = xs_filters
             .iter()
             .find_map(|f| match f {
-                FeynGenFilter::ParticleVeto(v) => Some(v.clone()),
+                GenerationFilter::ParticleVeto(v) => Some(v.clone()),
                 _ => None,
             })
             .expect("ParticleVeto filter not found");
-        let set: BTreeSet<i64> = veto_pdgs.into_iter().collect();
+        let set: BTreeSet<i64> = veto_pdgs
+            .into_iter()
+            .filter_map(|selector| match selector {
+                ParticleSelector::Pdg(pdg) => Some(pdg),
+                ParticleSelector::Id { .. } | ParticleSelector::Name(_) => None,
+            })
+            .collect();
 
         // u=2, d=1, u~=-2, e+=-11
         for pdg in [2_i64, 1_i64, -2_i64, -11_i64] {
@@ -2481,16 +2524,25 @@ mod tests {
         test_initialise().unwrap();
         // Veto both particles and anti-particles, plus a charged lepton
         let ps = parse_ok_xs("e+ e- > mu+ mu- | u d u~ e+");
-        let xs_filters = &ps.process_definition.cross_section_filters.0;
+        let xs_filters = ps
+            .process_definition
+            .generation_options
+            .filters(FilterScope::Graph);
 
         let veto_pdgs = xs_filters
             .iter()
             .find_map(|f| match f {
-                FeynGenFilter::ParticleVeto(v) => Some(v.clone()),
+                GenerationFilter::ParticleVeto(v) => Some(v.clone()),
                 _ => None,
             })
             .expect("ParticleVeto filter not found");
-        let set: BTreeSet<i64> = veto_pdgs.into_iter().collect();
+        let set: BTreeSet<i64> = veto_pdgs
+            .into_iter()
+            .filter_map(|selector| match selector {
+                ParticleSelector::Pdg(pdg) => Some(pdg),
+                ParticleSelector::Id { .. } | ParticleSelector::Name(_) => None,
+            })
+            .collect();
 
         for pdg in [
             3, 4, 5, 6, 12, 13, 14, 15, 16, 21, 22, 23, 24, 25, 250, 251, 9000001, 9000002,
@@ -2509,17 +2561,20 @@ mod tests {
         // Final-state alternatives captured
         assert_eq!(ps.final_sets.len(), 3);
         assert_eq!(
-            ps.process_definition.generation_type,
+            ps.process_definition.process.generation_type(),
             GenerationType::CrossSection
         );
 
         // XS loop count from {{3}}
-        assert_eq!(ps.process_definition.loop_count_range, (3, 3));
+        assert_eq!(ps.process_definition.process.loop_count(), 3..=3);
 
         // Perturbative orders end up in XS filters
-        let xs_filters = &ps.process_definition.cross_section_filters.0;
+        let xs_filters = ps
+            .process_definition
+            .generation_options
+            .filters(FilterScope::Graph);
         assert!(xs_filters.iter().any(|f| {
-            if let FeynGenFilter::PerturbativeOrders(m) = f {
+            if let GenerationFilter::PerturbativeOrders(m) = f {
                 m.get("QCD") == Some(&2usize) && m.get("QED") == Some(&1usize)
             } else {
                 false
@@ -2565,16 +2620,25 @@ mod tests {
         // Mixed case names and anti-particles in veto; ensure AMP-side veto filter present
         let ps = parse_ok_amp("E+ e- to Z Z / u~ d~ A");
 
-        let amp_filters = &ps.process_definition.amplitude_filters.0;
+        let amp_filters = ps
+            .process_definition
+            .generation_options
+            .filters(FilterScope::Graph);
         let veto_pdgs = amp_filters
             .iter()
             .find_map(|f| match f {
-                FeynGenFilter::ParticleVeto(v) => Some(v.clone()),
+                GenerationFilter::ParticleVeto(v) => Some(v.clone()),
                 _ => None,
             })
             .expect("AMP ParticleVeto filter not found");
 
-        let set: BTreeSet<i64> = veto_pdgs.into_iter().collect();
+        let set: BTreeSet<i64> = veto_pdgs
+            .into_iter()
+            .filter_map(|selector| match selector {
+                ParticleSelector::Pdg(pdg) => Some(pdg),
+                ParticleSelector::Id { .. } | ParticleSelector::Name(_) => None,
+            })
+            .collect();
         // u~=-2, d~=-1, A(=a)=22
         for pdg in [-2_i64, -1_i64, 22_i64] {
             assert!(set.contains(&pdg), "missing PDG {pdg} in AMP veto");

@@ -3,13 +3,13 @@ use std::fmt;
 use color_eyre::Result;
 use eyre::{eyre, Context};
 use gammalooprs::{
-    cff::esurface::EsurfaceExistenceStatus,
-    graph::{FeynmanGraph, Graph},
+    cff::esurface::{EnergySurfaceExt, EsurfaceExistenceStatus},
+    graph::{FeynmanGraph, FinalizedCut, Graph},
     integrands::process::{ActiveF64Backend, LmbMultiChannelingSetup, ParamBuilder},
     model::Model,
     processes::{
-        Amplitude, CrossSection, CrossSectionCut, CutId, ProcessCollection,
-        ThresholdCountertermAssociation, ThresholdCountertermStatus,
+        Amplitude, CrossSection, CutId, ProcessCollection, ThresholdCountertermAssociation,
+        ThresholdCountertermStatus,
     },
     settings::{global::FrozenCompilationMode, runtime::ParameterizationSettings, RuntimeSettings},
     utils::F,
@@ -122,7 +122,7 @@ impl IntegrandCutThresholdInfo {
     fn from_association(
         association: &ThresholdCountertermAssociation,
         graph: &Graph,
-        cut: &CrossSectionCut,
+        cut: &FinalizedCut,
         model: &Model,
         param_builder: &ParamBuilder,
         settings: &RuntimeSettings,
@@ -191,7 +191,7 @@ impl IntegrandCutInfo {
     fn from_cross_section_cut(
         graph_term: &gammalooprs::integrands::process::cross_section::CrossSectionGraphTerm,
         cut_id: CutId,
-        cut: &CrossSectionCut,
+        cut: &FinalizedCut,
         raising_power: usize,
         model: &Model,
         param_builder: &ParamBuilder,
@@ -253,7 +253,7 @@ pub struct IntegrandGraphGroupInfo {
 }
 
 fn threshold_esurface_edge_ids(
-    esurfaces: &gammalooprs::cff::esurface::EsurfaceCollection,
+    esurfaces: &gammalooprs::cff::esurface::EnergySurfaceCollection,
     esurface_id: usize,
 ) -> Vec<usize> {
     esurfaces
@@ -376,7 +376,7 @@ fn orientation_edge_ids(orientation: &EdgeVec<Orientation>) -> Vec<usize> {
     orientation.iter().map(|(edge_id, _)| edge_id.0).collect()
 }
 
-fn cut_edge_ids(graph: &Graph, cut: &CrossSectionCut) -> Vec<usize> {
+fn cut_edge_ids(graph: &Graph, cut: &FinalizedCut) -> Vec<usize> {
     cut.cut
         .iter_edges(&graph.underlying)
         .map(|(_, edge)| {
@@ -397,7 +397,7 @@ fn cut_raising_powers(
     let mut raising_powers: typed_index_collections::TiVec<CutId, usize> =
         vec![1; graph.cuts.len()].into();
     for cut_group in graph.cut_group_data.cut_groups.iter() {
-        let raising_power = cut_group.related_esurface_group.max_occurence;
+        let raising_power = cut_group.related_esurface_group.max_occurrence;
         for cut_id in &cut_group.cuts {
             raising_powers[*cut_id] = raising_power;
         }
@@ -487,10 +487,9 @@ fn amplitude_graph_groups(
                                 .generated_mask[*raised_esurface_id]
                         })?;
                     let graph_term = &integrand.data.graph_terms[representative_graph_id];
-                    let local_esurface_id =
-                        graph_term.threshold_counterterm.raised_data.raised_groups
-                            [raised_esurface_id]
-                            .esurface_ids[0];
+                    let local_esurface_id = graph_term.threshold_counterterm.raised_data.groups
+                        [raised_esurface_id]
+                        .surface_ids[0];
 
                     let mut classification = IntegrandEsurfaceClassification::NonExisting;
                     for (graph_group_position, raised_esurface_id) in raised_esurface_map
@@ -504,9 +503,8 @@ fn amplitude_graph_groups(
                         let graph_id = group[graph_group_position];
                         let candidate = &integrand.data.graph_terms[graph_id];
                         let candidate_esurface_id =
-                            candidate.threshold_counterterm.raised_data.raised_groups
-                                [raised_esurface_id]
-                                .esurface_ids[0];
+                            candidate.threshold_counterterm.raised_data.groups[raised_esurface_id]
+                                .surface_ids[0];
                         let candidate_status = candidate.esurfaces[candidate_esurface_id]
                             .existence_status(
                                 &external_momenta,
@@ -659,7 +657,7 @@ fn cross_section_graph_groups(
                         esurface_id,
                         representative_graph_id: master_graph_id,
                         edge_ids: threshold_esurface_edge_ids(
-                            &master_graph.graph.surface_cache.esurface_cache,
+                            master_graph.graph.surface_cache.energy_surfaces(),
                             esurface_id,
                         ),
                         classification: None,

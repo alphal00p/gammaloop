@@ -177,7 +177,9 @@ jobs:
 
       - name: Check FeynKit dependency boundaries
         if: matrix.check == 'boundaries'
-        run: python3 .github/scripts/check-feynkit-boundaries.py
+        run: |
+          python3 .github/scripts/check-feynkit-boundaries.py --self-test
+          python3 .github/scripts/check-feynkit-boundaries.py
 
       - name: Run fmt
         if: matrix.check == 'fmt'

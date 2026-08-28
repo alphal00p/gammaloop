@@ -1755,8 +1755,8 @@ pub mod test {
     };
 
     use crate::{
-        dot,
-        graph::{FeynmanGraph, Graph, LMBext, LmbError, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::{FeynmanGraph, Graph, LMBext, LmbError, parse::IntoFinalizedRuntimeGraph},
         initialisation::test_initialise,
         momentum::SignOrZero,
     };
@@ -1767,22 +1767,25 @@ pub mod test {
     #[test]
     fn lmb_for_dummy() {
         test_initialise().unwrap();
-        let gs: Vec<Graph> = dot!(
+        let gs: Vec<Graph> = finalized_runtime_dot!(
             digraph dxda{
+                graph [projector="1"]
                 ext [style=invis]
                 node[num=1]
-                ext->v1:0[id=0 is_dummy=true]
-                ext->v1:1[id=1 ]
-                ext->v1:2[id=2 ]
+                edge[num=1 particle=a dir=none]
+                ext->v1:0[id=0 is_dummy=true sink="{ufo_order:0}"]
+                ext->v1:1[id=1 sink="{ufo_order:1}"]
+                ext->v1:2[id=2 sink="{ufo_order:2}"]
             }
-
             digraph aa{
+                graph [projector="1"]
                 ext [style=invis]
                 node[num=1]
-                ext->v1:0[id=0 is_dummy=true]
-                ext->v1:1[id=1 is_dummy=true]
-                v1->v2
-                ext->v2:2[id=2 ]
+                edge[num=1 particle=a dir=none]
+                ext->v1:0[id=0 is_dummy=true sink="{ufo_order:0}"]
+                ext->v1:1[id=1 is_dummy=true sink="{ufo_order:1}"]
+                v1->v2[id=3 source="{ufo_order:2}" sink="{ufo_order:0}"]
+                ext->v2:2[id=2 sink="{ufo_order:1}"]
             }
         )
         .unwrap();
@@ -1799,15 +1802,16 @@ pub mod test {
     #[test]
     fn generated_lmbs_do_not_use_dummy_external_carriers() {
         test_initialise().unwrap();
-        let g: Graph = dot!(digraph{
+        let g: Graph = finalized_runtime_dot!(digraph{
+            graph [projector="1"]
             ext [style=invis]
-            edge[num=1 mass=1]
+            edge[num=1 mass=1 particle=a dir=none]
             node[num=1]
-            ext->v1:0[id=0 is_dummy=true]
-            ext->v1:1[id=1]
-            v1->v2[id=2]
-            v2->v1[id=3]
-            ext->v2:2[id=4]
+            ext->v1:0[id=0 is_dummy=true sink="{ufo_order:0}"]
+            ext->v1:1[id=1 sink="{ufo_order:1}"]
+            v1->v2[id=2 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            v2->v1[id=3 source="{ufo_order:1}" sink="{ufo_order:3}"]
+            ext->v2:2[id=4 sink="{ufo_order:2}"]
         })
         .unwrap();
 
@@ -1834,7 +1838,7 @@ pub mod test {
     #[test]
     fn complicated() {
         test_initialise().unwrap();
-        let g: Graph = dot!(digraph{
+        let g: DotGraph = linnet::dot!(digraph{
 
             edge[num=1 mass=1]
             node[num=1]
@@ -1857,14 +1861,15 @@ pub mod test {
             b2->e
         })
         .unwrap();
-        assert_snapshot!(g.dot_lmb_of(&g.full_filter(), &g.loop_momentum_basis));
-        assert_snapshot!(&g.loop_momentum_basis.to_string());
+        let lmb = g.lmb();
+        assert_snapshot!(g.dot_lmb_of(&g.full_filter(), &lmb));
+        assert_snapshot!(&lmb.to_string());
         let _g = g.generate_loop_momentum_bases_of(&g.full_filter());
     }
     #[test]
     fn disconnected() {
         test_initialise().unwrap();
-        let g: Graph = dot!(digraph{
+        let g: DotGraph = linnet::dot!(digraph{
             // layout=neato
             e [style=invis]
             edge[num=1 mass=1]
@@ -1891,10 +1896,11 @@ pub mod test {
             e->v7
         })
         .unwrap();
-        assert_snapshot!(g.dot_lmb_of(&g.full_filter(), &g.loop_momentum_basis));
-        assert_snapshot!(&g.loop_momentum_basis.to_string());
+        let lmb = g.lmb();
+        assert_snapshot!(g.dot_lmb_of(&g.full_filter(), &lmb));
+        assert_snapshot!(&lmb.to_string());
 
-        let g: Graph = dot!(digraph{
+        let g: DotGraph = linnet::dot!(digraph{
 
             edge[num=1 mass=1]
             node[num=1]
@@ -1915,7 +1921,7 @@ pub mod test {
     #[test]
     fn subgraph_with_exts_in_loop() {
         test_initialise().unwrap();
-        let g: Graph = dot!(digraph{
+        let g: DotGraph = linnet::dot!(digraph{
             edge[num=1 mass=1]
             node[num=1]
             v3:0->v4:1
@@ -2025,7 +2031,7 @@ pub mod test {
     fn shrunken_connected_subgraph() {
         let _guard = SHRUNKEN_LMB_TEST_LOCK.lock().unwrap();
         SHRUNKEN_LMB_TEST_INIT.call_once(|| test_initialise().unwrap());
-        let g: Graph = dot!(digraph{
+        let g: DotGraph = linnet::dot!(digraph{
             edge[num=1 mass=1]
             node[num=1]
 
@@ -2039,8 +2045,7 @@ pub mod test {
         let mut shrunken_filter: SuBitGraph = g.empty_subgraph();
         let shrunken_edge = EdgeIndex::from(0);
         shrunken_filter.add(g[&shrunken_edge].1);
-        let shrunken =
-            InternalSubGraph::try_new(shrunken_filter, &g.underlying).expect("valid subgraph");
+        let shrunken = InternalSubGraph::try_new(shrunken_filter, &g).expect("valid subgraph");
         let remainder = outer.subtract(&shrunken.filter);
 
         let lmb = g.shrunken_lmb_of(&outer, &shrunken);
@@ -2057,7 +2062,7 @@ pub mod test {
     fn shrunken_disconnected_subgraph() {
         let _guard = SHRUNKEN_LMB_TEST_LOCK.lock().unwrap();
         SHRUNKEN_LMB_TEST_INIT.call_once(|| test_initialise().unwrap());
-        let g: Graph = dot!(digraph{
+        let g: DotGraph = linnet::dot!(digraph{
             edge[num=1 mass=1]
             node[num=1]
 
@@ -2078,8 +2083,7 @@ pub mod test {
         for edge in [EdgeIndex::from(0), EdgeIndex::from(3)] {
             shrunken_filter.add(g[&edge].1);
         }
-        let shrunken =
-            InternalSubGraph::try_new(shrunken_filter, &g.underlying).expect("valid subgraph");
+        let shrunken = InternalSubGraph::try_new(shrunken_filter, &g).expect("valid subgraph");
         let remainder = outer.subtract(&shrunken.filter);
 
         let lmb = g.shrunken_lmb_of(&outer, &shrunken);
@@ -2096,7 +2100,7 @@ pub mod test {
     fn shrunken_edge_outside_outer_errors() {
         let _guard = SHRUNKEN_LMB_TEST_LOCK.lock().unwrap();
         SHRUNKEN_LMB_TEST_INIT.call_once(|| test_initialise().unwrap());
-        let g: Graph = dot!(digraph{
+        let g: DotGraph = linnet::dot!(digraph{
             edge[num=1 mass=1]
             node[num=1]
 
@@ -2109,8 +2113,7 @@ pub mod test {
         let mut shrunken_filter: SuBitGraph = g.empty_subgraph();
         let shrunken_edge = EdgeIndex::from(0);
         shrunken_filter.add(g[&shrunken_edge].1);
-        let shrunken =
-            InternalSubGraph::try_new(shrunken_filter, &g.underlying).expect("valid subgraph");
+        let shrunken = InternalSubGraph::try_new(shrunken_filter, &g).expect("valid subgraph");
         let outer = g.full_filter().subtract(&shrunken.filter);
 
         let result = g.shrunken_sub_lmb(&outer, &shrunken, g.full_crown(&outer));

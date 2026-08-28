@@ -4,122 +4,120 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
 ---
 {
   "expression": {
-    "orientations": [
-      {
-        "data": {
-          "orientation": [
-            "Default",
-            "Default",
-            "Default"
-          ]
+    "expression": {
+      "orientations": [
+        {
+          "data": {
+            "orientation": [
+              "Default",
+              "Default",
+              "Default"
+            ]
+          },
+          "expression": {
+            "nodes": [
+              {
+                "children": [],
+                "data": {
+                  "Energy": 1
+                },
+                "id": 0,
+                "parent": null
+              }
+            ]
+          },
+          "id": 0
         },
-        "expression": {
-          "nodes": [
-            {
-              "children": [],
-              "data": {
-                "Esurface": 1
-              },
-              "node_id": 0,
-              "parent": null
-            }
-          ]
+        {
+          "data": {
+            "orientation": [
+              "Default",
+              "Reversed",
+              "Reversed"
+            ]
+          },
+          "expression": {
+            "nodes": [
+              {
+                "children": [],
+                "data": {
+                  "Energy": 1
+                },
+                "id": 0,
+                "parent": null
+              }
+            ]
+          },
+          "id": 1
         }
-      },
-      {
-        "data": {
-          "orientation": [
-            "Default",
-            "Reversed",
-            "Reversed"
-          ]
-        },
-        "expression": {
-          "nodes": [
-            {
-              "children": [],
-              "data": {
-                "Esurface": 1
-              },
-              "node_id": 0,
-              "parent": null
-            }
-          ]
-        }
-      }
-    ],
+      ]
+    },
+    "report": {
+      "acyclic_orientations": 2,
+      "candidate_orientations": 4,
+      "interned_surfaces": 1,
+      "unfolded_terms": 2
+    },
     "surfaces": {
-      "esurface_cache": [
+      "energy_surfaces": [
         {
           "energies": [
             99
           ],
-          "external_shift": [],
-          "vertex_set": {
-            "vertex_set": 0
-          }
+          "external_shift": {},
+          "vertex_set": 0
         },
         {
           "energies": [
             1,
             2
           ],
-          "external_shift": [],
-          "vertex_set": {
-            "vertex_set": 1
-          }
+          "external_shift": {},
+          "vertex_set": 1
         }
       ],
-      "hsurface_cache": [
+      "h_surfaces": [
         {
-          "external_shift": [],
+          "external_shift": {},
           "negative_energies": [
             99
           ],
           "positive_energies": [
             98
           ],
-          "vertex_set": {
-            "vertex_set": 0
-          }
+          "vertex_set": 0
         }
       ]
     }
   },
   "surface_cache": {
-    "esurface_cache": [
+    "energy_surfaces": [
       {
         "energies": [
           99
         ],
-        "external_shift": [],
-        "vertex_set": {
-          "vertex_set": 0
-        }
+        "external_shift": {},
+        "vertex_set": 0
       },
       {
         "energies": [
           1,
           2
         ],
-        "external_shift": [],
-        "vertex_set": {
-          "vertex_set": 1
-        }
+        "external_shift": {},
+        "vertex_set": 1
       }
     ],
-    "hsurface_cache": [
+    "h_surfaces": [
       {
-        "external_shift": [],
+        "external_shift": {},
         "negative_energies": [
           99
         ],
         "positive_energies": [
           98
         ],
-        "vertex_set": {
-          "vertex_set": 0
-        }
+        "vertex_set": 0
       }
     ]
   }
