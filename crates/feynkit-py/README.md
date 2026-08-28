@@ -60,6 +60,9 @@ cargo run -p feynkit-py --features python_stubgen --bin feynkit-stubgen
 `LorentzStructure`, `Propagator`, `ModelFunction`, and `FormFactor` values
 through both collections and name lookups. Process selectors similarly retain
 whether they were specified by name or by PDG code through `ParticleSelector`.
+Concrete `Particle` values can also be passed directly to process constructors
+and diagram generation; `particle.antiparticle` resolves the complete paired
+record from the same model.
 
 Expression evaluation stays outside the model crate. Pass a Python callable to
 `Model.recompute_with()` or as the optional `evaluator` argument to
@@ -77,7 +80,14 @@ Each operation lives on the object that owns its configuration:
 ```python
 import symbolica.community.feynkit as fk
 
-result = model.generate_diagrams(["e-", "e+"], ["mu-", "mu+"], loops=1)
+model = fk.Model("models/sm.json")
+electron = model.particle("e-")
+muon = model.particle("mu-")
+result = model.generate_diagrams(
+    [electron, electron.antiparticle],
+    [muon, muon.antiparticle],
+    loops=1,
+)
 diagram = result.diagrams[0]
 cff = diagram.build_cff()
 jets = fk.JetDefinition.anti_kt(0.4).cluster(final_state_momenta)

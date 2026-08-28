@@ -47,11 +47,16 @@ fn complex_value<'py>(py: Python<'py>, value: ComplexValue) -> Bound<'py, PyComp
 #[derive(Clone)]
 pub struct PyParticle {
     inner: Particle,
+    model: Arc<Model>,
 }
 
-impl From<Particle> for PyParticle {
-    fn from(inner: Particle) -> Self {
-        Self { inner }
+impl PyParticle {
+    fn new(inner: Particle, model: Arc<Model>) -> Self {
+        Self { inner, model }
+    }
+
+    pub(crate) fn signed_pdg(&self) -> i64 {
+        self.inner.pdg_code
     }
 }
 
@@ -68,6 +73,27 @@ impl PyParticle {
     #[getter]
     fn antiname(&self) -> &str {
         &self.inner.antiname
+    }
+
+    /// Return the corresponding antiparticle from the same model.
+    ///
+    /// Self-conjugate particles map to themselves.
+    ///
+    /// Examples
+    /// --------
+    /// >>> electron = model.particle_by_pdg(11)
+    /// >>> electron.antiparticle.name
+    /// 'e+'
+    /// >>> model.particle_by_pdg(22).antiparticle.name  # the photon is self-conjugate
+    /// 'a'
+    ///
+    #[getter]
+    fn antiparticle(&self) -> PyResult<PyParticle> {
+        self.model
+            .antiparticle(&self.inner)
+            .cloned()
+            .map(|inner| Self::new(inner, Arc::clone(&self.model)))
+            .map_err(error::model)
     }
 
     /// Return the signed Particle Data Group code.
@@ -1319,8 +1345,13 @@ impl PyParameterCard {
 ///
 /// Or open a previously normalized FeynKit JSON model directly:
 ///
-/// >>> model = fk.Model.from_path("models/sm.json")
+/// >>> model = fk.Model("models/sm.json")
 /// >>> photon = model.particle("a")
+///
+/// Parameters
+/// ----------
+/// path : str or os.PathLike
+///     Path to a normalized FeynKit JSON model.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Model",
@@ -1351,6 +1382,23 @@ impl From<Arc<Model>> for PyModel {
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyModel {
+    /// Load a model from a normalized FeynKit JSON file.
+    ///
+    /// Examples
+    /// --------
+    /// >>> model = Model("model.json")
+    ///
+    /// Parameters
+    /// ----------
+    /// path : str or os.PathLike
+    ///     Path to the JSON model.
+    #[new]
+    fn new(py: Python<'_>, path: PathBuf) -> PyResult<Self> {
+        py.detach(move || Model::from_path(path))
+            .map(Self::from)
+            .map_err(error::model)
+    }
+
     /// Parse a model from its JSON representation.
     ///
     /// Examples
@@ -1366,38 +1414,23 @@ impl PyModel {
         Model::from_json(json).map(Self::from).map_err(error::model)
     }
 
-    /// Load a model from a JSON file.
-    ///
-    /// Examples
-    /// --------
-    /// >>> model = Model.from_path("model.json")
-    ///
-    /// Parameters
-    /// ----------
-    /// path : str or os.PathLike
-    ///     Path to the JSON model.
-    #[staticmethod]
-    fn from_path(py: Python<'_>, path: PathBuf) -> PyResult<Self> {
-        py.detach(move || Model::from_path(path))
-            .map(Self::from)
-            .map_err(error::model)
-    }
-
     /// Generate amplitude or cross-section diagrams from this model.
     ///
-    /// Particle names, signed PDG codes, and :class:`ParticleSelector` objects
-    /// may be mixed in the external states. An integer loop order selects that
-    /// exact order; a pair such as ``(0, 1)`` selects an inclusive range. The
-    /// selected model Feynman rules are instantiated on every returned vertex
-    /// and propagator edge and combined in each diagram numerator.
+    /// Concrete :class:`Particle` values, particle names, signed PDG codes, and
+    /// :class:`ParticleSelector` objects may be mixed in the external states.
+    /// An integer loop order selects that exact order; a pair such as ``(0, 1)``
+    /// selects an inclusive range. The selected model Feynman rules are
+    /// instantiated on every returned vertex and propagator edge and combined
+    /// in each diagram numerator.
     ///
     /// Examples
     /// --------
     /// Generate one-loop scalar amplitudes directly from their model:
     ///
     /// >>> options = fk.GenerationOptions(max_vertices=3, allow_self_loops=True)
+    /// >>> scalar = model.particle("scalar_0")
     /// >>> result = model.generate_diagrams(
-    /// ...     ["scalar_0"], ["scalar_0", "scalar_0"],
+    /// ...     [scalar], [scalar, scalar.antiparticle],
     /// ...     loops=1, options=options,
     /// ... )
     /// >>> diagram = result.diagrams[0]
@@ -1405,9 +1438,9 @@ impl PyModel {
     ///
     /// Parameters
     /// ----------
-    /// incoming : sequence[ParticleSelector | str | int]
+    /// incoming : sequence[Particle | ParticleSelector | str | int]
     ///     Incoming particles in external-leg order.
-    /// outgoing : sequence[ParticleSelector | str | int]
+    /// outgoing : sequence[Particle | ParticleSelector | str | int]
     ///     Primary outgoing state in external-leg order.
     /// kind : {"amplitude", "cross_section"}, optional
     ///     Graph structure to generate.
@@ -1415,7 +1448,7 @@ impl PyModel {
     ///     Exact loop order or inclusive minimum and maximum.
     /// options : GenerationOptions or None, optional
     ///     Generation filters and limits; defaults to standard options.
-    /// final_state_alternatives : sequence[sequence[ParticleSelector | str | int]] or None, optional
+    /// final_state_alternatives : sequence[sequence[Particle | ParticleSelector | str | int]] or None, optional
     ///     Extra outgoing states for a cross section.
     #[pyo3(signature = (incoming, outgoing, *, kind="amplitude", loops=LoopOrderInput::default(), options=None, final_state_alternatives=None))]
     #[allow(clippy::too_many_arguments)]
@@ -1465,7 +1498,7 @@ impl PyModel {
             .particles()
             .iter()
             .cloned()
-            .map(Into::into)
+            .map(|inner| PyParticle::new(inner, Arc::clone(&self.inner)))
             .collect()
     }
 
@@ -1483,7 +1516,7 @@ impl PyModel {
         self.inner
             .particle(name)
             .cloned()
-            .map(Into::into)
+            .map(|inner| PyParticle::new(inner, Arc::clone(&self.inner)))
             .map_err(error::model)
     }
 
@@ -1501,7 +1534,7 @@ impl PyModel {
         self.inner
             .particle_by_pdg(pdg)
             .cloned()
-            .map(Into::into)
+            .map(|inner| PyParticle::new(inner, Arc::clone(&self.inner)))
             .map_err(error::model)
     }
 
@@ -1976,6 +2009,14 @@ mod tests {
             "mass":"mass","width":"ZERO","texname":"s","antitexname":"s",
             "charge":0.0,"ghost_number":0,"lepton_number":0,"y_charge":0,
             "propagator":"s_prop"
+        },{
+            "pdg_code":11,"name":"e-","antiname":"e+","spin":2,"color":1,
+            "mass":"mass","width":"ZERO","texname":"e^-","antitexname":"e^+",
+            "charge":-1.0,"ghost_number":0,"lepton_number":1,"y_charge":-1
+        },{
+            "pdg_code":-11,"name":"e+","antiname":"e-","spin":2,"color":1,
+            "mass":"mass","width":"ZERO","texname":"e^+","antitexname":"e^-",
+            "charge":1.0,"ghost_number":0,"lepton_number":-1,"y_charge":1
         }],
         "propagators": [{
             "name":"s_prop","particle":"s","numerator":"1","denominator":"P^2-mass^2"
@@ -1999,6 +2040,46 @@ mod tests {
     }
 
     #[test]
+    fn model_constructor_loads_paths_and_reports_read_errors() {
+        let directory = tempfile::tempdir().unwrap();
+        let model_path = directory.path().join("model.json");
+        let missing_path = directory.path().join("missing.json");
+        std::fs::write(&model_path, MODEL_JSON).unwrap();
+
+        Python::initialize();
+        Python::attach(|py| {
+            let module = registered_module(py);
+            let locals = PyDict::new(py);
+            locals.set_item("fk", &module).unwrap();
+            locals
+                .set_item("MODEL_PATH", model_path.to_string_lossy().as_ref())
+                .unwrap();
+            locals
+                .set_item("MISSING_PATH", missing_path.to_string_lossy().as_ref())
+                .unwrap();
+            let code = CString::new(
+                r#"
+from pathlib import Path
+
+model = fk.Model(Path(MODEL_PATH))
+assert model.name == "scalar"
+assert model.particle("e-").antiparticle.name == "e+"
+assert not hasattr(fk.Model, "from_path")
+
+try:
+    fk.Model(MISSING_PATH)
+except fk.ModelError as error:
+    assert "missing.json" in str(error)
+else:
+    raise AssertionError("loading a missing model path must raise ModelError")
+"#,
+            )
+            .unwrap();
+            py.run(&code, Some(&locals), Some(&locals)).unwrap();
+        });
+    }
+
+    #[test]
     fn exposes_typed_model_entities_and_atomic_python_evaluation() {
         Python::initialize();
         Python::attach(|py| {
@@ -2009,6 +2090,25 @@ mod tests {
             let code = CString::new(
                 r#"
 model = fk.Model.from_json(MODEL_JSON)
+
+electron = model.particle_by_pdg(11)
+positron = electron.antiparticle
+assert isinstance(positron, fk.Particle)
+assert positron.name == "e+"
+assert positron.pdg_code == -11
+assert positron.charge == 1.0
+assert positron.antiparticle.name == "e-"
+
+scalar = model.particle("s")
+assert scalar.is_self_antiparticle
+assert scalar.antiparticle.name == scalar.name
+assert scalar.antiparticle.pdg_code == scalar.pdg_code
+
+# A particle keeps enough native model context to resolve its antiparticle
+# after the Python Model object has gone out of scope.
+detached_positron = fk.Model.from_json(MODEL_JSON).particle("e-").antiparticle
+assert detached_positron.name == "e+"
+assert detached_positron.antiparticle.name == "e-"
 
 assert len(model.parameters) == 3
 mass = model.parameter("mass")
