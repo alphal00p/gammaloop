@@ -395,8 +395,11 @@ inspects it. GammaLoop's richer particle decorations, momentum annotations, and 
 belong to GammaLoop's own template rather than to a `PhysicsOptions` type in `linnet_py`.
 The #source-link(
   "crates/linnet-py/examples/physics_render_settings.py",
-  label: "complete Python-only physics theme",
-) composes edge and half-edge layers using the same generic API.
+  label: "editable DOT physics notebook",
+) parses ordinary DOT with an explicit application codec, then composes particle,
+momentum, edge-index, and node-index layers using the same generic API.
+Run it from a checkout with
+`nix develop -c uvx --from marimo==0.24.0 --with-editable crates/linnet-py marimo edit crates/linnet-py/examples/physics_render_settings.py`.
 Typst callbacks that require measured geometry use an explicit module function reference:
 
 ```python
