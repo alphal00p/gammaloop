@@ -132,21 +132,44 @@ def _():
         """Return one custom physics-flavored ``RenderConfig``."""
 
         black = lp.Color("black")
-        particle_paints = {
-            "fermion": black,
-            "gluon": lp.Color("purple"),
-            "photon": lp.Color("blue"),
-            "scalar": lp.Color("orange"),
-        }
+        blue = lp.Color("blue")
+        # GammaLoop lightens sink halves by 45%; Color stores the resulting value.
+        light_black = lp.Color.rgb(115, 115, 115)
+        light_blue = lp.Color.rgb(115, 179, 234)
         particle_kinds = {
             "a": "photon",
             "g": "gluon",
             "H": "scalar",
             "t": "fermion",
         }
+        source_paints = {"fermion": blue}
+        sink_paints = {"fermion": light_blue}
+        particle_patterns = {
+            "photon": {
+                "pattern": lp.Pattern.Wave,
+                "pattern-amplitude": 0.14,
+                "pattern-wavelength": 0.55,
+            },
+            "gluon": {
+                "pattern": lp.Pattern.Coil,
+                "pattern-amplitude": 0.14,
+                "pattern-wavelength": 0.55,
+                "pattern-coil-longitudinal-scale": 1.6,
+            },
+        }
+        scalar_dash = lp.Dash.pattern((lp.Length.em(0.1), lp.Length.em(0.45)))
+        fermion_mark = lp.Mark(
+            end=lp.MarkSymbol.Barbed,
+            fill=black,
+            stroke=lp.Stroke(paint=black, thickness=lp.Length.pt(0.2)),
+            scale=0.75,
+            anchor=lp.Anchor.Center,
+            shorten_to=lp.AUTO,
+        )
         momentum_stroke = lp.Stroke(
-            paint=lp.Color("red"),
-            thickness=lp.Length.pt(0.45),
+            paint=black,
+            thickness=lp.Length.pt(0.55),
+            cap=lp.StrokeCap.Round,
         )
 
         def node_drawing(node: lp.Node) -> lp.NodeDrawing:
@@ -154,45 +177,48 @@ def _():
             return lp.NodeDrawing(label=label)
 
         def edge_drawing(edge: lp.Edge) -> lp.EdgeDrawing:
-            particle = edge.data.particle
-            kind = particle_kinds.get(particle, particle)
-            paint = particle_paints.get(kind, black)
-            stroke = lp.Stroke(
-                paint=paint,
-                thickness=lp.Length.pt(0.65),
-                dash=(
-                    lp.Dash(lp.DashPattern.Dashed) if kind == "scalar" else lp.INHERIT
-                ),
-            )
-            decoration = {
-                "gluon": lp.Pattern.Coil,
-                "photon": lp.Pattern.Wave,
-            }.get(kind, lp.INHERIT)
             label = lp.MathSymbol("p", subscript=edge.index) if show_indices else None
             return lp.EdgeDrawing(
                 label=label,
-                label_style={"fill": paint},
-                style={"stroke": stroke},
-                decoration=decoration,
+                label_style={"fill": black},
             )
 
         def half_edge_drawing(
             half_edge: lp.HalfEdge,
-        ) -> lp.HalfEdgeDrawing | None:
-            particle = half_edge.edge.data.particle
+        ) -> lp.HalfEdgeDrawing:
+            edge = half_edge.edge
+            particle = edge.data.particle
             kind = particle_kinds.get(particle, particle)
-            layers = []
+            is_sink = edge.sink is not None and half_edge.index == edge.sink.index
+            paints = sink_paints if is_sink else source_paints
+            paint = paints.get(
+                kind,
+                light_black if is_sink else black,
+            )
+            thickness = lp.Length.pt(1.0 if kind in {"fermion", "scalar"} else 0.55)
+            stroke_options = {
+                "paint": paint,
+                "thickness": thickness,
+                "cap": lp.StrokeCap.Round,
+            }
+            if kind == "scalar":
+                stroke_options["dash"] = scalar_dash
+            particle_layer = {
+                "stroke": lp.Stroke(**stroke_options),
+                **particle_patterns.get(kind, {}),
+            }
             if kind == "fermion":
-                layers.append(
+                particle_layer.update(
                     {
-                        "mark": lp.Mark.barbed(),
+                        "mark": fermion_mark,
                         "mark-position": lp.MarkPosition.CenterIfDangling,
                         "mark-orientation": lp.MarkOrientation.Edge,
                     }
                 )
 
+            layers = [particle_layer]
+
             if show_momenta:
-                edge = half_edge.edge
                 arrow_half = edge.sink if edge.sink is not None else edge.source
                 momentum_layer = {
                     "offset": 0.46,
@@ -210,7 +236,7 @@ def _():
                     )
                 layers.append(momentum_layer)
 
-            return lp.HalfEdgeDrawing(style=tuple(layers)) if layers else None
+            return lp.HalfEdgeDrawing(style=tuple(layers))
 
         if layout_algorithm == lp.LayoutAlgorithm.Force:
             layouts = lp.LayoutOptions(
@@ -285,7 +311,9 @@ def _(mo):
 
     This notebook parses ordinary DOT into a native Linnet `Graph`, then applies
     a physics-flavored rendering configuration assembled entirely in Python.
-    It is an example, not a built-in Linnet mode.
+    Its particle geometry and independent momentum-arrow layer mirror
+    GammaLoop's current Linnest template, but remain an example rather than a
+    built-in Linnet mode.
 
     The notebook-local `DotCodec` maps `particle`, momentum, vertex, and port
     records into arbitrary Python dataclass instances. Only the selectors'
@@ -300,10 +328,10 @@ def _(mo):
 def _(default_dot, lp, mo):
     dot_source = mo.ui.code_editor(
         value=default_dot,
-        language="dot",
+        language="text",
         min_height=440,
         max_height=700,
-        debounce=True,
+        debounce=400,
         label="Editable physics DOT",
     )
     layout_algorithm = mo.ui.dropdown(
