@@ -320,6 +320,9 @@ def _(mo):
     typed drawing results cross into Typst. Invisible DOT vertices represent
     external legs, and edge direction retains the underlying source/sink flow
     used by the momentum arrows.
+
+    The read-only panel below the diagram shows the exact generated Typst
+    entrypoint compiled for the current view.
     """)
     return
 
@@ -383,16 +386,74 @@ def _(
 
 
 @app.cell
-def _(graph, mo, parse_error):
+def _(graph):
+    if graph is None:
+        prepared_render = None
+        render_error = None
+        rendered_svg = None
+        typst_source = None
+    else:
+        try:
+            prepared_render = graph.prepare_render()
+            typst_source = prepared_render.typst_source
+            rendered_svg = prepared_render.to_svg()
+            render_error = None
+        except (OSError, RuntimeError, TypeError, ValueError) as error:
+            prepared_render = None
+            render_error = f"{type(error).__name__}: {error}"
+            rendered_svg = None
+            typst_source = None
+    return prepared_render, render_error, rendered_svg, typst_source
+
+
+@app.cell
+def _(mo, parse_error, render_error, rendered_svg):
     if parse_error is not None:
         _output = mo.callout(
             mo.md(f"`{parse_error}`"),
             kind="danger",
             title="DOT parsing failed",
         )
+    elif render_error is not None:
+        _output = mo.callout(
+            mo.md(f"`{render_error}`"),
+            kind="danger",
+            title="Typst rendering failed",
+        )
     else:
-        _output = graph
+        _output = mo.Html(rendered_svg)
     _output
+    return
+
+
+@app.cell
+def _(mo, parse_error, render_error, typst_source):
+    if typst_source is None:
+        _source_panel = mo.md(
+            "Fix the DOT or rendering error to inspect the generated Typst."
+        )
+    else:
+        _source_viewer = mo.ui.code_editor(
+            value=typst_source,
+            language="text",
+            disabled=True,
+            min_height=260,
+            max_height=560,
+            show_copy_button=True,
+            label="Generated Typst entrypoint",
+        )
+        _source_panel = mo.vstack(
+            [
+                mo.md(r"""
+                ## Live generated Typst
+
+                This is the exact staged entrypoint used for the SVG above.
+                It updates with the DOT and rendering controls.
+                """),
+                _source_viewer,
+            ]
+        )
+    _source_panel
     return
 
 

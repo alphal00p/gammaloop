@@ -1501,6 +1501,18 @@ impl PyGraph {
         dot::encode_graph(py, self, codec)
     }
 
+    /// Stage one render so its exact Typst source and compiled output stay correlated.
+    #[pyo3(signature = (*, config=None))]
+    fn prepare_render(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "RenderConfig | None"))] config: Option<
+            &Bound<'_, PyAny>,
+        >,
+    ) -> PyResult<crate::render::PreparedRender> {
+        crate::render::prepare_graph(py, &slf, config)
+    }
+
     #[pyo3(signature = (output, *, config=None))]
     fn render(
         slf: Py<PyGraph>,
