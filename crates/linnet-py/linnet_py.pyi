@@ -233,7 +233,6 @@ _OptionalNumber: typing.TypeAlias = _Number | None
 _EdgeLengthResolver: typing.TypeAlias = EdgeLengthResolution | _ValueExpression | _FunctionExpression | Inherit
 _OptionalPadding: typing.TypeAlias = _Padding | None
 _TemplatePath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | None | Inherit
-_ExecutablePath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | Inherit
 _RenderStyle: typing.TypeAlias = GraphStyleOptions | None | Inherit
 _RenderLayouts: typing.TypeAlias = LayoutOptions | None | Inherit
 _RenderDrawing: typing.TypeAlias = DrawOptions | None | Inherit
@@ -1014,16 +1013,12 @@ class RelativeLength:
 @typing.final
 class RenderConfig:
     r"""
-    Complete rendering configuration, including renderer transport settings.
+    Complete typed rendering configuration.
     """
     @property
     def template(self) -> _TemplatePath: ...
     @template.setter
     def template(self, value: _TemplatePath) -> None: ...
-    @property
-    def typst_executable(self) -> _ExecutablePath: ...
-    @typst_executable.setter
-    def typst_executable(self, value: _ExecutablePath) -> None: ...
     @property
     def title(self) -> _AutoOptionalStaticContent: ...
     @title.setter
@@ -1050,7 +1045,7 @@ class RenderConfig:
     def template_options(self, value: _TemplateOptions) -> None: ...
     def overlay(self, overlay: RenderConfig) -> RenderConfig: ...
     def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, template: _TemplatePath = ..., typst_executable: _ExecutablePath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderConfig: ...
+    def __new__(cls, *, template: _TemplatePath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderConfig: ...
 
 @typing.final
 class Stroke:
