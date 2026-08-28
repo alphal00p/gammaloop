@@ -24,7 +24,7 @@ use crate::{
     display::render_diagram_html,
     error,
     graph::{PyFeynmanDiagram, parse_symbolic_annotation},
-    model::PyModel,
+    model::{PyModel, PyParticle},
 };
 use symbolica::api::python::PythonExpression;
 
@@ -270,10 +270,28 @@ impl PyParticleSelector {
     }
 }
 
+#[derive(Clone, Copy)]
+pub(crate) struct ParticlePdg(i64);
+
+impl<'a, 'py> FromPyObject<'a, 'py> for ParticlePdg {
+    type Error = PyErr;
+
+    fn extract(value: pyo3::Borrowed<'a, 'py, PyAny>) -> Result<Self, Self::Error> {
+        Ok(Self(value.cast::<PyParticle>()?.get().signed_pdg()))
+    }
+}
+
 #[derive(FromPyObject)]
 pub(crate) enum SelectorInput {
+    Particle(ParticlePdg),
     Selector(PyParticleSelector),
     Name(String),
+    Pdg(i64),
+}
+
+#[derive(FromPyObject)]
+enum ParticlePdgInput {
+    Particle(ParticlePdg),
     Pdg(i64),
 }
 
@@ -327,6 +345,7 @@ impl<'a, 'py> FromPyObject<'a, 'py> for LoopOrderInput {
 impl From<SelectorInput> for ParticleSelector {
     fn from(value: SelectorInput) -> Self {
         match value {
+            SelectorInput::Particle(particle) => Self::Pdg(particle.0),
             SelectorInput::Selector(selector) => selector.inner,
             SelectorInput::Name(name) => Self::Name(name),
             SelectorInput::Pdg(pdg) => Self::Pdg(pdg),
@@ -334,14 +353,40 @@ impl From<SelectorInput> for ParticleSelector {
     }
 }
 
+impl From<ParticlePdgInput> for i64 {
+    fn from(value: ParticlePdgInput) -> Self {
+        match value {
+            ParticlePdgInput::Particle(particle) => particle.0,
+            ParticlePdgInput::Pdg(pdg) => pdg,
+        }
+    }
+}
+
 #[cfg(feature = "python_stubgen")]
 impl PyStubType for SelectorInput {
     fn type_input() -> TypeInfo {
-        PyParticleSelector::type_input() | String::type_input() | i64::type_input()
+        PyParticle::type_input()
+            | PyParticleSelector::type_input()
+            | String::type_input()
+            | i64::type_input()
     }
 
     fn type_output() -> TypeInfo {
-        PyParticleSelector::type_output() | String::type_output() | i64::type_output()
+        PyParticle::type_output()
+            | PyParticleSelector::type_output()
+            | String::type_output()
+            | i64::type_output()
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+impl PyStubType for ParticlePdgInput {
+    fn type_input() -> TypeInfo {
+        PyParticle::type_input() | i64::type_input()
+    }
+
+    fn type_output() -> TypeInfo {
+        PyParticle::type_output() | i64::type_output()
     }
 }
 
@@ -359,7 +404,9 @@ impl PyStubType for LoopOrderInput {
 /// A scattering or decay process to pass to the diagram generator.
 ///
 /// A process records its incoming and outgoing particles, loop-order range,
-/// and optional external-state symmetrizations.
+/// and optional external-state symmetrizations. External states accept loaded
+/// :class:`Particle` objects as well as names, signed PDG codes, and explicit
+/// :class:`ParticleSelector` objects.
 ///
 /// Examples
 /// --------
@@ -386,13 +433,15 @@ impl PyProcess {
     ///
     /// Examples
     /// --------
-    /// >>> process = fk.Process.amplitude([11, -11], [22])
+    /// >>> electron = model.particle_by_pdg(11)
+    /// >>> positron = model.particle_by_pdg(-11)
+    /// >>> process = fk.Process.amplitude([electron, positron], [22])
     ///
     /// Parameters
     /// ----------
-    /// incoming : sequence[ParticleSelector | str | int]
+    /// incoming : sequence[Particle | ParticleSelector | str | int]
     ///     Incoming particles in external-leg order.
-    /// outgoing : sequence[ParticleSelector | str | int]
+    /// outgoing : sequence[Particle | ParticleSelector | str | int]
     ///     Outgoing particles in external-leg order.
     #[staticmethod]
     fn amplitude(incoming: Vec<SelectorInput>, outgoing: Vec<SelectorInput>) -> Self {
@@ -412,9 +461,9 @@ impl PyProcess {
     ///
     /// Parameters
     /// ----------
-    /// incoming : sequence[ParticleSelector | str | int]
+    /// incoming : sequence[Particle | ParticleSelector | str | int]
     ///     Incoming particles in external-leg order.
-    /// outgoing : sequence[ParticleSelector | str | int]
+    /// outgoing : sequence[Particle | ParticleSelector | str | int]
     ///     Outgoing particles in external-leg order.
     #[staticmethod]
     fn cross_section(incoming: Vec<SelectorInput>, outgoing: Vec<SelectorInput>) -> Self {
@@ -451,11 +500,12 @@ impl PyProcess {
     ///
     /// Examples
     /// --------
-    /// >>> process = process.with_final_state_alternatives([[22, 22], [23]])
+    /// >>> photon = model.particle_by_pdg(22)
+    /// >>> process = process.with_final_state_alternatives([[photon, photon], [23]])
     ///
     /// Parameters
     /// ----------
-    /// alternatives : sequence[sequence[ParticleSelector | str | int]]
+    /// alternatives : sequence[sequence[Particle | ParticleSelector | str | int]]
     ///     Allowed outgoing particle lists.
     fn with_final_state_alternatives(
         &self,
@@ -788,18 +838,21 @@ impl PyGenerationOptions {
         self.inner = self.inner.clone().cancellation_token(token.inner.clone());
     }
 
-    /// Reject every graph containing any listed particle PDG code.
+    /// Reject every graph containing any listed particle.
     ///
     /// Examples
     /// --------
-    /// >>> options.add_particle_veto([6, -6])
+    /// >>> bottom = model.particle_by_pdg(5)
+    /// >>> options.add_particle_veto([bottom, bottom.antiparticle])
     ///
     /// Parameters
     /// ----------
-    /// pdg_codes : sequence[int]
-    ///     Signed PDG codes forbidden on graph edges.
-    fn add_particle_veto(&mut self, pdg_codes: Vec<i64>) {
-        self.add_graph_filter(GenerationFilter::ParticleVeto(pdg_codes));
+    /// particles : sequence[Particle | int]
+    ///     Particles or signed PDG codes forbidden on graph edges.
+    fn add_particle_veto(&mut self, particles: Vec<ParticlePdgInput>) {
+        self.add_graph_filter(GenerationFilter::ParticleVeto(
+            particles.into_iter().map(i64::from).collect(),
+        ));
     }
 
     /// Keep only graphs whose interaction vertices use allowed vertex names.
@@ -1843,10 +1896,18 @@ mod tests {
             crate::initialize_feynkit(&module).unwrap();
             let locals = PyDict::new(py);
             locals.set_item("fk", &module).unwrap();
+            locals
+                .set_item(
+                    "MODEL_JSON",
+                    include_str!("../tests/fixtures/scalars_2p_3p.json"),
+                )
+                .unwrap();
             let code = CString::new(
                 r#"
 by_name = fk.ParticleSelector.by_name("1")
 by_pdg = fk.ParticleSelector.by_pdg(1)
+model = fk.Model.from_json(MODEL_JSON)
+particle = model.particle("scalar_0")
 
 assert by_name.name == "1"
 try:
@@ -1874,6 +1935,16 @@ except AttributeError:
 else:
     raise AssertionError("particle selectors must be immutable")
 
+mixed_process = fk.Process.amplitude(
+    [particle, by_name, "scalar_2", 1001],
+    [particle.antiparticle],
+)
+assert [
+    selector.name if selector.is_name else selector.pdg
+    for selector in mixed_process.incoming
+] == [1000, "1", "scalar_2", 1001]
+assert mixed_process.outgoing_alternatives[0][0].pdg == 1000
+
 process = fk.Process.amplitude(
     [by_name, by_pdg],
     [fk.ParticleSelector.by_name("out"), fk.ParticleSelector.by_pdg(-1)],
@@ -1895,8 +1966,10 @@ assert round_tripped.incoming == process.incoming
 assert round_tripped.outgoing_alternatives == process.outgoing_alternatives
 assert round_tripped.loop_count == process.loop_count
 
-cross_section = fk.Process.cross_section([by_pdg], [by_name])
-cross_section = cross_section.with_final_state_alternatives([[by_name], [by_pdg]])
+cross_section = fk.Process.cross_section([particle, by_pdg], [by_name])
+cross_section = cross_section.with_final_state_alternatives(
+    [[particle.antiparticle], [by_name], [by_pdg], ["scalar_2"], [1002]],
+)
 cross_section = cross_section.with_symmetrization(
     initial=True,
     final_state=True,
@@ -1905,11 +1978,27 @@ cross_section = cross_section.with_symmetrization(
 )
 assert cross_section.generation_type == fk.GenerationType.CROSS_SECTION
 assert cross_section.generation_type.value == "cross_section"
-assert cross_section.outgoing_alternatives == [[by_name], [by_pdg]]
+assert cross_section.incoming[0].pdg == 1000
+assert cross_section.outgoing_alternatives[0][0].pdg == 1000
+assert cross_section.outgoing_alternatives[1:] == [
+    [by_name],
+    [by_pdg],
+    [fk.ParticleSelector.by_name("scalar_2")],
+    [fk.ParticleSelector.by_pdg(1002)],
+]
 assert cross_section.symmetrizes_initial
 assert cross_section.symmetrizes_final
 assert cross_section.symmetrizes_left_right
 assert cross_section.symmetrizes_external_fermions
+
+veto_options = fk.GenerationOptions()
+assert veto_options.add_particle_veto([particle, 1001]) is None
+try:
+    veto_options.add_particle_veto(["scalar_0"])
+except TypeError:
+    pass
+else:
+    raise AssertionError("particle vetoes accept Particle objects and signed PDG integers only")
 "#,
             )
             .unwrap();

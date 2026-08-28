@@ -1683,18 +1683,19 @@ class GenerationOptions:
         token : CancellationToken
             Token whose cancellation state is checked during generation.
         """
-    def add_particle_veto(self, pdg_codes: typing.Sequence[builtins.int]) -> None:
+    def add_particle_veto(self, particles: typing.Sequence[Particle | builtins.int]) -> None:
         r"""
-        Reject every graph containing any listed particle PDG code.
+        Reject every graph containing any listed particle.
 
         Examples
         --------
-        >>> options.add_particle_veto([6, -6])
+        >>> bottom = model.particle_by_pdg(5)
+        >>> options.add_particle_veto([bottom, bottom.antiparticle])
 
         Parameters
         ----------
-        pdg_codes : sequence[int]
-            Signed PDG codes forbidden on graph edges.
+        particles : sequence[Particle | int]
+            Particles or signed PDG codes forbidden on graph edges.
         """
     def add_vertex_allow(self, vertices: typing.Sequence[builtins.str]) -> None:
         r"""
@@ -2858,8 +2859,13 @@ class Model:
 
     Or open a previously normalized FeynKit JSON model directly:
 
-    >>> model = fk.Model.from_path("models/sm.json")
+    >>> model = fk.Model("models/sm.json")
     >>> photon = model.particle("a")
+
+    Parameters
+    ----------
+    path : str or os.PathLike
+        Path to a normalized FeynKit JSON model.
     """
     @property
     def name(self) -> builtins.str:
@@ -2943,6 +2949,19 @@ class Model:
         --------
         >>> form_factors = {factor.name: factor for factor in model.form_factors}
         """
+    def __new__(cls, path: builtins.str | os.PathLike | pathlib.Path) -> Model:
+        r"""
+        Load a model from a normalized FeynKit JSON file.
+
+        Examples
+        --------
+        >>> model = Model("model.json")
+
+        Parameters
+        ----------
+        path : str or os.PathLike
+            Path to the JSON model.
+        """
     @staticmethod
     def from_json(json: builtins.str) -> Model:
         r"""
@@ -2957,37 +2976,25 @@ class Model:
         json : str
             Serialized model object.
         """
-    @staticmethod
-    def from_path(path: builtins.str | os.PathLike | pathlib.Path) -> Model:
-        r"""
-        Load a model from a JSON file.
-
-        Examples
-        --------
-        >>> model = Model.from_path("model.json")
-
-        Parameters
-        ----------
-        path : str or os.PathLike
-            Path to the JSON model.
-        """
-    def generate_diagrams(self, incoming: typing.Sequence[ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[ParticleSelector | builtins.str | builtins.int], *, kind: builtins.str = 'amplitude', loops: builtins.int | tuple[builtins.int, builtins.int] = 0, options: typing.Optional[GenerationOptions] = None, final_state_alternatives: typing.Optional[typing.Sequence[typing.Sequence[ParticleSelector | builtins.str | builtins.int]]] = None) -> GenerationResult:
+    def generate_diagrams(self, incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], *, kind: builtins.str = 'amplitude', loops: builtins.int | tuple[builtins.int, builtins.int] = 0, options: typing.Optional[GenerationOptions] = None, final_state_alternatives: typing.Optional[typing.Sequence[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]]] = None) -> GenerationResult:
         r"""
         Generate amplitude or cross-section diagrams from this model.
 
-        Particle names, signed PDG codes, and :class:`ParticleSelector` objects
-        may be mixed in the external states. An integer loop order selects that
-        exact order; a pair such as ``(0, 1)`` selects an inclusive range. The
-        selected model Feynman rules are instantiated on every returned vertex
-        and propagator edge and combined in each diagram numerator.
+        Concrete :class:`Particle` values, particle names, signed PDG codes, and
+        :class:`ParticleSelector` objects may be mixed in the external states.
+        An integer loop order selects that exact order; a pair such as ``(0, 1)``
+        selects an inclusive range. The selected model Feynman rules are
+        instantiated on every returned vertex and propagator edge and combined
+        in each diagram numerator.
 
         Examples
         --------
         Generate one-loop scalar amplitudes directly from their model:
 
         >>> options = fk.GenerationOptions(max_vertices=3, allow_self_loops=True)
+        >>> scalar = model.particle("scalar_0")
         >>> result = model.generate_diagrams(
-        ...     ["scalar_0"], ["scalar_0", "scalar_0"],
+        ...     [scalar], [scalar, scalar.antiparticle],
         ...     loops=1, options=options,
         ... )
         >>> diagram = result.diagrams[0]
@@ -2995,9 +3002,9 @@ class Model:
 
         Parameters
         ----------
-        incoming : sequence[ParticleSelector | str | int]
+        incoming : sequence[Particle | ParticleSelector | str | int]
             Incoming particles in external-leg order.
-        outgoing : sequence[ParticleSelector | str | int]
+        outgoing : sequence[Particle | ParticleSelector | str | int]
             Primary outgoing state in external-leg order.
         kind : {"amplitude", "cross_section"}, optional
             Graph structure to generate.
@@ -3005,7 +3012,7 @@ class Model:
             Exact loop order or inclusive minimum and maximum.
         options : GenerationOptions or None, optional
             Generation filters and limits; defaults to standard options.
-        final_state_alternatives : sequence[sequence[ParticleSelector | str | int]] or None, optional
+        final_state_alternatives : sequence[sequence[Particle | ParticleSelector | str | int]] or None, optional
             Extra outgoing states for a cross section.
         """
     def particle(self, name: builtins.str) -> Particle:
@@ -3636,6 +3643,21 @@ class Particle:
         Return the name of the corresponding antiparticle.
         """
     @property
+    def antiparticle(self) -> Particle:
+        r"""
+        Return the corresponding antiparticle from the same model.
+
+        Self-conjugate particles map to themselves.
+
+        Examples
+        --------
+        >>> electron = model.particle_by_pdg(11)
+        >>> electron.antiparticle.name
+        'e+'
+        >>> model.particle_by_pdg(22).antiparticle.name  # the photon is self-conjugate
+        'a'
+        """
+    @property
     def pdg_code(self) -> builtins.int:
         r"""
         Return the signed Particle Data Group code.
@@ -3852,7 +3874,9 @@ class Process:
     A scattering or decay process to pass to the diagram generator.
 
     A process records its incoming and outgoing particles, loop-order range,
-    and optional external-state symmetrizations.
+    and optional external-state symmetrizations. External states accept loaded
+    :class:`Particle` objects as well as names, signed PDG codes, and explicit
+    :class:`ParticleSelector` objects.
 
     Examples
     --------
@@ -3936,23 +3960,25 @@ class Process:
         True
         """
     @staticmethod
-    def amplitude(incoming: typing.Sequence[ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[ParticleSelector | builtins.str | builtins.int]) -> Process:
+    def amplitude(incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]) -> Process:
         r"""
         Define an amplitude with ordered incoming and outgoing particles.
 
         Examples
         --------
-        >>> process = fk.Process.amplitude([11, -11], [22])
+        >>> electron = model.particle_by_pdg(11)
+        >>> positron = model.particle_by_pdg(-11)
+        >>> process = fk.Process.amplitude([electron, positron], [22])
 
         Parameters
         ----------
-        incoming : sequence[ParticleSelector | str | int]
+        incoming : sequence[Particle | ParticleSelector | str | int]
             Incoming particles in external-leg order.
-        outgoing : sequence[ParticleSelector | str | int]
+        outgoing : sequence[Particle | ParticleSelector | str | int]
             Outgoing particles in external-leg order.
         """
     @staticmethod
-    def cross_section(incoming: typing.Sequence[ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[ParticleSelector | builtins.str | builtins.int]) -> Process:
+    def cross_section(incoming: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int], outgoing: typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]) -> Process:
         r"""
         Define a cross section with ordered incoming and outgoing particles.
 
@@ -3962,9 +3988,9 @@ class Process:
 
         Parameters
         ----------
-        incoming : sequence[ParticleSelector | str | int]
+        incoming : sequence[Particle | ParticleSelector | str | int]
             Incoming particles in external-leg order.
-        outgoing : sequence[ParticleSelector | str | int]
+        outgoing : sequence[Particle | ParticleSelector | str | int]
             Outgoing particles in external-leg order.
         """
     def with_loop_count(self, minimum: builtins.int, maximum: builtins.int) -> Process:
@@ -3982,18 +4008,19 @@ class Process:
         maximum : int
             Maximum number of loops to generate, inclusive.
         """
-    def with_final_state_alternatives(self, alternatives: typing.Sequence[typing.Sequence[ParticleSelector | builtins.str | builtins.int]]) -> Process:
+    def with_final_state_alternatives(self, alternatives: typing.Sequence[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]]) -> Process:
         r"""
         Return a process accepting any of the supplied final states.
         Amplitudes accept exactly one alternative; cross-section alternatives cannot be empty.
 
         Examples
         --------
-        >>> process = process.with_final_state_alternatives([[22, 22], [23]])
+        >>> photon = model.particle_by_pdg(22)
+        >>> process = process.with_final_state_alternatives([[photon, photon], [23]])
 
         Parameters
         ----------
-        alternatives : sequence[sequence[ParticleSelector | str | int]]
+        alternatives : sequence[sequence[Particle | ParticleSelector | str | int]]
             Allowed outgoing particle lists.
         """
     def with_symmetrization(self, *, initial: builtins.bool = False, final_state: builtins.bool = False, left_right: builtins.bool = False, external_fermions: builtins.bool = False) -> Process:
