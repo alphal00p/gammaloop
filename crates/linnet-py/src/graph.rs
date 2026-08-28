@@ -686,7 +686,7 @@ impl PyNode {
 }
 
 impl PyHalfEdge {
-    fn index_for_graph(
+    pub(crate) fn index_for_graph(
         &self,
         py: Python<'_>,
         graph: &Py<PyGraph>,
@@ -703,6 +703,21 @@ impl PyHalfEdge {
 }
 
 impl PyEdge {
+    pub(crate) fn index_for_graph(
+        &self,
+        py: Python<'_>,
+        graph: &Py<PyGraph>,
+        revision: u64,
+    ) -> PyResult<usize> {
+        let owner = self.owner(py)?;
+        if self.revision != revision || !owner.is(graph.bind(py)) {
+            return Err(PyValueError::new_err(
+                "edge belongs to a different graph revision",
+            ));
+        }
+        Ok(self.index)
+    }
+
     fn endpoint_view(
         &self,
         py: Python<'_>,

@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Linnet source on
-2026-08-18.
+2026-08-28.
 
 This note covers the `linnet` Rust crate. `clinnet` is a separate command-line renderer and
 `linnest` owns Typst layout and drawing; neither is part of Linnet's graph core.
@@ -85,9 +85,19 @@ to the same `HedgePair` recorded by `SmartEdgeVec`. Node-store operations provid
 partition and incidence checks.
 
 Algorithms consume the graph together with an explicit subgraph when boundary behavior matters.
-Traversal and cycle/cut routines operate on those views. Topological sort counts incoming
-half-edges by `Flow` and rejects cycles; transitive closure and reduction first require that DAG
-check, then add or delete complete half-edge pairs rather than one side of an edge.
+Traversal and cycle/cut routines operate on those views. Directed algorithms take a
+`DirectionBasis`: `Underlying` follows the involution's source/sink roles, while `Superficial`
+applies each edge's `Orientation` and omits superficially undirected edges. Dangling and
+subgraph-split edges do not form complete directed arcs. Full topological sort canonicalizes
+identification-history aliases with shared incidence, counts incoming arcs in the selected basis,
+and rejects cycles; transitive closure and reduction first require that DAG check, then add or
+delete complete half-edge pairs rather than one side of an edge.
+
+Exhaustive circuit enumeration requires an explicit cycle-rank bound and rejects powersets that
+the platform cannot represent before enumeration. Tadpole classification similarly validates and
+canonicalizes a non-empty terminal set, compares components against every terminal-incident edge,
+and returns deduplicated structural results. These guards make malformed input return errors and
+keep retained node-identification history on canonical structural paths instead of panic paths.
 
 DOT interchange follows a separate adapter path:
 

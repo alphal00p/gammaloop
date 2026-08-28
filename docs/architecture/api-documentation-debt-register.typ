@@ -427,6 +427,13 @@ enumeration. The generated stub exposes those contracts directly, and real-wheel
 both node stores, arbitrary payload identity, rollback, cut orientation, and deterministic result
 ordering. Runnable traversal-flag and callback-failure journeys remain open.
 
+*Progress (`sxssmmuv`):* direction-basis semantics now distinguish the underlying flow required by
+GammaLoop momentum routing from superficial reversed/undirected orientation. The guide also covers
+boundary selections, traversal-tree relationships, bounded circuit enumeration, single-bond and
+tadpole queries, cut orientation/winding access, and non-mutating transitive reduction. Focused
+real-wheel regressions exercise both node stores; a complete runnable callback-failure journey
+remains open.
+
 *Complete when:* DOT parse/build → indexing → components/cycle basis → checked result
 is runnable, and compound returns, callbacks, proxies, and mutation behavior have
 local semantic contracts.

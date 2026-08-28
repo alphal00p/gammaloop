@@ -234,6 +234,7 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
     // module variables such as AUTO and INHERIT are already included.
     for (rust, python) in [
         ("PyEdgeLengthResolution", "EdgeLengthResolution"),
+        ("PyDirectionBasis", "DirectionBasis"),
         ("PyHalfEdgeDrawing", "HalfEdgeDrawing"),
         ("PyHalfEdgeValue", "HalfEdgeValue"),
         ("PyLayoutAlgorithm", "LayoutAlgorithm"),
@@ -275,5 +276,21 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
     // Rust collection constructors are valid PyO3 defaults but are not Python
     // syntax. Keep the generated stub's conventional unspecified default.
     stub = stub.replace(" = Vec :: new()", " = ...");
+    // Stub generation runs without signature inference, so non-builtin Rust
+    // values collapse to `...`. These closed enums have one API-wide default.
+    for (type_name, default) in [
+        ("NodeStore", "NodeStore.Vec"),
+        ("Orientation", "Orientation.Default"),
+        ("DirectionBasis", "DirectionBasis.Underlying"),
+    ] {
+        stub = stub.replace(
+            &format!(": {type_name} = ..."),
+            &format!(": {type_name} = {default}"),
+        );
+    }
+    stub = stub.replace(
+        "name: builtins.str = ..., *, payload:",
+        "name: builtins.str = '', *, payload:",
+    );
     Ok(stub)
 }
