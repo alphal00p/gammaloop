@@ -61,7 +61,7 @@ complete or assess a calculation.
   [Idenso], [Deep source-backed rule material and strong rewrite-stage cautions.], [Shipped scientific behavior, target specifications, implementation evidence, and historical validation are mixed in one public reference.],
   [Spenso], [Strong structure/data/execution model and useful failure ownership.], [The bridge from indexed physics to representations, slots, duality, networks, and HEP conventions is missing.],
   [Linnet], [The strongest progressive conceptual introduction, including the physical value of half-edge boundaries.], [The maintained strategy still needs the checked mutation and complete graph-result journey recorded under `DOC-007`.],
-  [Linnest], [Broad graph, layout, drawing, and physics-style capability.], [Archive/plugin payload mechanics and advanced callbacks precede the smallest useful drawing result.],
+  [Linnest], [Broad graph, layout, generic drawing, and application-template composition.], [Archive/plugin payload mechanics and advanced callbacks precede the smallest useful drawing result.],
 )
 
 == Maintenance contract

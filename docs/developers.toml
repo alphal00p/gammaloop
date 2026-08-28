@@ -202,13 +202,13 @@ topics = ["drawing", "typst"]
 review_triggers = ["crates/gammaloop-api/src/commands/save.rs", "crates/gammaloop-api/src/templates.rs", "crates/gammalooprs/src/graph/parse/from_dot.rs", "crates/gammalooprs/src/model/mod.rs", "crates/linnest/typst/**", "assets/embedded/drawing/**"]
 
 [[section.note.scope]]
-# No-impact attestation 2026-08-26: extraction checks now follow the drawing
-# mode defaults from the thin figure wrapper to their layout-core owner; the
-# embedded-template extraction contract is unchanged.
+# Reviewed 2026-08-28: GammaLoop now extracts its domain physics module from
+# its own template bundle; the extraction API and destination contract remain
+# unchanged.
 path = "crates/gammaloop-api/src/templates.rs"
 symbol = "gammaloop_api::templates::Assets::extract_templates"
 anchor = "pub fn extract_templates<P: AsRef<Path>>"
-digest = "5f308342e83cc108e15ed79119f069e925692b59"
+digest = "c3d1ef9ba1d26c5bfdca07d92433afa0cb9d83ab"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
@@ -226,10 +226,12 @@ topics = ["drawing", "dot", "typst"]
 review_triggers = ["crates/gammaloop-api/src/commands/save.rs", "crates/gammaloop-api/src/templates.rs", "crates/gammalooprs/src/graph/parse/from_dot.rs", "crates/gammalooprs/src/model/mod.rs", "crates/linnet/src/**", "crates/linnest/src/**", "crates/linnest/typst/src/**", "crates/kurvst/src/**", "crates/kurvst/typst/src/**", "crates/clinnet/src/**", "assets/embedded/drawing/templates/**"]
 
 [[section.note.scope]]
+# Reviewed 2026-08-28: Linnest no longer re-exports GammaLoop's physics
+# template; the generic layout-sequence API remains unchanged.
 path = "crates/linnest/typst/src/lib.typ"
 symbol = "linnest::typst::layout-sequence"
 anchor = "#let layout-sequence = layouts.sequence"
-digest = "82e7f18d12a2707349685de415a6c32af1b53418"
+digest = "df4d9c7e162b3d67227e4d3fcd660b19a1bca0e0"
 
 [[section.note]]
 id = "spenso-symbolica-syntax-and-rewrites"
@@ -730,7 +732,11 @@ anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
 # The snapshot gate now also verifies stale routes are pruned while published
 # product channels survive; this does not change the documented cache graph.
 # Its Kurvst assertion follows the generated deployment-relative product link.
-digest = "a35d582b6828cd9a29ab1f8459958bae17a29df4"
+# No cache-architecture impact 2026-08-28: the source filters follow the
+# GammaLoop-owned layout and physics templates for split Clinnet tests and
+# stage the linked Python-only custom-theme example for documentation builds;
+# the final docs assertion follows the replacement domain-templates route.
+digest = "db267b3d0c0ad7f5b4f4af56f940d9e748c8e504"
 
 [[section]]
 id = "documentation"
@@ -765,7 +771,10 @@ anchor = "pub fn check(&self) -> Result<()> {"
 # Its validation-state grouping is a Clippy-only refactor with identical behavior.
 # Snapshot candidates are now normalized before immutable comparison, replace
 # stale global output, and retain existing product channels and snapshot tags.
-digest = "21fa9ad810530c405e411f23b5b9e9d935a9d5ab"
+# No documentation-system architecture impact 2026-08-28: portal dependency
+# validation follows the GammaLoop-owned template path, and generated Linnet
+# navigation describes domain templates instead of the removed physics route.
+digest = "3e6a11d88c3c7f6959479902a910ab36d4ae577c"
 
 [[section.note]]
 id = "documentation-improvement-plan"

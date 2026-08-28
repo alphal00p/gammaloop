@@ -61,8 +61,6 @@ _NativeValue: typing.TypeAlias = (
     | StrokeCap
     | StrokeJoin
     | TextStyle
-    | RenderMode
-    | TypstFields
     | DashPattern
     | MarkSymbol
     | MarkPosition
@@ -105,7 +103,6 @@ _RoutingValue: typing.TypeAlias = Routing | None | Inherit
 _AnchorValue: typing.TypeAlias = Anchor | Auto | None | Inherit
 _Radius: typing.TypeAlias = builtins.int | builtins.float | builtins.list[builtins.int | builtins.float] | builtins.tuple[builtins.int | builtins.float, ...] | _ValueExpression | Inherit
 _Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets | _ValueExpression | Inherit
-_FieldNames: typing.TypeAlias = builtins.str | builtins.list[builtins.str] | builtins.tuple[builtins.str, ...] | _ValueExpression | Inherit
 _OptionalString: typing.TypeAlias = builtins.str | None
 _OptionalHalfEdgeSpec: typing.TypeAlias = HalfEdgeSpec | None
 _EndpointTarget: typing.TypeAlias = NodeSpec | Node | builtins.int | builtins.str
@@ -138,12 +135,11 @@ _DrawingPointDict = typing.TypedDict(
 )
 _DrawingPoint: typing.TypeAlias = builtins.list[_DrawingCoordinate] | builtins.tuple[_DrawingCoordinate, _DrawingCoordinate] | _DrawingPointDict | _ValueExpression | None | Inherit
 _DrawingString: typing.TypeAlias = builtins.str | _ValueExpression | None | Inherit
-_DrawingScalar: typing.TypeAlias = builtins.str | builtins.int | builtins.float | _ValueExpression | None | Inherit
 _DrawingAngle: typing.TypeAlias = builtins.int | builtins.float | Angle | _ValueExpression | None | Inherit
 _DrawingDecoration: typing.TypeAlias = Pattern | _StyleLayers | None | Inherit
-_NodeSelector: typing.TypeAlias = typing.Callable[[Node], _OptionalStyle] | None | Inherit
-_EdgeSelector: typing.TypeAlias = typing.Callable[[Edge], _OptionalStyleLayers] | None | Inherit
-_HalfEdgeSelector: typing.TypeAlias = typing.Callable[[HalfEdge], _OptionalStyleLayers] | None | Inherit
+_NodeDrawingSelector: typing.TypeAlias = typing.Callable[[Node], NodeDrawing | None] | None | Inherit
+_EdgeDrawingSelector: typing.TypeAlias = typing.Callable[[Edge], EdgeDrawing | None] | None | Inherit
+_HalfEdgeDrawingSelector: typing.TypeAlias = typing.Callable[[HalfEdge], HalfEdgeDrawing | None] | None | Inherit
 _HedgeSelection: typing.TypeAlias = builtins.list[builtins.bool] | builtins.tuple[builtins.bool, ...]
 _SubgraphExpression: typing.TypeAlias = _ValueExpression | _FunctionExpression
 _SubgraphSelection: typing.TypeAlias = _HedgeSelection | _SubgraphExpression
@@ -175,16 +171,13 @@ _AutoFunction: typing.TypeAlias = _FunctionExpression | Auto
 _OptionalNumber: typing.TypeAlias = _Number | None
 _EdgeLengthResolver: typing.TypeAlias = EdgeLengthResolution | _ValueExpression | _FunctionExpression | Inherit
 _OptionalPadding: typing.TypeAlias = _Padding | None
-_TypstFieldsValue: typing.TypeAlias = TypstFields | Inherit
-_MomentumMark: typing.TypeAlias = Mark | _NativeDict | _ValueExpression | None | Auto | Inherit
-_OptionalFieldNames: typing.TypeAlias = _FieldNames | None
 _TemplatePath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | None | Inherit
 _ExecutablePath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | Inherit
-_RenderModeValue: typing.TypeAlias = RenderMode | Auto | Inherit
 _RenderStyle: typing.TypeAlias = GraphStyleOptions | None | Inherit
 _RenderLayouts: typing.TypeAlias = LayoutOptions | None | Inherit
 _RenderDrawing: typing.TypeAlias = DrawOptions | None | Inherit
-_RenderPhysics: typing.TypeAlias = PhysicsOptions | None | Inherit
+_RenderSelectors: typing.TypeAlias = DrawingSelectors | None | Inherit
+_TemplateOptions: typing.TypeAlias = _NativeDict | None | Inherit
 "#;
 
 /// Render the installed and documented Python surface from one stub inventory.
@@ -252,11 +245,10 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
         ("PyLayoutNodes", "LayoutNodes"),
         ("PyDashPattern", "DashPattern"),
         ("PyMarkSymbol", "MarkSymbol"),
-        ("PyRenderMode", "RenderMode"),
+        ("PyDrawingSelectors", "DrawingSelectors"),
         ("PyRoutePoints", "RoutePoints"),
         ("PyStrokeJoin", "StrokeJoin"),
         ("PyTextStyle", "TextStyle"),
-        ("PyTypstFields", "TypstFields"),
         ("PyNodeValue", "NodeValue"),
         ("PySubgraph", "Subgraph"),
         ("PyTraversalTree", "TraversalTree"),
@@ -292,5 +284,13 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
         "name: builtins.str = ..., *, payload:",
         "name: builtins.str = '', *, payload:",
     );
-    Ok(stub)
+    // Generated docstrings can retain indentation on blank lines; keep the
+    // checked-in canonical stub free of trailing whitespace.
+    let mut canonical = stub
+        .lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n");
+    canonical.push('\n');
+    Ok(canonical)
 }

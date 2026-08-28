@@ -219,6 +219,7 @@
               ./pyproject.toml
               ./crates/linnet-py/pyproject.toml
               ./crates/linnet-py/linnet_py.pyi
+              ./crates/linnet-py/examples/physics_render_settings.py
               ./crates/linnet-py/tests/test_basic.py
             ]
           );
@@ -625,8 +626,10 @@
 
         workspacePackageRuntimeTestExtraSourceRoots = {
           "alphal00p-docs-builder" = [
+            "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
             "assets/embedded/drawing/templates/layout-core.typ"
             "assets/embedded/drawing/templates/layout.typ"
+            "assets/embedded/drawing/templates/physics-edge-style.typ"
             "assets/gammalooplogo-dark.svg"
             "assets/gammalooplogo-light.svg"
             "crates/idenso/CHANGELOG.typ"
@@ -637,6 +640,11 @@
           ];
           "alphal00p-docs-catalogs" = [
             "docs/api/python"
+          ];
+          clinnet = [
+            "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
+            "assets/embedded/drawing/templates/layout-core.typ"
+            "assets/embedded/drawing/templates/physics-edge-style.typ"
           ];
           "gammaloop-api" = [
             "tests/resources/graphs/scalar_bubble.dot"
@@ -3336,7 +3344,7 @@
               grep -Fq 'class="alphal00p-rustdoc-bar"' \
                 "$out/products/gammaloop/latest/reference/rust/src/gammalooprs/lib.rs.html"
               test -s "$out/products/linnet/latest/reference/typst/index.html"
-              for typst_page in graph layout drawing physics subgraph; do
+              for typst_page in graph layout drawing templates subgraph; do
                 test -s \
                   "$out/products/linnet/latest/reference/typst/$typst_page/index.html"
               done

@@ -1,10 +1,11 @@
 #import "../../../../crates/linnest/typst/src/lib.typ": (
-  draw, graph, layout as apply-layout, physics,
+  draw, graph, layout as apply-layout,
 )
 #import "@preview/cetz:0.5.1" as cetz
 #import "../../../../assets/embedded/drawing/templates/layout-core.typ": (
   bind-layout,
 )
+#import "../../../../assets/embedded/drawing/templates/physics-edge-style.typ" as physics
 #import "edge-style.typ" as edge-style
 #import "../theme.typ": palette
 

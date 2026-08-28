@@ -22,6 +22,7 @@ __all__ = [
     "DotHalfEdgeData",
     "DotVertexData",
     "DrawOptions",
+    "DrawingSelectors",
     "EdgeSpec",
     "Flow",
     "Fraction",
@@ -40,7 +41,6 @@ __all__ = [
     "NodeStore",
     "Orientation",
     "OrientedCut",
-    "PhysicsOptions",
     "Anchor",
     "Compass",
     "DashPattern",
@@ -65,13 +65,11 @@ __all__ = [
     "Pattern",
     "Placement",
     "RankAlignment",
-    "RenderMode",
     "RoutePoints",
     "Routing",
     "StrokeCap",
     "StrokeJoin",
     "TextStyle",
-    "TypstFields",
     "Ratio",
     "RelativeLength",
     "RenderConfig",
@@ -124,8 +122,6 @@ _NativeValue: typing.TypeAlias = (
     | StrokeCap
     | StrokeJoin
     | TextStyle
-    | RenderMode
-    | TypstFields
     | DashPattern
     | MarkSymbol
     | MarkPosition
@@ -168,7 +164,6 @@ _RoutingValue: typing.TypeAlias = Routing | None | Inherit
 _AnchorValue: typing.TypeAlias = Anchor | Auto | None | Inherit
 _Radius: typing.TypeAlias = builtins.int | builtins.float | builtins.list[builtins.int | builtins.float] | builtins.tuple[builtins.int | builtins.float, ...] | _ValueExpression | Inherit
 _Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets | _ValueExpression | Inherit
-_FieldNames: typing.TypeAlias = builtins.str | builtins.list[builtins.str] | builtins.tuple[builtins.str, ...] | _ValueExpression | Inherit
 _OptionalString: typing.TypeAlias = builtins.str | None
 _OptionalHalfEdgeSpec: typing.TypeAlias = HalfEdgeSpec | None
 _EndpointTarget: typing.TypeAlias = NodeSpec | Node | builtins.int | builtins.str
@@ -201,12 +196,11 @@ _DrawingPointDict = typing.TypedDict(
 )
 _DrawingPoint: typing.TypeAlias = builtins.list[_DrawingCoordinate] | builtins.tuple[_DrawingCoordinate, _DrawingCoordinate] | _DrawingPointDict | _ValueExpression | None | Inherit
 _DrawingString: typing.TypeAlias = builtins.str | _ValueExpression | None | Inherit
-_DrawingScalar: typing.TypeAlias = builtins.str | builtins.int | builtins.float | _ValueExpression | None | Inherit
 _DrawingAngle: typing.TypeAlias = builtins.int | builtins.float | Angle | _ValueExpression | None | Inherit
 _DrawingDecoration: typing.TypeAlias = Pattern | _StyleLayers | None | Inherit
-_NodeSelector: typing.TypeAlias = typing.Callable[[Node], _OptionalStyle] | None | Inherit
-_EdgeSelector: typing.TypeAlias = typing.Callable[[Edge], _OptionalStyleLayers] | None | Inherit
-_HalfEdgeSelector: typing.TypeAlias = typing.Callable[[HalfEdge], _OptionalStyleLayers] | None | Inherit
+_NodeDrawingSelector: typing.TypeAlias = typing.Callable[[Node], NodeDrawing | None] | None | Inherit
+_EdgeDrawingSelector: typing.TypeAlias = typing.Callable[[Edge], EdgeDrawing | None] | None | Inherit
+_HalfEdgeDrawingSelector: typing.TypeAlias = typing.Callable[[HalfEdge], HalfEdgeDrawing | None] | None | Inherit
 _HedgeSelection: typing.TypeAlias = builtins.list[builtins.bool] | builtins.tuple[builtins.bool, ...]
 _SubgraphExpression: typing.TypeAlias = _ValueExpression | _FunctionExpression
 _SubgraphSelection: typing.TypeAlias = _HedgeSelection | _SubgraphExpression
@@ -238,16 +232,13 @@ _AutoFunction: typing.TypeAlias = _FunctionExpression | Auto
 _OptionalNumber: typing.TypeAlias = _Number | None
 _EdgeLengthResolver: typing.TypeAlias = EdgeLengthResolution | _ValueExpression | _FunctionExpression | Inherit
 _OptionalPadding: typing.TypeAlias = _Padding | None
-_TypstFieldsValue: typing.TypeAlias = TypstFields | Inherit
-_MomentumMark: typing.TypeAlias = Mark | _NativeDict | _ValueExpression | None | Auto | Inherit
-_OptionalFieldNames: typing.TypeAlias = _FieldNames | None
 _TemplatePath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | None | Inherit
 _ExecutablePath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | Inherit
-_RenderModeValue: typing.TypeAlias = RenderMode | Auto | Inherit
 _RenderStyle: typing.TypeAlias = GraphStyleOptions | None | Inherit
 _RenderLayouts: typing.TypeAlias = LayoutOptions | None | Inherit
 _RenderDrawing: typing.TypeAlias = DrawOptions | None | Inherit
-_RenderPhysics: typing.TypeAlias = PhysicsOptions | None | Inherit
+_RenderSelectors: typing.TypeAlias = DrawingSelectors | None | Inherit
+_TemplateOptions: typing.TypeAlias = _NativeDict | None | Inherit
 
 
 AUTO: Auto
@@ -384,6 +375,14 @@ class DrawOptions:
     """
     def __repr__(self) -> builtins.str: ...
     def __new__(cls, *, scope: _Dictionary = ..., unit: _AutoLengthValue = ..., title: _AutoOptionalStaticContent = ..., subgraph: _DrawSubgraphs = ..., debug: _DebugValue = ..., node_radius: _AutoRadius = ..., node_min_radius: _Number = ..., node_label_padding: _Number = ..., node_fill: _Paint = ..., node_stroke: _StrokeValue = ..., node_outset: _AutoNumber = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., node_label: _AutoOptionalContent = ..., draw_node: _AutoFunction = ..., edge_stroke: _StrokeValue = ..., edge_offset: _Number = ..., edge_length: _OptionalNumber = ..., edge_ratio: _OptionalNumber = ..., edge_resolve_length: _EdgeLengthResolver = ..., edge_accuracy: _Number = ..., edge_optimize: _Boolean = ..., source_style: _OptionalStyleLayers = ..., sink_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _OptionalStyle = ..., edge_omega: _Number = ..., edge_trim_accuracy: _Number = ..., padding: _OptionalPadding = ..., debug_edge_radius: _Number = ..., debug_edge_fill: _Paint = ..., debug_edge_stroke: _StrokeValue = ..., debug_edge_label_fill: _Paint = ..., subgraph_edge_style: _Style = ..., subgraph_edge_underlay: _Boolean = ...) -> DrawOptions: ...
+
+@typing.final
+class DrawingSelectors:
+    r"""
+    Per-render Python callbacks returning typed drawing patches.
+    """
+    def __repr__(self) -> builtins.str: ...
+    def __new__(cls, *, node: _NodeDrawingSelector = ..., edge: _EdgeDrawingSelector = ..., source: _HalfEdgeDrawingSelector = ..., sink: _HalfEdgeDrawingSelector = ...) -> DrawingSelectors: ...
 
 @typing.final
 class EdgeSpec:
@@ -616,7 +615,7 @@ class GraphStyleOptions:
     Options applied by `linnest.graph.style` before layout measurement.
     """
     def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, scope: _Dictionary = ..., unit: _LengthValue = ..., node_label: _AutoOptionalContent = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., edge_label: _OptionalContent = ..., edge_label_style: _Style = ..., node_selector: _NodeSelector = ..., edge_selector: _EdgeSelector = ..., source_selector: _HalfEdgeSelector = ..., sink_selector: _HalfEdgeSelector = ...) -> GraphStyleOptions: ...
+    def __new__(cls, *, scope: _Dictionary = ..., unit: _LengthValue = ..., node_label: _AutoOptionalContent = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., edge_label: _OptionalContent = ..., edge_label_style: _Style = ...) -> GraphStyleOptions: ...
 
 @typing.final
 class HalfEdgeSpec:
@@ -745,14 +744,6 @@ class OrientedCut:
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
-class PhysicsOptions:
-    r"""
-    Physics line decoration and label options.
-    """
-    def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, map: _Dictionary = ..., default: _Dictionary = ..., typst_fields: _TypstFieldsValue = ..., scope: _Dictionary = ..., orientation_split: _Boolean = ..., momentum_arrows: _Boolean = ..., momentum_arrow_offset: _Number = ..., momentum_arrow_length: _Number = ..., momentum_arrow_ratio: _Number = ..., momentum_arrow_stroke: _OptionalStrokeValue = ..., momentum_arrow_mark: _MomentumMark = ..., show_momentum: _Boolean = ..., show_node_index: _Boolean = ..., show_edge_index: _Boolean = ..., show_half_edge_index: _Boolean = ..., show_particle: _Boolean = ..., momentum_fields: _OptionalFieldNames = ..., edge_index_fields: _OptionalFieldNames = ..., momentum_prefix: _OptionalStaticContent = ..., edge_index_prefix: _OptionalStaticContent = ..., half_edge_index_prefix: _OptionalStaticContent = ..., particle_prefix: _OptionalStaticContent = ..., label_separator: _StaticContent = ..., label_size: _LengthValue = ..., label_fill: _Paint = ...) -> PhysicsOptions: ...
-
-@typing.final
 class Edge:
     r"""
     A live edge view whose data and drawing metadata update its graph.
@@ -784,18 +775,6 @@ class EdgeDrawing:
     def label(self) -> _OptionalStaticContent: ...
     @label.setter
     def label(self, value: _OptionalStaticContent) -> None: ...
-    @property
-    def particle(self) -> _DrawingString: ...
-    @particle.setter
-    def particle(self, value: _DrawingString) -> None: ...
-    @property
-    def momentum(self) -> _DrawingScalar: ...
-    @momentum.setter
-    def momentum(self, value: _DrawingScalar) -> None: ...
-    @property
-    def cut_id(self) -> _DrawingScalar: ...
-    @cut_id.setter
-    def cut_id(self, value: _DrawingScalar) -> None: ...
     @property
     def placement(self) -> _PlacementValue: ...
     @placement.setter
@@ -837,10 +816,6 @@ class EdgeDrawing:
     @label_style.setter
     def label_style(self, value: _OptionalStyle) -> None: ...
     @property
-    def momentum_style(self) -> _OptionalStyleLayers: ...
-    @momentum_style.setter
-    def momentum_style(self, value: _OptionalStyleLayers) -> None: ...
-    @property
     def decoration(self) -> _DrawingDecoration: ...
     @decoration.setter
     def decoration(self, value: _DrawingDecoration) -> None: ...
@@ -849,7 +824,7 @@ class EdgeDrawing:
     @extensions.setter
     def extensions(self, value: builtins.dict[builtins.str, _NativeValue]) -> None: ...
     def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, label: _OptionalStaticContent = ..., particle: _DrawingString = ..., momentum: _DrawingScalar = ..., cut_id: _DrawingScalar = ..., placement: _PlacementValue = ..., label_position: _DrawingPoint = ..., label_offset: _OptionalNumber = ..., label_angle: _DrawingAngle = ..., bend: _DrawingAngle = ..., routing: _RoutingValue = ..., minimum_length: _OptionalInteger = ..., same_rank: _OptionalBoolean = ..., style: _OptionalStyleLayers = ..., label_style: _OptionalStyle = ..., momentum_style: _OptionalStyleLayers = ..., decoration: _DrawingDecoration = ..., extensions: _NativeDict = ...) -> EdgeDrawing: ...
+    def __new__(cls, *, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., label_position: _DrawingPoint = ..., label_offset: _OptionalNumber = ..., label_angle: _DrawingAngle = ..., bend: _DrawingAngle = ..., routing: _RoutingValue = ..., minimum_length: _OptionalInteger = ..., same_rank: _OptionalBoolean = ..., style: _OptionalStyleLayers = ..., label_style: _OptionalStyle = ..., decoration: _DrawingDecoration = ..., extensions: _NativeDict = ...) -> EdgeDrawing: ...
 
 @typing.final
 class EdgeValue:
@@ -1054,10 +1029,6 @@ class RenderConfig:
     @title.setter
     def title(self, value: _AutoOptionalStaticContent) -> None: ...
     @property
-    def mode(self) -> _RenderModeValue: ...
-    @mode.setter
-    def mode(self, value: _RenderModeValue) -> None: ...
-    @property
     def style(self) -> _RenderStyle: ...
     @style.setter
     def style(self, value: _RenderStyle) -> None: ...
@@ -1070,12 +1041,16 @@ class RenderConfig:
     @drawing.setter
     def drawing(self, value: _RenderDrawing) -> None: ...
     @property
-    def physics(self) -> _RenderPhysics: ...
-    @physics.setter
-    def physics(self, value: _RenderPhysics) -> None: ...
+    def selectors(self) -> _RenderSelectors: ...
+    @selectors.setter
+    def selectors(self, value: _RenderSelectors) -> None: ...
+    @property
+    def template_options(self) -> _TemplateOptions: ...
+    @template_options.setter
+    def template_options(self, value: _TemplateOptions) -> None: ...
     def overlay(self, overlay: RenderConfig) -> RenderConfig: ...
     def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, template: _TemplatePath = ..., typst_executable: _ExecutablePath = ..., title: _AutoOptionalStaticContent = ..., mode: _RenderModeValue = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., physics: _RenderPhysics = ...) -> RenderConfig: ...
+    def __new__(cls, *, template: _TemplatePath = ..., typst_executable: _ExecutablePath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderConfig: ...
 
 @typing.final
 class Stroke:
@@ -1393,7 +1368,7 @@ class MarkPosition(enum.Enum):
 @typing.final
 class MarkSymbol(enum.Enum):
     r"""
-    Built-in mark symbol used by Linnest physics styles.
+    Built-in arrowhead symbol used by CeTZ edge marks.
     """
     Barbed = ...
     Straight = ...
@@ -1427,16 +1402,6 @@ class RankAlignment(enum.Enum):
     Left = ...
     End = ...
     Right = ...
-
-@typing.final
-class RenderMode(enum.Enum):
-    r"""
-    Renderer mode used by the Clinnet V1 template.
-    """
-    Auto = ...
-    Generic = ...
-    Amplitude = ...
-    CrossSection = ...
 
 @typing.final
 class RoutePoints(enum.Enum):
@@ -1483,19 +1448,12 @@ class TextStyle(enum.Enum):
     Italic = ...
     Oblique = ...
 
-@typing.final
-class TypstFields(enum.Enum):
-    r"""
-    Safe literal interpretation of Typst-valued graph fields.
-    """
-    Plain = ...
-
 def build(*items: _GraphItem, name: _OptionalString = None, global_data: _OptionalGlobalData = None, codec: _OptionalDotCodec = None, render_config: _OptionalRenderConfig = None, node_store: NodeStore = NodeStore.Vec) -> Graph:
     r"""
     Build a graph from declarative node and edge specs.
     """
 
-def edge(first: HalfEdgeSpec, name: _OptionalString = None, second: _OptionalHalfEdgeSpec = None, *, data: typing.Any = None, orientation: Orientation = Orientation.Default, label: _OptionalStaticContent = ..., particle: _DrawingString = ..., momentum: _DrawingScalar = ..., cut_id: _DrawingScalar = ..., placement: _PlacementValue = ..., label_position: _DrawingPoint = ..., label_offset: _OptionalNumber = ..., label_angle: _DrawingAngle = ..., bend: _DrawingAngle = ..., routing: _RoutingValue = ..., minimum_length: _OptionalInteger = ..., same_rank: _OptionalBoolean = ..., style: _OptionalStyleLayers = ..., label_style: _OptionalStyle = ..., momentum_style: _OptionalStyleLayers = ..., decoration: _DrawingDecoration = ..., extensions: _NativeDict = ...) -> EdgeSpec:
+def edge(first: HalfEdgeSpec, name: _OptionalString = None, second: _OptionalHalfEdgeSpec = None, *, data: typing.Any = None, orientation: Orientation = Orientation.Default, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., label_position: _DrawingPoint = ..., label_offset: _OptionalNumber = ..., label_angle: _DrawingAngle = ..., bend: _DrawingAngle = ..., routing: _RoutingValue = ..., minimum_length: _OptionalInteger = ..., same_rank: _OptionalBoolean = ..., style: _OptionalStyleLayers = ..., label_style: _OptionalStyle = ..., decoration: _DrawingDecoration = ..., extensions: _NativeDict = ...) -> EdgeSpec:
     r"""
     Describe an edge from one or two endpoint specs.
     """

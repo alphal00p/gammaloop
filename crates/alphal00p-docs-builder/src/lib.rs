@@ -1143,7 +1143,9 @@ impl SiteBuilder {
             "docs/assets/typst/marks/local-unitarity.typ",
             "docs/assets/typst/marks/gammaloop.typ",
             "docs/assets/typst/marks/spenso.typ",
+            "assets/embedded/drawing/templates/impl/physics-edge-style.typ",
             "assets/embedded/drawing/templates/layout-core.typ",
+            "assets/embedded/drawing/templates/physics-edge-style.typ",
             "docs/assets/typst/portal-graphs/figure.typ",
             "docs/assets/typst/portal-graphs/layout.typ",
             "docs/assets/typst/portal-graphs/edge-style.typ",
@@ -2737,7 +2739,7 @@ impl SiteBuilder {
             .iter()
             .any(|page| page.route == "reference/typst/");
         if has_typst {
-            cards.push_str("<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Typst-native reference</p><h2><a href=\"reference/typst/\">Typst API</a></h2><p>Package exports grouped by graph construction, layout, drawing, physics, and subgraph operations.</p></article>");
+            cards.push_str("<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Typst-native reference</p><h2><a href=\"reference/typst/\">Typst API</a></h2><p>Package exports grouped by graph construction, layout, drawing, domain templates, and subgraph operations.</p></article>");
         }
         if let Some((route, title)) = supplemental_reference(&product.id) {
             cards.push_str(&format!(
@@ -2956,7 +2958,6 @@ impl SiteBuilder {
         if let Some((reference_heading, reference_scope)) = match page.route.as_str() {
             "reference/typst/graph/" => Some(("graph", Some("graph"))),
             "reference/typst/layout/" | "reference/typst/drawing/" => Some(("reference", None)),
-            "reference/typst/physics/" => Some(("physics", Some("physics"))),
             "reference/typst/subgraph/" => Some(("subgraph", Some("subgraph"))),
             _ => None,
         } {
@@ -5857,8 +5858,7 @@ fn append_rendered_page_search(
         .strip_prefix("reference/typst/")
         .map(|route| route.trim_matches('/'))
         .filter(|route| !route.is_empty() && !route.contains('/'));
-    let module_scope =
-        typst_scope.filter(|scope| matches!(*scope, "graph" | "physics" | "subgraph"));
+    let module_scope = typst_scope.filter(|scope| matches!(*scope, "graph" | "subgraph"));
     let mut in_generated_reference = false;
     for heading in headings {
         if heading.level == 2 && module_scope == Some(heading.title.as_str()) {
@@ -12224,6 +12224,12 @@ mod tests {
                 .join("docs/assets/typst/portal-graphs/layout.typ"),
         )
         .unwrap();
+        let portal_edge_style = fs::read_to_string(
+            builder
+                .root
+                .join("docs/assets/typst/portal-graphs/edge-style.typ"),
+        )
+        .unwrap();
         for structural_contract in [
             "#let edge-label-style(edge)",
             "#let autogen-external-edge-fields(",
@@ -12242,8 +12248,15 @@ mod tests {
             );
         }
         assert!(canonical_layout.contains("#import \"layout-core.typ\": bind-layout"));
+        assert!(canonical_layout.contains("#import \"physics-edge-style.typ\" as physics"));
         assert!(portal_layout.contains(
             "#import \"../../../../assets/embedded/drawing/templates/layout-core.typ\": ("
+        ));
+        assert!(portal_layout.contains(
+            "#import \"../../../../assets/embedded/drawing/templates/physics-edge-style.typ\" as physics"
+        ));
+        assert!(portal_edge_style.contains(
+            "#import \"../../../../assets/embedded/drawing/templates/physics-edge-style.typ\": ("
         ));
         assert!(portal_layout.contains("cetz.draw.bezier("));
         for (name, adapter) in [

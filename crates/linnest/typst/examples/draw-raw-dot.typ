@@ -1,59 +1,22 @@
-#import "../src/lib.typ": draw, graph, layout, physics, subgraph
+#import "../src/lib.typ": draw, graph, layout
 #import graph: *
-#import physics: *
 
 
-#let fermion = (
-  source: source-stroke(c: blue, thickness: massless),
-  sink: sink-stroke(c: blue, thickness: massless),
-  fermion-arrow: true,
+#let source-style(edge) = (
+  stroke: (
+    paint: if edge.ext { rgb("#596579") } else { rgb("#315f9f") },
+    thickness: if edge.ext { 0.7pt } else { 0.9pt },
+    cap: "round",
+  ),
 )
-
-#let massive-fermion = (
-  source: source-stroke(c: blue, thickness: massive),
-  sink: sink-stroke(c: blue, thickness: massive),
-  fermion-arrow: true,
+#let sink-style(edge) = (
+  stroke: (
+    paint: if edge.ext { rgb("#7a879b") } else { rgb("#79a0d0") },
+    thickness: if edge.ext { 0.7pt } else { 0.9pt },
+    cap: "round",
+  ),
 )
-
-#let scalar = (
-  source: source-stroke(c: black, thickness: massive, dash: dashed),
-  sink: sink-stroke(c: black, thickness: massive, dash: dashed),
-)
-
-#let gluon = (
-  source: source-stroke(c: black, thickness: massless) + coil,
-  sink: sink-stroke(c: black, thickness: massless) + coil,
-  label: mi(`{g}`),
-)
-
-#let photon = (
-  source: source-stroke(c: black, thickness: massless) + wave,
-  sink: sink-stroke(c: black, thickness: massless) + wave,
-)
-
-
-#let map = (
-  "a": photon + (label: [$gamma$]),
-  "mu+": fermion + (label: [$mu^+$]),
-  "mu-": fermion + (label: [$mu^-$]),
-  "e+": fermion + (label: [$e^+$]),
-  "e-": fermion + (label: [$e^-$]),
-  "q": fermion + (label: [q]),
-  "d": fermion + (label: [d]),
-  "t": massive-fermion + (label: [$t$]),
-  "photon": photon,
-  "g": gluon,
-  "gluon": gluon,
-  "fermion": fermion + (label: [$f$]),
-  "scalar": scalar + (label: [$s$]),
-  "ghG": scalar + (label: [$s$]),
-)
-#let (source-style, sink-style, edge-label, ..callbacks) = physics.style(
-  map: map,
-  momentum-arrows: false,
-  show-particle: false,
-  show-edge-index: false,
-)
+#let edge-label(edge) = [link #edge.eid]
 #let edge-label-style(edge) = {
   let raw-edge = edge.at("edge", default: (:))
   let statements = raw-edge.at("statements", default: (:))
@@ -63,16 +26,6 @@
   } else {
     (:)
   }
-}
-
-#let _particle-label(edge, edge-style-map) = {
-  let scope = edge.fields + (edge: edge.edge)
-  let label-value = physics.edge-entry(scope, map: edge-style-map, default: (label: none)).at("label", default: none)
-  let particle-label = physics.label-content(label-value, scope, map: edge-style-map, scope: scope)
-  if particle-label == none {
-    return none
-  }
-  particle-label + [$(p_#edge.edge)$]
 }
 
 #let _rank(ids, id) = {
@@ -92,7 +45,7 @@
   ((ids.len() - 1) / 2 - rank) * y-scale
 }
 
-#let autogen-external-edge-fields(g, edge-style-map: map, y-scale: 10) = {
+#let autogen-boundary-edge-fields(g, y-scale: 10) = {
   let left = ()
   let right = ()
   for edge in graph.edges(g) {
@@ -126,19 +79,26 @@
       pos: graph.pos(x: x, y: graph.start(_centered-y(ids, edge.edge, y-scale))),
       "label-anchor": anchor,
     )
-    let label = _particle-label(edge, edge-style-map)
-    if label != none {
-      patch.insert("label", label)
-    }
     patch
   })
 }
 
 #let draw_dot(doc) = {
   show raw: it => if it.at("lang") == "dot" {
-    for g in parse(it.text, eval-edge-fields: "label") {
-      let g = autogen-external-edge-fields(g)
-      let layed-out = layout(
+    for g in parse(it.text) {
+      let g = autogen-boundary-edge-fields(g)
+      let g = graph.style(
+        g,
+        node-label: node => [item #node.vid],
+        node-label-style: (padding: 0.12),
+        node-style: (
+          fill: rgb("#f3f6fa"),
+          stroke: rgb("#34445c") + 0.8pt,
+        ),
+        edge-label: edge-label,
+        edge-label-style: edge-label-style,
+      )
+      let laid-out = layout(
         g,
         layout-algo: "force",
         epochs: 30,
@@ -156,16 +116,13 @@
 
       (
         [#align(center, info(g).name)
-          #edges
+          #edges(g).len() links
 
         ]
           + draw(
-            layed-out,
+            laid-out,
             source-style: source-style,
             sink-style: sink-style,
-            edge-label: edge-label,
-            edge-label-style: edge-label-style,
-            subgraph: subgraph.compass(layed-out, "s"),
           )
       )
     }

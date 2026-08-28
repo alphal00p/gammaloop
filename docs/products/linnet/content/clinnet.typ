@@ -54,17 +54,18 @@ linnet --build-dir build draw graphs \
   --grid-template templates/grid.typ \
   --style templates/colors.typ \
   --input steps=250 \
-  --input momentum-arrows=true \
-  --input show-edge-index=true \
+  --input theme=dark \
+  --input accent=teal \
   --input columns=4 \
   --output-path build/review.pdf
 ```
 
-Clinnet parses recognized values before constructing the native Typst configuration. Figure
-overrides cover layout `steps`/`seed`, amplitude and cross-section mode selection, momentum-arrow
-appearance, and particle or node/edge/half-edge index labels. Grid overrides cover its rows,
-columns, page geometry, alignment, labels, and page numbers. Only recognized keys enter the
-configuration; they are not published as `sys.inputs`.
+Clinnet parses values before constructing the native Typst configuration. Figure `steps` and
+`seed` become generic layout options; every other accepted figure input is staged as typed
+`config.options` for the selected template to interpret. In the example, `theme` and `accent`
+are application-defined settings rather than Clinnet modes. Grid overrides cover its rows,
+columns, page geometry, alignment, labels, and page numbers. Inputs are never published as
+`sys.inputs`.
 
 Each figure render stages the DOT topology and an ephemeral entrypoint. That entrypoint imports
 the selected template, constructs `config`, adds `data-path`, and calls the mandatory
@@ -94,7 +95,8 @@ drawing rather than copying its wrapper surface into a Clinnet template guide.
   bundle under `drawings/templates/`, including its generated `edge-style.typ`. Select that
   bundle's `figure.typ` when particle colors and decorations, momentum annotations, amplitude
   ordering, or cut-matched cross-section labels are required. Both templates implement the same
-  `render(config)` contract.
+  `render(config)` contract, while only GammaLoop's template assigns meaning to its domain
+  options.
 ])
 
 `--style` records an imported file as a cache dependency; it does not inject or execute that file.

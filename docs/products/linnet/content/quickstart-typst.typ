@@ -3,9 +3,9 @@
 #let quickstart-typst = [
 = Using Linnet from Typst
 
-Linnest brings Linnet's graph model, layout algorithms, and physics-aware drawing styles into
-Typst through a bundled WebAssembly plugin. This first document draws two nodes joined by one
-internal edge.
+Linnest brings Linnet's graph model, layout algorithms, and generic drawing styles into Typst
+through a bundled WebAssembly plugin. This first document draws two nodes joined by one internal
+edge.
 
 #callout("Bundled source package", [
   Linnest `0.1.0` is not currently published on Typst Universe. Keep the repository's complete
@@ -47,5 +47,5 @@ are separate stages: keep the graph value when you need queries or subgraphs bef
 
 Continue with the #link("guides/linnest/")[Linnest guide] for DOT parsing, explicit styling, and
 subgraph drawing, then use the #link("reference/typst/")[Typst API reference] for graph, layout,
-drawing, physics, and subgraph functions.
+drawing, subgraph, and application-template composition.
 ]
