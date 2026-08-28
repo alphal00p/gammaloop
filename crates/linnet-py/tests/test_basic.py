@@ -40,9 +40,7 @@ def replace_linnest_native(dot, statement, value):
         "value": value,
     }
     replacement = json.dumps(envelope, separators=(",", ":")).encode().hex()
-    match = re.search(
-        rf"{re.escape(statement)}\s*=\s*\"?([0-9a-fA-F]+)\"?", dot
-    )
+    match = re.search(rf"{re.escape(statement)}\s*=\s*\"?([0-9a-fA-F]+)\"?", dot)
     if match is None:
         raise AssertionError(f"missing Linnest native statement {statement!r}")
     return dot[: match.start(1)] + replacement + dot[match.end(1) :]
@@ -98,9 +96,7 @@ def sample_graph(*, codec=None, render_config=None, node_store=lp.NodeStore.Vec)
 
 
 def topology_graph(*, node_store=lp.NodeStore.Vec):
-    node_data = {
-        name: UserNodePayload(name) for name in ("a", "b", "c", "d", "e", "f")
-    }
+    node_data = {name: UserNodePayload(name) for name in ("a", "b", "c", "d", "e", "f")}
     edge_data = {
         name: UserEdgePayload(f"coupling-{name}")
         for name in ("ab", "bc", "ca", "cd", "ef")
@@ -329,9 +325,7 @@ class TestGraphModel(unittest.TestCase):
         graph.edge("propagator").drawing.extensions = {"template-field": [1, 2]}
         self.assertIs(graph.node(0).data, replacement)
         self.assertEqual(graph.node(0).drawing.label.text, "incoming")
-        self.assertEqual(
-            graph.edge(0).drawing.extensions["template-field"], (1, 2)
-        )
+        self.assertEqual(graph.edge(0).drawing.extensions["template-field"], (1, 2))
 
         edge = graph.edge(0)
         self.assertEqual(edge.orientation, lp.Orientation.Default)
@@ -380,14 +374,18 @@ class TestGraphModel(unittest.TestCase):
         seen = []
 
         mapped = graph.map(
-            node=lambda value: seen.append(("node", value.name))
-            or {"mapped": value.data},
-            edge=lambda value: seen.append(("edge", value.name))
-            or {"mapped": value.data},
-            source=lambda value: seen.append(("source", value.edge.name))
-            or {"mapped": value.data},
-            sink=lambda value: seen.append(("sink", value.edge.name))
-            or {"mapped": value.data},
+            node=lambda value: (
+                seen.append(("node", value.name)) or {"mapped": value.data}
+            ),
+            edge=lambda value: (
+                seen.append(("edge", value.name)) or {"mapped": value.data}
+            ),
+            source=lambda value: (
+                seen.append(("source", value.edge.name)) or {"mapped": value.data}
+            ),
+            sink=lambda value: (
+                seen.append(("sink", value.edge.name)) or {"mapped": value.data}
+            ),
         )
 
         self.assertEqual(
@@ -583,6 +581,24 @@ class TestGraphModel(unittest.TestCase):
             payload.view = graph.node(0)
             return weakref.ref(payload)
 
+        def endpoint_spec_cycle():
+            payload = Payload()
+            graph = lp.build(lp.node("endpoint", data=payload))
+            payload.spec = lp.edge(lp.source(graph.node("endpoint")), "external")
+            return weakref.ref(payload)
+
+        def cut_partition_cycle():
+            payload = Payload()
+            source = lp.node("source", data=payload)
+            target = lp.node("target")
+            graph = lp.build(
+                source,
+                target,
+                lp.edge(lp.source(source), "edge", lp.sink(target)),
+            )
+            payload.partition = graph.all_cuts(["source"], ["target"])[0]
+            return weakref.ref(payload)
+
         class Callback:
             def __call__(self, _value):
                 raise AssertionError("cycle callbacks are never executed")
@@ -602,9 +618,7 @@ class TestGraphModel(unittest.TestCase):
 
         def selector_cycle():
             callback = Callback()
-            config = lp.RenderConfig(
-                style=lp.GraphStyleOptions(node_selector=callback)
-            )
+            config = lp.RenderConfig(style=lp.GraphStyleOptions(node_selector=callback))
             callback.config = config
             return weakref.ref(callback)
 
@@ -612,6 +626,8 @@ class TestGraphModel(unittest.TestCase):
             graph_cycle(),
             spec_cycle(),
             view_cycle(),
+            endpoint_spec_cycle(),
+            cut_partition_cycle(),
             codec_cycle(),
             selector_cycle(),
         ]
@@ -682,9 +698,7 @@ class TestNodeStores(unittest.TestCase):
         self.assertEqual(round_trip.node("left").drawing.label, "converted node")
 
     def test_derived_graphs_preserve_the_backend(self):
-        graph, node_data, edge_data, _ = topology_graph(
-            node_store=lp.NodeStore.Forest
-        )
+        graph, node_data, edge_data, _ = topology_graph(node_store=lp.NodeStore.Forest)
 
         mapped = graph.map()
         fragment = graph.concretize(graph.subgraph(edges=["ef"]))
@@ -696,9 +710,7 @@ class TestNodeStores(unittest.TestCase):
         extracted_from, _, extracted_edge_data, _ = topology_graph(
             node_store=lp.NodeStore.Forest
         )
-        extracted = extracted_from.extract(
-            extracted_from.subgraph(edges=["ef"])
-        )
+        extracted = extracted_from.extract(extracted_from.subgraph(edges=["ef"]))
         self.assertEqual(extracted_from.node_store, lp.NodeStore.Forest)
         self.assertEqual(extracted.node_store, lp.NodeStore.Forest)
         self.assertIs(extracted.edge("ef").data, extracted_edge_data["ef"])
@@ -856,6 +868,164 @@ class TestNodeStores(unittest.TestCase):
 
 
 class TestHedgeGraphTopology(unittest.TestCase):
+    def test_incremental_node_and_edge_insertion_is_transactional(self):
+        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
+            with self.subTest(node_store=node_store):
+                graph = lp.Graph(node_store=node_store)
+                a_data = UserNodePayload("a")
+                b_data = UserNodePayload("b")
+                a_spec = lp.node("a", data=a_data, label="node a")
+                b_spec = lp.node("b", data=b_data)
+                first = graph.add_node(a_spec)
+                self.assertIs(first.data, a_data)
+
+                second = graph.add_node(b_spec)
+                self.assertIs(second.data, b_data)
+                with self.assertRaises(ReferenceError):
+                    _ = first.data
+
+                source_data = UserHalfEdgePayload("source")
+                sink_data = UserHalfEdgePayload("sink")
+                edge_data = UserEdgePayload("ab")
+                edge_spec = lp.edge(
+                    lp.source(a_spec, data=source_data, compass=lp.Compass.E),
+                    "ab",
+                    lp.sink(graph.node("b"), data=sink_data),
+                    data=edge_data,
+                    particle="electron",
+                )
+                inserted = graph.add_edge(edge_spec)
+                self.assertIs(inserted.data, edge_data)
+                self.assertIs(inserted.source.data, source_data)
+                self.assertIs(inserted.sink.data, sink_data)
+                self.assertEqual(inserted.drawing.particle, "electron")
+                self.assertEqual(inserted.source.node.name, "a")
+                self.assertEqual(inserted.sink.node.name, "b")
+
+                dangling_data = UserEdgePayload("external")
+                dangling = graph.add_edge(
+                    lp.edge(
+                        lp.source("b"),
+                        "external",
+                        data=dangling_data,
+                        particle="photon",
+                    )
+                )
+                self.assertIs(dangling.data, dangling_data)
+                self.assertIsNotNone(dangling.source)
+                self.assertIsNone(dangling.sink)
+
+                a_spec.drawing.label = "changed spec"
+                edge_spec.drawing.particle = "changed spec"
+                self.assertEqual(graph.node("a").drawing.label, "node a")
+                self.assertEqual(graph.edge("ab").drawing.particle, "electron")
+
+                live = graph.node("a")
+                with self.assertRaisesRegex(ValueError, "duplicate node name"):
+                    graph.add_node(lp.node("a"))
+                self.assertIs(live.data, a_data)
+
+                foreign = lp.Graph(node_store=node_store)
+                foreign.add_node(lp.node("foreign"))
+                with self.assertRaisesRegex(ValueError, "different graph revision"):
+                    graph.add_edge(
+                        lp.edge(
+                            lp.source(foreign.node("foreign")),
+                            "foreign-edge",
+                        )
+                    )
+                self.assertIs(live.data, a_data)
+
+                stale = graph.node("a")
+                graph.add_node(lp.node("c"))
+                current = graph.node("a")
+                with self.assertRaises(ReferenceError):
+                    graph.add_edge(lp.edge(lp.source(stale), "stale-edge"))
+                self.assertIs(current.data, a_data)
+
+    def test_build_resolves_declared_endpoint_target_forms(self):
+        key_graph = lp.Graph()
+        key_graph.add_node(lp.node("b"))
+        live_b = key_graph.node("b")
+        a = lp.node("a")
+        b = lp.node("b")
+        graph = lp.build(
+            a,
+            b,
+            lp.edge(lp.source("a"), "by-key", lp.sink(1)),
+            lp.edge(lp.source(live_b), "by-live-node"),
+        )
+        self.assertEqual(graph.edge("by-key").source.node.name, "a")
+        self.assertEqual(graph.edge("by-key").sink.node.name, "b")
+        self.assertEqual(graph.edge("by-live-node").source.node.name, "b")
+
+    def test_incremental_split_and_connect_preserve_endpoint_values(self):
+        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
+            with self.subTest(node_store=node_store):
+                graph = lp.Graph(node_store=node_store)
+                graph.add_node(lp.node("a"))
+                graph.add_node(lp.node("b"))
+                source_data = UserHalfEdgePayload("source")
+                sink_data = UserHalfEdgePayload("sink")
+                original_data = UserEdgePayload("original")
+                graph.add_edge(
+                    lp.edge(
+                        lp.source("a", data=source_data),
+                        "ab",
+                        lp.sink("b", data=sink_data),
+                        data=original_data,
+                    )
+                )
+
+                original = graph.edge("ab")
+                selected, opposite = graph.split_edge(
+                    original.source,
+                    lp.EdgeValue(
+                        data=UserEdgePayload("split"),
+                        drawing=lp.EdgeDrawing(particle="split-particle"),
+                    ),
+                    name="a-external",
+                )
+                self.assertEqual((graph.n_edges, graph.n_half_edges), (2, 2))
+                self.assertEqual(selected.name, "a-external")
+                self.assertEqual(opposite.name, "ab")
+                self.assertEqual(selected.drawing.particle, "split-particle")
+                self.assertIs(selected.source.data, source_data)
+                self.assertIs(opposite.sink.data, sink_data)
+                self.assertIs(opposite.data, original_data)
+                with self.assertRaises(ReferenceError):
+                    _ = original.data
+
+                joined_data = UserEdgePayload("joined")
+                selected_view = selected
+                joined = graph.connect(
+                    selected.source,
+                    opposite.sink,
+                    lp.EdgeValue(
+                        data=joined_data,
+                        drawing=lp.EdgeDrawing(particle="joined-particle"),
+                    ),
+                    name="joined",
+                )
+                self.assertEqual((graph.n_edges, graph.n_half_edges), (1, 2))
+                self.assertIs(joined.data, joined_data)
+                self.assertEqual(joined.drawing.particle, "joined-particle")
+                self.assertEqual(joined.source.node.name, "a")
+                self.assertEqual(joined.sink.node.name, "b")
+                self.assertIs(joined.source.data, source_data)
+                self.assertIs(joined.sink.data, sink_data)
+                with self.assertRaises(ReferenceError):
+                    _ = selected_view.data
+
+                live = graph.edge("joined")
+                with self.assertRaisesRegex(ValueError, "two dangling"):
+                    graph.connect(
+                        live.source,
+                        live.sink,
+                        lp.EdgeValue(data=UserEdgePayload("invalid")),
+                    )
+                self.assertIs(live.data, joined_data)
+
     def test_subgraph_views_and_set_algebra_use_half_edge_indices(self):
         graph, _, _, _ = topology_graph()
         full = graph.full_subgraph()
@@ -908,8 +1078,9 @@ class TestHedgeGraphTopology(unittest.TestCase):
         selected = graph.filter(
             node=lambda node: seen["node"].append(node.name) or node.name == "a",
             edge=lambda edge: seen["edge"].append(edge.name) or edge.name == "ef",
-            half_edge=lambda half_edge: seen["half_edge"].append(half_edge.index)
-            or half_edge.node.name == "d",
+            half_edge=lambda half_edge: (
+                seen["half_edge"].append(half_edge.index) or half_edge.node.name == "d"
+            ),
         )
         self.assertEqual(len(seen["node"]), graph.n_nodes)
         self.assertEqual(len(seen["edge"]), graph.n_edges)
@@ -956,9 +1127,7 @@ class TestHedgeGraphTopology(unittest.TestCase):
             {frozenset({"ab", "bc", "ca", "cd"}), frozenset({"ef"})},
         )
         self.assertFalse(graph.is_connected())
-        self.assertTrue(
-            graph.is_connected(graph.subgraph(edges=["ab", "bc", "ca"]))
-        )
+        self.assertTrue(graph.is_connected(graph.subgraph(edges=["ab", "bc", "ca"])))
 
         bridges = graph.bridges()
         self.assertEqual(
@@ -982,11 +1151,26 @@ class TestHedgeGraphTopology(unittest.TestCase):
 
         cuts = graph.all_cuts(["a"], ["d"])
         self.assertTrue(cuts)
-        for left, cut, right in cuts:
+        self.assertTrue(all(isinstance(cut, lp.CutPartition) for cut in cuts))
+        ordering = []
+        for partition in cuts:
+            cut = partition.boundary
             self.assertIsInstance(cut, lp.OrientedCut)
             self.assertEqual(cut.left, cut.side(True))
             self.assertEqual(cut.right, cut.side(False))
-            self.assertTrue(left.is_disjoint(right))
+            self.assertTrue(partition.source_side.is_disjoint(partition.target_side))
+            self.assertEqual(
+                {edge.index for edge in partition.edges},
+                {edge.index for edge in graph.edges_of(cut.left)},
+            )
+            ordering.append(
+                (
+                    partition.source_side.half_edge_indices(),
+                    cut.left.half_edge_indices(),
+                    partition.target_side.half_edge_indices(),
+                )
+            )
+        self.assertEqual(ordering, sorted(ordering))
 
         with self.assertRaisesRegex(ValueError, "must be disjoint"):
             graph.all_cuts(["a"], ["a"])
@@ -994,8 +1178,13 @@ class TestHedgeGraphTopology(unittest.TestCase):
             graph.all_cuts(["a", "b", "c", "d"], ["e"])
 
         isolated = lp.build(lp.node("isolated-source"), lp.node("isolated-target"))
-        with self.assertRaisesRegex(ValueError, "boundary half-edge"):
+        with self.assertRaisesRegex(ValueError, "incident half-edge"):
             isolated.all_cuts(["isolated-source"], ["isolated-target"])
+
+        mixed, _, _, _ = topology_graph()
+        mixed.add_node(lp.node("isolated"))
+        with self.assertRaisesRegex(ValueError, "every source and target node"):
+            mixed.all_cuts(["a", "isolated"], ["d"])
 
         for traverse in (graph.depth_first_traverse, graph.breadth_first_traverse):
             tree = traverse("a")
@@ -1006,6 +1195,117 @@ class TestHedgeGraphTopology(unittest.TestCase):
                 {"a", "b", "c", "d"},
             )
             self.assertEqual(len(tree.half_edges), 6)
+
+    def test_cut_partitions_match_native_square_regression(self):
+        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
+            with self.subTest(node_store=node_store):
+                nodes = {name: lp.node(name) for name in ("a", "b", "c", "d")}
+
+                def connection(source, sink, name):
+                    return lp.edge(
+                        lp.source(nodes[source]),
+                        name,
+                        lp.sink(nodes[sink]),
+                    )
+
+                graph = lp.build(
+                    *nodes.values(),
+                    connection("a", "b", "ab"),
+                    connection("b", "c", "bc"),
+                    connection("c", "d", "cd"),
+                    connection("d", "a", "da"),
+                    connection("b", "d", "bd"),
+                    node_store=node_store,
+                )
+                partitions = graph.all_cuts(["a"], ["c"])
+                self.assertEqual(len(partitions), 4)
+                for partition in partitions:
+                    self.assertTrue(
+                        partition.source_side.includes_node(graph.node("a").index)
+                    )
+                    self.assertTrue(
+                        partition.target_side.includes_node(graph.node("c").index)
+                    )
+                    self.assertEqual(
+                        partition.source_side | partition.target_side,
+                        graph.full_subgraph(),
+                    )
+                    right = set(partition.boundary.right.half_edge_indices())
+                    for half_edge in partition.boundary.left.to_half_edges():
+                        self.assertIn(half_edge.pair.index, right)
+
+                partition = partitions[0]
+                boundary = partition.boundary
+                graph.reverse_edge("ab")
+                with self.assertRaises(ReferenceError):
+                    _ = partition.source_side
+                with self.assertRaises(ReferenceError):
+                    _ = boundary.left
+
+    def test_bond_enumeration_uses_native_size_bounds(self):
+        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
+            with self.subTest(node_store=node_store):
+                names = ("0", "1", "2", "3", "a", "b", "c")
+                nodes = {name: lp.node(name) for name in names}
+
+                def connection(source, sink, index):
+                    return lp.edge(
+                        lp.source(nodes[source]),
+                        f"e{index}",
+                        lp.sink(nodes[sink]),
+                    )
+
+                graph = lp.build(
+                    *nodes.values(),
+                    connection("0", "1", 0),
+                    connection("1", "2", 1),
+                    connection("0", "3", 2),
+                    connection("2", "a", 3),
+                    connection("a", "b", 4),
+                    connection("b", "c", 5),
+                    connection("c", "3", 6),
+                    connection("3", "0", 7),
+                    connection("2", "1", 8),
+                    node_store=node_store,
+                )
+                bonds = graph.all_bonds(min_size=2, max_size=2)
+                self.assertEqual(len(bonds), 10)
+                self.assertTrue(all(bond.n_half_edges == 2 for bond in bonds))
+                self.assertEqual(
+                    [bond.half_edge_indices() for bond in bonds],
+                    sorted(bond.half_edge_indices() for bond in bonds),
+                )
+                with self.assertRaisesRegex(ValueError, "min_size"):
+                    graph.all_bonds(min_size=3, max_size=2)
+
+    def test_bond_defaults_restriction_and_live_revision(self):
+        for node_store in (lp.NodeStore.Vec, lp.NodeStore.Forest):
+            with self.subTest(node_store=node_store):
+                nodes = {name: lp.node(name) for name in ("a", "b", "c", "d")}
+                graph = lp.build(
+                    *nodes.values(),
+                    lp.edge(lp.source(nodes["a"]), "ab", lp.sink(nodes["b"])),
+                    lp.edge(lp.source(nodes["c"]), "cd", lp.sink(nodes["d"])),
+                    node_store=node_store,
+                )
+                bonds = graph.all_bonds()
+                self.assertEqual(len(bonds), 2)
+                self.assertTrue(all(bond.n_half_edges > 0 for bond in bonds))
+
+                restricted = graph.all_bonds(subgraph=graph.subgraph(edges=["ab"]))
+                self.assertEqual(len(restricted), 1)
+                self.assertTrue(restricted[0].is_subset(graph.subgraph(edges=["ab"])))
+
+                stale = restricted[0]
+                graph.add_node(lp.node("isolated"))
+                with self.assertRaises(ReferenceError):
+                    _ = stale.n_half_edges
+
+                edgeless = lp.build(lp.node("only"), node_store=node_store)
+                self.assertEqual(edgeless.all_bonds(), [])
+                self.assertEqual(edgeless.all_bonds(min_size=2), [])
+                with self.assertRaisesRegex(ValueError, "at least 1"):
+                    edgeless.all_bonds(min_size=0)
 
     def test_isolated_nodes_are_first_class_subgraph_members(self):
         a = lp.node("a", data=UserNodePayload("a"))
@@ -1250,12 +1550,8 @@ class TestHedgeGraphTopology(unittest.TestCase):
             _ = old_view.data
 
     def test_join_and_callback_errors_are_transactional(self):
-        left, left_node, _, left_half_edge = dangling_graph(
-            "left", lp.Flow.Source
-        )
-        right, right_node, _, right_half_edge = dangling_graph(
-            "right", lp.Flow.Sink
-        )
+        left, left_node, _, left_half_edge = dangling_graph("left", lp.Flow.Source)
+        right, right_node, _, right_half_edge = dangling_graph("right", lp.Flow.Sink)
         merged_data = UserEdgePayload("merged-coupling")
         matched = []
         merged = []
@@ -1374,9 +1670,7 @@ class TestDotCodec(unittest.TestCase):
         self.assertEqual(decoded.edge("connection").data["local"], "edge")
         self.assertEqual(decoded.edge(0).source.data["token"], "source")
         self.assertEqual(decoded.edge(0).sink.data["token"], "sink")
-        self.assertEqual(
-            decoded.edge(0).source.data["payload"], b"half-edge payload"
-        )
+        self.assertEqual(decoded.edge(0).source.data["payload"], b"half-edge payload")
         self.assertEqual(decoded.edge(0).source.node.name, "left")
         self.assertEqual(decoded.edge(0).sink.node.name, "right")
         self.assertIn("TextLabel", repr(decoded.node(0).drawing.label))
@@ -1407,9 +1701,7 @@ class TestDotCodec(unittest.TestCase):
     def test_linnest_codec_round_trips_canonical_drawing_fields(self):
         graph, _, _, _ = sample_graph()
         graph.node("left").drawing.style = {
-            "stroke": lp.Stroke(
-                paint=lp.Color("red"), thickness=lp.Length.pt(0.7)
-            )
+            "stroke": lp.Stroke(paint=lp.Color("red"), thickness=lp.Length.pt(0.7))
         }
         graph.edge("propagator").drawing.decoration = {
             "marks": [lp.Mark.barbed()],
@@ -1469,15 +1761,11 @@ class TestDotCodec(unittest.TestCase):
             },
             "invalid angle unit": {
                 "type": "dict",
-                "value": {
-                    "bad": {"type": "angle", "value": [1.0, "turn"]}
-                },
+                "value": {"bad": {"type": "angle", "value": [1.0, "turn"]}},
             },
             "negative fraction": {
                 "type": "dict",
-                "value": {
-                    "bad": {"type": "fraction", "value": -1.0}
-                },
+                "value": {"bad": {"type": "fraction", "value": -1.0}},
             },
             "empty insets": {
                 "type": "dict",
@@ -1530,9 +1818,7 @@ class TestDotCodec(unittest.TestCase):
             },
         }
         for name, value in tampered_values.items():
-            tampered = replace_linnest_native(
-                encoded, "linnet_node_extensions", value
-            )
+            tampered = replace_linnest_native(encoded, "linnet_node_extensions", value)
             with self.subTest(name=name), self.assertRaises((TypeError, ValueError)):
                 lp.Graph.from_dot(tampered, codec)
 
@@ -1640,9 +1926,7 @@ class TestDotCodec(unittest.TestCase):
             global_data=lp.GlobalData(statements={key: value}),
         )
         codec = lp.DotCodec(
-            encode_node=lambda item: lp.DotVertexData(
-                statements={key: item.data}
-            ),
+            encode_node=lambda item: lp.DotVertexData(statements={key: item.data}),
             decode_node=lambda item: lp.NodeValue(data=item.statements[key]),
             encode_edge=lambda _item: lp.DotEdgeData(),
             decode_edge=lambda _item: lp.EdgeValue(),
@@ -1666,14 +1950,12 @@ class TestDotCodec(unittest.TestCase):
         codec = lp.DotCodec.topology()
         duplicates = {
             "node": "digraph { a [linnet_name=78]; b [linnet_name=78]; }",
-            "edge": (
-                "digraph { a -> b [linnet_name=78]; "
-                "b -> c [linnet_name=78]; }"
-            ),
+            "edge": ("digraph { a -> b [linnet_name=78]; b -> c [linnet_name=78]; }"),
         }
         for kind, source in duplicates.items():
-            with self.subTest(kind=kind), self.assertRaisesRegex(
-                ValueError, f"duplicate imported {kind} name"
+            with (
+                self.subTest(kind=kind),
+                self.assertRaisesRegex(ValueError, f"duplicate imported {kind} name"),
             ):
                 lp.Graph.from_dot(source, codec)
 
@@ -1875,7 +2157,14 @@ class TestTypedTypstSurface(unittest.TestCase):
         graph.render_config.title = lp.TextLabel("live graph default")
         self.assertEqual(graph.render_config.title.text, "live graph default")
 
-        for field in ("template", "typst_executable", "mode", "layouts", "drawing", "physics"):
+        for field in (
+            "template",
+            "typst_executable",
+            "mode",
+            "layouts",
+            "drawing",
+            "physics",
+        ):
             setattr(config, field, lp.INHERIT)
             self.assertIs(getattr(config, field), lp.INHERIT)
 
@@ -1945,14 +2234,17 @@ class TestTypedTypstSurface(unittest.TestCase):
     def test_drawing_selectors_validate_results_and_topology_stability(self):
         graph, _, _, _ = sample_graph()
         invalid_styles = (
-            lp.GraphStyleOptions(node_selector=lambda _node: [{"fill": lp.Color("red")}]),
+            lp.GraphStyleOptions(
+                node_selector=lambda _node: [{"fill": lp.Color("red")}]
+            ),
             lp.GraphStyleOptions(edge_selector=lambda _edge: "red"),
             lp.GraphStyleOptions(source_selector=lambda _half_edge: lp.Color("red")),
             lp.GraphStyleOptions(sink_selector=lambda _half_edge: lp.AUTO),
         )
         for style in invalid_styles:
-            with self.subTest(style=style), self.assertRaisesRegex(
-                TypeError, "drawing selector result"
+            with (
+                self.subTest(style=style),
+                self.assertRaisesRegex(TypeError, "drawing selector result"),
             ):
                 graph.to_svg(config=lp.RenderConfig(style=style))
 
@@ -2142,9 +2434,7 @@ class TestTypedTypstSurface(unittest.TestCase):
                 lp.EdgeDrawing(extensions={name: {}})
         with self.assertRaises(TypeError):
             lp.NodeDrawing(placement="start")
-        lp.NodeDrawing(
-            placement={"x": 0.0, "y": 1.0, "mode": lp.Placement.Start}
-        )
+        lp.NodeDrawing(placement={"x": 0.0, "y": 1.0, "mode": lp.Placement.Start})
         lp.NodeDrawing(placement=lp.Placement.Start)
         with self.assertRaises(ValueError):
             lp.NodeDrawing(placement=lp.Placement.Pin)
@@ -2192,21 +2482,13 @@ class TestTypedTypstSurface(unittest.TestCase):
         with self.assertRaises(TypeError):
             lp.DrawOptions(subgraph=[{"edge-style": {}}])
         with self.assertRaises(TypeError):
-            lp.DrawOptions(
-                subgraph=[{"subgraph": [True, False], "edge-style": "red"}]
-            )
+            lp.DrawOptions(subgraph=[{"subgraph": [True, False], "edge-style": "red"}])
         with self.assertRaises(TypeError):
-            lp.DrawOptions(
-                subgraph=[{"subgraph": [True, False], "unknown": {}}]
-            )
+            lp.DrawOptions(subgraph=[{"subgraph": [True, False], "unknown": {}}])
         static_content_fields = {
             "draw title": lambda value: lp.DrawOptions(title=value),
-            "momentum prefix": lambda value: lp.PhysicsOptions(
-                momentum_prefix=value
-            ),
-            "label separator": lambda value: lp.PhysicsOptions(
-                label_separator=value
-            ),
+            "momentum prefix": lambda value: lp.PhysicsOptions(momentum_prefix=value),
+            "label separator": lambda value: lp.PhysicsOptions(label_separator=value),
             "render title": lambda value: lp.RenderConfig(title=value),
         }
         for name, static_content in static_content_fields.items():
@@ -2256,7 +2538,10 @@ class TestTypedTypstSurface(unittest.TestCase):
             "@preview/cetz:",
             "@preview/cetz:0.5.1/extra",
         ]:
-            with self.subTest(specification=specification), self.assertRaises(ValueError):
+            with (
+                self.subTest(specification=specification),
+                self.assertRaises(ValueError),
+            ):
                 lp.TypstModule.package(specification)
 
     def test_legacy_names_and_render_inputs_are_gone(self):
@@ -2269,7 +2554,13 @@ class TestTypedTypstSurface(unittest.TestCase):
             "HedgePair",
         }
         self.assertTrue(all(not hasattr(lp, name) for name in legacy))
-        topology_views = {"Subgraph", "Cycle", "OrientedCut", "TraversalTree"}
+        topology_views = {
+            "Subgraph",
+            "Cycle",
+            "OrientedCut",
+            "CutPartition",
+            "TraversalTree",
+        }
         self.assertTrue(all(hasattr(lp, name) for name in topology_views))
         self.assertFalse(hasattr(lp.Graph, "from_string"))
         graph, _, _, _ = sample_graph()
@@ -2300,17 +2591,17 @@ class TestRendering(unittest.TestCase):
             executable = root / "fake typst"
             executable.write_text(
                 "#!/bin/sh\n"
-                "if [ \"$1\" = \"--version\" ]; then\n"
+                'if [ "$1" = "--version" ]; then\n'
                 "  echo 'typst 0.15.0'\n"
                 "  exit 0\n"
                 "fi\n"
-                "for argument in \"$@\"; do\n"
-                "  case \"$argument\" in\n"
+                'for argument in "$@"; do\n'
+                '  case "$argument" in\n'
                 "    *.typ) source=$argument ;;\n"
                 "    *.svg) output=$argument ;;\n"
                 "  esac\n"
                 "done\n"
-                f"cp \"$(dirname \"$source\")/diagram.dot\" \"{staged_dot}\"\n"
+                f'cp "$(dirname "$source")/diagram.dot" "{staged_dot}"\n'
                 "printf '<svg>fake</svg>' > \"$output\"\n",
                 encoding="utf-8",
             )
@@ -2348,7 +2639,7 @@ class TestRendering(unittest.TestCase):
             self.assertEqual(graph.to_svg(), "<svg>fake</svg>")
             topology = staged_dot.read_text(encoding="utf-8")
             self.assertIn("left node", topology)
-            self.assertIn(r'right \"node\"', topology)
+            self.assertIn(r"right \"node\"", topology)
             self.assertIn("linnet_render_edge_name", topology)
             self.assertIn("propagator edge", topology)
             self.assertIn("render graph", topology)
@@ -2406,7 +2697,7 @@ class TestRendering(unittest.TestCase):
             template.write_text(
                 "#let render(config) = {\n"
                 "  let helpers = config.elements.nodes.at(0)\n"
-                "  let parsed = helpers.at(\"inspect-parse\")(read(config.at(\"data-path\"))).first()\n"
+                '  let parsed = helpers.at("inspect-parse")(read(config.at("data-path"))).first()\n'
                 "  let attach = half-edge => {\n"
                 "    let drawing = config.elements.hedges.at(half-edge.hedge)\n"
                 "    let patch = (data: drawing)\n"
@@ -2415,12 +2706,12 @@ class TestRendering(unittest.TestCase):
                 "    }\n"
                 "    patch\n"
                 "  }\n"
-                "  parsed = helpers.at(\"inspect-map\")(parsed, source: attach, sink: attach)\n"
-                "  let nodes = helpers.at(\"inspect-nodes\")(parsed)\n"
-                "  let edges = config.elements.edges.at(0).at(\"inspect-edges\")(parsed)\n"
+                '  parsed = helpers.at("inspect-map")(parsed, source: attach, sink: attach)\n'
+                '  let nodes = helpers.at("inspect-nodes")(parsed)\n'
+                '  let edges = config.elements.edges.at(0).at("inspect-edges")(parsed)\n'
                 "  let node-names = nodes.map(node => str(node.name))\n"
                 "  let edge-names = edges.map(edge => str(edge.name))\n"
-                '  assert(node-names == ("left node", "right \\\"node\\\""))\n'
+                '  assert(node-names == ("left node", "right \\"node\\""))\n'
                 '  assert(edge-names == ("propagator edge",))\n'
                 '  assert(edges.first().source.statement == "source-statement")\n'
                 '  assert(edges.first().source.at("port-label") == "source-port")\n'
@@ -2490,17 +2781,17 @@ class TestRendering(unittest.TestCase):
                 "#let title = [trusted module content]\n"
                 "#let wrap(body, prefix: [prefix]) = [#prefix #body]\n"
                 "#let underscore(foo_bar: [missing]) = foo_bar\n"
-                "#let particle_map = (electron: \"e-\",)\n",
+                '#let particle_map = (electron: "e-",)\n',
                 encoding="utf-8",
             )
             module = lp.TypstModule.file(module_path)
             template = root / "custom template.typ"
             template.write_text(
                 "#let render(config) = {\n"
-                "  assert(config.schema == \"linnet-render-config\")\n"
+                '  assert(config.schema == "linnet-render-config")\n'
                 "  assert(config.version == 1)\n"
                 "  set page(width: auto, height: auto, margin: 2mm)\n"
-                "  config.elements.nodes.at(0).at(\"underscore-call\")\n"
+                '  config.elements.nodes.at(0).at("underscore-call")\n'
                 "  config.elements.nodes.at(0).label\n"
                 "}\n",
                 encoding="utf-8",
@@ -2540,19 +2831,19 @@ class TestRendering(unittest.TestCase):
             executable = root / "fake typst"
             executable.write_text(
                 "#!/bin/sh\n"
-                "if [ \"$1\" = \"--version\" ]; then\n"
+                'if [ "$1" = "--version" ]; then\n'
                 "  echo 'typst 0.15.0'\n"
                 "  exit 0\n"
                 "fi\n"
-                f": > \"{arguments}\"\n"
-                "for argument in \"$@\"; do\n"
-                f"  printf '%s\\n' \"$argument\" >> \"{arguments}\"\n"
-                "  case \"$argument\" in\n"
+                f': > "{arguments}"\n'
+                'for argument in "$@"; do\n'
+                f'  printf \'%s\\n\' "$argument" >> "{arguments}"\n'
+                '  case "$argument" in\n'
                 "    *.typ) source=$argument ;;\n"
                 "    *.svg) output=$argument ;;\n"
                 "  esac\n"
                 "done\n"
-                f"cp \"$source\" \"{entrypoint}\"\n"
+                f'cp "$source" "{entrypoint}"\n'
                 "printf '<svg>fake</svg>' > \"$output\"\n",
                 encoding="utf-8",
             )
@@ -2561,7 +2852,7 @@ class TestRendering(unittest.TestCase):
             template.write_text("#let render(config) = [ok]\n", encoding="utf-8")
             module_path = root / "drawing styles.typ"
             module_path.write_text(
-                "#let particle_map = (electron: \"e-\",)\n",
+                '#let particle_map = (electron: "e-",)\n',
                 encoding="utf-8",
             )
             module = lp.TypstModule.file(module_path)
@@ -2569,9 +2860,7 @@ class TestRendering(unittest.TestCase):
                 render_config=lp.RenderConfig(
                     template=template,
                     typst_executable=executable,
-                    title=lp.TextLabel(
-                        '\")\n#let injected = true\n' + "x" * 100_000
-                    ),
+                    title=lp.TextLabel('")\n#let injected = true\n' + "x" * 100_000),
                     style=lp.GraphStyleOptions(
                         node_selector=lambda node: {
                             "selected-name": lp.TextLabel(node.name)

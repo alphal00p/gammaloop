@@ -1,9 +1,9 @@
 //! Python graph transformations backed by Linnet's owning topology operations.
 
-use std::{cell::RefCell, collections::BTreeSet};
+use std::{cell::RefCell, collections::BTreeSet, mem};
 
 use linnet::half_edge::builder::HedgeGraphBuilder;
-use linnet::half_edge::involution::{EdgeData, Flow};
+use linnet::half_edge::involution::{EdgeData, Flow, Hedge};
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike};
 use linnet::half_edge::NodeIndex;
 use pyo3::exceptions::{PyReferenceError, PyTypeError, PyValueError};
@@ -14,7 +14,8 @@ use pyo3_stub_gen::derive::gen_stub_pymethods;
 use crate::dot::{PyEdgeValue, PyNodeValue};
 use crate::drawing::copy_drawing;
 use crate::graph::{
-    EdgeRecord, GraphState, NodeRecord, PyFlow, PyGraph, PyHalfEdge, PyOrientation,
+    EdgeRecord, GraphState, IncrementalEdgeRecords, NodeRecord, PyEdge, PyEdgeSpec, PyFlow,
+    PyGraph, PyHalfEdge, PyNode, PyNodeSpec, PyOrientation,
 };
 use crate::native_graph::PyHedgeGraph;
 use crate::topology::PySubgraph;
@@ -289,6 +290,14 @@ impl PyGraph {
         let value = value.extract::<PyRef<'_, PyEdgeValue>>().map_err(|_| {
             PyTypeError::new_err("join merge callback must return EdgeValue in item 4")
         })?;
+        Self::snapshot_edge_record(py, &value, name)
+    }
+
+    fn snapshot_edge_record(
+        py: Python<'_>,
+        value: &PyEdgeValue,
+        name: Option<String>,
+    ) -> PyResult<EdgeRecord> {
         Ok(EdgeRecord {
             name,
             data: value
@@ -331,6 +340,179 @@ impl PyGraph {
 #[gen_stub_pymethods]
 #[pymethods]
 impl PyGraph {
+    /// Append one declarative node and return its fresh live view.
+    #[pyo3(signature = (spec))]
+    fn add_node(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        spec: PyRef<'_, PyNodeSpec>,
+    ) -> PyResult<Py<PyNode>> {
+        let revision = slf.borrow(py).revision()?;
+        let mut candidate = slf
+            .borrow(py)
+            .state
+            .borrow()
+            .as_ref()
+            .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?
+            .copy(py)?;
+        let index = candidate.graph.n_nodes();
+        let mut builder = HedgeGraphBuilder::new();
+        builder.add_node(spec.snapshot(py)?);
+        candidate
+            .graph
+            .append_disconnected_mut(PyHedgeGraph::build(builder, candidate.graph.node_store()))
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        Self::validate_names(&candidate.graph)?;
+        let result = Py::new(py, PyNode::new(slf.clone_ref(py), index, revision + 1))?;
+        slf.borrow(py).check_revision(revision)?;
+        candidate.revision = revision + 1;
+        *slf.borrow(py).state.borrow_mut() = Some(candidate);
+        Ok(result)
+    }
+
+    /// Append one declarative internal or dangling edge and return its fresh live view.
+    #[pyo3(signature = (spec))]
+    fn add_edge(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        spec: PyRef<'_, PyEdgeSpec>,
+    ) -> PyResult<Py<PyEdge>> {
+        let revision = slf.borrow(py).revision()?;
+        let IncrementalEdgeRecords {
+            source,
+            sink,
+            edge,
+            orientation,
+        } = spec.incremental_records(py, &slf, revision)?;
+        let mut candidate = slf
+            .borrow(py)
+            .state
+            .borrow()
+            .as_ref()
+            .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?
+            .copy(py)?;
+        let node_store = candidate.graph.node_store();
+        let graph = mem::replace(&mut candidate.graph, PyHedgeGraph::empty(node_store));
+        let (hedge, graph) = match (source, sink) {
+            (Some(source), Some(sink)) => graph
+                .add_pair(source, sink, edge, orientation.into())
+                .map(|(source, _, graph)| (source, graph)),
+            (Some(source), None) => {
+                graph.add_dangling_edge(source, edge, Flow::Source, orientation.into())
+            }
+            (None, Some(sink)) => {
+                graph.add_dangling_edge(sink, edge, Flow::Sink, orientation.into())
+            }
+            (None, None) => unreachable!("validated edge has an endpoint"),
+        }
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let index = graph[&hedge].0;
+        candidate.graph = graph;
+        Self::validate_names(&candidate.graph)?;
+        let result = Py::new(py, PyEdge::new(slf.clone_ref(py), index, revision + 1))?;
+        slf.borrow(py).check_revision(revision)?;
+        candidate.revision = revision + 1;
+        *slf.borrow(py).state.borrow_mut() = Some(candidate);
+        Ok(result)
+    }
+
+    /// Split a paired edge at one half-edge, preserving the opposite edge value.
+    #[pyo3(signature = (at, replacement, *, name=None, orientation=PyOrientation::Default))]
+    fn split_edge(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "_HalfEdgeTarget"))] at: &Bound<'_, PyAny>,
+        replacement: PyRef<'_, PyEdgeValue>,
+        name: Option<String>,
+        orientation: PyOrientation,
+    ) -> PyResult<(Py<PyEdge>, Py<PyEdge>)> {
+        let revision = slf.borrow(py).revision()?;
+        let at = slf.borrow(py).resolve_half_edge(py, &slf, at)?;
+        let opposite = {
+            let graph = slf.borrow(py);
+            let state = graph.state.borrow();
+            let graph = &state.as_ref().expect("checked").graph;
+            let opposite = graph.inv(Hedge(at));
+            if opposite.0 == at {
+                return Err(PyValueError::new_err("cannot split a dangling edge"));
+            }
+            opposite
+        };
+        let edge = Self::snapshot_edge_record(py, &replacement, name)?;
+        let mut candidate = slf
+            .borrow(py)
+            .state
+            .borrow()
+            .as_ref()
+            .expect("checked")
+            .copy(py)?;
+        candidate
+            .graph
+            .split_edge(Hedge(at), EdgeData::new(edge, orientation.into()))
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let selected = candidate.graph[&Hedge(at)].0;
+        let opposite = candidate.graph[&opposite].0;
+        Self::validate_names(&candidate.graph)?;
+        let selected = Py::new(py, PyEdge::new(slf.clone_ref(py), selected, revision + 1))?;
+        let opposite = Py::new(py, PyEdge::new(slf.clone_ref(py), opposite, revision + 1))?;
+        slf.borrow(py).check_revision(revision)?;
+        candidate.revision = revision + 1;
+        *slf.borrow(py).state.borrow_mut() = Some(candidate);
+        Ok((selected, opposite))
+    }
+
+    /// Connect two dangling half-edges; the first becomes the source endpoint.
+    #[pyo3(signature = (source, sink, replacement, *, name=None, orientation=PyOrientation::Default))]
+    fn connect(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "_HalfEdgeTarget"))] source: &Bound<'_, PyAny>,
+        #[gen_stub(override_type(type_repr = "_HalfEdgeTarget"))] sink: &Bound<'_, PyAny>,
+        replacement: PyRef<'_, PyEdgeValue>,
+        name: Option<String>,
+        orientation: PyOrientation,
+    ) -> PyResult<Py<PyEdge>> {
+        let revision = slf.borrow(py).revision()?;
+        let source = slf.borrow(py).resolve_half_edge(py, &slf, source)?;
+        let sink = slf.borrow(py).resolve_half_edge(py, &slf, sink)?;
+        if source == sink {
+            return Err(PyValueError::new_err(
+                "cannot connect a dangling half-edge to itself",
+            ));
+        }
+        {
+            let graph = slf.borrow(py);
+            let state = graph.state.borrow();
+            let graph = &state.as_ref().expect("checked").graph;
+            if graph.inv(Hedge(source)).0 != source || graph.inv(Hedge(sink)).0 != sink {
+                return Err(PyValueError::new_err(
+                    "connect() requires two dangling half-edges",
+                ));
+            }
+        }
+        let edge = Self::snapshot_edge_record(py, &replacement, name)?;
+        let mut candidate = slf
+            .borrow(py)
+            .state
+            .borrow()
+            .as_ref()
+            .expect("checked")
+            .copy(py)?;
+        candidate.graph.connect_identities(
+            Hedge(source),
+            Hedge(sink),
+            Flow::Source,
+            EdgeData::new(edge, orientation.into()),
+        );
+        let index = candidate.graph[&Hedge(source)].0;
+        Self::validate_names(&candidate.graph)?;
+        let result = Py::new(py, PyEdge::new(slf.clone_ref(py), index, revision + 1))?;
+        slf.borrow(py).check_revision(revision)?;
+        candidate.revision = revision + 1;
+        *slf.borrow(py).state.borrow_mut() = Some(candidate);
+        Ok(result)
+    }
+
     /// Copy a structural subgraph into an independent graph.
     #[pyo3(signature = (subgraph))]
     fn concretize(slf: Py<PyGraph>, py: Python<'_>, subgraph: &PySubgraph) -> PyResult<PyGraph> {

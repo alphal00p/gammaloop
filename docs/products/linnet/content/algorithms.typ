@@ -73,26 +73,51 @@ fn main() {
 ```
 
 The expected invariant is four distinct left/cut/right partitions separating `a` from `c`.
-Changing the diagonal changes that count, while changing only node or edge payloads does not.
+Changing topology can change that count, while changing only node or edge payloads does not.
 The native #link("reference/rust/linnet/half_edge/struct.HedgeGraph.html")[`HedgeGraph`
 Rustdoc] and
 #link("reference/rust/linnet/half_edge/builder/struct.HedgeGraphBuilder.html")[builder Rustdoc]
 give the exact compiled type boundaries for this revision.
 
+The Python binding delegates to that same native enumeration and returns named graph-bound
+results rather than nested tuples:
+
+```python
+partitions = graph.all_cuts(["a"], ["c"])
+for partition in partitions:
+    source_side = partition.source_side
+    boundary = partition.boundary
+    cut_edges = partition.edges
+    target_side = partition.target_side
+```
+
+The source and target sides are structural `Subgraph` views. `boundary.left` and
+`boundary.right` select the two oriented half-edges of every cut edge. The result is eagerly
+materialized and sorted by half-edge membership at the Python boundary; do not use all-cut
+enumeration where one witness or a minimum-cardinality cut is the actual question.
+
+`all_bonds(min_size=..., max_size=...)` is the related native enumeration of
+inclusion-minimal cutsets whose two induced sides are connected. A bond size is its boundary
+half-edge count; it is not a max-flow result. Both algorithms can be combinatorial.
+
 #callout("Interpret a cut mismatch structurally", [
   A failed `graph.check()` indicates a storage or involution invariant and must be resolved before
-  enumeration. Zero cuts usually means the endpoint sets overlap or are disconnected from the
-  selected region. An unexpected nonzero count means the constructed edges or endpoint sets do
-  not describe the graph you intended; inspect those before adding post-enumeration filters.
+  enumeration. Overlapping, empty, isolated, or closed terminal groups are rejected. For validated
+  groups, zero cuts means the native enumerator found no admissible separating partition, commonly
+  because the groups occupy disconnected components. An unexpected nonzero count means the
+  constructed edges or endpoint sets do not describe the graph you intended; inspect those before
+  adding post-enumeration filters.
 ])
 
 == Mutation boundaries
 
-Extraction copies a selected region, excision separates a graph along its boundary, sewing
-joins compatible dangling half-edges, and contraction identifies structure. These operations
-return mappings or replacement indexes where needed. Keep those results: a numeric `Hedge` or
-`NodeIndex` from before a storage-changing operation is not automatically a valid index into the
-resulting graph.
+Insertion extends a graph with the same declarative node and edge specs accepted by the builder.
+`split_edge` separates one paired edge into two dangling edges, while `connect` joins two exact
+dangling half-edges. Extraction copies a selected region, excision separates a graph along its
+boundary, sewing joins compatible dangling half-edges, and contraction identifies structure.
+These operations return replacement views or indexes where needed. Keep only the topology-independent
+payloads across an edit: graph-bound Python views are revision checked and become stale after every
+successful topology change.
 
 == DOT and drawing
 

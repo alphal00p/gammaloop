@@ -12,6 +12,7 @@ __all__ = [
     "Angle",
     "Auto",
     "Color",
+    "CutPartition",
     "Cycle",
     "Dash",
     "DebugLevel",
@@ -169,6 +170,8 @@ _Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _Nat
 _FieldNames: typing.TypeAlias = builtins.str | builtins.list[builtins.str] | builtins.tuple[builtins.str, ...] | _ValueExpression | Inherit
 _OptionalString: typing.TypeAlias = builtins.str | None
 _OptionalHalfEdgeSpec: typing.TypeAlias = HalfEdgeSpec | None
+_EndpointTarget: typing.TypeAlias = NodeSpec | Node | builtins.int | builtins.str
+_HalfEdgeTarget: typing.TypeAlias = HalfEdge | builtins.int
 _GraphItem: typing.TypeAlias = NodeSpec | EdgeSpec
 _OptionalGlobalData: typing.TypeAlias = GlobalData | None
 _OptionalDotCodec: typing.TypeAlias = DotCodec | None
@@ -280,6 +283,21 @@ class Color:
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
+class CutPartition:
+    r"""
+    One source-side, oriented-boundary, target-side cut partition.
+    """
+    @property
+    def source_side(self) -> Subgraph: ...
+    @property
+    def boundary(self) -> OrientedCut: ...
+    @property
+    def target_side(self) -> Subgraph: ...
+    @property
+    def edges(self) -> builtins.list[Edge]: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
 class Cycle:
     r"""
     A cycle in a particular graph revision.
@@ -369,7 +387,7 @@ class DrawOptions:
 @typing.final
 class EdgeSpec:
     r"""
-    A declarative internal or external edge description consumed by `build()`.
+    A reusable declarative edge description accepted by `build()` and `Graph.add_edge()`.
     """
     @property
     def name(self) -> typing.Optional[builtins.str]: ...
@@ -473,6 +491,22 @@ class Graph:
     def to_svg(self, *, config: RenderConfig | None = None) -> builtins.str: ...
     def _repr_svg_(self) -> builtins.str: ...
     def __repr__(self) -> builtins.str: ...
+    def add_node(self, spec: NodeSpec) -> Node:
+        r"""
+        Append one declarative node and return its fresh live view.
+        """
+    def add_edge(self, spec: EdgeSpec) -> Edge:
+        r"""
+        Append one declarative internal or dangling edge and return its fresh live view.
+        """
+    def split_edge(self, at: _HalfEdgeTarget, replacement: EdgeValue, *, name: typing.Optional[builtins.str] = None, orientation: Orientation = Orientation.Default) -> tuple[Edge, Edge]:
+        r"""
+        Split a paired edge at one half-edge, preserving the opposite edge value.
+        """
+    def connect(self, source: _HalfEdgeTarget, sink: _HalfEdgeTarget, replacement: EdgeValue, *, name: typing.Optional[builtins.str] = None, orientation: Orientation = Orientation.Default) -> Edge:
+        r"""
+        Connect two dangling half-edges; the first becomes the source endpoint.
+        """
     def concretize(self, subgraph: Subgraph) -> Graph:
         r"""
         Copy a structural subgraph into an independent graph.
@@ -521,7 +555,16 @@ class Graph:
     def bridges(self, subgraph: typing.Optional[Subgraph] = None) -> Subgraph: ...
     def cycle_basis(self, subgraph: typing.Optional[Subgraph] = None) -> tuple[builtins.list[Cycle], Subgraph]: ...
     def all_spanning_forests(self, subgraph: typing.Optional[Subgraph] = None) -> builtins.list[Subgraph]: ...
-    def all_cuts(self, source: typing.Sequence[builtins.int | builtins.str], target: typing.Sequence[builtins.int | builtins.str]) -> builtins.list[tuple[Subgraph, OrientedCut, Subgraph]]: ...
+    def all_bonds(self, *, subgraph: typing.Optional[Subgraph] = None, min_size: typing.Optional[builtins.int] = None, max_size: typing.Optional[builtins.int] = None) -> builtins.list[Subgraph]:
+        r"""
+        Enumerate inclusion-minimal cutsets with an inclusive boundary-size range.
+
+        Bounds default to `[1, unbounded]`; `min_size=0` is rejected because a bond is non-empty.
+        """
+    def all_cuts(self, source: typing.Sequence[builtins.int | builtins.str], target: typing.Sequence[builtins.int | builtins.str]) -> builtins.list[CutPartition]:
+        r"""
+        Enumerate all native separating partitions between two disjoint, non-empty node groups.
+        """
 
 @typing.final
 class GraphStyleOptions:
@@ -620,7 +663,7 @@ class MathSymbol:
 @typing.final
 class NodeSpec:
     r"""
-    A declarative node description consumed by `build()`.
+    A reusable declarative node description accepted by `build()` and `Graph.add_node()`.
     """
     @property
     def name(self) -> typing.Optional[builtins.str]: ...
@@ -1375,12 +1418,12 @@ def node(name: _OptionalString = None, *, data: typing.Any = None, label: _Optio
     Describe a node while preserving its arbitrary Python data by identity.
     """
 
-def sink(node: NodeSpec, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
+def sink(node: _EndpointTarget, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
     r"""
-    Attach a sink endpoint and its metadata to a node spec.
+    Attach a sink endpoint. Build resolves specs, names, indices, and live-node keys; incremental insertion resolves current graph references.
     """
 
-def source(node: NodeSpec, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
+def source(node: _EndpointTarget, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
     r"""
-    Attach a source endpoint and its metadata to a node spec.
+    Attach a source endpoint. Build resolves specs, names, indices, and live-node keys; incremental insertion resolves current graph references.
     """
