@@ -2,7 +2,7 @@
 name = "linnet-py"
 version = "0.1.0"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["typst==0.15.0"]
 
 [tool.maturin]
 module-name = "linnet_py"

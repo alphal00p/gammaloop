@@ -28,6 +28,9 @@ maturin develop --locked \
   --features extension-module,abi3-py310
 ```
 
+The declared Python dependencies install `typst` 0.15.0 alongside the extension. Python rendering
+uses that in-process binding; a `typst` command in `PATH` is neither required nor invoked.
+
 == Parse and inspect a graph
 
 Save this as `linnet_quickstart.py`:

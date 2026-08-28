@@ -40,7 +40,7 @@ def _(mo):
 
     A graph's ordinary notebook representation is a model-neutral Linnest
     drawing. `Graph._repr_svg_()` powers the automatic display; `to_svg()` and
-    `render(path)` expose the same Typst 0.15 pipeline explicitly.
+    `render(path)` expose the same in-process typst-py 0.15 pipeline explicitly.
 
     Domain-specific conventions are ordinary Python render settings, not modes
     built into Linnet. The example data below is an application workflow: every

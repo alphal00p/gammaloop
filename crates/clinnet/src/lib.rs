@@ -205,6 +205,33 @@ impl TypstRenderRequest {
     }
 }
 
+/// A staged Typst entrypoint and DOT input.
+///
+/// The entrypoint and project root can be passed to an in-process compiler such
+/// as typst-py. The caller must also keep the renderer build directory and any
+/// external template, module, or dependency paths alive until compilation
+/// finishes. Dropping this value removes its ephemeral entrypoint and DOT input.
+#[derive(Debug)]
+pub struct PreparedTypstRender {
+    _scratch_dir: tempfile::TempDir,
+    entrypoint: PathBuf,
+    root: PathBuf,
+    dot_path: PathBuf,
+    template: PathBuf,
+}
+
+impl PreparedTypstRender {
+    /// Return the generated Typst entrypoint.
+    pub fn entrypoint(&self) -> &Path {
+        &self.entrypoint
+    }
+
+    /// Return the project root containing every filesystem compilation input.
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+}
+
 /// Compile Linnet DOT graphs through an external Typst executable.
 ///
 /// The renderer stages the bundled templates and Typst packages beneath its
@@ -300,6 +327,30 @@ impl TypstRenderer {
     pub fn render(&self, request: &TypstRenderRequest, output: impl AsRef<Path>) -> Result<()> {
         let output = output.as_ref();
         Self::validate_output_path(output)?;
+        let prepared = self.prepare(request)?;
+        self.check_version()?;
+        Self::ensure_parent_dir(output)?;
+        let mut command = Command::new(&self.typst_executable);
+        command
+            .arg("compile")
+            .arg(prepared.entrypoint())
+            .arg(output)
+            .arg("--root")
+            .arg(prepared.root());
+        self.run_typst(
+            &mut command,
+            &format!("rendering {}", output.display()),
+            Some(RenderContext {
+                input: &prepared.dot_path,
+                template: &prepared.template,
+                root: prepared.root(),
+                output,
+            }),
+        )
+    }
+
+    /// Stage one render request without selecting a compiler backend.
+    pub fn prepare(&self, request: &TypstRenderRequest) -> Result<PreparedTypstRender> {
         Self::validate_modules(&request.modules)?;
         for alias in request.config.module_aliases() {
             if !request.modules.iter().any(|module| module.alias == alias) {
@@ -312,8 +363,6 @@ impl TypstRenderer {
                 self.build_dir.display()
             )
         })?;
-        self.check_version()?;
-        Self::ensure_parent_dir(output)?;
         let build_dir = Self::canonicalize_existing(&self.build_dir)?;
         let template = if let Some(template) = &request.template {
             Self::canonicalize_existing(template)
@@ -374,23 +423,13 @@ impl TypstRenderer {
             format!("failed to stage Typst entrypoint {}", entrypoint.display())
         })?;
 
-        let mut command = Command::new(&self.typst_executable);
-        command
-            .arg("compile")
-            .arg(&entrypoint)
-            .arg(output)
-            .arg("--root")
-            .arg(&root);
-        self.run_typst(
-            &mut command,
-            &format!("rendering {}", output.display()),
-            Some(RenderContext {
-                input: &dot_path,
-                template: &template,
-                root: &root,
-                output,
-            }),
-        )
+        Ok(PreparedTypstRender {
+            _scratch_dir: scratch_dir,
+            entrypoint,
+            root,
+            dot_path,
+            template,
+        })
     }
 
     /// Render a typed V1 request and return the resulting SVG document.
@@ -759,6 +798,27 @@ mod tests {
         assert!(TypstRenderer::require_typst_version("typst 1.0.0").is_ok());
         assert!(TypstRenderer::require_typst_version("typst 0.15.0-rc1").is_err());
         assert!(TypstRenderer::require_typst_version("typst 0.14.2").is_err());
+    }
+
+    #[test]
+    fn prepared_render_owns_its_ephemeral_inputs() {
+        let base = tempfile::tempdir().unwrap();
+        let template = base.path().join("template.typ");
+        fs::write(&template, "#let render(config) = [ok]").unwrap();
+        let request = TypstRenderRequest::new("digraph example { a -> b }", empty_config())
+            .template(&template);
+        let renderer = TypstRenderer::new(base.path());
+
+        let entrypoint = {
+            let prepared = renderer.prepare(&request).unwrap();
+            assert!(prepared.entrypoint().starts_with(prepared.root()));
+            assert!(prepared.root().is_dir());
+            let source = fs::read_to_string(prepared.entrypoint()).unwrap();
+            assert!(source.contains("data-path:"));
+            assert!(source.contains("_clinnet_template.render(_clinnet_config)"));
+            prepared.entrypoint().to_owned()
+        };
+        assert!(!entrypoint.exists());
     }
 
     #[test]
