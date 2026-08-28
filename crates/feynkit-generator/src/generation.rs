@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt,
     hash::{Hash, Hasher},
     sync::{
@@ -12,11 +12,21 @@ use feynkit_graph::{
     DiagramEdge, DiagramError, DiagramVertex, ExternalState, FeynmanDiagram, ParticleReference,
 };
 use feynkit_model::{Model, ModelError, Particle, VertexRule};
+use idenso::{
+    color::CS,
+    dirac::AGS,
+    epsilon::EPSILON_SYMBOL,
+    representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
+};
 use linnet::half_edge::involution::Flow;
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike};
 use linnet::half_edge::{HedgeGraph, NodeIndex};
 use rayon::{ThreadPoolBuildError, ThreadPoolBuilder, prelude::*};
 use serde::{Deserialize, Serialize};
+use spenso::{
+    network::library::symbolic::ETS,
+    structure::representation::{Minkowski, RepName},
+};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder},
     graph::{GenerationSettings, Graph, HalfEdge},
@@ -119,6 +129,14 @@ pub enum GenerationError {
     },
     #[error("the {owner} numerator contains an invalid UFO index '{index}'")]
     InvalidNumeratorIndex { owner: String, index: String },
+    #[error("the {owner} numerator has an invalid UFO tensor {tensor}: {message}")]
+    InvalidNumeratorTensor {
+        owner: String,
+        tensor: String,
+        message: String,
+    },
+    #[error("the {owner} numerator uses unsupported UFO tensor {tensor}")]
+    UnsupportedNumeratorTensor { owner: String, tensor: String },
     #[error("the {owner} numerator references momentum but has no incident edge")]
     MissingNumeratorMomentum { owner: String },
     #[error(
@@ -172,12 +190,51 @@ pub struct GenerationResult {
 struct NumeratorHalfEdge {
     edge: usize,
     flow: Flow,
+    spin: i64,
+    color: i64,
 }
 
 #[derive(Debug, Clone, Copy)]
 enum NumeratorOwner {
     Vertex(usize),
     Edge(usize),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NumeratorSector {
+    Spin,
+    Color,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ColorRepresentation {
+    Fundamental,
+    AntiFundamental,
+    Sextet,
+    AntiSextet,
+    Adjoint,
+}
+
+impl ColorRepresentation {
+    fn dual(self) -> Self {
+        match self {
+            Self::Fundamental => Self::AntiFundamental,
+            Self::AntiFundamental => Self::Fundamental,
+            Self::Sextet => Self::AntiSextet,
+            Self::AntiSextet => Self::Sextet,
+            Self::Adjoint => Self::Adjoint,
+        }
+    }
+
+    fn index(self, index: Atom) -> Atom {
+        match self {
+            Self::Fundamental => ColorFundamental {}.new_rep(3).to_symbolic([index]),
+            Self::AntiFundamental => ColorFundamental {}.dual().new_rep(3).to_symbolic([index]),
+            Self::Sextet => ColorSextet {}.new_rep(6).to_symbolic([index]),
+            Self::AntiSextet => ColorSextet {}.dual().new_rep(6).to_symbolic([index]),
+            Self::Adjoint => ColorAdjoint {}.new_rep(8).to_symbolic([index]),
+        }
+    }
 }
 
 impl fmt::Display for NumeratorOwner {
@@ -198,7 +255,11 @@ impl NumeratorInstantiation<'_> {
     // UFO `idx(shift, leg)` and `dummy(index)` values are local to one
     // propagator or interaction. Localize them before exposing the annotation
     // so equal endpoint indices contract and unrelated dummy indices cannot.
-    fn instantiate(&self, expression: &str) -> Result<String, GenerationError> {
+    fn instantiate(
+        &self,
+        expression: &str,
+        sector: NumeratorSector,
+    ) -> Result<String, GenerationError> {
         let owner = self.owner.to_string();
         let mut atom = Atom::parse(
             expression,
@@ -242,15 +303,21 @@ impl NumeratorInstantiation<'_> {
             }
         });
         if let Some(error) = error {
-            Err(error)
-        } else if changed {
-            // The default `Display` printer hides every namespace. Keep the
-            // public FeynKit and UFO namespaces in the serialized annotation.
-            Ok(atom.to_plain_string())
-        } else {
-            // Keep already-global model expressions byte-for-byte stable.
-            Ok(expression.to_owned())
+            return Err(error);
         }
+
+        atom = match sector {
+            NumeratorSector::Spin => self.lower_spin(atom)?,
+            NumeratorSector::Color => self.lower_color(atom)?,
+        };
+
+        // The default `Display` printer hides namespaces. Keep the public
+        // FeynKit and Spenso namespaces in the serialized annotation.
+        Ok(if changed || atom.to_plain_string() != expression {
+            atom.to_plain_string()
+        } else {
+            expression.to_owned()
+        })
     }
 
     fn localize_momentum(&self, term: AtomView<'_>) -> Result<Option<Atom>, GenerationError> {
@@ -357,6 +424,532 @@ impl NumeratorInstantiation<'_> {
             localized = localized.add_arg(self.localize_index_argument(argument)?);
         }
         Ok(Some(localized.finish()))
+    }
+
+    fn lower_spin(&self, mut atom: Atom) -> Result<Atom, GenerationError> {
+        // Force the canonical Idenso/Spenso registrations before constructing
+        // any of their heads. Symbolica attributes cannot be added after a
+        // bare symbol with the same name has already been interned.
+        let _ = (
+            AGS.gamma,
+            AGS.gamma5,
+            AGS.projm,
+            AGS.projp,
+            AGS.sigma,
+            ETS.metric,
+            *EPSILON_SYMBOL,
+        );
+
+        let mut next_dummy = self.maximum_local_dummy(&atom)?;
+        let mut error = None;
+        atom = atom.replace_map(|term, _, out| {
+            if error.is_some() {
+                return;
+            }
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            let symbol = function.get_symbol();
+            let name = symbol.get_stripped_name();
+            if !Self::is_model_symbol(symbol, name) {
+                return;
+            }
+            let arguments = function
+                .iter()
+                .map(|argument| argument.to_owned())
+                .collect::<Vec<_>>();
+            let lowered = match name {
+                "Identity" => self.exact_arguments(term, &arguments, 2).map(|args| {
+                    ETS.metric(
+                        self.bispinor(args[0].clone()),
+                        self.bispinor(args[1].clone()),
+                    )
+                }),
+                "IdentityL" | "Metric" => self.exact_arguments(term, &arguments, 2).map(|args| {
+                    ETS.metric(
+                        self.minkowski(args[0].clone()),
+                        self.minkowski(args[1].clone()),
+                    )
+                }),
+                "Gamma" => self.exact_arguments(term, &arguments, 3).map(|args| {
+                    FunctionBuilder::new(AGS.gamma)
+                        .add_arg(self.bispinor(args[1].clone()))
+                        .add_arg(self.bispinor(args[2].clone()))
+                        .add_arg(self.minkowski(args[0].clone()))
+                        .finish()
+                }),
+                "Gamma5" => self.exact_arguments(term, &arguments, 2).map(|args| {
+                    FunctionBuilder::new(AGS.gamma5)
+                        .add_arg(self.bispinor(args[0].clone()))
+                        .add_arg(self.bispinor(args[1].clone()))
+                        .finish()
+                }),
+                "ProjM" => self.exact_arguments(term, &arguments, 2).map(|args| {
+                    FunctionBuilder::new(AGS.projm)
+                        .add_arg(self.bispinor(args[0].clone()))
+                        .add_arg(self.bispinor(args[1].clone()))
+                        .finish()
+                }),
+                "ProjP" => self.exact_arguments(term, &arguments, 2).map(|args| {
+                    FunctionBuilder::new(AGS.projp)
+                        .add_arg(self.bispinor(args[0].clone()))
+                        .add_arg(self.bispinor(args[1].clone()))
+                        .finish()
+                }),
+                "Sigma" => self.exact_arguments(term, &arguments, 4).map(|args| {
+                    FunctionBuilder::new(AGS.sigma)
+                        .add_arg(self.bispinor(args[2].clone()))
+                        .add_arg(self.bispinor(args[3].clone()))
+                        .add_arg(self.minkowski(args[0].clone()))
+                        .add_arg(self.minkowski(args[1].clone()))
+                        .finish()
+                }),
+                "PSlash" => {
+                    self.exact_arguments(term, &arguments, 3).and_then(|args| {
+                        next_dummy = next_dummy.checked_add(1).ok_or(
+                            GenerationError::ArithmeticOverflow("a symbolic slash dummy index"),
+                        )?;
+                        let index = self.minkowski(self.dummy(next_dummy)?);
+                        let momentum = self.index_momentum(args[2].as_view(), index.clone())?;
+                        Ok(FunctionBuilder::new(AGS.gamma)
+                            .add_arg(self.bispinor(args[0].clone()))
+                            .add_arg(self.bispinor(args[1].clone()))
+                            .add_arg(index)
+                            .finish()
+                            * momentum)
+                    })
+                }
+                "Epsilon" => {
+                    if arguments.is_empty() {
+                        Err(self.invalid_tensor(term, "expected at least one Lorentz index"))
+                    } else {
+                        Ok(arguments
+                            .into_iter()
+                            .fold(
+                                FunctionBuilder::new(*EPSILON_SYMBOL),
+                                |builder, argument| builder.add_arg(self.minkowski(argument)),
+                            )
+                            .finish())
+                    }
+                }
+                "C" => Err(self.unsupported_tensor(term)),
+                "T" | "f" | "d" | "EpsilonBar" | "T6" | "K6" | "K6Bar" => {
+                    Err(self.invalid_tensor(term, "a color tensor appeared in a Lorentz structure"))
+                }
+                _ => return,
+            };
+            match lowered {
+                Ok(replacement) => **out = replacement,
+                Err(lowering_error) => error = Some(lowering_error),
+            }
+        });
+        if let Some(error) = error {
+            return Err(error);
+        }
+
+        // P(mu, leg) has already become FeynKit::Momentum(edge, mu).
+        // Attach the Minkowski representation after all UFO indices have been
+        // localized. PSlash momenta already carry the freshly allocated slot.
+        atom = atom.replace_map(|term, _, out| {
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            if function.get_symbol() != momentum_symbol() || function.get_nargs() != 2 {
+                return;
+            }
+            let mut arguments = function.iter();
+            let edge = arguments.next().expect("the arity was checked");
+            let index = arguments.next().expect("the arity was checked");
+            if Self::is_representation(index, "mink") {
+                return;
+            }
+            **out = FunctionBuilder::new(momentum_symbol())
+                .add_arg(edge)
+                .add_arg(self.minkowski(index.to_owned()))
+                .finish();
+        });
+        self.reject_residual_tensors(&atom)?;
+        Ok(atom)
+    }
+
+    fn lower_color(&self, mut atom: Atom) -> Result<Atom, GenerationError> {
+        let _ = (CS.t, CS.f, ETS.metric);
+        let mut representations = HashMap::<String, ColorRepresentation>::new();
+        for leg in self.legs {
+            if let Some(representation) = Self::vertex_color_representation(leg.color) {
+                let index = self.index(*leg, 1)?;
+                self.assign_color_representation(
+                    &mut representations,
+                    index.as_view(),
+                    representation,
+                )?;
+            }
+        }
+
+        let mut identities = Vec::<(Atom, Atom)>::new();
+        let mut error = None;
+        atom = atom.replace_map(|term, _, _| {
+            if error.is_some() {
+                return;
+            }
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            let symbol = function.get_symbol();
+            let name = symbol.get_stripped_name();
+            if !Self::is_model_symbol(symbol, name) {
+                return;
+            }
+            let arguments = function
+                .iter()
+                .map(|argument| argument.to_owned())
+                .collect::<Vec<_>>();
+            let result = match name {
+                "Identity" => self.exact_arguments(term, &arguments, 2).map(|args| {
+                    identities.push((args[0].clone(), args[1].clone()));
+                }),
+                "T" => self.exact_arguments(term, &arguments, 3).and_then(|args| {
+                    self.assign_color_representation(
+                        &mut representations,
+                        args[0].as_view(),
+                        ColorRepresentation::Adjoint,
+                    )?;
+                    self.assign_color_representation(
+                        &mut representations,
+                        args[1].as_view(),
+                        ColorRepresentation::Fundamental,
+                    )?;
+                    self.assign_color_representation(
+                        &mut representations,
+                        args[2].as_view(),
+                        ColorRepresentation::AntiFundamental,
+                    )
+                }),
+                "f" => self.exact_arguments(term, &arguments, 3).and_then(|args| {
+                    for argument in args {
+                        self.assign_color_representation(
+                            &mut representations,
+                            argument.as_view(),
+                            ColorRepresentation::Adjoint,
+                        )?;
+                    }
+                    Ok(())
+                }),
+                "d" | "Epsilon" | "EpsilonBar" | "T6" | "K6" | "K6Bar" => {
+                    Err(self.unsupported_tensor(term))
+                }
+                "IdentityL" | "Gamma" | "Gamma5" | "ProjM" | "ProjP" | "Sigma" | "C" | "Metric"
+                | "PSlash" => {
+                    Err(self.invalid_tensor(term, "a Lorentz tensor appeared in a color structure"))
+                }
+                _ => return,
+            };
+            if let Err(lowering_error) = result {
+                error = Some(lowering_error);
+            }
+        });
+        if let Some(error) = error {
+            return Err(error);
+        }
+
+        loop {
+            let mut changed = false;
+            for (left, right) in &identities {
+                let left_representation = representations
+                    .get(&Self::index_key(left.as_view()))
+                    .copied();
+                let right_representation = representations
+                    .get(&Self::index_key(right.as_view()))
+                    .copied();
+                match (left_representation, right_representation) {
+                    (Some(left_rep), Some(right_rep)) if left_rep.dual() != right_rep => {
+                        return Err(self.invalid_tensor(
+                            FunctionBuilder::new(symbol!("UFO::Identity"))
+                                .add_arg(left)
+                                .add_arg(right)
+                                .finish()
+                                .as_view(),
+                            "the two color identity indices do not carry dual representations",
+                        ));
+                    }
+                    (Some(_), Some(_)) => {}
+                    (Some(left), None) => {
+                        self.assign_color_representation(
+                            &mut representations,
+                            right.as_view(),
+                            left.dual(),
+                        )?;
+                        changed = true;
+                    }
+                    (None, Some(right)) => {
+                        self.assign_color_representation(
+                            &mut representations,
+                            left.as_view(),
+                            right.dual(),
+                        )?;
+                        changed = true;
+                    }
+                    (None, None) => {}
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        for (left, right) in &identities {
+            if !representations.contains_key(&Self::index_key(left.as_view()))
+                || !representations.contains_key(&Self::index_key(right.as_view()))
+            {
+                return Err(self.invalid_tensor(
+                    FunctionBuilder::new(symbol!("UFO::Identity"))
+                        .add_arg(left)
+                        .add_arg(right)
+                        .finish()
+                        .as_view(),
+                    "its color representation cannot be inferred",
+                ));
+            }
+        }
+
+        error = None;
+        atom = atom.replace_map(|term, _, out| {
+            if error.is_some() {
+                return;
+            }
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            let symbol = function.get_symbol();
+            let name = symbol.get_stripped_name();
+            if !Self::is_model_symbol(symbol, name) {
+                return;
+            }
+            let arguments = function
+                .iter()
+                .map(|argument| argument.to_owned())
+                .collect::<Vec<_>>();
+            let lowered = match name {
+                "Identity" => self.exact_arguments(term, &arguments, 2).map(|args| {
+                    let left = representations[&Self::index_key(args[0].as_view())];
+                    let right = representations[&Self::index_key(args[1].as_view())];
+                    ETS.metric(left.index(args[0].clone()), right.index(args[1].clone()))
+                }),
+                "T" => self.exact_arguments(term, &arguments, 3).map(|args| {
+                    FunctionBuilder::new(CS.t)
+                        .add_arg(ColorRepresentation::Adjoint.index(args[0].clone()))
+                        .add_arg(ColorRepresentation::Fundamental.index(args[1].clone()))
+                        .add_arg(ColorRepresentation::AntiFundamental.index(args[2].clone()))
+                        .finish()
+                }),
+                "f" => self.exact_arguments(term, &arguments, 3).map(|args| {
+                    args.iter()
+                        .fold(FunctionBuilder::new(CS.f), |builder, argument| {
+                            builder.add_arg(ColorRepresentation::Adjoint.index(argument.clone()))
+                        })
+                        .finish()
+                }),
+                _ => return,
+            };
+            match lowered {
+                Ok(replacement) => **out = replacement,
+                Err(lowering_error) => error = Some(lowering_error),
+            }
+        });
+        if let Some(error) = error {
+            return Err(error);
+        }
+        self.reject_residual_tensors(&atom)?;
+        Ok(atom)
+    }
+
+    fn edge_color_identity(&self, color: i64) -> Result<Option<String>, GenerationError> {
+        let Some(source_representation) = Self::vertex_color_representation(color) else {
+            return Ok(None);
+        };
+        let source = self
+            .legs
+            .iter()
+            .copied()
+            .find(|leg| leg.flow == Flow::Source)
+            .ok_or_else(|| GenerationError::MissingNumeratorMomentum {
+                owner: self.owner.to_string(),
+            })?;
+        let sink = self
+            .legs
+            .iter()
+            .copied()
+            .find(|leg| leg.flow == Flow::Sink)
+            .ok_or_else(|| GenerationError::MissingNumeratorMomentum {
+                owner: self.owner.to_string(),
+            })?;
+        let identity = ETS.metric(
+            source_representation.index(self.index(source, 1)?),
+            source_representation.dual().index(self.index(sink, 1)?),
+        );
+        Ok(Some(identity.to_plain_string()))
+    }
+
+    fn maximum_local_dummy(&self, atom: &Atom) -> Result<usize, GenerationError> {
+        let mut maximum = 0;
+        let mut error = None;
+        let _ = atom.replace_map(|term, _, _| {
+            if error.is_some() {
+                return;
+            }
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            let expected = match self.owner {
+                NumeratorOwner::Vertex(_) => symbol!("FeynKit::VertexDummy"),
+                NumeratorOwner::Edge(_) => symbol!("FeynKit::EdgeDummy"),
+            };
+            if function.get_symbol() != expected || function.get_nargs() != 2 {
+                return;
+            }
+            let Some(local) = function.iter().nth(1) else {
+                return;
+            };
+            match usize::try_from(local) {
+                Ok(local) => maximum = maximum.max(local),
+                Err(_) => error = Some(self.invalid_index(term)),
+            }
+        });
+        error.map_or(Ok(maximum), Err)
+    }
+
+    fn exact_arguments<'a>(
+        &self,
+        tensor: AtomView<'_>,
+        arguments: &'a [Atom],
+        expected: usize,
+    ) -> Result<&'a [Atom], GenerationError> {
+        if arguments.len() == expected {
+            Ok(arguments)
+        } else {
+            Err(self.invalid_tensor(
+                tensor,
+                &format!("expected {expected} arguments, found {}", arguments.len()),
+            ))
+        }
+    }
+
+    fn index_momentum(&self, momentum: AtomView<'_>, index: Atom) -> Result<Atom, GenerationError> {
+        let AtomView::Fun(function) = momentum else {
+            return Err(self.invalid_tensor(momentum, "expected a localized momentum"));
+        };
+        if function.get_symbol() != momentum_symbol() || function.get_nargs() != 1 {
+            return Err(self.invalid_tensor(momentum, "expected a rank-one localized momentum"));
+        }
+        Ok(FunctionBuilder::new(momentum_symbol())
+            .add_arg(function.iter().next().expect("the arity was checked"))
+            .add_arg(index)
+            .finish())
+    }
+
+    fn bispinor(&self, index: Atom) -> Atom {
+        Bispinor {}.new_rep(4).to_symbolic([index])
+    }
+
+    fn minkowski(&self, index: Atom) -> Atom {
+        Minkowski {}.new_rep(4).to_symbolic([index])
+    }
+
+    fn is_representation(index: AtomView<'_>, name: &str) -> bool {
+        matches!(
+            index,
+            AtomView::Fun(function)
+                if function.get_symbol().get_namespace() == "spenso"
+                    && function.get_symbol().get_stripped_name() == name
+                    && function.get_nargs() == 2
+        )
+    }
+
+    fn vertex_color_representation(color: i64) -> Option<ColorRepresentation> {
+        match color {
+            3 => Some(ColorRepresentation::Fundamental),
+            -3 => Some(ColorRepresentation::AntiFundamental),
+            6 => Some(ColorRepresentation::Sextet),
+            -6 => Some(ColorRepresentation::AntiSextet),
+            8 => Some(ColorRepresentation::Adjoint),
+            _ => None,
+        }
+    }
+
+    fn assign_color_representation(
+        &self,
+        representations: &mut HashMap<String, ColorRepresentation>,
+        index: AtomView<'_>,
+        representation: ColorRepresentation,
+    ) -> Result<(), GenerationError> {
+        let key = Self::index_key(index);
+        match representations.insert(key, representation) {
+            Some(previous) if previous != representation => Err(self.invalid_tensor(
+                index,
+                &format!(
+                    "index is used as both {previous:?} and {representation:?} color representations"
+                ),
+            )),
+            _ => Ok(()),
+        }
+    }
+
+    fn index_key(index: AtomView<'_>) -> String {
+        index.to_canonical_string()
+    }
+
+    fn reject_residual_tensors(&self, atom: &Atom) -> Result<(), GenerationError> {
+        let mut residual = None;
+        let _ = atom.replace_map(|term, _, _| {
+            if residual.is_some() {
+                return;
+            }
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            let symbol = function.get_symbol();
+            let name = symbol.get_stripped_name();
+            if Self::is_model_symbol(symbol, name)
+                && matches!(
+                    name,
+                    "Identity"
+                        | "IdentityL"
+                        | "Gamma"
+                        | "Gamma5"
+                        | "ProjM"
+                        | "ProjP"
+                        | "Sigma"
+                        | "C"
+                        | "Metric"
+                        | "PSlash"
+                        | "Epsilon"
+                        | "T"
+                        | "f"
+                        | "d"
+                        | "EpsilonBar"
+                        | "T6"
+                        | "K6"
+                        | "K6Bar"
+                )
+            {
+                residual = Some(self.unsupported_tensor(term));
+            }
+        });
+        residual.map_or(Ok(()), Err)
+    }
+
+    fn invalid_tensor(&self, tensor: AtomView<'_>, message: &str) -> GenerationError {
+        GenerationError::InvalidNumeratorTensor {
+            owner: self.owner.to_string(),
+            tensor: tensor.to_string(),
+            message: message.to_owned(),
+        }
+    }
+
+    fn unsupported_tensor(&self, tensor: AtomView<'_>) -> GenerationError {
+        GenerationError::UnsupportedNumeratorTensor {
+            owner: self.owner.to_string(),
+            tensor: tensor.to_string(),
+        }
     }
 
     fn localize_index_argument(&self, argument: AtomView<'_>) -> Result<Atom, GenerationError> {
@@ -1589,13 +2182,12 @@ impl Generator {
                 ),
                 ColoredNode::Interaction(rule_name) => {
                     let rule = self.model.vertex_rule(rule_name)?;
-                    let raw_numerator = self.interaction_numerator(rule)?;
                     let legs = self.interaction_half_edges(&topology.graph, index, rule)?;
-                    let numerator = NumeratorInstantiation {
+                    let instantiation = NumeratorInstantiation {
                         owner: NumeratorOwner::Vertex(index),
                         legs: &legs,
-                    }
-                    .instantiate(&raw_numerator)?;
+                    };
+                    let numerator = self.interaction_numerator(rule, &instantiation)?;
                     if numerator != "1" {
                         numerator_factors.push(format!("({numerator})"));
                     }
@@ -1621,17 +2213,29 @@ impl Generator {
                     NumeratorHalfEdge {
                         edge: edge_index,
                         flow: Flow::Source,
+                        spin: particle.spin,
+                        color: particle.color,
                     },
                     NumeratorHalfEdge {
                         edge: edge_index,
                         flow: Flow::Sink,
+                        spin: particle.spin,
+                        color: particle.color,
                     },
                 ];
-                NumeratorInstantiation {
+                let instantiation = NumeratorInstantiation {
                     owner: NumeratorOwner::Edge(edge_index),
                     legs: &legs,
+                };
+                let spin = instantiation
+                    .instantiate(self.propagator_numerator(particle)?, NumeratorSector::Spin)?;
+                let color = instantiation.edge_color_identity(particle.color)?;
+                match (spin.as_str(), color) {
+                    ("1", None) => "1".to_owned(),
+                    (_, None) => spin,
+                    ("1", Some(color)) => color,
+                    (_, Some(color)) => format!("({spin})*({color})"),
                 }
-                .instantiate(self.propagator_numerator(particle)?)?
             } else {
                 "1".to_owned()
             };
@@ -1676,6 +2280,8 @@ impl Generator {
                     NumeratorHalfEdge {
                         edge: *edge_id,
                         flow: Flow::Source,
+                        spin: 0,
+                        color: 1,
                     },
                     edge.data.pdg,
                     edge.directed.then_some(true),
@@ -1686,6 +2292,8 @@ impl Generator {
                     NumeratorHalfEdge {
                         edge: *edge_id,
                         flow: Flow::Sink,
+                        spin: 0,
+                        color: 1,
                     },
                     edge.data.pdg,
                     edge.directed.then_some(false),
@@ -1707,7 +2315,10 @@ impl Generator {
                     particle: particle_name.clone(),
                 });
             };
-            ordered.push(available.remove(position).0);
+            let mut selected = available.remove(position).0;
+            selected.spin = particle.spin;
+            selected.color = particle.color;
+            ordered.push(selected);
         }
         Ok(ordered)
     }
@@ -1727,7 +2338,11 @@ impl Generator {
             .map_or("1", |propagator| propagator.numerator.as_str()))
     }
 
-    fn interaction_numerator(&self, rule: &VertexRule) -> Result<String, GenerationError> {
+    fn interaction_numerator(
+        &self,
+        rule: &VertexRule,
+        instantiation: &NumeratorInstantiation<'_>,
+    ) -> Result<String, GenerationError> {
         let mut terms = Vec::new();
         for (color_index, color) in rule.color_structures.iter().enumerate() {
             for (lorentz_index, lorentz_name) in rule.lorentz_structures.iter().enumerate() {
@@ -1739,6 +2354,8 @@ impl Generator {
                 {
                     let coupling = &self.model.coupling(coupling)?.expression;
                     let lorentz = &self.model.lorentz_structure(lorentz_name)?.structure;
+                    let color = instantiation.instantiate(color, NumeratorSector::Color)?;
+                    let lorentz = instantiation.instantiate(lorentz, NumeratorSector::Spin)?;
                     terms.push(format!("({coupling})*({color})*({lorentz})"));
                 }
             }
@@ -2625,6 +3242,44 @@ mod tests {
 
     use super::*;
 
+    fn test_atom(expression: &str) -> Atom {
+        Atom::parse(
+            expression,
+            "feynkit_generator_test",
+            ParseSettings::default(),
+        )
+        .unwrap()
+    }
+
+    fn tensor_test_legs() -> [NumeratorHalfEdge; 4] {
+        [
+            NumeratorHalfEdge {
+                edge: 10,
+                flow: Flow::Source,
+                spin: 2,
+                color: -3,
+            },
+            NumeratorHalfEdge {
+                edge: 20,
+                flow: Flow::Sink,
+                spin: 2,
+                color: 3,
+            },
+            NumeratorHalfEdge {
+                edge: 30,
+                flow: Flow::Source,
+                spin: 3,
+                color: 8,
+            },
+            NumeratorHalfEdge {
+                edge: 40,
+                flow: Flow::Sink,
+                spin: 3,
+                color: 8,
+            },
+        ]
+    }
+
     fn scalar_model() -> Model {
         Model::new(ModelDefinition {
             name: "phi3".to_owned(),
@@ -2739,7 +3394,7 @@ mod tests {
                 ],
                 "vertex_rules":[{
                     "name":"V","particles":["f~","f","a"],
-                    "color_structures":["1","T(1,2,3)"],
+                    "color_structures":["1","T(3,2,1)"],
                     "lorentz_structures":["FFV"],
                     "couplings":[["GC_LOW"],["GC_HIGH"]]
                 }]
@@ -2808,6 +3463,10 @@ mod tests {
             }"#,
         )
         .unwrap()
+    }
+
+    fn standard_model() -> Model {
+        Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap()
     }
 
     fn photon_process() -> Process {
@@ -2967,12 +3626,200 @@ mod tests {
     fn interaction_numerator_uses_model_expressions() {
         let model = fermion_model();
         let generator = Generator::new(model.clone());
+        let legs = tensor_test_legs();
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs[..3],
+        };
+        let numerator = generator
+            .interaction_numerator(model.vertex_rule("V").unwrap(), &instantiation)
+            .unwrap();
+
+        assert!(numerator.contains("spenso::gamma"));
+        assert!(numerator.contains("spenso::t"));
+        assert!(!numerator.contains("Gamma("));
+        assert!(!numerator.contains("UFO::T("));
+    }
+
+    #[test]
+    fn lowers_ufo_lorentz_tensors_to_spenso_structures() {
+        let legs = tensor_test_legs();
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs,
+        };
+        let gamma = instantiation
+            .instantiate("Gamma(3,2,1)", NumeratorSector::Spin)
+            .unwrap();
         assert_eq!(
-            generator
-                .interaction_numerator(model.vertex_rule("V").unwrap())
-                .unwrap(),
-            "(g_low)*(1)*(Gamma(3,2,1))+(g_high)*(T(1,2,3))*(Gamma(3,2,1))"
+            test_atom(&gamma),
+            test_atom(
+                "spenso::gamma(spenso::bis(4,FeynKit::SinkIndex(20,1)),spenso::bis(4,FeynKit::SourceIndex(10,1)),spenso::mink(4,FeynKit::SourceIndex(30,1)))"
+            )
         );
+
+        let metric = instantiation
+            .instantiate("Metric(3,4)", NumeratorSector::Spin)
+            .unwrap();
+        assert_eq!(
+            test_atom(&metric),
+            test_atom(
+                "spenso::g(spenso::mink(4,FeynKit::SourceIndex(30,1)),spenso::mink(4,FeynKit::SinkIndex(40,1)))"
+            )
+        );
+
+        let identity = instantiation
+            .instantiate("Identity(1,2)", NumeratorSector::Spin)
+            .unwrap();
+        assert_eq!(
+            test_atom(&identity),
+            test_atom(
+                "spenso::g(spenso::bis(4,FeynKit::SourceIndex(10,1)),spenso::bis(4,FeynKit::SinkIndex(20,1)))"
+            )
+        );
+    }
+
+    #[test]
+    fn lowers_ufo_color_tensors_with_dual_representations() {
+        let legs = tensor_test_legs();
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs,
+        };
+        let tensors = instantiation
+            .instantiate("Identity(1,2)*T(3,2,1)*f(3,-1,-2)", NumeratorSector::Color)
+            .unwrap();
+        let expected = test_atom(
+            "spenso::g(spenso::dind(spenso::cof(3,FeynKit::SourceIndex(10,1))),spenso::cof(3,FeynKit::SinkIndex(20,1)))*spenso::t(spenso::coad(8,FeynKit::SourceIndex(30,1)),spenso::cof(3,FeynKit::SinkIndex(20,1)),spenso::dind(spenso::cof(3,FeynKit::SourceIndex(10,1))))*spenso::f(spenso::coad(8,FeynKit::SourceIndex(30,1)),spenso::coad(8,FeynKit::VertexDummy(7,1)),spenso::coad(8,FeynKit::VertexDummy(7,2)))",
+        );
+        assert_eq!(test_atom(&tensors), expected);
+    }
+
+    #[test]
+    fn expands_pslash_with_one_shared_collision_free_lorentz_index() {
+        let legs = [
+            NumeratorHalfEdge {
+                edge: 5,
+                flow: Flow::Source,
+                spin: 2,
+                color: 3,
+            },
+            NumeratorHalfEdge {
+                edge: 5,
+                flow: Flow::Sink,
+                spin: 2,
+                color: 3,
+            },
+        ];
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Edge(5),
+            legs: &legs,
+        };
+        let slash = instantiation
+            .instantiate(
+                "PSlash(2,1)*Metric(dummy(4),dummy(4))",
+                NumeratorSector::Spin,
+            )
+            .unwrap();
+        assert_eq!(
+            test_atom(&slash),
+            test_atom(
+                "spenso::gamma(spenso::bis(4,FeynKit::SinkIndex(5,1)),spenso::bis(4,FeynKit::SourceIndex(5,1)),spenso::mink(4,FeynKit::EdgeDummy(5,5)))*FeynKit::Momentum(5,spenso::mink(4,FeynKit::EdgeDummy(5,5)))*spenso::g(spenso::mink(4,FeynKit::EdgeDummy(5,4)),spenso::mink(4,FeynKit::EdgeDummy(5,4)))"
+            )
+        );
+    }
+
+    #[test]
+    fn keeps_color_and_spin_identity_sectors_distinct() {
+        let model = standard_model();
+        let generator = Generator::new(model.clone());
+        let legs = [
+            NumeratorHalfEdge {
+                edge: 1,
+                flow: Flow::Source,
+                spin: 2,
+                color: -3,
+            },
+            NumeratorHalfEdge {
+                edge: 2,
+                flow: Flow::Sink,
+                spin: 2,
+                color: 3,
+            },
+            NumeratorHalfEdge {
+                edge: 3,
+                flow: Flow::Source,
+                spin: 1,
+                color: 1,
+            },
+        ];
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(9),
+            legs: &legs,
+        };
+        let numerator = generator
+            .interaction_numerator(model.vertex_rule("V_78").unwrap(), &instantiation)
+            .unwrap();
+
+        assert!(numerator.contains("spenso::bis(4"));
+        assert!(numerator.contains("spenso::cof(3"));
+        assert!(numerator.contains("spenso::dind"));
+        assert_eq!(numerator.matches("spenso::g(").count(), 2);
+        assert!(!numerator.contains("UFO::Identity("));
+    }
+
+    #[test]
+    fn generated_qcd_loop_numerators_are_spenso_ready() {
+        let model = standard_model();
+        let options = GenerationOptions::default()
+            .threads(1)
+            .max_vertices(2)
+            .with_graph_filter(GenerationFilter::CouplingOrders(BTreeMap::from([
+                ("QCD".to_owned(), (2, Some(2))),
+                ("QED".to_owned(), (0, Some(0))),
+            ])))
+            .with_graph_filter(GenerationFilter::ParticleVeto(vec![
+                -6, -4, -3, -2, -1, 1, 2, 3, 4, 6,
+            ]));
+        let generated = Generator::new(model)
+            .generate(
+                &Process::amplitude(["g"], ["g"])
+                    .with_loop_count(1, 1)
+                    .unwrap(),
+                &options,
+            )
+            .unwrap();
+        assert_eq!(generated.diagrams.len(), 3);
+
+        let residual_heads = [
+            "UFO::Gamma(",
+            "UFO::Metric(",
+            "UFO::PSlash(",
+            "UFO::Identity(",
+            "UFO::T(",
+            "UFO::f(",
+        ];
+        let mut combined = String::new();
+        for diagram in &generated.diagrams {
+            combined.push_str(diagram.numerator().unwrap());
+            for (_, vertex) in diagram.vertices() {
+                if let Some(numerator) = &vertex.numerator {
+                    combined.push_str(numerator);
+                }
+            }
+            for (_, _, edge) in diagram.edges() {
+                if let Some(numerator) = &edge.numerator {
+                    combined.push_str(numerator);
+                }
+            }
+        }
+        for head in residual_heads {
+            assert!(!combined.contains(head), "residual tensor head {head}");
+        }
+        assert!(combined.contains("spenso::gamma("));
+        assert!(combined.contains("spenso::t("));
+        assert!(combined.contains("spenso::f("));
+        assert!(combined.contains("spenso::g("));
     }
 
     #[test]
