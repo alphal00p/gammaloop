@@ -19,6 +19,7 @@ fn linnet_py(module: &Bound<'_, PyModule>) -> PyResult<()> {
     drawing::register(module)?;
     dot::register(module)?;
     typst::register_typst_api(module)?;
+    render::register(module)?;
     Ok(())
 }
 

@@ -41,6 +41,7 @@ __all__ = [
     "NodeStore",
     "Orientation",
     "OrientedCut",
+    "PreparedRender",
     "Anchor",
     "Compass",
     "DashPattern",
@@ -486,6 +487,10 @@ class Graph:
     @classmethod
     def from_dot_file(cls, path: builtins.str | os.PathLike[builtins.str], codec: DotCodec, *, node_store: NodeStore = NodeStore.Vec) -> Graph: ...
     def to_dot(self, codec: typing.Optional[DotCodec] = None) -> builtins.str: ...
+    def prepare_render(self, *, config: RenderConfig | None = None) -> PreparedRender:
+        r"""
+        Stage one render so its exact Typst source and compiled output stay correlated.
+        """
     def render(self, output: builtins.str | os.PathLike[builtins.str], *, config: RenderConfig | None = None) -> pathlib.Path: ...
     def to_svg(self, *, config: RenderConfig | None = None) -> builtins.str: ...
     def _repr_svg_(self) -> builtins.str: ...
@@ -741,6 +746,25 @@ class OrientedCut:
         Return the signed intersection count with a cycle from the same graph revision.
         """
     def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class PreparedRender:
+    r"""
+    One Typst render whose generated entrypoint and staged topology share a lifetime.
+    """
+    @property
+    def typst_source(self) -> builtins.str:
+        r"""
+        Return the exact generated Typst entrypoint for this preparation.
+        """
+    def render(self, output: builtins.str | os.PathLike[builtins.str]) -> pathlib.Path:
+        r"""
+        Compile this preparation to a PDF, SVG, or PNG selected by the suffix.
+        """
+    def to_svg(self) -> builtins.str:
+        r"""
+        Compile this preparation and return its one-page SVG document.
+        """
 
 @typing.final
 class Edge:

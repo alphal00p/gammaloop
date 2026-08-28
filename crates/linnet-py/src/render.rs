@@ -8,6 +8,7 @@ use linnet::half_edge::involution::{Flow, Hedge};
 use pyo3::exceptions::{PyReferenceError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyBytes, PyDict, PyDictMethods, PyList, PyListMethods, PyModule};
+use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 
 use crate::drawing::DrawingKind;
 use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyNode};
@@ -239,6 +240,94 @@ fn build_request(
     Ok((renderer, request, build_dir))
 }
 
+/// One Typst render whose generated entrypoint and staged topology share a lifetime.
+#[gen_stub_pyclass]
+#[pyclass(module = "linnet_py", frozen)]
+pub(crate) struct PreparedRender {
+    prepared: PreparedTypstRender,
+    _build_dir: tempfile::TempDir,
+}
+
+impl PreparedRender {
+    fn typst_source_value(&self) -> PyResult<String> {
+        fs::read_to_string(self.prepared.entrypoint())
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))
+    }
+
+    fn render_to(&self, py: Python<'_>, output: PathBuf) -> PyResult<PathBuf> {
+        let format = output_format(&output)?;
+        if let Some(parent) = output
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty())
+        {
+            fs::create_dir_all(parent).map_err(|error| {
+                PyRuntimeError::new_err(format!(
+                    "failed to create output directory {}: {error}",
+                    parent.display()
+                ))
+            })?;
+        }
+        compile_typst(py, &self.prepared, Some(&output), format)?;
+        Ok(output)
+    }
+
+    fn svg(&self, py: Python<'_>) -> PyResult<String> {
+        let rendered = compile_typst(py, &self.prepared, None, "svg")?;
+        let bytes = if let Ok(bytes) = rendered.cast::<PyBytes>() {
+            bytes.as_bytes().to_vec()
+        } else if let Ok(pages) = rendered.cast::<PyList>() {
+            if pages.len() != 1 {
+                return Err(PyRuntimeError::new_err(format!(
+                    "Typst SVG render produced {} pages; expected exactly one",
+                    pages.len()
+                )));
+            }
+            pages
+                .get_item(0)?
+                .cast_into::<PyBytes>()?
+                .as_bytes()
+                .to_vec()
+        } else {
+            return Err(PyRuntimeError::new_err(
+                "typst.compile(format='svg') did not return SVG bytes",
+            ));
+        };
+        String::from_utf8(bytes).map_err(|error| {
+            PyRuntimeError::new_err(format!("Typst returned invalid UTF-8 SVG: {error}"))
+        })
+    }
+}
+
+#[gen_stub_pymethods]
+#[pymethods]
+impl PreparedRender {
+    /// Return the exact generated Typst entrypoint for this preparation.
+    #[getter]
+    fn typst_source(&self) -> PyResult<String> {
+        self.typst_source_value()
+    }
+
+    /// Compile this preparation to a PDF, SVG, or PNG selected by the suffix.
+    fn render(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="builtins.str | os.PathLike[builtins.str]", imports=("builtins", "os")))]
+        output: PathBuf,
+    ) -> PyResult<PathBuf> {
+        self.render_to(py, output)
+    }
+
+    /// Compile this preparation and return its one-page SVG document.
+    fn to_svg(&self, py: Python<'_>) -> PyResult<String> {
+        self.svg(py)
+    }
+}
+
+pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<PreparedRender>()?;
+    Ok(())
+}
+
 fn output_format(output: &Path) -> PyResult<&'static str> {
     match output
         .extension()
@@ -289,25 +378,7 @@ pub(crate) fn render_graph(
     output: PathBuf,
     config: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<PathBuf> {
-    let (renderer, request, build_dir) = request(py, graph, config)?;
-    let format = output_format(&output)?;
-    if let Some(parent) = output
-        .parent()
-        .filter(|parent| !parent.as_os_str().is_empty())
-    {
-        fs::create_dir_all(parent).map_err(|error| {
-            PyRuntimeError::new_err(format!(
-                "failed to create output directory {}: {error}",
-                parent.display()
-            ))
-        })?;
-    }
-    let prepared = renderer
-        .prepare(&request)
-        .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-    let _build_dir = build_dir;
-    compile_typst(py, &prepared, Some(&output), format)?;
-    Ok(output)
+    prepare_graph(py, graph, config)?.render_to(py, output)
 }
 
 pub(crate) fn graph_to_svg(
@@ -315,32 +386,20 @@ pub(crate) fn graph_to_svg(
     graph: &Py<PyGraph>,
     config: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<String> {
+    prepare_graph(py, graph, config)?.svg(py)
+}
+
+pub(crate) fn prepare_graph(
+    py: Python<'_>,
+    graph: &Py<PyGraph>,
+    config: Option<&Bound<'_, PyAny>>,
+) -> PyResult<PreparedRender> {
     let (renderer, request, build_dir) = request(py, graph, config)?;
     let prepared = renderer
         .prepare(&request)
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-    let _build_dir = build_dir;
-    let rendered = compile_typst(py, &prepared, None, "svg")?;
-    let bytes = if let Ok(bytes) = rendered.cast::<PyBytes>() {
-        bytes.as_bytes().to_vec()
-    } else if let Ok(pages) = rendered.cast::<PyList>() {
-        if pages.len() != 1 {
-            return Err(PyRuntimeError::new_err(format!(
-                "Typst SVG render produced {} pages; expected exactly one",
-                pages.len()
-            )));
-        }
-        pages
-            .get_item(0)?
-            .cast_into::<PyBytes>()?
-            .as_bytes()
-            .to_vec()
-    } else {
-        return Err(PyRuntimeError::new_err(
-            "typst.compile(format='svg') did not return SVG bytes",
-        ));
-    };
-    String::from_utf8(bytes).map_err(|error| {
-        PyRuntimeError::new_err(format!("Typst returned invalid UTF-8 SVG: {error}"))
+    Ok(PreparedRender {
+        prepared,
+        _build_dir: build_dir,
     })
 }
