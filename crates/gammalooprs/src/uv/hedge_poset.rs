@@ -13,8 +13,9 @@ use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NoData, NodeIndex,
-    algorithms::trace_unfold::{
-        HiddenData, Independence, TraceKey, TraceUnfold, UnfoldedTraceGraph,
+    algorithms::{
+        DirectionBasis,
+        trace_unfold::{HiddenData, Independence, TraceKey, TraceUnfold, UnfoldedTraceGraph},
     },
     involution::{EdgeIndex, Flow, HedgePair},
     nodestore::{NodeStorageOps, NodeStorageVec},
@@ -704,7 +705,11 @@ impl Forests {
 
     fn cache_node_label_atoms(&mut self) {
         self.cached_node_label_atoms = Some(AHashMap::new());
-        for nidx in self.graph.topo_sort_kahn().unwrap() {
+        for nidx in self
+            .graph
+            .topo_sort_kahn(DirectionBasis::Underlying)
+            .unwrap()
+        {
             let atom = self.node_label_atom(nidx);
             self.cached_node_label_atoms
                 .as_mut()
@@ -803,7 +808,9 @@ impl Forests {
     }
 
     fn compatible_topological_order(&self, subset: &SuBitGraph) -> Result<Vec<NodeIndex>> {
-        let mut order = self.graph.topo_sort_kahn_of(subset)?;
+        let mut order = self
+            .graph
+            .topo_sort_kahn_of(subset, DirectionBasis::Underlying)?;
 
         if let Some(root_position) = order.iter().position(|node| *node == self.root) {
             if root_position != 0 {
@@ -1153,7 +1160,12 @@ impl Forests {
         vakint: &Vakint,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        for (order, nidx) in self.graph.topo_sort_kahn()?.into_iter().enumerate() {
+        for (order, nidx) in self
+            .graph
+            .topo_sort_kahn(DirectionBasis::Underlying)?
+            .into_iter()
+            .enumerate()
+        {
             debug!(order, nidx=%nidx, key=%self.graph[nidx], "Computing hedge-poset 4D term");
             let operation = self.graph[nidx].clone();
             let (local_4d, integrated) = self.compute_4d_for_node(nidx, graph, vakint, settings)?;
@@ -1380,7 +1392,7 @@ impl Forests {
         let mut cover_groups: BTreeMap<SuBitGraph, Vec<NodeIndex>> = BTreeMap::new();
 
         self.graph
-            .topo_sort_kahn()
+            .topo_sort_kahn(DirectionBasis::Underlying)
             .unwrap()
             .iter()
             .for_each(|nidx| {

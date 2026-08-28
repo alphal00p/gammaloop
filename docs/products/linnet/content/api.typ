@@ -172,6 +172,8 @@ or indexed nodes and edges, exact half-edge indices, or live-view predicates, th
 object with Linnet's topology algorithms and owning transformations:
 
 ```python
+from linnet_py import DirectionBasis
+
 # Explicit selections are unioned. Selecting a node includes its incident crown.
 selected = graph.subgraph(nodes=["in"], edges=["propagator"])
 
@@ -184,10 +186,31 @@ component_copies = [graph.concretize(part) for part in graph.connected_component
 tree = graph.depth_first_traverse("in", subgraph=selected)
 cycles, covered = graph.cycle_basis(selected)
 
+# Boundary operations return composable structural selections.
+inside_boundary = graph.internal_boundary(selected)
+incident_boundary = graph.boundary(selected)
+external = graph.external_half_edges()
+
+# Directed algorithms default to the underlying source/sink flow.
+assert graph.is_reachable("in", "out")
+underlying_order = graph.topological_order()
+superficial_order = graph.topological_order(
+    direction=DirectionBasis.Superficial,
+)
+
+# Enumeration is explicit about its potentially exponential search space.
+circuits = graph.all_cycles(subgraph=selected, max_results=31)
+one_bond = graph.find_bond(subgraph=selected, min_size=1, max_size=1)
+tadpole_components = graph.tadpoles(["in"])
+
+# The result owns a reduced topology; views into graph remain live.
+reduced = graph.transitive_reduction()
+
 for partition in graph.all_cuts(["in"], ["out"]):
     source_region = partition.source_side
     cut_edges = partition.edges
     target_region = partition.target_side
+    relative_orientation = partition.boundary.orientation(cut_edges[0])
 
 # Inclusion-minimal connected bipartition boundaries of size one.
 bridge_bonds = graph.all_bonds(subgraph=selected, min_size=1, max_size=1)
@@ -200,9 +223,10 @@ removed = graph.extract(propagators)
 
 `Subgraph` supports immutable union, intersection, difference, symmetric difference, complement,
 and their Python operators. The binding also exposes connectivity and component queries, DFS and
-BFS trees, bridges, cycle bases, spanning forests, cut partitions, bond enumeration, contraction,
-disconnected append, and callback-driven joining of dangling half-edges. `append()` and `join()`
-return a graph while their
+BFS trees, tree parents/children/ancestors and fundamental cycles, boundary/crown queries, bridges,
+cycle bases and bounded circuit enumeration, spanning forests, cut partitions, bond queries,
+tadpole components, contraction, disconnected append, and callback-driven joining of dangling
+half-edges. `append()` and `join()` return a graph while their
 `*_mut()` counterparts update the left graph; the right graph is unchanged. Transformations retain
 arbitrary data by Python identity and copy drawing/configuration by value. Callback failures and
 name collisions never publish a candidate topology. Join callbacks receive live views, so any
@@ -214,7 +238,28 @@ eagerly materializes the native admissible separating
 partitions and can be combinatorial. Its result is sorted by structural half-edge indices, while
 `CutPartition.boundary.left` and `.right` retain the orientation of each boundary half-edge.
 `all_bonds` enumerates inclusion-minimal connected bipartition boundaries in a size range; it is
-not a minimum-cardinality or max-flow operation.
+not a minimum-cardinality or max-flow operation. `find_bond` returns one deterministic native
+witness without materializing the complete family. `all_cycles(max_results=...)` checks the full
+non-empty cycle-space candidate count before enumeration; `max_results` therefore bounds work even
+when only a few combinations are circuits. Tadpole terminals must be distinct, valid, and incident
+to at least one half-edge; identification-history aliases of the same structural node are duplicates.
+
+`DirectionBasis.Underlying` is the default for reachability, topological order, and transitive
+reduction. It follows the intrinsic half-edge source/sink roles used by GammaLoop momentum routing.
+`DirectionBasis.Superficial` applies each edge's drawing-independent `Orientation`: reversed edges
+reverse the arc and undirected edges contribute no arc. A direction choice is local to the
+algorithm and never changes stored flow or orientation. `transitive_reduction()` returns a new
+graph with retained arbitrary payload objects shared by identity; Python transitive closure is
+intentionally absent until synthesized edges have an explicit data/drawing factory.
+When `is_reachable(..., subgraph=...)` is used, both endpoint nodes must belong to that selection;
+an endpoint outside it is a `ValueError`, rather than an implicit unreachable result.
+
+Traversal-tree relationship methods validate that a node belongs to that exact tree revision.
+`parent` returns `None` at the root, `children` returns immediate children, and `ancestors` runs from
+the immediate parent through the root. `fundamental_cycle` returns `None` for a tree edge and rejects
+dangling edges or edges whose endpoints are outside the traversal tree. An `OrientedCut` exposes its
+edges, the orientation of each edge relative to the cut, and its winding number against a cycle from
+the same graph revision.
 
 === Typed Typst configuration
 
@@ -230,22 +275,13 @@ the structured Python reference lists the choices for each option.
 Linnest surfaces. Layout passes retain their order:
 
 ```python
-from dataclasses import dataclass
-
 from linnet_py import (
-    AUTO,
-    Color,
-    DebugLevel,
-    DrawOptions,
-    GraphStyleOptions,
     LayoutAlgorithm,
     LayoutDirection,
     LayoutOptions,
-    Length,
     PhysicsOptions,
     RenderConfig,
-    Stroke,
-    TextLabel,
+    RenderMode,
 )
 
 layouts = LayoutOptions(
@@ -254,24 +290,23 @@ layouts = LayoutOptions(
     steps=200,
 ).then(label_steps=80)
 graph.render_config = RenderConfig(
-    title=TextLabel("Example", size=Length.pt(11)),
-    style=GraphStyleOptions(node_label=AUTO),
+    title="Example",
     layouts=layouts,
-    drawing=DrawOptions(
-        debug=DebugLevel.Off,
-        node_radius=AUTO,
-        edge_stroke=Stroke(paint=Color("black"), thickness=Length.pt(0.6)),
-    ),
-    physics=PhysicsOptions(
-        momentum_arrows=True,
-        show_momentum=True,
-        show_edge_index=True,
-    ),
 )
 
 output = graph.render("diagram.pdf")
 svg = graph.to_svg()
 graph  # the final expression in a notebook renders inline
+
+# Physics callbacks and topology-based mode inference are explicit overlays.
+physics_svg = graph.to_svg(config=RenderConfig(
+    mode=RenderMode.Auto,
+    physics=PhysicsOptions(
+        momentum_arrows=True,
+        show_momentum=True,
+        show_edge_index=True,
+    ),
+))
 ```
 
 The four configuration layers are shipped defaults, the selected diagram-mode preset, the
@@ -280,6 +315,13 @@ writes PDF, SVG, or PNG according to the output suffix. `to_svg(config=None)` re
 and `_repr_svg_()` supports notebooks. These are the only high-level rendering methods; there are
 no raw command-line inputs or string-expression escape hatches. Rendering requires Typst 0.15 or
 newer and keeps generated inputs and imported modules alive until compilation completes.
+
+The shipped notebook display is generic and model-neutral, including for graphs with dangling
+edges. `RenderMode.Auto` explicitly opts into amplitude/cross-section inference from topology,
+while `PhysicsOptions()` enables particle, momentum, index-label, and physics-line callbacks.
+Use both when physics mode labels and placement are wanted. `physics=None` explicitly disables an
+inherited physics layer; `INHERIT` leaves the preceding layer unchanged. Explicit node and edge
+labels and ordinary styles remain active without physics.
 
 `graph.render_config` is a live mutable object: assign its fields directly, or replace the whole
 configuration. The nested style, layout, drawing, and physics option objects are immutable values,

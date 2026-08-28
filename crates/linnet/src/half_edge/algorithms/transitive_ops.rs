@@ -31,11 +31,11 @@ use crate::half_edge::{
     builder::HedgeGraphBuilder,
     involution::Flow,
     nodestore::NodeStorageOps,
-    subgraph::{ModifySubSet, SuBitGraph},
+    subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
     HedgeGraph, NoData, NodeIndex,
 };
 
-use super::topological_order::TopoError;
+use super::{topological_order::TopoError, DirectionBasis};
 
 /// Error types for transitive operations on half-edge graphs.
 ///
@@ -118,7 +118,7 @@ impl<V, S: NodeStorageOps<NodeData = V, Base = SuBitGraph>> HedgeGraph<NoData, V
 
         // Apply transitive reduction to get the Hasse diagram
         complete_graph
-            .transitive_reduction()
+            .transitive_reduction(DirectionBasis::Underlying)
             .expect("Partial order should be acyclic")
     }
 }
@@ -149,6 +149,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
     /// # Arguments
     ///
     /// * `self` - Takes ownership of the graph to avoid cloning
+    /// * `basis` - Selects whether underlying or superficial edge direction is followed
     ///
     /// # Returns
     ///
@@ -162,16 +163,16 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
     ///
     /// ```rust,ignore
     /// // Graph: A -> B -> C
-    /// let closure = graph.transitive_closure()?;
+    /// let closure = graph.transitive_closure(DirectionBasis::Underlying)?;
     /// // Result: A -> B -> C, A -> C (transitive edge added)
     /// ```
-    pub fn transitive_closure(self) -> Result<Self, TransitiveError>
+    pub fn transitive_closure(self, basis: DirectionBasis) -> Result<Self, TransitiveError>
     where
         E: Default,
         H: Default,
     {
         // First verify this is a DAG by getting topological order
-        let topo_order = self.topo_sort_kahn()?;
+        let topo_order = self.topo_sort_kahn(basis)?;
 
         // Build reachability matrix using Floyd-Warshall algorithm
         let nodes: Vec<NodeIndex> = topo_order;
@@ -197,7 +198,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
         // Initialize direct edges
         for (i, &from_node) in nodes.iter().enumerate() {
             for hedge in self.iter_crown(from_node) {
-                if self.flow(hedge) == Flow::Source {
+                if basis.flow(&self, hedge) == Some(Flow::Source) {
                     if let Some(to_node) = self.involved_node_id(hedge) {
                         if let Some(&j) = node_to_idx.get(&to_node) {
                             reachable[i][j] = true;
@@ -225,9 +226,8 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
                     let to_node = idx_to_node[j];
 
                     // Check if edge already exists
-                    // Check if edge already exists
                     let edge_exists = graph.iter_crown(from_node).any(|hedge| {
-                        graph.flow(hedge) == crate::half_edge::involution::Flow::Source
+                        basis.flow(&graph, hedge) == Some(Flow::Source)
                             && graph.involved_node_id(hedge) == Some(to_node)
                     });
 
@@ -285,6 +285,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
     /// # Arguments
     ///
     /// * `self` - Takes ownership of the graph to modify it in place
+    /// * `basis` - Selects whether underlying or superficial edge direction is followed
     ///
     /// # Returns
     ///
@@ -298,21 +299,21 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
     ///
     /// ```rust,ignore
     /// // Graph: A -> B -> C, A -> C (redundant)
-    /// let reduction = graph.transitive_reduction()?;
+    /// let reduction = graph.transitive_reduction(DirectionBasis::Underlying)?;
     /// // Result: A -> B -> C (A -> C removed as redundant)
     /// ```
-    pub fn transitive_reduction(mut self) -> Result<Self, TransitiveError> {
+    pub fn transitive_reduction(mut self, basis: DirectionBasis) -> Result<Self, TransitiveError> {
         // First verify this is a DAG
-        let topo_order = self.topo_sort_kahn()?;
+        let topo_order = self.topo_sort_kahn(basis)?;
 
         // Collect all redundant edges (edges that can be removed)
         let mut redundant_hedges = Vec::new();
         for &u in &topo_order {
             for hedge in self.iter_crown(u) {
-                if self.flow(hedge) == Flow::Source {
+                if basis.flow(&self, hedge) == Some(Flow::Source) {
                     if let Some(v) = self.involved_node_id(hedge) {
                         // Check if this edge is redundant (has alternative path)
-                        if self.has_alternative_path(u, v) {
+                        if self.has_alternative_path(u, v, basis) {
                             redundant_hedges.push(hedge);
                         }
                     }
@@ -347,14 +348,14 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
     /// This uses breadth-first search starting from all neighbors of u (except v)
     /// to determine if v can be reached through an indirect path. This is used
     /// to identify redundant edges in transitive reduction.
-    fn has_alternative_path(&self, u: NodeIndex, v: NodeIndex) -> bool {
+    fn has_alternative_path(&self, u: NodeIndex, v: NodeIndex, basis: DirectionBasis) -> bool {
         // Use BFS to find if there's a path from u to v without using the direct edge
         let mut queue = VecDeque::new();
         let mut visited = HashSet::new();
 
         // Start with all neighbors of u except v
         for hedge in self.iter_crown(u) {
-            if self.flow(hedge) == Flow::Source {
+            if basis.flow(self, hedge) == Some(Flow::Source) {
                 if let Some(neighbor) = self.involved_node_id(hedge) {
                     if neighbor != v && !visited.contains(&neighbor) {
                         queue.push_back(neighbor);
@@ -371,7 +372,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
             }
 
             for hedge in self.iter_crown(current) {
-                if self.flow(hedge) == Flow::Source {
+                if basis.flow(self, hedge) == Some(Flow::Source) {
                     if let Some(neighbor) = self.involved_node_id(hedge) {
                         if !visited.contains(&neighbor) {
                             queue.push_back(neighbor);
@@ -387,14 +388,14 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
 
     /// Checks if there is a path from `source` to `target` in the graph.
     ///
-    /// Uses breadth-first search to determine reachability. This method
-    /// only follows source half-edges (outgoing edges) to traverse the
-    /// directed graph structure.
+    /// Uses breadth-first search to determine reachability. This method follows
+    /// outgoing half-edges in the selected direction basis.
     ///
     /// # Arguments
     ///
     /// * `source` - The source node
     /// * `target` - The target node
+    /// * `basis` - Selects whether underlying or superficial edge direction is followed
     ///
     /// # Returns
     ///
@@ -402,9 +403,29 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
     ///
     /// # Half-Edge Traversal
     ///
-    /// The algorithm only follows half-edges with `Flow::Source` to ensure
-    /// it respects the directed nature of edges in the graph.
-    pub fn is_reachable(&self, source: NodeIndex, target: NodeIndex) -> bool {
+    /// The algorithm follows half-edges with `Flow::Source` in the selected
+    /// direction basis. Superficially undirected edges are not traversed.
+    pub fn is_reachable(
+        &self,
+        source: NodeIndex,
+        target: NodeIndex,
+        basis: DirectionBasis,
+    ) -> bool {
+        self.is_reachable_of(&self.full_filter(), source, target, basis)
+    }
+
+    /// Checks if there is a path from `source` to `target` within a subgraph.
+    ///
+    /// Both half-edges of an internal edge must belong to `subgraph`. Identity
+    /// half-edges and edges split by the subgraph boundary are not traversed.
+    /// Superficially undirected edges are ignored in the superficial basis.
+    pub fn is_reachable_of<S: SubSetLike>(
+        &self,
+        subgraph: &S,
+        source: NodeIndex,
+        target: NodeIndex,
+        basis: DirectionBasis,
+    ) -> bool {
         if source == target {
             return true;
         }
@@ -417,16 +438,23 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
 
         while let Some(current) = queue.pop_front() {
             for hedge in self.iter_crown(current) {
-                if self.flow(hedge) == Flow::Source {
-                    if let Some(neighbor) = self.involved_node_id(hedge) {
-                        if neighbor == target {
-                            return true;
-                        }
-                        if !visited.contains(&neighbor) {
-                            visited.insert(neighbor);
-                            queue.push_back(neighbor);
-                        }
-                    }
+                if !subgraph.includes(&hedge) {
+                    continue;
+                }
+                let inverse = self.inv(hedge);
+                if inverse == hedge
+                    || !subgraph.includes(&inverse)
+                    || basis.flow(self, hedge) != Some(Flow::Source)
+                {
+                    continue;
+                }
+
+                let neighbor = self.node_id(inverse);
+                if neighbor == target {
+                    return true;
+                }
+                if visited.insert(neighbor) {
+                    queue.push_back(neighbor);
                 }
             }
         }
@@ -437,11 +465,18 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V, Base = crate::half_edge::subgraph:
 
 #[cfg(test)]
 mod tests {
-    use crate::half_edge::nodestore::NodeStorageVec;
     use crate::{
         dot,
-        half_edge::{nodestore::NodeStorageOps, HedgeGraph, NoData},
+        half_edge::{
+            algorithms::DirectionBasis,
+            builder::HedgeGraphBuilder,
+            involution::{Flow, HedgePair, Orientation},
+            nodestore::{NodeStorageOps, NodeStorageVec},
+            subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
+            HedgeGraph, NoData,
+        },
         parser::{DotGraph, DotVertexData},
+        tree::{child_vec::ChildVecStore, Forest},
     };
 
     #[test]
@@ -457,7 +492,10 @@ mod tests {
         .unwrap();
 
         let original_edges = graph.graph.n_edges();
-        let closure = graph.graph.transitive_closure().unwrap();
+        let closure = graph
+            .graph
+            .transitive_closure(DirectionBasis::Underlying)
+            .unwrap();
 
         // The closure should have all original edges plus A -> C
         // (since A can reach C through both A->B->C and A->D->C)
@@ -476,7 +514,10 @@ mod tests {
         .unwrap();
 
         let original_edges = graph.graph.n_edges();
-        let reduction = graph.graph.transitive_reduction().unwrap();
+        let reduction = graph
+            .graph
+            .transitive_reduction(DirectionBasis::Underlying)
+            .unwrap();
 
         // The reduction should remove the redundant A -> C edge
         assert!(reduction.n_edges() < original_edges);
@@ -495,7 +536,10 @@ mod tests {
         .unwrap();
 
         let original_edges = graph.graph.n_edges();
-        let closure = graph.graph.transitive_closure().unwrap();
+        let closure = graph
+            .graph
+            .transitive_closure(DirectionBasis::Underlying)
+            .unwrap();
 
         // Should add A -> D edge in closure
         assert!(closure.n_edges() >= original_edges);
@@ -514,7 +558,10 @@ mod tests {
         )
         .unwrap();
 
-        let reduction = graph.graph.transitive_reduction().unwrap();
+        let reduction = graph
+            .graph
+            .transitive_reduction(DirectionBasis::Underlying)
+            .unwrap();
 
         // Should remove the redundant A -> D edge
         assert_eq!(reduction.n_edges(), 4); // A->B, A->C, B->D, C->D
@@ -531,7 +578,10 @@ mod tests {
         )
         .unwrap();
 
-        assert!(graph.graph.transitive_closure().is_err());
+        assert!(graph
+            .graph
+            .transitive_closure(DirectionBasis::Underlying)
+            .is_err());
 
         let graph2: DotGraph = dot!(
             digraph {
@@ -541,7 +591,10 @@ mod tests {
             }
         )
         .unwrap();
-        assert!(graph2.graph.transitive_reduction().is_err());
+        assert!(graph2
+            .graph
+            .transitive_reduction(DirectionBasis::Underlying)
+            .is_err());
     }
 
     #[test]
@@ -557,7 +610,10 @@ mod tests {
         )
         .unwrap();
 
-        let closure = graph.graph.transitive_closure().unwrap();
+        let closure = graph
+            .graph
+            .transitive_closure(DirectionBasis::Underlying)
+            .unwrap();
 
         let graph2: DotGraph<NodeStorageVec<DotVertexData>> = DotGraph::from_string(
             r#"
@@ -569,7 +625,10 @@ mod tests {
             "#,
         )
         .unwrap();
-        let reduction = graph2.graph.transitive_reduction().unwrap();
+        let reduction = graph2
+            .graph
+            .transitive_reduction(DirectionBasis::Underlying)
+            .unwrap();
 
         // Empty graphs should remain empty
         assert_eq!(closure.n_edges(), 0);
@@ -581,11 +640,17 @@ mod tests {
         let graph: DotGraph<NodeStorageVec<DotVertexData>> =
             DotGraph::from_string("digraph { A }").unwrap();
 
-        let closure = graph.graph.transitive_closure().unwrap();
+        let closure = graph
+            .graph
+            .transitive_closure(DirectionBasis::Underlying)
+            .unwrap();
 
         let graph2: DotGraph<NodeStorageVec<DotVertexData>> =
             DotGraph::from_string("digraph { A }").unwrap();
-        let reduction = graph2.graph.transitive_reduction().unwrap();
+        let reduction = graph2
+            .graph
+            .transitive_reduction(DirectionBasis::Underlying)
+            .unwrap();
 
         assert_eq!(closure.n_nodes(), 1);
         assert_eq!(reduction.n_nodes(), 1);
@@ -612,9 +677,123 @@ mod tests {
             let _c = nodes[2];
             let _d = nodes[3];
 
-            assert!(graph.graph.is_reachable(a, a));
+            assert!(graph.graph.is_reachable(a, a, DirectionBasis::Underlying));
             // Note: actual reachability depends on how nodes are mapped in DOT parsing
         }
+    }
+
+    #[test]
+    fn direction_basis_controls_reachability_with_forest_storage() {
+        type ForestStore = Forest<(), ChildVecStore<()>>;
+
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let left = builder.add_node(());
+        let right = builder.add_node(());
+        builder.add_edge(left, right, (), Orientation::Reversed);
+        let graph: HedgeGraph<(), (), NoData, ForestStore> = builder.build();
+
+        assert!(graph.is_reachable(left, right, DirectionBasis::Underlying));
+        assert!(!graph.is_reachable(right, left, DirectionBasis::Underlying));
+        assert!(graph.is_reachable(right, left, DirectionBasis::Superficial));
+        assert!(!graph.is_reachable(left, right, DirectionBasis::Superficial));
+        assert_eq!(
+            graph.topo_sort_kahn(DirectionBasis::Superficial).unwrap(),
+            vec![right, left]
+        );
+
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let target = builder.add_node(());
+        let source = builder.add_node(());
+        builder.add_edge(source, target, (), Orientation::Undirected);
+        let graph: HedgeGraph<(), (), NoData, ForestStore> = builder.build();
+
+        assert!(graph.is_reachable(source, target, DirectionBasis::Underlying));
+        assert!(!graph.is_reachable(source, target, DirectionBasis::Superficial));
+        assert!(!graph.is_reachable(target, source, DirectionBasis::Superficial));
+    }
+
+    #[test]
+    fn reachability_of_ignores_external_and_split_boundary_edges() {
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let first = builder.add_node(());
+        let middle = builder.add_node(());
+        let last = builder.add_node(());
+        builder.add_edge(first, middle, (), Orientation::Default);
+        builder.add_edge(middle, last, (), Orientation::Default);
+        builder.add_external_edge(middle, (), Orientation::Default, Flow::Source);
+        let graph: HedgeGraph<(), ()> = builder.build();
+
+        let first_pair = graph.iter_edges().next().unwrap().0;
+        let second_pair = graph.iter_edges().nth(1).unwrap().0;
+        let external = graph.iter_edges().nth(2).unwrap().0;
+        let HedgePair::Paired { sink, .. } = first_pair else {
+            panic!("builder created a non-paired edge")
+        };
+        let mut selected = SuBitGraph::empty(graph.n_hedges());
+        selected.add(sink);
+        selected.add(second_pair);
+        selected.add(external);
+
+        assert!(!graph.is_reachable_of(&selected, first, last, DirectionBasis::Underlying));
+        assert!(graph.is_reachable_of(&selected, middle, last, DirectionBasis::Underlying));
+    }
+
+    #[test]
+    fn transitive_closure_uses_the_selected_direction_basis() {
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let first = builder.add_node(());
+        let middle = builder.add_node(());
+        let last = builder.add_node(());
+        builder.add_edge(first, middle, (), Orientation::Reversed);
+        builder.add_edge(middle, last, (), Orientation::Reversed);
+        let graph: HedgeGraph<(), ()> = builder.build();
+
+        let underlying = graph
+            .clone()
+            .transitive_closure(DirectionBasis::Underlying)
+            .unwrap();
+        let superficial = graph
+            .transitive_closure(DirectionBasis::Superficial)
+            .unwrap();
+
+        assert_eq!(underlying.n_edges(), 3);
+        assert!(underlying.iter_crown(first).any(|hedge| {
+            underlying.flow(hedge) == Flow::Source
+                && underlying.involved_node_id(hedge) == Some(last)
+        }));
+        assert_eq!(superficial.n_edges(), 3);
+        assert!(superficial.iter_crown(last).any(|hedge| {
+            superficial.superficial_hedge_orientation(hedge) == Some(Flow::Source)
+                && superficial.involved_node_id(hedge) == Some(first)
+        }));
+    }
+
+    #[test]
+    fn transitive_reduction_does_not_direct_superficially_undirected_edges() {
+        let mut builder = HedgeGraphBuilder::<(), ()>::new();
+        let first = builder.add_node(());
+        let middle = builder.add_node(());
+        let last = builder.add_node(());
+        builder.add_edge(first, middle, (), Orientation::Default);
+        builder.add_edge(middle, last, (), Orientation::Default);
+        builder.add_edge(first, last, (), Orientation::Undirected);
+        let graph: HedgeGraph<(), ()> = builder.build();
+
+        assert_eq!(
+            graph
+                .clone()
+                .transitive_reduction(DirectionBasis::Underlying)
+                .unwrap()
+                .n_edges(),
+            2
+        );
+        assert_eq!(
+            graph
+                .transitive_reduction(DirectionBasis::Superficial)
+                .unwrap()
+                .n_edges(),
+            3
+        );
     }
 
     // ===============================
@@ -643,7 +822,10 @@ mod tests {
         .unwrap();
 
         let closure_graph = DotGraph {
-            graph: original.graph.transitive_closure().unwrap(),
+            graph: original
+                .graph
+                .transitive_closure(DirectionBasis::Underlying)
+                .unwrap(),
             global_data: original.global_data.clone(),
         };
 
@@ -670,7 +852,10 @@ mod tests {
         .unwrap();
 
         let reduction_graph = DotGraph {
-            graph: original.graph.transitive_reduction().unwrap(),
+            graph: original
+                .graph
+                .transitive_reduction(DirectionBasis::Underlying)
+                .unwrap(),
             global_data: original.global_data.clone(),
         };
 
@@ -695,7 +880,10 @@ mod tests {
         .unwrap();
 
         let closure_graph = DotGraph {
-            graph: original.graph.transitive_closure().unwrap(),
+            graph: original
+                .graph
+                .transitive_closure(DirectionBasis::Underlying)
+                .unwrap(),
             global_data: original.global_data.clone(),
         };
 
@@ -723,7 +911,10 @@ mod tests {
         .unwrap();
 
         let reduction_graph = DotGraph {
-            graph: original.graph.transitive_reduction().unwrap(),
+            graph: original
+                .graph
+                .transitive_reduction(DirectionBasis::Underlying)
+                .unwrap(),
             global_data: original.global_data.clone(),
         };
 
@@ -756,7 +947,10 @@ mod tests {
         .unwrap();
 
         let closure_graph = DotGraph {
-            graph: original.graph.transitive_closure().unwrap(),
+            graph: original
+                .graph
+                .transitive_closure(DirectionBasis::Underlying)
+                .unwrap(),
             global_data: original.global_data.clone(),
         };
 
@@ -783,7 +977,11 @@ mod tests {
 
         // Test closure
         let closure_graph = DotGraph {
-            graph: original.graph.clone().transitive_closure().unwrap(),
+            graph: original
+                .graph
+                .clone()
+                .transitive_closure(DirectionBasis::Underlying)
+                .unwrap(),
             global_data: original.global_data.clone(),
         };
         insta::assert_snapshot!(closure_graph.debug_dot(), @r"
@@ -809,7 +1007,10 @@ mod tests {
 
         // Test reduction
         let reduction_graph = DotGraph {
-            graph: original.graph.transitive_reduction().unwrap(),
+            graph: original
+                .graph
+                .transitive_reduction(DirectionBasis::Underlying)
+                .unwrap(),
             global_data: original.global_data.clone(),
         };
         insta::assert_snapshot!(reduction_graph.debug_dot(), @r"
@@ -858,7 +1059,10 @@ mod tests {
         .unwrap();
 
         let closure_graph = DotGraph {
-            graph: original.graph.transitive_closure().unwrap(),
+            graph: original
+                .graph
+                .transitive_closure(DirectionBasis::Underlying)
+                .unwrap(),
             global_data: original.global_data.clone(),
         };
 
@@ -895,7 +1099,10 @@ mod tests {
         .unwrap();
 
         let reduction_graph = DotGraph {
-            graph: original.graph.transitive_reduction().unwrap(),
+            graph: original
+                .graph
+                .transitive_reduction(DirectionBasis::Underlying)
+                .unwrap(),
             global_data: original.global_data.clone(),
         };
 
@@ -938,7 +1145,11 @@ mod tests {
 
         // Test closure
         let closure_graph = DotGraph {
-            graph: original.graph.clone().transitive_closure().unwrap(),
+            graph: original
+                .graph
+                .clone()
+                .transitive_closure(DirectionBasis::Underlying)
+                .unwrap(),
             global_data: original.global_data.clone(),
         };
         insta::assert_snapshot!(closure_graph.debug_dot(), @r"
@@ -995,7 +1206,10 @@ mod tests {
 
         // Test reduction
         let reduction_graph = DotGraph {
-            graph: original.graph.transitive_reduction().unwrap(),
+            graph: original
+                .graph
+                .transitive_reduction(DirectionBasis::Underlying)
+                .unwrap(),
             global_data: original.global_data.clone(),
         };
         insta::assert_snapshot!(reduction_graph.debug_dot(), @r"
@@ -1062,7 +1276,10 @@ mod tests {
         .unwrap();
 
         let closure_graph = DotGraph {
-            graph: original.graph.transitive_closure().unwrap(),
+            graph: original
+                .graph
+                .transitive_closure(DirectionBasis::Underlying)
+                .unwrap(),
             global_data: original.global_data.clone(),
         };
 
@@ -1094,8 +1311,13 @@ mod tests {
         .unwrap();
 
         // Both operations should detect the cycle and fail
-        let closure_result = graph_with_cycle.graph.clone().transitive_closure();
-        let reduction_result = graph_with_cycle.graph.transitive_reduction();
+        let closure_result = graph_with_cycle
+            .graph
+            .clone()
+            .transitive_closure(DirectionBasis::Underlying);
+        let reduction_result = graph_with_cycle
+            .graph
+            .transitive_reduction(DirectionBasis::Underlying);
 
         assert!(closure_result.is_err());
         assert!(reduction_result.is_err());
@@ -1151,34 +1373,48 @@ mod tests {
 
         // Self-reachability
         if let Some(&root_idx) = node_map.get("root") {
-            assert!(graph.graph.is_reachable(root_idx, root_idx));
+            assert!(graph
+                .graph
+                .is_reachable(root_idx, root_idx, DirectionBasis::Underlying));
         }
 
         // Direct reachability
         if let (Some(&root_idx), Some(&branch_a_idx)) =
             (node_map.get("root"), node_map.get("branch_a"))
         {
-            assert!(graph.graph.is_reachable(root_idx, branch_a_idx));
+            assert!(graph
+                .graph
+                .is_reachable(root_idx, branch_a_idx, DirectionBasis::Underlying));
         }
 
         // Transitive reachability
         if let (Some(&root_idx), Some(&final_idx)) =
             (node_map.get("root"), node_map.get("final_node"))
         {
-            assert!(graph.graph.is_reachable(root_idx, final_idx));
+            assert!(graph
+                .graph
+                .is_reachable(root_idx, final_idx, DirectionBasis::Underlying));
         }
 
         // Non-reachability across components
         if let (Some(&root_idx), Some(&iso_a_idx)) = (node_map.get("root"), node_map.get("iso_a")) {
-            assert!(!graph.graph.is_reachable(root_idx, iso_a_idx));
-            assert!(!graph.graph.is_reachable(iso_a_idx, root_idx));
+            assert!(!graph
+                .graph
+                .is_reachable(root_idx, iso_a_idx, DirectionBasis::Underlying));
+            assert!(!graph
+                .graph
+                .is_reachable(iso_a_idx, root_idx, DirectionBasis::Underlying));
         }
 
         // Reachability within isolated component
         if let (Some(&iso_a_idx), Some(&iso_c_idx)) = (node_map.get("iso_a"), node_map.get("iso_c"))
         {
-            assert!(graph.graph.is_reachable(iso_a_idx, iso_c_idx));
-            assert!(!graph.graph.is_reachable(iso_c_idx, iso_a_idx));
+            assert!(graph
+                .graph
+                .is_reachable(iso_a_idx, iso_c_idx, DirectionBasis::Underlying));
+            assert!(!graph
+                .graph
+                .is_reachable(iso_c_idx, iso_a_idx, DirectionBasis::Underlying));
         }
     }
 
@@ -1189,7 +1425,7 @@ mod tests {
         let nodes = vec![1, 2, 3, 4];
         let hasse: HedgeGraph<NoData, i32> = HedgeGraph::hasse_diagram(nodes);
 
-        // println!("{}", hasse.clone().transitive_closure().unwrap().base_dot());
+        // println!("{}", hasse.clone().transitive_closure(DirectionBasis::Underlying).unwrap().base_dot());
 
         // Should have 4 nodes
         assert_eq!(hasse.n_nodes(), 4);
@@ -1198,6 +1434,6 @@ mod tests {
         assert_eq!(hasse.n_edges(), 3);
 
         // Verify the graph is acyclic
-        assert!(hasse.transitive_closure().is_ok());
+        assert!(hasse.transitive_closure(DirectionBasis::Underlying).is_ok());
     }
 }

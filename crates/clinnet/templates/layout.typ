@@ -786,13 +786,19 @@
   }
   let style-options = _dictionary(config.at("style", default: (:)), "config.style")
   let draw-options = _dictionary(config.at("draw", default: (:)), "config.draw")
-  let requested-mode = config.at("mode", default: "auto")
+  let requested-mode = config.at("mode", default: "generic")
   if not ("auto", "generic", "amplitude", "cross-section").contains(requested-mode) {
     panic("config.mode must be auto, generic, amplitude, or cross-section")
   }
-  let physics-config = _dictionary(config.at("physics", default: (:)), "config.physics")
-  let physics-options = _physics-options(config)
-  let physics-callbacks = _physics-callbacks(physics-options)
+  let physics-value = config.at("physics", default: none)
+  let physics-enabled = physics-value != none
+  let physics-config = _dictionary(physics-value, "config.physics")
+  let physics-options = if physics-enabled { _physics-options(config) } else { (:) }
+  let physics-callbacks = if physics-enabled {
+    _physics-callbacks(physics-options)
+  } else {
+    (source-style: (:), sink-style: (:))
+  }
   let passes = if config.keys().contains("layouts") {
     config.at("layouts")
   } else {
@@ -812,14 +818,18 @@
     let defaults = (
       scope: (:),
       unit: 1.5,
-      node-label: if physics-config.at(
+      node-label: if physics-enabled and physics-config.at(
         "show-node-index",
         default: false,
       ) { _node-index-label } else { auto },
       node-label-style: (padding: 0.08),
       node-style: (:),
-      edge-label: edge => _generated-edge-label(edge, mode, physics-options),
-      edge-label-style: _mode-edge-label-style,
+      edge-label: if physics-enabled {
+        edge => _generated-edge-label(edge, mode, physics-options)
+      } else {
+        none
+      },
+      edge-label-style: if physics-enabled { _mode-edge-label-style } else { (:) },
     )
     let effective = _effective-options(defaults, style-options, draw-options)
     let callbacks = _callbacks(effective)

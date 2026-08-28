@@ -40,16 +40,18 @@ rendering run has these steps:
    the template's mandatory `render(config)` export. Configuration is not flattened into
    `sys.inputs`, and its size does not change the Typst process argument list.
 + The generic rendering path materializes Clinnet's embedded figure/layout templates and the
-   embedded Linnest and Kurvst package assets. The GammaLoop path supplies its generated template
-   bundle instead, binding the model-specific `edge-style.typ` callbacks and its generic,
-   amplitude, and cross-section presets.
+   embedded Linnest and Kurvst package assets. Its shipped mode is generic, and particle/momentum
+   callbacks stay inactive until a physics configuration is supplied. The GammaLoop path supplies
+   its generated template bundle instead, binding the model-specific `edge-style.typ` callbacks
+   and its generic, amplitude, and cross-section presets.
 + The selected `layout.typ` parses the staged DOT topology, attaches the typed node, edge, and
    half-edge records from `config.elements`, and patches half-edge statements, port labels, and
    compass points into the native graph by topology index. It applies final labels and styles with
    `graph.style`, and only then runs the ordered layout passes and `draw`. Label and node
    measurements therefore participate in spacing.
-+ `draw` calls the generated callbacks from `edge-style.typ`, draws edges and
-   labels, then draws nodes last so nodes sit on top of edges.
++ `draw` uses ordinary Linnest node and edge styles for a model-neutral graph. An explicit physics
+   configuration installs the particle and momentum callbacks from `edge-style.typ`. It draws
+   edges and labels first, then nodes last so nodes sit on top of edges.
 
 The rendering contract has no evaluated-string mode. Generated particle styles are ordinary
 Typst dictionaries/functions in `edge-style.typ`, backed by
@@ -297,6 +299,12 @@ The `Graph.render_config` object itself is live and mutable, while its nested op
 immutable values whose getters reconstruct copies. Replace `style`, `layouts`, `drawing`, or
 `physics` after changing an option. `RenderConfig.overlay` returns a new configuration, and
 per-call overlays do not mutate the graph configuration.
+
+The shipped display mode is generic even when topology has dangling edges. `RenderMode.Auto` is
+the explicit request to infer amplitude or cross-section mode, and a non-`none` `PhysicsOptions`
+value explicitly installs particle, momentum-arrow, and index-label callbacks. `physics: none`
+disables a physics layer inherited from a preceding configuration, while GammaLoop's CLI and
+generated bundles provide their mode and physics configuration explicitly.
 
 The renderer correlates every typed node, edge, and half-edge record with its topology index
 before GammaLoop mode generation. Explicit element or configuration values override generated

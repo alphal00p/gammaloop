@@ -2,6 +2,7 @@ use std::ops::{Index, IndexMut};
 
 use std::cell::RefCell;
 
+use linnet::half_edge::algorithms::DirectionBasis;
 use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
 use linnet::half_edge::involution::{EdgeData, EdgeIndex, Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::nodestore::{NodeStorage, NodeStorageVec};
@@ -336,6 +337,27 @@ impl PyHedgeGraph {
         }
     }
 
+    pub(crate) fn internal_boundary(&self, subgraph: &SuBitGraph) -> SuBitGraph {
+        match self {
+            Self::Vec(graph) => graph.internal_crown(subgraph),
+            Self::Forest(graph) => graph.internal_crown(subgraph),
+        }
+    }
+
+    pub(crate) fn boundary(&self, subgraph: &SuBitGraph) -> SuBitGraph {
+        match self {
+            Self::Vec(graph) => graph.full_crown(subgraph),
+            Self::Forest(graph) => graph.full_crown(subgraph),
+        }
+    }
+
+    pub(crate) fn external_filter(&self) -> SuBitGraph {
+        match self {
+            Self::Vec(graph) => graph.external_filter(),
+            Self::Forest(graph) => graph.external_filter(),
+        }
+    }
+
     pub(crate) fn connected_components(&self, subgraph: &SuBitGraph) -> Vec<SuBitGraph> {
         match self {
             Self::Vec(graph) => graph.connected_components(subgraph),
@@ -378,6 +400,39 @@ impl PyHedgeGraph {
         }
     }
 
+    pub(crate) fn topological_order_of(
+        &self,
+        subgraph: &SuBitGraph,
+        direction: DirectionBasis,
+    ) -> Result<Vec<NodeIndex>, String> {
+        match self {
+            Self::Vec(graph) => graph.topo_sort_kahn_of(subgraph, direction),
+            Self::Forest(graph) => graph.topo_sort_kahn_of(subgraph, direction),
+        }
+        .map_err(|error| error.to_string())
+    }
+
+    pub(crate) fn is_reachable_of(
+        &self,
+        subgraph: &SuBitGraph,
+        source: NodeIndex,
+        target: NodeIndex,
+        direction: DirectionBasis,
+    ) -> bool {
+        match self {
+            Self::Vec(graph) => graph.is_reachable_of(subgraph, source, target, direction),
+            Self::Forest(graph) => graph.is_reachable_of(subgraph, source, target, direction),
+        }
+    }
+
+    pub(crate) fn transitive_reduction(self, direction: DirectionBasis) -> Result<Self, String> {
+        match self {
+            Self::Vec(graph) => graph.transitive_reduction(direction).map(Self::Vec),
+            Self::Forest(graph) => graph.transitive_reduction(direction).map(Self::Forest),
+        }
+        .map_err(|error| error.to_string())
+    }
+
     pub(crate) fn all_bonds_of(
         &self,
         subgraph: &SuBitGraph,
@@ -388,6 +443,40 @@ impl PyHedgeGraph {
             Self::Vec(graph) => graph.all_bonds_of(subgraph, &(minimum_size..=maximum_size)),
             Self::Forest(graph) => graph.all_bonds_of(subgraph, &(minimum_size..=maximum_size)),
         }
+    }
+
+    pub(crate) fn a_bond_of(
+        &self,
+        subgraph: &SuBitGraph,
+        minimum_size: usize,
+        maximum_size: usize,
+    ) -> Option<SuBitGraph> {
+        let in_range =
+            |bond: &SuBitGraph| (minimum_size..=maximum_size).contains(&bond.n_included());
+        match self {
+            Self::Vec(graph) => graph.a_bond_of(subgraph, &in_range),
+            Self::Forest(graph) => graph.a_bond_of(subgraph, &in_range),
+        }
+    }
+
+    pub(crate) fn all_cycles_of(
+        &self,
+        subgraph: &SuBitGraph,
+        max_cycle_rank: usize,
+    ) -> Result<Vec<Cycle>, String> {
+        match self {
+            Self::Vec(graph) => graph.all_cycles_of(subgraph, max_cycle_rank),
+            Self::Forest(graph) => graph.all_cycles_of(subgraph, max_cycle_rank),
+        }
+        .map_err(|error| error.to_string())
+    }
+
+    pub(crate) fn tadpoles(&self, externals: &[NodeIndex]) -> Result<Vec<SuBitGraph>, String> {
+        match self {
+            Self::Vec(graph) => graph.tadpoles(externals),
+            Self::Forest(graph) => graph.tadpoles(externals),
+        }
+        .map_err(|error| error.to_string())
     }
 
     pub(crate) fn combine_to_single_hedgenode(&self, nodes: &[NodeIndex]) -> HedgeNode {
@@ -444,6 +533,45 @@ impl PyHedgeGraph {
             Self::Forest(graph) => {
                 SimpleTraversalTree::breadth_first_traverse(graph, subgraph, root, include)
             }
+        }
+    }
+
+    pub(crate) fn traversal_parent(
+        &self,
+        tree: &SimpleTraversalTree,
+        node: NodeIndex,
+    ) -> Option<NodeIndex> {
+        match self {
+            Self::Vec(graph) => tree.node_parent(node, graph),
+            Self::Forest(graph) => tree.node_parent(node, graph),
+        }
+    }
+
+    pub(crate) fn traversal_ancestors(
+        &self,
+        tree: &SimpleTraversalTree,
+        node: NodeIndex,
+    ) -> Vec<NodeIndex> {
+        match self {
+            Self::Vec(graph) => tree
+                .ancestor_iter_node(node, graph.as_ref())
+                .skip(1)
+                .collect(),
+            Self::Forest(graph) => tree
+                .ancestor_iter_node(node, graph.as_ref())
+                .skip(1)
+                .collect(),
+        }
+    }
+
+    pub(crate) fn traversal_cycle(
+        &self,
+        tree: &SimpleTraversalTree,
+        hedge: Hedge,
+    ) -> Option<Cycle> {
+        match self {
+            Self::Vec(graph) => tree.get_cycle(hedge, graph),
+            Self::Forest(graph) => tree.get_cycle(hedge, graph),
         }
     }
 

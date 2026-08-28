@@ -2,7 +2,8 @@
 
 use std::collections::BTreeSet;
 
-use linnet::half_edge::involution::Hedge;
+use linnet::half_edge::algorithms::DirectionBasis;
+use linnet::half_edge::involution::{EdgeIndex, Hedge};
 use linnet::half_edge::subgraph::{
     cut::OrientedCut, cycle::Cycle, Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps,
 };
@@ -12,10 +13,31 @@ use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyIndexError, PyReferenceError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
+use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
 
-use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyNode};
+use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyNode, PyOrientation};
 use crate::native_graph::PyHedgeGraph;
+
+/// Selects which notion of edge direction a directed algorithm follows.
+#[gen_stub_pyclass_enum]
+#[pyclass(from_py_object, eq, eq_int, name = "DirectionBasis")]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PyDirectionBasis {
+    /// Follow the source/sink roles stored by the half-edge involution.
+    #[default]
+    Underlying,
+    /// Apply each edge's superficial orientation and ignore undirected edges.
+    Superficial,
+}
+
+impl From<PyDirectionBasis> for DirectionBasis {
+    fn from(value: PyDirectionBasis) -> Self {
+        match value {
+            PyDirectionBasis::Underlying => Self::Underlying,
+            PyDirectionBasis::Superficial => Self::Superficial,
+        }
+    }
+}
 
 /// A graph-bound structural selection.
 #[gen_stub_pyclass]
@@ -365,18 +387,35 @@ pub struct PyCycle {
     cycle: Cycle,
 }
 
-#[gen_stub_pymethods]
-#[pymethods]
 impl PyCycle {
-    #[getter]
-    fn filter(&self, py: Python<'_>) -> PyResult<PySubgraph> {
+    fn owner<'py>(&self, py: Python<'py>) -> PyResult<&Bound<'py, PyGraph>> {
         let graph = self
             .graph
             .as_ref()
             .ok_or_else(|| PyReferenceError::new_err("cycle has been cleared"))?;
         graph.borrow(py).check_revision(self.revision)?;
+        Ok(graph.bind(py))
+    }
+
+    fn ensure_owner(&self, py: Python<'_>, graph: &Py<PyGraph>, revision: u64) -> PyResult<()> {
+        let owner = self.owner(py)?;
+        if self.revision != revision || !owner.is(graph.bind(py)) {
+            return Err(PyValueError::new_err(
+                "cycle belongs to a different graph revision",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[gen_stub_pymethods]
+#[pymethods]
+impl PyCycle {
+    #[getter]
+    fn filter(&self, py: Python<'_>) -> PyResult<PySubgraph> {
+        self.owner(py)?;
         Ok(PySubgraph::new(
-            graph.clone_ref(py),
+            self.graph.as_ref().expect("checked").clone_ref(py),
             self.revision,
             self.cycle.filter.clone(),
         ))
@@ -415,6 +454,31 @@ pub struct PyOrientedCut {
     graph: Option<Py<PyGraph>>,
     revision: u64,
     cut: OrientedCut,
+}
+
+impl PyOrientedCut {
+    fn owner<'py>(&self, py: Python<'py>) -> PyResult<&Bound<'py, PyGraph>> {
+        let graph = self
+            .graph
+            .as_ref()
+            .ok_or_else(|| PyReferenceError::new_err("cut has been cleared"))?;
+        graph.borrow(py).check_revision(self.revision)?;
+        Ok(graph.bind(py))
+    }
+
+    fn edge_ids(&self, py: Python<'_>) -> PyResult<Vec<usize>> {
+        let graph = self.owner(py)?.borrow();
+        let state = graph.state.borrow();
+        let mut edges = state
+            .as_ref()
+            .expect("checked")
+            .graph
+            .iter_edges_of(&self.cut.left)
+            .map(|(_, edge, _)| edge.0)
+            .collect::<Vec<_>>();
+        edges.sort_unstable();
+        Ok(edges)
+    }
 }
 
 /// One source-side, oriented-boundary, target-side cut partition.
@@ -525,13 +589,9 @@ impl PyCutPartition {
 #[pymethods]
 impl PyOrientedCut {
     fn side(&self, py: Python<'_>, left: bool) -> PyResult<PySubgraph> {
-        let graph = self
-            .graph
-            .as_ref()
-            .ok_or_else(|| PyReferenceError::new_err("cut has been cleared"))?;
-        graph.borrow(py).check_revision(self.revision)?;
+        self.owner(py)?;
         Ok(PySubgraph::new(
-            graph.clone_ref(py),
+            self.graph.as_ref().expect("checked").clone_ref(py),
             self.revision,
             if left {
                 self.cut.left.clone()
@@ -549,6 +609,58 @@ impl PyOrientedCut {
     #[getter]
     fn right(&self, py: Python<'_>) -> PyResult<PySubgraph> {
         self.side(py, false)
+    }
+
+    /// Return the cut edges in stable graph order.
+    #[getter]
+    fn edges(&self, py: Python<'_>) -> PyResult<Vec<Py<PyEdge>>> {
+        self.edge_ids(py)?
+            .into_iter()
+            .map(|edge| {
+                Py::new(
+                    py,
+                    PyEdge::new(
+                        self.graph.as_ref().expect("checked").clone_ref(py),
+                        edge,
+                        self.revision,
+                    ),
+                )
+            })
+            .collect()
+    }
+
+    /// Return one edge's orientation relative to this cut.
+    #[pyo3(signature = (edge))]
+    fn orientation(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="Edge | builtins.int | builtins.str", imports=("builtins")))]
+        edge: &Bound<'_, PyAny>,
+    ) -> PyResult<PyOrientation> {
+        self.owner(py)?;
+        let graph_object = self
+            .graph
+            .as_ref()
+            .ok_or_else(|| PyReferenceError::new_err("cut has been cleared"))?;
+        let edge = resolve_edge_target(graph_object, py, self.revision, edge)?;
+        if !self.edge_ids(py)?.contains(&edge) {
+            return Err(PyValueError::new_err("edge is not part of this cut"));
+        }
+        let graph = self.owner(py)?.borrow();
+        let state = graph.state.borrow();
+        let pair = state.as_ref().expect("checked").graph[&EdgeIndex(edge)].1;
+        Ok(self.cut.get_from_pair(pair).into())
+    }
+
+    /// Return the signed intersection count with a cycle from the same graph revision.
+    fn winding_number(&self, py: Python<'_>, cycle: &PyCycle) -> PyResult<i32> {
+        let graph = self
+            .graph
+            .as_ref()
+            .ok_or_else(|| PyReferenceError::new_err("cut has been cleared"))?;
+        self.owner(py)?;
+        cycle.ensure_owner(py, graph, self.revision)?;
+        Ok(self.cut.winding_number(&cycle.cycle))
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -585,6 +697,35 @@ impl PyTraversalTree {
             .ok_or_else(|| PyReferenceError::new_err("traversal tree has been cleared"))?;
         graph.borrow(py).check_revision(self.revision)?;
         Ok(graph.bind(py))
+    }
+
+    fn resolve_node(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<usize> {
+        self.owner(py)?;
+        let graph = self
+            .graph
+            .as_ref()
+            .ok_or_else(|| PyReferenceError::new_err("traversal tree has been cleared"))?;
+        let node = resolve_node_target(graph, py, self.revision, key)?;
+        if self.isolated_root == Some(node)
+            || (self.isolated_root.is_none() && self.tree.node_data(NodeIndex(node)).includes())
+        {
+            Ok(node)
+        } else {
+            Err(PyValueError::new_err(
+                "node is not part of this traversal tree",
+            ))
+        }
+    }
+
+    fn node_view(&self, py: Python<'_>, node: usize) -> PyResult<Py<PyNode>> {
+        Py::new(
+            py,
+            PyNode::new(
+                self.graph.as_ref().expect("checked").clone_ref(py),
+                node,
+                self.revision,
+            ),
+        )
     }
 }
 
@@ -652,6 +793,125 @@ impl PyTraversalTree {
             .collect()
     }
 
+    /// Return the immediate parent, or `None` for the traversal root.
+    fn parent(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
+        node: &Bound<'_, PyAny>,
+    ) -> PyResult<Option<Py<PyNode>>> {
+        let node = self.resolve_node(py, node)?;
+        if self.isolated_root.is_some() {
+            return Ok(None);
+        }
+        let graph = self.owner(py)?.borrow();
+        let state = graph.state.borrow();
+        state
+            .as_ref()
+            .expect("checked")
+            .graph
+            .traversal_parent(&self.tree, NodeIndex(node))
+            .map(|parent| self.node_view(py, parent.0))
+            .transpose()
+    }
+
+    /// Return the immediate children in traversal discovery order.
+    fn children(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
+        node: &Bound<'_, PyAny>,
+    ) -> PyResult<Vec<Py<PyNode>>> {
+        let node = self.resolve_node(py, node)?;
+        if self.isolated_root.is_some() {
+            return Ok(Vec::new());
+        }
+        let children = {
+            let graph = self.owner(py)?.borrow();
+            let state = graph.state.borrow();
+            let graph = &state.as_ref().expect("checked").graph;
+            self.tree
+                .node_order()
+                .into_iter()
+                .filter(|candidate| {
+                    graph.traversal_parent(&self.tree, *candidate) == Some(NodeIndex(node))
+                })
+                .collect::<Vec<_>>()
+        };
+        children
+            .into_iter()
+            .map(|child| self.node_view(py, child.0))
+            .collect()
+    }
+
+    /// Return strict ancestors from the immediate parent through the root.
+    fn ancestors(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
+        node: &Bound<'_, PyAny>,
+    ) -> PyResult<Vec<Py<PyNode>>> {
+        let node = self.resolve_node(py, node)?;
+        if self.isolated_root.is_some() {
+            return Ok(Vec::new());
+        }
+        let ancestors = {
+            let graph = self.owner(py)?.borrow();
+            let state = graph.state.borrow();
+            state
+                .as_ref()
+                .expect("checked")
+                .graph
+                .traversal_ancestors(&self.tree, NodeIndex(node))
+        };
+        ancestors
+            .into_iter()
+            .map(|ancestor| self.node_view(py, ancestor.0))
+            .collect()
+    }
+
+    /// Return the fundamental cycle closed by an internal edge, or `None` for a tree edge.
+    fn fundamental_cycle(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "_HalfEdgeTarget"))] half_edge: &Bound<'_, PyAny>,
+    ) -> PyResult<Option<PyCycle>> {
+        self.owner(py)?;
+        let graph_object = self
+            .graph
+            .as_ref()
+            .ok_or_else(|| PyReferenceError::new_err("traversal tree has been cleared"))?;
+        let hedge = Hedge(graph_object.borrow(py).resolve_half_edge(
+            py,
+            graph_object,
+            half_edge,
+        )?);
+        let cycle = {
+            let graph = self.owner(py)?.borrow();
+            let state = graph.state.borrow();
+            let graph = &state.as_ref().expect("checked").graph;
+            let inverse = graph.inv(hedge);
+            if inverse == hedge {
+                return Err(PyValueError::new_err(
+                    "an external half-edge cannot close a fundamental cycle",
+                ));
+            }
+            if !self.tree.node_data(graph.node_id(hedge)).includes()
+                || !self.tree.node_data(graph.node_id(inverse)).includes()
+            {
+                return Err(PyValueError::new_err(
+                    "both edge endpoints must be part of this traversal tree",
+                ));
+            }
+            graph.traversal_cycle(&self.tree, hedge)
+        };
+        Ok(cycle.map(|cycle| PyCycle {
+            graph: Some(graph_object.clone_ref(py)),
+            revision: self.revision,
+            cycle,
+        }))
+    }
+
     #[gen_stub(skip)]
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
         visit.call(&self.graph)
@@ -677,6 +937,44 @@ fn selected_filter(
     let state = graph.state.borrow();
     let graph = &state.as_ref().expect("checked").graph;
     Ok((graph.full_filter(), isolated_node_indices(graph)))
+}
+
+fn resolve_node_target(
+    graph: &Py<PyGraph>,
+    py: Python<'_>,
+    revision: u64,
+    key: &Bound<'_, PyAny>,
+) -> PyResult<usize> {
+    if let Ok(node) = key.extract::<PyRef<'_, PyNode>>() {
+        node.index_for_graph(py, graph, revision)
+    } else {
+        graph.borrow(py).resolve_node(key)
+    }
+}
+
+fn resolve_edge_target(
+    graph: &Py<PyGraph>,
+    py: Python<'_>,
+    revision: u64,
+    key: &Bound<'_, PyAny>,
+) -> PyResult<usize> {
+    if let Ok(edge) = key.extract::<PyRef<'_, PyEdge>>() {
+        edge.index_for_graph(py, graph, revision)
+    } else {
+        graph.borrow(py).resolve_edge(key)
+    }
+}
+
+fn selection_includes_node(
+    graph: &PyHedgeGraph,
+    filter: &SuBitGraph,
+    isolated_nodes: &BTreeSet<usize>,
+    node: usize,
+) -> bool {
+    isolated_nodes.contains(&node)
+        || graph
+            .iter_crown(NodeIndex(node))
+            .any(|hedge| filter.includes(&hedge))
 }
 
 fn check_hedge(index: Hedge, n_hedges: usize) -> PyResult<Hedge> {
@@ -908,6 +1206,56 @@ impl PyGraph {
         subgraph.to_half_edges(py)
     }
 
+    /// Return selected half-edges that lie on the selection's internal boundary.
+    #[pyo3(signature = (subgraph))]
+    fn internal_boundary(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: &PySubgraph,
+    ) -> PyResult<PySubgraph> {
+        let revision = slf.borrow(py).revision()?;
+        subgraph.ensure_owner(py, &slf, revision)?;
+        let boundary = {
+            let graph = slf.borrow(py);
+            let state = graph.state.borrow();
+            state
+                .as_ref()
+                .expect("checked")
+                .graph
+                .internal_boundary(&subgraph.subgraph)
+        };
+        Ok(PySubgraph::new(slf.clone_ref(py), revision, boundary))
+    }
+
+    /// Return all boundary half-edges incident to nodes touched by the selection.
+    #[pyo3(signature = (subgraph))]
+    fn boundary(slf: Py<PyGraph>, py: Python<'_>, subgraph: &PySubgraph) -> PyResult<PySubgraph> {
+        let revision = slf.borrow(py).revision()?;
+        subgraph.ensure_owner(py, &slf, revision)?;
+        let boundary = {
+            let graph = slf.borrow(py);
+            let state = graph.state.borrow();
+            state
+                .as_ref()
+                .expect("checked")
+                .graph
+                .boundary(&subgraph.subgraph)
+        };
+        Ok(PySubgraph::new(slf.clone_ref(py), revision, boundary))
+    }
+
+    /// Return dangling/external half-edges as a composable structural selection.
+    #[pyo3(signature = ())]
+    fn external_half_edges(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<PySubgraph> {
+        let revision = slf.borrow(py).revision()?;
+        let external = {
+            let graph = slf.borrow(py);
+            let state = graph.state.borrow();
+            state.as_ref().expect("checked").graph.external_filter()
+        };
+        Ok(PySubgraph::new(slf.clone_ref(py), revision, external))
+    }
+
     #[pyo3(signature = (subgraph=None))]
     fn connected_components(
         slf: Py<PyGraph>,
@@ -987,6 +1335,106 @@ impl PyGraph {
             .expect("checked")
             .graph
             .cyclotomatic_number(&filter))
+    }
+
+    /// Test directed reachability within an optional structural selection.
+    ///
+    /// Both endpoints must belong to the selected subgraph; otherwise this raises `ValueError`.
+    #[pyo3(signature = (source, target, *, subgraph=None, direction=PyDirectionBasis::Underlying))]
+    fn is_reachable(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
+        source: &Bound<'_, PyAny>,
+        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
+        target: &Bound<'_, PyAny>,
+        subgraph: Option<&PySubgraph>,
+        direction: PyDirectionBasis,
+    ) -> PyResult<bool> {
+        let revision = slf.borrow(py).revision()?;
+        let (filter, isolated_nodes) = selected_filter(&slf, py, revision, subgraph)?;
+        let source = resolve_node_target(&slf, py, revision, source)?;
+        let target = resolve_node_target(&slf, py, revision, target)?;
+        let graph = slf.borrow(py);
+        let state = graph.state.borrow();
+        let graph = &state.as_ref().expect("checked").graph;
+        if !selection_includes_node(graph, &filter, &isolated_nodes, source) {
+            return Err(PyValueError::new_err(
+                "source node is not part of the selected subgraph",
+            ));
+        }
+        if !selection_includes_node(graph, &filter, &isolated_nodes, target) {
+            return Err(PyValueError::new_err(
+                "target node is not part of the selected subgraph",
+            ));
+        }
+        if source == target {
+            return Ok(true);
+        }
+        if isolated_nodes.contains(&source) || isolated_nodes.contains(&target) {
+            return Ok(false);
+        }
+        Ok(graph.is_reachable_of(
+            &filter,
+            NodeIndex(source),
+            NodeIndex(target),
+            direction.into(),
+        ))
+    }
+
+    /// Return a deterministic topological order for the selected directed graph.
+    ///
+    /// Explicitly selected zero-crown nodes appear first in ascending graph order.
+    #[pyo3(signature = (*, subgraph=None, direction=PyDirectionBasis::Underlying))]
+    fn topological_order(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: Option<&PySubgraph>,
+        direction: PyDirectionBasis,
+    ) -> PyResult<Vec<Py<PyNode>>> {
+        let revision = slf.borrow(py).revision()?;
+        let (filter, isolated_nodes) = selected_filter(&slf, py, revision, subgraph)?;
+        let mut order = isolated_nodes
+            .into_iter()
+            .map(NodeIndex)
+            .collect::<Vec<_>>();
+        let directed = {
+            let graph = slf.borrow(py);
+            let state = graph.state.borrow();
+            state
+                .as_ref()
+                .expect("checked")
+                .graph
+                .topological_order_of(&filter, direction.into())
+                .map_err(PyValueError::new_err)?
+        };
+        order.extend(directed);
+        order
+            .into_iter()
+            .map(|node| Py::new(py, PyNode::new(slf.clone_ref(py), node.0, revision)))
+            .collect()
+    }
+
+    /// Return a new graph with directionally redundant DAG edges removed.
+    #[pyo3(signature = (*, direction=PyDirectionBasis::Underlying))]
+    fn transitive_reduction(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        direction: PyDirectionBasis,
+    ) -> PyResult<PyGraph> {
+        let candidate = {
+            let graph = slf.borrow(py);
+            let state = graph.state.borrow();
+            let state = state
+                .as_ref()
+                .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
+            let reduced = state
+                .copy_graph(py)?
+                .transitive_reduction(direction.into())
+                .map_err(PyValueError::new_err)?;
+            state.derived(py, reduced)?
+        };
+        Ok(PyGraph::from_state(candidate))
     }
 
     #[pyo3(signature = (root, *, subgraph=None, include=None))]
@@ -1137,6 +1585,126 @@ impl PyGraph {
             .collect())
     }
 
+    /// Find one native inclusion-minimal cutset within an inclusive size range.
+    #[pyo3(signature = (*, subgraph=None, min_size=None, max_size=None))]
+    fn find_bond(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: Option<&PySubgraph>,
+        min_size: Option<usize>,
+        max_size: Option<usize>,
+    ) -> PyResult<Option<PySubgraph>> {
+        let revision = slf.borrow(py).revision()?;
+        let (filter, _) = selected_filter(&slf, py, revision, subgraph)?;
+        let minimum = min_size.unwrap_or(1);
+        if minimum == 0 {
+            return Err(PyValueError::new_err("min_size must be at least 1"));
+        }
+        let maximum = max_size.unwrap_or(usize::MAX);
+        if minimum > maximum {
+            return Err(PyValueError::new_err(
+                "min_size must be less than or equal to max_size",
+            ));
+        }
+        let bond = {
+            let graph = slf.borrow(py);
+            let state = graph.state.borrow();
+            state
+                .as_ref()
+                .expect("checked")
+                .graph
+                .a_bond_of(&filter, minimum, maximum)
+        };
+        Ok(bond.map(|bond| PySubgraph::new(slf.clone_ref(py), revision, bond)))
+    }
+
+    /// Enumerate circuits only when the complete cycle-space candidate count fits the bound.
+    ///
+    /// `max_results` bounds all non-empty combinations of a cycle basis, not only
+    /// the combinations that ultimately form circuits.
+    #[pyo3(signature = (*, max_results, subgraph=None))]
+    fn all_cycles(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        max_results: usize,
+        subgraph: Option<&PySubgraph>,
+    ) -> PyResult<Vec<PyCycle>> {
+        let revision = slf.borrow(py).revision()?;
+        let (filter, _) = selected_filter(&slf, py, revision, subgraph)?;
+        let rank = {
+            let graph = slf.borrow(py);
+            let state = graph.state.borrow();
+            state
+                .as_ref()
+                .expect("checked")
+                .graph
+                .cyclotomatic_number(&filter)
+        };
+        let Some(candidates) = (rank < usize::BITS as usize).then(|| (1usize << rank) - 1) else {
+            return Err(PyValueError::new_err(format!(
+                "cycle-space powerset at rank {rank} is not representable or safely enumerable"
+            )));
+        };
+        if candidates > max_results {
+            return Err(PyValueError::new_err(format!(
+                "cycle space has {candidates} candidate combinations, exceeding max_results={max_results}"
+            )));
+        }
+        let cycles = {
+            let graph = slf.borrow(py);
+            let state = graph.state.borrow();
+            state
+                .as_ref()
+                .expect("checked")
+                .graph
+                .all_cycles_of(&filter, rank)
+                .map_err(PyValueError::new_err)?
+        };
+        Ok(cycles
+            .into_iter()
+            .map(|cycle| PyCycle {
+                graph: Some(slf.clone_ref(py)),
+                revision,
+                cycle,
+            })
+            .collect())
+    }
+
+    /// Enumerate tadpole components after identifying a non-empty terminal node set.
+    #[pyo3(signature = (externals))]
+    fn tadpoles(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="typing.Sequence[Node | builtins.int | builtins.str]", imports=("builtins", "typing")))]
+        externals: Vec<Py<PyAny>>,
+    ) -> PyResult<Vec<PySubgraph>> {
+        let revision = slf.borrow(py).revision()?;
+        let externals = externals
+            .iter()
+            .map(|key| resolve_node_target(&slf, py, revision, key.bind(py)).map(NodeIndex))
+            .collect::<PyResult<Vec<_>>>()?;
+        let mut tadpoles = {
+            let graph = slf.borrow(py);
+            let state = graph.state.borrow();
+            state
+                .as_ref()
+                .expect("checked")
+                .graph
+                .tadpoles(&externals)
+                .map_err(PyValueError::new_err)?
+        };
+        tadpoles.sort_by_key(|tadpole| {
+            tadpole
+                .included_iter()
+                .map(|half_edge| half_edge.0)
+                .collect::<Vec<_>>()
+        });
+        Ok(tadpoles
+            .into_iter()
+            .map(|tadpole| PySubgraph::new(slf.clone_ref(py), revision, tadpole))
+            .collect())
+    }
+
     /// Enumerate all native separating partitions between two disjoint, non-empty node groups.
     #[pyo3(signature = (source, target))]
     fn all_cuts(
@@ -1266,6 +1834,7 @@ impl PyGraph {
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<PyDirectionBasis>()?;
     module.add_class::<PySubgraph>()?;
     module.add_class::<PyCycle>()?;
     module.add_class::<PyOrientedCut>()?;
