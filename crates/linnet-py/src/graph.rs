@@ -83,7 +83,7 @@ impl From<Orientation> for PyOrientation {
     }
 }
 
-/// A declarative node description consumed by `build()`.
+/// A reusable declarative node description accepted by `build()` and `Graph.add_node()`.
 #[gen_stub_pyclass]
 #[pyclass(unsendable, name = "NodeSpec")]
 pub struct PyNodeSpec {
@@ -91,6 +91,25 @@ pub struct PyNodeSpec {
     name: Option<String>,
     data: Option<Py<PyAny>>,
     drawing: Option<Py<PyDict>>,
+}
+
+impl PyNodeSpec {
+    pub(crate) fn snapshot(&self, py: Python<'_>) -> PyResult<NodeRecord> {
+        Ok(NodeRecord {
+            name: self.name.clone(),
+            data: self
+                .data
+                .as_ref()
+                .ok_or_else(|| PyReferenceError::new_err("node specification has been cleared"))?
+                .clone_ref(py),
+            drawing: copy_drawing(
+                py,
+                self.drawing.as_ref().ok_or_else(|| {
+                    PyReferenceError::new_err("node specification has been cleared")
+                })?,
+            )?,
+        })
+    }
 }
 
 #[gen_stub_pymethods]
@@ -143,7 +162,7 @@ impl PyNodeSpec {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum EndpointRole {
+pub(crate) enum EndpointRole {
     Source,
     Sink,
 }
@@ -161,7 +180,7 @@ impl EndpointRole {
 #[gen_stub_pyclass]
 #[pyclass(unsendable, name = "HalfEdgeSpec")]
 pub struct PyHalfEdgeSpec {
-    node: Option<Py<PyNodeSpec>>,
+    node: Option<Py<PyAny>>,
     role: EndpointRole,
     data: Option<Py<PyAny>>,
     drawing: Option<Py<PyDict>>,
@@ -211,7 +230,7 @@ impl PyHalfEdgeSpec {
     }
 }
 
-/// A declarative internal or external edge description consumed by `build()`.
+/// A reusable declarative edge description accepted by `build()` and `Graph.add_edge()`.
 #[gen_stub_pyclass]
 #[pyclass(unsendable, name = "EdgeSpec")]
 pub struct PyEdgeSpec {
@@ -299,11 +318,21 @@ pub fn node(
 
 fn endpoint(
     py: Python<'_>,
-    node: Py<PyNodeSpec>,
+    node: Py<PyAny>,
     role: EndpointRole,
     data: Option<Py<PyAny>>,
     drawing: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<PyHalfEdgeSpec> {
+    let target = node.bind(py);
+    if !target.is_instance_of::<PyNodeSpec>()
+        && !target.is_instance_of::<PyNode>()
+        && target.extract::<usize>().is_err()
+        && target.extract::<String>().is_err()
+    {
+        return Err(PyTypeError::new_err(
+            "an endpoint target must be a NodeSpec, live Node, integer index, or node name",
+        ));
+    }
     Ok(PyHalfEdgeSpec {
         node: Some(node),
         role,
@@ -312,36 +341,36 @@ fn endpoint(
     })
 }
 
-/// Attach a source endpoint and its data and drawing metadata to a node spec.
+/// Attach a source endpoint resolved by `build()` or `Graph.add_edge()`.
 #[gen_stub_pyfunction(python = r#"
     import typing
 
-    def source(node: NodeSpec, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
-        """Attach a source endpoint and its metadata to a node spec."""
+    def source(node: _EndpointTarget, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
+        """Attach a source endpoint. Build resolves specs, names, indices, and live-node keys; incremental insertion resolves current graph references."""
         ...
 "#)]
 #[pyfunction(signature = (node, *, data=None, **drawing))]
 pub fn source(
     py: Python<'_>,
-    node: Py<PyNodeSpec>,
+    node: Py<PyAny>,
     data: Option<Py<PyAny>>,
     drawing: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<PyHalfEdgeSpec> {
     endpoint(py, node, EndpointRole::Source, data, drawing)
 }
 
-/// Attach a sink endpoint and its data and drawing metadata to a node spec.
+/// Attach a sink endpoint resolved by `build()` or `Graph.add_edge()`.
 #[gen_stub_pyfunction(python = r#"
     import typing
 
-    def sink(node: NodeSpec, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
-        """Attach a sink endpoint and its metadata to a node spec."""
+    def sink(node: _EndpointTarget, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
+        """Attach a sink endpoint. Build resolves specs, names, indices, and live-node keys; incremental insertion resolves current graph references."""
         ...
 "#)]
 #[pyfunction(signature = (node, *, data=None, **drawing))]
 pub fn sink(
     py: Python<'_>,
-    node: Py<PyNodeSpec>,
+    node: Py<PyAny>,
     data: Option<Py<PyAny>>,
     drawing: Option<&Bound<'_, PyDict>>,
 ) -> PyResult<PyHalfEdgeSpec> {
@@ -419,6 +448,13 @@ pub(crate) struct EdgeRecord {
     pub(crate) name: Option<String>,
     pub(crate) data: Py<PyAny>,
     pub(crate) drawing: Py<PyDict>,
+}
+
+pub(crate) struct IncrementalEdgeRecords {
+    pub(crate) source: Option<HedgeData<HalfEdgeRecord>>,
+    pub(crate) sink: Option<HedgeData<HalfEdgeRecord>>,
+    pub(crate) edge: EdgeRecord,
+    pub(crate) orientation: PyOrientation,
 }
 
 impl EdgeRecord {
@@ -542,6 +578,31 @@ impl PyGraph {
         }
         Err(PyTypeError::new_err("edge key must be an integer or name"))
     }
+
+    pub(crate) fn resolve_half_edge(
+        &self,
+        py: Python<'_>,
+        owner: &Py<PyGraph>,
+        key: &Bound<'_, PyAny>,
+    ) -> PyResult<usize> {
+        let revision = self.revision()?;
+        if let Ok(view) = key.extract::<PyRef<'_, PyHalfEdge>>() {
+            return view.index_for_graph(py, owner, revision);
+        }
+        let index = key
+            .extract::<usize>()
+            .map_err(|_| PyTypeError::new_err("half-edge key must be an integer or HalfEdge"))?;
+        let len = self
+            .state
+            .borrow()
+            .as_ref()
+            .expect("checked")
+            .graph
+            .n_hedges();
+        (index < len)
+            .then_some(index)
+            .ok_or_else(|| PyIndexError::new_err("half-edge index out of range"))
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -606,6 +667,40 @@ graph_view!(
     "HalfEdge",
     Hedge
 );
+
+impl PyNode {
+    pub(crate) fn index_for_graph(
+        &self,
+        py: Python<'_>,
+        graph: &Py<PyGraph>,
+        revision: u64,
+    ) -> PyResult<usize> {
+        let owner = self.owner(py)?;
+        if self.revision != revision || !owner.is(graph.bind(py)) {
+            return Err(PyValueError::new_err(
+                "node endpoint belongs to a different graph revision",
+            ));
+        }
+        Ok(self.index)
+    }
+}
+
+impl PyHalfEdge {
+    fn index_for_graph(
+        &self,
+        py: Python<'_>,
+        graph: &Py<PyGraph>,
+        revision: u64,
+    ) -> PyResult<usize> {
+        let owner = self.owner(py)?;
+        if self.revision != revision || !owner.is(graph.bind(py)) {
+            return Err(PyValueError::new_err(
+                "half-edge belongs to a different graph revision",
+            ));
+        }
+        Ok(self.index)
+    }
+}
 
 impl PyEdge {
     fn endpoint_view(
@@ -1468,16 +1563,48 @@ fn endpoint_record(
     py: Python<'_>,
     endpoint: &Py<PyHalfEdgeSpec>,
     node_indices: &BTreeMap<u64, NodeIndex>,
+    node_names: &BTreeMap<String, NodeIndex>,
+    node_count: usize,
 ) -> PyResult<(EndpointRole, HedgeData<HalfEdgeRecord>)> {
     let endpoint = endpoint.borrow(py);
-    let node = endpoint
+    let target = endpoint
         .node
         .as_ref()
         .ok_or_else(|| PyReferenceError::new_err("half-edge specification has been cleared"))?
-        .borrow(py);
-    let index = node_indices.get(&node.token).copied().ok_or_else(|| {
-        PyValueError::new_err("an edge endpoint refers to a node that was not passed to build()")
-    })?;
+        .bind(py);
+    let index = if let Ok(node) = target.extract::<PyRef<'_, PyNodeSpec>>() {
+        node_indices.get(&node.token).copied().ok_or_else(|| {
+            PyValueError::new_err(
+                "an edge endpoint refers to a node that was not passed to build()",
+            )
+        })?
+    } else if let Ok(node) = target.extract::<PyRef<'_, PyNode>>() {
+        if let Some(name) = node.name(py)? {
+            node_names.get(&name).copied().ok_or_else(|| {
+                PyValueError::new_err(format!(
+                    "live node endpoint name {name:?} does not match a node passed to build()"
+                ))
+            })?
+        } else {
+            let index = node.index(py)?;
+            (index < node_count)
+                .then_some(NodeIndex(index))
+                .ok_or_else(|| PyIndexError::new_err("node endpoint index out of range"))?
+        }
+    } else if let Ok(index) = target.extract::<usize>() {
+        (index < node_count)
+            .then_some(NodeIndex(index))
+            .ok_or_else(|| PyIndexError::new_err("node endpoint index out of range"))?
+    } else if let Ok(name) = target.extract::<String>() {
+        node_names
+            .get(&name)
+            .copied()
+            .ok_or_else(|| PyKeyError::new_err(format!("unknown node {name:?}")))?
+    } else {
+        return Err(PyTypeError::new_err(
+            "an endpoint target must be a NodeSpec, live Node, integer index, or node name",
+        ));
+    };
     Ok((
         endpoint.role,
         HedgeData {
@@ -1500,6 +1627,122 @@ fn endpoint_record(
             },
         },
     ))
+}
+
+fn endpoint_record_for_graph(
+    py: Python<'_>,
+    endpoint: &Py<PyHalfEdgeSpec>,
+    graph: &Py<PyGraph>,
+    revision: u64,
+) -> PyResult<(EndpointRole, HedgeData<HalfEdgeRecord>)> {
+    let endpoint = endpoint.borrow(py);
+    let target = endpoint
+        .node
+        .as_ref()
+        .ok_or_else(|| PyReferenceError::new_err("half-edge specification has been cleared"))?
+        .bind(py);
+    let node = if let Ok(view) = target.extract::<PyRef<'_, PyNode>>() {
+        view.index_for_graph(py, graph, revision)?
+    } else if let Ok(spec) = target.extract::<PyRef<'_, PyNodeSpec>>() {
+        let name = spec.name.as_deref().ok_or_else(|| {
+            PyTypeError::new_err(
+                "Graph.add_edge() cannot resolve an unnamed NodeSpec; use a live Node or index",
+            )
+        })?;
+        let graph = graph.borrow(py);
+        let state = graph.state.borrow();
+        let index = state
+            .as_ref()
+            .expect("checked")
+            .graph
+            .iter_nodes()
+            .find_map(|(index, _, node)| (node.name.as_deref() == Some(name)).then_some(index.0))
+            .ok_or_else(|| PyKeyError::new_err(format!("unknown node {name:?}")))?;
+        index
+    } else {
+        graph.borrow(py).resolve_node(target)?
+    };
+    Ok((
+        endpoint.role,
+        HedgeData {
+            node: NodeIndex(node),
+            is_in_subgraph: false,
+            data: HalfEdgeRecord {
+                data: endpoint
+                    .data
+                    .as_ref()
+                    .ok_or_else(|| {
+                        PyReferenceError::new_err("half-edge specification has been cleared")
+                    })?
+                    .clone_ref(py),
+                drawing: copy_drawing(
+                    py,
+                    endpoint.drawing.as_ref().ok_or_else(|| {
+                        PyReferenceError::new_err("half-edge specification has been cleared")
+                    })?,
+                )?,
+            },
+        },
+    ))
+}
+
+impl PyEdgeSpec {
+    fn snapshot(&self, py: Python<'_>) -> PyResult<EdgeRecord> {
+        Ok(EdgeRecord {
+            name: self.name.clone(),
+            data: self
+                .data
+                .as_ref()
+                .ok_or_else(|| PyReferenceError::new_err("edge specification has been cleared"))?
+                .clone_ref(py),
+            drawing: copy_drawing(
+                py,
+                self.drawing.as_ref().ok_or_else(|| {
+                    PyReferenceError::new_err("edge specification has been cleared")
+                })?,
+            )?,
+        })
+    }
+
+    pub(crate) fn incremental_records(
+        &self,
+        py: Python<'_>,
+        graph: &Py<PyGraph>,
+        revision: u64,
+    ) -> PyResult<IncrementalEdgeRecords> {
+        let first = endpoint_record_for_graph(
+            py,
+            self.first
+                .as_ref()
+                .ok_or_else(|| PyReferenceError::new_err("edge specification has been cleared"))?,
+            graph,
+            revision,
+        )?;
+        let second = self
+            .second
+            .as_ref()
+            .map(|endpoint| endpoint_record_for_graph(py, endpoint, graph, revision))
+            .transpose()?;
+        let (source, sink) = match (first, second) {
+            ((EndpointRole::Source, source), Some((EndpointRole::Sink, sink)))
+            | ((EndpointRole::Sink, sink), Some((EndpointRole::Source, source))) => {
+                (Some(source), Some(sink))
+            }
+            ((EndpointRole::Source, source), None) => (Some(source), None),
+            ((EndpointRole::Sink, sink), None) => (None, Some(sink)),
+            _ => {
+                return Err(PyValueError::new_err(
+                    "an internal edge needs one source and one sink",
+                ));
+            }
+        };
+        Ok(IncrementalEdgeRecords {
+            source,
+            sink,
+            edge: self.snapshot(py)?,
+            orientation: self.orientation,
+        })
+    }
 }
 
 /// Build a graph from declarative node and edge specs.
@@ -1536,6 +1779,7 @@ pub fn build(
 
     let mut names = BTreeSet::new();
     let mut node_indices = BTreeMap::new();
+    let mut node_names = BTreeMap::new();
     let mut builder = HedgeGraphBuilder::<EdgeRecord, NodeRecord, HalfEdgeRecord>::new();
     for spec in &node_specs {
         let spec = spec.borrow(py);
@@ -1546,20 +1790,10 @@ pub fn build(
                 )));
             }
         }
-        let index = builder.add_node(NodeRecord {
-            name: spec.name.clone(),
-            data: spec
-                .data
-                .as_ref()
-                .ok_or_else(|| PyReferenceError::new_err("node specification has been cleared"))?
-                .clone_ref(py),
-            drawing: copy_drawing(
-                py,
-                spec.drawing.as_ref().ok_or_else(|| {
-                    PyReferenceError::new_err("node specification has been cleared")
-                })?,
-            )?,
-        });
+        let index = builder.add_node(spec.snapshot(py)?);
+        if let Some(name) = &spec.name {
+            node_names.insert(name.clone(), index);
+        }
         if node_indices.insert(spec.token, index).is_some() {
             return Err(PyValueError::new_err(
                 "the same node specification was passed to build() more than once",
@@ -1583,11 +1817,15 @@ pub fn build(
                 .as_ref()
                 .ok_or_else(|| PyReferenceError::new_err("edge specification has been cleared"))?,
             &node_indices,
+            &node_names,
+            node_specs.len(),
         )?;
         let second = spec
             .second
             .as_ref()
-            .map(|endpoint| endpoint_record(py, endpoint, &node_indices))
+            .map(|endpoint| {
+                endpoint_record(py, endpoint, &node_indices, &node_names, node_specs.len())
+            })
             .transpose()?;
         let (source, sink) = match (first, second) {
             ((EndpointRole::Source, source), Some((EndpointRole::Sink, sink)))
@@ -1602,20 +1840,7 @@ pub fn build(
                 ));
             }
         };
-        let record = EdgeRecord {
-            name: spec.name.clone(),
-            data: spec
-                .data
-                .as_ref()
-                .ok_or_else(|| PyReferenceError::new_err("edge specification has been cleared"))?
-                .clone_ref(py),
-            drawing: copy_drawing(
-                py,
-                spec.drawing.as_ref().ok_or_else(|| {
-                    PyReferenceError::new_err("edge specification has been cleared")
-                })?,
-            )?,
-        };
+        let record = spec.snapshot(py)?;
         match (source, sink) {
             (Some(source), Some(sink)) => builder.add_edge(source, sink, record, spec.orientation),
             (Some(source), None) => {

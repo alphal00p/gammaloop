@@ -417,6 +417,110 @@ pub struct PyOrientedCut {
     cut: OrientedCut,
 }
 
+/// One source-side, oriented-boundary, target-side cut partition.
+#[gen_stub_pyclass]
+#[pyclass(unsendable, name = "CutPartition")]
+pub struct PyCutPartition {
+    graph: Option<Py<PyGraph>>,
+    revision: u64,
+    source_side: SuBitGraph,
+    boundary: OrientedCut,
+    target_side: SuBitGraph,
+}
+
+impl PyCutPartition {
+    fn owner<'py>(&self, py: Python<'py>) -> PyResult<&Bound<'py, PyGraph>> {
+        let graph = self
+            .graph
+            .as_ref()
+            .ok_or_else(|| PyReferenceError::new_err("cut partition has been cleared"))?;
+        graph.borrow(py).check_revision(self.revision)?;
+        Ok(graph.bind(py))
+    }
+}
+
+#[gen_stub_pymethods]
+#[pymethods]
+impl PyCutPartition {
+    #[getter]
+    fn source_side(&self, py: Python<'_>) -> PyResult<PySubgraph> {
+        self.owner(py)?;
+        Ok(PySubgraph::new(
+            self.graph.as_ref().expect("checked").clone_ref(py),
+            self.revision,
+            self.source_side.clone(),
+        ))
+    }
+
+    #[getter]
+    fn boundary(&self, py: Python<'_>) -> PyResult<PyOrientedCut> {
+        self.owner(py)?;
+        Ok(PyOrientedCut {
+            graph: Some(self.graph.as_ref().expect("checked").clone_ref(py)),
+            revision: self.revision,
+            cut: self.boundary.clone(),
+        })
+    }
+
+    #[getter]
+    fn target_side(&self, py: Python<'_>) -> PyResult<PySubgraph> {
+        self.owner(py)?;
+        Ok(PySubgraph::new(
+            self.graph.as_ref().expect("checked").clone_ref(py),
+            self.revision,
+            self.target_side.clone(),
+        ))
+    }
+
+    #[getter]
+    fn edges(&self, py: Python<'_>) -> PyResult<Vec<Py<PyEdge>>> {
+        let graph = self.owner(py)?;
+        let ids = {
+            let graph = graph.borrow();
+            let state = graph.state.borrow();
+            state
+                .as_ref()
+                .expect("checked")
+                .graph
+                .iter_edges_of(&self.boundary.left)
+                .map(|(_, edge, _)| edge.0)
+                .collect::<Vec<_>>()
+        };
+        ids.into_iter()
+            .map(|edge| {
+                Py::new(
+                    py,
+                    PyEdge::new(
+                        self.graph.as_ref().expect("checked").clone_ref(py),
+                        edge,
+                        self.revision,
+                    ),
+                )
+            })
+            .collect()
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        self.owner(py)?;
+        Ok(format!(
+            "CutPartition(source_half_edges={}, boundary_edges={}, target_half_edges={})",
+            self.source_side.n_included(),
+            self.boundary.left.n_included(),
+            self.target_side.n_included(),
+        ))
+    }
+
+    #[gen_stub(skip)]
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        visit.call(&self.graph)
+    }
+
+    #[gen_stub(skip)]
+    fn __clear__(&mut self) {
+        self.graph = None;
+    }
+}
+
 #[gen_stub_pymethods]
 #[pymethods]
 impl PyOrientedCut {
@@ -988,6 +1092,52 @@ impl PyGraph {
             .collect())
     }
 
+    /// Enumerate inclusion-minimal cutsets with an inclusive boundary-size range.
+    ///
+    /// Bounds default to `[1, unbounded]`; `min_size=0` is rejected because a bond is non-empty.
+    #[pyo3(signature = (*, subgraph=None, min_size=None, max_size=None))]
+    fn all_bonds(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: Option<&PySubgraph>,
+        min_size: Option<usize>,
+        max_size: Option<usize>,
+    ) -> PyResult<Vec<PySubgraph>> {
+        let revision = slf.borrow(py).revision()?;
+        let (filter, isolated_nodes) = selected_filter(&slf, py, revision, subgraph)?;
+        let minimum = min_size.unwrap_or(1);
+        if minimum == 0 {
+            return Err(PyValueError::new_err("min_size must be at least 1"));
+        }
+        let maximum = max_size.unwrap_or(usize::MAX);
+        if minimum > maximum {
+            return Err(PyValueError::new_err(
+                "min_size must be less than or equal to max_size",
+            ));
+        }
+        let mut bonds = {
+            let graph = slf.borrow(py);
+            let state = graph.state.borrow();
+            state
+                .as_ref()
+                .expect("checked")
+                .graph
+                .all_bonds_of(&filter, minimum, maximum)
+        };
+        // Isolated nodes have no edge boundary and therefore contribute no bond.
+        drop(isolated_nodes);
+        bonds.sort_by_key(|bond| {
+            bond.included_iter()
+                .map(|half_edge| half_edge.0)
+                .collect::<Vec<_>>()
+        });
+        Ok(bonds
+            .into_iter()
+            .map(|bond| PySubgraph::new(slf.clone_ref(py), revision, bond))
+            .collect())
+    }
+
+    /// Enumerate all native separating partitions between two disjoint, non-empty node groups.
     #[pyo3(signature = (source, target))]
     fn all_cuts(
         slf: Py<PyGraph>,
@@ -996,7 +1146,7 @@ impl PyGraph {
         source: Vec<Py<PyAny>>,
         #[gen_stub(override_type(type_repr="typing.Sequence[builtins.int | builtins.str]", imports=("builtins", "typing")))]
         target: Vec<Py<PyAny>>,
-    ) -> PyResult<Vec<(PySubgraph, PyOrientedCut, PySubgraph)>> {
+    ) -> PyResult<Vec<PyCutPartition>> {
         if source.is_empty() || target.is_empty() {
             return Err(PyValueError::new_err(
                 "source and target must each contain at least one node",
@@ -1016,10 +1166,19 @@ impl PyGraph {
                 "source and target node groups must be disjoint",
             ));
         }
-        let cuts = {
+        let mut cuts = {
             let graph = slf.borrow(py);
             let state = graph.state.borrow();
             let graph = &state.as_ref().expect("checked").graph;
+            if source
+                .iter()
+                .chain(&target)
+                .any(|node| graph.iter_crown(*node).next().is_none())
+            {
+                return Err(PyValueError::new_err(
+                    "every source and target node must have an incident half-edge",
+                ));
+            }
             let source = graph.combine_to_single_hedgenode(&source);
             let target = graph.combine_to_single_hedgenode(&target);
             if source.hairs.is_empty() || target.hairs.is_empty() {
@@ -1029,18 +1188,31 @@ impl PyGraph {
             }
             graph.all_cuts(source, target)
         };
+        cuts.sort_by_key(|(source, boundary, target)| {
+            (
+                source
+                    .included_iter()
+                    .map(|half_edge| half_edge.0)
+                    .collect::<Vec<_>>(),
+                boundary
+                    .left
+                    .included_iter()
+                    .map(|half_edge| half_edge.0)
+                    .collect::<Vec<_>>(),
+                target
+                    .included_iter()
+                    .map(|half_edge| half_edge.0)
+                    .collect::<Vec<_>>(),
+            )
+        });
         Ok(cuts
             .into_iter()
-            .map(|(left, cut, right)| {
-                (
-                    PySubgraph::new(slf.clone_ref(py), revision, left),
-                    PyOrientedCut {
-                        graph: Some(slf.clone_ref(py)),
-                        revision,
-                        cut,
-                    },
-                    PySubgraph::new(slf.clone_ref(py), revision, right),
-                )
+            .map(|(source_side, boundary, target_side)| PyCutPartition {
+                graph: Some(slf.clone_ref(py)),
+                revision,
+                source_side,
+                boundary,
+                target_side,
             })
             .collect())
     }
@@ -1097,6 +1269,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PySubgraph>()?;
     module.add_class::<PyCycle>()?;
     module.add_class::<PyOrientedCut>()?;
+    module.add_class::<PyCutPartition>()?;
     module.add_class::<PyTraversalTree>()?;
     Ok(())
 }

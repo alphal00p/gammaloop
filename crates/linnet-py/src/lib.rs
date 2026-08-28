@@ -108,6 +108,8 @@ _Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _Nat
 _FieldNames: typing.TypeAlias = builtins.str | builtins.list[builtins.str] | builtins.tuple[builtins.str, ...] | _ValueExpression | Inherit
 _OptionalString: typing.TypeAlias = builtins.str | None
 _OptionalHalfEdgeSpec: typing.TypeAlias = HalfEdgeSpec | None
+_EndpointTarget: typing.TypeAlias = NodeSpec | Node | builtins.int | builtins.str
+_HalfEdgeTarget: typing.TypeAlias = HalfEdge | builtins.int
 _GraphItem: typing.TypeAlias = NodeSpec | EdgeSpec
 _OptionalGlobalData: typing.TypeAlias = GlobalData | None
 _OptionalDotCodec: typing.TypeAlias = DotCodec | None
@@ -258,6 +260,7 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
         ("PySubgraph", "Subgraph"),
         ("PyTraversalTree", "TraversalTree"),
         ("PyCycle", "Cycle"),
+        ("PyCutPartition", "CutPartition"),
         ("PyPlacement", "Placement"),
         ("PyStrokeCap", "StrokeCap"),
         ("PyCompass", "Compass"),

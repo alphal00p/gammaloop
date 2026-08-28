@@ -81,6 +81,11 @@ class UserEdgeData:
     interaction: object
 
 
+@dataclass
+class UserHalfEdgeData:
+    port: object
+
+
 incoming_data = UserNodeData(state=object())
 outgoing_data = UserNodeData(state=object())
 propagator_data = UserEdgeData(interaction=object())
@@ -118,6 +123,42 @@ object. Drawing and rendering configuration are copied by value. Reordering node
 reversing an edge preserve each data/drawing association, but invalidate every older live view;
 using a stale view raises `ReferenceError`.
 
+Incremental edits reuse the declarative constructors instead of introducing a second set of
+drawing dictionaries. `add_node` accepts a `NodeSpec`; `add_edge` accepts the same internal or
+dangling `EdgeSpec` used by `build`. Declarative endpoints resolve a passed `NodeSpec`, name,
+index, or live-node key. Incremental endpoints resolve a current live `Node`, name, index, or a
+named `NodeSpec`:
+
+```python
+from linnet_py import Compass, Graph, MathSymbol, edge, node, sink, source
+
+graph = Graph()
+graph.add_node(node("in", data=UserNodeData(object()), label="incoming"))
+graph.add_node(node("out", data=UserNodeData(object())))
+
+propagator = graph.add_edge(edge(
+    source("in", data=UserHalfEdgeData(object()), compass=Compass.E),
+    "propagator",
+    sink(graph.node("out"), data=UserHalfEdgeData(object()), compass=Compass.W),
+    data=UserEdgeData(object()),
+    particle="e-",
+    label=MathSymbol("p", subscript=0),
+))
+```
+
+Each successful insertion is one atomic topology revision and returns a fresh view. Reacquire a
+view by name or index after the next edit. Validation failures do not publish the candidate and
+therefore leave existing views live. Arbitrary data keeps Python object identity; specs and their
+drawing dictionaries are copied by value and remain reusable.
+
+`split_edge(at, replacement, ...)` turns a paired edge into two dangling edges. The selected
+half-edge receives the detached replacement `EdgeValue`; the opposite half retains the original
+edge value. `connect(source, sink, replacement, ...)` performs the topological inverse, with the
+first dangling half-edge becoming the source. The two dangling
+edge records are replaced by the supplied value, name, and orientation. Use
+`delete(graph.subgraph(...))` for removal; there are no duplicate `remove_node` or `remove_edge`
+aliases.
+
 The long-lived topology is Linnet's native `HedgeGraph`; it is not a separate Python adjacency
 model. `NodeStore.Vec` is the default dense node store, while `NodeStore.Forest` selects the
 identification-preserving forest store. Pass `node_store=` to `Graph`, `build`, or a DOT importer,
@@ -143,22 +184,37 @@ component_copies = [graph.concretize(part) for part in graph.connected_component
 tree = graph.depth_first_traverse("in", subgraph=selected)
 cycles, covered = graph.cycle_basis(selected)
 
-# concretize() is non-mutating; extract(), delete(), contract(), append_mut(),
-# and join_mut() change topology and therefore stale old views and selections.
+for partition in graph.all_cuts(["in"], ["out"]):
+    source_region = partition.source_side
+    cut_edges = partition.edges
+    target_region = partition.target_side
+
+# Inclusion-minimal connected bipartition boundaries of size one.
+bridge_bonds = graph.all_bonds(subgraph=selected, min_size=1, max_size=1)
+
+# concretize() is non-mutating; insertion, split/connect, extract(), delete(),
+# contract(), append_mut(), and join_mut() stale old views and selections.
 detached = graph.concretize(propagators)
 removed = graph.extract(propagators)
 ```
 
 `Subgraph` supports immutable union, intersection, difference, symmetric difference, complement,
 and their Python operators. The binding also exposes connectivity and component queries, DFS and
-BFS trees, bridges, cycle bases, spanning forests, cuts, contraction, disconnected append, and
-callback-driven joining of dangling half-edges. `append()` and `join()` return a graph while their
+BFS trees, bridges, cycle bases, spanning forests, cut partitions, bond enumeration, contraction,
+disconnected append, and callback-driven joining of dangling half-edges. `append()` and `join()`
+return a graph while their
 `*_mut()` counterparts update the left graph; the right graph is unchanged. Transformations retain
 arbitrary data by Python identity and copy drawing/configuration by value. Callback failures and
 name collisions never publish a candidate topology. Join callbacks receive live views, so any
 explicit `data` or `drawing` mutations they perform take effect immediately and are not rolled back.
-Cut terminals must be disjoint node groups with a boundary half-edge; isolated or closed terminal
-regions raise `ValueError` rather than entering Linnet's cut enumeration.
+Every cut terminal must be part of a disjoint source or target node group and have an incident
+half-edge, while each combined terminal group must have a boundary. An isolated node mixed into
+an otherwise connected terminal group is rejected instead of being silently dropped. `all_cuts`
+eagerly materializes the native admissible separating
+partitions and can be combinatorial. Its result is sorted by structural half-edge indices, while
+`CutPartition.boundary.left` and `.right` retain the orientation of each boundary half-edge.
+`all_bonds` enumerates inclusion-minimal connected bipartition boundaries in a size range; it is
+not a minimum-cardinality or max-flow operation.
 
 === Typed Typst configuration
 
