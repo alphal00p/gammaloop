@@ -11,9 +11,11 @@ categories = ["science"]
 [dependencies]
 feynkit-graph = { version = "0.1.0", path = "../feynkit-graph" }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
+idenso = { workspace = true }
 linnet = { workspace = true, features = ["symbolica"] }
 rayon = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+spenso = { workspace = true, features = ["shadowing"] }
 symbolica = { workspace = true, default-features = false }
 thiserror = { workspace = true }
 
