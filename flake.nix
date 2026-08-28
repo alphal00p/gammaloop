@@ -491,9 +491,7 @@
 
       workspacePackageOwnTestSourceRoots = {
         gammalooprs = [
-          "crates/gammalooprs/src/feyngen/test.rs"
           "crates/gammalooprs/src/graph/parse/tests.rs"
-          "crates/gammalooprs/src/model/test_polarization_sums.rs"
           "crates/gammalooprs/src/numerator/spensotests.rs"
           "crates/gammalooprs/src/numerator/tests.rs"
           "crates/gammalooprs/src/utils/test_utils.rs"
