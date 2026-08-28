@@ -4,69 +4,88 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
 ---
 {
   "expression": {
-    "orientations": [
-      {
-        "data": {
-          "orientation": [
-            "Default",
-            "Default",
-            "Undirected",
-            "Undirected"
-          ]
-        },
-        "expression": {
-          "nodes": [
-            {
-              "children": [],
-              "data": {
-                "Esurface": 0
-              },
-              "node_id": 0,
-              "parent": null
-            }
-          ]
+    "expression": {
+      "orientations": [
+        {
+          "data": {
+            "orientation": [
+              "Default",
+              "Default",
+              "Undirected",
+              "Undirected"
+            ]
+          },
+          "expression": {
+            "nodes": [
+              {
+                "children": [],
+                "data": {
+                  "Energy": 0
+                },
+                "id": 0,
+                "parent": null
+              }
+            ]
+          },
+          "id": 0
         }
-      }
-    ],
+      ]
+    },
+    "report": {
+      "acyclic_orientations": 1,
+      "candidate_orientations": 4,
+      "interned_surfaces": 2,
+      "unfolded_terms": 1
+    },
     "surfaces": {
-      "esurface_cache": [
+      "energy_surfaces": [
         {
           "energies": [
             0,
             1
           ],
-          "external_shift": [
-            [
-              3,
-              -1
-            ]
+          "external_shift": {
+            "3": -1
+          },
+          "vertex_set": 1
+        },
+        {
+          "energies": [
+            0,
+            1
           ],
-          "vertex_set": {
-            "vertex_set": 1
-          }
+          "external_shift": {
+            "3": 1
+          },
+          "vertex_set": 1
         }
       ],
-      "hsurface_cache": []
+      "h_surfaces": []
     }
   },
   "surface_cache": {
-    "esurface_cache": [
+    "energy_surfaces": [
       {
         "energies": [
           0,
           1
         ],
-        "external_shift": [
-          [
-            3,
-            -1
-          ]
+        "external_shift": {
+          "3": -1
+        },
+        "vertex_set": 1
+      },
+      {
+        "energies": [
+          0,
+          1
         ],
-        "vertex_set": {
-          "vertex_set": 1
-        }
+        "external_shift": {
+          "3": 1
+        },
+        "vertex_set": 1
       }
     ],
-    "hsurface_cache": []
+    "h_surfaces": []
   }
 }

@@ -1,15 +1,21 @@
 use std::ffi::CString;
 
 use feynkit_graph::FeynmanDiagram;
+use feynkit_model::Model;
 use feynkit_py::{FeynkitModule, PyFeynmanDiagram};
 use pyo3::{
     prelude::*,
     types::{PyCFunction, PyDict, PyList, PyModule},
 };
 use spynso3::SpensoModule;
-use symbolica::api::python::{SymbolicaCommunityModule, create_symbolica_module};
+use symbolica::{
+    api::python::{SymbolicaCommunityModule, create_symbolica_module},
+    atom::Atom,
+    parser::ParseSettings,
+};
 
 const FEYNKIT_WRAPPER: &str = include_str!("../python/symbolica/community/feynkit/__init__.py");
+const MODEL_JSON: &str = include_str!("fixtures/scalars_2p_3p.json");
 const SPENSO_WRAPPER: &str = "from ..spenso_native import *\n\ninitialize_module()\n";
 
 fn install_package<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyModule>> {
@@ -98,8 +104,11 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
 
             let feynkit = PyModule::import(py, "symbolica.community.feynkit")?;
             let spenso = PyModule::import(py, "symbolica.community.spenso")?;
-            let diagram = FeynmanDiagram::builder("shared-kernel")
-                .overall_factor("x + 1")
+            let model = Model::from_json(MODEL_JSON).expect("fixture is a valid model");
+            let diagram = FeynmanDiagram::builder(model, "shared-kernel")
+                .overall_factor(
+                    Atom::parse("x + 1", "feynkit_py_test", ParseSettings::default()).unwrap(),
+                )
                 .build()
                 .expect("empty test diagram is valid");
             let diagram = Py::new(py, PyFeynmanDiagram::from(diagram))?;

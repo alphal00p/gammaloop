@@ -66,10 +66,131 @@ pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
 /// Gather the FeynKit stub inventory without declaring an independent wheel.
 #[cfg(feature = "python_stubgen")]
 pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
-    pyo3_stub_gen::StubInfo::from_project_root(
+    let info = pyo3_stub_gen::StubInfo::from_project_root(
         "symbolica.community.feynkit".to_owned(),
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("python"),
+    )?;
+    let module = info
+        .modules
+        .get("symbolica.community.feynkit")
+        .ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "FeynKit did not contribute a symbolica.community.feynkit stub module",
+            )
+        })?;
+    validate_stub_documentation(&module.to_string())?;
+    Ok(info)
+}
+
+#[cfg(feature = "python_stubgen")]
+fn validate_stub_documentation(source: &str) -> PyResult<()> {
+    const DOCUMENTATION_AUDIT: &str = r#"
+import ast
+
+tree = ast.parse(source)
+errors = []
+
+def section_body(doc, heading):
+    lines = doc.splitlines()
+    try:
+        start = lines.index(heading) + 2
+    except ValueError:
+        return None
+    end = len(lines)
+    for index in range(start, len(lines) - 1):
+        underline = lines[index + 1].strip()
+        if lines[index].strip() and len(underline) >= 3 and set(underline) == {"-"}:
+            end = index
+            break
+    return [line.strip() for line in lines[start:end] if line.strip()]
+
+for node in ast.walk(tree):
+    if isinstance(node, ast.ClassDef):
+        doc = ast.get_docstring(node) or ""
+        if "Examples\n--------" not in doc:
+            errors.append(f"class {node.name} has no Examples section")
+        if "Examples\n--------" in doc and "Parameters\n----------" in doc:
+            if doc.index("Examples\n--------") > doc.index("Parameters\n----------"):
+                errors.append(f"class {node.name} puts Parameters before Examples")
+        parameters = section_body(doc, "Parameters")
+        if parameters is not None and (not parameters or parameters == ["None"]):
+            errors.append(f"class {node.name} has an empty Parameters section")
+        if "isinstance(" in doc or "is None or" in doc:
+            errors.append(f"class {node.name} uses a type-check-only example")
+        continue
+    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        continue
+
+    doc = ast.get_docstring(node) or ""
+    is_property = any(
+        isinstance(decorator, ast.Name) and decorator.id == "property"
+        for decorator in node.decorator_list
     )
+    arguments = [
+        *node.args.posonlyargs,
+        *node.args.args,
+        *node.args.kwonlyargs,
+    ]
+    arguments = [argument for argument in arguments if argument.arg not in {"self", "cls"}]
+    if node.args.vararg is not None:
+        arguments.append(node.args.vararg)
+    if node.args.kwarg is not None:
+        arguments.append(node.args.kwarg)
+    has_examples = "Examples\n--------" in doc
+    has_parameters = "Parameters\n----------" in doc
+    parameters = section_body(doc, "Parameters")
+    documented_parameters = set()
+    for line in parameters or []:
+        if ":" not in line:
+            continue
+        names = line.split(":", 1)[0]
+        documented_parameters.update(
+            name.strip().lstrip("*") for name in names.split(",")
+        )
+
+    if not doc:
+        errors.append(f"callable {node.name} has no documentation")
+    if not is_property and not has_examples:
+        errors.append(f"callable {node.name} has no Examples section")
+    if not is_property and arguments and not has_parameters:
+        errors.append(f"callable {node.name} has undocumented parameters")
+    elif arguments:
+        missing = [
+            argument.arg for argument in arguments
+            if argument.arg not in documented_parameters
+        ]
+        if missing:
+            errors.append(
+                f"callable {node.name} omits parameters: {', '.join(missing)}"
+            )
+    if not arguments and has_parameters:
+        errors.append(f"callable {node.name} has an empty Parameters section")
+    if parameters is not None and (not parameters or parameters == ["None"]):
+        errors.append(f"callable {node.name} has an empty Parameters section")
+    if has_examples and has_parameters and doc.index("Examples\n--------") > doc.index("Parameters\n----------"):
+        errors.append(f"callable {node.name} puts Parameters before Examples")
+    if "isinstance(" in doc or "is None or" in doc:
+        errors.append(f"callable {node.name} uses a type-check-only example")
+
+if errors:
+    raise AssertionError("invalid FeynKit API documentation:\n" + "\n".join(errors))
+"#;
+
+    Python::initialize();
+    Python::attach(|py| {
+        PyModule::import(py, "ast")?
+            .getattr("parse")?
+            .call1((source,))?;
+        let globals = pyo3::types::PyDict::new(py);
+        globals.set_item("source", source)?;
+        PyModule::import(py, "builtins")?.getattr("exec")?.call1((
+            DOCUMENTATION_AUDIT,
+            &globals,
+            &globals,
+        ))?;
+        Ok(())
+    })
 }
 
 #[cfg(test)]
@@ -101,6 +222,42 @@ mod tests {
         assert_send::<PyModel>();
         assert_send::<PyGenerator>();
         assert_send::<PyFeynmanDiagram>();
+    }
+
+    #[cfg(feature = "python_stubgen")]
+    #[test]
+    fn generated_stub_covers_every_registered_native_class() {
+        Python::initialize();
+        Python::attach(|py| {
+            let module = registered_module(py);
+            let info = stub_info().unwrap();
+            let source = info
+                .modules
+                .get("symbolica.community.feynkit")
+                .unwrap()
+                .to_string();
+            let locals = PyDict::new(py);
+            locals.set_item("fk", module).unwrap();
+            locals.set_item("source", source).unwrap();
+            let code = CString::new(
+                r#"
+import ast
+
+stub_classes = {
+    node.name for node in ast.walk(ast.parse(source))
+    if isinstance(node, ast.ClassDef)
+}
+runtime_classes = {
+    name for name, value in vars(fk).items()
+    if isinstance(value, type) and value.__module__ == fk.__name__
+}
+missing = sorted(runtime_classes - stub_classes)
+assert not missing, f"native classes missing from the generated stub: {missing}"
+"#,
+            )
+            .unwrap();
+            py.run(&code, Some(&locals), Some(&locals)).unwrap();
+        });
     }
 
     #[test]
@@ -185,7 +342,12 @@ generated = model.generate_diagrams(
 assert len(generated) > 0
 assert generated[0].name == next(iter(generated)).name
 assert generated.report.completed
-assert "Generation result" in generated._repr_html_()
+try:
+    generation_html = generated._repr_html_()
+except ImportError as error:
+    assert "typst-py" in str(error)
+else:
+    assert "Generation result" in generation_html
 assert "retained diagrams" in generated.report._repr_html_()
 assert "particles" in model._repr_html_()
 
@@ -195,16 +357,23 @@ loop_diagram = next(
     if diagram.loop_count == 1
     and all(edge.source != edge.target for edge in diagram.edges)
 )
-loop_diagram.validate(model)
-assert loop_diagram.to_svg().startswith("<svg")
-assert loop_diagram.to_html() == loop_diagram._repr_html_()
-assert "<svg" in loop_diagram._repr_svg_()
-assert "Feynman diagram" in loop_diagram._repr_html_()
+loop_diagram.validate()
+try:
+    diagram_svg = loop_diagram.to_svg()
+except ImportError as error:
+    # The minimal Rust test environment does not install optional Python
+    # rendering dependencies; the community-venv tests exercise the SVG path.
+    assert "typst-py" in str(error)
+else:
+    assert diagram_svg.startswith("<svg")
+    assert loop_diagram.to_html() == loop_diagram._repr_html_()
+    assert "<svg" in loop_diagram._repr_svg_()
+    assert "Feynman diagram" in loop_diagram._repr_html_()
 
-json_diagram = fk.FeynmanDiagram.from_json(loop_diagram.to_json())
-dot_diagram = fk.FeynmanDiagram.from_dot(loop_diagram.to_dot())
-json_diagram.validate(model)
-dot_diagram.validate(model)
+json_diagram = fk.FeynmanDiagram.from_json(model, loop_diagram.to_json())
+dot_diagram = fk.FeynmanDiagram.from_dot(model, loop_diagram.to_dot())
+json_diagram.validate()
+dot_diagram.validate()
 assert json_diagram.loop_count == dot_diagram.loop_count == 1
 
 bases = json_diagram.loop_momentum_bases()
@@ -273,6 +442,8 @@ import sys
 
 assert "_gammaloop" not in sys.modules
 
+model = fk.Model.from_json(MODEL_JSON)
+
 def assert_feynkit_error(error_type, operation):
     try:
         operation()
@@ -287,13 +458,15 @@ assert_feynkit_error(
     fk.GenerationError,
     lambda: fk.Process.amplitude([], []).with_loop_count(2, 1),
 )
-assert_feynkit_error(fk.DiagramError, lambda: fk.FeynmanDiagram.from_json("{}"))
+assert_feynkit_error(
+    fk.DiagramError,
+    lambda: fk.FeynmanDiagram.from_json(model, "{}"),
+)
 assert_feynkit_error(
     fk.KinematicsError,
     lambda: fk.Boost(fk.ThreeMomentum(1.0, 0.0, 0.0)),
 )
 
-model = fk.Model.from_json(MODEL_JSON)
 generator = fk.Generator(model)
 
 filter_options = fk.GenerationOptions()
@@ -411,5 +584,104 @@ assert "_gammaloop" not in sys.modules
 
             py.run(&code, Some(&locals), Some(&locals)).unwrap();
         });
+    }
+
+    #[cfg(feature = "python_stubgen")]
+    #[test]
+    fn documentation_audit_accepts_documented_classes_methods_and_accessors() {
+        validate_stub_documentation(
+            r#"
+class Diagram:
+    """A diagram.
+
+    Examples
+    --------
+    >>> diagram = model.generate_diagrams([], []).diagrams[0]
+    """
+
+    @property
+    def loops(self) -> int:
+        """Return the loop count."""
+        ...
+
+    def render(self, width: int) -> str:
+        """Render the diagram.
+
+        Examples
+        --------
+        >>> diagram.render(640)
+
+        Parameters
+        ----------
+        width : int
+            Target width.
+        """
+        ...
+"#,
+        )
+        .unwrap();
+    }
+
+    #[cfg(feature = "python_stubgen")]
+    #[test]
+    fn documentation_audit_rejects_undocumented_accessors() {
+        let error = validate_stub_documentation(
+            r#"
+class Diagram:
+    """A diagram.
+
+    Examples
+    --------
+    >>> diagram
+    """
+
+    @property
+    def loops(self) -> int: ...
+"#,
+        )
+        .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("callable loops has no documentation")
+        );
+    }
+
+    #[cfg(feature = "python_stubgen")]
+    #[test]
+    fn documentation_audit_rejects_missing_parameter_entries() {
+        let error = validate_stub_documentation(
+            r#"
+class Generator:
+    """A generator.
+
+    Examples
+    --------
+    >>> generator.generate(diagram, options)
+    """
+
+    def generate(self, diagram: object, options: object) -> object:
+        """Generate diagrams.
+
+        Examples
+        --------
+        >>> generator.generate(diagram, options)
+
+        Parameters
+        ----------
+        diagram : object
+            Diagram to process.
+        """
+        ...
+"#,
+        )
+        .unwrap_err();
+
+        assert!(
+            error
+                .to_string()
+                .contains("callable generate omits parameters: options")
+        );
     }
 }

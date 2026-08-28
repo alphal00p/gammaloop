@@ -5,6 +5,7 @@ use std::{
 
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
+use feynkit_cff::EnergySurface;
 use linnet::half_edge::involution::EdgeVec;
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -14,7 +15,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     DependentMomentaConstructor, GammaLoopContext,
-    cff::esurface::Esurface,
+    cff::esurface::EnergySurfaceExt,
     graph::LoopMomentumBasis,
     integrands::process::evaluators::EvaluatorMethod,
     momentum::{Helicity, RotationMethod, sample::ExternalIndex, signature::SignatureLike},
@@ -154,7 +155,7 @@ impl<'a> LockedRuntimeSettings<'a> {
 
     pub(crate) fn existence_check(
         &self,
-        esurface: &Esurface,
+        esurface: &EnergySurface,
         masses: &EdgeVec<F<f64>>,
         external_signature: &SignatureLike<ExternalIndex>,
         lmb: &LoopMomentumBasis,

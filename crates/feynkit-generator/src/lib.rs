@@ -27,6 +27,7 @@ pub(crate) fn momentum_symbol() -> Symbol {
 
 pub use generation::{
     DiagramGroup, GenerationError, GenerationReport, GenerationResult, Generator, GroupMember,
+    UnresolvedCutContent, unresolved_cut_content,
 };
 pub use grouping::GroupingError;
 pub use options::{
@@ -34,4 +35,6 @@ pub use options::{
     GenerationOptions, GenerationProgress, GraphGroupingOptions, NumeratorGrouping,
     SelfEnergyFilterOptions, SewnFilterOptions, SnailFilterOptions, TadpoleFilterOptions,
 };
-pub use process::{GenerationType, ParticleSelector, Process, ProcessError};
+pub use process::{
+    GenerationType, ParticleSelector, Process, ProcessError, SelectorError, VertexSelector,
+};

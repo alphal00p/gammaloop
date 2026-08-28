@@ -112,6 +112,16 @@ pub enum ModelError {
     },
     #[error("invalid JSON: {0}")]
     Json(#[from] serde_json::Error),
+    #[error(
+        "could not parse {kind} '{name}' field '{field}' as a symbolic expression: {message}; expression: {expression}"
+    )]
+    SymbolicParse {
+        kind: EntityKind,
+        name: String,
+        field: &'static str,
+        expression: String,
+        message: String,
+    },
     #[error(transparent)]
     Validation(#[from] ModelValidationError),
     #[error("{kind} '{key}' was not found in model '{model}'")]

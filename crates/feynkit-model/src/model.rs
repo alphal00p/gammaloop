@@ -5,6 +5,11 @@ use std::{
 };
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    parser::ParseSettings,
+    printer::PrintOptions,
+};
 
 use crate::{
     ComplexValue, EntityKind, EvaluatedValues, EvaluationRequest, ModelError, ModelEvaluator,
@@ -15,10 +20,45 @@ const fn default_true() -> bool {
     true
 }
 
+fn parse_expression(
+    kind: EntityKind,
+    name: &str,
+    field: &'static str,
+    expression: &str,
+) -> Result<Atom, ModelError> {
+    let normalized = expression
+        .replace("**", "^")
+        .replace("cmath.sqrt", "sqrt")
+        .replace("cmath.pi", "pi")
+        .replace("math.sqrt", "sqrt")
+        .replace("math.pi", "pi");
+    Atom::parse(&normalized, "UFO", ParseSettings::default()).map_err(|message| {
+        ModelError::SymbolicParse {
+            kind,
+            name: name.to_owned(),
+            field,
+            expression: expression.to_owned(),
+            message,
+        }
+    })
+}
+
+/// Export an expression in the UFO interchange syntax.
+///
+/// Runtime atoms deliberately live in Symbolica's `UFO` namespace, but the
+/// UFO JSON and evaluator boundaries use the original, namespaceless symbol
+/// spelling. Keeping that conversion in one place also gives every exported
+/// expression a deterministic ordering.
+fn export_expression(expression: &Atom) -> String {
+    expression
+        .printer(PrintOptions::file_no_namespace())
+        .to_string()
+}
+
 /// The UFO convention stores twice the spin plus one (scalar = 1, spinor = 2,
 /// vector = 3, and tensor = 5).
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct Particle {
+pub(crate) struct ParticleDefinition {
     pub pdg_code: i64,
     pub name: String,
     pub antiname: String,
@@ -45,13 +85,207 @@ pub struct Particle {
     pub propagator: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct PropagatorDefinition {
+    pub name: String,
+    pub particle: String,
+    pub numerator: String,
+    pub denominator: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct LorentzStructureDefinition {
+    pub name: String,
+    pub spins: Vec<i64>,
+    pub structure: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct CouplingDefinition {
+    pub name: String,
+    pub expression: String,
+    #[serde(with = "vectorize")]
+    pub orders: BTreeMap<String, usize>,
+    #[serde(default, with = "crate::card::optional_complex")]
+    pub value: Option<ComplexValue>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ParameterNature {
+    #[default]
+    External,
+    Internal,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ParameterType {
+    #[default]
+    Real,
+    Complex,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ParameterDefinition {
+    pub name: String,
+    pub lhablock: Option<String>,
+    pub lhacode: Option<Vec<usize>>,
+    pub nature: ParameterNature,
+    pub parameter_type: ParameterType,
+    #[serde(default, with = "crate::card::optional_complex")]
+    pub value: Option<ComplexValue>,
+    pub expression: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Order {
+    pub name: String,
+    pub expansion_order: i64,
+    pub hierarchy: i64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct VertexRuleDefinition {
+    pub name: String,
+    pub particles: Vec<String>,
+    pub color_structures: Vec<String>,
+    pub lorentz_structures: Vec<String>,
+    pub couplings: Vec<Vec<Option<String>>>,
+}
+
+/// A callable function declared by a UFO model.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ModelFunctionDefinition {
+    pub name: String,
+    #[serde(default)]
+    pub arguments: Vec<String>,
+    pub expression: Option<String>,
+}
+
+/// Metadata for a UFO form factor.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub(crate) struct ModelFormFactorDefinition {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub type_name: Option<String>,
+    pub value: Option<String>,
+}
+
+/// Serializable data from which a validated [`Model`] is constructed.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub(crate) struct ModelDefinition {
+    pub name: String,
+    pub restriction: Option<String>,
+    pub orders: Vec<Order>,
+    pub parameters: Vec<ParameterDefinition>,
+    pub particles: Vec<ParticleDefinition>,
+    pub propagators: Vec<PropagatorDefinition>,
+    pub lorentz_structures: Vec<LorentzStructureDefinition>,
+    pub couplings: Vec<CouplingDefinition>,
+    pub vertex_rules: Vec<VertexRuleDefinition>,
+    #[serde(default)]
+    pub functions: Vec<ModelFunctionDefinition>,
+    #[serde(default)]
+    pub form_factors: Vec<ModelFormFactorDefinition>,
+}
+
+macro_rules! entity_id {
+    ($name:ident) => {
+        #[derive(
+            Clone,
+            Copy,
+            Debug,
+            PartialEq,
+            Eq,
+            PartialOrd,
+            Ord,
+            Hash,
+            Serialize,
+            Deserialize,
+            bincode_trait_derive::Encode,
+            bincode_trait_derive::Decode,
+        )]
+        pub struct $name(usize);
+
+        impl $name {
+            pub const fn from_index(index: usize) -> Self {
+                Self(index)
+            }
+
+            pub const fn index(self) -> usize {
+                self.0
+            }
+        }
+    };
+}
+
+entity_id!(OrderId);
+entity_id!(ParameterId);
+entity_id!(ParticleId);
+entity_id!(PropagatorId);
+entity_id!(LorentzStructureId);
+entity_id!(CouplingId);
+entity_id!(VertexRuleId);
+entity_id!(ModelFunctionId);
+entity_id!(ModelFormFactorId);
+
+/// Content identity of a validated model.
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
+pub struct ModelFingerprint([u8; 32]);
+
+impl ModelFingerprint {
+    pub const fn as_bytes(&self) -> &[u8; 32] {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for ModelFingerprint {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for byte in self.0 {
+            write!(formatter, "{byte:02x}")?;
+        }
+        Ok(())
+    }
+}
+
+/// A particle whose links into the model are stable typed identifiers.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Particle {
+    pub pdg_code: i64,
+    pub name: String,
+    pub antiparticle: ParticleId,
+    pub spin: i64,
+    pub color: i64,
+    pub mass: ParameterId,
+    pub width: ParameterId,
+    pub texname: String,
+    pub antitexname: String,
+    pub charge: f64,
+    pub ghost_number: i64,
+    pub lepton_number: i64,
+    pub y_charge: i64,
+    pub propagating: bool,
+    pub goldstone: bool,
+    pub propagator: Option<PropagatorId>,
+}
+
 impl Particle {
     pub fn is_antiparticle(&self) -> bool {
         self.pdg_code < 0
-    }
-
-    pub fn is_self_antiparticle(&self) -> bool {
-        self.name == self.antiname
     }
 
     pub fn is_fermion(&self) -> bool {
@@ -86,56 +320,35 @@ impl Particle {
         self.propagating
     }
 
-    pub fn is_massless(&self) -> bool {
-        self.mass == "ZERO"
-    }
-
     pub fn is_qcd_charged(&self) -> bool {
         self.color != 1
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Propagator {
     pub name: String,
-    pub particle: String,
-    pub numerator: String,
-    pub denominator: String,
+    pub particle: ParticleId,
+    pub numerator: Atom,
+    pub denominator: Atom,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct LorentzStructure {
     pub name: String,
     pub spins: Vec<i64>,
-    pub structure: String,
+    pub structure: Atom,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Coupling {
     pub name: String,
-    pub expression: String,
-    #[serde(with = "vectorize")]
+    pub expression: Atom,
     pub orders: BTreeMap<String, usize>,
     pub value: Option<ComplexValue>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ParameterNature {
-    #[default]
-    External,
-    Internal,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ParameterType {
-    #[default]
-    Real,
-    Complex,
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Parameter {
     pub name: String,
     pub lhablock: Option<String>,
@@ -143,122 +356,304 @@ pub struct Parameter {
     pub nature: ParameterNature,
     pub parameter_type: ParameterType,
     pub value: Option<ComplexValue>,
-    pub expression: Option<String>,
+    pub expression: Option<Atom>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Order {
-    pub name: String,
-    pub expansion_order: i64,
-    pub hierarchy: i64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VertexRule {
     pub name: String,
-    pub particles: Vec<String>,
-    pub color_structures: Vec<String>,
-    pub lorentz_structures: Vec<String>,
-    pub couplings: Vec<Vec<Option<String>>>,
+    pub particles: Vec<ParticleId>,
+    pub color_structures: Vec<Atom>,
+    pub lorentz_structures: Vec<LorentzStructureId>,
+    pub couplings: Vec<Vec<Option<CouplingId>>>,
 }
 
 impl VertexRule {
     /// Return the largest power of every coupling order represented by an
     /// entry in this vertex's color/Lorentz coupling matrix.
-    pub fn coupling_orders(&self, model: &Model) -> Result<BTreeMap<String, usize>, ModelError> {
+    pub fn coupling_orders(&self, model: &Model) -> BTreeMap<String, usize> {
         let mut orders: BTreeMap<String, usize> = BTreeMap::new();
-        for coupling_name in self.couplings.iter().flatten().flatten() {
-            for (name, power) in &model.coupling(coupling_name)?.orders {
+        for coupling in self.couplings.iter().flatten().flatten() {
+            for (name, power) in &model.coupling_by_id(*coupling).unwrap().orders {
                 orders
                     .entry(name.clone())
                     .and_modify(|current| *current = (*current).max(*power))
                     .or_insert(*power);
             }
         }
-        Ok(orders)
+        orders
     }
 }
 
-/// A callable function declared by a UFO model.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModelFunction {
     pub name: String,
-    #[serde(default)]
     pub arguments: Vec<String>,
-    pub expression: Option<String>,
+    pub expression: Option<Atom>,
 }
 
-/// Metadata for a UFO form factor.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModelFormFactor {
     pub name: String,
-    #[serde(rename = "type")]
     pub type_name: Option<String>,
-    pub value: Option<String>,
-}
-
-/// Serializable data from which a validated [`Model`] is constructed.
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct ModelDefinition {
-    pub name: String,
-    pub restriction: Option<String>,
-    pub orders: Vec<Order>,
-    pub parameters: Vec<Parameter>,
-    pub particles: Vec<Particle>,
-    pub propagators: Vec<Propagator>,
-    pub lorentz_structures: Vec<LorentzStructure>,
-    pub couplings: Vec<Coupling>,
-    pub vertex_rules: Vec<VertexRule>,
-    #[serde(default)]
-    pub functions: Vec<ModelFunction>,
-    #[serde(default)]
-    pub form_factors: Vec<ModelFormFactor>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct ParticleId(usize);
-
-impl ParticleId {
-    pub fn index(self) -> usize {
-        self.0
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
-pub struct VertexRuleId(usize);
-
-impl VertexRuleId {
-    pub fn index(self) -> usize {
-        self.0
-    }
+    pub value: Option<Atom>,
 }
 
 #[derive(Clone, Debug, Default)]
 struct ModelIndexes {
-    orders: HashMap<String, usize>,
-    parameters: HashMap<String, usize>,
+    orders: HashMap<String, OrderId>,
+    parameters: HashMap<String, ParameterId>,
     particles: HashMap<String, ParticleId>,
     particles_by_pdg: HashMap<i64, ParticleId>,
-    propagators: HashMap<String, usize>,
-    lorentz_structures: HashMap<String, usize>,
-    couplings: HashMap<String, usize>,
+    propagators: HashMap<String, PropagatorId>,
+    lorentz_structures: HashMap<String, LorentzStructureId>,
+    couplings: HashMap<String, CouplingId>,
     vertex_rules: HashMap<String, VertexRuleId>,
-    functions: HashMap<String, usize>,
-    form_factors: HashMap<String, usize>,
+    functions: HashMap<String, ModelFunctionId>,
+    form_factors: HashMap<String, ModelFormFactorId>,
 }
 
 /// A validated physics model with fallible, indexed lookups.
 #[derive(Clone, Debug)]
 pub struct Model {
-    definition: ModelDefinition,
+    name: String,
+    restriction: Option<String>,
+    orders: Vec<Order>,
+    parameters: Vec<Parameter>,
+    particles: Vec<Particle>,
+    propagators: Vec<Propagator>,
+    lorentz_structures: Vec<LorentzStructure>,
+    couplings: Vec<Coupling>,
+    vertex_rules: Vec<VertexRule>,
+    functions: Vec<ModelFunction>,
+    form_factors: Vec<ModelFormFactor>,
     indexes: ModelIndexes,
 }
 
 impl Model {
-    pub fn new(definition: ModelDefinition) -> Result<Self, ModelError> {
+    /// Construct an empty, validated model for application state that has not
+    /// loaded a physics model yet.
+    pub fn empty(name: impl Into<String>) -> Self {
+        Self::new(ModelDefinition {
+            name: name.into(),
+            restriction: None,
+            orders: Vec::new(),
+            parameters: Vec::new(),
+            particles: Vec::new(),
+            propagators: Vec::new(),
+            lorentz_structures: Vec::new(),
+            couplings: Vec::new(),
+            vertex_rules: Vec::new(),
+            functions: Vec::new(),
+            form_factors: Vec::new(),
+        })
+        .expect("an empty model definition is valid")
+    }
+
+    fn new(definition: ModelDefinition) -> Result<Self, ModelError> {
         let indexes = ModelIndexes::build(&definition)?;
+        let parameters = definition
+            .parameters
+            .iter()
+            .map(|parameter| {
+                Ok(Parameter {
+                    name: parameter.name.clone(),
+                    lhablock: parameter.lhablock.clone(),
+                    lhacode: parameter.lhacode.clone(),
+                    nature: parameter.nature.clone(),
+                    parameter_type: parameter.parameter_type.clone(),
+                    value: parameter.value,
+                    expression: parameter
+                        .expression
+                        .as_deref()
+                        .map(|expression| {
+                            parse_expression(
+                                EntityKind::Parameter,
+                                &parameter.name,
+                                "expression",
+                                expression,
+                            )
+                        })
+                        .transpose()?,
+                })
+            })
+            .collect::<Result<Vec<_>, ModelError>>()?;
+        let particles = definition
+            .particles
+            .iter()
+            .map(|particle| Particle {
+                pdg_code: particle.pdg_code,
+                name: particle.name.clone(),
+                antiparticle: indexes.particles[&particle.antiname],
+                spin: particle.spin,
+                color: particle.color,
+                mass: indexes.parameters[&particle.mass],
+                width: indexes.parameters[&particle.width],
+                texname: particle.texname.clone(),
+                antitexname: particle.antitexname.clone(),
+                charge: particle.charge,
+                ghost_number: particle.ghost_number,
+                lepton_number: particle.lepton_number,
+                y_charge: particle.y_charge,
+                propagating: particle.propagating,
+                goldstone: particle.goldstone,
+                propagator: particle
+                    .propagator
+                    .as_ref()
+                    .map(|name| indexes.propagators[name]),
+            })
+            .collect();
+        let propagators = definition
+            .propagators
+            .iter()
+            .map(|propagator| {
+                Ok(Propagator {
+                    name: propagator.name.clone(),
+                    particle: indexes.particles[&propagator.particle],
+                    numerator: parse_expression(
+                        EntityKind::Propagator,
+                        &propagator.name,
+                        "numerator",
+                        &propagator.numerator,
+                    )?,
+                    denominator: parse_expression(
+                        EntityKind::Propagator,
+                        &propagator.name,
+                        "denominator",
+                        &propagator.denominator,
+                    )?,
+                })
+            })
+            .collect::<Result<Vec<_>, ModelError>>()?;
+        let lorentz_structures = definition
+            .lorentz_structures
+            .iter()
+            .map(|lorentz| {
+                Ok(LorentzStructure {
+                    name: lorentz.name.clone(),
+                    spins: lorentz.spins.clone(),
+                    structure: parse_expression(
+                        EntityKind::LorentzStructure,
+                        &lorentz.name,
+                        "structure",
+                        &lorentz.structure,
+                    )?,
+                })
+            })
+            .collect::<Result<Vec<_>, ModelError>>()?;
+        let couplings = definition
+            .couplings
+            .iter()
+            .map(|coupling| {
+                Ok(Coupling {
+                    name: coupling.name.clone(),
+                    expression: parse_expression(
+                        EntityKind::Coupling,
+                        &coupling.name,
+                        "expression",
+                        &coupling.expression,
+                    )?,
+                    orders: coupling.orders.clone(),
+                    value: coupling.value,
+                })
+            })
+            .collect::<Result<Vec<_>, ModelError>>()?;
+        let vertex_rules = definition
+            .vertex_rules
+            .iter()
+            .map(|vertex| {
+                Ok(VertexRule {
+                    name: vertex.name.clone(),
+                    particles: vertex
+                        .particles
+                        .iter()
+                        .map(|name| indexes.particles[name])
+                        .collect(),
+                    color_structures: vertex
+                        .color_structures
+                        .iter()
+                        .map(|expression| {
+                            parse_expression(
+                                EntityKind::VertexRule,
+                                &vertex.name,
+                                "color_structures",
+                                expression,
+                            )
+                        })
+                        .collect::<Result<Vec<_>, _>>()?,
+                    lorentz_structures: vertex
+                        .lorentz_structures
+                        .iter()
+                        .map(|name| indexes.lorentz_structures[name])
+                        .collect(),
+                    couplings: vertex
+                        .couplings
+                        .iter()
+                        .map(|row| {
+                            row.iter()
+                                .map(|name| name.as_ref().map(|name| indexes.couplings[name]))
+                                .collect()
+                        })
+                        .collect(),
+                })
+            })
+            .collect::<Result<Vec<_>, ModelError>>()?;
+        let functions = definition
+            .functions
+            .iter()
+            .map(|function| {
+                Ok(ModelFunction {
+                    name: function.name.clone(),
+                    arguments: function.arguments.clone(),
+                    expression: function
+                        .expression
+                        .as_deref()
+                        .map(|expression| {
+                            parse_expression(
+                                EntityKind::ModelFunction,
+                                &function.name,
+                                "expression",
+                                expression,
+                            )
+                        })
+                        .transpose()?,
+                })
+            })
+            .collect::<Result<Vec<_>, ModelError>>()?;
+        let form_factors = definition
+            .form_factors
+            .iter()
+            .map(|form_factor| {
+                Ok(ModelFormFactor {
+                    name: form_factor.name.clone(),
+                    type_name: form_factor.type_name.clone(),
+                    value: form_factor
+                        .value
+                        .as_deref()
+                        .map(|value| {
+                            parse_expression(
+                                EntityKind::FormFactor,
+                                &form_factor.name,
+                                "value",
+                                value,
+                            )
+                        })
+                        .transpose()?,
+                })
+            })
+            .collect::<Result<Vec<_>, ModelError>>()?;
         Ok(Self {
-            definition,
+            name: definition.name,
+            restriction: definition.restriction,
+            orders: definition.orders,
+            parameters,
+            particles,
+            propagators,
+            lorentz_structures,
+            couplings,
+            vertex_rules,
+            functions,
+            form_factors,
             indexes,
         })
     }
@@ -277,11 +672,11 @@ impl Model {
     }
 
     pub fn to_json(&self) -> Result<String, ModelError> {
-        Ok(serde_json::to_string(&self.definition)?)
+        Ok(serde_json::to_string(self)?)
     }
 
     pub fn to_json_pretty(&self) -> Result<String, ModelError> {
-        Ok(serde_json::to_string_pretty(&self.definition)?)
+        Ok(serde_json::to_string_pretty(self)?)
     }
 
     pub fn write_json(&self, path: impl AsRef<Path>) -> Result<(), ModelError> {
@@ -292,56 +687,237 @@ impl Model {
         })
     }
 
-    pub fn definition(&self) -> &ModelDefinition {
-        &self.definition
+    fn definition(&self) -> ModelDefinition {
+        ModelDefinition {
+            name: self.name.clone(),
+            restriction: self.restriction.clone(),
+            orders: self.orders.clone(),
+            parameters: self
+                .parameters
+                .iter()
+                .map(|parameter| ParameterDefinition {
+                    name: parameter.name.clone(),
+                    lhablock: parameter.lhablock.clone(),
+                    lhacode: parameter.lhacode.clone(),
+                    nature: parameter.nature.clone(),
+                    parameter_type: parameter.parameter_type.clone(),
+                    value: parameter.value,
+                    expression: parameter.expression.as_ref().map(export_expression),
+                })
+                .collect(),
+            particles: self
+                .particles
+                .iter()
+                .map(|particle| ParticleDefinition {
+                    pdg_code: particle.pdg_code,
+                    name: particle.name.clone(),
+                    antiname: self.particles[particle.antiparticle.index()].name.clone(),
+                    spin: particle.spin,
+                    color: particle.color,
+                    mass: self.parameters[particle.mass.index()].name.clone(),
+                    width: self.parameters[particle.width.index()].name.clone(),
+                    texname: particle.texname.clone(),
+                    antitexname: particle.antitexname.clone(),
+                    charge: particle.charge,
+                    ghost_number: particle.ghost_number,
+                    lepton_number: particle.lepton_number,
+                    y_charge: particle.y_charge,
+                    propagating: particle.propagating,
+                    goldstone: particle.goldstone,
+                    propagator: particle
+                        .propagator
+                        .map(|id| self.propagators[id.index()].name.clone()),
+                })
+                .collect(),
+            propagators: self
+                .propagators
+                .iter()
+                .map(|propagator| PropagatorDefinition {
+                    name: propagator.name.clone(),
+                    particle: self.particles[propagator.particle.index()].name.clone(),
+                    numerator: export_expression(&propagator.numerator),
+                    denominator: export_expression(&propagator.denominator),
+                })
+                .collect(),
+            lorentz_structures: self
+                .lorentz_structures
+                .iter()
+                .map(|lorentz| LorentzStructureDefinition {
+                    name: lorentz.name.clone(),
+                    spins: lorentz.spins.clone(),
+                    structure: export_expression(&lorentz.structure),
+                })
+                .collect(),
+            couplings: self
+                .couplings
+                .iter()
+                .map(|coupling| CouplingDefinition {
+                    name: coupling.name.clone(),
+                    expression: export_expression(&coupling.expression),
+                    orders: coupling.orders.clone(),
+                    value: coupling.value,
+                })
+                .collect(),
+            vertex_rules: self
+                .vertex_rules
+                .iter()
+                .map(|vertex| VertexRuleDefinition {
+                    name: vertex.name.clone(),
+                    particles: vertex
+                        .particles
+                        .iter()
+                        .map(|id| self.particles[id.index()].name.clone())
+                        .collect(),
+                    color_structures: vertex
+                        .color_structures
+                        .iter()
+                        .map(export_expression)
+                        .collect(),
+                    lorentz_structures: vertex
+                        .lorentz_structures
+                        .iter()
+                        .map(|id| self.lorentz_structures[id.index()].name.clone())
+                        .collect(),
+                    couplings: vertex
+                        .couplings
+                        .iter()
+                        .map(|row| {
+                            row.iter()
+                                .map(|id| id.map(|id| self.couplings[id.index()].name.clone()))
+                                .collect()
+                        })
+                        .collect(),
+                })
+                .collect(),
+            functions: self
+                .functions
+                .iter()
+                .map(|function| ModelFunctionDefinition {
+                    name: function.name.clone(),
+                    arguments: function.arguments.clone(),
+                    expression: function.expression.as_ref().map(export_expression),
+                })
+                .collect(),
+            form_factors: self
+                .form_factors
+                .iter()
+                .map(|form_factor| ModelFormFactorDefinition {
+                    name: form_factor.name.clone(),
+                    type_name: form_factor.type_name.clone(),
+                    value: form_factor.value.as_ref().map(export_expression),
+                })
+                .collect(),
+        }
     }
 
-    pub fn into_definition(self) -> ModelDefinition {
-        self.definition
+    #[cfg(test)]
+    pub(crate) fn into_definition(self) -> ModelDefinition {
+        self.definition()
+    }
+
+    pub fn fingerprint(&self) -> ModelFingerprint {
+        let bytes = serde_json::to_vec(&self.definition())
+            .expect("canonical model definitions are always JSON serializable");
+        ModelFingerprint(*blake3::hash(&bytes).as_bytes())
+    }
+
+    /// Remove parameters and interactions that evaluate to zero, rebuilding
+    /// all typed identifiers atomically after compaction.
+    pub fn simplify_zero_values(&mut self) -> Result<(), ModelError> {
+        let mut definition = self.definition();
+        for parameter in &mut definition.parameters {
+            if parameter.nature == ParameterNature::External
+                && parameter
+                    .value
+                    .is_some_and(|value| value.re == 0.0 && value.im == 0.0)
+            {
+                parameter.nature = ParameterNature::Internal;
+                parameter.expression = Some("0".to_owned());
+            }
+        }
+        let zero_couplings = self
+            .couplings()
+            .iter()
+            .filter(|coupling| {
+                coupling
+                    .value
+                    .is_some_and(|value| value.re == 0.0 && value.im == 0.0)
+            })
+            .map(|coupling| coupling.name.clone())
+            .collect::<BTreeSet<_>>();
+        for vertex in &mut definition.vertex_rules {
+            for coupling in vertex.couplings.iter_mut().flatten() {
+                if coupling
+                    .as_ref()
+                    .is_some_and(|name| zero_couplings.contains(name))
+                {
+                    *coupling = None;
+                }
+            }
+        }
+        definition
+            .vertex_rules
+            .retain(|vertex| vertex.couplings.iter().flatten().any(Option::is_some));
+        definition
+            .couplings
+            .retain(|coupling| !zero_couplings.contains(&coupling.name));
+        *self = Self::new(definition)?;
+        Ok(())
     }
 
     pub fn name(&self) -> &str {
-        &self.definition.name
+        &self.name
     }
 
     pub fn restriction(&self) -> Option<&str> {
-        self.definition.restriction.as_deref()
+        self.restriction.as_deref()
+    }
+
+    /// Return an independently validated model with updated restriction metadata.
+    ///
+    /// The original model is left unchanged, and the returned model has its own
+    /// canonical fingerprint. This keeps restriction changes from bypassing the
+    /// model's validation and indexing boundary.
+    pub fn with_restriction(&self, restriction: Option<String>) -> Result<Self, ModelError> {
+        let mut definition = self.definition();
+        definition.restriction = restriction;
+        Self::new(definition)
     }
 
     pub fn orders(&self) -> &[Order] {
-        &self.definition.orders
+        &self.orders
     }
 
     pub fn parameters(&self) -> &[Parameter] {
-        &self.definition.parameters
+        &self.parameters
     }
 
     pub fn particles(&self) -> &[Particle] {
-        &self.definition.particles
+        &self.particles
     }
 
     pub fn propagators(&self) -> &[Propagator] {
-        &self.definition.propagators
+        &self.propagators
     }
 
     pub fn lorentz_structures(&self) -> &[LorentzStructure] {
-        &self.definition.lorentz_structures
+        &self.lorentz_structures
     }
 
     pub fn couplings(&self) -> &[Coupling] {
-        &self.definition.couplings
+        &self.couplings
     }
 
     pub fn vertex_rules(&self) -> &[VertexRule] {
-        &self.definition.vertex_rules
+        &self.vertex_rules
     }
 
     pub fn functions(&self) -> &[ModelFunction] {
-        &self.definition.functions
+        &self.functions
     }
 
     pub fn form_factors(&self) -> &[ModelFormFactor] {
-        &self.definition.form_factors
+        &self.form_factors
     }
 
     pub fn particle_id(&self, name: &str) -> Result<ParticleId, ModelError> {
@@ -369,43 +945,128 @@ impl Model {
     }
 
     pub fn particle_by_id(&self, id: ParticleId) -> Result<&Particle, ModelError> {
-        self.definition
-            .particles
+        self.particles
             .get(id.0)
             .ok_or_else(|| self.not_found(EntityKind::Particle, &id.0.to_string()))
     }
 
+    pub fn particle_id_at(&self, index: usize) -> Result<ParticleId, ModelError> {
+        self.particle_by_id(ParticleId(index))?;
+        Ok(ParticleId(index))
+    }
+
     pub fn antiparticle(&self, particle: &Particle) -> Result<&Particle, ModelError> {
-        self.particle(&particle.antiname)
+        self.particle_by_id(particle.antiparticle)
+    }
+
+    pub fn particle_is_self_conjugate(&self, particle: ParticleId) -> bool {
+        self.particle_by_id(particle)
+            .is_ok_and(|record| record.antiparticle == particle)
+    }
+
+    pub fn particle_mass(&self, particle: ParticleId) -> Result<&Parameter, ModelError> {
+        let particle = self.particle_by_id(particle)?;
+        self.parameter_by_id(particle.mass)
+    }
+
+    pub fn particle_width(&self, particle: ParticleId) -> Result<&Parameter, ModelError> {
+        let particle = self.particle_by_id(particle)?;
+        self.parameter_by_id(particle.width)
+    }
+
+    pub fn particle_is_massless(&self, particle: ParticleId) -> bool {
+        self.particle_mass(particle).is_ok_and(|mass| {
+            mass.name == "ZERO"
+                || mass
+                    .value
+                    .is_some_and(|value| value.re == 0.0 && value.im == 0.0)
+                || mass
+                    .expression
+                    .as_ref()
+                    .is_some_and(|expression| expression.is_zero())
+        })
+    }
+
+    pub fn parameter_id(&self, name: &str) -> Result<ParameterId, ModelError> {
+        self.lookup_id(EntityKind::Parameter, name, &self.indexes.parameters)
     }
 
     pub fn parameter(&self, name: &str) -> Result<&Parameter, ModelError> {
-        self.lookup(EntityKind::Parameter, name, &self.indexes.parameters)
-            .map(|index| &self.definition.parameters[index])
+        self.parameter_by_id(self.parameter_id(name)?)
+    }
+
+    pub fn parameter_by_id(&self, id: ParameterId) -> Result<&Parameter, ModelError> {
+        self.parameters
+            .get(id.index())
+            .ok_or_else(|| self.not_found(EntityKind::Parameter, &id.index().to_string()))
+    }
+
+    pub fn coupling_id(&self, name: &str) -> Result<CouplingId, ModelError> {
+        self.lookup_id(EntityKind::Coupling, name, &self.indexes.couplings)
     }
 
     pub fn coupling(&self, name: &str) -> Result<&Coupling, ModelError> {
-        self.lookup(EntityKind::Coupling, name, &self.indexes.couplings)
-            .map(|index| &self.definition.couplings[index])
+        self.coupling_by_id(self.coupling_id(name)?)
+    }
+
+    pub fn coupling_by_id(&self, id: CouplingId) -> Result<&Coupling, ModelError> {
+        self.couplings
+            .get(id.index())
+            .ok_or_else(|| self.not_found(EntityKind::Coupling, &id.index().to_string()))
+    }
+
+    pub fn order_id(&self, name: &str) -> Result<OrderId, ModelError> {
+        self.lookup_id(EntityKind::Order, name, &self.indexes.orders)
     }
 
     pub fn order(&self, name: &str) -> Result<&Order, ModelError> {
-        self.lookup(EntityKind::Order, name, &self.indexes.orders)
-            .map(|index| &self.definition.orders[index])
+        self.order_by_id(self.order_id(name)?)
+    }
+
+    pub fn order_by_id(&self, id: OrderId) -> Result<&Order, ModelError> {
+        self.orders
+            .get(id.index())
+            .ok_or_else(|| self.not_found(EntityKind::Order, &id.index().to_string()))
+    }
+
+    pub fn propagator_id(&self, name: &str) -> Result<PropagatorId, ModelError> {
+        self.lookup_id(EntityKind::Propagator, name, &self.indexes.propagators)
     }
 
     pub fn propagator(&self, name: &str) -> Result<&Propagator, ModelError> {
-        self.lookup(EntityKind::Propagator, name, &self.indexes.propagators)
-            .map(|index| &self.definition.propagators[index])
+        self.propagator_by_id(self.propagator_id(name)?)
     }
 
-    pub fn lorentz_structure(&self, name: &str) -> Result<&LorentzStructure, ModelError> {
-        self.lookup(
+    pub fn propagator_by_id(&self, id: PropagatorId) -> Result<&Propagator, ModelError> {
+        self.propagators
+            .get(id.index())
+            .ok_or_else(|| self.not_found(EntityKind::Propagator, &id.index().to_string()))
+    }
+
+    pub fn propagator_id_at(&self, index: usize) -> Result<PropagatorId, ModelError> {
+        self.propagator_by_id(PropagatorId(index))?;
+        Ok(PropagatorId(index))
+    }
+
+    pub fn lorentz_structure_id(&self, name: &str) -> Result<LorentzStructureId, ModelError> {
+        self.lookup_id(
             EntityKind::LorentzStructure,
             name,
             &self.indexes.lorentz_structures,
         )
-        .map(|index| &self.definition.lorentz_structures[index])
+    }
+
+    pub fn lorentz_structure(&self, name: &str) -> Result<&LorentzStructure, ModelError> {
+        self.lorentz_structure_by_id(self.lorentz_structure_id(name)?)
+    }
+
+    pub fn lorentz_structure_by_id(
+        &self,
+        id: LorentzStructureId,
+    ) -> Result<&LorentzStructure, ModelError> {
+        self.lorentz_structures
+            .get(id.index())
+            .ok_or_else(|| self.not_found(EntityKind::LorentzStructure, &id.index().to_string()))
     }
 
     pub fn vertex_rule_id(&self, name: &str) -> Result<VertexRuleId, ModelError> {
@@ -421,25 +1082,46 @@ impl Model {
     }
 
     pub fn vertex_rule_by_id(&self, id: VertexRuleId) -> Result<&VertexRule, ModelError> {
-        self.definition
-            .vertex_rules
+        self.vertex_rules
             .get(id.0)
             .ok_or_else(|| self.not_found(EntityKind::VertexRule, &id.0.to_string()))
     }
 
+    pub fn vertex_rule_id_at(&self, index: usize) -> Result<VertexRuleId, ModelError> {
+        self.vertex_rule_by_id(VertexRuleId(index))?;
+        Ok(VertexRuleId(index))
+    }
+
     pub fn function(&self, name: &str) -> Result<&ModelFunction, ModelError> {
-        self.lookup(EntityKind::ModelFunction, name, &self.indexes.functions)
-            .map(|index| &self.definition.functions[index])
+        self.function_by_id(self.function_id(name)?)
+    }
+
+    pub fn function_id(&self, name: &str) -> Result<ModelFunctionId, ModelError> {
+        self.lookup_id(EntityKind::ModelFunction, name, &self.indexes.functions)
+    }
+
+    pub fn function_by_id(&self, id: ModelFunctionId) -> Result<&ModelFunction, ModelError> {
+        self.functions
+            .get(id.index())
+            .ok_or_else(|| self.not_found(EntityKind::ModelFunction, &id.index().to_string()))
     }
 
     pub fn form_factor(&self, name: &str) -> Result<&ModelFormFactor, ModelError> {
-        self.lookup(EntityKind::FormFactor, name, &self.indexes.form_factors)
-            .map(|index| &self.definition.form_factors[index])
+        self.form_factor_by_id(self.form_factor_id(name)?)
+    }
+
+    pub fn form_factor_id(&self, name: &str) -> Result<ModelFormFactorId, ModelError> {
+        self.lookup_id(EntityKind::FormFactor, name, &self.indexes.form_factors)
+    }
+
+    pub fn form_factor_by_id(&self, id: ModelFormFactorId) -> Result<&ModelFormFactor, ModelError> {
+        self.form_factors
+            .get(id.index())
+            .ok_or_else(|| self.not_found(EntityKind::FormFactor, &id.index().to_string()))
     }
 
     pub fn default_parameter_card(&self) -> Result<ParameterCard, ModelError> {
-        self.definition
-            .parameters
+        self.parameters
             .iter()
             .filter(|parameter| parameter.nature == ParameterNature::External)
             .map(|parameter| {
@@ -473,16 +1155,16 @@ impl Model {
         if updates.is_empty() {
             return Ok(());
         }
-        for parameter in &mut self.definition.parameters {
+        for parameter in &mut self.parameters {
             if parameter.nature == ParameterNature::Internal && parameter.expression.is_some() {
                 parameter.value = None;
             }
         }
-        for coupling in &mut self.definition.couplings {
+        for coupling in &mut self.couplings {
             coupling.value = None;
         }
         for (index, value) in updates {
-            self.definition.parameters[index].value = Some(value);
+            self.parameters[index.index()].value = Some(value);
         }
         Ok(())
     }
@@ -509,7 +1191,7 @@ impl Model {
             .map_err(RecomputeError::Evaluator)?;
         self.validate_evaluated_values(&evaluated, overrides)?;
 
-        for parameter in &mut self.definition.parameters {
+        for parameter in &mut self.parameters {
             if parameter.nature == ParameterNature::Internal
                 && parameter.expression.is_some()
                 && !overrides.contains(&parameter.name)
@@ -517,7 +1199,7 @@ impl Model {
                 parameter.value = evaluated.internal_parameters.get(&parameter.name).copied();
             }
         }
-        for coupling in &mut self.definition.couplings {
+        for coupling in &mut self.couplings {
             coupling.value = evaluated.couplings.get(&coupling.name).copied();
         }
         Ok(())
@@ -538,7 +1220,7 @@ impl Model {
             .keys()
             .filter(|name| {
                 updated.indexes.parameters.get(*name).is_some_and(|index| {
-                    let parameter = &updated.definition.parameters[*index];
+                    let parameter = &updated.parameters[index.index()];
                     parameter.nature == ParameterNature::Internal && parameter.expression.is_some()
                 })
             })
@@ -552,7 +1234,6 @@ impl Model {
 
     fn evaluation_request(&self, overrides: &BTreeSet<String>) -> EvaluationRequest {
         let known_parameters = self
-            .definition
             .parameters
             .iter()
             .filter(|parameter| {
@@ -563,7 +1244,6 @@ impl Model {
             .filter_map(|parameter| parameter.value.map(|value| (parameter.name.clone(), value)))
             .collect();
         let internal_parameters = self
-            .definition
             .parameters
             .iter()
             .filter(|parameter| {
@@ -576,25 +1256,40 @@ impl Model {
                     .as_ref()
                     .map(|expression| ModelExpression {
                         name: parameter.name.clone(),
-                        expression: expression.clone(),
+                        expression: export_expression(expression),
                     })
             })
             .collect();
         let couplings = self
-            .definition
             .couplings
             .iter()
             .map(|coupling| ModelExpression {
                 name: coupling.name.clone(),
-                expression: coupling.expression.clone(),
+                expression: export_expression(&coupling.expression),
             })
             .collect();
         EvaluationRequest {
             known_parameters,
             internal_parameters,
             couplings,
-            functions: self.definition.functions.clone(),
-            form_factors: self.definition.form_factors.clone(),
+            functions: self
+                .functions
+                .iter()
+                .map(|function| crate::EvaluationFunction {
+                    name: function.name.clone(),
+                    arguments: function.arguments.clone(),
+                    expression: function.expression.as_ref().map(export_expression),
+                })
+                .collect(),
+            form_factors: self
+                .form_factors
+                .iter()
+                .map(|form_factor| crate::EvaluationFormFactor {
+                    name: form_factor.name.clone(),
+                    type_name: form_factor.type_name.clone(),
+                    value: form_factor.value.as_ref().map(export_expression),
+                })
+                .collect(),
         }
     }
 
@@ -606,7 +1301,7 @@ impl Model {
     where
         E: std::error::Error + 'static,
     {
-        for parameter in self.definition.parameters.iter().filter(|parameter| {
+        for parameter in self.parameters.iter().filter(|parameter| {
             parameter.nature == ParameterNature::Internal
                 && parameter.expression.is_some()
                 && !overrides.contains(&parameter.name)
@@ -625,7 +1320,7 @@ impl Model {
                     name: name.clone(),
                 });
             };
-            let parameter = &self.definition.parameters[*index];
+            let parameter = &self.parameters[index.index()];
             if parameter.nature != ParameterNature::Internal
                 || parameter.expression.is_none()
                 || overrides.contains(name)
@@ -636,7 +1331,7 @@ impl Model {
                 });
             }
         }
-        for coupling in &self.definition.couplings {
+        for coupling in &self.couplings {
             if !evaluated.couplings.contains_key(&coupling.name) {
                 return Err(RecomputeError::MissingValue {
                     kind: EntityKind::Coupling,
@@ -655,12 +1350,12 @@ impl Model {
         Ok(())
     }
 
-    fn lookup(
+    fn lookup_id<I: Copy>(
         &self,
         kind: EntityKind,
         name: &str,
-        index: &HashMap<String, usize>,
-    ) -> Result<usize, ModelError> {
+        index: &HashMap<String, I>,
+    ) -> Result<I, ModelError> {
         index
             .get(name)
             .copied()
@@ -669,7 +1364,7 @@ impl Model {
 
     fn not_found(&self, kind: EntityKind, key: &str) -> ModelError {
         ModelError::NotFound {
-            model: self.definition.name.clone(),
+            model: self.name.clone(),
             kind,
             key: key.to_owned(),
         }
@@ -681,7 +1376,7 @@ impl Serialize for Model {
     where
         S: Serializer,
     {
-        self.definition.serialize(serializer)
+        self.definition().serialize(serializer)
     }
 }
 
@@ -695,60 +1390,66 @@ impl<'de> Deserialize<'de> for Model {
     }
 }
 
-impl TryFrom<ModelDefinition> for Model {
-    type Error = ModelError;
-
-    fn try_from(definition: ModelDefinition) -> Result<Self, Self::Error> {
-        Self::new(definition)
-    }
-}
-
-impl From<Model> for ModelDefinition {
-    fn from(model: Model) -> Self {
-        model.definition
-    }
-}
-
 impl ModelIndexes {
     fn build(definition: &ModelDefinition) -> Result<Self, ModelValidationError> {
         if definition.name.trim().is_empty() {
             return Err(ModelValidationError::EmptyModelName);
         }
 
-        let orders = named_index(EntityKind::Order, &definition.orders, |value| &value.name)?;
-        let parameters = named_index(EntityKind::Parameter, &definition.parameters, |value| {
-            &value.name
-        })?;
+        let orders = typed_index(
+            EntityKind::Order,
+            &definition.orders,
+            |value| &value.name,
+            OrderId,
+        )?;
+        let parameters = typed_index(
+            EntityKind::Parameter,
+            &definition.parameters,
+            |value| &value.name,
+            ParameterId,
+        )?;
         let particles = typed_index(
             EntityKind::Particle,
             &definition.particles,
             |value| &value.name,
             ParticleId,
         )?;
-        let propagators = named_index(EntityKind::Propagator, &definition.propagators, |value| {
-            &value.name
-        })?;
-        let lorentz_structures = named_index(
+        let propagators = typed_index(
+            EntityKind::Propagator,
+            &definition.propagators,
+            |value| &value.name,
+            PropagatorId,
+        )?;
+        let lorentz_structures = typed_index(
             EntityKind::LorentzStructure,
             &definition.lorentz_structures,
             |value| &value.name,
+            LorentzStructureId,
         )?;
-        let couplings = named_index(EntityKind::Coupling, &definition.couplings, |value| {
-            &value.name
-        })?;
+        let couplings = typed_index(
+            EntityKind::Coupling,
+            &definition.couplings,
+            |value| &value.name,
+            CouplingId,
+        )?;
         let vertex_rules = typed_index(
             EntityKind::VertexRule,
             &definition.vertex_rules,
             |value| &value.name,
             VertexRuleId,
         )?;
-        let functions = named_index(EntityKind::ModelFunction, &definition.functions, |value| {
-            &value.name
-        })?;
-        let form_factors =
-            named_index(EntityKind::FormFactor, &definition.form_factors, |value| {
-                &value.name
-            })?;
+        let functions = typed_index(
+            EntityKind::ModelFunction,
+            &definition.functions,
+            |value| &value.name,
+            ModelFunctionId,
+        )?;
+        let form_factors = typed_index(
+            EntityKind::FormFactor,
+            &definition.form_factors,
+            |value| &value.name,
+            ModelFormFactorId,
+        )?;
 
         let mut particles_by_pdg = HashMap::new();
         for (index, particle) in definition.particles.iter().enumerate() {
@@ -796,24 +1497,6 @@ impl ModelIndexes {
     }
 }
 
-fn named_index<T>(
-    kind: EntityKind,
-    values: &[T],
-    name: impl Fn(&T) -> &str,
-) -> Result<HashMap<String, usize>, ModelValidationError> {
-    let mut result = HashMap::with_capacity(values.len());
-    for (index, value) in values.iter().enumerate() {
-        let name = name(value);
-        if result.insert(name.to_owned(), index).is_some() {
-            return Err(ModelValidationError::DuplicateName {
-                kind,
-                name: name.to_owned(),
-            });
-        }
-    }
-    Ok(result)
-}
-
 fn typed_index<T, I: Copy>(
     kind: EntityKind,
     values: &[T],
@@ -833,7 +1516,7 @@ fn typed_index<T, I: Copy>(
     Ok(result)
 }
 
-fn validate_parameters(parameters: &[Parameter]) -> Result<(), ModelValidationError> {
+fn validate_parameters(parameters: &[ParameterDefinition]) -> Result<(), ModelValidationError> {
     for parameter in parameters {
         match parameter.nature {
             ParameterNature::External if parameter.value.is_none() => {
@@ -855,8 +1538,8 @@ fn validate_parameters(parameters: &[Parameter]) -> Result<(), ModelValidationEr
 }
 
 fn validate_couplings(
-    couplings: &[Coupling],
-    orders: &HashMap<String, usize>,
+    couplings: &[CouplingDefinition],
+    orders: &HashMap<String, OrderId>,
 ) -> Result<(), ModelValidationError> {
     for coupling in couplings {
         for order in coupling.orders.keys() {
@@ -874,11 +1557,11 @@ fn validate_couplings(
 }
 
 fn validate_particles(
-    particles: &[Particle],
-    parameters: &HashMap<String, usize>,
+    particles: &[ParticleDefinition],
+    parameters: &HashMap<String, ParameterId>,
     particle_names: &HashMap<String, ParticleId>,
-    propagator_definitions: &[Propagator],
-    propagators: &HashMap<String, usize>,
+    propagator_definitions: &[PropagatorDefinition],
+    propagators: &HashMap<String, PropagatorId>,
 ) -> Result<(), ModelValidationError> {
     for particle in particles {
         reference(
@@ -922,7 +1605,7 @@ fn validate_particles(
                 propagator,
                 propagators,
             )?;
-            let propagator_definition = &propagator_definitions[propagator_index];
+            let propagator_definition = &propagator_definitions[propagator_index.index()];
             if propagator_definition.particle != particle.name {
                 return Err(ModelValidationError::PropagatorParticleMismatch {
                     particle: particle.name.clone(),
@@ -936,7 +1619,7 @@ fn validate_particles(
 }
 
 fn validate_propagators(
-    propagators: &[Propagator],
+    propagators: &[PropagatorDefinition],
     particles: &HashMap<String, ParticleId>,
 ) -> Result<(), ModelValidationError> {
     for propagator in propagators {
@@ -953,12 +1636,12 @@ fn validate_propagators(
 }
 
 fn validate_vertices(
-    vertices: &[VertexRule],
-    particle_definitions: &[Particle],
+    vertices: &[VertexRuleDefinition],
+    particle_definitions: &[ParticleDefinition],
     particles: &HashMap<String, ParticleId>,
-    lorentz_definitions: &[LorentzStructure],
-    lorentz_structures: &HashMap<String, usize>,
-    couplings: &HashMap<String, usize>,
+    lorentz_definitions: &[LorentzStructureDefinition],
+    lorentz_structures: &HashMap<String, LorentzStructureId>,
+    couplings: &HashMap<String, CouplingId>,
 ) -> Result<(), ModelValidationError> {
     for vertex in vertices {
         let mut particle_spins = Vec::with_capacity(vertex.particles.len());
@@ -982,7 +1665,7 @@ fn validate_vertices(
                 lorentz_structure,
                 lorentz_structures,
             )?;
-            let lorentz_spins = &lorentz_definitions[lorentz_index].spins;
+            let lorentz_spins = &lorentz_definitions[lorentz_index.index()].spins;
             if lorentz_spins != &particle_spins {
                 return Err(ModelValidationError::LorentzSpinMismatch {
                     vertex: vertex.name.clone(),
@@ -1100,7 +1783,11 @@ mod tests {
         assert!(!model.particle("s").unwrap().is_propagating());
         assert!(model.particle("s").unwrap().is_goldstone());
         assert_eq!(
-            model.particle("s").unwrap().propagator.as_deref(),
+            model.particle("s").unwrap().propagator.map(|id| model
+                .propagator_by_id(id)
+                .unwrap()
+                .name
+                .as_str()),
             Some("s_prop")
         );
         assert_eq!(model.coupling("GC1").unwrap().orders["QED"], 1);
@@ -1108,6 +1795,70 @@ mod tests {
         assert_eq!(
             model.form_factor("FF1").unwrap().type_name.as_deref(),
             Some("complex")
+        );
+
+        assert_eq!(
+            model.order_by_id(model.order_id("QED").unwrap()).unwrap(),
+            model.order("QED").unwrap()
+        );
+        assert_eq!(
+            model
+                .parameter_by_id(model.parameter_id("mass").unwrap())
+                .unwrap(),
+            model.parameter("mass").unwrap()
+        );
+        assert_eq!(
+            model
+                .propagator_by_id(model.propagator_id("s_prop").unwrap())
+                .unwrap(),
+            model.propagator("s_prop").unwrap()
+        );
+        assert_eq!(
+            model
+                .lorentz_structure_by_id(model.lorentz_structure_id("L1").unwrap())
+                .unwrap(),
+            model.lorentz_structure("L1").unwrap()
+        );
+        assert_eq!(
+            model
+                .coupling_by_id(model.coupling_id("GC1").unwrap())
+                .unwrap(),
+            model.coupling("GC1").unwrap()
+        );
+        assert_eq!(
+            model
+                .vertex_rule_by_id(model.vertex_rule_id("V1").unwrap())
+                .unwrap(),
+            model.vertex_rule("V1").unwrap()
+        );
+        assert_eq!(
+            model
+                .function_by_id(model.function_id("twice").unwrap())
+                .unwrap(),
+            model.function("twice").unwrap()
+        );
+        assert_eq!(
+            model
+                .form_factor_by_id(model.form_factor_id("FF1").unwrap())
+                .unwrap(),
+            model.form_factor("FF1").unwrap()
+        );
+    }
+
+    #[test]
+    fn restriction_updates_are_immutable_and_revalidated() {
+        let model = Model::from_json(&model_json("GC1")).unwrap();
+        let original_fingerprint = model.fingerprint();
+
+        let restricted = model.with_restriction(Some("massless".to_owned())).unwrap();
+
+        assert_eq!(model.restriction(), None);
+        assert_eq!(model.fingerprint(), original_fingerprint);
+        assert_eq!(restricted.restriction(), Some("massless"));
+        assert_ne!(restricted.fingerprint(), original_fingerprint);
+        assert_eq!(
+            restricted.particle_id("s").unwrap(),
+            model.particle_id("s").unwrap()
         );
     }
 
@@ -1225,7 +1976,7 @@ mod tests {
 
         let invalid = ParameterCard::from_iter([
             ("mass".to_owned(), ComplexValue::new(7.0, 0.0)),
-            ("unknown".to_owned(), ComplexValue::ZERO),
+            ("unknown".to_owned(), ComplexValue::new(0.0, 0.0)),
         ]);
         let before_invalid = model.to_json().unwrap();
         assert!(model.apply_parameter_card(&invalid).is_err());
@@ -1271,7 +2022,10 @@ mod tests {
                 request.known_parameters["mass"],
                 ComplexValue::new(2.5, 0.25)
             );
-            assert_eq!(request.known_parameters["ZERO"], ComplexValue::ZERO);
+            assert_eq!(
+                request.known_parameters["ZERO"],
+                ComplexValue::new(0.0, 0.0)
+            );
             assert_eq!(
                 request.internal_parameters,
                 [ModelExpression {
@@ -1288,7 +2042,7 @@ mod tests {
             );
             assert_eq!(
                 request.functions,
-                [ModelFunction {
+                [crate::EvaluationFunction {
                     name: "twice".to_owned(),
                     arguments: vec!["x".to_owned()],
                     expression: Some("2*x".to_owned()),
@@ -1296,7 +2050,7 @@ mod tests {
             );
             assert_eq!(
                 request.form_factors,
-                [ModelFormFactor {
+                [crate::EvaluationFormFactor {
                     name: "FF1".to_owned(),
                     type_name: Some("complex".to_owned()),
                     value: Some("twice(P(1)^2)".to_owned()),
