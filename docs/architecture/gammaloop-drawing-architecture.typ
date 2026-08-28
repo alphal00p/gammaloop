@@ -31,14 +31,15 @@ rendering run has these steps:
    its app templates there (`figure.typ`, `grid.typ`, `layout.typ`, `layout-core.typ`), while the
    shared Linnest/Kurvst package files keep their canonical workspace layout
    under `drawings/templates/crates/{linnest,kurvst}/typst/`.
-+ Clinnet's shared renderer stages the topology DOT and one generated Typst entrypoint for each
-   graph, then invokes an external Typst 0.15 or newer executable. The `linnet` CLI and
-   `linnet-py`'s `Graph.render`, `Graph.to_svg`, and notebook display use this same renderer; it
-   is orchestration around Typst, not a native Rust drawing backend.
++ Clinnet's shared preparation layer stages the topology DOT and one generated Typst entrypoint
+   for each graph. The `linnet` CLI compiles it with an external Typst 0.15 executable.
+   `linnet-py` passes the same prepared entrypoint and project root to `typst-py` 0.15.0 for
+   in-process compilation; it does not discover or launch an executable.
 + The entrypoint statically imports the selected template, imports each referenced user module
    once, constructs the native configuration dictionary, adds the staged `data-path`, and calls
    the template's mandatory `render(config)` export. Configuration is not flattened into
-   `sys.inputs`, and its size does not change the Typst process argument list.
+   `sys.inputs`. Its size does not change Clinnet's process argument list, and the Python path has
+   no compiler subprocess arguments at all.
 + The generic rendering path materializes Clinnet's embedded figure/layout templates and the
    embedded Linnest and Kurvst package assets. It has no particle, momentum, amplitude, or
    cross-section mode. The GammaLoop path supplies its generated template bundle instead, binding
@@ -88,8 +89,9 @@ Python strings remain data.
   typed drawing metadata and render configuration, explicit DOT codecs, and module references.
   Subgraphs retain Linnet's native half-edge set and add only the zero-crown node IDs that the set
   cannot represent, keeping isolated nodes visible to Python graph operations.
-  Its rendering methods and notebook SVG display delegate to Clinnet rather than implementing a
-  separate renderer.
+  Its rendering methods and notebook SVG display reuse Clinnet's prepared project, then compile it
+  in-process through the `typst` Python package. This is a second compiler backend for the same
+  rendering contract, not a separate template or staging implementation.
 
 GammaLoop's particle policy is not part of Clinnet's generic embedded template. Python callers
 that want GammaLoop particle colors, labels, path decorations, or mode presets select the

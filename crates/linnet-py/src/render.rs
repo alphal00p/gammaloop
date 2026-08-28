@@ -1,10 +1,13 @@
-use std::path::PathBuf;
+use std::env;
+use std::ffi::OsStr;
+use std::fs;
+use std::path::{Path, PathBuf};
 
-use clinnet::{TypstModule, TypstRenderRequest, TypstRenderer};
+use clinnet::{PreparedTypstRender, TypstModule, TypstRenderRequest, TypstRenderer};
 use linnet::half_edge::involution::{Flow, Hedge};
 use pyo3::exceptions::{PyReferenceError, PyRuntimeError};
 use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyDict, PyDictMethods, PyList, PyListMethods};
+use pyo3::types::{PyAny, PyBytes, PyDict, PyDictMethods, PyList, PyListMethods, PyModule};
 
 use crate::drawing::DrawingKind;
 use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyNode};
@@ -225,8 +228,7 @@ fn build_request(
     let dot = crate::dot::topology_dot(py, &graph.borrow(py))?;
     let build_dir =
         tempfile::tempdir().map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-    let renderer =
-        TypstRenderer::new(build_dir.path()).typst_executable(transport.typst_executable);
+    let renderer = TypstRenderer::new(build_dir.path());
     let mut request = TypstRenderRequest::new(dot, transport.config);
     if let Some(template) = transport.template {
         request = request.template(template);
@@ -237,6 +239,50 @@ fn build_request(
     Ok((renderer, request, build_dir))
 }
 
+fn output_format(output: &Path) -> PyResult<&'static str> {
+    match output
+        .extension()
+        .and_then(OsStr::to_str)
+        .map(str::to_ascii_lowercase)
+        .as_deref()
+    {
+        Some("pdf") => Ok("pdf"),
+        Some("svg") => Ok("svg"),
+        Some("png") => Ok("png"),
+        _ => Err(PyRuntimeError::new_err(format!(
+            "unsupported Typst output {}; expected a .pdf, .svg, or .png suffix",
+            output.display()
+        ))),
+    }
+}
+
+fn compile_typst<'py>(
+    py: Python<'py>,
+    prepared: &PreparedTypstRender,
+    output: Option<&Path>,
+    format: &str,
+) -> PyResult<Bound<'py, PyAny>> {
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("input", prepared.entrypoint().to_path_buf())?;
+    kwargs.set_item("root", prepared.root().to_path_buf())?;
+    kwargs.set_item("format", format)?;
+    if let Some(output) = output {
+        kwargs.set_item("output", output.to_path_buf())?;
+    }
+    if let Some(path) = env::var_os("TYPST_PACKAGE_PATH") {
+        kwargs.set_item("package_path", PathBuf::from(path))?;
+    }
+    if let Some(path) = env::var_os("TYPST_PACKAGE_CACHE_PATH") {
+        kwargs.set_item("package_cache_path", PathBuf::from(path))?;
+    }
+    if let Some(paths) = env::var_os("TYPST_FONT_PATHS") {
+        kwargs.set_item("font_paths", env::split_paths(&paths).collect::<Vec<_>>())?;
+    }
+    PyModule::import(py, "typst")?
+        .getattr("compile")?
+        .call((), Some(&kwargs))
+}
+
 pub(crate) fn render_graph(
     py: Python<'_>,
     graph: &Py<PyGraph>,
@@ -244,12 +290,23 @@ pub(crate) fn render_graph(
     config: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<PathBuf> {
     let (renderer, request, build_dir) = request(py, graph, config)?;
-    let rendered = output.clone();
-    py.detach(move || {
-        let _build_dir = build_dir;
-        renderer.render(&request, &rendered)
-    })
-    .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+    let format = output_format(&output)?;
+    if let Some(parent) = output
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+    {
+        fs::create_dir_all(parent).map_err(|error| {
+            PyRuntimeError::new_err(format!(
+                "failed to create output directory {}: {error}",
+                parent.display()
+            ))
+        })?;
+    }
+    let prepared = renderer
+        .prepare(&request)
+        .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+    let _build_dir = build_dir;
+    compile_typst(py, &prepared, Some(&output), format)?;
     Ok(output)
 }
 
@@ -259,9 +316,31 @@ pub(crate) fn graph_to_svg(
     config: Option<&Bound<'_, PyAny>>,
 ) -> PyResult<String> {
     let (renderer, request, build_dir) = request(py, graph, config)?;
-    py.detach(move || {
-        let _build_dir = build_dir;
-        renderer.to_svg(&request)
+    let prepared = renderer
+        .prepare(&request)
+        .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+    let _build_dir = build_dir;
+    let rendered = compile_typst(py, &prepared, None, "svg")?;
+    let bytes = if let Ok(bytes) = rendered.cast::<PyBytes>() {
+        bytes.as_bytes().to_vec()
+    } else if let Ok(pages) = rendered.cast::<PyList>() {
+        if pages.len() != 1 {
+            return Err(PyRuntimeError::new_err(format!(
+                "Typst SVG render produced {} pages; expected exactly one",
+                pages.len()
+            )));
+        }
+        pages
+            .get_item(0)?
+            .cast_into::<PyBytes>()?
+            .as_bytes()
+            .to_vec()
+    } else {
+        return Err(PyRuntimeError::new_err(
+            "typst.compile(format='svg') did not return SVG bytes",
+        ));
+    };
+    String::from_utf8(bytes).map_err(|error| {
+        PyRuntimeError::new_err(format!("Typst returned invalid UTF-8 SVG: {error}"))
     })
-    .map_err(|error| PyRuntimeError::new_err(error.to_string()))
 }

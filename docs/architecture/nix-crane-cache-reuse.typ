@@ -1454,6 +1454,16 @@ change the reusable Cargo artifact. Checks whose Rust source is
 generated from the manuals remain in the terminal Pages derivation so
 they still validate the content being published.
 
+The terminal documentation derivation tests `linnet-py` in a virtual
+environment based on a Nix-composed Python that includes `typst-py`
+0.15.0. System site packages keep that wheel dependency available to
+the offline installer. The same terminal derivation exposes the package
+tree from `docsTypst` through `TYPST_PACKAGE_CACHE_PATH`; the Python
+binding forwards it to its in-process compiler so CeTZ and MiTeX never
+require a network fetch. This extends only the documentation/runtime
+closure and does not admit Python wheels or Typst packages into the
+reusable Cargo producer key.
+
 The final Pages derivation remains terminal. Its identity includes all
 rendered documentation sources, the publication channel and optional
 snapshot tag, and the documented commit and timestamp. An exact rerun

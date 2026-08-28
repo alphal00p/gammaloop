@@ -218,6 +218,7 @@
               ./tests/resources/graphs/epemttbar.dot
               ./pyproject.toml
               ./crates/linnet-py/pyproject.toml
+              ./crates/linnet-py/uv.lock
               ./crates/linnet-py/linnet_py.pyi
               ./crates/linnet-py/examples/physics_render_settings.py
               ./crates/linnet-py/tests/test_basic.py
@@ -1633,6 +1634,9 @@
         nextestPython = pkgs.python313.withPackages (pythonPackages: [
           pythonPackages.numpy
         ]);
+        linnetPython = pkgs.python313.withPackages (pythonPackages: [
+          pythonPackages.typst
+        ]);
 
         # Common arguments can be set here to avoid repeating them later
         commonArgs = {
@@ -1824,6 +1828,7 @@
             nickel
             nls
             docsTypst
+            linnetPython
             roboto
             cargo-nextest
             pkg-config
@@ -1859,6 +1864,7 @@
             RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
             GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
             TYPST_FONT_PATHS = docsFontPath;
+            TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
 
             CC = nixCc;
             CXX = nixCxx;
@@ -3083,6 +3089,7 @@
             pkgs.uv
           ];
           TYPST_FONT_PATHS = docsFontPath;
+          TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
           ALPHAL00P_DOCS_CARGO_PROFILE = docsCargoProfile;
           doNotLinkInheritedArtifacts = true;
           doInstallCargoArtifacts = false;
@@ -3133,7 +3140,7 @@
           cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
           linnet_python="$TMPDIR/alphal00p-docs-linnet-python"
           export UV_CACHE_DIR="$TMPDIR/alphal00p-docs-uv-cache"
-          uv venv "$linnet_python" --python "$PYO3_PYTHON"
+          uv venv "$linnet_python" --python "${linnetPython}/bin/python3" --system-site-packages
           VIRTUAL_ENV="$linnet_python" maturin develop \
             --uv \
             --offline \

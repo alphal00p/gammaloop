@@ -2795,13 +2795,12 @@ fn deep_overlay(
     merged
 }
 
-/// Complete rendering configuration, including renderer transport settings.
+/// Complete typed rendering configuration.
 #[gen_stub_pyclass]
 #[pyclass(skip_from_py_object, name = "RenderConfig")]
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PyRenderConfig {
     template: PathSetting,
-    typst_executable: Option<PathBuf>,
     values: BTreeMap<String, NativeValue>,
     selectors: SelectorSettings,
 }
@@ -2840,23 +2839,6 @@ impl PyRenderConfig {
         #[gen_stub(override_type(type_repr = "_TemplatePath"))] value: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
         self.assign("template", value)
-    }
-
-    #[getter]
-    #[gen_stub(override_return_type(type_repr = "_ExecutablePath"))]
-    fn typst_executable(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        match &self.typst_executable {
-            Some(path) => self.path_value(py, path),
-            None => Ok(inherit(py)),
-        }
-    }
-
-    #[setter]
-    fn set_typst_executable(
-        &mut self,
-        #[gen_stub(override_type(type_repr = "_ExecutablePath"))] value: &Bound<'_, PyAny>,
-    ) -> PyResult<()> {
-        self.assign("typst_executable", value)
     }
 
     #[getter]
@@ -3004,11 +2986,8 @@ impl PyRenderConfig {
 
     fn __repr__(&self) -> String {
         format!(
-            "RenderConfig(template={:?}, typst_executable={:?}, fields={})",
+            "RenderConfig(template={:?}, fields={})",
             self.template.resolved(),
-            self.typst_executable
-                .clone()
-                .unwrap_or_else(|| PathBuf::from("typst")),
             self.values.len()
         )
     }
@@ -3089,10 +3068,8 @@ pyo3_stub_gen::inventory::submit! {
 
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
-        import os
-
         class PyRenderConfig:
-            def __new__(cls, *, template: _TemplatePath = ..., typst_executable: _ExecutablePath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderConfig: ...
+            def __new__(cls, *, template: _TemplatePath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderConfig: ...
     "# }
 }
 
@@ -3107,21 +3084,6 @@ impl PyRenderConfig {
                 } else {
                     PathSetting::Value(value.extract::<PathBuf>().map_err(|_| {
                         PyTypeError::new_err("template must be a path, None, or INHERIT")
-                    })?)
-                };
-            }
-            "typst_executable" => {
-                self.typst_executable = if value.extract::<PyRef<'_, PyInherit>>().is_ok() {
-                    None
-                } else if value.is_none() {
-                    return Err(PyTypeError::new_err(
-                        "typst_executable must be an executable path or INHERIT",
-                    ));
-                } else {
-                    Some(value.extract::<PathBuf>().map_err(|_| {
-                        PyTypeError::new_err(
-                            "typst_executable must be an executable path or INHERIT",
-                        )
                     })?)
                 };
             }
@@ -3253,10 +3215,6 @@ impl PyRenderConfig {
     fn merged(&self, overlay: &Self) -> Self {
         Self {
             template: self.template.overlay(&overlay.template),
-            typst_executable: overlay
-                .typst_executable
-                .clone()
-                .or_else(|| self.typst_executable.clone()),
             values: deep_overlay(&self.values, &overlay.values),
             selectors: self.selectors.overlay(&overlay.selectors),
         }
@@ -3280,7 +3238,6 @@ pub(crate) struct RenderConfigTransport {
     pub(crate) config: clinnet::TypstConfig,
     pub(crate) imports: Vec<TypstImport>,
     pub(crate) template: Option<PathBuf>,
-    pub(crate) typst_executable: PathBuf,
     pub(crate) selectors: SelectorCallbacks,
 }
 
@@ -4053,10 +4010,6 @@ pub(crate) fn render_config_transport(
         config: native_config,
         imports,
         template: config.template.resolved(),
-        typst_executable: config
-            .typst_executable
-            .clone()
-            .unwrap_or_else(|| PathBuf::from("typst")),
         selectors: config.selectors.resolved(py),
     })
 }

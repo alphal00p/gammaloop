@@ -42,9 +42,10 @@ its required feature and your `Cargo.toml` before using it.
 
 #boundary("Rendering runs through Typst", [
   Linnet can compute layout coordinates, but the supported renderer is not a native Rust drawing
-  backend. Clinnet's shared renderer invokes an external Typst 0.15 or newer executable over
-  Linnest and Kurvst assets. Use #link("guides/clinnet/")[Clinnet] for command-line figure
-  batches, or use #link("guides/linnest/")[Linnest] when a Typst document owns the final drawing.
+  backend. Clinnet invokes an external Typst 0.15 executable for command-line figure batches;
+  `linnet-py` uses the `typst` Python package to compile the same prepared project in-process.
+  Use #link("guides/clinnet/")[Clinnet] for batch rendering, or use
+  #link("guides/linnest/")[Linnest] when a Typst document owns the final drawing.
 ])
 
 == Standalone Python distribution
@@ -318,8 +319,9 @@ The selected template's defaults are overlaid by the graph's `render_config` and
 per-call `config`. `render(output, config=None)` writes PDF, SVG, or PNG according to the output
 suffix. `to_svg(config=None)` returns SVG text, and `_repr_svg_()` supports notebooks. These are
 the only high-level rendering methods; there are no raw command-line inputs or string-expression
-escape hatches. Rendering requires Typst 0.15 or newer and keeps generated inputs and imported
-modules alive until compilation completes.
+escape hatches. The Python distribution depends on `typst` 0.15.0 and compiles in-process without
+looking up or launching a Typst executable. Generated inputs and imported modules remain alive
+until compilation completes.
 
 The shipped notebook display is generic and model-neutral, including for graphs with dangling
 edges. It never infers amplitude, cross-section, particle, or momentum semantics from topology.

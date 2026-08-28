@@ -736,7 +736,10 @@ anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
 # GammaLoop-owned layout and physics templates for split Clinnet tests and
 # stage the linked Python-only custom-theme example for documentation builds;
 # the final docs assertion follows the replacement domain-templates route.
-digest = "db267b3d0c0ad7f5b4f4af56f940d9e748c8e504"
+# Reviewed 2026-08-28: typst-py 0.15 and its preview-package cache extend
+# only the terminal Linnet Python/docs runtime closure, as documented; the
+# reusable Cargo producer boundary is unchanged.
+digest = "f068ae2540cb182d7700b84abf345e11354cde29"
 
 [[section]]
 id = "documentation"
