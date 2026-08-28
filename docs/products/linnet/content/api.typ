@@ -323,6 +323,12 @@ escape hatches. The Python distribution depends on `typst` 0.15.0 and compiles i
 looking up or launching a Typst executable. Generated inputs and imported modules remain alive
 until compilation completes.
 
+For inspection tools, `prepare_render(config=None)` evaluates selectors once and returns a
+`PreparedRender`. Its `typst_source` property is the exact generated entrypoint subsequently used
+by `to_svg()` or `render(path)` on that preparation. It keeps the ephemeral entrypoint, topology
+DOT, and bundled assets alive; referenced user templates and modules retain their ordinary
+file-backed semantics.
+
 The shipped notebook display is generic and model-neutral, including for graphs with dangling
 edges. It never infers amplitude, cross-section, particle, or momentum semantics from topology.
 An application that needs those concepts selects its own template and passes that template's

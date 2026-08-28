@@ -3074,6 +3074,51 @@ class TestRendering(unittest.TestCase):
             ):
                 graph.to_svg()
 
+    def test_prepared_render_keeps_source_and_compilation_correlated(self):
+        with TemporaryDirectory(prefix="linnet prepared render ") as directory:
+            root = Path(directory)
+            template = root / "template.typ"
+            template.write_text("#let render(config) = [ok]\n", encoding="utf-8")
+            selector_calls = []
+            graph = lp.build(
+                lp.node("only"),
+                render_config=lp.RenderConfig(
+                    template=template,
+                    selectors=lp.DrawingSelectors(
+                        node=lambda node: (
+                            selector_calls.append(node.index)
+                            or lp.NodeDrawing(label="prepared node")
+                        )
+                    ),
+                ),
+            )
+
+            prepared = graph.prepare_render()
+            source = prepared.typst_source
+            self.assertEqual(selector_calls, [0])
+            self.assertIn("prepared node", source)
+            self.assertIn("_clinnet_template.render(_clinnet_config)", source)
+            entrypoints = []
+
+            def compile_typst(input, **kwargs):
+                entrypoint = Path(input)
+                entrypoints.append(entrypoint)
+                self.assertEqual(entrypoint.read_text(encoding="utf-8"), source)
+                if output := kwargs.get("output"):
+                    Path(output).write_bytes(b"rendered")
+                    return None
+                return b"<svg>prepared</svg>"
+
+            with patch.object(typst, "compile", side_effect=compile_typst):
+                self.assertEqual(prepared.to_svg(), "<svg>prepared</svg>")
+                output = root / "nested" / "prepared.svg"
+                self.assertEqual(prepared.render(output), output)
+            self.assertEqual(selector_calls, [0])
+            self.assertEqual(len(entrypoints), 2)
+            self.assertEqual(entrypoints[0], entrypoints[1])
+            self.assertTrue(entrypoints[0].is_file())
+            self.assertEqual(output.read_bytes(), b"rendered")
+
     def test_render_stages_structural_names_without_python_data(self):
         class Opaque:
             def __str__(self):
