@@ -1,0 +1,12 @@
+digraph dotted_bubble {
+    num = 1
+    edge [
+        pdg=1001
+    ]
+    ext0 [style=invis, is_cut=0]
+    ext0 -> v1 [id=0];
+    v1 -> v2 [id=1];
+    v2 -> v3 [id=2]; 
+    v1 -> v3 [id=3]; 
+    v3 -> ext0;
+}

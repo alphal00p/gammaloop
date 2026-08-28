@@ -1,0 +1,84 @@
+# This file contains settings for `cargo hakari`.
+# See https://docs.rs/cargo-hakari/latest/cargo_hakari/config for a full list of options.
+
+hakari-package = "gammaloop-workspace-hack"
+
+# Format version for hakari's output. Version 4 requires cargo-hakari 0.9.22 or above.
+dep-format-version = "4"
+
+# Setting workspace.resolver = "2" or higher in the root Cargo.toml is HIGHLY recommended.
+# Hakari works much better with the v2 resolver. (The v2 and v3 resolvers are identical from
+# hakari's perspective, so you're welcome to set either.)
+#
+# For more about the new feature resolver, see:
+# https://blog.rust-lang.org/2021/03/25/Rust-1.51.0.html#cargos-new-feature-resolver
+resolver = "2"
+
+# Add triples corresponding to platforms commonly used by developers here.
+# https://doc.rust-lang.org/rustc/platform-support.html
+platforms = [
+    "x86_64-unknown-linux-gnu",
+    # "x86_64-apple-darwin",
+    # "aarch64-apple-darwin",
+    # "x86_64-pc-windows-msvc",
+]
+
+# These crates expose Python/stubgen feature sets that are useful for their own
+# builds but too broad for the common CI cache target. Documentation tools
+# likewise keep their compiler and rendering dependencies in their own builds.
+[traversal-excludes]
+workspace-members = [
+    "alphal00p-docs-builder",
+    "alphal00p-docs-catalogs",
+    "alphal00p-docs-examples",
+    "alphal00p-docs-python-exporter",
+    "clinnet",
+    "feynkit-py",
+    "idenso",
+    # These reusable crates expose a mutually exclusive `wasm` feature for
+    # Tydenso's nested workspace. Their normal native feature sets are still
+    # reached through GammaLoop consumers, but treating the crates themselves
+    # as Hakari roots would combine both arithmetic backends in the hack.
+    "linnet",
+    "linnest",
+    "linnet-py",
+    "spenso",
+    "spenso-hep-lib",
+    "spenso-macros",
+    "spynso3",
+    "symbolica-utils",
+    "vakint",
+]
+third-party = [
+    { name = "pyo3" },
+    { name = "pyo3-build-config" },
+    { name = "pyo3-ffi" },
+    { name = "pyo3-stub-gen" },
+]
+
+# Publishable FeynKit crates must not depend on the private workspace hack.
+# Proc-macro crates also build on the host side and should not carry the hack
+# into normal target-side artifact archives.
+[final-excludes]
+workspace-members = [
+    "feynkit",
+    "feynkit-cff",
+    "feynkit-generator",
+    "feynkit-graph",
+    "feynkit-kinematics",
+    "feynkit-model",
+    "feynkit-ufo",
+    "gammaloop-tracing-filter-macros",
+    "spenso-macros",
+]
+# These std feature anchors are maintained outside Hakari's generated section.
+# Keep traversing their dependencies, but do not emit duplicate declarations.
+third-party = [
+    { name = "arrayvec", version = "0.7" },
+    { name = "indenter", version = "0.3" },
+    # Stub generation is opt-in and must not leak into ordinary abi3 builds.
+    { name = "pyo3-stub-gen" },
+]
+
+# Write out exact versions rather than a semver range. (Defaults to false.)
+# exact-versions = true

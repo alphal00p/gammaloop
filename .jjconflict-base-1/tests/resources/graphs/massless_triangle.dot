@@ -1,0 +1,9 @@
+digraph massless_triangle_0 {
+ext [style=invis]
+ext -> v4 [pdg=1000];
+v5 -> ext [pdg=1000];
+v6 -> ext [pdg=1000];
+v4 -> v5 [pdg=1000];
+v5 -> v6 [pdg=1000];
+v6 -> v4 [pdg=1000];
+}

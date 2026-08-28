@@ -123,7 +123,12 @@ class CffError(FeynkitError):
 
     Examples
     --------
-    >>> diagram.build_cff()
+    Catch incompatible edge constraints at the CFF boundary:
+
+    >>> try:
+    ...     cff = diagram.build_cff(contracted_edges=[edge_id])
+    ... except fk.CffError as error:
+    ...     print(error)
     """
     ...
 
@@ -328,7 +333,7 @@ class CffResult:
     Examples
     --------
     >>> import symbolica.community.feynkit as fk
-    >>> result = fk.CffGenerator().generate(diagram)
+    >>> result = diagram.build_cff()
     >>> expression = result.to_expression()
     """
     @property
@@ -578,7 +583,7 @@ class Coupling:
         Return the coupling name.
         """
     @property
-    def expression(self) -> builtins.str:
+    def expression(self) -> Expression:
         r"""
         Return the expression defining the coupling.
         """
@@ -724,7 +729,12 @@ class DiagramError(FeynkitError):
 
     Examples
     --------
-    >>> diagram.validate(model)
+    Validate imported diagrams before further physics operations:
+
+    >>> try:
+    ...     diagram.validate()
+    ... except fk.DiagramError as error:
+    ...     print(error)
     """
     ...
 
@@ -984,6 +994,8 @@ class FeynkitError(builtins.Exception):
 
     Examples
     --------
+    Catch any model, diagram, generation, CFF, or kinematics failure:
+
     >>> try:
     ...     result = model.generate_diagrams(incoming, outgoing)
     ... except fk.FeynkitError as error:
@@ -1002,13 +1014,18 @@ class FeynmanDiagram:
     Examples
     --------
     >>> diagram = result.diagrams[0]
-    >>> diagram.validate(model)
+    >>> diagram.validate()
     >>> diagram  # renders as a Linnest graph in Jupyter or Marimo
     """
     @property
     def name(self) -> builtins.str:
         r"""
         Return the deterministic name assigned during diagram generation.
+        """
+    @property
+    def id(self) -> builtins.str:
+        r"""
+        Return the stable content-derived hexadecimal diagram ID.
         """
     @property
     def symmetry_factor(self) -> builtins.int:
@@ -1038,9 +1055,11 @@ class FeynmanDiagram:
     def numerator(self) -> builtins.str:
         r"""
         Return the diagram numerator annotation as source text.
-
-        Raises :class:`DiagramError` for an imported or partially constructed
-        diagram whose Feynman rules have not supplied a numerator.
+        """
+    @property
+    def loop_momentum_basis(self) -> LoopMomentumBasis:
+        r"""
+        Return the loop-momentum routing selected during generation.
         """
     @property
     def loop_count(self) -> builtins.int:
@@ -1083,37 +1102,41 @@ class FeynmanDiagram:
         >>> external_particles = [edge.particle_name for edge in diagram.external_edges]
         """
     @staticmethod
-    def from_json(json: builtins.str) -> FeynmanDiagram:
+    def from_json(model: Model, json: builtins.str) -> FeynmanDiagram:
         r"""
         Deserialize a Feynman diagram from its JSON representation.
 
         Examples
         --------
         >>> encoded = diagram.to_json()
-        >>> restored = FeynmanDiagram.from_json(encoded)
-        >>> restored.validate(model)
+        >>> restored = FeynmanDiagram.from_json(model, encoded)
+        >>> restored.validate()
         >>> restored  # render the recovered graph in a notebook
 
         Parameters
         ----------
+        model : Model
+            Model whose stable IDs and fingerprint are referenced by the diagram.
         json : str
             JSON text produced by :meth:`FeynmanDiagram.to_json` or another
             schema-compatible producer.
         """
     @staticmethod
-    def from_dot(dot: builtins.str) -> FeynmanDiagram:
+    def from_dot(model: Model, dot: builtins.str) -> FeynmanDiagram:
         r"""
         Parse a Feynman diagram from Graphviz DOT text.
 
         Examples
         --------
         >>> dot = diagram.to_dot()
-        >>> restored = FeynmanDiagram.from_dot(dot)
-        >>> restored.validate(model)
+        >>> restored = FeynmanDiagram.from_dot(model, dot)
+        >>> restored.validate()
         >>> restored  # preserve topology through a Graphviz workflow
 
         Parameters
         ----------
+        model : Model
+            Model whose stable IDs and fingerprint are referenced by the diagram.
         dot : str
             DOT text containing the diagram topology and FeynKit annotations.
         """
@@ -1136,7 +1159,27 @@ class FeynmanDiagram:
         >>> factor = diagram.overall_factor_expression()
         >>> factor  # supports Symbolica algebra and native rich display
         """
-    def validate(self, model: Model) -> None:
+    def numerator_prefactor_expression(self) -> Expression:
+        r"""
+        Return the request-wide numerator multiplier as a Symbolica expression.
+
+        Examples
+        --------
+        >>> prefactor = diagram.numerator_prefactor_expression()
+        >>> weighted_numerator = prefactor * diagram.numerator_expression()
+        >>> weighted_numerator
+        """
+    def projector_expression(self) -> Expression:
+        r"""
+        Return the external-state projector as a Symbolica expression.
+
+        Examples
+        --------
+        >>> projector = diagram.projector_expression()
+        >>> projected_numerator = projector * diagram.numerator_expression()
+        >>> projected_numerator
+        """
+    def validate(self) -> None:
         r"""
         Validate particle and interaction references against a physics model.
 
@@ -1145,13 +1188,7 @@ class FeynmanDiagram:
         Validation raises ``DiagramError`` for invalid particle or interaction
         references:
 
-        >>> diagram.validate(model)
-
-        Parameters
-        ----------
-        model : Model
-            The :class:`Model` whose particle and interaction definitions should
-            be used for validation.
+        >>> diagram.validate()
         """
     def build_cff(self, *, max_orientations: typing.Optional[builtins.int] = None, fixed_orientations: typing.Optional[typing.Mapping[builtins.int, builtins.bool]] = None, contracted_edges: typing.Optional[typing.Sequence[builtins.int]] = None, initial_state_edges: typing.Optional[typing.Sequence[builtins.int]] = None) -> CffResult:
         r"""
@@ -1186,8 +1223,8 @@ class FeynmanDiagram:
         Examples
         --------
         >>> encoded = diagram.to_json()
-        >>> restored = FeynmanDiagram.from_json(encoded)
-        >>> restored.validate(model)
+        >>> restored = FeynmanDiagram.from_json(model, encoded)
+        >>> restored.validate()
         """
     def to_dot(self) -> builtins.str:
         r"""
@@ -1196,8 +1233,8 @@ class FeynmanDiagram:
         Examples
         --------
         >>> dot = diagram.to_dot()
-        >>> restored = FeynmanDiagram.from_dot(dot)
-        >>> restored.validate(model)
+        >>> restored = FeynmanDiagram.from_dot(model, dot)
+        >>> restored.validate()
         """
     def to_linnest(self) -> builtins.str:
         r"""
@@ -1318,7 +1355,7 @@ class FormFactor:
         Return the model-defined form-factor type, when present.
         """
     @property
-    def value(self) -> typing.Optional[builtins.str]:
+    def value(self) -> typing.Optional[Expression]:
         r"""
         Return the symbolic form-factor value, when present.
         """
@@ -1619,7 +1656,12 @@ class GenerationError(FeynkitError):
 
     Examples
     --------
-    >>> model.generate_diagrams(incoming, outgoing, loops=1)
+    Process and topology failures share one public exception type:
+
+    >>> try:
+    ...     result = model.generate_diagrams(incoming, outgoing, loops=1)
+    ... except fk.GenerationError as error:
+    ...     print(error)
     """
     ...
 
@@ -1683,7 +1725,7 @@ class GenerationOptions:
         token : CancellationToken
             Token whose cancellation state is checked during generation.
         """
-    def add_particle_veto(self, particles: typing.Sequence[Particle | builtins.int]) -> None:
+    def add_particle_veto(self, particles: typing.Sequence[Particle | builtins.str | builtins.int]) -> None:
         r"""
         Reject every graph containing any listed particle.
 
@@ -1694,10 +1736,10 @@ class GenerationOptions:
 
         Parameters
         ----------
-        particles : sequence[Particle | int]
-            Particles or signed PDG codes forbidden on graph edges.
+        particles : sequence[Particle | str | int]
+            Particles, model names, or signed PDG codes forbidden on graph edges.
         """
-    def add_vertex_allow(self, vertices: typing.Sequence[builtins.str]) -> None:
+    def add_vertex_allow(self, vertices: typing.Sequence[VertexRule | builtins.str]) -> None:
         r"""
         Keep only graphs whose interaction vertices use allowed vertex names.
 
@@ -1707,10 +1749,10 @@ class GenerationOptions:
 
         Parameters
         ----------
-        vertices : sequence[str]
-            Model vertex names allowed in generated graphs.
+        vertices : sequence[VertexRule | str]
+            Model vertex rules or names allowed in generated graphs.
         """
-    def add_vertex_veto(self, vertices: typing.Sequence[builtins.str]) -> None:
+    def add_vertex_veto(self, vertices: typing.Sequence[VertexRule | builtins.str]) -> None:
         r"""
         Reject graphs containing any listed interaction vertex.
 
@@ -1720,8 +1762,8 @@ class GenerationOptions:
 
         Parameters
         ----------
-        vertices : sequence[str]
-            Model vertex names forbidden in generated graphs.
+        vertices : sequence[VertexRule | str]
+            Model vertex rules or names forbidden in generated graphs.
         """
     def set_maximum_bridges(self, maximum: builtins.int) -> None:
         r"""
@@ -1928,6 +1970,76 @@ class GenerationOptions:
             Minimum combined loop count of the two cut amplitudes.
         maximum : int
             Maximum combined loop count, inclusive.
+        """
+    def select_diagrams(self, diagrams: typing.Sequence[FeynmanDiagram | builtins.str]) -> None:
+        r"""
+        Retain only diagrams with the listed finalized names.
+
+        Examples
+        --------
+        >>> options.select_diagrams(["FK0"])
+
+        Parameters
+        ----------
+        diagrams : sequence[FeynmanDiagram | str]
+            Diagram objects, content-derived IDs, or deterministic names to retain.
+        """
+    def veto_diagrams(self, diagrams: typing.Sequence[FeynmanDiagram | builtins.str]) -> None:
+        r"""
+        Remove diagrams with the listed finalized names.
+
+        Examples
+        --------
+        >>> options.veto_diagrams(["FK2"])
+
+        Parameters
+        ----------
+        diagrams : sequence[FeynmanDiagram | str]
+            Diagram objects, content-derived IDs, or deterministic names to remove.
+        """
+    def set_loop_momentum_basis(self, diagram: FeynmanDiagram | builtins.str, edges: typing.Sequence[builtins.int]) -> None:
+        r"""
+        Select the ordered loop-momentum edges for one diagram.
+
+        Examples
+        --------
+        >>> options.set_loop_momentum_basis("FK0", [2])
+
+        Parameters
+        ----------
+        diagram : str
+            Finalized deterministic diagram name.
+        edges : sequence[int]
+            Ordered stable edge IDs carrying independent loop momenta.
+        """
+    def set_numerator_prefactor(self, expression: Expression) -> None:
+        r"""
+        Multiply every generated numerator by a Symbolica expression.
+
+        Examples
+        --------
+        >>> options.set_numerator_prefactor(model.parameter("aS").symbol)
+
+        Parameters
+        ----------
+        expression : Expression
+            Scalar numerator multiplier retained on every finalized diagram.
+        """
+    def set_projector(self, expression: Expression) -> None:
+        r"""
+        Override the automatically generated external-state projector.
+
+        Examples
+        --------
+        >>> from symbolica import S
+        >>> transverse_sum = S("g(mu,nu)-p(mu)*p(nu)/p2")
+        >>> options.set_projector(transverse_sum)
+
+        Parameters
+        ----------
+        expression : Expression
+            Symbolica tensor expression used for external-state contraction.
+            Passing ``S("1")`` explicitly disables external wavefunctions.
         """
     def disable_numerator_grouping(self) -> None:
         r"""
@@ -2254,9 +2366,19 @@ class GroupMember:
         Return the generated-order index from before zero-numerator removal.
         """
     @property
+    def source_id(self) -> builtins.str:
+        r"""
+        Return the source diagram's stable content-derived ID.
+        """
+    @property
+    def source_name(self) -> builtins.str:
+        r"""
+        Return the finalized display name assigned to the source diagram.
+        """
+    @property
     def diagram(self) -> builtins.int:
         r"""
-        Return the member's index in the retained ``GenerationResult.diagrams``.
+        Return the collapsed master index in ``GenerationResult.diagrams``.
 
         Examples
         --------
@@ -2274,6 +2396,20 @@ class GroupMember:
         Examples
         --------
         >>> ratio = result.groups[0].members[0].ratio_expression()
+        """
+    def overall_factor_expression(self) -> Expression:
+        r"""
+        Parse the source diagram's numerator-independent factor.
+
+        Examples
+        --------
+        >>> group = result.groups[0]
+        >>> member = group.members[0]
+        >>> master = result.diagrams[group.master]
+        >>> reconstructed = (member.overall_factor_expression()
+        ...                  * member.ratio_expression()
+        ...                  * master.numerator_expression())
+        >>> reconstructed
         """
 
 @typing.final
@@ -2370,9 +2506,9 @@ class Helicity:
         >>> int(Helicity.MINUS)
         -1
         """
-    def __eq__(self, other: Helicity) -> builtins.bool:
+    def __eq__(self, other: typing.Any) -> builtins.bool:
         r"""
-        Compare two helicity values.
+        Compare with another helicity value.
 
         Examples
         --------
@@ -2381,8 +2517,8 @@ class Helicity:
 
         Parameters
         ----------
-        other : Helicity
-            Helicity to compare with this value.
+        other : object
+            Object to compare with this helicity value.
         """
     def __repr__(self) -> builtins.str:
         r"""
@@ -2590,7 +2726,12 @@ class KinematicsError(FeynkitError):
 
     Examples
     --------
-    >>> fk.JetDefinition.anti_kt(0.4).cluster(momenta)
+    Kinematic-domain failures remain distinct from model errors:
+
+    >>> try:
+    ...     jets = fk.JetDefinition.anti_kt(-0.4).cluster(momenta)
+    ... except fk.KinematicsError as error:
+    ...     print(error)
     """
     ...
 
@@ -2605,7 +2746,8 @@ class LoadedModel:
     Examples
     --------
     >>> loaded = fk.UfoLoader().load("path/to/MyUFO")
-    >>> generator = fk.Generator(loaded.model)
+    >>> model = loaded.model
+    >>> particle_names = [particle.name for particle in model.particles]
     >>> parameters = loaded.parameters
     """
     @property
@@ -2615,7 +2757,8 @@ class LoadedModel:
 
         Examples
         --------
-        >>> generator = fk.Generator(loaded.model)
+        >>> model = loaded.model
+        >>> particles = model.particles
         """
     @property
     def parameters(self) -> ParameterCard:
@@ -2827,7 +2970,7 @@ class LorentzStructure:
         True
         """
     @property
-    def structure(self) -> builtins.str:
+    def structure(self) -> Expression:
         r"""
         Return the symbolic Lorentz expression.
         """
@@ -2955,7 +3098,7 @@ class Model:
 
         Examples
         --------
-        >>> model = Model("model.json")
+        >>> model = fk.Model("model.json")
 
         Parameters
         ----------
@@ -2969,7 +3112,7 @@ class Model:
 
         Examples
         --------
-        >>> model = Model.from_json(model_json)
+        >>> model = fk.Model.from_json(model_json)
 
         Parameters
         ----------
@@ -3233,8 +3376,10 @@ class ModelError(FeynkitError):
 
     Examples
     --------
+    A missing particle is reported as a model error:
+
     >>> try:
-    ...     model.particle(999999)
+    ...     model.particle_by_pdg(999999)
     ... except fk.ModelError:
     ...     pass
     """
@@ -3260,7 +3405,7 @@ class ModelExpression:
         Return the name assigned to the expression.
         """
     @property
-    def expression(self) -> builtins.str:
+    def expression(self) -> Expression:
         r"""
         Return the symbolic expression text.
         """
@@ -3295,7 +3440,7 @@ class ModelFunction:
         >>> argument_slots = dict.fromkeys(function.arguments)
         """
     @property
-    def expression(self) -> typing.Optional[builtins.str]:
+    def expression(self) -> typing.Optional[Expression]:
         r"""
         Return the function body, when one is defined by the model.
         """
@@ -3463,7 +3608,7 @@ class Parameter:
         >>> print("mass:", mass_value.real, "width component:", mass_value.imag)
         """
     @property
-    def expression(self) -> typing.Optional[builtins.str]:
+    def expression(self) -> typing.Optional[Expression]:
         r"""
         Return the defining expression for an internal parameter.
 
@@ -4054,8 +4199,7 @@ class Propagator:
     Examples
     --------
     >>> propagator = model.propagators[0]
-    >>> propagator.denominator
-    'P(-1, id)**2 - Mass(id)**2'
+    >>> propagator.numerator / propagator.denominator
     """
     @property
     def name(self) -> builtins.str:
@@ -4073,12 +4217,12 @@ class Propagator:
         >>> particle = model.particle(propagator.particle)
         """
     @property
-    def numerator(self) -> builtins.str:
+    def numerator(self) -> Expression:
         r"""
         Return the symbolic propagator numerator.
         """
     @property
-    def denominator(self) -> builtins.str:
+    def denominator(self) -> Expression:
         r"""
         Return the symbolic propagator denominator.
         """
@@ -4591,7 +4735,12 @@ class UfoLoadError(FeynkitError):
 
     Examples
     --------
-    >>> fk.UfoLoader().load("models/sm")
+    Report a missing or malformed UFO directory cleanly:
+
+    >>> try:
+    ...     loaded = fk.UfoLoader().load("models/sm")
+    ... except fk.UfoLoadError as error:
+    ...     print(error)
     """
     ...
 
@@ -4695,7 +4844,7 @@ class VertexRule:
         >>> particles = [model.particle(name) for name in vertex.particles]
         """
     @property
-    def color_structures(self) -> builtins.list[builtins.str]:
+    def color_structures(self) -> builtins.list[Expression]:
         r"""
         Return the color structures used by the vertex.
         """
@@ -4720,18 +4869,14 @@ class VertexRule:
         >>> names = [name for row in vertex.couplings for name in row if name is not None]
         >>> couplings = [model.coupling(name) for name in names]
         """
-    def coupling_orders(self, model: Model) -> builtins.dict[builtins.str, builtins.int]:
+    def coupling_orders(self) -> builtins.dict[builtins.str, builtins.int]:
         r"""
         Combine the coupling-order powers referenced by this vertex.
 
         Examples
         --------
-        >>> vertex.coupling_orders(model)
-
-        Parameters
-        ----------
-        model : Model
-            Model containing the referenced couplings.
+        >>> vertex.coupling_orders()
+        {'QED': 1}
         """
     def __repr__(self) -> builtins.str:
         r"""

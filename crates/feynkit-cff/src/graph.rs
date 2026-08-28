@@ -3,7 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use feynkit_graph::{ExternalState, FeynmanDiagram};
 use serde::{Deserialize, Deserializer, Serialize, de};
 
-use crate::{CffError, EdgeId, VertexId};
+use crate::surface::MAX_VERTEX_COUNT;
+use crate::{CffError, EdgeId, VertexId, VertexSet};
 
 /// Direction of an edge at the vertex to which it is attached.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -24,6 +25,11 @@ pub enum EdgeKind {
     /// Boundary edges retain an on-shell energy in the generated surface, but
     /// unlike internal edges their orientation is fixed by `flow`.
     Boundary { vertex: VertexId, flow: EdgeFlow },
+    /// A sewn initial-state cut edge attached to both endpoints.
+    ///
+    /// It contributes external-energy shifts at both vertices but is excluded
+    /// from cycle and orientation generation.
+    InitialState { source: VertexId, sink: VertexId },
 }
 
 /// An edge with a stable caller-provided identifier.
@@ -55,6 +61,13 @@ impl CffEdge {
         }
     }
 
+    pub const fn initial_state(id: EdgeId, source: VertexId, sink: VertexId) -> Self {
+        Self {
+            id,
+            kind: EdgeKind::InitialState { source, sink },
+        }
+    }
+
     pub const fn is_internal(self) -> bool {
         matches!(self.kind, EdgeKind::Internal { .. })
     }
@@ -63,13 +76,13 @@ impl CffEdge {
 /// Minimal graph input needed by the CFF contraction algorithm.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct CffGraph {
-    vertex_count: usize,
+    vertex_sets: Vec<VertexSet>,
     edges: Vec<CffEdge>,
 }
 
 #[derive(Deserialize)]
 struct CffGraphSerde {
-    vertex_count: usize,
+    vertex_sets: Vec<VertexSet>,
     edges: Vec<CffEdge>,
 }
 
@@ -79,7 +92,7 @@ impl<'de> Deserialize<'de> for CffGraph {
         D: Deserializer<'de>,
     {
         let graph = CffGraphSerde::deserialize(deserializer)?;
-        Self::new(graph.vertex_count, graph.edges).map_err(de::Error::custom)
+        Self::with_vertex_sets(graph.vertex_sets, graph.edges).map_err(de::Error::custom)
     }
 }
 
@@ -88,8 +101,23 @@ impl CffGraph {
         vertex_count: usize,
         edges: impl IntoIterator<Item = CffEdge>,
     ) -> Result<Self, CffError> {
+        Self::with_vertex_sets(
+            (0..vertex_count).map(|vertex| VertexSet::singleton(VertexId::new(vertex))),
+            edges,
+        )
+    }
+
+    /// Build a graph whose dense working vertices retain caller-provided identities.
+    ///
+    /// This lets subgraph generation intern surfaces directly into a shared arena:
+    /// generated [`VertexSet`] metadata already refers to the containing graph and
+    /// does not require a post-generation adapter.
+    pub fn with_vertex_sets(
+        vertex_sets: impl IntoIterator<Item = VertexSet>,
+        edges: impl IntoIterator<Item = CffEdge>,
+    ) -> Result<Self, CffError> {
         let graph = Self {
-            vertex_count,
+            vertex_sets: vertex_sets.into_iter().collect(),
             edges: edges.into_iter().collect(),
         };
         graph.validate()?;
@@ -97,7 +125,11 @@ impl CffGraph {
     }
 
     pub const fn vertex_count(&self) -> usize {
-        self.vertex_count
+        self.vertex_sets.len()
+    }
+
+    pub fn vertex_sets(&self) -> &[VertexSet] {
+        &self.vertex_sets
     }
 
     pub fn edges(&self) -> &[CffEdge] {
@@ -115,14 +147,22 @@ impl CffGraph {
             .map(|edge| edge.id)
     }
 
+    pub fn edge_count(&self) -> usize {
+        self.edges
+            .iter()
+            .map(|edge| edge.id.index() + 1)
+            .max()
+            .unwrap_or(0)
+    }
+
     fn validate(&self) -> Result<(), CffError> {
-        if self.vertex_count == 0 {
+        if self.vertex_sets.is_empty() {
             return Err(CffError::EmptyGraph);
         }
-        if self.vertex_count > VertexId::MAX_COUNT {
+        if self.vertex_sets.len() > MAX_VERTEX_COUNT {
             return Err(CffError::TooManyVertices {
-                actual: self.vertex_count,
-                maximum: VertexId::MAX_COUNT,
+                actual: self.vertex_sets.len(),
+                maximum: MAX_VERTEX_COUNT,
             });
         }
 
@@ -139,23 +179,27 @@ impl CffGraph {
                 EdgeKind::External { vertex, .. } | EdgeKind::Boundary { vertex, .. } => {
                     self.validate_vertex(edge.id, vertex)?;
                 }
+                EdgeKind::InitialState { source, sink } => {
+                    self.validate_vertex(edge.id, source)?;
+                    self.validate_vertex(edge.id, sink)?;
+                }
             }
         }
 
-        if self.vertex_count > 1 && !self.internal_topology_is_connected() {
+        if self.vertex_sets.len() > 1 && !self.internal_topology_is_connected() {
             return Err(CffError::DisconnectedGraph);
         }
         Ok(())
     }
 
     fn validate_vertex(&self, edge: EdgeId, vertex: VertexId) -> Result<(), CffError> {
-        if vertex.index() < self.vertex_count {
+        if vertex.index() < self.vertex_sets.len() {
             Ok(())
         } else {
             Err(CffError::UnknownVertex {
                 edge,
                 vertex,
-                vertex_count: self.vertex_count,
+                vertex_count: self.vertex_sets.len(),
             })
         }
     }
@@ -179,7 +223,7 @@ impl CffGraph {
                 }
             }
         }
-        visited.len() == self.vertex_count
+        visited.len() == self.vertex_sets.len()
     }
 }
 
@@ -192,6 +236,9 @@ impl TryFrom<&FeynmanDiagram> for CffGraph {
     type Error = CffError;
 
     fn try_from(diagram: &FeynmanDiagram) -> Result<Self, Self::Error> {
+        diagram
+            .validate()
+            .map_err(|error| CffError::Invariant(error.to_string()))?;
         let internal_vertices = diagram
             .vertices()
             .filter(|(_, vertex)| !vertex.is_external())
@@ -200,6 +247,8 @@ impl TryFrom<&FeynmanDiagram> for CffGraph {
             .collect::<BTreeMap<_, _>>();
 
         let mut edges = Vec::new();
+        let mut external_connections =
+            BTreeMap::<usize, Vec<(EdgeId, VertexId, ExternalState)>>::new();
         for (diagram_edge, endpoints, _) in diagram.edges() {
             let edge = EdgeId::new(diagram_edge.0);
             match (
@@ -210,30 +259,48 @@ impl TryFrom<&FeynmanDiagram> for CffGraph {
                     edges.push(CffEdge::internal(edge, *source, *sink));
                 }
                 (Some(vertex), None) => {
-                    let state = diagram
+                    let external = diagram
                         .vertex(endpoints.target)
                         .and_then(|vertex| vertex.external.as_ref())
                         .ok_or(CffError::MissingExternalMetadata(edge))?;
-                    edges.push(CffEdge::external(
-                        edge,
-                        *vertex,
-                        EdgeFlow::from(state.state),
-                    ));
+                    external_connections
+                        .entry(external.connection)
+                        .or_default()
+                        .push((edge, *vertex, external.state));
                 }
                 (None, Some(vertex)) => {
-                    let state = diagram
+                    let external = diagram
                         .vertex(endpoints.source)
                         .and_then(|vertex| vertex.external.as_ref())
                         .ok_or(CffError::MissingExternalMetadata(edge))?;
-                    edges.push(CffEdge::external(
-                        edge,
-                        *vertex,
-                        EdgeFlow::from(state.state),
-                    ));
+                    external_connections
+                        .entry(external.connection)
+                        .or_default()
+                        .push((edge, *vertex, external.state));
                 }
                 (None, None) => return Err(CffError::ExternalToExternalEdge(edge)),
             }
         }
+        for connection in external_connections.into_values() {
+            match connection.as_slice() {
+                [(edge, vertex, state)] => {
+                    edges.push(CffEdge::external(*edge, *vertex, EdgeFlow::from(*state)));
+                }
+                [left, right] => {
+                    let incoming = [left, right]
+                        .into_iter()
+                        .find(|(_, _, state)| *state == ExternalState::Incoming)
+                        .expect("FeynmanDiagram validation requires opposite connection states");
+                    let outgoing = [left, right]
+                        .into_iter()
+                        .find(|(_, _, state)| *state == ExternalState::Outgoing)
+                        .expect("FeynmanDiagram validation requires opposite connection states");
+                    edges.push(CffEdge::initial_state(incoming.0, outgoing.1, incoming.1));
+                }
+                _ => unreachable!("FeynmanDiagram validation constrains connection cardinality"),
+            }
+        }
+        edges.sort_by_key(|edge| edge.id);
 
         Self::new(internal_vertices.len(), edges)
     }
@@ -250,8 +317,11 @@ impl From<ExternalState> for EdgeFlow {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::*;
-    use feynkit_graph::{DiagramEdge, DiagramError, DiagramVertex, ParticleReference};
+    use feynkit_graph::{DiagramEdge, DiagramError, DiagramVertex};
+    use feynkit_model::Model;
 
     #[test]
     fn rejects_duplicate_edge_ids() {
@@ -295,27 +365,42 @@ mod tests {
         )
         .unwrap();
         let mut json = serde_json::to_value(graph).unwrap();
-        json["vertex_count"] = serde_json::json!(1);
+        json["vertex_sets"] = serde_json::json!([VertexSet::singleton(VertexId::new(0))]);
 
         assert!(serde_json::from_value::<CffGraph>(json).is_err());
     }
 
-    fn scalar_edge() -> DiagramEdge {
-        DiagramEdge::new(ParticleReference::new("phi", 25), false)
+    fn scalar_model() -> Arc<Model> {
+        Arc::new(
+            Model::from_json(include_str!(
+                "../../feynkit-model/tests/fixtures/scalars_2p_3p.json"
+            ))
+            .unwrap(),
+        )
+    }
+
+    fn scalar_edge(model: &Model) -> DiagramEdge {
+        DiagramEdge::new(model.particle_id("scalar_0").unwrap(), false)
     }
 
     fn bubble_diagram() -> FeynmanDiagram {
-        let mut builder = FeynmanDiagram::builder("bubble");
+        let model = scalar_model();
+        let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "bubble");
         let incoming =
             builder.add_vertex(DiagramVertex::external("p1", 0, ExternalState::Incoming));
         let outgoing =
             builder.add_vertex(DiagramVertex::external("p2", 1, ExternalState::Outgoing));
-        let left = builder.add_vertex(DiagramVertex::interaction("left", "V_1"));
-        let right = builder.add_vertex(DiagramVertex::interaction("right", "V_1"));
-        builder.add_edge(incoming, left, scalar_edge()).unwrap();
-        builder.add_edge(left, right, scalar_edge()).unwrap();
-        builder.add_edge(left, right, scalar_edge()).unwrap();
-        builder.add_edge(right, outgoing, scalar_edge()).unwrap();
+        let rule = model.vertex_rule_id("V_3_SCALAR_000").unwrap();
+        let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
+        let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
+        builder
+            .add_edge(incoming, left, scalar_edge(&model))
+            .unwrap();
+        builder.add_edge(left, right, scalar_edge(&model)).unwrap();
+        builder.add_edge(left, right, scalar_edge(&model)).unwrap();
+        builder
+            .add_edge(right, outgoing, scalar_edge(&model))
+            .unwrap();
         builder.build().unwrap()
     }
 
@@ -337,32 +422,51 @@ mod tests {
 
     #[test]
     fn external_state_determines_flow_independently_of_endpoint_order() {
-        let mut builder = FeynmanDiagram::builder("external-flow");
-        let internal = builder.add_vertex(DiagramVertex::interaction("v", "V_1"));
+        let model = scalar_model();
+        let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "external-flow");
+        let internal = builder.add_vertex(DiagramVertex::interaction(
+            "v",
+            model.vertex_rule_id("V_3_SCALAR_000").unwrap(),
+        ));
         let incoming =
             builder.add_vertex(DiagramVertex::external("p1", 0, ExternalState::Incoming));
-        builder.add_edge(internal, incoming, scalar_edge()).unwrap();
+        let outgoing_1 =
+            builder.add_vertex(DiagramVertex::external("p2", 1, ExternalState::Outgoing));
+        let outgoing_2 =
+            builder.add_vertex(DiagramVertex::external("p3", 2, ExternalState::Outgoing));
+        builder
+            .add_edge(internal, incoming, scalar_edge(&model))
+            .unwrap();
+        builder
+            .add_edge(internal, outgoing_1, scalar_edge(&model))
+            .unwrap();
+        builder
+            .add_edge(internal, outgoing_2, scalar_edge(&model))
+            .unwrap();
         let diagram = builder.build().unwrap();
 
         let graph = CffGraph::try_from(&diagram).unwrap();
         assert_eq!(
-            graph.edges(),
-            &[CffEdge::external(
+            graph.edges().first(),
+            Some(&CffEdge::external(
                 EdgeId::new(0),
                 VertexId::new(0),
                 EdgeFlow::Incoming,
-            )]
+            ))
         );
     }
 
     #[test]
     fn diagram_builder_rejects_edges_between_external_vertices() {
-        let mut builder = FeynmanDiagram::builder("external-only");
+        let model = scalar_model();
+        let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "external-only");
         let incoming =
             builder.add_vertex(DiagramVertex::external("p1", 0, ExternalState::Incoming));
         let outgoing =
             builder.add_vertex(DiagramVertex::external("p2", 1, ExternalState::Outgoing));
-        builder.add_edge(incoming, outgoing, scalar_edge()).unwrap();
+        builder
+            .add_edge(incoming, outgoing, scalar_edge(&model))
+            .unwrap();
         assert!(matches!(
             builder.build().unwrap_err(),
             DiagramError::ExternalToExternalEdge { edge: 0 }

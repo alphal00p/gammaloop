@@ -1,0 +1,33 @@
+digraph GL252{
+    num = "1";
+    overall_factor = "(AutG(1))^(-1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(4)";
+    overall_factor_evaluated = "-4";
+    projector = "ϵ(0,spenso::mink(4,hedge(0)))*ϵ(1,spenso::mink(4,hedge(1)))*ϵbar(2,spenso::mink(4,hedge(2)))*ϵbar(3,spenso::mink(4,hedge(3)))";
+
+	0 [int_id="V_137"];
+	1 [int_id="V_137"];
+	2 [int_id="V_137"];
+	3 [int_id="V_36"];
+	4 [int_id="V_134"];
+	5 [int_id="V_134"];
+	6 [int_id="V_134"];
+	7 [int_id="V_134"];
+	exte0	 [style=invis];
+	exte0	-> 5:0	 [id=0 dir=none  lmb_rep="P(0,a___)" particle="a" pin="x:@-left"];
+	exte1	 [style=invis];
+	exte1	-> 4:1	 [id=1 dir=none  lmb_rep="P(1,a___)" particle="a" pin="x:@-left"];
+	exte2	 [style=invis];
+	7:2	-> exte2	 [id=2 dir=none  lmb_rep="P(2,a___)" particle="a" pin="x:@+right"];
+	exte3	 [style=invis];
+	6:3	-> exte3	 [id=3 dir=none  lmb_rep="-1*P(2,a___)+P(0,a___)+P(1,a___)" particle="a" pin="x:@+right"];
+	0:4	-> 1:5	 [id=4  lmb_id="0" lmb_rep="K(0,a___)" particle="t"];
+	0:6	-> 3:7	 [id=5 dir=none  lmb_id="1" lmb_rep="K(1,a___)" particle="g"];
+	7:8	-> 0:9	 [id=6  lmb_rep="K(0,a___)+K(1,a___)" particle="t"];
+	1:10	-> 3:11	 [id=7 dir=none  lmb_rep="-1*K(2,a___)+K(0,a___)+P(2,a___)" particle="g"];
+	1:12	-> 5:13	 [id=8  lmb_rep="-1*P(2,a___)+K(2,a___)" particle="t"];
+	2:14	-> 3:15	 [id=9 dir=none  lmb_rep="-1*K(0,a___)+-1*K(1,a___)+-1*P(2,a___)+K(2,a___)" particle="g"];
+	6:16	-> 2:17	 [id=10  lmb_id="2" lmb_rep="K(2,a___)" particle="t"];
+	2:18	-> 7:19	 [id=11  lmb_rep="K(0,a___)+K(1,a___)+P(2,a___)" particle="t"];
+	5:20	-> 4:21	 [id=12  lmb_rep="-1*P(2,a___)+K(2,a___)+P(0,a___)" particle="t"];
+	4:22	-> 6:23	 [id=13  lmb_rep="-1*P(2,a___)+K(2,a___)+P(0,a___)+P(1,a___)" particle="t"];
+}

@@ -9,12 +9,15 @@ use std::{
 };
 
 use feynkit_graph::{
-    DiagramEdge, DiagramError, DiagramVertex, ExternalState, FeynmanDiagram, ParticleReference,
+    DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramError, DiagramHalfEdge,
+    DiagramId, DiagramVertex, EdgeId, ExternalState, FeynmanDiagram, VertexSlot,
 };
-use feynkit_model::{Model, ModelError, Particle, VertexRule};
+use feynkit_model::{
+    Model, ModelError, ParameterId, Particle, ParticleId, VertexRule, VertexRuleId,
+};
 use idenso::{
     color::CS,
-    dirac::AGS,
+    dirac::{AGS, PS},
     epsilon::EPSILON_SYMBOL,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
 };
@@ -38,8 +41,8 @@ use thiserror::Error;
 use crate::{
     FilterScope, GenerationControl, GenerationFilter, GenerationFilterKind, GenerationOptions,
     GenerationProgress, GenerationType, GroupingError, NumeratorGrouping, ParticleSelector,
-    Process, ProcessError, SelfEnergyFilterOptions, SewnFilterOptions, SnailFilterOptions,
-    TadpoleFilterOptions, grouping, momentum_symbol,
+    Process, ProcessError, SelectorError, SelfEnergyFilterOptions, SewnFilterOptions,
+    SnailFilterOptions, TadpoleFilterOptions, VertexSelector, grouping, momentum_symbol,
 };
 
 #[derive(Debug, Error)]
@@ -48,6 +51,8 @@ pub enum GenerationError {
     Process(#[from] ProcessError),
     #[error(transparent)]
     Model(#[from] ModelError),
+    #[error(transparent)]
+    Selector(#[from] SelectorError),
     #[error(transparent)]
     Diagram(#[from] DiagramError),
     #[error("failed to build generation thread pool: {0}")]
@@ -90,8 +95,12 @@ pub enum GenerationError {
     InvalidNumericalSampleCount,
     #[error("arithmetic overflow while computing {0}")]
     ArithmeticOverflow(&'static str),
+    #[error("forced cut edge set {edges:?} does not match any generated physical cut")]
+    UnknownForcedCut { edges: Vec<usize> },
     #[error(transparent)]
     Grouping(#[from] GroupingError),
+    #[error("invalid generation grouping provenance: {0}")]
+    InvalidGroups(String),
     #[error(
         "fermion flow branches at vertex {vertex} with degree {degree}; branching fermion chains are not supported"
     )]
@@ -150,17 +159,23 @@ pub enum GenerationError {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct GroupMember {
     /// Stable generated-order index assigned before zero-numerator removal.
     pub source_diagram: usize,
+    /// Stable content-derived ID of the source diagram.
+    pub source_id: DiagramId,
+    /// Finalized display name of the source diagram.
+    pub source_name: String,
     /// Index into [`GenerationResult::diagrams`] after zero-numerator removal.
     pub diagram: usize,
     /// The numerator of this member divided by the numerator of the master.
-    pub ratio: String,
+    pub ratio: Atom,
+    /// Numerator-independent factor contributed by this source diagram.
+    pub overall_factor: Atom,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct DiagramGroup {
     /// Post-zero-removal index of the numerator reference diagram.
     pub master: usize,
@@ -178,12 +193,97 @@ pub struct GenerationReport {
     pub completed: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct GenerationResult {
-    /// Every retained diagram in generated order; grouping does not collapse this vector.
+    /// Final retained master diagrams in deterministic order.
     pub diagrams: Vec<FeynmanDiagram>,
     pub groups: Vec<DiagramGroup>,
     pub report: GenerationReport,
+}
+
+impl GenerationResult {
+    /// Validate collapsed group provenance against the finalized master list.
+    pub fn validate_groups(&self) -> Result<(), GenerationError> {
+        if self.groups.len() != self.diagrams.len() {
+            return Err(GenerationError::InvalidGroups(format!(
+                "{} groups do not cover {} collapsed diagrams",
+                self.groups.len(),
+                self.diagrams.len()
+            )));
+        }
+        let mut masters = BTreeSet::new();
+        for (group_index, group) in self.groups.iter().enumerate() {
+            if group.master >= self.diagrams.len() || !masters.insert(group.master) {
+                return Err(GenerationError::InvalidGroups(format!(
+                    "group {group_index} has invalid or duplicate master {}",
+                    group.master
+                )));
+            }
+            if group.members.is_empty()
+                || group
+                    .members
+                    .iter()
+                    .any(|member| member.diagram != group.master)
+            {
+                return Err(GenerationError::InvalidGroups(format!(
+                    "group {group_index} has no members or a member assigned to another master"
+                )));
+            }
+            self.diagrams[group.master].validate()?;
+        }
+        if masters != (0..self.diagrams.len()).collect::<BTreeSet<_>>() {
+            return Err(GenerationError::InvalidGroups(
+                "collapsed diagram masters are not covered exactly once".to_owned(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Extra massless particles allowed by perturbative unresolved-cut selection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnresolvedCutContent {
+    pub particles: BTreeSet<ParticleId>,
+    pub maximum_multiplicity: usize,
+}
+
+/// Resolve the canonical unresolved-cut policy stored in generation options.
+pub fn unresolved_cut_content(
+    model: &Model,
+    options: &GenerationOptions,
+) -> Result<Option<UnresolvedCutContent>, GenerationError> {
+    let Some(required) = options
+        .graph_filters
+        .iter()
+        .find_map(|filter| match filter {
+            GenerationFilter::PerturbativeOrders(required) => Some(required),
+            _ => None,
+        })
+    else {
+        return Ok(None);
+    };
+    let mut particles = BTreeSet::new();
+    for rule in model.vertex_rules() {
+        let orders = rule.coupling_orders(model);
+        if !required.keys().any(|name| orders.contains_key(name)) {
+            continue;
+        }
+        for particle in &rule.particles {
+            if model.particle_is_massless(*particle) {
+                particles.insert(*particle);
+            }
+        }
+    }
+    let maximum_multiplicity = required.values().try_fold(0_usize, |sum, order| {
+        sum.checked_add(*order)
+            .ok_or(GenerationError::ArithmeticOverflow(
+                "the unresolved cut multiplicity",
+            ))
+    })?;
+    Ok(Some(UnresolvedCutContent {
+        particles,
+        maximum_multiplicity,
+    }))
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -257,29 +357,17 @@ impl NumeratorInstantiation<'_> {
     // so equal endpoint indices contract and unrelated dummy indices cannot.
     fn instantiate(
         &self,
-        expression: &str,
+        expression: &Atom,
         sector: NumeratorSector,
-    ) -> Result<String, GenerationError> {
-        let owner = self.owner.to_string();
-        let mut atom = Atom::parse(
-            expression,
-            "feynkit_generator_numerator",
-            ParseSettings::default(),
-        )
-        .map_err(|error| GenerationError::NumeratorParse {
-            owner: owner.clone(),
-            expression: expression.to_owned(),
-            message: error.to_string(),
-        })?;
+    ) -> Result<Atom, GenerationError> {
+        let mut atom = expression.clone();
         let mut error = None;
-        let mut changed = false;
         atom = atom.replace_map(|term, _, out| {
             if error.is_some() {
                 return;
             }
             match self.localize_momentum(term) {
                 Ok(Some(replacement)) => {
-                    changed = true;
                     **out = replacement;
                 }
                 Ok(None) => {}
@@ -295,7 +383,6 @@ impl NumeratorInstantiation<'_> {
             }
             match self.localize_indices(term) {
                 Ok(Some(replacement)) => {
-                    changed = true;
                     **out = replacement;
                 }
                 Ok(None) => {}
@@ -311,13 +398,7 @@ impl NumeratorInstantiation<'_> {
             NumeratorSector::Color => self.lower_color(atom)?,
         };
 
-        // The default `Display` printer hides namespaces. Keep the public
-        // FeynKit and Spenso namespaces in the serialized annotation.
-        Ok(if changed || atom.to_plain_string() != expression {
-            atom.to_plain_string()
-        } else {
-            expression.to_owned()
-        })
+        Ok(atom)
     }
 
     fn localize_momentum(&self, term: AtomView<'_>) -> Result<Option<Atom>, GenerationError> {
@@ -762,7 +843,7 @@ impl NumeratorInstantiation<'_> {
         Ok(atom)
     }
 
-    fn edge_color_identity(&self, color: i64) -> Result<Option<String>, GenerationError> {
+    fn edge_color_identity(&self, color: i64) -> Result<Option<Atom>, GenerationError> {
         let Some(source_representation) = Self::vertex_color_representation(color) else {
             return Ok(None);
         };
@@ -786,7 +867,7 @@ impl NumeratorInstantiation<'_> {
             source_representation.index(self.index(source, 1)?),
             source_representation.dual().index(self.index(sink, 1)?),
         );
-        Ok(Some(identity.to_plain_string()))
+        Ok(Some(identity))
     }
 
     fn maximum_local_dummy(&self, atom: &Atom) -> Result<usize, GenerationError> {
@@ -1127,6 +1208,8 @@ impl Generator {
         options: &GenerationOptions,
     ) -> Result<GenerationResult, GenerationError> {
         process.validate()?;
+        let options = options.resolve_selectors(&self.model)?;
+        let options = &options;
         self.validate_options(process, options)?;
         let resolved = ResolvedProcess::new(&self.model, process)?;
         let signatures = InteractionSignatures::new(&self.model, options)?;
@@ -1262,6 +1345,19 @@ impl Generator {
                 completed = false;
                 break;
             }
+            topology.graph = resolved.canonicalize_numerator_graph(
+                &topology.graph,
+                &self.model,
+                &options.numerator_grouping,
+            )?;
+            // Fermion-flow normalization determines the physical sign, but
+            // the canonical comparison graph remains the finalized graph.
+            // Reorienting it here would change the momentum convention after
+            // the reduced skeleton was selected and make mirror numerators
+            // differ.  This matches the legacy ordering: canonicalize first,
+            // instantiate on that representative, and use normalized flow as
+            // sign metadata only.
+            let normalized = resolved.normalize_fermion_flows(&topology.graph, &self.model)?;
             if process.generation_type() == GenerationType::CrossSection {
                 topology.cut_partitions =
                     resolved.cut_partitions(&topology.graph, &self.model, options)?;
@@ -1276,8 +1372,6 @@ impl Generator {
             if !self.passes_interaction_filters(&topology.graph, fermion_loop_count, options)? {
                 continue;
             }
-            let normalized = resolved.normalize_fermion_flows(&topology.graph, &self.model)?;
-            topology.graph = normalized.graph;
             diagram_inputs.push((topology, fermion_loop_count, normalized.signs));
         }
         let width = diagram_inputs.len().saturating_sub(1).to_string().len();
@@ -1290,22 +1384,118 @@ impl Generator {
             }
             diagrams.push(self.to_diagram(
                 format!("{}{index:0width$}", options.graph_prefix),
+                process.generation_type(),
                 topology,
                 fermion_loop_count,
                 signs,
+                options,
             )?);
+        }
+        if !options.forced_cuts.is_empty() {
+            let mut matched = vec![false; options.forced_cuts.len()];
+            let mut retained = Vec::new();
+            for diagram in diagrams {
+                let cuts = diagram
+                    .cuts()
+                    .iter()
+                    .filter(|cut| {
+                        let edges = cut
+                            .cut
+                            .iter()
+                            .map(|half_edge| half_edge.edge)
+                            .collect::<BTreeSet<_>>();
+                        let keep = options
+                            .forced_cuts
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, requested)| **requested == edges)
+                            .map(|(index, _)| index)
+                            .collect::<Vec<_>>();
+                        for index in keep {
+                            matched[index] = true;
+                        }
+                        options.forced_cuts.contains(&edges)
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if !cuts.is_empty() {
+                    retained.push(diagram.with_cuts(cuts)?);
+                }
+            }
+            diagrams = retained;
+            if let Some((_, missing)) = options
+                .forced_cuts
+                .iter()
+                .enumerate()
+                .find(|(index, _)| !matched[*index])
+            {
+                return Err(GenerationError::UnknownForcedCut {
+                    edges: missing.iter().map(|edge| edge.0).collect(),
+                });
+            }
+        }
+        let mut keyed_diagrams = diagrams
+            .into_iter()
+            .map(|diagram| Ok((diagram.canonical_key()?, diagram)))
+            .collect::<Result<Vec<_>, GenerationError>>()?;
+        keyed_diagrams.sort_by(|left, right| left.0.cmp(&right.0));
+        let width = keyed_diagrams
+            .len()
+            .saturating_sub(1)
+            .to_string()
+            .len()
+            .max(1);
+        let mut diagrams = Vec::with_capacity(keyed_diagrams.len());
+        for (index, (_, diagram)) in keyed_diagrams.into_iter().enumerate() {
+            let name = format!("{}{index:0width$}", options.graph_prefix);
+            let selected_by_id = options
+                .selected_diagram_ids
+                .as_ref()
+                .is_some_and(|selected| selected.contains(&diagram.id()));
+            let selected_by_name = options
+                .selected_diagram_names
+                .as_ref()
+                .is_some_and(|selected| selected.contains(&name));
+            let has_selection =
+                options.selected_diagram_ids.is_some() || options.selected_diagram_names.is_some();
+            if (has_selection && !selected_by_id && !selected_by_name)
+                || options.vetoed_diagram_ids.contains(&diagram.id())
+                || options.vetoed_diagram_names.contains(&name)
+            {
+                continue;
+            }
+            let diagram = diagram.with_name(&name);
+            diagrams.push(
+                if let Some(edges) = options.loop_momentum_bases.get(&diagram.id()) {
+                    diagram.with_loop_momentum_edges(edges)?
+                } else if let Some(edges) = options.named_loop_momentum_bases.get(&name) {
+                    diagram.with_loop_momentum_edges(edges)?
+                } else {
+                    diagram
+                },
+            );
         }
         let grouped = if options.cancellation_requested() {
             completed = false;
-            grouping::group_diagrams(diagrams, &self.model, &NumeratorGrouping::None)?
+            grouping::group_diagrams(
+                diagrams,
+                &self.model,
+                &NumeratorGrouping::None,
+                process.symmetrizes_left_right(),
+            )?
         } else {
-            grouping::group_diagrams(diagrams, &self.model, &options.numerator_grouping)?
+            grouping::group_diagrams(
+                diagrams,
+                &self.model,
+                &options.numerator_grouping,
+                process.symmetrizes_left_right(),
+            )?
         };
         if options.cancellation_requested() {
             completed = false;
         }
 
-        Ok(GenerationResult {
+        let result = GenerationResult {
             report: GenerationReport {
                 topology_count,
                 interaction_assignment_count,
@@ -1315,7 +1505,9 @@ impl Generator {
             },
             diagrams: grouped.diagrams,
             groups: grouped.groups,
-        })
+        };
+        result.validate_groups()?;
+        Ok(result)
     }
 
     fn validate_options(
@@ -1455,14 +1647,15 @@ impl Generator {
 
             self.validate_filter_range(scope, filter)?;
             match filter {
-                GenerationFilter::ParticleVeto(pdgs) => {
-                    for pdg in pdgs {
-                        self.model.particle_by_pdg(*pdg)?;
+                GenerationFilter::ParticleVeto(selectors) => {
+                    for selector in selectors {
+                        selector.resolve(&self.model)?;
                     }
                 }
-                GenerationFilter::VertexAllow(names) | GenerationFilter::VertexVeto(names) => {
-                    for name in names {
-                        self.model.vertex_rule(name)?;
+                GenerationFilter::VertexAllow(selectors)
+                | GenerationFilter::VertexVeto(selectors) => {
+                    for selector in selectors {
+                        selector.resolve(&self.model)?;
                     }
                 }
                 GenerationFilter::CouplingOrders(required) => {
@@ -1548,14 +1741,14 @@ impl Generator {
                     let edge = &graph.edges()[*edge_id];
                     let direction = edge.directed.then_some(edge.vertices.0 == node_index);
                     signature.push(EdgeColor {
-                        pdg: edge.data.pdg,
+                        particle: edge.data.particle,
                         direction,
                     });
                     // A self-loop contributes both half-edges to the
                     // interaction signature.
                     if edge.vertices.0 == edge.vertices.1 {
                         signature.push(EdgeColor {
-                            pdg: edge.data.pdg,
+                            particle: edge.data.particle,
                             direction: direction.map(|value| !value),
                         });
                     }
@@ -1567,7 +1760,9 @@ impl Generator {
                         node: node_index,
                         signature: signature
                             .iter()
-                            .map(|edge| format!("{:?}:{}", edge.direction, edge.pdg))
+                            .map(|edge| {
+                                format!("{:?}:particle#{}", edge.direction, edge.particle.index())
+                            })
                             .collect(),
                     })?
                     .iter()
@@ -1650,10 +1845,19 @@ impl Generator {
         for filter in &options.graph_filters {
             match filter {
                 GenerationFilter::ParticleVeto(vetoed)
-                    if graph
-                        .edges()
-                        .iter()
-                        .any(|edge| vetoed.contains(&edge.data.pdg)) =>
+                    if graph.edges().iter().any(|edge| {
+                        vetoed.iter().any(|selector| match selector {
+                            ParticleSelector::Id { particle, .. } => {
+                                *particle == edge.data.particle
+                                    || self.model.particle_by_id(*particle).is_ok_and(|selected| {
+                                        selected.antiparticle == edge.data.particle
+                                    })
+                            }
+                            ParticleSelector::Name(_) | ParticleSelector::Pdg(_) => {
+                                unreachable!("generation selectors are resolved before use")
+                            }
+                        })
+                    }) =>
                 {
                     return Ok(false);
                 }
@@ -1721,8 +1925,10 @@ impl Generator {
                     .first()
                     .ok_or(GenerationError::MissingExternalEdge { node: node_index })?;
                 let edge = &graph.edges()[*edge_id];
-                external_particles
-                    .insert(external.index, self.model.particle_by_pdg(edge.data.pdg)?);
+                external_particles.insert(
+                    external.index,
+                    self.model.particle_by_id(edge.data.particle)?,
+                );
             }
         }
 
@@ -1914,9 +2120,10 @@ impl Generator {
                 let particle = external_particles
                     .get(leg_id)
                     .ok_or(GenerationError::MissingExternalParticle { index: *leg_id })?;
-                if (!particle.is_massless() && options.veto_massive)
-                    || (particle.is_massless() && options.veto_massless)
-                {
+                let massless = self
+                    .model
+                    .particle_is_massless(self.model.particle_id(&particle.name)?);
+                if (!massless && options.veto_massive) || (massless && options.veto_massless) {
                     return Ok(true);
                 }
             }
@@ -1948,7 +2155,7 @@ impl Generator {
                         node: first_tree_attachment_node_index,
                         parent,
                     })?;
-                !self.model.particle_by_pdg(edge.data.pdg)?.is_massless()
+                !self.model.particle_is_massless(edge.data.particle)
             } else {
                 // Always consider the attachment particle massive for vacuum
                 // graphs: without external legs there is no supported way to
@@ -2064,11 +2271,11 @@ impl Generator {
     ) -> Result<BTreeMap<String, usize>, GenerationError> {
         let mut result = BTreeMap::new();
         for node in graph.nodes() {
-            let ColoredNode::Interaction(rule_name) = &node.data else {
+            let ColoredNode::Interaction(rule_id) = &node.data else {
                 continue;
             };
-            let rule = self.model.vertex_rule(rule_name)?;
-            for (name, order) in rule.coupling_orders(&self.model)? {
+            let rule = self.model.vertex_rule_by_id(*rule_id)?;
+            for (name, order) in rule.coupling_orders(&self.model) {
                 *result.entry(name).or_insert(0) += order;
             }
         }
@@ -2086,7 +2293,7 @@ impl Generator {
         // Build adjacency using only fermion edges. A self-loop contributes
         // degree two.
         for edge in graph.edges() {
-            if !self.model.particle_by_pdg(edge.data.pdg)?.is_fermion() {
+            if !self.model.particle_by_id(edge.data.particle)?.is_fermion() {
                 continue;
             }
             let (left, right) = edge.vertices;
@@ -2136,9 +2343,11 @@ impl Generator {
     fn to_diagram(
         &self,
         name: String,
+        generation_type: GenerationType,
         topology: ColoredTopology,
         fermion_loop_count: usize,
         fermion_signs: FermionSigns,
+        options: &GenerationOptions,
     ) -> Result<FeynmanDiagram, GenerationError> {
         // Symbolica's automorphism factor is a denominator in the overall
         // multiplier.
@@ -2169,38 +2378,91 @@ impl Generator {
             };
             overall_factor = format!("AntiFermionSpinSumSign({sign})*{overall_factor}");
         }
-        let mut builder = FeynmanDiagram::builder(name)
+        let overall_factor = Atom::parse(
+            &overall_factor,
+            "feynkit_generator_factor",
+            ParseSettings::default(),
+        )
+        .map_err(|message| GenerationError::NumeratorParse {
+            owner: "diagram overall factor".to_owned(),
+            expression: overall_factor,
+            message,
+        })?;
+        let incoming_count = topology
+            .graph
+            .nodes()
+            .iter()
+            .filter(|node| {
+                matches!(
+                    node.data,
+                    ColoredNode::External(ExternalNode {
+                        state: ExternalState::Incoming,
+                        ..
+                    })
+                )
+            })
+            .count();
+        let projector = match &options.projector {
+            Some(projector) => projector.clone(),
+            None => self.external_state_projector(&topology.graph)?,
+        };
+        let mut builder = FeynmanDiagram::builder(Arc::clone(&self.model), name)
             .symmetry_factor(topology.symmetry)
-            .overall_factor(overall_factor);
+            .overall_factor(overall_factor)
+            .numerator_prefactor(options.numerator_prefactor.clone())
+            .projector(projector)
+            .cuts(topology.cut_partitions.clone());
         let mut numerator_factors = Vec::new();
+        let mut endpoint_slots = BTreeMap::new();
         for (index, node) in topology.graph.nodes().iter().enumerate() {
             let vertex = match &node.data {
-                ColoredNode::External(external) => DiagramVertex::external(
-                    format!("ext{}", external.index),
-                    external.index,
-                    external.state,
-                ),
-                ColoredNode::Interaction(rule_name) => {
-                    let rule = self.model.vertex_rule(rule_name)?;
+                ColoredNode::External(external) => {
+                    let connection = match (generation_type, external.state) {
+                        (GenerationType::Amplitude, _) | (_, ExternalState::Incoming) => {
+                            external.index
+                        }
+                        (GenerationType::CrossSection, ExternalState::Outgoing) => external
+                            .index
+                            .checked_sub(incoming_count)
+                            .ok_or(GenerationError::MissingExternalParticle {
+                                index: external.index,
+                            })?,
+                    };
+                    DiagramVertex::external_in_connection(
+                        format!("ext{}", external.index),
+                        external.index,
+                        external.state,
+                        connection,
+                    )
+                }
+                ColoredNode::Interaction(rule_id) => {
+                    let rule = self.model.vertex_rule_by_id(*rule_id)?;
                     let legs = self.interaction_half_edges(&topology.graph, index, rule)?;
                     let instantiation = NumeratorInstantiation {
                         owner: NumeratorOwner::Vertex(index),
                         legs: &legs,
                     };
-                    let numerator = self.interaction_numerator(rule, &instantiation)?;
-                    if numerator != "1" {
-                        numerator_factors.push(format!("({numerator})"));
+                    for (slot, leg) in legs.iter().enumerate() {
+                        endpoint_slots.insert((leg.edge, leg.flow), VertexSlot(slot));
                     }
-                    let mut vertex =
-                        DiagramVertex::interaction(format!("v{index}"), rule_name.clone());
-                    vertex.numerator = Some(numerator);
+                    let numerator = self.interaction_numerator(rule, &instantiation)?;
+                    if numerator != Atom::one() {
+                        numerator_factors.push(numerator.clone());
+                    }
+                    let mut vertex = DiagramVertex::interaction(format!("v{index}"), *rule_id);
+                    vertex.numerator = numerator;
                     vertex
                 }
             };
             builder.add_vertex(vertex);
         }
         for (edge_index, edge) in topology.graph.edges().iter().enumerate() {
-            let particle = self.model.particle_by_pdg(edge.data.pdg)?;
+            let particle = self.model.particle_by_id(edge.data.particle)?;
+            let propagator_particle = if particle.is_antiparticle() {
+                self.model.antiparticle(particle)?
+            } else {
+                particle
+            };
             let internal = matches!(
                 &topology.graph.nodes()[edge.vertices.0].data,
                 ColoredNode::Interaction(_)
@@ -2227,40 +2489,98 @@ impl Generator {
                     owner: NumeratorOwner::Edge(edge_index),
                     legs: &legs,
                 };
-                let spin = instantiation
-                    .instantiate(self.propagator_numerator(particle)?, NumeratorSector::Spin)?;
+                let propagator_numerator = self.propagator_numerator(propagator_particle)?;
+                let spin =
+                    instantiation.instantiate(&propagator_numerator, NumeratorSector::Spin)?;
                 let color = instantiation.edge_color_identity(particle.color)?;
-                match (spin.as_str(), color) {
-                    ("1", None) => "1".to_owned(),
-                    (_, None) => spin,
-                    ("1", Some(color)) => color,
-                    (_, Some(color)) => format!("({spin})*({color})"),
+                match color {
+                    None => spin,
+                    Some(color) => spin * color,
                 }
             } else {
-                "1".to_owned()
+                Atom::one()
             };
-            if edge_numerator != "1" {
-                numerator_factors.push(format!("({edge_numerator})"));
+            if edge_numerator != Atom::one() {
+                numerator_factors.push(edge_numerator.clone());
             }
-            let mut diagram_edge = DiagramEdge::new(
-                ParticleReference::new(&particle.name, particle.pdg_code),
-                edge.directed,
-            );
-            diagram_edge.numerator = Some(edge_numerator);
-            builder.add_edge(
+            let mut diagram_edge = DiagramEdge::new(edge.data.particle, edge.directed);
+            diagram_edge.numerator = edge_numerator;
+            let source_slot = endpoint_slots
+                .get(&(edge_index, Flow::Source))
+                .copied()
+                .unwrap_or(VertexSlot(0));
+            let target_slot = endpoint_slots
+                .get(&(edge_index, Flow::Sink))
+                .copied()
+                .unwrap_or(VertexSlot(0));
+            builder.add_edge_with_slots(
                 feynkit_graph::VertexId(edge.vertices.0),
                 feynkit_graph::VertexId(edge.vertices.1),
                 diagram_edge,
+                source_slot,
+                target_slot,
             )?;
         }
-        let numerator = if numerator_factors.is_empty() {
-            "1".to_owned()
-        } else {
-            numerator_factors.join("*")
-        };
+        let numerator = numerator_factors
+            .into_iter()
+            .fold(Atom::one(), |product, factor| product * factor);
         let diagram = builder.numerator(numerator).build()?;
-        diagram.validate(&self.model)?;
+        diagram.validate()?;
         Ok(diagram)
+    }
+
+    fn external_state_projector(
+        &self,
+        graph: &Graph<ColoredNode, EdgeColor>,
+    ) -> Result<Atom, GenerationError> {
+        let mut projector = Atom::one();
+        for (vertex, node) in graph.nodes().iter().enumerate() {
+            let ColoredNode::External(external) = &node.data else {
+                continue;
+            };
+            let edge_id = *node
+                .edges
+                .first()
+                .ok_or(GenerationError::MissingExternalEdge { node: vertex })?;
+            let edge = &graph.edges()[edge_id];
+            let flow = if edge.vertices.0 == vertex {
+                Flow::Sink
+            } else {
+                Flow::Source
+            };
+            let index_symbol = match flow {
+                Flow::Source => symbol!("FeynKit::SourceIndex"),
+                Flow::Sink => symbol!("FeynKit::SinkIndex"),
+            };
+            let edge_index = i64::try_from(edge_id)
+                .map_err(|_| GenerationError::ArithmeticOverflow("an external edge identifier"))?;
+            let index = index_symbol.call((edge_index, 1_i64));
+            let particle = self.model.particle_by_id(external.particle)?;
+            let (head, index) = match particle.spin {
+                2 => {
+                    let head = match (external.state, particle.is_antiparticle()) {
+                        (ExternalState::Incoming, false) => PS.u,
+                        (ExternalState::Incoming, true) => PS.vbar,
+                        (ExternalState::Outgoing, false) => PS.ubar,
+                        (ExternalState::Outgoing, true) => PS.v,
+                    };
+                    (head, Bispinor {}.new_rep(4).to_symbolic([index]))
+                }
+                3 => {
+                    let head = match external.state {
+                        ExternalState::Incoming => PS.eps,
+                        ExternalState::Outgoing => PS.ebar,
+                    };
+                    (head, Minkowski {}.new_rep(4).to_symbolic([index]))
+                }
+                _ => continue,
+            };
+            projector *= FunctionBuilder::new(head)
+                .add_arg(edge_index)
+                .add_arg(index)
+                .finish();
+        }
+        Ok(projector)
     }
 
     fn interaction_half_edges(
@@ -2275,6 +2595,12 @@ impl Generator {
         let mut available = Vec::new();
         for edge_id in &graph.nodes()[vertex].edges {
             let edge = &graph.edges()[*edge_id];
+            let particle = self.model.particle_by_id(edge.data.particle)?;
+            let base = if particle.is_antiparticle() {
+                particle.antiparticle
+            } else {
+                edge.data.particle
+            };
             if edge.vertices.0 == vertex {
                 available.push((
                     NumeratorHalfEdge {
@@ -2283,8 +2609,8 @@ impl Generator {
                         spin: 0,
                         color: 1,
                     },
-                    edge.data.pdg,
-                    edge.directed.then_some(true),
+                    base,
+                    edge.directed.then_some(!particle.is_antiparticle()),
                 ));
             }
             if edge.vertices.1 == vertex {
@@ -2295,24 +2621,24 @@ impl Generator {
                         spin: 0,
                         color: 1,
                     },
-                    edge.data.pdg,
-                    edge.directed.then_some(false),
+                    base,
+                    edge.directed.then_some(particle.is_antiparticle()),
                 ));
             }
         }
 
         let mut ordered = Vec::with_capacity(rule.particles.len());
-        for (leg, particle_name) in rule.particles.iter().enumerate() {
-            let particle = self.model.particle(particle_name)?;
+        for (leg, particle_id) in rule.particles.iter().enumerate() {
+            let particle = self.model.particle_by_id(*particle_id)?;
             let expected = ResolvedProcess::vertex_half_edge(&self.model, particle)?;
-            let Some(position) = available.iter().position(|(_, pdg, direction)| {
-                *pdg == expected.data.pdg && *direction == expected.direction
+            let Some(position) = available.iter().position(|(_, particle, direction)| {
+                *particle == expected.data.particle && *direction == expected.direction
             }) else {
                 return Err(GenerationError::MissingInteractionLeg {
                     vertex,
                     interaction: rule.name.clone(),
                     leg: leg + 1,
-                    particle: particle_name.clone(),
+                    particle: particle.name.clone(),
                 });
             };
             let mut selected = available.remove(position).0;
@@ -2323,26 +2649,30 @@ impl Generator {
         Ok(ordered)
     }
 
-    fn propagator_numerator<'model>(
-        &'model self,
-        particle: &Particle,
-    ) -> Result<&'model str, GenerationError> {
-        if let Some(propagator) = &particle.propagator {
-            return Ok(&self.model.propagator(propagator)?.numerator);
+    fn propagator_numerator(&self, particle: &Particle) -> Result<Atom, GenerationError> {
+        if let Some(propagator) = particle.propagator {
+            return Ok(self.model.propagator_by_id(propagator)?.numerator.clone());
         }
+        let antiparticle = self.model.antiparticle(particle)?;
+        if let Some(propagator) = antiparticle.propagator {
+            return Ok(self.model.propagator_by_id(propagator)?.numerator.clone());
+        }
+        let particle_id = self.model.particle_id(&particle.name)?;
         Ok(self
             .model
             .propagators()
             .iter()
-            .find(|propagator| propagator.particle == particle.name)
-            .map_or("1", |propagator| propagator.numerator.as_str()))
+            .find(|propagator| {
+                propagator.particle == particle_id || propagator.particle == particle.antiparticle
+            })
+            .map_or_else(Atom::one, |propagator| propagator.numerator.clone()))
     }
 
     fn interaction_numerator(
         &self,
         rule: &VertexRule,
         instantiation: &NumeratorInstantiation<'_>,
-    ) -> Result<String, GenerationError> {
+    ) -> Result<Atom, GenerationError> {
         let mut terms = Vec::new();
         for (color_index, color) in rule.color_structures.iter().enumerate() {
             for (lorentz_index, lorentz_name) in rule.lorentz_structures.iter().enumerate() {
@@ -2352,31 +2682,31 @@ impl Generator {
                     .and_then(|row| row.get(lorentz_index))
                     .and_then(Option::as_ref)
                 {
-                    let coupling = &self.model.coupling(coupling)?.expression;
-                    let lorentz = &self.model.lorentz_structure(lorentz_name)?.structure;
+                    let coupling = &self.model.coupling_by_id(*coupling)?.expression;
+                    let lorentz = &self.model.lorentz_structure_by_id(*lorentz_name)?.structure;
                     let color = instantiation.instantiate(color, NumeratorSector::Color)?;
                     let lorentz = instantiation.instantiate(lorentz, NumeratorSector::Spin)?;
-                    terms.push(format!("({coupling})*({color})*({lorentz})"));
+                    terms.push(coupling.clone() * color * lorentz);
                 }
             }
         }
         if terms.is_empty() {
-            Ok("1".to_owned())
+            Ok(Atom::one())
         } else {
-            Ok(terms.join("+"))
+            Ok(terms.into_iter().fold(Atom::new(), |sum, term| sum + term))
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct EdgeColor {
-    pdg: i64,
+    particle: ParticleId,
     direction: Option<bool>,
 }
 
 impl fmt::Display for EdgeColor {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.pdg.fmt(formatter)
+        write!(formatter, "particle#{}", self.particle.index())
     }
 }
 
@@ -2384,20 +2714,30 @@ impl fmt::Display for EdgeColor {
 struct ExternalNode {
     index: usize,
     state: ExternalState,
-    particle: ParticleReference,
-    symmetry_class: usize,
+    particle: ParticleId,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum ExternalCanonicalClass {
+    Exact { state: ExternalState, index: usize },
+    WithinState(ExternalState),
 }
 
 #[derive(Debug, Clone, Default)]
 struct NodeColor {
     external: Option<ExternalNode>,
+    external_class: Option<ExternalCanonicalClass>,
 }
 
 impl NodeColor {
-    fn key(&self) -> Option<(ExternalState, &ParticleReference, usize)> {
-        self.external
-            .as_ref()
-            .map(|external| (external.state, &external.particle, external.symmetry_class))
+    fn key(&self) -> Option<(ParticleId, ExternalCanonicalClass)> {
+        self.external.as_ref().map(|external| {
+            (
+                external.particle,
+                self.external_class
+                    .expect("external nodes always have a canonical class"),
+            )
+        })
     }
 }
 
@@ -2439,7 +2779,26 @@ impl fmt::Display for NodeColor {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum ColoredNode {
     External(ExternalNode),
-    Interaction(String),
+    Interaction(VertexRuleId),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum NumeratorCanonicalNode {
+    Internal,
+    External(ExternalNode),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+enum NumeratorCanonicalEdge {
+    InternalMassAndSpin {
+        mass: ParameterId,
+        spin: i64,
+    },
+    InternalParticle(ParticleId),
+    External {
+        particle: ParticleId,
+        directed: bool,
+    },
 }
 
 type InteractionAssignment = (Graph<ColoredNode, EdgeColor>, usize);
@@ -2448,7 +2807,7 @@ impl fmt::Display for ColoredNode {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::External(external) => write!(formatter, "ext{}", external.index),
-            Self::Interaction(rule) => formatter.write_str(rule),
+            Self::Interaction(rule) => write!(formatter, "vertex#{}", rule.index()),
         }
     }
 }
@@ -2457,22 +2816,7 @@ struct ColoredTopology {
     graph: Graph<ColoredNode, EdgeColor>,
     symmetry: u64,
     multiplicity: usize,
-    cut_partitions: Vec<CutPartition>,
-}
-
-struct CutPartition {
-    left: CutSide,
-    right: CutSide,
-}
-
-struct CutSide {
-    coupling_orders: BTreeMap<String, usize>,
-    loop_count: usize,
-}
-
-struct UnresolvedCutContent {
-    particles: BTreeSet<i64>,
-    maximum_multiplicity: usize,
+    cut_partitions: Vec<DiagramCut>,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -2484,6 +2828,7 @@ struct FermionSigns {
 }
 
 struct NormalizedFermionFlow {
+    #[cfg_attr(not(test), allow(dead_code))]
     graph: Graph<ColoredNode, EdgeColor>,
     signs: FermionSigns,
 }
@@ -2531,7 +2876,7 @@ fn all_incoming_particle<'model>(
     external: &ExternalNode,
     model: &'model Model,
 ) -> Result<&'model Particle, GenerationError> {
-    let particle = model.particle_by_pdg(external.particle.pdg)?;
+    let particle = model.particle_by_id(external.particle)?;
     match external.state {
         ExternalState::Incoming => Ok(particle),
         ExternalState::Outgoing => Ok(model.antiparticle(particle)?),
@@ -2553,7 +2898,7 @@ fn permutation_is_odd(values: &[usize]) -> bool {
         == 1
 }
 
-struct InteractionSignatures(BTreeMap<Vec<HalfEdge<EdgeColor>>, Vec<String>>);
+struct InteractionSignatures(BTreeMap<Vec<HalfEdge<EdgeColor>>, Vec<VertexRuleId>>);
 
 impl InteractionSignatures {
     fn new(model: &Model, options: &GenerationOptions) -> Result<Self, GenerationError> {
@@ -2561,43 +2906,71 @@ impl InteractionSignatures {
             .graph_filters
             .iter()
             .find_map(|filter| match filter {
-                GenerationFilter::VertexAllow(names) => Some(names.iter().collect::<BTreeSet<_>>()),
+                GenerationFilter::VertexAllow(selectors) => Some(
+                    selectors
+                        .iter()
+                        .map(|selector| match selector {
+                            VertexSelector::Id { vertex, .. } => *vertex,
+                            VertexSelector::Name(_) => {
+                                unreachable!("generation selectors are resolved before use")
+                            }
+                        })
+                        .collect::<BTreeSet<_>>(),
+                ),
                 _ => None,
             });
         let vetoed = options
             .graph_filters
             .iter()
             .find_map(|filter| match filter {
-                GenerationFilter::VertexVeto(names) => Some(names.iter().collect::<BTreeSet<_>>()),
+                GenerationFilter::VertexVeto(selectors) => Some(
+                    selectors
+                        .iter()
+                        .map(|selector| match selector {
+                            VertexSelector::Id { vertex, .. } => *vertex,
+                            VertexSelector::Name(_) => {
+                                unreachable!("generation selectors are resolved before use")
+                            }
+                        })
+                        .collect::<BTreeSet<_>>(),
+                ),
                 _ => None,
             });
         let particle_vetoes = options
             .graph_filters
             .iter()
             .find_map(|filter| match filter {
-                GenerationFilter::ParticleVeto(pdgs) => Some(pdgs.as_slice()),
+                GenerationFilter::ParticleVeto(selectors) => Some(
+                    selectors
+                        .iter()
+                        .map(|selector| match selector {
+                            ParticleSelector::Id { particle, .. } => *particle,
+                            ParticleSelector::Name(_) | ParticleSelector::Pdg(_) => {
+                                unreachable!("generation selectors are resolved before use")
+                            }
+                        })
+                        .collect::<BTreeSet<_>>(),
+                ),
                 _ => None,
             });
         let mut signatures: BTreeMap<Vec<_>, Vec<_>> = BTreeMap::new();
-        for rule in model.vertex_rules() {
+        for (rule_index, rule) in model.vertex_rules().iter().enumerate() {
+            let rule_id = model.vertex_rule_id_at(rule_index)?;
             if allowed
                 .as_ref()
-                .is_some_and(|allowed| !allowed.contains(&rule.name))
+                .is_some_and(|allowed| !allowed.contains(&rule_id))
                 || vetoed
                     .as_ref()
-                    .is_some_and(|vetoed| vetoed.contains(&rule.name))
+                    .is_some_and(|vetoed| vetoed.contains(&rule_id))
             {
                 continue;
             }
             let mut signature = Vec::new();
             let mut rejected = false;
-            for particle_name in &rule.particles {
-                let particle = model.particle(particle_name)?;
-                if particle_vetoes.is_some_and(|vetoed| {
-                    vetoed.contains(&particle.pdg_code)
-                        || model
-                            .antiparticle(particle)
-                            .is_ok_and(|anti| vetoed.contains(&anti.pdg_code))
+            for particle_id in &rule.particles {
+                let particle = model.particle_by_id(*particle_id)?;
+                if particle_vetoes.as_ref().is_some_and(|vetoed| {
+                    vetoed.contains(particle_id) || vetoed.contains(&particle.antiparticle)
                 }) {
                     rejected = true;
                     break;
@@ -2606,10 +2979,7 @@ impl InteractionSignatures {
             }
             if !rejected {
                 signature.sort();
-                signatures
-                    .entry(signature)
-                    .or_default()
-                    .push(rule.name.clone());
+                signatures.entry(signature).or_default().push(rule_id);
             }
         }
         // Stable signature and rule ordering makes graph generation
@@ -2624,13 +2994,13 @@ impl InteractionSignatures {
         self.0.keys()
     }
 
-    fn rules(&self, signature: &[EdgeColor]) -> Option<&[String]> {
+    fn rules(&self, signature: &[EdgeColor]) -> Option<&[VertexRuleId]> {
         let mut half_edges: Vec<_> = signature
             .iter()
             .map(|edge| HalfEdge {
                 direction: edge.direction,
                 data: EdgeColor {
-                    pdg: edge.pdg,
+                    particle: edge.particle,
                     direction: None,
                 },
             })
@@ -2656,11 +3026,8 @@ struct ResolvedProcess {
 
 impl ResolvedProcess {
     fn new(model: &Model, process: &Process) -> Result<Self, GenerationError> {
-        let resolve = |selector: &ParticleSelector| -> Result<Particle, ModelError> {
-            match selector {
-                ParticleSelector::Name(name) => model.particle(name).cloned(),
-                ParticleSelector::Pdg(pdg) => model.particle_by_pdg(*pdg).cloned(),
-            }
+        let resolve = |selector: &ParticleSelector| -> Result<Particle, GenerationError> {
+            Ok(model.particle_by_id(selector.resolve(model)?)?.clone())
         };
         Ok(Self {
             generation_type: process.generation_type(),
@@ -2724,11 +3091,12 @@ impl ResolvedProcess {
         // Symbolica represents every non-self-conjugate species by its particle
         // entry; particle versus antiparticle is encoded by edge direction.
         let base = if particle.is_antiparticle() {
-            model.antiparticle(particle)?
+            particle.antiparticle
         } else {
-            particle
+            model.particle_id(&particle.name)?
         };
-        let direction = if particle.is_self_antiparticle() {
+        let particle_id = model.particle_id(&particle.name)?;
+        let direction = if model.particle_is_self_conjugate(particle_id) {
             None
         } else {
             Some(match (state, particle.is_antiparticle()) {
@@ -2736,30 +3104,266 @@ impl ResolvedProcess {
                 (ExternalState::Incoming, true) | (ExternalState::Outgoing, false) => false,
             })
         };
-        let symmetrized = (match state {
+        let symmetrized_within_state = match state {
             ExternalState::Incoming => self.symmetrize_initial,
             ExternalState::Outgoing => self.symmetrize_final,
-        } || self.symmetrize_left_right)
-            && (self.generation_type == GenerationType::CrossSection
-                || !particle.is_fermion()
-                || self.symmetrize_external_fermions);
+        } && (self.generation_type == GenerationType::CrossSection
+            || !particle.is_fermion()
+            || self.symmetrize_external_fermions);
+        // Left/right symmetry is one global transformation of a sewn graph,
+        // not an independent automorphism of every external pair. It is
+        // applied after generation when canonical diagram keys are built.
+        let external_class = if symmetrized_within_state {
+            ExternalCanonicalClass::WithinState(state)
+        } else {
+            ExternalCanonicalClass::Exact { state, index }
+        };
         Ok((
             NodeColor {
                 external: Some(ExternalNode {
                     index,
                     state,
-                    particle: ParticleReference::new(&particle.name, particle.pdg_code),
-                    symmetry_class: if symmetrized { 0 } else { index + 1 },
+                    particle: model.particle_id(&particle.name)?,
                 }),
+                external_class: Some(external_class),
             },
             HalfEdge {
                 direction,
                 data: EdgeColor {
-                    pdg: base.pdg_code,
+                    particle: base,
                     direction: None,
                 },
             },
         ))
+    }
+
+    /// Choose the reduced-skeleton representative before any numerator
+    /// indices are instantiated.
+    ///
+    /// For left/right symmetry the extra orbit operation is global: either
+    /// every sewn incoming leg is exchanged with its outgoing partner, or none
+    /// is. Keeping the exact external colors in each skeleton prevents graph
+    /// automorphisms from swapping only a subset of the pairs. Once the
+    /// smallest skeleton is selected, the complete colored graph is rebuilt in
+    /// that canonical vertex/edge order so UFO slot matching and propagator
+    /// momenta are instantiated identically for isomorphic diagrams.
+    fn canonicalize_numerator_graph(
+        &self,
+        graph: &Graph<ColoredNode, EdgeColor>,
+        model: &Model,
+        grouping: &NumeratorGrouping,
+    ) -> Result<Graph<ColoredNode, EdgeColor>, GenerationError> {
+        let grouping_options = match grouping {
+            NumeratorGrouping::Identical(options)
+            | NumeratorGrouping::UpToSign(options)
+            | NumeratorGrouping::UpToScalar(options) => Some(options),
+            NumeratorGrouping::None | NumeratorGrouping::OnlyDetectZeroes => None,
+        };
+        let include_left_right =
+            self.generation_type == GenerationType::CrossSection && self.symmetrize_left_right;
+        let exact_internal_particles =
+            grouping_options.is_some_and(|options| !options.differentiate_particle_masses_only);
+
+        let mut candidates = Vec::new();
+        let mut remappings = vec![BTreeMap::new()];
+        if include_left_right {
+            let external_nodes = graph
+                .nodes()
+                .iter()
+                .enumerate()
+                .filter_map(|(node, value)| match &value.data {
+                    ColoredNode::External(external) => Some((external.index, node)),
+                    ColoredNode::Interaction(_) => None,
+                })
+                .collect::<BTreeMap<_, _>>();
+            let incoming_count = self.incoming.len();
+            if external_nodes.len() != 2 * incoming_count {
+                return Err(GenerationError::GraphConstruction(format!(
+                    "left/right canonicalization expected {} sewn external nodes, found {}",
+                    2 * incoming_count,
+                    external_nodes.len()
+                )));
+            }
+            remappings.push(
+                (0..incoming_count)
+                    .flat_map(|index| {
+                        [
+                            (
+                                external_nodes[&index],
+                                external_nodes[&(incoming_count + index)],
+                            ),
+                            (
+                                external_nodes[&(incoming_count + index)],
+                                external_nodes[&index],
+                            ),
+                        ]
+                    })
+                    .collect(),
+            );
+        }
+        for (swapped, remapping) in remappings.into_iter().enumerate() {
+            let mut skeleton = Graph::new();
+            for node in graph.nodes() {
+                skeleton.add_node(match &node.data {
+                    ColoredNode::External(external) => {
+                        NumeratorCanonicalNode::External(external.clone())
+                    }
+                    ColoredNode::Interaction(_) => NumeratorCanonicalNode::Internal,
+                });
+            }
+            for edge in graph.edges() {
+                let external = matches!(
+                    graph.nodes()[edge.vertices.0].data,
+                    ColoredNode::External(_)
+                ) || matches!(
+                    graph.nodes()[edge.vertices.1].data,
+                    ColoredNode::External(_)
+                );
+                let mut vertices = (
+                    remapping
+                        .get(&edge.vertices.0)
+                        .copied()
+                        .unwrap_or(edge.vertices.0),
+                    remapping
+                        .get(&edge.vertices.1)
+                        .copied()
+                        .unwrap_or(edge.vertices.1),
+                );
+                // As in the legacy comparison graph, all external edges point
+                // into the interaction graph.  Internal direction is omitted
+                // from the reduced skeleton but restored below.
+                if matches!(
+                    graph.nodes()[edge.vertices.1].data,
+                    ColoredNode::External(_)
+                ) {
+                    vertices = (vertices.1, vertices.0);
+                }
+                let color = if external {
+                    NumeratorCanonicalEdge::External {
+                        particle: edge.data.particle,
+                        directed: edge.directed,
+                    }
+                } else if exact_internal_particles {
+                    NumeratorCanonicalEdge::InternalParticle(edge.data.particle)
+                } else {
+                    let particle = model.particle_by_id(edge.data.particle)?;
+                    NumeratorCanonicalEdge::InternalMassAndSpin {
+                        mass: particle.mass,
+                        spin: particle.spin,
+                    }
+                };
+                skeleton
+                    .add_edge(vertices.0, vertices.1, external && edge.directed, color)
+                    .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
+            }
+            candidates.push((swapped == 1, remapping, skeleton.canonize()));
+        }
+        candidates.sort_by(|left, right| left.2.graph.cmp(&right.2.graph));
+        let mut representatives = Vec::new();
+        for (left_right_swapped, remapping, canonical) in candidates {
+            let mut canonical_to_input = vec![0; graph.nodes().len()];
+            for (input, canonical_position) in canonical.vertex_map.iter().copied().enumerate() {
+                canonical_to_input[canonical_position] =
+                    remapping.get(&input).copied().unwrap_or(input);
+            }
+            let mut input_to_canonical = vec![0; graph.nodes().len()];
+            for (canonical_position, input) in canonical_to_input.iter().copied().enumerate() {
+                input_to_canonical[input] = canonical_position;
+            }
+
+            let mut result = Graph::new();
+            for input in canonical_to_input.iter().copied() {
+                // The selected global remapping is an involution. Applying it
+                // a second time keeps each physical external label attached to
+                // its original process state while adopting the selected
+                // topology.
+                let data = remapping.get(&input).copied().unwrap_or(input);
+                result.add_node(graph.nodes()[data].data.clone());
+            }
+
+            let mut edges = graph
+                .edges()
+                .iter()
+                .map(|edge| {
+                    let external = matches!(
+                        graph.nodes()[edge.vertices.0].data,
+                        ColoredNode::External(_)
+                    ) || matches!(
+                        graph.nodes()[edge.vertices.1].data,
+                        ColoredNode::External(_)
+                    );
+                    let external_outgoing = matches!(
+                        graph.nodes()[edge.vertices.1].data,
+                        ColoredNode::External(_)
+                    );
+                    let flipped = external_outgoing
+                        || (!external
+                            && input_to_canonical[edge.vertices.0]
+                                > input_to_canonical[edge.vertices.1]);
+                    let vertices = if flipped {
+                        (
+                            input_to_canonical[edge.vertices.1],
+                            input_to_canonical[edge.vertices.0],
+                        )
+                    } else {
+                        (
+                            input_to_canonical[edge.vertices.0],
+                            input_to_canonical[edge.vertices.1],
+                        )
+                    };
+                    let mut data = edge.data;
+                    if edge.directed && flipped {
+                        data.particle = model.particle_by_id(data.particle)?.antiparticle;
+                    }
+                    if edge.directed && left_right_swapped {
+                        data.particle = model.particle_by_id(data.particle)?.antiparticle;
+                    }
+                    Ok((vertices, edge.directed, data))
+                })
+                .collect::<Result<Vec<_>, GenerationError>>()?;
+            edges.sort_by_key(|(vertices, directed, data)| {
+                (vertices.0, vertices.1, data.particle, *directed)
+            });
+            for (vertices, directed, data) in edges {
+                result
+                    .add_edge(vertices.0, vertices.1, directed, data)
+                    .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
+            }
+            if include_left_right {
+                // After the external involution is applied twice, exact
+                // process labels are restored.  In the base/anti ParticleId
+                // representation this leaves one residual CP ambiguity on
+                // the internal charged flows.  Add exactly its one global
+                // conjugate; taking the minimum below must never conjugate a
+                // subset of those edges independently.
+                let mut conjugated = Graph::new();
+                for node in result.nodes() {
+                    conjugated.add_node(node.data.clone());
+                }
+                for edge in result.edges() {
+                    let external = matches!(
+                        result.nodes()[edge.vertices.0].data,
+                        ColoredNode::External(_)
+                    ) || matches!(
+                        result.nodes()[edge.vertices.1].data,
+                        ColoredNode::External(_)
+                    );
+                    let mut data = edge.data;
+                    if edge.directed && !external {
+                        data.particle = model.particle_by_id(data.particle)?.antiparticle;
+                    }
+                    conjugated
+                        .add_edge(edge.vertices.0, edge.vertices.1, edge.directed, data)
+                        .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
+                }
+                representatives.push(conjugated);
+            }
+            representatives.push(result);
+        }
+        representatives
+            .into_iter()
+            .min()
+            .ok_or_else(|| GenerationError::GraphConstruction("no canonical graph".to_owned()))
     }
 
     // Normalize every fermion chain before exposing the diagram. A chain keeps
@@ -2774,7 +3378,8 @@ impl ResolvedProcess {
         let mut adjacency = vec![Vec::new(); graph.nodes().len()];
         let mut degrees = vec![0; graph.nodes().len()];
         for (edge_id, edge) in graph.edges().iter().enumerate() {
-            if !model.particle_by_pdg(edge.data.pdg)?.is_fermion() {
+            let particle = model.particle_by_id(edge.data.particle)?;
+            if !(particle.is_fermion() || particle.is_ghost()) {
                 continue;
             }
             let (left, right) = edge.vertices;
@@ -2813,7 +3418,7 @@ impl ResolvedProcess {
         let mut line_pairings = Vec::new();
 
         // First fix flows connected to external legs, then all internal flows.
-        for (node_id, _) in external_nodes.values() {
+        for (node_id, external) in external_nodes.values() {
             let Some((edge_id, _)) = adjacency[*node_id]
                 .iter()
                 .find(|(edge_id, _)| !visited_edges[*edge_id])
@@ -2828,6 +3433,13 @@ impl ResolvedProcess {
                 &mut normalized_vertices,
             );
             let legs = legs.into_iter().collect::<Vec<_>>();
+            // Ghost chains are oriented like fermion chains but do not enter
+            // the external-fermion permutation sign. Physical processes do
+            // not normally expose external ghosts, yet keeping this split
+            // makes the flow normalization faithful for complete UFO models.
+            if !model.particle_by_id(external.particle)?.is_fermion() {
+                continue;
+            }
             let [first_leg, second_leg] = legs.as_slice() else {
                 return Err(GenerationError::InvalidExternalFermionLegCount { legs });
             };
@@ -2865,11 +3477,8 @@ impl ResolvedProcess {
             line_pairings.push((*first_leg, *second_leg));
         }
         for edge_id in 0..graph.edges().len() {
-            if model
-                .particle_by_pdg(graph.edges()[edge_id].data.pdg)?
-                .is_fermion()
-                && !visited_edges[edge_id]
-            {
+            let particle = model.particle_by_id(graph.edges()[edge_id].data.particle)?;
+            if (particle.is_fermion() || particle.is_ghost()) && !visited_edges[edge_id] {
                 normalize_fermion_component(
                     graph,
                     edge_id,
@@ -2886,8 +3495,12 @@ impl ResolvedProcess {
         }
         for (edge_id, edge) in graph.edges().iter().enumerate() {
             let (left, right) = normalized_vertices[edge_id].unwrap_or(edge.vertices);
+            let mut data = edge.data;
+            if edge.directed && (left, right) != edge.vertices {
+                data.particle = model.particle_by_id(data.particle)?.antiparticle;
+            }
             normalized_graph
-                .add_edge(left, right, edge.directed, edge.data)
+                .add_edge(left, right, edge.directed, data)
                 .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
         }
 
@@ -2981,18 +3594,18 @@ impl ResolvedProcess {
         particle: &Particle,
     ) -> Result<HalfEdge<EdgeColor>, GenerationError> {
         let base = if particle.is_antiparticle() {
-            model.antiparticle(particle)?
+            particle.antiparticle
         } else {
-            particle
+            model.particle_id(&particle.name)?
         };
         Ok(HalfEdge {
-            direction: if particle.is_self_antiparticle() {
+            direction: if model.particle_is_self_conjugate(model.particle_id(&particle.name)?) {
                 None
             } else {
                 Some(particle.is_antiparticle())
             },
             data: EdgeColor {
-                pdg: base.pdg_code,
+                particle: base,
                 direction: None,
             },
         })
@@ -3005,20 +3618,20 @@ impl ResolvedProcess {
         graph: &Graph<ColoredNode, EdgeColor>,
         model: &Model,
         options: &GenerationOptions,
-    ) -> Result<Vec<CutPartition>, GenerationError> {
-        let unresolved = Self::unresolved_cut_content(model, options)?;
-        let targets: Vec<Vec<i64>> = self
+    ) -> Result<Vec<DiagramCut>, GenerationError> {
+        let unresolved = unresolved_cut_content(model, options)?;
+        let targets: Vec<Vec<ParticleId>> = self
             .outgoing
             .iter()
             .map(|particles| {
-                let mut pdgs = particles
+                let mut particle_ids = particles
                     .iter()
-                    .map(|particle| particle.pdg_code)
-                    .collect::<Vec<_>>();
-                pdgs.sort();
-                pdgs
+                    .map(|particle| model.particle_id(&particle.name))
+                    .collect::<Result<Vec<_>, _>>()?;
+                particle_ids.sort();
+                Ok(particle_ids)
             })
-            .collect();
+            .collect::<Result<_, ModelError>>()?;
         let he_graph: HedgeGraph<EdgeColor, ColoredNode, ()> = graph.clone().into();
         let mut source = Vec::new();
         let mut target = Vec::new();
@@ -3069,18 +3682,34 @@ impl ResolvedProcess {
             blob_range.contains(&blobs) && spectator_range.contains(&spectators)
         };
 
-        let summarize_side = |subgraph: &SuBitGraph| -> Result<CutSide, GenerationError> {
+        let stable_half_edges = |subgraph: &SuBitGraph| {
+            let mut half_edges = subgraph
+                .included_iter()
+                .map(|hedge| DiagramHalfEdge {
+                    edge: EdgeId(he_graph[&hedge].0),
+                    endpoint: match he_graph.flow(hedge) {
+                        Flow::Source => DiagramEndpoint::Source,
+                        Flow::Sink => DiagramEndpoint::Target,
+                    },
+                })
+                .collect::<Vec<_>>();
+            half_edges.sort();
+            half_edges.dedup();
+            half_edges
+        };
+        let summarize_side = |subgraph: &SuBitGraph| -> Result<DiagramCutSide, GenerationError> {
             let mut coupling_orders = BTreeMap::new();
             for (_, _, node) in he_graph.iter_nodes_of(subgraph) {
-                let ColoredNode::Interaction(rule_name) = node else {
+                let ColoredNode::Interaction(rule_id) = node else {
                     continue;
                 };
-                for (name, order) in model.vertex_rule(rule_name)?.coupling_orders(model)? {
+                for (name, order) in model.vertex_rule_by_id(*rule_id)?.coupling_orders(model) {
                     *coupling_orders.entry(name).or_insert(0) += order;
                 }
             }
             let internal = InternalSubGraph::cleaned_filter_pessimist(subgraph.clone(), &he_graph);
-            Ok(CutSide {
+            Ok(DiagramCutSide {
+                half_edges: stable_half_edges(subgraph),
                 coupling_orders,
                 loop_count: he_graph.cyclotomatic_number(&internal),
             })
@@ -3096,11 +3725,11 @@ impl ResolvedProcess {
             let mut cut_content = cut
                 .iter_left_hedges()
                 .map(|hedge| {
-                    let particle = model.particle_by_pdg(he_graph[[&hedge]].pdg)?;
+                    let particle = he_graph[[&hedge]].particle;
                     if matches!(he_graph.flow(hedge), Flow::Sink) {
-                        model.antiparticle(particle).map(|anti| anti.pdg_code)
+                        Ok(model.particle_by_id(particle)?.antiparticle)
                     } else {
-                        Ok(particle.pdg_code)
+                        Ok(particle)
                     }
                 })
                 .collect::<Result<Vec<_>, ModelError>>()?;
@@ -3111,7 +3740,8 @@ impl ResolvedProcess {
             {
                 continue;
             }
-            partitions.push(CutPartition {
+            partitions.push(DiagramCut {
+                cut: stable_half_edges(&cut.left),
                 left: summarize_side(&left)?,
                 right: summarize_side(&right)?,
             });
@@ -3119,48 +3749,9 @@ impl ResolvedProcess {
         Ok(partitions)
     }
 
-    fn unresolved_cut_content(
-        model: &Model,
-        options: &GenerationOptions,
-    ) -> Result<Option<UnresolvedCutContent>, GenerationError> {
-        let Some(required) = options
-            .graph_filters
-            .iter()
-            .find_map(|filter| match filter {
-                GenerationFilter::PerturbativeOrders(required) => Some(required),
-                _ => None,
-            })
-        else {
-            return Ok(None);
-        };
-        let mut particles = BTreeSet::new();
-        for rule in model.vertex_rules() {
-            let orders = rule.coupling_orders(model)?;
-            if !required.keys().any(|name| orders.contains_key(name)) {
-                continue;
-            }
-            for particle_name in &rule.particles {
-                let particle = model.particle(particle_name)?;
-                if particle.is_massless() {
-                    particles.insert(particle.pdg_code);
-                }
-            }
-        }
-        let maximum_multiplicity = required.values().try_fold(0_usize, |sum, order| {
-            sum.checked_add(*order)
-                .ok_or(GenerationError::ArithmeticOverflow(
-                    "the unresolved cut multiplicity",
-                ))
-        })?;
-        Ok(Some(UnresolvedCutContent {
-            particles,
-            maximum_multiplicity,
-        }))
-    }
-
     fn matches_cut_content(
-        cut_content: &[i64],
-        target: &[i64],
+        cut_content: &[ParticleId],
+        target: &[ParticleId],
         unresolved: Option<&UnresolvedCutContent>,
     ) -> bool {
         let mut remainder = cut_content.to_vec();
@@ -3235,20 +3826,31 @@ impl ResolvedProcess {
 #[cfg(test)]
 mod tests {
     use crate::{CancellationToken, GraphGroupingOptions, NumeratorGrouping};
-    use feynkit_model::{
-        ComplexValue, Coupling, LorentzStructure, ModelDefinition, Order, Parameter,
-        ParameterNature, ParameterType, Propagator,
-    };
+    use feynkit_model::Model;
 
     use super::*;
 
     fn test_atom(expression: &str) -> Atom {
+        Atom::parse(expression, "UFO", ParseSettings::default()).unwrap()
+    }
+
+    fn factor_atom(expression: &str) -> Atom {
         Atom::parse(
             expression,
-            "feynkit_generator_test",
+            "feynkit_generator_factor",
             ParseSettings::default(),
         )
         .unwrap()
+    }
+
+    fn function_count(expression: &Atom, head: symbolica::atom::Symbol) -> usize {
+        let mut count = 0;
+        let _ = expression.replace_map(|term, _, _| {
+            if matches!(term, AtomView::Fun(function) if function.get_symbol() == head) {
+                count += 1;
+            }
+        });
+        count
     }
 
     fn tensor_test_legs() -> [NumeratorHalfEdge; 4] {
@@ -3281,79 +3883,34 @@ mod tests {
     }
 
     fn scalar_model() -> Model {
-        Model::new(ModelDefinition {
-            name: "phi3".to_owned(),
-            restriction: None,
-            orders: vec![Order {
-                name: "QED".to_owned(),
-                expansion_order: 99,
-                hierarchy: 1,
-            }],
-            parameters: vec![
-                Parameter {
-                    name: "ZERO".to_owned(),
-                    lhablock: None,
-                    lhacode: None,
-                    nature: ParameterNature::Internal,
-                    parameter_type: ParameterType::Real,
-                    value: Some(ComplexValue::ZERO),
-                    expression: None,
-                },
-                Parameter {
-                    name: "M".to_owned(),
-                    lhablock: Some("MASS".to_owned()),
-                    lhacode: Some(vec![25]),
-                    nature: ParameterNature::External,
-                    parameter_type: ParameterType::Real,
-                    value: Some(ComplexValue::new(1.0, 0.0)),
-                    expression: None,
-                },
-            ],
-            particles: vec![Particle {
-                pdg_code: 25,
-                name: "phi".to_owned(),
-                antiname: "phi".to_owned(),
-                spin: 1,
-                color: 1,
-                mass: "M".to_owned(),
-                width: "ZERO".to_owned(),
-                texname: "phi".to_owned(),
-                antitexname: "phi".to_owned(),
-                charge: 0.0,
-                ghost_number: 0,
-                lepton_number: 0,
-                y_charge: 0,
-                propagating: true,
-                goldstone: false,
-                propagator: None,
-            }],
-            propagators: vec![Propagator {
-                name: "phi_prop".to_owned(),
-                particle: "phi".to_owned(),
-                numerator: "1".to_owned(),
-                denominator: "P^2-M^2".to_owned(),
-            }],
-            lorentz_structures: vec![LorentzStructure {
-                name: "L1".to_owned(),
-                spins: vec![1, 1, 1],
-                structure: "1".to_owned(),
-            }],
-            couplings: vec![Coupling {
-                name: "GC1".to_owned(),
-                expression: "g".to_owned(),
-                orders: BTreeMap::from([("QED".to_owned(), 1)]),
-                value: None,
-            }],
-            vertex_rules: vec![VertexRule {
-                name: "V1".to_owned(),
-                particles: vec!["phi".to_owned(); 3],
-                color_structures: vec!["1".to_owned()],
-                lorentz_structures: vec!["L1".to_owned()],
-                couplings: vec![vec![Some("GC1".to_owned())]],
-            }],
-            functions: Vec::new(),
-            form_factors: Vec::new(),
-        })
+        Model::from_json(
+            r#"{
+                "name":"phi3",
+                "restriction":null,
+                "orders":[{"name":"QED","expansion_order":99,"hierarchy":1}],
+                "parameters":[
+                    {"name":"ZERO","lhablock":null,"lhacode":null,"nature":"internal","parameter_type":"real","value":[0.0,0.0],"expression":null},
+                    {"name":"M","lhablock":"MASS","lhacode":[25],"nature":"external","parameter_type":"real","value":[1.0,0.0],"expression":null}
+                ],
+                "particles":[
+                    {"pdg_code":25,"name":"phi","antiname":"phi","spin":1,"color":1,"mass":"M","width":"ZERO","texname":"phi","antitexname":"phi","charge":0.0,"ghost_number":0,"lepton_number":0,"y_charge":0}
+                ],
+                "propagators":[
+                    {"name":"phi_prop","particle":"phi","numerator":"1","denominator":"P^2-M^2"}
+                ],
+                "lorentz_structures":[
+                    {"name":"L1","spins":[1,1,1],"structure":"1"}
+                ],
+                "couplings":[
+                    {"name":"GC1","expression":"g","orders":[["QED",1]],"value":null}
+                ],
+                "vertex_rules":[
+                    {"name":"V1","particles":["phi","phi","phi"],"color_structures":["1"],"lorentz_structures":["L1"],"couplings":[["GC1"]]}
+                ],
+                "functions":[],
+                "form_factors":[]
+            }"#,
+        )
         .unwrap()
     }
 
@@ -3366,10 +3923,12 @@ mod tests {
                     {"name":"QED","expansion_order":99,"hierarchy":1},
                     {"name":"QCD","expansion_order":99,"hierarchy":1}
                 ],
-                "parameters":[{
-                    "name":"ZERO","lhablock":null,"lhacode":null,"nature":"internal",
-                    "parameter_type":"real","value":[0.0,0.0],"expression":null
-                }],
+                "parameters":[
+                    {"name":"ZERO","lhablock":null,"lhacode":null,"nature":"internal",
+                     "parameter_type":"real","value":[0.0,0.0],"expression":null},
+                    {"name":"M","lhablock":"MASS","lhacode":[25],"nature":"external",
+                     "parameter_type":"real","value":[1.0,0.0],"expression":null}
+                ],
                 "particles":[
                     {"pdg_code":1,"name":"f","antiname":"f~","spin":2,"color":1,
                      "mass":"ZERO","width":"ZERO","texname":"f","antitexname":"f~",
@@ -3379,6 +3938,9 @@ mod tests {
                      "charge":1.0,"ghost_number":0,"lepton_number":-1,"y_charge":0},
                     {"pdg_code":22,"name":"a","antiname":"a","spin":3,"color":1,
                      "mass":"ZERO","width":"ZERO","texname":"a","antitexname":"a",
+                     "charge":0.0,"ghost_number":0,"lepton_number":0,"y_charge":0},
+                    {"pdg_code":25,"name":"phi","antiname":"phi","spin":1,"color":1,
+                     "mass":"M","width":"ZERO","texname":"phi","antitexname":"phi",
                      "charge":0.0,"ghost_number":0,"lepton_number":0,"y_charge":0}
                 ],
                 "propagators":[
@@ -3473,6 +4035,27 @@ mod tests {
         Process::amplitude([22_i64], [22_i64])
     }
 
+    fn scalar_cross_section_process() -> Process {
+        Process::cross_section(["phi", "phi"], ["phi", "phi"])
+            .with_loop_count(1, 1)
+            .unwrap()
+    }
+
+    fn particle(model: &Model, pdg: i64) -> ParticleId {
+        model.particle_id_by_pdg(pdg).unwrap()
+    }
+
+    fn vertex(model: &Model, name: &str) -> VertexRuleId {
+        model.vertex_rule_id(name).unwrap()
+    }
+
+    fn edge(model: &Model, pdg: i64) -> EdgeColor {
+        EdgeColor {
+            particle: particle(model, pdg),
+            direction: None,
+        }
+    }
+
     #[test]
     fn generates_tree_and_one_loop_diagrams() {
         let generator = Generator::new(scalar_model());
@@ -3491,8 +4074,225 @@ mod tests {
             generated
                 .diagrams
                 .iter()
-                .all(|diagram| diagram.numerator().is_some())
+                .all(|diagram| !diagram.numerator().is_zero())
         );
+    }
+
+    #[test]
+    fn finalizes_external_fermion_projectors_unless_explicitly_overridden() {
+        let generator = Generator::new(fermion_model());
+        let process = Process::amplitude([1_i64, -1], [1_i64, -1])
+            .with_loop_count(0, 0)
+            .unwrap();
+        let options = GenerationOptions::default().threads(1).max_vertices(2);
+        let generated = generator.generate(&process, &options).unwrap();
+        assert!(!generated.diagrams.is_empty());
+        for diagram in &generated.diagrams {
+            for wavefunction in [PS.u, PS.ubar, PS.v, PS.vbar] {
+                assert_eq!(function_count(diagram.projector(), wavefunction), 1);
+            }
+            assert_eq!(
+                function_count(diagram.projector(), symbol!("FeynKit::SourceIndex"))
+                    + function_count(diagram.projector(), symbol!("FeynKit::SinkIndex")),
+                4
+            );
+        }
+
+        let explicit = generator
+            .generate(&process, &options.projector(Atom::one()))
+            .unwrap();
+        assert!(
+            explicit
+                .diagrams
+                .iter()
+                .all(|diagram| diagram.projector() == &Atom::one())
+        );
+    }
+
+    #[test]
+    fn finalizes_vector_projectors_and_leaves_scalar_states_trivial() {
+        let generator = Generator::new(fermion_model());
+        let mut vector_graph = Graph::new();
+        let incoming = vector_graph.add_node(ColoredNode::External(ExternalNode {
+            index: 0,
+            state: ExternalState::Incoming,
+            particle: particle(&generator.model, 22),
+        }));
+        let left = vector_graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
+        let right = vector_graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
+        let outgoing = vector_graph.add_node(ColoredNode::External(ExternalNode {
+            index: 1,
+            state: ExternalState::Outgoing,
+            particle: particle(&generator.model, 22),
+        }));
+        vector_graph
+            .add_edge(incoming, left, false, edge(&generator.model, 22))
+            .unwrap();
+        vector_graph
+            .add_edge(right, outgoing, false, edge(&generator.model, 22))
+            .unwrap();
+        let vector_projector = generator.external_state_projector(&vector_graph).unwrap();
+        assert_eq!(function_count(&vector_projector, PS.eps), 1);
+        assert_eq!(function_count(&vector_projector, PS.ebar), 1);
+        assert_eq!(
+            function_count(&vector_projector, symbol!("FeynKit::SinkIndex")),
+            1
+        );
+        assert_eq!(
+            function_count(&vector_projector, symbol!("FeynKit::SourceIndex")),
+            1
+        );
+
+        let mut scalar_graph = Graph::new();
+        let scalar = scalar_graph.add_node(ColoredNode::External(ExternalNode {
+            index: 0,
+            state: ExternalState::Incoming,
+            particle: particle(&generator.model, 25),
+        }));
+        let internal =
+            scalar_graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
+        scalar_graph
+            .add_edge(scalar, internal, false, edge(&generator.model, 25))
+            .unwrap();
+        assert_eq!(
+            generator.external_state_projector(&scalar_graph).unwrap(),
+            Atom::one()
+        );
+    }
+
+    #[test]
+    fn forced_cuts_retain_only_the_requested_typed_edge_set() {
+        let generator = Generator::new(scalar_model());
+        let process = scalar_cross_section_process();
+        let options = GenerationOptions::default().threads(1).max_vertices(4);
+        let generated = generator.generate(&process, &options).unwrap();
+        let requested: BTreeSet<EdgeId> = generated
+            .diagrams
+            .iter()
+            .flat_map(|diagram| diagram.cuts())
+            .next()
+            .unwrap()
+            .cut
+            .iter()
+            .map(|half_edge| half_edge.edge)
+            .collect();
+
+        let forced = generator
+            .generate(&process, &options.clone().forced_cuts([requested.clone()]))
+            .unwrap();
+
+        assert!(!forced.diagrams.is_empty());
+        assert!(forced.diagrams.iter().all(|diagram| {
+            !diagram.cuts().is_empty()
+                && diagram.cuts().iter().all(|cut| {
+                    cut.cut
+                        .iter()
+                        .map(|half_edge| half_edge.edge)
+                        .collect::<BTreeSet<_>>()
+                        == requested
+                })
+        }));
+    }
+
+    #[test]
+    fn unknown_forced_cut_reports_the_typed_edge_set() {
+        let unknown = BTreeSet::from([EdgeId(usize::MAX)]);
+        let result = Generator::new(scalar_model()).generate(
+            &scalar_cross_section_process(),
+            &GenerationOptions::default()
+                .threads(1)
+                .max_vertices(4)
+                .forced_cuts([unknown]),
+        );
+
+        assert!(matches!(
+            result,
+            Err(GenerationError::UnknownForcedCut { edges })
+                if edges == vec![usize::MAX]
+        ));
+    }
+
+    #[test]
+    fn forced_cut_filtering_precedes_numerator_grouping() {
+        let generator = Generator::new(scalar_model());
+        let process = scalar_cross_section_process();
+        let options = GenerationOptions::default().threads(1).max_vertices(4);
+        let generated = generator.generate(&process, &options).unwrap();
+        let cut_sets = generated
+            .diagrams
+            .iter()
+            .flat_map(|diagram| diagram.cuts())
+            .map(|cut| {
+                cut.cut
+                    .iter()
+                    .map(|half_edge| half_edge.edge)
+                    .collect::<BTreeSet<_>>()
+            })
+            .collect::<BTreeSet<_>>();
+        assert!(
+            cut_sets.len() > 1,
+            "fixture must exercise actual cut filtering"
+        );
+        let requested = cut_sets.into_iter().next().unwrap();
+
+        let grouped = generator
+            .generate(
+                &process,
+                &options.forced_cuts([requested.clone()]).numerator_grouping(
+                    NumeratorGrouping::Identical(GraphGroupingOptions::default()),
+                ),
+            )
+            .unwrap();
+
+        grouped.validate_groups().unwrap();
+        assert!(!grouped.groups.is_empty());
+        assert!(grouped.diagrams.iter().all(|diagram| {
+            !diagram.cuts().is_empty()
+                && diagram.cuts().iter().all(|cut| {
+                    cut.cut
+                        .iter()
+                        .map(|half_edge| half_edge.edge)
+                        .collect::<BTreeSet<_>>()
+                        == requested
+                })
+        }));
+    }
+
+    #[test]
+    fn rejects_model_bound_process_and_filter_selectors_from_another_model() {
+        let source = scalar_model();
+        let mut target_json: serde_json::Value =
+            serde_json::from_str(&source.to_json().unwrap()).unwrap();
+        target_json["name"] = serde_json::Value::String("other_phi3".to_owned());
+        let target = Model::from_json(&serde_json::to_string(&target_json).unwrap()).unwrap();
+        assert_ne!(source.fingerprint(), target.fingerprint());
+
+        let foreign_particle =
+            ParticleSelector::by_id(&source, source.particle_id("phi").unwrap()).unwrap();
+        let process = Process::amplitude([foreign_particle.clone()], ["phi"]);
+        assert!(matches!(
+            Generator::new(target.clone()).generate(&process, &GenerationOptions::default()),
+            Err(GenerationError::Selector(SelectorError::ModelMismatch {
+                kind: "particle",
+                ..
+            }))
+        ));
+
+        let foreign_vertex =
+            VertexSelector::by_id(&source, source.vertex_rule_id("V1").unwrap()).unwrap();
+        for filter in [
+            GenerationFilter::ParticleVeto(vec![foreign_particle]),
+            GenerationFilter::VertexAllow(vec![foreign_vertex]),
+        ] {
+            let options = GenerationOptions::default().with_graph_filter(filter);
+            assert!(matches!(
+                Generator::new(target.clone())
+                    .generate(&Process::amplitude(["phi"], ["phi", "phi"]), &options,),
+                Err(GenerationError::Selector(
+                    SelectorError::ModelMismatch { .. }
+                ))
+            ));
+        }
     }
 
     #[test]
@@ -3526,26 +4326,32 @@ mod tests {
     #[test]
     fn directed_and_undirected_half_edges_use_the_interaction_key_order() {
         let model = fermion_model();
-        let options = GenerationOptions::default()
-            .with_graph_filter(GenerationFilter::VertexAllow(vec!["V".to_owned()]));
+        let options =
+            GenerationOptions::default().with_graph_filter(GenerationFilter::VertexAllow(vec![
+                VertexSelector::Name("V".to_owned()),
+            ]));
+        let options = options.resolve_selectors(&model).unwrap();
         let signatures = InteractionSignatures::new(&model, &options).unwrap();
         let mut signature = vec![
             EdgeColor {
-                pdg: 1,
+                particle: particle(&model, 1),
                 direction: Some(false),
             },
             EdgeColor {
-                pdg: 1,
+                particle: particle(&model, 1),
                 direction: Some(true),
             },
             EdgeColor {
-                pdg: 22,
+                particle: particle(&model, 22),
                 direction: None,
             },
         ];
         signature.sort();
 
-        assert_eq!(signatures.rules(&signature).unwrap(), &["V".to_owned()]);
+        assert_eq!(
+            signatures.rules(&signature).unwrap(),
+            &[vertex(&model, "V")]
+        );
     }
 
     #[test]
@@ -3555,30 +4361,33 @@ mod tests {
             ResolvedProcess::new(&model, &Process::amplitude([1_i64, -1], Vec::<i64>::new()))
                 .unwrap();
         let mut graph = Graph::new();
-        let particle = graph.add_node(ColoredNode::External(ExternalNode {
+        let particle_vertex = graph.add_node(ColoredNode::External(ExternalNode {
             index: 0,
             state: ExternalState::Incoming,
-            particle: ParticleReference::new("f", 1),
-            symmetry_class: 1,
+            particle: particle(&model, 1),
         }));
-        let left = graph.add_node(ColoredNode::Interaction("V".to_owned()));
-        let right = graph.add_node(ColoredNode::Interaction("V".to_owned()));
+        let left = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
+        let right = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
         let antiparticle = graph.add_node(ColoredNode::External(ExternalNode {
             index: 1,
             state: ExternalState::Incoming,
-            particle: ParticleReference::new("f~", -1),
-            symmetry_class: 2,
+            particle: particle(&model, -1),
         }));
         let fermion = EdgeColor {
-            pdg: 1,
+            particle: particle(&model, 1),
             direction: None,
         };
-        graph.add_edge(particle, left, true, fermion).unwrap();
+        graph
+            .add_edge(particle_vertex, left, true, fermion)
+            .unwrap();
         graph.add_edge(right, left, true, fermion).unwrap();
         graph.add_edge(right, antiparticle, true, fermion).unwrap();
 
         let normalized = process.normalize_fermion_flows(&graph, &model).unwrap();
-        assert_eq!(normalized.graph.edges()[0].vertices, (particle, left));
+        assert_eq!(
+            normalized.graph.edges()[0].vertices,
+            (particle_vertex, left)
+        );
         assert_eq!(normalized.graph.edges()[1].vertices, (left, right));
         assert_eq!(normalized.graph.edges()[2].vertices, (right, antiparticle));
         assert!(normalized.signs.external_ordering_negative);
@@ -3600,13 +4409,195 @@ mod tests {
     }
 
     #[test]
+    fn ghost_chains_are_oriented_without_entering_external_fermion_signs() {
+        let source = fermion_model().to_json().unwrap();
+        let mut definition = serde_json::from_str::<serde_json::Value>(&source).unwrap();
+        for particle in definition["particles"].as_array_mut().unwrap() {
+            match particle["name"].as_str() {
+                Some("f") => {
+                    particle["spin"] = serde_json::json!(-1);
+                    particle["ghost_number"] = serde_json::json!(1);
+                }
+                Some("f~") => {
+                    particle["spin"] = serde_json::json!(-1);
+                    particle["ghost_number"] = serde_json::json!(-1);
+                }
+                _ => {}
+            }
+        }
+        definition["lorentz_structures"][0]["spins"] = serde_json::json!([-1, -1, 3]);
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let process =
+            ResolvedProcess::new(&model, &Process::amplitude([1_i64, -1], Vec::<i64>::new()))
+                .unwrap();
+        let mut graph = Graph::new();
+        let ghost = graph.add_node(ColoredNode::External(ExternalNode {
+            index: 0,
+            state: ExternalState::Incoming,
+            particle: particle(&model, 1),
+        }));
+        let left = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
+        let right = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
+        let antighost = graph.add_node(ColoredNode::External(ExternalNode {
+            index: 1,
+            state: ExternalState::Incoming,
+            particle: particle(&model, -1),
+        }));
+        let flow = EdgeColor {
+            particle: particle(&model, 1),
+            direction: None,
+        };
+        graph.add_edge(ghost, left, true, flow).unwrap();
+        graph.add_edge(right, left, true, flow).unwrap();
+        graph.add_edge(right, antighost, true, flow).unwrap();
+
+        let normalized = process.normalize_fermion_flows(&graph, &model).unwrap();
+        assert_eq!(normalized.graph.edges()[0].vertices, (ghost, left));
+        assert_eq!(normalized.graph.edges()[1].vertices, (left, right));
+        assert_eq!(normalized.graph.edges()[2].vertices, (right, antighost));
+        assert!(!normalized.signs.external_ordering_negative);
+    }
+
+    #[test]
+    fn global_left_right_canonicalization_preserves_charged_slash_momenta() {
+        let model = fermion_model();
+        let process = ResolvedProcess::new(
+            &model,
+            &Process::cross_section([1_i64, -1], [22_i64]).symmetrize_left_right(true),
+        )
+        .unwrap();
+        let mut graph = Graph::new();
+        let external_particles = [1_i64, -1, 1, -1];
+        let external_nodes = external_particles
+            .into_iter()
+            .enumerate()
+            .map(|(index, pdg)| {
+                graph.add_node(ColoredNode::External(ExternalNode {
+                    index,
+                    state: if index < 2 {
+                        ExternalState::Incoming
+                    } else {
+                        ExternalState::Outgoing
+                    },
+                    particle: particle(&model, pdg),
+                }))
+            })
+            .collect::<Vec<_>>();
+        let left = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
+        let right = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
+        let charged = EdgeColor {
+            particle: particle(&model, 1),
+            direction: None,
+        };
+        graph
+            .add_edge(external_nodes[0], left, true, charged)
+            .unwrap();
+        graph
+            .add_edge(left, external_nodes[1], true, charged)
+            .unwrap();
+        graph
+            .add_edge(right, external_nodes[2], true, charged)
+            .unwrap();
+        graph
+            .add_edge(external_nodes[3], right, true, charged)
+            .unwrap();
+        graph.add_edge(left, right, true, charged).unwrap();
+
+        let external_swap = BTreeMap::from([
+            (external_nodes[0], external_nodes[2]),
+            (external_nodes[1], external_nodes[3]),
+            (external_nodes[2], external_nodes[0]),
+            (external_nodes[3], external_nodes[1]),
+        ]);
+        let mut mirror = Graph::new();
+        for node in graph.nodes() {
+            mirror.add_node(node.data.clone());
+        }
+        for edge in graph.edges() {
+            let mut data = edge.data;
+            data.particle = model.particle_by_id(data.particle).unwrap().antiparticle;
+            mirror
+                .add_edge(
+                    external_swap
+                        .get(&edge.vertices.0)
+                        .copied()
+                        .unwrap_or(edge.vertices.0),
+                    external_swap
+                        .get(&edge.vertices.1)
+                        .copied()
+                        .unwrap_or(edge.vertices.1),
+                    edge.directed,
+                    data,
+                )
+                .unwrap();
+        }
+
+        let grouping = NumeratorGrouping::UpToScalar(GraphGroupingOptions::default());
+        let canonical = process
+            .canonicalize_numerator_graph(&graph, &model, &grouping)
+            .unwrap();
+        let canonical_mirror = process
+            .canonicalize_numerator_graph(&mirror, &model, &grouping)
+            .unwrap();
+        assert_eq!(canonical, canonical_mirror);
+
+        let internal_edge = canonical
+            .edges()
+            .iter()
+            .enumerate()
+            .find(|(_, edge)| {
+                matches!(
+                    canonical.nodes()[edge.vertices.0].data,
+                    ColoredNode::Interaction(_)
+                ) && matches!(
+                    canonical.nodes()[edge.vertices.1].data,
+                    ColoredNode::Interaction(_)
+                )
+            })
+            .map(|(edge, _)| edge)
+            .unwrap();
+        let generator = Generator::new(model.clone());
+        let particle_numerator = generator
+            .propagator_numerator(model.particle_by_id(particle(&model, 1)).unwrap())
+            .unwrap();
+        let antiparticle_numerator = generator
+            .propagator_numerator(model.particle_by_id(particle(&model, -1)).unwrap())
+            .unwrap();
+        assert_eq!(particle_numerator, antiparticle_numerator);
+        let propagator = generator
+            .propagator_numerator(
+                model
+                    .particle_by_id(canonical.edges()[internal_edge].data.particle)
+                    .unwrap(),
+            )
+            .unwrap();
+        let legs = [
+            NumeratorHalfEdge {
+                edge: internal_edge,
+                flow: Flow::Source,
+                spin: 2,
+                color: 1,
+            },
+            NumeratorHalfEdge {
+                edge: internal_edge,
+                flow: Flow::Sink,
+                spin: 2,
+                color: 1,
+            },
+        ];
+        let localized = NumeratorInstantiation {
+            owner: NumeratorOwner::Edge(internal_edge),
+            legs: &legs,
+        }
+        .instantiate(&propagator, NumeratorSector::Spin)
+        .unwrap();
+        assert_eq!(function_count(&localized, symbol!("FeynKit::Momentum")), 1);
+    }
+
+    #[test]
     fn vertex_orders_take_each_order_maximum_and_graph_orders_sum_vertices() {
         let model = fermion_model();
-        let rule_orders = model
-            .vertex_rule("V")
-            .unwrap()
-            .coupling_orders(&model)
-            .unwrap();
+        let rule_orders = model.vertex_rule("V").unwrap().coupling_orders(&model);
         assert_eq!(
             rule_orders,
             BTreeMap::from([("QCD".to_owned(), 2), ("QED".to_owned(), 3)])
@@ -3614,8 +4605,8 @@ mod tests {
 
         let generator = Generator::new(model);
         let mut graph = Graph::new();
-        graph.add_node(ColoredNode::Interaction("V".to_owned()));
-        graph.add_node(ColoredNode::Interaction("V".to_owned()));
+        graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
+        graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
         assert_eq!(
             generator.coupling_orders(&graph).unwrap(),
             BTreeMap::from([("QCD".to_owned(), 4), ("QED".to_owned(), 6)])
@@ -3635,6 +4626,7 @@ mod tests {
             .interaction_numerator(model.vertex_rule("V").unwrap(), &instantiation)
             .unwrap();
 
+        let numerator = numerator.to_plain_string();
         assert!(numerator.contains("spenso::gamma"));
         assert!(numerator.contains("spenso::t"));
         assert!(!numerator.contains("Gamma("));
@@ -3649,30 +4641,30 @@ mod tests {
             legs: &legs,
         };
         let gamma = instantiation
-            .instantiate("Gamma(3,2,1)", NumeratorSector::Spin)
+            .instantiate(&test_atom("Gamma(3,2,1)"), NumeratorSector::Spin)
             .unwrap();
         assert_eq!(
-            test_atom(&gamma),
+            gamma,
             test_atom(
                 "spenso::gamma(spenso::bis(4,FeynKit::SinkIndex(20,1)),spenso::bis(4,FeynKit::SourceIndex(10,1)),spenso::mink(4,FeynKit::SourceIndex(30,1)))"
             )
         );
 
         let metric = instantiation
-            .instantiate("Metric(3,4)", NumeratorSector::Spin)
+            .instantiate(&test_atom("Metric(3,4)"), NumeratorSector::Spin)
             .unwrap();
         assert_eq!(
-            test_atom(&metric),
+            metric,
             test_atom(
                 "spenso::g(spenso::mink(4,FeynKit::SourceIndex(30,1)),spenso::mink(4,FeynKit::SinkIndex(40,1)))"
             )
         );
 
         let identity = instantiation
-            .instantiate("Identity(1,2)", NumeratorSector::Spin)
+            .instantiate(&test_atom("Identity(1,2)"), NumeratorSector::Spin)
             .unwrap();
         assert_eq!(
-            test_atom(&identity),
+            identity,
             test_atom(
                 "spenso::g(spenso::bis(4,FeynKit::SourceIndex(10,1)),spenso::bis(4,FeynKit::SinkIndex(20,1)))"
             )
@@ -3687,12 +4679,15 @@ mod tests {
             legs: &legs,
         };
         let tensors = instantiation
-            .instantiate("Identity(1,2)*T(3,2,1)*f(3,-1,-2)", NumeratorSector::Color)
+            .instantiate(
+                &test_atom("Identity(1,2)*T(3,2,1)*f(3,-1,-2)"),
+                NumeratorSector::Color,
+            )
             .unwrap();
         let expected = test_atom(
             "spenso::g(spenso::dind(spenso::cof(3,FeynKit::SourceIndex(10,1))),spenso::cof(3,FeynKit::SinkIndex(20,1)))*spenso::t(spenso::coad(8,FeynKit::SourceIndex(30,1)),spenso::cof(3,FeynKit::SinkIndex(20,1)),spenso::dind(spenso::cof(3,FeynKit::SourceIndex(10,1))))*spenso::f(spenso::coad(8,FeynKit::SourceIndex(30,1)),spenso::coad(8,FeynKit::VertexDummy(7,1)),spenso::coad(8,FeynKit::VertexDummy(7,2)))",
         );
-        assert_eq!(test_atom(&tensors), expected);
+        assert_eq!(tensors, expected);
     }
 
     #[test]
@@ -3717,12 +4712,12 @@ mod tests {
         };
         let slash = instantiation
             .instantiate(
-                "PSlash(2,1)*Metric(dummy(4),dummy(4))",
+                &test_atom("PSlash(2,1)*Metric(dummy(4),dummy(4))"),
                 NumeratorSector::Spin,
             )
             .unwrap();
         assert_eq!(
-            test_atom(&slash),
+            slash,
             test_atom(
                 "spenso::gamma(spenso::bis(4,FeynKit::SinkIndex(5,1)),spenso::bis(4,FeynKit::SourceIndex(5,1)),spenso::mink(4,FeynKit::EdgeDummy(5,5)))*FeynKit::Momentum(5,spenso::mink(4,FeynKit::EdgeDummy(5,5)))*spenso::g(spenso::mink(4,FeynKit::EdgeDummy(5,4)),spenso::mink(4,FeynKit::EdgeDummy(5,4)))"
             )
@@ -3761,6 +4756,7 @@ mod tests {
             .interaction_numerator(model.vertex_rule("V_78").unwrap(), &instantiation)
             .unwrap();
 
+        let numerator = numerator.to_plain_string();
         assert!(numerator.contains("spenso::bis(4"));
         assert!(numerator.contains("spenso::cof(3"));
         assert!(numerator.contains("spenso::dind"));
@@ -3778,9 +4774,12 @@ mod tests {
                 ("QCD".to_owned(), (2, Some(2))),
                 ("QED".to_owned(), (0, Some(0))),
             ])))
-            .with_graph_filter(GenerationFilter::ParticleVeto(vec![
-                -6, -4, -3, -2, -1, 1, 2, 3, 4, 6,
-            ]));
+            .with_graph_filter(GenerationFilter::ParticleVeto(
+                vec![-6, -4, -3, -2, -1, 1, 2, 3, 4, 6]
+                    .into_iter()
+                    .map(ParticleSelector::Pdg)
+                    .collect(),
+            ));
         let generated = Generator::new(model)
             .generate(
                 &Process::amplitude(["g"], ["g"])
@@ -3801,16 +4800,12 @@ mod tests {
         ];
         let mut combined = String::new();
         for diagram in &generated.diagrams {
-            combined.push_str(diagram.numerator().unwrap());
+            combined.push_str(&diagram.numerator().to_plain_string());
             for (_, vertex) in diagram.vertices() {
-                if let Some(numerator) = &vertex.numerator {
-                    combined.push_str(numerator);
-                }
+                combined.push_str(&vertex.numerator.to_plain_string());
             }
             for (_, _, edge) in diagram.edges() {
-                if let Some(numerator) = &edge.numerator {
-                    combined.push_str(numerator);
-                }
+                combined.push_str(&edge.numerator.to_plain_string());
             }
         }
         for head in residual_heads {
@@ -3826,12 +4821,11 @@ mod tests {
     fn closed_fermion_loops_always_contribute_their_sign() {
         let generator = Generator::new(fermion_model());
         let mut graph = Graph::new();
-        let interaction = graph.add_node(ColoredNode::Interaction("V".to_owned()));
+        let interaction = graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
         let external = graph.add_node(ColoredNode::External(ExternalNode {
             index: 0,
             state: ExternalState::Outgoing,
-            particle: ParticleReference::new("a", 22),
-            symmetry_class: 1,
+            particle: particle(&generator.model, 22),
         }));
         graph
             .add_edge(
@@ -3839,7 +4833,7 @@ mod tests {
                 interaction,
                 true,
                 EdgeColor {
-                    pdg: 1,
+                    particle: particle(&generator.model, 1),
                     direction: None,
                 },
             )
@@ -3850,7 +4844,7 @@ mod tests {
                 external,
                 false,
                 EdgeColor {
-                    pdg: 22,
+                    particle: particle(&generator.model, 22),
                     direction: None,
                 },
             )
@@ -3861,6 +4855,7 @@ mod tests {
         let diagram = generator
             .to_diagram(
                 "loop".to_owned(),
+                GenerationType::Amplitude,
                 ColoredTopology {
                     graph,
                     symmetry: 3,
@@ -3869,11 +4864,12 @@ mod tests {
                 },
                 loop_count,
                 FermionSigns::default(),
+                &GenerationOptions::default(),
             )
             .unwrap();
         assert_eq!(
             diagram.overall_factor(),
-            "InternalFermionLoopSign(-1)*CouplingsMultiplicity(2)/AutG(3)"
+            &factor_atom("InternalFermionLoopSign(-1)*CouplingsMultiplicity(2)/AutG(3)")
         );
     }
 
@@ -3883,6 +4879,7 @@ mod tests {
         let diagram = generator
             .to_diagram(
                 "positive".to_owned(),
+                GenerationType::Amplitude,
                 ColoredTopology {
                     graph: Graph::new(),
                     symmetry: 1,
@@ -3896,11 +4893,12 @@ mod tests {
                     include_antifermion_spin_sum: true,
                     antifermion_spin_sum_negative: false,
                 },
+                &GenerationOptions::default(),
             )
             .unwrap();
         assert_eq!(
             diagram.overall_factor(),
-            "AntiFermionSpinSumSign(1)*ExternalFermionOrderingSign(1)*1/AutG(1)"
+            &factor_atom("AntiFermionSpinSumSign(1)*ExternalFermionOrderingSign(1)*1/AutG(1)")
         );
     }
 
@@ -3908,16 +4906,16 @@ mod tests {
     fn branching_fermion_chains_are_rejected() {
         let generator = Generator::new(fermion_model());
         let mut graph = Graph::new();
-        let center = graph.add_node(ColoredNode::Interaction("V".to_owned()));
+        let center = graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
         for _ in 0..3 {
-            let endpoint = graph.add_node(ColoredNode::Interaction("V".to_owned()));
+            let endpoint = graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
             graph
                 .add_edge(
                     center,
                     endpoint,
                     true,
                     EdgeColor {
-                        pdg: 1,
+                        particle: particle(&generator.model, 1),
                         direction: None,
                     },
                 )
@@ -4015,8 +5013,9 @@ mod tests {
             })
         ));
 
-        let invalid_scope = GenerationOptions::default()
-            .with_cut_amplitude_filter(GenerationFilter::ParticleVeto(vec![1]));
+        let invalid_scope = GenerationOptions::default().with_cut_amplitude_filter(
+            GenerationFilter::ParticleVeto(vec![ParticleSelector::Pdg(1)]),
+        );
         assert!(matches!(
             generator.generate(&process, &invalid_scope),
             Err(GenerationError::InvalidFilterScope {
@@ -4067,7 +5066,7 @@ mod tests {
                 BTreeMap::from([("QED".to_owned(), usize::MAX), ("QCD".to_owned(), 1)]),
             ));
         assert!(matches!(
-            ResolvedProcess::unresolved_cut_content(&model, &options),
+            unresolved_cut_content(&model, &options),
             Err(GenerationError::ArithmeticOverflow(
                 "the unresolved cut multiplicity"
             ))
@@ -4080,24 +5079,33 @@ mod tests {
         let options = GenerationOptions::default().with_graph_filter(
             GenerationFilter::PerturbativeOrders(BTreeMap::from([("QED".to_owned(), 1)])),
         );
-        let unresolved = ResolvedProcess::unresolved_cut_content(&model, &options)
-            .unwrap()
-            .unwrap();
+        let unresolved = unresolved_cut_content(&model, &options).unwrap().unwrap();
         assert_eq!(unresolved.maximum_multiplicity, 1);
-        assert_eq!(unresolved.particles, BTreeSet::from([-1, 1, 22]));
+        assert_eq!(
+            unresolved.particles,
+            BTreeSet::from([
+                particle(&model, -1),
+                particle(&model, 1),
+                particle(&model, 22),
+            ])
+        );
         assert!(ResolvedProcess::matches_cut_content(
-            &[1, 22],
-            &[1],
+            &[particle(&model, 1), particle(&model, 22)],
+            &[particle(&model, 1)],
             Some(&unresolved)
         ));
         assert!(!ResolvedProcess::matches_cut_content(
-            &[1, 22, 22],
-            &[1],
+            &[
+                particle(&model, 1),
+                particle(&model, 22),
+                particle(&model, 22),
+            ],
+            &[particle(&model, 1)],
             Some(&unresolved)
         ));
         assert!(!ResolvedProcess::matches_cut_content(
-            &[1, 25],
-            &[1],
+            &[particle(&model, 1), particle(&model, 25)],
+            &[particle(&model, 1)],
             Some(&unresolved)
         ));
     }
@@ -4105,19 +5113,15 @@ mod tests {
     #[test]
     fn exact_cut_rejects_species_only_false_positives() {
         let model = exact_cut_model();
-        let interaction = |name: &str| ColoredNode::Interaction(name.to_owned());
-        let external = |index, state, name, pdg| {
+        let interaction = |name: &str| ColoredNode::Interaction(vertex(&model, name));
+        let external = |index, state, pdg| {
             ColoredNode::External(ExternalNode {
                 index,
                 state,
-                particle: ParticleReference::new(name, pdg),
-                symmetry_class: index + 1,
+                particle: particle(&model, pdg),
             })
         };
-        let edge = |pdg| EdgeColor {
-            pdg,
-            direction: None,
-        };
+        let edge = |pdg| edge(&model, pdg);
 
         let mut three_loop = Graph::new();
         let h0 = three_loop.add_node(interaction("V_78"));
@@ -4128,10 +5132,10 @@ mod tests {
         let p1 = three_loop.add_node(interaction("V_73"));
         let q0 = three_loop.add_node(interaction("V_98"));
         let q1 = three_loop.add_node(interaction("V_98"));
-        let x0 = three_loop.add_node(external(0, ExternalState::Incoming, "e+", -11));
-        let x1 = three_loop.add_node(external(1, ExternalState::Incoming, "e-", 11));
-        let x2 = three_loop.add_node(external(2, ExternalState::Outgoing, "e+", -11));
-        let x3 = three_loop.add_node(external(3, ExternalState::Outgoing, "e-", 11));
+        let x0 = three_loop.add_node(external(0, ExternalState::Incoming, -11));
+        let x1 = three_loop.add_node(external(1, ExternalState::Incoming, 11));
+        let x2 = three_loop.add_node(external(2, ExternalState::Outgoing, -11));
+        let x3 = three_loop.add_node(external(3, ExternalState::Outgoing, 11));
         three_loop.add_edge(h0, h1, false, edge(25)).unwrap();
         three_loop.add_edge(h0, p1, true, edge(5)).unwrap();
         three_loop.add_edge(h1, p0, true, edge(5)).unwrap();
@@ -4148,10 +5152,10 @@ mod tests {
         three_loop.add_edge(x3, q0, true, edge(11)).unwrap();
 
         let mut four_loop = Graph::new();
-        let x0 = four_loop.add_node(external(0, ExternalState::Incoming, "e+", -11));
-        let x1 = four_loop.add_node(external(1, ExternalState::Incoming, "e-", 11));
-        let x2 = four_loop.add_node(external(2, ExternalState::Outgoing, "e+", -11));
-        let x3 = four_loop.add_node(external(3, ExternalState::Outgoing, "e-", 11));
+        let x0 = four_loop.add_node(external(0, ExternalState::Incoming, -11));
+        let x1 = four_loop.add_node(external(1, ExternalState::Incoming, 11));
+        let x2 = four_loop.add_node(external(2, ExternalState::Outgoing, -11));
+        let x3 = four_loop.add_node(external(3, ExternalState::Outgoing, 11));
         let p0 = four_loop.add_node(interaction("V_73"));
         let p1 = four_loop.add_node(interaction("V_73"));
         let h0 = four_loop.add_node(interaction("V_78"));
@@ -4220,16 +5224,12 @@ mod tests {
                     } else {
                         ExternalState::Outgoing
                     },
-                    particle: ParticleReference::new("a", 22),
-                    symmetry_class: index + 1,
+                    particle: particle(&model, 22),
                 }))
             })
             .collect();
-        let center = graph.add_node(ColoredNode::Interaction("V".to_owned()));
-        let photon = EdgeColor {
-            pdg: 22,
-            direction: None,
-        };
+        let center = graph.add_node(ColoredNode::Interaction(vertex(&model, "V")));
+        let photon = edge(&model, 22);
         for external in &externals {
             graph.add_edge(*external, center, false, photon).unwrap();
         }
@@ -4248,13 +5248,12 @@ mod tests {
                     } else {
                         ExternalState::Outgoing
                     },
-                    particle: ParticleReference::new("a", 22),
-                    symmetry_class: index + 1,
+                    particle: particle(&model, 22),
                 }))
             })
             .collect();
-        let left = factorized.add_node(ColoredNode::Interaction("V".to_owned()));
-        let right = factorized.add_node(ColoredNode::Interaction("V".to_owned()));
+        let left = factorized.add_node(ColoredNode::Interaction(vertex(&model, "V")));
+        let right = factorized.add_node(ColoredNode::Interaction(vertex(&model, "V")));
         for external in [externals[0], externals[2]] {
             factorized.add_edge(external, left, false, photon).unwrap();
         }
@@ -4274,7 +5273,7 @@ mod tests {
     }
 
     #[test]
-    fn amplitude_fermions_require_explicit_symmetrization_opt_in() {
+    fn external_canonical_classes_keep_global_left_right_symmetry_out_of_raw_generation() {
         let model = fermion_model();
         let classes = |process: Process| {
             ResolvedProcess::new(&model, &process)
@@ -4282,45 +5281,104 @@ mod tests {
                 .external_edges(&model)
                 .unwrap()
                 .into_iter()
-                .map(|(node, _)| node.external.unwrap().symmetry_class)
+                .map(|(node, _)| node.external_class.unwrap())
                 .collect::<Vec<_>>()
         };
         let process =
             Process::amplitude([1_i64, -1, 22], Vec::<i64>::new()).symmetrize_initial(true);
-        assert_eq!(classes(process.clone()), vec![1, 2, 0]);
+        assert_eq!(
+            classes(process.clone()),
+            vec![
+                ExternalCanonicalClass::Exact {
+                    state: ExternalState::Incoming,
+                    index: 0,
+                },
+                ExternalCanonicalClass::Exact {
+                    state: ExternalState::Incoming,
+                    index: 1,
+                },
+                ExternalCanonicalClass::WithinState(ExternalState::Incoming),
+            ]
+        );
         assert_eq!(
             classes(process.symmetrize_external_fermions(true)),
-            vec![0, 0, 0]
+            vec![
+                ExternalCanonicalClass::WithinState(ExternalState::Incoming),
+                ExternalCanonicalClass::WithinState(ExternalState::Incoming),
+                ExternalCanonicalClass::WithinState(ExternalState::Incoming),
+            ]
         );
 
         let cross_section = Process::cross_section([1_i64, -1], [22_i64]).symmetrize_initial(true);
-        assert_eq!(classes(cross_section), vec![0, 0, 3, 4]);
+        assert_eq!(
+            classes(cross_section),
+            vec![
+                ExternalCanonicalClass::WithinState(ExternalState::Incoming),
+                ExternalCanonicalClass::WithinState(ExternalState::Incoming),
+                ExternalCanonicalClass::Exact {
+                    state: ExternalState::Outgoing,
+                    index: 2,
+                },
+                ExternalCanonicalClass::Exact {
+                    state: ExternalState::Outgoing,
+                    index: 3,
+                },
+            ]
+        );
+
+        let left_right = Process::cross_section([1_i64, -1], [22_i64]).symmetrize_left_right(true);
+        assert_eq!(
+            classes(left_right),
+            vec![
+                ExternalCanonicalClass::Exact {
+                    state: ExternalState::Incoming,
+                    index: 0,
+                },
+                ExternalCanonicalClass::Exact {
+                    state: ExternalState::Incoming,
+                    index: 1,
+                },
+                ExternalCanonicalClass::Exact {
+                    state: ExternalState::Outgoing,
+                    index: 2,
+                },
+                ExternalCanonicalClass::Exact {
+                    state: ExternalState::Outgoing,
+                    index: 3,
+                },
+            ]
+        );
     }
 
     #[test]
     fn numerator_construction_localizes_internal_ufo_data() {
-        let mut definition = fermion_model().into_definition();
-        definition
-            .particles
-            .iter_mut()
-            .find(|particle| particle.name == "f")
+        let source = fermion_model().to_json().unwrap();
+        let mut definition = serde_json::from_str::<serde_json::Value>(&source).unwrap();
+        let fermion = definition["particles"]
+            .as_array_mut()
             .unwrap()
-            .propagator = Some("custom_f_prop".to_owned());
-        definition.propagators.push(Propagator {
-            name: "custom_f_prop".to_owned(),
-            particle: "f".to_owned(),
-            numerator: "UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2))*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::Metric(UFO::{}::dummy(1),UFO::{}::idx(1,2))".to_owned(),
-            denominator: "P^2".to_owned(),
-        });
-        let generator = Generator::new(Model::new(definition).unwrap());
+            .iter_mut()
+            .find(|particle| particle["name"] == "f")
+            .unwrap();
+        fermion["propagator"] = serde_json::json!("custom_f_prop");
+        definition["propagators"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "name": "custom_f_prop",
+                "particle": "f",
+                "numerator": "UFO::{}::P(UFO::{}::idx(1,1))*UFO::{}::P(UFO::{}::idx(1,2))*UFO::{}::Metric(UFO::{}::idx(1,1),UFO::{}::dummy(1))*UFO::{}::Metric(UFO::{}::dummy(1),UFO::{}::idx(1,2))",
+                "denominator": "P^2"
+            }));
+        let definition = serde_json::to_string(&definition).unwrap();
+        let generator = Generator::new(Model::from_json(&definition).unwrap());
 
         let mut graph = Graph::new();
-        let interaction = graph.add_node(ColoredNode::Interaction("V".to_owned()));
+        let interaction = graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
         let external = graph.add_node(ColoredNode::External(ExternalNode {
             index: 0,
             state: ExternalState::Outgoing,
-            particle: ParticleReference::new("a", 22),
-            symmetry_class: 1,
+            particle: particle(&generator.model, 22),
         }));
         graph
             .add_edge(
@@ -4328,7 +5386,7 @@ mod tests {
                 interaction,
                 true,
                 EdgeColor {
-                    pdg: 1,
+                    particle: particle(&generator.model, 1),
                     direction: None,
                 },
             )
@@ -4339,7 +5397,7 @@ mod tests {
                 external,
                 false,
                 EdgeColor {
-                    pdg: 22,
+                    particle: particle(&generator.model, 22),
                     direction: None,
                 },
             )
@@ -4348,6 +5406,7 @@ mod tests {
         let diagram = generator
             .to_diagram(
                 "localized".to_owned(),
+                GenerationType::Amplitude,
                 ColoredTopology {
                     graph,
                     symmetry: 1,
@@ -4356,6 +5415,7 @@ mod tests {
                 },
                 1,
                 FermionSigns::default(),
+                &GenerationOptions::default(),
             )
             .unwrap();
         let internal_numerator = diagram
@@ -4364,8 +5424,7 @@ mod tests {
             .unwrap()
             .2
             .numerator
-            .as_deref()
-            .unwrap();
+            .to_plain_string();
         assert!(internal_numerator.contains("FeynKit::Momentum"));
         assert!(internal_numerator.contains("FeynKit::SourceIndex"));
         assert!(internal_numerator.contains("FeynKit::SinkIndex"));
@@ -4377,21 +5436,19 @@ mod tests {
         assert!(momentum.has_tag("spenso::tensor"));
         assert!(momentum.has_tag("spenso::rank1"));
 
-        let external_numerator = diagram
+        let external_numerator = &diagram
             .edges()
             .find(|(id, _, _)| id.0 == 1)
             .unwrap()
             .2
-            .numerator
-            .as_deref();
-        assert_eq!(external_numerator, Some("1"));
+            .numerator;
+        assert_eq!(external_numerator, &Atom::one());
 
         let vertex_numerator = diagram
             .vertex(feynkit_graph::VertexId(interaction))
             .unwrap()
             .numerator
-            .as_deref()
-            .unwrap();
+            .to_plain_string();
         assert!(vertex_numerator.contains("FeynKit::SourceIndex"));
         assert!(vertex_numerator.contains("FeynKit::SinkIndex"));
     }

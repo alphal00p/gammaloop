@@ -1,0 +1,32 @@
+digraph oak_diag {
+
+num="1";
+overall_factor=1;
+ext    [style=invis]
+
+edge [num="1", dod=-100];
+node [num="1", dod=-100];
+
+ext -> v0:1 [particle="scalar_1" id=1]; // p1
+ext -> v4:2 [particle="scalar_2" id=2]; // p2
+v3:3 -> ext [particle="scalar_1" id=3]; // p3
+v4:0 -> ext [particle="scalar_2" id=0]; // p4
+
+v0 -> v1 [particle="scalar_1" id=4];
+v1 -> v2 [particle="scalar_1" id=5];
+v2 -> v3 [particle="scalar_1" id=6];
+
+v5 -> v0 [particle="scalar_0" id=7, lmb_id=0];
+v5 -> v4 [particle="scalar_0" id=8];
+v5 -> v1 [particle="scalar_0" id=9, lmb_id=1];
+
+v6 -> v2 [particle="scalar_0" id=10, lmb_id=2];
+v3 -> v6 [particle="scalar_0" id=11];
+v6 -> v4 [particle="scalar_0" id=12];
+
+
+}
+
+
+
+//( Q(7,spenso::mink(4,tau1))*Q(2,spenso::mink(4,tau1)) )*( Q(8,spenso::mink(4,tau2))*Q(2,spenso::mink(4,tau2)) )*( Q(10,spenso::mink(4,tau3))*Q(2,spenso::mink(4,tau3)) )*( Q(12,spenso::mink(4,tau4))*Q(2,spenso::mink(4,tau4)) )

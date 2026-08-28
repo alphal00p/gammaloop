@@ -28,6 +28,14 @@ macro_rules! define_indexed_vec {
         #[cfg_attr(feature = "rkyv", archive(check_bytes))]
         $idx_vis struct $Idx(pub usize);
 
+        impl $Idx {
+            #[inline]
+            pub const fn new(value: usize) -> Self { Self(value) }
+
+            #[inline]
+            pub const fn index(self) -> usize { self.0 }
+        }
+
         impl ::std::convert::From<usize> for $Idx {
             fn from(value: usize) -> Self {
                 $Idx(value)
