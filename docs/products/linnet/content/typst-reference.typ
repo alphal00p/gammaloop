@@ -15,21 +15,21 @@ pages when you need an exact function, parameter, or default.
   functions. They are documented together because both come from `layout.typ`.
 - #link("reference/typst/drawing/")[`draw`, `edge-halves`, and
   `to-cetz-edge-halves`] are top-level drawing functions from `draw.typ`.
-- #link("reference/typst/physics/")[`physics`] is a module of reusable particle-line
-  styles and callbacks.
 - #link("reference/typst/subgraph/")[`subgraph`] is a module for constructing and
   inspecting zero-copy subgraph values.
+- #link("reference/typst/templates/")[Domain styles and templates] explains how
+  application-owned callbacks compose the generic drawing surface.
 - `curve` is a re-export of Kurvst, not a second Linnest API. Use the canonical
   #product-link("gammaloop", label: "Kurvst curve and path reference", path: "guides/kurvst/").
 
 #boundary("Modules and functions import differently", [
-  Import `graph`, `physics`, and `subgraph` as modules when you want qualified calls such
-  as `graph.build`. Import `layout`, `layout-sequence`, and `draw` directly from
-  `lib.typ`; they are functions rather than nested modules.
+  Import `graph` and `subgraph` as modules when you want qualified calls such as
+  `graph.build`. Import `layout`, `layout-sequence`, and `draw` directly from `lib.typ`;
+  they are functions rather than nested modules.
 ])
 
 ```typ
-#import "crates/linnest/typst/src/lib.typ": draw, graph, layout, physics, subgraph
+#import "crates/linnest/typst/src/lib.typ": draw, graph, layout, subgraph
 #import graph: build, edge, node, sink, source
 ```
 

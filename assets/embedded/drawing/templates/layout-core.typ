@@ -796,8 +796,8 @@
     )
     let is-amplitude = mode.amplitude
     let is-cross-section = mode.cross-section
-    // Explicit PhysicsOptions.map entries override the generated model map,
-    // which itself extends the model-neutral Linnest aliases.
+    // Explicit template-option map entries override the generated model map,
+    // which itself extends the model-neutral aliases.
     let particle-map = (
       physics.default-map
         + edge-style.map
@@ -1022,9 +1022,27 @@
   if path == none {
     panic("render config requires data-path")
   }
-  let mode = config.at("mode", default: "auto")
+  let custom-options = _dictionary(
+    config.at("options", default: (:)),
+    "config.options",
+  )
+  let amplitude-mode = custom-options.at("amplitude-mode", default: false)
+  let cross-section-mode = custom-options.at("cross-section-mode", default: false)
+  if amplitude-mode and cross-section-mode {
+    panic("amplitude-mode and cross-section-mode cannot both be true")
+  }
+  let mode = custom-options.at(
+    "mode",
+    default: if amplitude-mode {
+      "amplitude"
+    } else if cross-section-mode {
+      "cross-section"
+    } else {
+      "auto"
+    },
+  )
   if not ("auto", "generic", "amplitude", "cross-section").contains(mode) {
-    panic("config.mode must be auto, generic, amplitude, or cross-section")
+    panic("config.options.mode must be auto, generic, amplitude, or cross-section")
   }
   let style-options = _dictionary(config.at("style", default: (:)), "config.style")
   let draw-options = diagram-options + _dictionary(
@@ -1034,15 +1052,46 @@
   if not draw-options.keys().contains("title") {
     draw-options.title = config.at("title", default: auto)
   }
-  let physics-options = _dictionary(
-    config.at("physics", default: (:)),
-    "config.physics",
-  )
-  let edge-style-options = physics-options
-  for key in ("show-node-index", "typst-fields") {
-    if edge-style-options.keys().contains(key) {
-      let _ = edge-style-options.remove(key)
+  let edge-style-options = (:)
+  for key in (
+    "map",
+    "default",
+    "scope",
+    "orientation-split",
+    "momentum-arrows",
+    "momentum-arrow-offset",
+    "momentum-arrow-length",
+    "momentum-arrow-ratio",
+    "momentum-arrow-stroke",
+    "momentum-arrow-mark",
+    "show-momentum",
+    "show-edge-index",
+    "show-half-edge-index",
+    "show-particle",
+    "momentum-fields",
+    "edge-index-fields",
+    "momentum-prefix",
+    "edge-index-prefix",
+    "half-edge-index-prefix",
+    "particle-prefix",
+    "label-separator",
+    "label-size",
+    "label-fill",
+  ) {
+    if custom-options.keys().contains(key) {
+      edge-style-options.insert(key, custom-options.at(key))
     }
+  }
+  let has-arrow-paint = custom-options.keys().contains("momentum-arrow-paint")
+  let has-arrow-thickness = custom-options.keys().contains("momentum-arrow-thickness")
+  if not edge-style-options.keys().contains("momentum-arrow-stroke") and (
+    has-arrow-paint or has-arrow-thickness
+  ) {
+    edge-style-options.insert("momentum-arrow-stroke", (
+      paint: custom-options.at("momentum-arrow-paint", default: black),
+      thickness: custom-options.at("momentum-arrow-thickness", default: 0.55pt),
+      cap: "round",
+    ))
   }
   let unit = draw-options.at(
     "unit",
@@ -1063,7 +1112,7 @@
     // remains available solely through the standalone Linnest layout API.
     typst-fields: "plain",
     edge-style-options: edge-style-options,
-    show-node-index: physics-options.at("show-node-index", default: false),
+    show-node-index: custom-options.at("show-node-index", default: false),
     amplitude-mode: mode == "amplitude",
     cross-section-mode: mode == "cross-section",
     elements: config.at("elements", default: (:)),

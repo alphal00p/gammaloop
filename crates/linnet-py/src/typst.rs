@@ -15,6 +15,8 @@ use pyo3::types::{PyAny, PyBool, PyDict, PyFloat, PyInt, PyList, PyModule, PyStr
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
 use serde::{Deserialize, Serialize};
 
+use crate::drawing::{DrawingKind, PyEdgeDrawing, PyHalfEdgeDrawing, PyNodeDrawing};
+
 const MAX_NATIVE_DEPTH: usize = 64;
 static AUTO_SINGLETON: PyOnceLock<Py<PyAuto>> = PyOnceLock::new();
 static INHERIT_SINGLETON: PyOnceLock<Py<PyInherit>> = PyOnceLock::new();
@@ -264,8 +266,6 @@ enum EnumKind {
     StrokeCap,
     StrokeJoin,
     TextStyle,
-    RenderMode,
-    TypstFields,
     DashPattern,
     MarkSymbol,
     MarkPosition,
@@ -292,8 +292,6 @@ impl EnumKind {
             Self::StrokeCap => "StrokeCap",
             Self::StrokeJoin => "StrokeJoin",
             Self::TextStyle => "TextStyle",
-            Self::RenderMode => "RenderMode",
-            Self::TypstFields => "TypstFields",
             Self::DashPattern => "DashPattern",
             Self::MarkSymbol => "MarkSymbol",
             Self::MarkPosition => "MarkPosition",
@@ -322,8 +320,6 @@ enum NativeEnum {
     StrokeCap(PyStrokeCap),
     StrokeJoin(PyStrokeJoin),
     TextStyle(PyTextStyle),
-    RenderMode(PyRenderMode),
-    TypstFields(PyTypstFields),
     DashPattern(PyDashPattern),
     MarkSymbol(PyMarkSymbol),
     MarkPosition(PyMarkPosition),
@@ -350,8 +346,6 @@ impl NativeEnum {
             Self::StrokeCap(_) => EnumKind::StrokeCap,
             Self::StrokeJoin(_) => EnumKind::StrokeJoin,
             Self::TextStyle(_) => EnumKind::TextStyle,
-            Self::RenderMode(_) => EnumKind::RenderMode,
-            Self::TypstFields(_) => EnumKind::TypstFields,
             Self::DashPattern(_) => EnumKind::DashPattern,
             Self::MarkSymbol(_) => EnumKind::MarkSymbol,
             Self::MarkPosition(_) => EnumKind::MarkPosition,
@@ -378,8 +372,6 @@ impl NativeEnum {
             Self::StrokeCap(value) => Py::new(py, value)?.into_any(),
             Self::StrokeJoin(value) => Py::new(py, value)?.into_any(),
             Self::TextStyle(value) => Py::new(py, value)?.into_any(),
-            Self::RenderMode(value) => Py::new(py, value)?.into_any(),
-            Self::TypstFields(value) => Py::new(py, value)?.into_any(),
             Self::DashPattern(value) => Py::new(py, value)?.into_any(),
             Self::MarkSymbol(value) => Py::new(py, value)?.into_any(),
             Self::MarkPosition(value) => Py::new(py, value)?.into_any(),
@@ -622,8 +614,6 @@ impl NativeEnum {
             Self::StrokeCap(value) => value.typst_name(),
             Self::StrokeJoin(value) => value.typst_name(),
             Self::TextStyle(value) => value.typst_name(),
-            Self::RenderMode(value) => value.typst_name(),
-            Self::TypstFields(value) => value.typst_name(),
             Self::DashPattern(value) => value.typst_name(),
             Self::MarkSymbol(value) => value.typst_name(),
             Self::MarkPosition(value) => value.typst_name(),
@@ -971,23 +961,6 @@ typst_string_enum! {
 }
 
 typst_string_enum! {
-    /// Renderer mode used by the Clinnet V1 template.
-    PyRenderMode, "RenderMode", RenderMode {
-        Auto => "auto",
-        Generic => "generic",
-        Amplitude => "amplitude",
-        CrossSection => "cross-section",
-    }
-}
-
-typst_string_enum! {
-    /// Safe literal interpretation of Typst-valued graph fields.
-    PyTypstFields, "TypstFields", TypstFields {
-        Plain => "plain",
-    }
-}
-
-typst_string_enum! {
     /// Built-in Typst stroke dash pattern.
     PyDashPattern, "DashPattern", DashPattern {
         Solid => "solid",
@@ -1004,7 +977,7 @@ typst_string_enum! {
 }
 
 typst_string_enum! {
-    /// Built-in mark symbol used by Linnest physics styles.
+    /// Built-in arrowhead symbol used by CeTZ edge marks.
     PyMarkSymbol, "MarkSymbol", MarkSymbol {
         Barbed => "barbed",
         Straight => "straight",
@@ -1304,7 +1277,6 @@ enum ValueRule {
     Any,
     Bool,
     String,
-    Scalar,
     NonNegativeInt,
     Number,
     NonNegativeNumber,
@@ -1316,7 +1288,6 @@ enum ValueRule {
     NodeGroups,
     HedgeSelection,
     DrawSubgraphs,
-    FieldNames,
     Dictionary,
     Unit,
     Length,
@@ -1330,7 +1301,6 @@ enum ValueRule {
     StyleLayers,
     Radius,
     Padding,
-    Mark,
     PatternOrStyleLayers,
 }
 
@@ -1354,12 +1324,6 @@ impl ValueRule {
             }
             Self::String => {
                 matches!(value, NativeValue::String(_)) || expression_kind(SymbolKind::Value)
-            }
-            Self::Scalar => {
-                matches!(
-                    value,
-                    NativeValue::String(_) | NativeValue::Int(_) | NativeValue::Float(_)
-                ) || expression_kind(SymbolKind::Value)
             }
             Self::NonNegativeInt => {
                 matches!(value, NativeValue::Int(number) if *number >= 0)
@@ -1437,11 +1401,6 @@ impl ValueRule {
                 }) || expression_kind(SymbolKind::Value)
                     || expression_kind(SymbolKind::Function)
             }
-            Self::FieldNames => {
-                matches!(value, NativeValue::String(_))
-                    || matches!(value, NativeValue::Array(values) if values.iter().all(|value| matches!(value, NativeValue::String(_))))
-                    || expression_kind(SymbolKind::Value)
-            }
             Self::Dictionary => {
                 matches!(value, NativeValue::Dict(_)) || expression_kind(SymbolKind::Value)
             }
@@ -1517,10 +1476,6 @@ impl ValueRule {
                         | NativeValue::Insets(_)
                 ) || expression_kind(SymbolKind::Value)
             }
-            Self::Mark => {
-                matches!(value, NativeValue::Mark(_) | NativeValue::Dict(_))
-                    || expression_kind(SymbolKind::Value)
-            }
             Self::PatternOrStyleLayers => {
                 matches!(value, NativeValue::Enum(value) if value.kind() == EnumKind::Pattern)
                     || Self::StyleLayers.accepts(value)
@@ -1533,7 +1488,6 @@ impl ValueRule {
             Self::Any => "a supported native Typst value",
             Self::Bool => "a bool",
             Self::String => "a string or module value",
-            Self::Scalar => "a string, number, or module value",
             Self::NonNegativeInt => "a non-negative int",
             Self::Number => "a number",
             Self::NonNegativeNumber => "a non-negative number",
@@ -1550,7 +1504,6 @@ impl ValueRule {
             Self::DrawSubgraphs => {
                 "a boolean half-edge selection, module function, or array of typed selections"
             }
-            Self::FieldNames => "a field name or array of field names",
             Self::Dictionary => "a dictionary",
             Self::Unit => "a number, length, ratio, or relative length",
             Self::Length => "a number, length, ratio, or relative length",
@@ -1566,7 +1519,6 @@ impl ValueRule {
             }
             Self::Radius => "a number, numeric array, or module value",
             Self::Padding => "a number, array, dictionary, Insets, or module value",
-            Self::Mark => "a Mark, mark dictionary, or module value",
             Self::PatternOrStyleLayers => {
                 "a Pattern, style dictionary, style layers, or module function"
             }
@@ -2241,8 +2193,6 @@ fn native_from_py(value: &Bound<'_, PyAny>, depth: usize) -> PyResult<NativeValu
         PyStrokeCap,
         PyStrokeJoin,
         PyTextStyle,
-        PyRenderMode,
-        PyTypstFields,
         PyDashPattern,
         PyMarkSymbol,
         PyMarkPosition,
@@ -2413,6 +2363,18 @@ struct SelectorSettings {
 }
 
 impl SelectorSettings {
+    fn is_inherit(&self) -> bool {
+        [&self.node, &self.edge, &self.source, &self.sink]
+            .into_iter()
+            .all(|setting| matches!(setting, SelectorSetting::Inherit))
+    }
+
+    fn is_none(&self) -> bool {
+        [&self.node, &self.edge, &self.source, &self.sink]
+            .into_iter()
+            .all(|setting| matches!(setting, SelectorSetting::None))
+    }
+
     fn overlay(&self, overlay: &Self) -> Self {
         Self {
             node: self.node.overlay(&overlay.node),
@@ -2457,13 +2419,63 @@ pub(crate) struct SelectorCallbacks {
     pub(crate) sink: Option<Py<PyAny>>,
 }
 
+/// Per-render Python callbacks returning typed drawing patches.
+#[gen_stub_pyclass]
+#[pyclass(skip_from_py_object, name = "DrawingSelectors")]
+#[derive(Clone, Debug, Default)]
+struct PyDrawingSelectors {
+    settings: SelectorSettings,
+}
+
+#[gen_stub_pymethods]
+#[pymethods]
+impl PyDrawingSelectors {
+    #[new]
+    #[pyo3(signature = (**kwargs))]
+    #[gen_stub(skip)]
+    fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
+        let mut settings = SelectorSettings::default();
+        if let Some(kwargs) = kwargs {
+            for (key, value) in kwargs.iter() {
+                let key = key.extract::<String>()?;
+                let setting = SelectorSetting::from_python(&value, &key)?;
+                match key.as_str() {
+                    "node" => settings.node = setting,
+                    "edge" => settings.edge = setting,
+                    "source" => settings.source = setting,
+                    "sink" => settings.sink = setting,
+                    _ => {
+                        return Err(PyTypeError::new_err(format!(
+                            "unknown DrawingSelectors option {key:?}"
+                        )))
+                    }
+                }
+            }
+        }
+        Ok(Self { settings })
+    }
+
+    fn __repr__(&self) -> &'static str {
+        "DrawingSelectors(...)"
+    }
+
+    #[gen_stub(skip)]
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        self.settings.traverse(visit)
+    }
+
+    #[gen_stub(skip)]
+    fn __clear__(&mut self) {
+        self.settings.clear();
+    }
+}
+
 /// Options applied by `linnest.graph.style` before layout measurement.
 #[gen_stub_pyclass]
-#[pyclass(skip_from_py_object, name = "GraphStyleOptions")]
-#[derive(Clone, Debug)]
+#[pyclass(from_py_object, frozen, name = "GraphStyleOptions")]
+#[derive(Clone, Debug, Default, PartialEq)]
 struct PyGraphStyleOptions {
     values: BTreeMap<String, NativeValue>,
-    selectors: SelectorSettings,
 }
 
 #[gen_stub_pymethods]
@@ -2473,50 +2485,13 @@ impl PyGraphStyleOptions {
     #[pyo3(signature = (**kwargs))]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
-        let Some(kwargs) = kwargs else {
-            return Ok(Self {
-                values: parse_options(None, GRAPH_STYLE_FIELDS)?,
-                selectors: SelectorSettings::default(),
-            });
-        };
-        let native_kwargs = PyDict::new(kwargs.py());
-        let mut selectors = SelectorSettings::default();
-        for (key, value) in kwargs.iter() {
-            let key = key.extract::<String>()?;
-            match key.as_str() {
-                "node_selector" => {
-                    selectors.node = SelectorSetting::from_python(&value, &key)?;
-                }
-                "edge_selector" => {
-                    selectors.edge = SelectorSetting::from_python(&value, &key)?;
-                }
-                "source_selector" => {
-                    selectors.source = SelectorSetting::from_python(&value, &key)?;
-                }
-                "sink_selector" => {
-                    selectors.sink = SelectorSetting::from_python(&value, &key)?;
-                }
-                _ => native_kwargs.set_item(key, value)?,
-            }
-        }
         Ok(Self {
-            values: parse_options(Some(&native_kwargs), GRAPH_STYLE_FIELDS)?,
-            selectors,
+            values: parse_options(kwargs, GRAPH_STYLE_FIELDS)?,
         })
     }
 
     fn __repr__(&self) -> String {
         options_repr("GraphStyleOptions", &[&self.values])
-    }
-
-    #[gen_stub(skip)]
-    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
-        self.selectors.traverse(visit)
-    }
-
-    #[gen_stub(skip)]
-    fn __clear__(&mut self) {
-        self.selectors.clear();
     }
 }
 
@@ -2775,100 +2750,6 @@ impl PyDrawOptions {
     }
 }
 
-const PHYSICS_FIELDS: &[FieldSpec] = &[
-    FieldSpec::new("map", "map", ValueRule::Dictionary),
-    FieldSpec::new("default", "default", ValueRule::Dictionary),
-    FieldSpec::new(
-        "typst_fields",
-        "typst-fields",
-        ValueRule::Enum(EnumKind::TypstFields),
-    ),
-    FieldSpec::new("scope", "scope", ValueRule::Dictionary),
-    FieldSpec::new("orientation_split", "orientation-split", ValueRule::Bool),
-    FieldSpec::new("momentum_arrows", "momentum-arrows", ValueRule::Bool),
-    FieldSpec::new(
-        "momentum_arrow_offset",
-        "momentum-arrow-offset",
-        ValueRule::Number,
-    ),
-    FieldSpec::new(
-        "momentum_arrow_length",
-        "momentum-arrow-length",
-        ValueRule::Number,
-    ),
-    FieldSpec::new(
-        "momentum_arrow_ratio",
-        "momentum-arrow-ratio",
-        ValueRule::Number,
-    ),
-    FieldSpec::new(
-        "momentum_arrow_stroke",
-        "momentum-arrow-stroke",
-        ValueRule::Stroke,
-    )
-    .none(),
-    FieldSpec::new(
-        "momentum_arrow_mark",
-        "momentum-arrow-mark",
-        ValueRule::Mark,
-    )
-    .none()
-    .auto(),
-    FieldSpec::new("show_momentum", "show-momentum", ValueRule::Bool),
-    FieldSpec::new("show_node_index", "show-node-index", ValueRule::Bool),
-    FieldSpec::new("show_edge_index", "show-edge-index", ValueRule::Bool),
-    FieldSpec::new(
-        "show_half_edge_index",
-        "show-half-edge-index",
-        ValueRule::Bool,
-    ),
-    FieldSpec::new("show_particle", "show-particle", ValueRule::Bool),
-    FieldSpec::new("momentum_fields", "momentum-fields", ValueRule::FieldNames).none(),
-    FieldSpec::new(
-        "edge_index_fields",
-        "edge-index-fields",
-        ValueRule::FieldNames,
-    )
-    .none(),
-    FieldSpec::new("momentum_prefix", "momentum-prefix", ValueRule::Content).none(),
-    FieldSpec::new("edge_index_prefix", "edge-index-prefix", ValueRule::Content).none(),
-    FieldSpec::new(
-        "half_edge_index_prefix",
-        "half-edge-index-prefix",
-        ValueRule::Content,
-    )
-    .none(),
-    FieldSpec::new("particle_prefix", "particle-prefix", ValueRule::Content).none(),
-    FieldSpec::new("label_separator", "label-separator", ValueRule::Content),
-    FieldSpec::new("label_size", "label-size", ValueRule::Length),
-    FieldSpec::new("label_fill", "label-fill", ValueRule::Paint),
-];
-
-/// Physics line decoration and label options.
-#[gen_stub_pyclass]
-#[pyclass(from_py_object, frozen, name = "PhysicsOptions")]
-#[derive(Clone, Debug, Default, PartialEq)]
-struct PyPhysicsOptions {
-    values: BTreeMap<String, NativeValue>,
-}
-
-#[gen_stub_pymethods]
-#[pymethods]
-impl PyPhysicsOptions {
-    #[new]
-    #[pyo3(signature = (**kwargs))]
-    #[gen_stub(skip)]
-    fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
-        Ok(Self {
-            values: parse_options(kwargs, PHYSICS_FIELDS)?,
-        })
-    }
-
-    fn __repr__(&self) -> String {
-        options_repr("PhysicsOptions", &[&self.values])
-    }
-}
-
 #[derive(Clone, Debug, Default)]
 enum PathSetting {
     #[default]
@@ -2996,20 +2877,6 @@ impl PyRenderConfig {
     }
 
     #[getter]
-    #[gen_stub(override_return_type(type_repr = "_RenderModeValue"))]
-    fn mode(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        self.native_setting(py, "mode")
-    }
-
-    #[setter]
-    fn set_mode(
-        &mut self,
-        #[gen_stub(override_type(type_repr = "_RenderModeValue"))] value: &Bound<'_, PyAny>,
-    ) -> PyResult<()> {
-        self.assign("mode", value)
-    }
-
-    #[getter]
     #[gen_stub(override_return_type(type_repr = "_RenderStyle"))]
     fn style(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         match self.values.get("style") {
@@ -3019,7 +2886,6 @@ impl PyRenderConfig {
                 py,
                 PyGraphStyleOptions {
                     values: values.clone(),
-                    selectors: self.selectors.clone(),
                 },
             )?
             .into_any()),
@@ -3097,30 +2963,43 @@ impl PyRenderConfig {
     }
 
     #[getter]
-    #[gen_stub(override_return_type(type_repr = "_RenderPhysics"))]
-    fn physics(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        match self.values.get("physics") {
-            None => Ok(inherit(py)),
-            Some(NativeValue::None) => Ok(py.None()),
-            Some(NativeValue::Dict(values)) => Ok(Py::new(
+    #[gen_stub(override_return_type(type_repr = "_RenderSelectors"))]
+    fn selectors(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        if self.selectors.is_inherit() {
+            Ok(inherit(py))
+        } else if self.selectors.is_none() {
+            Ok(py.None())
+        } else {
+            Ok(Py::new(
                 py,
-                PyPhysicsOptions {
-                    values: values.clone(),
+                PyDrawingSelectors {
+                    settings: self.selectors.clone(),
                 },
             )?
-            .into_any()),
-            Some(_) => Err(PyValueError::new_err(
-                "internal error: RenderConfig physics has an invalid value",
-            )),
+            .into_any())
         }
     }
 
     #[setter]
-    fn set_physics(
+    fn set_selectors(
         &mut self,
-        #[gen_stub(override_type(type_repr = "_RenderPhysics"))] value: &Bound<'_, PyAny>,
+        #[gen_stub(override_type(type_repr = "_RenderSelectors"))] value: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
-        self.assign("physics", value)
+        self.assign("selectors", value)
+    }
+
+    #[getter]
+    #[gen_stub(override_return_type(type_repr = "_TemplateOptions"))]
+    fn template_options(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.native_setting(py, "options")
+    }
+
+    #[setter]
+    fn set_template_options(
+        &mut self,
+        #[gen_stub(override_type(type_repr = "_TemplateOptions"))] value: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        self.assign("template_options", value)
     }
 
     fn __repr__(&self) -> String {
@@ -3178,7 +3057,14 @@ pyo3_stub_gen::inventory::submit! {
         import typing
 
         class PyGraphStyleOptions:
-            def __new__(cls, *, scope: _Dictionary = ..., unit: _LengthValue = ..., node_label: _AutoOptionalContent = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., edge_label: _OptionalContent = ..., edge_label_style: _Style = ..., node_selector: _NodeSelector = ..., edge_selector: _EdgeSelector = ..., source_selector: _HalfEdgeSelector = ..., sink_selector: _HalfEdgeSelector = ...) -> GraphStyleOptions: ...
+            def __new__(cls, *, scope: _Dictionary = ..., unit: _LengthValue = ..., node_label: _AutoOptionalContent = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., edge_label: _OptionalContent = ..., edge_label_style: _Style = ...) -> GraphStyleOptions: ...
+    "# }
+}
+
+pyo3_stub_gen::inventory::submit! {
+    pyo3_stub_gen::derive::gen_methods_from_python! { r#"
+        class PyDrawingSelectors:
+            def __new__(cls, *, node: _NodeDrawingSelector = ..., edge: _EdgeDrawingSelector = ..., source: _HalfEdgeDrawingSelector = ..., sink: _HalfEdgeDrawingSelector = ...) -> DrawingSelectors: ...
     "# }
 }
 
@@ -3203,17 +3089,10 @@ pyo3_stub_gen::inventory::submit! {
 
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
-        class PyPhysicsOptions:
-            def __new__(cls, *, map: _Dictionary = ..., default: _Dictionary = ..., typst_fields: _TypstFieldsValue = ..., scope: _Dictionary = ..., orientation_split: _Boolean = ..., momentum_arrows: _Boolean = ..., momentum_arrow_offset: _Number = ..., momentum_arrow_length: _Number = ..., momentum_arrow_ratio: _Number = ..., momentum_arrow_stroke: _OptionalStrokeValue = ..., momentum_arrow_mark: _MomentumMark = ..., show_momentum: _Boolean = ..., show_node_index: _Boolean = ..., show_edge_index: _Boolean = ..., show_half_edge_index: _Boolean = ..., show_particle: _Boolean = ..., momentum_fields: _OptionalFieldNames = ..., edge_index_fields: _OptionalFieldNames = ..., momentum_prefix: _OptionalStaticContent = ..., edge_index_prefix: _OptionalStaticContent = ..., half_edge_index_prefix: _OptionalStaticContent = ..., particle_prefix: _OptionalStaticContent = ..., label_separator: _StaticContent = ..., label_size: _LengthValue = ..., label_fill: _Paint = ...) -> PhysicsOptions: ...
-    "# }
-}
-
-pyo3_stub_gen::inventory::submit! {
-    pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         import os
 
         class PyRenderConfig:
-            def __new__(cls, *, template: _TemplatePath = ..., typst_executable: _ExecutablePath = ..., title: _AutoOptionalStaticContent = ..., mode: _RenderModeValue = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., physics: _RenderPhysics = ...) -> RenderConfig: ...
+            def __new__(cls, *, template: _TemplatePath = ..., typst_executable: _ExecutablePath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderConfig: ...
     "# }
 }
 
@@ -3261,33 +3140,11 @@ impl PyRenderConfig {
                     ));
                 }
             }
-            "mode" => {
-                if value.extract::<PyRef<'_, PyInherit>>().is_ok() {
-                    self.values.remove("mode");
-                } else {
-                    let mode = if value.extract::<PyRef<'_, PyAuto>>().is_ok() {
-                        PyRenderMode::Auto
-                    } else {
-                        value.extract::<PyRenderMode>().map_err(|_| {
-                            PyTypeError::new_err("mode must be RenderMode, AUTO, or INHERIT")
-                        })?
-                    };
-                    self.values
-                        .insert("mode".to_owned(), NativeValue::Enum(mode.into()));
-                }
-            }
             "style" => {
                 if value.extract::<PyRef<'_, PyInherit>>().is_ok() {
                     self.values.remove("style");
-                    self.selectors = SelectorSettings::default();
                 } else if value.is_none() {
                     self.values.insert("style".to_owned(), NativeValue::None);
-                    self.selectors = SelectorSettings {
-                        node: SelectorSetting::None,
-                        edge: SelectorSetting::None,
-                        source: SelectorSetting::None,
-                        sink: SelectorSetting::None,
-                    };
                 } else {
                     let options =
                         value
@@ -3301,7 +3158,6 @@ impl PyRenderConfig {
                         "style".to_owned(),
                         NativeValue::Dict(options.values.clone()),
                     );
-                    self.selectors = options.selectors.clone();
                 }
             }
             "layouts" => {
@@ -3329,21 +3185,42 @@ impl PyRenderConfig {
                         .insert("draw".to_owned(), NativeValue::Dict(options.values.clone()));
                 }
             }
-            "physics" => {
+            "selectors" => {
                 if value.extract::<PyRef<'_, PyInherit>>().is_ok() {
-                    self.values.remove("physics");
+                    self.selectors = SelectorSettings::default();
                 } else if value.is_none() {
-                    self.values.insert("physics".to_owned(), NativeValue::None);
+                    self.selectors = SelectorSettings {
+                        node: SelectorSetting::None,
+                        edge: SelectorSetting::None,
+                        source: SelectorSetting::None,
+                        sink: SelectorSetting::None,
+                    };
                 } else {
-                    let options = value
-                        .extract::<PyRef<'_, PyPhysicsOptions>>()
-                        .map_err(|_| {
-                            PyTypeError::new_err("physics must be PhysicsOptions, None, or INHERIT")
-                        })?;
-                    self.values.insert(
-                        "physics".to_owned(),
-                        NativeValue::Dict(options.values.clone()),
-                    );
+                    let options =
+                        value
+                            .extract::<PyRef<'_, PyDrawingSelectors>>()
+                            .map_err(|_| {
+                                PyTypeError::new_err(
+                                    "selectors must be DrawingSelectors, None, or INHERIT",
+                                )
+                            })?;
+                    self.selectors = options.settings.clone();
+                }
+            }
+            "template_options" => {
+                if value.extract::<PyRef<'_, PyInherit>>().is_ok() {
+                    self.values.remove("options");
+                } else if value.is_none() {
+                    self.values.insert("options".to_owned(), NativeValue::None);
+                } else {
+                    let options = native_from_py(value, 0)?;
+                    if !matches!(options, NativeValue::Dict(_)) {
+                        return Err(PyTypeError::new_err(
+                            "template_options must be a dictionary, None, or INHERIT",
+                        ));
+                    }
+                    options.validate(0)?;
+                    self.values.insert("options".to_owned(), options);
                 }
             }
             _ => {
@@ -3810,9 +3687,6 @@ const NODE_DRAWING_FIELDS: &[FieldSpec] = &[
 
 const EDGE_DRAWING_FIELDS: &[FieldSpec] = &[
     FieldSpec::new("label", "label", ValueRule::Content).none(),
-    FieldSpec::new("particle", "particle", ValueRule::String).none(),
-    FieldSpec::new("momentum", "momentum", ValueRule::Scalar).none(),
-    FieldSpec::new("cut_id", "cut_id", ValueRule::Scalar).none(),
     FieldSpec::new("label_position", "label_position", ValueRule::Point).none(),
     FieldSpec::new("label_offset", "label_offset", ValueRule::Number).none(),
     FieldSpec::new("label_angle", "label_angle", ValueRule::Angle).none(),
@@ -3827,7 +3701,6 @@ const EDGE_DRAWING_FIELDS: &[FieldSpec] = &[
     FieldSpec::new("same_rank", "same_rank", ValueRule::Bool).none(),
     FieldSpec::new("style", "style", ValueRule::StyleLayers).none(),
     FieldSpec::new("label_style", "label_style", ValueRule::Style).none(),
-    FieldSpec::new("momentum_style", "momentum_style", ValueRule::StyleLayers).none(),
     FieldSpec::new("decoration", "decoration", ValueRule::PatternOrStyleLayers).none(),
 ];
 
@@ -3878,7 +3751,6 @@ fn drawing_enum_rule(field: &str) -> Option<(EnumKind, bool, bool)> {
         "mark_direction" | "mark-direction" => Some((EnumKind::MarkDirection, false, false)),
         "cap" => Some((EnumKind::StrokeCap, true, false)),
         "join" => Some((EnumKind::StrokeJoin, true, false)),
-        "typst_fields" | "typst-fields" => Some((EnumKind::TypstFields, false, false)),
         _ => None,
     }
 }
@@ -4194,21 +4066,38 @@ pub(crate) fn evaluate_selector(
     py: Python<'_>,
     selector: &Py<PyAny>,
     element: &Bound<'_, PyAny>,
-    kind: crate::drawing::DrawingKind,
-) -> PyResult<Py<PyAny>> {
+    kind: DrawingKind,
+) -> PyResult<Option<Py<PyDict>>> {
     let result = selector.bind(py).call1((element,))?;
-    let value = native_from_py(&result, 0)?;
-    value.validate(0)?;
-    let rule = match kind {
-        crate::drawing::DrawingKind::Node => ValueRule::Style,
-        crate::drawing::DrawingKind::Edge | crate::drawing::DrawingKind::HalfEdge => {
-            ValueRule::StyleLayers
-        }
+    if result.is_none() {
+        return Ok(None);
+    }
+    let expected = match kind {
+        DrawingKind::Node => "NodeDrawing",
+        DrawingKind::Edge => "EdgeDrawing",
+        DrawingKind::HalfEdge => "HalfEdgeDrawing",
     };
-    FieldSpec::new("drawing selector result", "selector-style", rule)
-        .none()
-        .validate(&value)?;
-    native_to_py(py, &value)
+    let wrong_type = || {
+        PyTypeError::new_err(format!(
+            "{} drawing selector must return {expected} or None",
+            kind.name(),
+        ))
+    };
+    let values = match kind {
+        DrawingKind::Node => result
+            .extract::<PyRef<'_, PyNodeDrawing>>()
+            .map_err(|_| wrong_type())?
+            .clone_values(py)?,
+        DrawingKind::Edge => result
+            .extract::<PyRef<'_, PyEdgeDrawing>>()
+            .map_err(|_| wrong_type())?
+            .clone_values(py)?,
+        DrawingKind::HalfEdge => result
+            .extract::<PyRef<'_, PyHalfEdgeDrawing>>()
+            .map_err(|_| wrong_type())?
+            .clone_values(py)?,
+    };
+    Ok(Some(values))
 }
 
 /// Register the typed Typst surface and its two singleton sentinels.
@@ -4231,8 +4120,6 @@ pub(crate) fn register_typst_api(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyStrokeCap>()?;
     module.add_class::<PyStrokeJoin>()?;
     module.add_class::<PyTextStyle>()?;
-    module.add_class::<PyRenderMode>()?;
-    module.add_class::<PyTypstFields>()?;
     module.add_class::<PyDashPattern>()?;
     module.add_class::<PyMarkSymbol>()?;
     module.add_class::<PyMarkPosition>()?;
@@ -4255,9 +4142,9 @@ pub(crate) fn register_typst_api(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyTypstCall>()?;
     module.add_class::<PyTypstBind>()?;
     module.add_class::<PyGraphStyleOptions>()?;
+    module.add_class::<PyDrawingSelectors>()?;
     module.add_class::<PyLayoutOptions>()?;
     module.add_class::<PyDrawOptions>()?;
-    module.add_class::<PyPhysicsOptions>()?;
     module.add_class::<PyRenderConfig>()?;
     module.add("AUTO", auto_singleton(module.py()))?;
     module.add("INHERIT", inherit_singleton(module.py()))?;

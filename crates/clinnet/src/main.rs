@@ -818,6 +818,11 @@ fn typst_native_value(value: &str) -> TypstValue {
     if value == "none" {
         return TypstValue::None;
     }
+    match value.to_ascii_lowercase().as_str() {
+        "true" | "on" | "yes" => return TypstValue::Bool(true),
+        "false" | "off" | "no" => return TypstValue::Bool(false),
+        _ => {}
+    }
     if matches!(
         value,
         "black"
@@ -894,32 +899,6 @@ fn figure_render_config(plan: &FigurePlan, inputs: &[(String, String)]) -> Resul
     if inputs.contains_key("typst-fields") {
         bail!("typst-fields is not supported by the V1 renderer; fields are always plain data");
     }
-    let relative = path_key(&plan.relative);
-    let detected_amplitude = relative.starts_with("processes/amplitudes/")
-        || relative.contains("/processes/amplitudes/");
-    let detected_cross_section = relative.starts_with("processes/cross_sections/")
-        || relative.contains("/processes/cross_sections/");
-    let amplitude = inputs
-        .get("amplitude-mode")
-        .map(|value| bool_input("amplitude-mode", value))
-        .transpose()?
-        .unwrap_or(detected_amplitude);
-    let cross_section = inputs
-        .get("cross-section-mode")
-        .map(|value| bool_input("cross-section-mode", value))
-        .transpose()?
-        .unwrap_or(detected_cross_section);
-    if amplitude && cross_section {
-        bail!("a figure cannot use amplitude and cross-section modes together");
-    }
-    let mode = if amplitude {
-        "amplitude"
-    } else if cross_section {
-        "cross-section"
-    } else {
-        "generic"
-    };
-
     let mut layout = Vec::new();
     for key in ["steps", "seed"] {
         if let Some(value) = inputs.get(key) {
@@ -927,54 +906,20 @@ fn figure_render_config(plan: &FigurePlan, inputs: &[(String, String)]) -> Resul
         }
     }
 
-    let mut physics = Vec::new();
-    for key in [
-        "momentum-arrows",
-        "show-edge-index",
-        "show-node-index",
-        "show-half-edge-index",
-        "show-particle",
-    ] {
-        if let Some(value) = inputs.get(key) {
-            physics.push((key, TypstValue::Bool(bool_input(key, value)?)));
-        }
-    }
-    if let Some(value) = inputs.get("momentum-arrow-mark") {
-        physics.push(("momentum-arrow-mark", typst_native_value(value)));
-    }
-    let paint = inputs.get("momentum-arrow-paint");
-    let thickness = inputs.get("momentum-arrow-thickness");
-    if paint.is_some() || thickness.is_some() {
-        let stroke = typed_dictionary([
-            (
-                "paint",
-                paint.map_or_else(
-                    || TypstValue::NamedColor("black".to_owned()),
-                    |value| typst_native_value(value),
-                ),
-            ),
-            (
-                "thickness",
-                thickness.map_or_else(
-                    || TypstValue::Length(0.55, TypstLengthUnit::Pt),
-                    |value| typst_native_value(value),
-                ),
-            ),
-            ("cap", TypstValue::String("round".to_owned())),
-        ]);
-        physics.push(("momentum-arrow-stroke", stroke));
-    }
+    let options = inputs
+        .iter()
+        .filter(|(key, _)| !matches!(**key, "steps" | "seed"))
+        .map(|(key, value)| (*key, typst_native_value(value)));
 
     let TypstValue::Dictionary(fields) = typed_dictionary([
         ("title", TypstValue::String(derive_title(&plan.relative))),
-        ("mode", TypstValue::String(mode.to_owned())),
         ("layouts", TypstValue::Array(vec![typed_dictionary(layout)])),
         (
             "style",
             typed_dictionary(Vec::<(String, TypstValue)>::new()),
         ),
         ("draw", typed_dictionary(Vec::<(String, TypstValue)>::new())),
-        ("physics", typed_dictionary(physics)),
+        ("options", typed_dictionary(options)),
         (
             "elements",
             typed_dictionary([

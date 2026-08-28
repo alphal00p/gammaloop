@@ -1,5 +1,5 @@
 #import "@preview/tidy:0.4.3"
-#import "../src/lib.typ": draw, graph, layout, physics, subgraph
+#import "../src/lib.typ": draw, graph, layout, subgraph
 #import graph: (
   build, dot, edge, edge-data, edges, node, node-data, nodes, parse, sink, source, update-edge-data, update-node-data,
 )
@@ -91,7 +91,10 @@ function and render the result with `draw`.
 - `subgraph` for subgraph object construction and inspection.
 - `layout` for the separate layout pass.
 - `draw` for rendering a laid-out graph object with CeTZ.
-- `physics` for reusable particle-line edge styles.
+
+Domain-specific styles are ordinary Typst data and callbacks composed with
+`graph.style` and `draw`; Linnest does not reserve a domain or export a physics
+module.
 
 === Choose an import path
 
@@ -247,8 +250,8 @@ They are resolved before the wire format is sent to the Rust plugin. Numeric `id
 arguments choose graph indexes or ordering: on nodes, `id` fixes the resulting
 node index and must be unique and in bounds. On nodes, edges, sources, and
 sinks, extra named arguments are captured as opaque Typst data fields:
-`edge(source(<a>, style: physics.source-stroke()), sink(<b>), particle: "g")`
-stores `(style: ..)` in the source data and `(particle: "g")` in the edge
+`edge(source(<a>, style: (stroke: red + 0.7pt)), sink(<b>), kind: "link")`
+stores `(style: ..)` in the source data and `(kind: "link")` in the edge
 data. These user data values are not sent through the Rust plugin boundary.
 Typst sends an internal opaque payload with correlation data, asks Rust to
 resolve the graph indexes, then stores user data in arrays at those resolved
@@ -264,31 +267,34 @@ content.
 `graph.build` and `graph.parse` also accept `default-node-data`,
 `default-edge-data`, `default-source-data`, and `default-sink-data`.
 These defaults are merged into the corresponding data; captured data
-fields on nodes, edges, sources, and sinks override the defaults. For drawing,
-the
-physics helpers read `data.style` on source and sink half-edges and
-`data.display-label`/`data.label` on edges:
+fields on nodes, edges, sources, and sinks override the defaults. Drawing
+callbacks decide how those fields affect the result. For example, endpoint
+styles can read `data.style` from the source and sink half-edge records:
 
 ```typ
 #let g = build({
   node(<a>, label: [a])
   node(<b>, label: [b])
   edge(
-    source(<a>, style: physics.source-stroke(c: red)),
+    source(<a>, style: (stroke: red + 0.7pt)),
     <e>,
-    sink(<b>, style: physics.sink-stroke(c: blue)),
-    label: [$p$],
-    particle: "g",
+    sink(<b>, style: (stroke: blue + 0.7pt)),
+    label: [connection],
+    kind: "dependency",
   )
 },
   default-edge-data: (kind: "propagator"),
 )
-#let callbacks = physics.style()
+#let endpoint-style(edge, side) = {
+  let endpoint = edge.at(side + "-half-edge", default: none)
+  if endpoint == none { return (:) }
+  endpoint.data.at("style", default: (:))
+}
 #draw(
   layout(g),
-  source-style: callbacks.source-style,
-  sink-style: callbacks.sink-style,
-  edge-label: callbacks.edge-label,
+  source-style: edge => endpoint-style(edge, "source"),
+  sink-style: edge => endpoint-style(edge, "sink"),
+  edge-label: edge => edge.at("label", default: none),
 )
 ```
 
@@ -499,75 +505,50 @@ flipped, and undirected edges suppress the mark.
 ```
 ]
 
-#let physics-concepts = [
-=== Physics Edge Styles
+#let domain-style-concepts = [
+=== Domain Styles And Templates
 
-`physics.style(..)` returns `source-style`, `sink-style`, and `edge-label`
-callbacks for `draw`. The default source/sink strokes use darker/lighter halves
-to encode the graph source/sink split. Fermion map entries marked with
-`fermion-flow` receive one particle-flow arrow on the main edge using
-`mark-orientation: "edge"`; paired edges follow `edge.orientation`, dangling
-half edges place the arrow in the middle of the visible half edge, and
-undirected edges omit the arrow. This is independent of momentum arrows.
-
-Set `momentum-arrows: true` to draw centered parallel arrow decorations while
-the main edge remains connected to the nodes. The arrows flow from source to
-sink independently of the DOT
-`dir`/`orientation` value; there is one momentum marker per edge, even though
-the base edge is internally styled as source and sink halves. On paired edges
-the marker lives on the sink half; on dangling edges it lives on the existing
-source or sink half-edge. The decoration defaults to a plain black `0.55pt`
-stroke and a scaled CeTZ `"barbed"` arrowhead, so it does not inherit the base
-particle stroke. The arrow length is capped by both `momentum-arrow-length` and
-`momentum-arrow-ratio`, so the shorter one wins. When the layout provides an
-edge-label position, the arrow offset is signed so the momentum marker is drawn
-on the same side of the edge as that label. Use `momentum-arrow-offset` to set
-the normal displacement. `momentum-arrow-mark: auto` uses the default barbed
-marker, `momentum-arrow-mark: none` draws only the momentum line, and any other
-value overrides the CeTZ mark style, for example `"stealth"` or `(end: "barbed",
-scale: 1.6)`. Only the `end` mark is kept so source/sink splitting cannot
-create a second momentum head.
-
-Optional labels can be built from edge metadata with `show-edge-index`,
-`show-half-edge-index`, `show-particle`, and, for explicit momentum fields,
-`show-momentum`.
-`show-half-edge-index` only emits a value for dangling half edges.
+Linnest's drawing layer is domain-neutral. A caller can map arbitrary node,
+edge, and half-edge data to ordinary `graph.style` or `draw` callbacks without
+changing topology or adding a domain-specific core option. The following map
+uses an application-defined `kind` field; the names and styles have no meaning
+to Linnest itself:
 
 ```typ
-#import "../src/lib.typ": draw, graph, layout, physics
-#import graph: build, dot, edge, edges, node, nodes, parse, sink, source
+#import "../src/lib.typ": draw, graph, layout
+#import graph: build, edge, node, sink, source
 
+#let kinds = (
+  dependency: (
+    source: (stroke: rgb("#315f9f") + 0.8pt),
+    sink: (stroke: rgb("#6f96c8") + 0.8pt),
+  ),
+  event: (
+    source: (stroke: rgb("#a24b36") + 0.8pt, mark: (end: ">")),
+    sink: (stroke: rgb("#d18b76") + 0.8pt, mark: (end: ">")),
+  ),
+)
+#let entry(edge) = kinds.at(edge.at("kind", default: "dependency"))
 #let g = build({
-  node(<a>)
-  node(<c>)
-  edge(
-    source(<a>),
-    <fermion-main>,
-    sink(<c>),
-    id: 7,
-    particle: "fermion",
-  )
-  edge(
-    source(<c>),
-    <fermion-out>,
-    id: 8,
-    particle: "fermion",
-  )
-},
-  name: "physics",
-)
-#let callbacks = physics.style(
-  momentum-arrows: true,
-  show-edge-index: true,
-  show-particle: true,
-)
+  node(<queued>, label: [queued])
+  node(<running>, label: [running])
+  node(<done>, label: [done])
+  edge(source(<queued>), <starts>, sink(<running>), kind: "event", label: [starts])
+  edge(source(<running>), <needs>, sink(<done>), kind: "dependency", label: [needs])
+})
+#let g = graph.style(g, edge-label: edge => edge.at("label", default: none))
 #draw(
   layout(g),
-  source-style: callbacks.source-style,
-  sink-style: callbacks.sink-style,
-  edge-label: callbacks.edge-label,
+  source-style: edge => entry(edge).source,
+  sink-style: edge => entry(edge).sink,
 )
 ```
+
+Custom templates can package the same policy behind their mandatory
+`render(config)` export. The selected application owns the meaning and schema
+of any extra options. GammaLoop follows that boundary: its particle, momentum,
+and diagram-mode callbacks live in its own `physics-edge-style.typ` drawing
+template, not in Linnest's `lib.typ`.
 
 Set `edge-offset` on `draw`, or `offset` in a `source-style`/`sink-style`
 dictionary, to draw a fitted parallel path. Style callbacks may also return an
@@ -623,8 +604,16 @@ fields to the Rust topology spec:
   default-source-data: (style: (stroke: red + 0.5pt)),
   default-sink-data: (style: (stroke: blue + 0.5pt)),
 )
-#let callbacks = physics.style()
-#draw(layout(g), source-style: callbacks.source-style, sink-style: callbacks.sink-style)
+#let endpoint-style(edge, side) = {
+  let endpoint = edge.at(side + "-half-edge", default: none)
+  if endpoint == none { return (:) }
+  endpoint.data.at("style", default: (:))
+}
+#draw(
+  layout(g),
+  source-style: edge => endpoint-style(edge, "source"),
+  sink-style: edge => endpoint-style(edge, "sink"),
+)
 ```
 
 `graph.build` also accepts comma-separated items:
@@ -812,7 +801,6 @@ Subgraph objects are opaque zero-copy values.
   draw: draw,
   graph: graph,
   layout: layout,
-  physics: physics,
   subgraph: subgraph,
 )
 
@@ -850,11 +838,6 @@ Subgraph objects are opaque zero-copy values.
   "Reference",
   function-aliases: (sequence: "layout-sequence"),
 )
-#let physics-reference = _show-reference(
-  read("../src/physics-edge-style.typ"),
-  "physics",
-  preamble: "#import graph: *\n",
-)
 #let drawing-reference = _show-reference(read("../src/draw.typ"), "Reference")
 #let subgraph-reference = _show-reference(read("../src/subgraph.typ"), "subgraph")
 
@@ -864,7 +847,7 @@ Subgraph objects are opaque zero-copy values.
 #graph-concepts
 #placement-concepts
 #drawing-concepts
-#physics-concepts
+#domain-style-concepts
 #graph-query-concepts
 #layout-concepts
 #subgraph-concepts
@@ -873,7 +856,6 @@ Subgraph objects are opaque zero-copy values.
 
 #graph-reference
 #layout-reference
-#physics-reference
 #drawing-reference
 #subgraph-reference
 ]

@@ -86,10 +86,15 @@ fn apply_selector(
         return Ok(());
     };
     for (index, view) in views.into_iter().enumerate() {
-        let value = evaluate_selector(py, selector, view?.bind(py), kind)?;
+        let Some(value) = evaluate_selector(py, selector, view?.bind(py), kind)? else {
+            continue;
+        };
+        let patch = element_drawing(py, value.bind(py), kind)?;
         let element = elements.get_item(index)?.cast_into::<PyDict>()?;
-        if element.get_item("selector-style")?.is_none() {
-            element.set_item("selector-style", value)?;
+        for (key, value) in patch.iter() {
+            if element.get_item(&key)?.is_none() {
+                element.set_item(key, value)?;
+            }
         }
     }
     Ok(())
@@ -163,10 +168,17 @@ fn apply_selectors(
             selectors.sink.as_ref()
         };
         if let Some(selector) = selector {
-            let value = evaluate_selector(py, selector, view.bind(py), DrawingKind::HalfEdge)?;
+            let Some(value) =
+                evaluate_selector(py, selector, view.bind(py), DrawingKind::HalfEdge)?
+            else {
+                continue;
+            };
+            let patch = element_drawing(py, value.bind(py), DrawingKind::HalfEdge)?;
             let element = half_edges.get_item(index)?.cast_into::<PyDict>()?;
-            if element.get_item("selector-style")?.is_none() {
-                element.set_item("selector-style", value)?;
+            for (key, value) in patch.iter() {
+                if element.get_item(&key)?.is_none() {
+                    element.set_item(key, value)?;
+                }
             }
         }
     }

@@ -42,9 +42,10 @@ def _(mo):
     drawing. `Graph._repr_svg_()` powers the automatic display; `to_svg()` and
     `render(path)` expose the same Typst 0.15 pipeline explicitly.
 
-    Physics conventions are an optional rendering layer. The example data
-    below is an application workflow: every node, edge, and half-edge carries
-    an arbitrary Python dataclass instance that is never serialized to Typst.
+    Domain-specific conventions are ordinary Python render settings, not modes
+    built into Linnet. The example data below is an application workflow: every
+    node, edge, and half-edge carries an arbitrary Python dataclass instance
+    that is never serialized to Typst.
     """)
     return
 
@@ -67,17 +68,17 @@ def _(lp, mo):
         value="Force",
         label="Layout",
     )
-    physics_overlay = mo.ui.checkbox(
+    custom_theme = mo.ui.checkbox(
         value=False,
-        label="Physics line overlay (optional)",
+        label="Custom Python line theme (optional)",
     )
     controls = mo.hstack(
-        [node_store, layout_algorithm, physics_overlay],
+        [node_store, layout_algorithm, custom_theme],
         justify="start",
         gap=1.5,
     )
     controls
-    return layout_algorithm, node_store, physics_overlay
+    return custom_theme, layout_algorithm, node_store
 
 
 @app.cell
@@ -85,10 +86,10 @@ def _(
     ChannelRecord,
     EndpointRecord,
     TaskRecord,
+    custom_theme,
     layout_algorithm,
     lp,
     node_store,
-    physics_overlay,
 ):
     runtime_context = object()
     receive_data = TaskRecord("platform", 3, runtime_context)
@@ -213,25 +214,56 @@ def _(
         title="Document intake workflow",
         layouts=_layouts,
     )
-    if physics_overlay.value:
-        graph.render_config.physics = lp.PhysicsOptions(
-            momentum_arrows=True,
-            show_momentum=False,
-            show_node_index=False,
-            show_edge_index=False,
-            show_half_edge_index=False,
-            show_particle=False,
+    if custom_theme.value:
+        _channel_colors = {
+            "append log": lp.Color("purple"),
+            "https": lp.Color("blue"),
+            "stream": lp.Color("teal"),
+        }
+
+        def _channel_drawing(edge):
+            _paint = _channel_colors.get(edge.data.protocol, lp.Color("black"))
+            return lp.EdgeDrawing(
+                label=lp.TextLabel(edge.name or edge.data.protocol, fill=_paint),
+                style={
+                    "stroke": lp.Stroke(
+                        paint=_paint,
+                        thickness=lp.Length.pt(0.7),
+                    )
+                },
+                decoration=(
+                    lp.Pattern.Wave if edge.data.protocol == "stream" else lp.INHERIT
+                ),
+            )
+
+        def _direction_drawing(half_edge):
+            _edge = half_edge.edge
+            _arrow_half = _edge.sink if _edge.sink is not None else _edge.source
+            if _arrow_half is None or half_edge.index != _arrow_half.index:
+                return None
+            return lp.HalfEdgeDrawing(
+                style={
+                    "mark": lp.Mark.straight(),
+                    "mark-position": lp.MarkPosition.CenterIfDangling,
+                    "mark-orientation": lp.MarkOrientation.Edge,
+                }
+            )
+
+        graph.render_config.selectors = lp.DrawingSelectors(
+            edge=_channel_drawing,
+            source=_direction_drawing,
+            sink=_direction_drawing,
         )
     return graph, receive_data, request_channel, request_port, runtime_context
 
 
 @app.cell
-def _(graph, mo, physics_overlay):
+def _(custom_theme, graph, mo):
     _overlay_note = (
-        "The explicit physics line overlay is enabled; it changes only drawing "
-        "callbacks, not the workflow payloads."
-        if physics_overlay.value
-        else "No physics configuration is active; this is the default generic display."
+        "The optional theme is enabled. It is assembled entirely in Python "
+        "from typed drawing selectors and inspects the workflow payloads."
+        if custom_theme.value
+        else "No custom theme is active; this is the default generic display."
     )
     mo.md(f"""
     ## Automatic rich display
@@ -306,6 +338,11 @@ def _(
     - shared runtime object remains aliased: **{_shared_alias}**
     - SVG starts with: `{svg[:40]!r}`
     """)
+    return
+
+
+@app.cell
+def _():
     return
 
 
