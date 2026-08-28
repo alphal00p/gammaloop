@@ -1,4 +1,4 @@
-#import "../../shared.typ": boundary
+#import "../../shared.typ": boundary, source-link
 
 #let api = [
 = Choose a Linnet interface
@@ -11,8 +11,8 @@ shares the half-edge model while exposing the conventions natural to its languag
 
 Linnest combines Typst functions with a WebAssembly plugin. Follow the
 #link("guides/linnest/")[Linnest workflow guide] for a first drawing, then use the focused
-#link("reference/typst/")[Typst API reference] for its graph, layout, drawing, physics, and
-subgraph surfaces. The curve helpers are Kurvst re-exports and stay documented in their
+#link("reference/typst/")[Typst API reference] for its graph, layout, drawing, subgraph, and
+template-composition surfaces. The curve helpers are Kurvst re-exports and stay documented in their
 canonical GammaLoop guide.
 
 == Rust package
@@ -114,8 +114,9 @@ Names and integer indices are accepted for node and edge lookup. Topology proper
 field on `drawing` are mutable. Endpoint-specific `source(..., data=...)` and
 `sink(..., data=...)` payloads are optional; use them only when the application has distinct
 half-edge data. Drawing fields include labels and styles as well as placement,
-routing, rank, size, bend, momentum, particle, cut, and half-edge anchor information. Put a
-template-specific field in `drawing.extensions`; built-in field names are reserved.
+routing, rank, size, bend, decoration, and half-edge anchor information. Put a
+template-specific field such as a particle or cut identifier in `drawing.extensions`; built-in
+field names are reserved and Linnet assigns no domain meaning to extensions.
 
 `Graph.map(node=..., edge=..., source=..., sink=...)` evaluates the supplied callbacks against
 live element views and returns a new graph. An omitted callback preserves the exact Python data
@@ -130,7 +131,7 @@ index, or live-node key. Incremental endpoints resolve a current live `Node`, na
 named `NodeSpec`:
 
 ```python
-from linnet_py import Compass, Graph, MathSymbol, edge, node, sink, source
+from linnet_py import Compass, Graph, edge, node, sink, source
 
 graph = Graph()
 graph.add_node(node("in", data=UserNodeData(object()), label="incoming"))
@@ -141,8 +142,7 @@ propagator = graph.add_edge(edge(
     "propagator",
     sink(graph.node("out"), data=UserHalfEdgeData(object()), compass=Compass.W),
     data=UserEdgeData(object()),
-    particle="e-",
-    label=MathSymbol("p", subscript=0),
+    label="dependency",
 ))
 ```
 
@@ -271,17 +271,21 @@ and `MathSymbol`, plus recursively validated arrays and string-keyed dictionarie
 layout, placement, routing, anchor, pattern, mark, and debug choices use their exported enums;
 the structured Python reference lists the choices for each option.
 
-`GraphStyleOptions`, `LayoutOptions`, `DrawOptions`, and `PhysicsOptions` cover the corresponding
-Linnest surfaces. Layout passes retain their order:
+`GraphStyleOptions`, `LayoutOptions`, and `DrawOptions` cover the corresponding generic Linnest
+surfaces. `DrawingSelectors` maps arbitrary Python data to detached typed drawing values at render
+time. Layout passes retain their order:
 
 ```python
 from linnet_py import (
+    Color,
+    DrawingSelectors,
+    EdgeDrawing,
     LayoutAlgorithm,
     LayoutDirection,
     LayoutOptions,
-    PhysicsOptions,
+    Length,
     RenderConfig,
-    RenderMode,
+    Stroke,
 )
 
 layouts = LayoutOptions(
@@ -292,48 +296,106 @@ layouts = LayoutOptions(
 graph.render_config = RenderConfig(
     title="Example",
     layouts=layouts,
+    selectors=DrawingSelectors(
+        edge=lambda value: EdgeDrawing(
+            label="dependency",
+            style={
+                "stroke": Stroke(
+                    paint=Color("navy"),
+                    thickness=Length.pt(0.8),
+                ),
+            },
+        ) if isinstance(value.data, UserEdgeData) else None,
+    ),
 )
 
 output = graph.render("diagram.pdf")
 svg = graph.to_svg()
 graph  # the final expression in a notebook renders inline
-
-# Physics callbacks and topology-based mode inference are explicit overlays.
-physics_svg = graph.to_svg(config=RenderConfig(
-    mode=RenderMode.Auto,
-    physics=PhysicsOptions(
-        momentum_arrows=True,
-        show_momentum=True,
-        show_edge_index=True,
-    ),
-))
 ```
 
-The four configuration layers are shipped defaults, the selected diagram-mode preset, the
-graph's `render_config`, and a sparse per-call `config` overlay. `render(output, config=None)`
-writes PDF, SVG, or PNG according to the output suffix. `to_svg(config=None)` returns SVG text,
-and `_repr_svg_()` supports notebooks. These are the only high-level rendering methods; there are
-no raw command-line inputs or string-expression escape hatches. Rendering requires Typst 0.15 or
-newer and keeps generated inputs and imported modules alive until compilation completes.
+The selected template's defaults are overlaid by the graph's `render_config` and then by a sparse
+per-call `config`. `render(output, config=None)` writes PDF, SVG, or PNG according to the output
+suffix. `to_svg(config=None)` returns SVG text, and `_repr_svg_()` supports notebooks. These are
+the only high-level rendering methods; there are no raw command-line inputs or string-expression
+escape hatches. Rendering requires Typst 0.15 or newer and keeps generated inputs and imported
+modules alive until compilation completes.
 
 The shipped notebook display is generic and model-neutral, including for graphs with dangling
-edges. `RenderMode.Auto` explicitly opts into amplitude/cross-section inference from topology,
-while `PhysicsOptions()` enables particle, momentum, index-label, and physics-line callbacks.
-Use both when physics mode labels and placement are wanted. `physics=None` explicitly disables an
-inherited physics layer; `INHERIT` leaves the preceding layer unchanged. Explicit node and edge
-labels and ordinary styles remain active without physics.
+edges. It never infers amplitude, cross-section, particle, or momentum semantics from topology.
+An application that needs those concepts selects its own template and passes that template's
+closed native settings through `RenderConfig.template_options`. `INHERIT` leaves the preceding
+configuration layer unchanged, while `None` becomes Typst `none`.
+
+```python
+domain_template = RenderConfig(
+    template="templates/domain-figure.typ",
+    template_options={
+        "theme": "review",
+        "accent": Color("teal"),
+    },
+)
+```
+
+`template_options` is intentionally a string-keyed dictionary because the selected template,
+not Linnet, defines that open schema. Its values still use the closed native-value model; it is
+not a dictionary of Typst source strings.
 
 `graph.render_config` is a live mutable object: assign its fields directly, or replace the whole
-configuration. The nested style, layout, drawing, and physics option objects are immutable values,
-and their getters return copies, so replace those fields rather than trying to mutate a nested
-object in place. `overlay()` returns a new configuration, and a per-call overlay never mutates the
-graph's stored defaults.
+configuration. The nested style, layout, drawing, and selector option objects are immutable
+values, and their getters return copies, so replace those fields rather than trying to mutate a
+nested object in place. `overlay()` returns a new configuration, and a per-call overlay never
+mutates the graph's stored defaults.
 
-Python drawing selectors belong on `GraphStyleOptions`. They may inspect arbitrary `.data`, but
-node selectors must return a style dictionary or module value, while edge, source, and sink
-selectors return one style layer or an array of layers. Only that validated result crosses the
-process boundary. Typst callbacks that require measured geometry use an explicit module function
-reference:
+Python drawing selectors belong on `RenderConfig.selectors`. They may inspect arbitrary `.data`,
+but must return the corresponding detached `NodeDrawing`, `EdgeDrawing`, or `HalfEdgeDrawing`, or
+`None` when no defaults apply. Selector fields fill only drawing fields that are absent on the
+element, so explicit element drawing remains authoritative. Only the validated drawing snapshot
+crosses the process boundary. The example above happens to color an application-defined edge
+payload; custom particle styling works the same way and is not a special Linnet mode:
+
+```python
+from dataclasses import dataclass
+
+from linnet_py import (
+    Color,
+    DrawingSelectors,
+    EdgeDrawing,
+    Length,
+    MathSymbol,
+    RenderConfig,
+    Stroke,
+)
+
+
+@dataclass
+class ParticleStyle:
+    color: Color
+    symbol: str
+
+
+def particle_drawing(value):
+    if not isinstance(value.data, ParticleStyle):
+        return None
+    return EdgeDrawing(
+        label=MathSymbol(value.data.symbol),
+        style={"stroke": Stroke(paint=value.data.color, thickness=Length.pt(0.8))},
+    )
+
+
+particle_style_example = RenderConfig(
+    selectors=DrawingSelectors(edge=particle_drawing),
+)
+```
+
+This is ordinary userland settings composition: Linnet neither defines `ParticleStyle` nor
+inspects it. GammaLoop's richer particle decorations, momentum annotations, and diagram modes
+belong to GammaLoop's own template rather than to a `PhysicsOptions` type in `linnet_py`.
+The #source-link(
+  "crates/linnet-py/examples/physics_render_settings.py",
+  label: "complete Python-only physics theme",
+) composes edge and half-edge layers using the same generic API.
+Typst callbacks that require measured geometry use an explicit module function reference:
 
 ```python
 from linnet_py import TypstModule
@@ -344,7 +406,7 @@ graph.edge("propagator").drawing.style = styles.function("edge_style").bind(
     emphasis=True
 )
 graph.edge("propagator").drawing.extensions = {
-    "particle-map": styles.value("particle_map"),
+    "lane-map": styles.value("lane_map"),
 }
 ```
 
@@ -358,17 +420,20 @@ A custom rendering template is a Typst module with one mandatory V1 export:
 #let render(config) = {
   assert(config.schema == "linnet-render-config")
   assert(config.version == 1)
-  // Read typed values from config and return the rendered content.
+  let options = config.at("options", default: (:))
+  // Read typed element values and template-owned options, then render content.
   config.elements.nodes.at(0).label
 }
 ```
 
-Bundled generic and GammaLoop templates use this same contract. Diagram-mode presets retain
-particle decoration, momentum arrowheads and index labels, amplitude edge ordering and side
-labels, cut-ID-matched cross-section side labels, directional placement, and label-aware sizing.
-Explicit element or configuration values override mode-generated values, which override the
-template defaults. Final labels and styles are applied before layout so their measured sizes
-affect spacing.
+The bundled generic and GammaLoop templates use this same contract. The generic template ignores
+unknown domain concepts. GammaLoop's template owns its mode presets, particle decoration,
+momentum arrowheads and index labels, amplitude edge ordering and side labels, cut-ID-matched
+cross-section side labels, directional placement, and label-aware sizing. Python selects that
+template explicitly and passes its template-specific settings through `template_options`.
+Within GammaLoop's template, explicit element or configuration values override generated values,
+which override template defaults. Final labels and styles are applied before layout so their
+measured sizes affect spacing.
 
 === Explicit DOT codecs
 

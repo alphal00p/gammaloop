@@ -1,4 +1,4 @@
-#import "../../../../crates/linnest/typst/src/physics-edge-style.typ": (
+#import "../../../../assets/embedded/drawing/templates/physics-edge-style.typ": (
   coil, dashed, dotted, mi, sink-stroke, source-stroke, style, wave, zigzag,
 )
 #import "../theme.typ": palette

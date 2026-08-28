@@ -21,9 +21,6 @@ pub(crate) const NODE_FIELDS: &[&str] = &[
 
 pub(crate) const EDGE_FIELDS: &[&str] = &[
     "label",
-    "particle",
-    "momentum",
-    "cut_id",
     "placement",
     "label_position",
     "label_offset",
@@ -34,7 +31,6 @@ pub(crate) const EDGE_FIELDS: &[&str] = &[
     "same_rank",
     "style",
     "label_style",
-    "momentum_style",
     "decoration",
 ];
 
@@ -71,7 +67,6 @@ impl DrawingKind {
             (Self::Node, "maximum_size") => "maximum-size",
             (Self::Node, "style") => "node-style",
             (Self::Node, "label_style") => "node-label-style",
-            (Self::Edge, "cut_id") => "cut-id",
             (Self::Edge, "label_position") => "label-pos",
             (Self::Edge, "label_offset") => "label-offset",
             (Self::Edge, "label_angle") => "label-angle",
@@ -79,7 +74,6 @@ impl DrawingKind {
             (Self::Edge, "same_rank") => "same-rank",
             (Self::Edge, "style") => "edge-style",
             (Self::Edge, "label_style") => "edge-label-style",
-            (Self::Edge, "momentum_style") => "momentum-style",
             (Self::HalfEdge, "port_label") => "port-label",
             _ => key,
         }
@@ -124,7 +118,6 @@ fn validate_extensions(extensions: &Bound<'_, PyDict>, fields: &[&str]) -> PyRes
         }
         DrawingKind::HalfEdge => {}
     }
-    reserved.insert("selector-style");
     for (key, value) in extensions.iter() {
         let key = key
             .extract::<String>()
@@ -367,9 +360,6 @@ drawing_class!(
     EDGE_FIELDS,
     [
         label, set_label, label, "label", "_OptionalStaticContent";
-        particle, set_particle, particle, "particle", "_DrawingString";
-        momentum, set_momentum, momentum, "momentum", "_DrawingScalar";
-        cut_id, set_cut_id, cut_id, "cut_id", "_DrawingScalar";
         placement, set_placement, placement, "placement", "_PlacementValue";
         label_position, set_label_position, label_position, "label_position", "_DrawingPoint";
         label_offset, set_label_offset, label_offset, "label_offset", "_OptionalNumber";
@@ -380,7 +370,6 @@ drawing_class!(
         same_rank, set_same_rank, same_rank, "same_rank", "_OptionalBoolean";
         style, set_style, style, "style", "_OptionalStyleLayers";
         label_style, set_label_style, label_style, "label_style", "_OptionalStyle";
-        momentum_style, set_momentum_style, momentum_style, "momentum_style", "_OptionalStyleLayers";
         decoration, set_decoration, decoration, "decoration", "_DrawingDecoration";
     ]
 );
@@ -415,7 +404,7 @@ pyo3_stub_gen::inventory::submit! {
         import typing
 
         class PyEdgeDrawing:
-            def __new__(cls, *, label: _OptionalStaticContent = ..., particle: _DrawingString = ..., momentum: _DrawingScalar = ..., cut_id: _DrawingScalar = ..., placement: _PlacementValue = ..., label_position: _DrawingPoint = ..., label_offset: _OptionalNumber = ..., label_angle: _DrawingAngle = ..., bend: _DrawingAngle = ..., routing: _RoutingValue = ..., minimum_length: _OptionalInteger = ..., same_rank: _OptionalBoolean = ..., style: _OptionalStyleLayers = ..., label_style: _OptionalStyle = ..., momentum_style: _OptionalStyleLayers = ..., decoration: _DrawingDecoration = ..., extensions: _NativeDict = ...) -> EdgeDrawing: ...
+            def __new__(cls, *, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., label_position: _DrawingPoint = ..., label_offset: _OptionalNumber = ..., label_angle: _DrawingAngle = ..., bend: _DrawingAngle = ..., routing: _RoutingValue = ..., minimum_length: _OptionalInteger = ..., same_rank: _OptionalBoolean = ..., style: _OptionalStyleLayers = ..., label_style: _OptionalStyle = ..., decoration: _DrawingDecoration = ..., extensions: _NativeDict = ...) -> EdgeDrawing: ...
     "# }
 }
 

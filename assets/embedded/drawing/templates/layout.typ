@@ -1,6 +1,7 @@
 #import "crates/linnest/typst/src/lib.typ": (
-  draw, graph, layout as apply-layout, physics, subgraph,
+  draw, graph, layout as apply-layout, subgraph,
 )
+#import "physics-edge-style.typ" as physics
 #import "edge-style.typ" as edge-style
 #import "layout-core.typ": bind-layout, bind-render
 

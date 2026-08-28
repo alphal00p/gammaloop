@@ -912,7 +912,7 @@ mod tests {
     }
 
     #[test]
-    fn default_template_renders_modes_physics_and_static_subgraphs_with_typst() {
+    fn default_template_renders_generic_config_and_static_subgraphs_with_typst() {
         let typst = std::env::var_os("TYPST_TEST_EXECUTABLE")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("typst"));
@@ -932,43 +932,34 @@ mod tests {
             SCRATCH_ID.fetch_add(1, Ordering::Relaxed)
         ));
         let renderer = TypstRenderer::new(&base).typst_executable(typst);
-        let dot = r#"digraph modes {
+        let dot = r#"digraph generic {
             0 [id=0]; 1 [id=1];
             ext0 [style=invis]; ext0 -> 0:0 [id=0];
             0:1 -> 1:2 [id=1];
             ext1 [style=invis]; 1:3 -> ext1 [id=2];
         }"#;
-        let elements = |cut_ids: bool, first_particle: &str| {
-            let edge = |particle: &str, cut_id: Option<&str>| {
-                let mut fields = std::collections::BTreeMap::from([(
-                    "particle".to_owned(),
-                    TypstValue::String(particle.to_owned()),
-                )]);
-                if let Some(cut_id) = cut_id {
-                    fields.insert("cut-id".to_owned(), TypstValue::String(cut_id.to_owned()));
-                }
-                TypstValue::Dictionary(fields)
-            };
-            value_dict([
-                ("graph", TypstValue::None),
-                (
-                    "nodes",
-                    TypstValue::Array(vec![
-                        value_dict(Vec::<(String, TypstValue)>::new()),
-                        value_dict(Vec::<(String, TypstValue)>::new()),
+        let elements = value_dict([
+            ("graph", TypstValue::None),
+            (
+                "nodes",
+                TypstValue::Array(vec![
+                    value_dict([("label", TypstValue::String("alpha".to_owned()))]),
+                    value_dict([("label", TypstValue::String("beta".to_owned()))]),
+                ]),
+            ),
+            (
+                "edges",
+                TypstValue::Array(vec![
+                    value_dict([("label", TypstValue::String("input".to_owned()))]),
+                    value_dict([
+                        ("label", TypstValue::String("relation".to_owned())),
+                        ("minimum-length", TypstValue::Integer(2)),
                     ]),
-                ),
-                (
-                    "edges",
-                    TypstValue::Array(vec![
-                        edge(first_particle, cut_ids.then_some("pair")),
-                        edge("photon", None),
-                        edge("e+", cut_ids.then_some("pair")),
-                    ]),
-                ),
-                ("hedges", TypstValue::Array(Vec::new())),
-            ])
-        };
+                    value_dict([("label", TypstValue::String("output".to_owned()))]),
+                ]),
+            ),
+            ("hedges", TypstValue::Array(Vec::new())),
+        ]);
         let all_hedges = TypstValue::Array(vec![
             TypstValue::Bool(true),
             TypstValue::Bool(true),
@@ -997,164 +988,54 @@ mod tests {
                 ("subgraph", all_hedges),
             ]),
         ]);
-        let config =
-            |mode: Option<&str>, arrows: Option<bool>, cut_ids: bool, first_particle: &str| {
-                let mut fields = std::collections::BTreeMap::from([
-                    ("layouts".to_owned(), layouts.clone()),
-                    (
-                        "draw".to_owned(),
-                        value_dict([(
-                            "subgraph",
-                            TypstValue::Array(vec![
-                                TypstValue::Array(vec![
-                                    TypstValue::Bool(true),
-                                    TypstValue::Bool(false),
-                                    TypstValue::Bool(true),
-                                    TypstValue::Bool(false),
-                                ]),
-                                TypstValue::Array(vec![
-                                    TypstValue::Bool(false),
-                                    TypstValue::Bool(true),
-                                    TypstValue::Bool(false),
-                                    TypstValue::Bool(true),
-                                ]),
-                            ]),
-                        )]),
-                    ),
-                    ("elements".to_owned(), elements(cut_ids, first_particle)),
-                ]);
-                if let Some(mode) = mode {
-                    fields.insert("mode".to_owned(), TypstValue::String(mode.to_owned()));
-                }
-                if let Some(arrows) = arrows {
-                    fields.insert(
-                        "physics".to_owned(),
-                        value_dict([
-                            ("momentum-arrows", TypstValue::Bool(arrows)),
-                            ("show-edge-index", TypstValue::Bool(true)),
-                            ("show-node-index", TypstValue::Bool(true)),
-                            ("show-particle", TypstValue::Bool(true)),
+        let config = TypstConfig::new(std::collections::BTreeMap::from([
+            ("layouts".to_owned(), layouts),
+            (
+                "draw".to_owned(),
+                value_dict([(
+                    "subgraph",
+                    TypstValue::Array(vec![
+                        TypstValue::Array(vec![
+                            TypstValue::Bool(true),
+                            TypstValue::Bool(false),
+                            TypstValue::Bool(true),
+                            TypstValue::Bool(false),
                         ]),
-                    );
-                }
-                TypstConfig::new(fields).unwrap()
-            };
+                        TypstValue::Array(vec![
+                            TypstValue::Bool(false),
+                            TypstValue::Bool(true),
+                            TypstValue::Bool(false),
+                            TypstValue::Bool(true),
+                        ]),
+                    ]),
+                )]),
+            ),
+            ("elements".to_owned(), elements),
+            (
+                "options".to_owned(),
+                value_dict([("application", TypstValue::String("example".to_owned()))]),
+            ),
+        ]))
+        .unwrap();
 
-        let neutral = renderer
-            .to_svg(&TypstRenderRequest::new(
-                dot,
-                config(None, None, true, "e-"),
-            ))
+        let svg = renderer
+            .to_svg(&TypstRenderRequest::new(dot, config))
             .unwrap();
-        let explicit_neutral = renderer
-            .to_svg(&TypstRenderRequest::new(
-                dot,
-                config(Some("generic"), None, true, "e-"),
-            ))
-            .unwrap();
-
-        let plain = renderer
-            .to_svg(&TypstRenderRequest::new(
-                dot,
-                config(Some("generic"), Some(false), true, "e-"),
-            ))
-            .unwrap();
-        let amplitude = renderer
-            .to_svg(&TypstRenderRequest::new(
-                dot,
-                config(Some("amplitude"), Some(true), true, "e-"),
-            ))
-            .unwrap();
-        let cross_section = renderer
-            .to_svg(&TypstRenderRequest::new(
-                dot,
-                config(Some("cross-section"), Some(true), true, "e-"),
-            ))
-            .unwrap();
-        let automatic_cross_section = renderer
-            .to_svg(&TypstRenderRequest::new(
-                dot,
-                config(Some("auto"), Some(true), true, "e-"),
-            ))
-            .unwrap();
-        let automatic_amplitude = renderer
-            .to_svg(&TypstRenderRequest::new(
-                dot,
-                config(Some("auto"), Some(true), false, "e-"),
-            ))
-            .unwrap();
-        let explicit_amplitude = renderer
-            .to_svg(&TypstRenderRequest::new(
-                dot,
-                config(Some("amplitude"), Some(true), false, "e-"),
-            ))
-            .unwrap();
-        let unknown_particle = renderer
-            .to_svg(&TypstRenderRequest::new(
-                dot,
-                config(Some("amplitude"), Some(true), false, "unknown"),
-            ))
-            .unwrap();
-        assert_eq!(neutral, explicit_neutral);
-        assert_ne!(neutral, plain);
-        assert!(plain.contains("<svg"));
-        assert!(amplitude.contains("<svg"));
-        assert!(cross_section.contains("<svg"));
-        assert_ne!(plain, amplitude);
-        assert_ne!(amplitude, cross_section);
-        assert_eq!(automatic_cross_section, cross_section);
-        assert_eq!(automatic_amplitude, explicit_amplitude);
-        assert_ne!(explicit_amplitude, unknown_particle);
+        assert!(svg.contains("<svg"));
 
         let templates = base.join(DEFAULT_TEMPLATE_SUBDIR);
-        let assertions = templates.join("mode-assertions.typ");
+        let assertions = templates.join("generic-assertions.typ");
         fs::write(
             &assertions,
             r#"#import "layout.typ": (
   _attach-elements,
   _apply-element-layout-constraints,
   _apply-label-offsets,
-  _autogen-mode-edges,
   _edge-rank-same,
   _element-edge-style,
   _layout-pass,
-  _mode-edge-label,
-  _momentum-index-label,
-  _node-index-label,
-  _physics-callbacks,
-  _physics-options,
 )
 #import "crates/linnest/typst/src/lib.typ": graph
-
-#let options = _physics-options((physics: (momentum-arrows: true),))
-#let callbacks = _physics-callbacks(options)
-#let edge = (
-  particle: "e-",
-  source-half-edge: (hedge: 0),
-  sink-half-edge: (hedge: 1),
-  orientation: "default",
-  data: (:),
-)
-#let source-style = (callbacks.source-style)(edge)
-#let sink-style = (callbacks.sink-style)(edge)
-#assert(type(source-style) == array)
-#assert(source-style.first().stroke.paint == blue)
-#assert(source-style.first().at("mark", default: none) != none)
-#assert(type(sink-style) == array)
-#assert(sink-style.last().at("mark", default: none) != none)
-#assert(sink-style.last().mark.at("end", default: none) != none)
-
-#let override-options = _physics-options((physics: (map: (
-  "e-": (
-    source: (stroke: (paint: red, thickness: 0.55pt)),
-    sink: (stroke: (paint: red, thickness: 0.55pt)),
-    label: [custom],
-  ),
-),),))
-#let override-style = ((_physics-callbacks(override-options).source-style)(edge))
-#assert(override-style.stroke.paint == red)
-#assert(repr(_node-index-label((vid: 3))) == repr([$n_3$]))
-#assert(repr(_momentum-index-label((momentum-index: 4), (:))) == repr([$p_4$]))
 
 #let source-drawing = (statement: "source-statement", compass: "e")
 #source-drawing.insert("port-label", "source-port")
@@ -1227,24 +1108,12 @@ mod tests {
     (stroke: (paint: black, thickness: 0.5pt), pattern: "coil"),
     (offset: 0.2, stroke: (paint: black, thickness: 0.4pt), mark: (end: "straight")),
   ),
-  (data: (
-    decoration: "wave",
-    momentum-style: (offset: 0.4, stroke: (paint: red, thickness: 0.8pt)),
-  )),
-  momentum-arrows: true,
+  (data: (decoration: "wave",)),
 )
 #assert(decorated.first().pattern == "wave")
-#assert(decorated.last().offset == 0.4)
-#assert(decorated.last().stroke.paint == red)
+#assert(decorated.last().offset == 0.2)
+#assert(decorated.last().stroke.paint == black)
 #assert(decorated.last().mark.end == "straight")
-#let without-momentum = _element-edge-style(
-  decorated,
-  (data: (momentum-style: none)),
-  momentum-arrows: true,
-)
-#assert(type(without-momentum) == dictionary)
-#assert(without-momentum.pattern == "wave")
-#assert(without-momentum.stroke.paint == black)
 
 #let explicit-partial = graph.parse(
   "digraph explicit { 0 [id=0]; ext [style=invis]; ext -> 0 [id=0, pos=\"y:37!\"]; }",
@@ -1256,49 +1125,20 @@ mod tests {
 #let explicit-roundtrip-edge = graph.edges(explicit-roundtrip).first()
 #assert(explicit-roundtrip-edge.at("pos-x-set") == false)
 #assert(explicit-roundtrip-edge.at("pos-y-set") == true)
-#let explicit-amplitude = _autogen-mode-edges(explicit-roundtrip, "amplitude")
-#assert(graph.edges(explicit-amplitude).first().pos == explicit-edge.pos)
-
-#let base = graph.build({
-  graph.node(<a>)
-  graph.node(<b>)
-  graph.node(<c>)
-  graph.node(<d>)
-  graph.edge(graph.sink(<a>), cut-id: "first")
-  graph.edge(graph.sink(<b>), cut-id: "second")
-  graph.edge(graph.source(<c>), cut-id: "second")
-  graph.edge(graph.source(<d>), cut-id: "first")
-})
-#let paired = _autogen-mode-edges(base, "cross-section")
-#let paired-edges = graph.edges(paired)
-#assert(paired-edges.map(edge => edge.data.momentum-index) == (0, 1, 1, 0))
-#let paired-right = paired-edges.last() + paired-edges.last().data
-#assert(repr(_mode-edge-label(
-  paired-right,
-  (show-particle: false, show-edge-index: true),
-)) == repr([$p_0$]))
-#let ordered = _autogen-mode-edges(base, "amplitude")
-#let ordered-edges = graph.edges(ordered)
-#assert(ordered-edges.map(edge => edge.data.momentum-index) == (0, 1, 2, 3))
-#let ordered-right = ordered-edges.last() + ordered-edges.last().data
-#assert(repr(_mode-edge-label(
-  ordered-right,
-  (show-particle: false, show-edge-index: true),
-)) == repr([$p_3$]))
 [ok]
 "#,
         )
         .unwrap();
         renderer
-            .compile_template(&assertions, base.join("mode-assertions.pdf"), &[])
+            .compile_template(&assertions, base.join("generic-assertions.pdf"), &[])
             .unwrap();
 
         let gamma_core = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../assets/embedded/drawing/templates/layout-core.typ")
             .canonicalize()
             .unwrap();
-        let physics_module = templates
-            .join("crates/linnest/typst/src/physics-edge-style.typ")
+        let physics_module = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/embedded/drawing/templates/physics-edge-style.typ")
             .canonicalize()
             .unwrap();
         let graph_module = templates
