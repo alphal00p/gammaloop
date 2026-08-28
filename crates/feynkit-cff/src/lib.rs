@@ -1,10 +1,11 @@
 //! Standalone Cross-Free Family (CFF) combinatorics.
 //!
-//! The crate owns only topology-level CFF generation. It deliberately has no
-//! knowledge of GammaLoop settings, numerical evaluators, UV subtraction, or
-//! runtime threshold classification. Callers provide a [`CffGraph`] and receive
-//! typed orientation and denominator trees that can be translated to their own
-//! symbolic representation.
+//! The crate owns the canonical CFF graph, generation algorithms, surface
+//! arena, orientation and denominator trees, residue construction, and
+//! Symbolica lowering. It deliberately has no knowledge of GammaLoop settings,
+//! numerical evaluators, or runtime threshold classification. Callers may
+//! construct a [`CffGraph`] explicitly or invoke the extension trait directly
+//! on a finalized FeynKit diagram.
 //!
 //! ```
 //! use feynkit_cff::{
@@ -36,13 +37,17 @@ mod surface;
 mod tree;
 
 pub use error::CffError;
-pub use expression::{CffExpression, OrientationExpression};
-pub use generation::{CffGenerator, CffOptions, CffReport, CffResult, ShiftRewrite};
+pub use expression::{CffExpression, OrientationData, OrientationExpression};
+pub use generation::{
+    CffGeneration, CffGenerator, CffOptions, CffReport, CffResult, FeynmanDiagramCffExt,
+    HedgeEdgeRole, HedgeGraphCffExt, ShiftRewrite,
+};
 pub use graph::{CffEdge, CffGraph, EdgeFlow, EdgeKind};
 pub use ids::{EdgeId, VertexId};
-pub use orientation::{EdgeOrientation, GraphOrientation, OrientationId};
+pub use orientation::{EdgeOrientation, GraphOrientation, GraphOrientationExt, OrientationId};
 pub use surface::{
-    EnergySurface, EnergySurfaceId, ExternalShift, HSurface, HSurfaceId, Surface, SurfaceCache,
-    SurfaceId, VertexSet,
+    EnergySurface, EnergySurfaceId, ExternalShift, HSurface, HSurfaceId, RaisedEnergySurfaceData,
+    RaisedEnergySurfaceGroup, RaisedEnergySurfaceId, Surface, SurfaceCache, SurfaceId,
+    SurfaceIdMap, VertexSet,
 };
 pub use tree::{ExpressionTree, ExpressionTreeError, NodeId, TreeNode};

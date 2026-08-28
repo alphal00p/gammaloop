@@ -200,7 +200,7 @@ fn grow<S: super::ForestNodeLike>(
         .get_single_atom()
         .unwrap();
 
-    t_arg /= graph.denominator(&reduced, |_| 1);
+    t_arg /= graph.denominator(&reduced, ctx.model, |_| 1);
     let integrand = (integrand.atom() * t_arg).simplify_metrics();
 
     debug_tags!(#uv, #integrated, #algebra, #start; log.integrand = integrand, reduced = %reduced.string_label());

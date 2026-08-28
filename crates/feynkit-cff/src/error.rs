@@ -18,6 +18,12 @@ pub enum CffError {
     DuplicateEdge(EdgeId),
     #[error("the internal topology is disconnected")]
     DisconnectedGraph,
+    #[error(
+        "original vertex {vertex} cannot be represented in a CFF surface; the maximum vertex id is {maximum}"
+    )]
+    VertexIdentityOutOfRange { vertex: VertexId, maximum: usize },
+    #[error("edge {edge} refers to vertex {vertex} outside the selected subgraph")]
+    SubgraphEndpointOutsideSelection { edge: EdgeId, vertex: VertexId },
     #[error("edge {0} is not an internal edge")]
     NotInternalEdge(EdgeId),
     #[error("edge {0} does not exist")]

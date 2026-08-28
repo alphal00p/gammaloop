@@ -9,9 +9,14 @@ keywords = ["feynman", "hep", "physics", "cff"]
 categories = ["science"]
 
 [dependencies]
+bincode = { workspace = true, features = ["serde"] }
 feynkit-graph = { version = "0.1.0", path = "../feynkit-graph" }
+linnet = { workspace = true, features = ["bincode", "serde"] }
 serde = { workspace = true, features = ["derive"] }
+symbolica = { workspace = true, default-features = false }
 thiserror = { workspace = true }
+typed-index-collections = { workspace = true, features = ["serde"] }
 
 [dev-dependencies]
+feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
 serde_json = { workspace = true }

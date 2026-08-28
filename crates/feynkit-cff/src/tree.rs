@@ -1,19 +1,54 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use serde::{Deserialize, Deserializer, Serialize, de};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    parse,
+};
 use thiserror::Error;
 
 /// Stable index of a node within an expression tree.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize,
+    Deserialize,
+    bincode::Encode,
+    bincode::Decode,
+)]
 pub struct NodeId(pub usize);
 
 impl NodeId {
     pub const ROOT: Self = Self(0);
+
+    pub const fn root() -> Self {
+        Self::ROOT
+    }
 
     pub const fn index(self) -> usize {
         self.0
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+impl From<usize> for NodeId {
+    fn from(value: usize) -> Self {
+        Self(value)
+    }
+}
+
+impl From<NodeId> for usize {
+    fn from(value: NodeId) -> Self {
+        value.0
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct TreeNode<T> {
     pub data: T,
     pub id: NodeId,
@@ -25,7 +60,7 @@ pub struct TreeNode<T> {
 ///
 /// Every root-to-leaf path is one product of inverse surface factors, while
 /// sibling branches are summed.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, bincode::Encode, bincode::Decode)]
 pub struct ExpressionTree<T> {
     nodes: Vec<TreeNode<T>>,
 }
@@ -53,7 +88,7 @@ pub enum ExpressionTreeError {
 }
 
 impl<T> ExpressionTree<T> {
-    pub(crate) fn from_root(data: T) -> Self {
+    pub fn from_root(data: T) -> Self {
         Self {
             nodes: vec![TreeNode {
                 data,
@@ -74,6 +109,10 @@ impl<T> ExpressionTree<T> {
 
     pub fn node_count(&self) -> usize {
         self.nodes.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.nodes.is_empty()
     }
 
     pub fn validate(&self) -> Result<(), ExpressionTreeError> {
@@ -149,11 +188,11 @@ impl<T> ExpressionTree<T> {
         self.nodes.iter().filter(|node| node.children.is_empty())
     }
 
-    pub(crate) fn leaf_ids(&self) -> Vec<NodeId> {
+    pub fn leaf_ids(&self) -> Vec<NodeId> {
         self.leaves().map(|node| node.id).collect()
     }
 
-    pub(crate) fn insert(&mut self, parent: NodeId, data: T) -> Option<NodeId> {
+    pub fn insert(&mut self, parent: NodeId, data: T) -> Option<NodeId> {
         if parent.index() >= self.nodes.len() {
             return None;
         }
@@ -166,6 +205,35 @@ impl<T> ExpressionTree<T> {
         });
         self.nodes[parent.index()].children.push(id);
         Some(id)
+    }
+
+    pub fn insert_node(&mut self, parent: NodeId, data: T) {
+        self.insert(parent, data)
+            .expect("cannot insert below a missing expression-tree node");
+    }
+
+    pub fn get_node(&self, id: NodeId) -> &TreeNode<T> {
+        self.node(id)
+            .expect("expression tree does not contain the requested node")
+    }
+
+    pub fn get_bottom_layer(&self) -> Vec<NodeId> {
+        self.leaf_ids()
+    }
+
+    pub fn get_num_nodes(&self) -> usize {
+        self.node_count()
+    }
+
+    pub fn iter_nodes(&self) -> impl Iterator<Item = &TreeNode<T>> {
+        self.nodes.iter()
+    }
+
+    pub fn apply_mut_closure(&mut self, id: NodeId, f: impl FnOnce(&mut T)) {
+        let data = self
+            .data_mut(id)
+            .expect("expression tree does not contain the requested node");
+        f(data);
     }
 
     pub(crate) fn data_mut(&mut self, id: NodeId) -> Option<&mut T> {
@@ -192,6 +260,27 @@ impl<T> ExpressionTree<T> {
         })
     }
 
+    pub fn map<U>(self, mut f: impl FnMut(T) -> U) -> ExpressionTree<U> {
+        ExpressionTree {
+            nodes: self
+                .nodes
+                .into_iter()
+                .map(|node| TreeNode {
+                    data: f(node.data),
+                    id: node.id,
+                    children: node.children,
+                    parent: node.parent,
+                })
+                .collect(),
+        }
+    }
+
+    pub fn map_mut(&mut self, mut f: impl FnMut(&mut T)) {
+        for node in &mut self.nodes {
+            f(&mut node.data);
+        }
+    }
+
     pub fn root_to_leaf_paths(&self) -> Vec<Vec<&T>> {
         self.leaves()
             .map(|leaf| {
@@ -206,6 +295,127 @@ impl<T> ExpressionTree<T> {
                 path
             })
             .collect()
+    }
+
+    /// Keep exactly the root-to-leaf branches containing `count` occurrences of `value`.
+    ///
+    /// Shared prefixes are retained once. If no branch matches, the tree becomes empty.
+    pub fn retain_branches_with_value_count(&mut self, value: &T, count: usize)
+    where
+        T: Eq,
+    {
+        if self.nodes.is_empty() {
+            return;
+        }
+
+        let mut retained = BTreeSet::new();
+        for leaf in self.leaf_ids() {
+            let path = self.path_to_root(leaf);
+            if path
+                .iter()
+                .filter(|id| self.nodes[id.index()].data == *value)
+                .count()
+                == count
+            {
+                retained.extend(path);
+            }
+        }
+
+        if retained.is_empty() {
+            self.nodes.clear();
+            return;
+        }
+
+        let remap = retained
+            .iter()
+            .enumerate()
+            .map(|(new, old)| (*old, NodeId(new)))
+            .collect::<BTreeMap<_, _>>();
+        let old_nodes = std::mem::take(&mut self.nodes);
+        self.nodes = old_nodes
+            .into_iter()
+            .filter(|node| retained.contains(&node.id))
+            .map(|node| TreeNode {
+                data: node.data,
+                id: remap[&node.id],
+                children: node
+                    .children
+                    .into_iter()
+                    .filter_map(|child| remap.get(&child).copied())
+                    .collect(),
+                parent: node.parent.map(|parent| remap[&parent]),
+            })
+            .collect();
+    }
+
+    pub fn keep_branches_with_value_count_mut(&mut self, value: &T, count: usize)
+    where
+        T: Eq,
+    {
+        self.retain_branches_with_value_count(value, count);
+    }
+
+    /// Largest number of occurrences of `value` on any root-to-leaf branch.
+    pub fn max_value_count_on_branch(&self, value: &T) -> usize
+    where
+        T: Eq,
+    {
+        self.leaf_ids()
+            .into_iter()
+            .map(|leaf| {
+                self.path_to_root(leaf)
+                    .into_iter()
+                    .filter(|id| self.nodes[id.index()].data == *value)
+                    .count()
+            })
+            .max()
+            .unwrap_or(0)
+    }
+
+    fn path_to_root(&self, mut node: NodeId) -> Vec<NodeId> {
+        let mut path = Vec::new();
+        loop {
+            path.push(node);
+            match self.nodes[node.index()].parent {
+                Some(parent) => node = parent,
+                None => break,
+            }
+        }
+        path.reverse();
+        path
+    }
+}
+
+impl<T> ExpressionTree<T>
+where
+    Atom: From<T>,
+    T: Copy,
+{
+    /// Lower the tree to a sum of products of inverse Symbolica surfaces.
+    pub fn to_atom_inverse(&self) -> Atom {
+        fn lower<T>(tree: &ExpressionTree<T>, current: NodeId) -> Atom
+        where
+            Atom: From<T>,
+            T: Copy,
+        {
+            let node = tree.get_node(current);
+            let inverse_surface = (Atom::num(1) / Atom::from(node.data))
+                .replace(parse!("η_inf^-1"))
+                .with(Atom::num(0));
+            let children = node
+                .children
+                .iter()
+                .map(|child| lower(tree, *child))
+                .reduce(|sum, term| sum + term)
+                .unwrap_or_else(|| Atom::num(1));
+            inverse_surface * children
+        }
+
+        if self.is_empty() {
+            Atom::Zero
+        } else {
+            lower(self, NodeId::ROOT)
+        }
     }
 }
 
@@ -246,5 +456,49 @@ mod tests {
             }]
         });
         assert!(serde_json::from_value::<ExpressionTree<u8>>(invalid).is_err());
+    }
+
+    #[test]
+    fn retaining_branches_preserves_shared_prefixes_and_reindexes_nodes() {
+        let mut tree = ExpressionTree::from_root(9);
+        let prefix = tree.insert(NodeId::ROOT, 8).unwrap();
+        let matching = tree.insert(prefix, 1).unwrap();
+        tree.insert(matching, 5).unwrap();
+        let rejected = tree.insert(prefix, 2).unwrap();
+        tree.insert(rejected, 6).unwrap();
+
+        tree.retain_branches_with_value_count(&1, 1);
+
+        assert_eq!(tree.root_to_leaf_paths(), vec![vec![&9, &8, &1, &5]]);
+        tree.validate().unwrap();
+    }
+
+    #[test]
+    fn retaining_an_absent_count_can_empty_a_tree() {
+        let mut tree = ExpressionTree::from_root(1);
+        tree.insert(NodeId::ROOT, 2).unwrap();
+
+        tree.retain_branches_with_value_count(&1, 2);
+
+        assert!(tree.is_empty());
+    }
+
+    #[test]
+    fn maximum_value_count_is_computed_per_branch() {
+        let mut tree = ExpressionTree::from_root(1);
+        let repeated = tree.insert(NodeId::ROOT, 1).unwrap();
+        tree.insert(repeated, 1).unwrap();
+        tree.insert(NodeId::ROOT, 2).unwrap();
+
+        assert_eq!(tree.max_value_count_on_branch(&1), 3);
+    }
+
+    #[test]
+    fn symbolic_lowering_sums_sibling_branches() {
+        let mut tree = ExpressionTree::from_root(1_i64);
+        tree.insert(NodeId::ROOT, 2).unwrap();
+        tree.insert(NodeId::ROOT, 3).unwrap();
+
+        assert_eq!(tree.to_atom_inverse(), Atom::num(5) / Atom::num(6));
     }
 }

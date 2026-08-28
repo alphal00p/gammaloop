@@ -7,6 +7,7 @@ use linnet::half_edge::{
 };
 use symbolica::atom::{Atom, AtomCore};
 
+use self::generation::{GammaLoopGraphCffExt, GammaLoopSurfaceCacheExt};
 use crate::{
     cff::orientations::GraphOrientation,
     graph::{FeynmanGraph, Graph, cuts::CutSet, get_cff_inverse_energy_product_impl},
@@ -16,7 +17,6 @@ use crate::{
 };
 use color_eyre::Result;
 
-pub mod cff_graph;
 pub mod orientations;
 //pub mod cut_expression;
 pub mod esurface;
@@ -25,7 +25,6 @@ mod feynkit;
 pub mod generation;
 pub mod hsurface;
 pub mod surface;
-pub mod tree;
 
 pub struct CFFTerm {
     // One per orientation
@@ -124,7 +123,7 @@ impl Graph {
             .flat_map(|(index, cff_expression)| {
                 if let Some(right_threshold) = cutset.residue_selector.right_th_cut.as_ref() {
                     cff_expression
-                        .select_esurface_residue(right_threshold)
+                        .select_energy_surface_residue(right_threshold)
                         .into_iter()
                         .enumerate()
                         .map(|(i, residue)| {
@@ -140,7 +139,7 @@ impl Graph {
             .flat_map(|(index, cff_expression)| {
                 if let Some(left_threshold) = cutset.residue_selector.left_th_cut.as_ref() {
                     cff_expression
-                        .select_esurface_residue(left_threshold)
+                        .select_energy_surface_residue(left_threshold)
                         .into_iter()
                         .enumerate()
                         .map(|(i, residue)| {
@@ -156,7 +155,7 @@ impl Graph {
             .flat_map(|(index, cff_expression)| {
                 if let Some(lu_cut) = cutset.residue_selector.lu_cut.as_ref() {
                     cff_expression
-                        .select_esurface_residue(lu_cut)
+                        .select_energy_surface_residue(lu_cut)
                         .into_iter()
                         .enumerate()
                         .map(|(i, residue)| {
@@ -212,7 +211,7 @@ impl Graph {
                 orientations: vec![],
             };
             for orientation in expr.orientations.iter() {
-                let eta_expr = orientation.expression.to_atom_inv();
+                let eta_expr = orientation.expression.to_atom_inverse();
                 let mut ose_expr = eta_expr.replace_multiple(&replacement_rules);
 
                 let inverse_energies = get_cff_inverse_energy_product_impl(
