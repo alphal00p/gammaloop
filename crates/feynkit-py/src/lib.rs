@@ -156,10 +156,13 @@ assert fk.__name__ == "symbolica.community.feynkit"
 
 model = fk.Model.from_json(MODEL_JSON)
 assert model.name == "scalars"
-assert model.particle("scalar_0").pdg_code == 1000
+scalar = model.particle("scalar_0")
+assert scalar.pdg_code == 1000
+assert scalar.antiparticle.name == "scalar_0"
 model = fk.Model.from_json(model.to_json(pretty=False))
 
-process = fk.Process.amplitude(["scalar_0"], [1000, "scalar_0"])
+scalar = model.particle("scalar_0")
+process = fk.Process.amplitude([scalar], [1000, scalar.antiparticle])
 process = process.with_loop_count(0, 1)
 assert isinstance(process, fk.Process)
 assert process.generation_type == "amplitude"
@@ -167,14 +170,15 @@ assert process.loop_count == (0, 1)
 
 options = fk.GenerationOptions(max_vertices=3, allow_self_loops=True)
 options.add_vertex_allow(["V_3_SCALAR_000"])
+options.add_particle_veto([model.particle("scalar_1"), 1002])
 options.set_coupling_orders({"QCD": (0, None)})
 options.set_loop_count_range(0, 1)
 options.set_fermion_loop_count_range(0, 0)
 options.set_factorized_loop_topologies_count_range(0, 1)
 assert options.disable_numerator_grouping() is None
 generated = model.generate_diagrams(
-    ["scalar_0"],
-    [1000, "scalar_0"],
+    [scalar],
+    [1000, scalar.antiparticle],
     loops=(0, 1),
     options=options,
 )
