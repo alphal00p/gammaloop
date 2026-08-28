@@ -20,7 +20,7 @@ pub(crate) use gammaloop_integration_tests::{
 pub(crate) use gammalooprs::utils as gloop_utils;
 pub(crate) use gammalooprs::{
     integrands::HasIntegrand,
-    model::UFOSymbol,
+    model::{ModelGammaLoopExt, UFOSymbol},
     settings::runtime::{IntegralEstimate, IntegrationResult as RuntimeIntegrationResult},
     utils::{ApproxEq, F},
 };

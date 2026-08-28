@@ -1,7 +1,8 @@
 use color_eyre::Result;
 use eyre::eyre;
+use feynkit_cff::GraphOrientationExt as FeynkitGraphOrientationExt;
 use itertools::{EitherOrBoth, Itertools};
-use linnet::half_edge::involution::{EdgeIndex, EdgeVec, EdgeVecIter, Orientation};
+use linnet::half_edge::involution::{EdgeIndex, EdgeVec, Orientation};
 use symbolica::prelude::*;
 
 use crate::utils::GS;
@@ -93,19 +94,13 @@ pub trait GraphOrientation: Sized {
             })
     }
 
-    fn iterate<'a>(&'a self) -> EdgeVecIter<'a, Orientation> {
-        self.orientation().iter()
-    }
-
     fn get(&self, index: EdgeIndex) -> Orientation {
         self.orientation()[index]
     }
 
     /// Returns `true` if the orientation matches the reference, ignoring `Undirected` edges of the reference.
     fn is_compatible_with(&self, reference: &Self) -> bool {
-        self.iterate()
-            .zip_eq(reference.orientation())
-            .all(|((_, l), (_, r))| matches!(r, Orientation::Undirected) || l == r)
+        FeynkitGraphOrientationExt::is_compatible_with(self.orientation(), reference.orientation())
     }
 
     fn score(&self, internal_edges: &[EdgeIndex]) -> RepresentativeScore {
@@ -242,6 +237,15 @@ mod tests {
                 .unwrap(),
             &valid[3]
         );
+    }
+
+    #[test]
+    fn compatibility_delegates_complete_edge_coverage_to_feynkit() {
+        let short = edgevec([1]);
+        let long = edgevec([1, 0]);
+
+        assert!(!short.is_compatible_with(&long));
+        assert!(!long.is_compatible_with(&short));
     }
 
     #[test]

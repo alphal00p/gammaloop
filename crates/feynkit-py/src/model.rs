@@ -1,9 +1,10 @@
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
 
 use feynkit_model::{
-    ComplexValue, Coupling, EvaluatedValues, EvaluationRequest, LorentzStructure, Model,
-    ModelEvaluator, ModelExpression, ModelFormFactor, ModelFunction, Parameter, ParameterCard,
-    ParameterNature, ParameterType, Particle, Propagator, VertexRule,
+    ComplexValue, Coupling, CouplingId, EvaluatedValues, EvaluationRequest, LorentzStructure,
+    LorentzStructureId, Model, ModelEvaluator, ModelExpression, ModelFormFactor, ModelFormFactorId,
+    ModelFunction, ModelFunctionId, Parameter, ParameterCard, ParameterId, ParameterNature,
+    ParameterType, Particle, ParticleId, Propagator, PropagatorId, VertexRule, VertexRuleId,
 };
 use pyo3::{
     prelude::*,
@@ -21,6 +22,7 @@ use crate::{
         generate_diagrams_for_model,
     },
 };
+use symbolica::api::python::PythonExpression;
 
 fn complex_value<'py>(py: Python<'py>, value: ComplexValue) -> Bound<'py, PyComplex> {
     PyComplex::from_doubles(py, value.re, value.im)
@@ -46,17 +48,21 @@ fn complex_value<'py>(py: Python<'py>, value: ComplexValue) -> Bound<'py, PyComp
 )]
 #[derive(Clone)]
 pub struct PyParticle {
-    inner: Particle,
+    id: ParticleId,
     model: Arc<Model>,
 }
 
 impl PyParticle {
-    fn new(inner: Particle, model: Arc<Model>) -> Self {
-        Self { inner, model }
+    fn new(id: ParticleId, model: Arc<Model>) -> Self {
+        Self { id, model }
+    }
+
+    fn inner(&self) -> &Particle {
+        self.model.particle_by_id(self.id).unwrap()
     }
 
     pub(crate) fn signed_pdg(&self) -> i64 {
-        self.inner.pdg_code
+        self.inner().pdg_code
     }
 }
 
@@ -66,13 +72,17 @@ impl PyParticle {
     /// Return the particle name used by the model.
     #[getter]
     fn name(&self) -> &str {
-        &self.inner.name
+        &self.inner().name
     }
 
     /// Return the name of the corresponding antiparticle.
     #[getter]
     fn antiname(&self) -> &str {
-        &self.inner.antiname
+        &self
+            .model
+            .particle_by_id(self.inner().antiparticle)
+            .unwrap()
+            .name
     }
 
     /// Return the corresponding antiparticle from the same model.
@@ -89,11 +99,10 @@ impl PyParticle {
     ///
     #[getter]
     fn antiparticle(&self) -> PyResult<PyParticle> {
-        self.model
-            .antiparticle(&self.inner)
-            .cloned()
-            .map(|inner| Self::new(inner, Arc::clone(&self.model)))
-            .map_err(error::model)
+        Ok(Self::new(
+            self.inner().antiparticle,
+            Arc::clone(&self.model),
+        ))
     }
 
     /// Return the signed Particle Data Group code.
@@ -105,7 +114,7 @@ impl PyParticle {
     ///
     #[getter]
     fn pdg_code(&self) -> i64 {
-        self.inner.pdg_code
+        self.inner().pdg_code
     }
 
     /// Return the UFO spin code ``2S + 1`` (negative for ghost fields).
@@ -117,7 +126,7 @@ impl PyParticle {
     ///
     #[getter]
     fn spin(&self) -> i64 {
-        self.inner.spin
+        self.inner().spin
     }
 
     /// Return the signed UFO SU(3) color representation code.
@@ -129,7 +138,7 @@ impl PyParticle {
     ///
     #[getter]
     fn color(&self) -> i64 {
-        self.inner.color
+        self.inner().color
     }
 
     /// Return the name of the particle's mass parameter.
@@ -141,7 +150,7 @@ impl PyParticle {
     ///
     #[getter]
     fn mass_parameter(&self) -> &str {
-        &self.inner.mass
+        &self.model.parameter_by_id(self.inner().mass).unwrap().name
     }
 
     /// Return the name of the particle's width parameter.
@@ -153,7 +162,7 @@ impl PyParticle {
     ///
     #[getter]
     fn width_parameter(&self) -> &str {
-        &self.inner.width
+        &self.model.parameter_by_id(self.inner().width).unwrap().name
     }
 
     /// Return the particle's electric charge.
@@ -165,7 +174,7 @@ impl PyParticle {
     ///
     #[getter]
     fn charge(&self) -> f64 {
-        self.inner.charge
+        self.inner().charge
     }
 
     /// Report whether this object represents an antiparticle.
@@ -177,7 +186,7 @@ impl PyParticle {
     ///
     #[getter]
     fn is_antiparticle(&self) -> bool {
-        self.inner.is_antiparticle()
+        self.inner().is_antiparticle()
     }
 
     /// Report whether the particle is its own antiparticle.
@@ -189,7 +198,7 @@ impl PyParticle {
     ///
     #[getter]
     fn is_self_antiparticle(&self) -> bool {
-        self.inner.is_self_antiparticle()
+        self.model.particle_is_self_conjugate(self.id)
     }
 
     /// Report whether the particle has fermionic spin.
@@ -201,7 +210,7 @@ impl PyParticle {
     ///
     #[getter]
     fn is_fermion(&self) -> bool {
-        self.inner.is_fermion()
+        self.inner().is_fermion()
     }
 
     /// Report whether the particle's mass parameter is zero.
@@ -213,7 +222,7 @@ impl PyParticle {
     ///
     #[getter]
     fn is_massless(&self) -> bool {
-        self.inner.is_massless()
+        self.model.particle_is_massless(self.id)
     }
 
     /// Return a concise representation containing the name and PDG code.
@@ -225,7 +234,8 @@ impl PyParticle {
     fn __repr__(&self) -> String {
         format!(
             "Particle(name='{}', pdg_code={})",
-            self.inner.name, self.inner.pdg_code
+            self.inner().name,
+            self.inner().pdg_code
         )
     }
 }
@@ -312,12 +322,17 @@ impl From<ParameterType> for PyParameterType {
 )]
 #[derive(Clone)]
 pub struct PyParameter {
-    inner: Parameter,
+    id: ParameterId,
+    model: Arc<Model>,
 }
 
-impl From<Parameter> for PyParameter {
-    fn from(inner: Parameter) -> Self {
-        Self { inner }
+impl PyParameter {
+    fn new(id: ParameterId, model: Arc<Model>) -> Self {
+        Self { id, model }
+    }
+
+    fn inner(&self) -> &Parameter {
+        self.model.parameter_by_id(self.id).unwrap()
     }
 }
 
@@ -327,7 +342,7 @@ impl PyParameter {
     /// Return the parameter name.
     #[getter]
     fn name(&self) -> &str {
-        &self.inner.name
+        &self.inner().name
     }
 
     /// Return the Les Houches block name, when defined.
@@ -340,7 +355,7 @@ impl PyParameter {
     ///
     #[getter]
     fn lhablock(&self) -> Option<String> {
-        self.inner.lhablock.clone()
+        self.inner().lhablock.clone()
     }
 
     /// Return the Les Houches entry indices, when defined.
@@ -353,7 +368,7 @@ impl PyParameter {
     ///
     #[getter]
     fn lhacode(&self) -> Option<Vec<usize>> {
-        self.inner.lhacode.clone()
+        self.inner().lhacode.clone()
     }
 
     /// Return whether the parameter is external or internal.
@@ -366,7 +381,7 @@ impl PyParameter {
     ///
     #[getter]
     fn nature(&self) -> PyParameterNature {
-        self.inner.nature.clone().into()
+        self.inner().nature.clone().into()
     }
 
     /// Return whether the parameter is real or complex.
@@ -379,7 +394,7 @@ impl PyParameter {
     ///
     #[getter]
     fn parameter_type(&self) -> PyParameterType {
-        self.inner.parameter_type.clone().into()
+        self.inner().parameter_type.clone().into()
     }
 
     /// Return the evaluated value as a native Python complex number.
@@ -393,13 +408,13 @@ impl PyParameter {
     ///
     #[getter]
     fn value<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyComplex>> {
-        self.inner
+        self.inner()
             .value
             .map(|value| complex_value(py, value))
             .ok_or_else(|| {
                 error::ModelError::new_err(format!(
                     "parameter {:?} has not been evaluated",
-                    self.inner.name
+                    self.inner().name
                 ))
             })
     }
@@ -412,8 +427,11 @@ impl PyParameter {
     /// >>> formula = internal.expression
     ///
     #[getter]
-    fn expression(&self) -> Option<String> {
-        self.inner.expression.clone()
+    fn expression(&self) -> Option<PythonExpression> {
+        self.inner()
+            .expression
+            .clone()
+            .map(|expr| PythonExpression { expr })
     }
 
     /// Return a concise representation containing the parameter name.
@@ -423,7 +441,7 @@ impl PyParameter {
     /// >>> print(model.parameter(model.particle_by_pdg(13).mass_parameter))
     ///
     fn __repr__(&self) -> String {
-        format!("Parameter(name='{}')", self.inner.name)
+        format!("Parameter(name='{}')", self.inner().name)
     }
 }
 
@@ -446,12 +464,17 @@ impl PyParameter {
 )]
 #[derive(Clone)]
 pub struct PyCoupling {
-    inner: Coupling,
+    id: CouplingId,
+    model: Arc<Model>,
 }
 
-impl From<Coupling> for PyCoupling {
-    fn from(inner: Coupling) -> Self {
-        Self { inner }
+impl PyCoupling {
+    fn new(id: CouplingId, model: Arc<Model>) -> Self {
+        Self { id, model }
+    }
+
+    fn inner(&self) -> &Coupling {
+        self.model.coupling_by_id(self.id).unwrap()
     }
 }
 
@@ -461,13 +484,15 @@ impl PyCoupling {
     /// Return the coupling name.
     #[getter]
     fn name(&self) -> &str {
-        &self.inner.name
+        &self.inner().name
     }
 
     /// Return the expression defining the coupling.
     #[getter]
-    fn expression(&self) -> &str {
-        &self.inner.expression
+    fn expression(&self) -> PythonExpression {
+        PythonExpression {
+            expr: self.inner().expression.clone(),
+        }
     }
 
     /// Return the coupling-order powers keyed by order name.
@@ -478,7 +503,7 @@ impl PyCoupling {
     ///
     #[getter]
     fn orders(&self) -> BTreeMap<String, usize> {
-        self.inner.orders.clone()
+        self.inner().orders.clone()
     }
 
     /// Return the evaluated coupling as a native Python complex number.
@@ -492,13 +517,13 @@ impl PyCoupling {
     ///
     #[getter]
     fn value<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyComplex>> {
-        self.inner
+        self.inner()
             .value
             .map(|value| complex_value(py, value))
             .ok_or_else(|| {
                 error::ModelError::new_err(format!(
                     "coupling {:?} has not been evaluated",
-                    self.inner.name
+                    self.inner().name
                 ))
             })
     }
@@ -510,7 +535,7 @@ impl PyCoupling {
     /// >>> print(next(c for c in model.couplings if c.orders.get("QED", 0) > 0))
     ///
     fn __repr__(&self) -> String {
-        format!("Coupling(name='{}')", self.inner.name)
+        format!("Coupling(name='{}')", self.inner().name)
     }
 }
 
@@ -533,12 +558,21 @@ impl PyCoupling {
 )]
 #[derive(Clone)]
 pub struct PyVertexRule {
-    inner: VertexRule,
+    id: VertexRuleId,
+    model: Arc<Model>,
 }
 
-impl From<VertexRule> for PyVertexRule {
-    fn from(inner: VertexRule) -> Self {
-        Self { inner }
+impl PyVertexRule {
+    fn new(id: VertexRuleId, model: Arc<Model>) -> Self {
+        Self { id, model }
+    }
+
+    fn inner(&self) -> &VertexRule {
+        self.model.vertex_rule_by_id(self.id).unwrap()
+    }
+
+    pub(crate) fn vertex_rule_name(&self) -> &str {
+        &self.inner().name
     }
 }
 
@@ -548,7 +582,7 @@ impl PyVertexRule {
     /// Return the vertex-rule name.
     #[getter]
     fn name(&self) -> &str {
-        &self.inner.name
+        &self.inner().name
     }
 
     /// Return the ordered particle names attached to the vertex.
@@ -560,13 +594,22 @@ impl PyVertexRule {
     ///
     #[getter]
     fn particles(&self) -> Vec<String> {
-        self.inner.particles.clone()
+        self.inner()
+            .particles
+            .iter()
+            .map(|id| self.model.particle_by_id(*id).unwrap().name.clone())
+            .collect()
     }
 
     /// Return the color structures used by the vertex.
     #[getter]
-    fn color_structures(&self) -> Vec<String> {
-        self.inner.color_structures.clone()
+    fn color_structures(&self) -> Vec<PythonExpression> {
+        self.inner()
+            .color_structures
+            .iter()
+            .cloned()
+            .map(|expr| PythonExpression { expr })
+            .collect()
     }
 
     /// Return the Lorentz-structure names used by the vertex.
@@ -578,7 +621,17 @@ impl PyVertexRule {
     ///
     #[getter]
     fn lorentz_structures(&self) -> Vec<String> {
-        self.inner.lorentz_structures.clone()
+        self.inner()
+            .lorentz_structures
+            .iter()
+            .map(|id| {
+                self.model
+                    .lorentz_structure_by_id(*id)
+                    .unwrap()
+                    .name
+                    .clone()
+            })
+            .collect()
     }
 
     /// Return the coupling-name matrix indexed by color and Lorentz structure.
@@ -591,23 +644,26 @@ impl PyVertexRule {
     ///
     #[getter]
     fn couplings(&self) -> Vec<Vec<Option<String>>> {
-        self.inner.couplings.clone()
+        self.inner()
+            .couplings
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .map(|id| id.map(|id| self.model.coupling_by_id(id).unwrap().name.clone()))
+                    .collect()
+            })
+            .collect()
     }
 
     /// Combine the coupling-order powers referenced by this vertex.
     ///
     /// Examples
     /// --------
-    /// >>> vertex.coupling_orders(model)
+    /// >>> vertex.coupling_orders()
+    /// {'QED': 1}
     ///
-    /// Parameters
-    /// ----------
-    /// model : Model
-    ///     Model containing the referenced couplings.
-    fn coupling_orders(&self, model: &PyModel) -> PyResult<BTreeMap<String, usize>> {
-        self.inner
-            .coupling_orders(&model.inner)
-            .map_err(error::model)
+    fn coupling_orders(&self) -> BTreeMap<String, usize> {
+        self.inner().coupling_orders(&self.model)
     }
 
     /// Return a concise representation containing the vertex-rule name.
@@ -617,7 +673,7 @@ impl PyVertexRule {
     /// >>> print(next(v for v in model.vertex_rules if "e-" in v.particles))
     ///
     fn __repr__(&self) -> String {
-        format!("VertexRule(name='{}')", self.inner.name)
+        format!("VertexRule(name='{}')", self.inner().name)
     }
 }
 
@@ -640,12 +696,17 @@ impl PyVertexRule {
 )]
 #[derive(Clone)]
 pub struct PyLorentzStructure {
-    inner: LorentzStructure,
+    id: LorentzStructureId,
+    model: Arc<Model>,
 }
 
-impl From<LorentzStructure> for PyLorentzStructure {
-    fn from(inner: LorentzStructure) -> Self {
-        Self { inner }
+impl PyLorentzStructure {
+    fn new(id: LorentzStructureId, model: Arc<Model>) -> Self {
+        Self { id, model }
+    }
+
+    fn inner(&self) -> &LorentzStructure {
+        self.model.lorentz_structure_by_id(self.id).unwrap()
     }
 }
 
@@ -655,7 +716,7 @@ impl PyLorentzStructure {
     /// Return the Lorentz-structure name.
     #[getter]
     fn name(&self) -> &str {
-        &self.inner.name
+        &self.inner().name
     }
 
     /// Return the UFO ``2S + 1`` spin codes of the structure's particle slots.
@@ -669,13 +730,15 @@ impl PyLorentzStructure {
     ///
     #[getter]
     fn spins(&self) -> Vec<i64> {
-        self.inner.spins.clone()
+        self.inner().spins.clone()
     }
 
     /// Return the symbolic Lorentz expression.
     #[getter]
-    fn structure(&self) -> &str {
-        &self.inner.structure
+    fn structure(&self) -> PythonExpression {
+        PythonExpression {
+            expr: self.inner().structure.clone(),
+        }
     }
 
     /// Return a concise representation containing the structure name.
@@ -686,7 +749,7 @@ impl PyLorentzStructure {
     /// >>> print(model.lorentz_structure(vertex.lorentz_structures[0]))
     ///
     fn __repr__(&self) -> String {
-        format!("LorentzStructure(name='{}')", self.inner.name)
+        format!("LorentzStructure(name='{}')", self.inner().name)
     }
 }
 
@@ -698,8 +761,7 @@ impl PyLorentzStructure {
 /// Examples
 /// --------
 /// >>> propagator = model.propagators[0]
-/// >>> propagator.denominator
-/// 'P(-1, id)**2 - Mass(id)**2'
+/// >>> propagator.numerator / propagator.denominator
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Propagator",
@@ -709,12 +771,17 @@ impl PyLorentzStructure {
 )]
 #[derive(Clone)]
 pub struct PyPropagator {
-    inner: Propagator,
+    id: PropagatorId,
+    model: Arc<Model>,
 }
 
-impl From<Propagator> for PyPropagator {
-    fn from(inner: Propagator) -> Self {
-        Self { inner }
+impl PyPropagator {
+    fn new(id: PropagatorId, model: Arc<Model>) -> Self {
+        Self { id, model }
+    }
+
+    fn inner(&self) -> &Propagator {
+        self.model.propagator_by_id(self.id).unwrap()
     }
 }
 
@@ -724,7 +791,7 @@ impl PyPropagator {
     /// Return the propagator name.
     #[getter]
     fn name(&self) -> &str {
-        &self.inner.name
+        &self.inner().name
     }
 
     /// Return the name of the particle using this propagator.
@@ -736,19 +803,27 @@ impl PyPropagator {
     ///
     #[getter]
     fn particle(&self) -> &str {
-        &self.inner.particle
+        &self
+            .model
+            .particle_by_id(self.inner().particle)
+            .unwrap()
+            .name
     }
 
     /// Return the symbolic propagator numerator.
     #[getter]
-    fn numerator(&self) -> &str {
-        &self.inner.numerator
+    fn numerator(&self) -> PythonExpression {
+        PythonExpression {
+            expr: self.inner().numerator.clone(),
+        }
     }
 
     /// Return the symbolic propagator denominator.
     #[getter]
-    fn denominator(&self) -> &str {
-        &self.inner.denominator
+    fn denominator(&self) -> PythonExpression {
+        PythonExpression {
+            expr: self.inner().denominator.clone(),
+        }
     }
 
     /// Return a concise representation containing the propagator name.
@@ -758,7 +833,7 @@ impl PyPropagator {
     /// >>> print(model.propagators[0])
     ///
     fn __repr__(&self) -> String {
-        format!("Propagator(name='{}')", self.inner.name)
+        format!("Propagator(name='{}')", self.inner().name)
     }
 }
 
@@ -781,12 +856,17 @@ impl PyPropagator {
 )]
 #[derive(Clone)]
 pub struct PyModelFunction {
-    inner: ModelFunction,
+    id: ModelFunctionId,
+    model: Arc<Model>,
 }
 
-impl From<ModelFunction> for PyModelFunction {
-    fn from(inner: ModelFunction) -> Self {
-        Self { inner }
+impl PyModelFunction {
+    fn new(id: ModelFunctionId, model: Arc<Model>) -> Self {
+        Self { id, model }
+    }
+
+    fn inner(&self) -> &ModelFunction {
+        self.model.function_by_id(self.id).unwrap()
     }
 }
 
@@ -796,7 +876,7 @@ impl PyModelFunction {
     /// Return the function name.
     #[getter]
     fn name(&self) -> &str {
-        &self.inner.name
+        &self.inner().name
     }
 
     /// Return the ordered argument names.
@@ -808,13 +888,16 @@ impl PyModelFunction {
     ///
     #[getter]
     fn arguments(&self) -> Vec<String> {
-        self.inner.arguments.clone()
+        self.inner().arguments.clone()
     }
 
     /// Return the function body, when one is defined by the model.
     #[getter]
-    fn expression(&self) -> Option<String> {
-        self.inner.expression.clone()
+    fn expression(&self) -> Option<PythonExpression> {
+        self.inner()
+            .expression
+            .clone()
+            .map(|expr| PythonExpression { expr })
     }
 
     /// Return a concise representation containing the function name.
@@ -824,7 +907,7 @@ impl PyModelFunction {
     /// >>> print(model.functions[0])
     ///
     fn __repr__(&self) -> String {
-        format!("ModelFunction(name='{}')", self.inner.name)
+        format!("ModelFunction(name='{}')", self.inner().name)
     }
 }
 
@@ -847,12 +930,17 @@ impl PyModelFunction {
 )]
 #[derive(Clone)]
 pub struct PyFormFactor {
-    inner: ModelFormFactor,
+    id: ModelFormFactorId,
+    model: Arc<Model>,
 }
 
-impl From<ModelFormFactor> for PyFormFactor {
-    fn from(inner: ModelFormFactor) -> Self {
-        Self { inner }
+impl PyFormFactor {
+    fn new(id: ModelFormFactorId, model: Arc<Model>) -> Self {
+        Self { id, model }
+    }
+
+    fn inner(&self) -> &ModelFormFactor {
+        self.model.form_factor_by_id(self.id).unwrap()
     }
 }
 
@@ -862,19 +950,22 @@ impl PyFormFactor {
     /// Return the form-factor name.
     #[getter]
     fn name(&self) -> &str {
-        &self.inner.name
+        &self.inner().name
     }
 
     /// Return the model-defined form-factor type, when present.
     #[getter]
     fn type_name(&self) -> Option<String> {
-        self.inner.type_name.clone()
+        self.inner().type_name.clone()
     }
 
     /// Return the symbolic form-factor value, when present.
     #[getter]
-    fn value(&self) -> Option<String> {
-        self.inner.value.clone()
+    fn value(&self) -> Option<PythonExpression> {
+        self.inner()
+            .value
+            .clone()
+            .map(|expr| PythonExpression { expr })
     }
 
     /// Return a concise representation containing the form-factor name.
@@ -884,7 +975,7 @@ impl PyFormFactor {
     /// >>> print(model.form_factors[0])
     ///
     fn __repr__(&self) -> String {
-        format!("FormFactor(name='{}')", self.inner.name)
+        format!("FormFactor(name='{}')", self.inner().name)
     }
 }
 
@@ -927,8 +1018,9 @@ impl PyModelExpression {
 
     /// Return the symbolic expression text.
     #[getter]
-    fn expression(&self) -> &str {
-        &self.inner.expression
+    fn expression(&self) -> PythonExpression {
+        crate::graph::parse_symbolic_annotation(&self.inner.expression)
+            .expect("evaluation requests contain canonical Symbolica expressions")
     }
 }
 
@@ -953,11 +1045,12 @@ impl PyModelExpression {
 #[derive(Clone)]
 pub struct PyEvaluationRequest {
     inner: EvaluationRequest,
+    model: Arc<Model>,
 }
 
-impl From<EvaluationRequest> for PyEvaluationRequest {
-    fn from(inner: EvaluationRequest) -> Self {
-        Self { inner }
+impl PyEvaluationRequest {
+    fn new(inner: EvaluationRequest, model: Arc<Model>) -> Self {
+        Self { inner, model }
     }
 }
 
@@ -977,7 +1070,7 @@ impl PyEvaluationRequest {
         self.inner
             .known_parameters
             .iter()
-            .map(|(name, value)| (name.clone(), (*value).into()))
+            .map(|(name, value)| (name.clone(), (value.re, value.im)))
             .collect()
     }
 
@@ -1024,8 +1117,12 @@ impl PyEvaluationRequest {
         self.inner
             .functions
             .iter()
-            .cloned()
-            .map(Into::into)
+            .map(|function| {
+                PyModelFunction::new(
+                    self.model.function_id(&function.name).unwrap(),
+                    Arc::clone(&self.model),
+                )
+            })
             .collect()
     }
 
@@ -1040,8 +1137,12 @@ impl PyEvaluationRequest {
         self.inner
             .form_factors
             .iter()
-            .cloned()
-            .map(Into::into)
+            .map(|form_factor| {
+                PyFormFactor::new(
+                    self.model.form_factor_id(&form_factor.name).unwrap(),
+                    Arc::clone(&self.model),
+                )
+            })
             .collect()
     }
 }
@@ -1100,12 +1201,12 @@ impl PyEvaluatedValues {
                 internal_parameters: internal_parameters
                     .unwrap_or_default()
                     .into_iter()
-                    .map(|(name, value)| (name, value.into()))
+                    .map(|(name, (re, im))| (name, ComplexValue::new(re, im)))
                     .collect(),
                 couplings: couplings
                     .unwrap_or_default()
                     .into_iter()
-                    .map(|(name, value)| (name, value.into()))
+                    .map(|(name, (re, im))| (name, ComplexValue::new(re, im)))
                     .collect(),
             },
         }
@@ -1117,7 +1218,7 @@ impl PyEvaluatedValues {
         self.inner
             .internal_parameters
             .iter()
-            .map(|(name, value)| (name.clone(), (*value).into()))
+            .map(|(name, value)| (name.clone(), (value.re, value.im)))
             .collect()
     }
 
@@ -1127,13 +1228,14 @@ impl PyEvaluatedValues {
         self.inner
             .couplings
             .iter()
-            .map(|(name, value)| (name.clone(), (*value).into()))
+            .map(|(name, value)| (name.clone(), (value.re, value.im)))
             .collect()
     }
 }
 
 struct PythonModelEvaluator<'a, 'py> {
     callable: &'a Bound<'py, PyAny>,
+    model: Arc<Model>,
 }
 
 impl ModelEvaluator for PythonModelEvaluator<'_, '_> {
@@ -1142,7 +1244,7 @@ impl ModelEvaluator for PythonModelEvaluator<'_, '_> {
     fn evaluate(&mut self, request: EvaluationRequest) -> Result<EvaluatedValues, Self::Error> {
         Ok(self
             .callable
-            .call1((PyEvaluationRequest::from(request),))?
+            .call1((PyEvaluationRequest::new(request, Arc::clone(&self.model)),))?
             .extract::<PyEvaluatedValues>()
             .map(|values| values.inner)?)
     }
@@ -1234,7 +1336,7 @@ impl PyParameterCard {
     /// name : str
     ///     Parameter name to look up.
     fn get(&self, name: &str) -> Option<(f64, f64)> {
-        self.inner.get(name).copied().map(Into::into)
+        self.inner.get(name).map(|value| (value.re, value.im))
     }
 
     /// Store a complex parameter value.
@@ -1267,7 +1369,7 @@ impl PyParameterCard {
     /// name : str
     ///     Parameter name to remove.
     fn remove(&mut self, name: &str) -> Option<(f64, f64)> {
-        self.inner.remove(name).map(Into::into)
+        self.inner.remove(name).map(|value| (value.re, value.im))
     }
 
     /// Return all parameter-card entries.
@@ -1279,7 +1381,7 @@ impl PyParameterCard {
     fn items(&self) -> Vec<(String, (f64, f64))> {
         self.inner
             .iter()
-            .map(|(name, value)| (name.clone(), (*value).into()))
+            .map(|(name, value)| (name.clone(), (value.re, value.im)))
             .collect()
     }
 
@@ -1386,7 +1488,7 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> model = Model("model.json")
+    /// >>> model = fk.Model("model.json")
     ///
     /// Parameters
     /// ----------
@@ -1403,7 +1505,7 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> model = Model.from_json(model_json)
+    /// >>> model = fk.Model.from_json(model_json)
     ///
     /// Parameters
     /// ----------
@@ -1497,8 +1599,10 @@ impl PyModel {
         self.inner
             .particles()
             .iter()
-            .cloned()
-            .map(|inner| PyParticle::new(inner, Arc::clone(&self.inner)))
+            .enumerate()
+            .map(|(index, _)| {
+                PyParticle::new(ParticleId::from_index(index), Arc::clone(&self.inner))
+            })
             .collect()
     }
 
@@ -1514,9 +1618,8 @@ impl PyModel {
     ///     Particle name or antiname.
     fn particle(&self, name: &str) -> PyResult<PyParticle> {
         self.inner
-            .particle(name)
-            .cloned()
-            .map(|inner| PyParticle::new(inner, Arc::clone(&self.inner)))
+            .particle_id(name)
+            .map(|id| PyParticle::new(id, Arc::clone(&self.inner)))
             .map_err(error::model)
     }
 
@@ -1532,9 +1635,8 @@ impl PyModel {
     ///     Signed PDG particle code.
     fn particle_by_pdg(&self, pdg: i64) -> PyResult<PyParticle> {
         self.inner
-            .particle_by_pdg(pdg)
-            .cloned()
-            .map(|inner| PyParticle::new(inner, Arc::clone(&self.inner)))
+            .particle_id_by_pdg(pdg)
+            .map(|id| PyParticle::new(id, Arc::clone(&self.inner)))
             .map_err(error::model)
     }
 
@@ -1549,8 +1651,10 @@ impl PyModel {
         self.inner
             .parameters()
             .iter()
-            .cloned()
-            .map(Into::into)
+            .enumerate()
+            .map(|(index, _)| {
+                PyParameter::new(ParameterId::from_index(index), Arc::clone(&self.inner))
+            })
             .collect()
     }
 
@@ -1566,9 +1670,8 @@ impl PyModel {
     ///     Parameter name.
     fn parameter(&self, name: &str) -> PyResult<PyParameter> {
         self.inner
-            .parameter(name)
-            .cloned()
-            .map(Into::into)
+            .parameter_id(name)
+            .map(|id| PyParameter::new(id, Arc::clone(&self.inner)))
             .map_err(error::model)
     }
 
@@ -1583,8 +1686,10 @@ impl PyModel {
         self.inner
             .couplings()
             .iter()
-            .cloned()
-            .map(Into::into)
+            .enumerate()
+            .map(|(index, _)| {
+                PyCoupling::new(CouplingId::from_index(index), Arc::clone(&self.inner))
+            })
             .collect()
     }
 
@@ -1600,9 +1705,8 @@ impl PyModel {
     ///     Coupling name.
     fn coupling(&self, name: &str) -> PyResult<PyCoupling> {
         self.inner
-            .coupling(name)
-            .cloned()
-            .map(Into::into)
+            .coupling_id(name)
+            .map(|id| PyCoupling::new(id, Arc::clone(&self.inner)))
             .map_err(error::model)
     }
 
@@ -1617,8 +1721,10 @@ impl PyModel {
         self.inner
             .vertex_rules()
             .iter()
-            .cloned()
-            .map(Into::into)
+            .enumerate()
+            .map(|(index, _)| {
+                PyVertexRule::new(VertexRuleId::from_index(index), Arc::clone(&self.inner))
+            })
             .collect()
     }
 
@@ -1634,9 +1740,8 @@ impl PyModel {
     ///     Vertex-rule name.
     fn vertex_rule(&self, name: &str) -> PyResult<PyVertexRule> {
         self.inner
-            .vertex_rule(name)
-            .cloned()
-            .map(Into::into)
+            .vertex_rule_id(name)
+            .map(|id| PyVertexRule::new(id, Arc::clone(&self.inner)))
             .map_err(error::model)
     }
 
@@ -1651,8 +1756,13 @@ impl PyModel {
         self.inner
             .lorentz_structures()
             .iter()
-            .cloned()
-            .map(Into::into)
+            .enumerate()
+            .map(|(index, _)| {
+                PyLorentzStructure::new(
+                    LorentzStructureId::from_index(index),
+                    Arc::clone(&self.inner),
+                )
+            })
             .collect()
     }
 
@@ -1668,9 +1778,8 @@ impl PyModel {
     ///     Lorentz-structure name.
     fn lorentz_structure(&self, name: &str) -> PyResult<PyLorentzStructure> {
         self.inner
-            .lorentz_structure(name)
-            .cloned()
-            .map(Into::into)
+            .lorentz_structure_id(name)
+            .map(|id| PyLorentzStructure::new(id, Arc::clone(&self.inner)))
             .map_err(error::model)
     }
 
@@ -1685,8 +1794,10 @@ impl PyModel {
         self.inner
             .propagators()
             .iter()
-            .cloned()
-            .map(Into::into)
+            .enumerate()
+            .map(|(index, _)| {
+                PyPropagator::new(PropagatorId::from_index(index), Arc::clone(&self.inner))
+            })
             .collect()
     }
 
@@ -1702,9 +1813,8 @@ impl PyModel {
     ///     Propagator name.
     fn propagator(&self, name: &str) -> PyResult<PyPropagator> {
         self.inner
-            .propagator(name)
-            .cloned()
-            .map(Into::into)
+            .propagator_id(name)
+            .map(|id| PyPropagator::new(id, Arc::clone(&self.inner)))
             .map_err(error::model)
     }
 
@@ -1719,8 +1829,10 @@ impl PyModel {
         self.inner
             .functions()
             .iter()
-            .cloned()
-            .map(Into::into)
+            .enumerate()
+            .map(|(index, _)| {
+                PyModelFunction::new(ModelFunctionId::from_index(index), Arc::clone(&self.inner))
+            })
             .collect()
     }
 
@@ -1736,9 +1848,8 @@ impl PyModel {
     ///     Function name.
     fn function(&self, name: &str) -> PyResult<PyModelFunction> {
         self.inner
-            .function(name)
-            .cloned()
-            .map(Into::into)
+            .function_id(name)
+            .map(|id| PyModelFunction::new(id, Arc::clone(&self.inner)))
             .map_err(error::model)
     }
 
@@ -1753,8 +1864,13 @@ impl PyModel {
         self.inner
             .form_factors()
             .iter()
-            .cloned()
-            .map(Into::into)
+            .enumerate()
+            .map(|(index, _)| {
+                PyFormFactor::new(
+                    ModelFormFactorId::from_index(index),
+                    Arc::clone(&self.inner),
+                )
+            })
             .collect()
     }
 
@@ -1770,9 +1886,8 @@ impl PyModel {
     ///     Form-factor name.
     fn form_factor(&self, name: &str) -> PyResult<PyFormFactor> {
         self.inner
-            .form_factor(name)
-            .cloned()
-            .map(Into::into)
+            .form_factor_id(name)
+            .map(|id| PyFormFactor::new(id, Arc::clone(&self.inner)))
             .map_err(error::model)
     }
 
@@ -1813,7 +1928,10 @@ impl PyModel {
     ) -> PyResult<Self> {
         let mut model = self.inner.as_ref().clone();
         if let Some(callable) = evaluator {
-            let mut evaluator = PythonModelEvaluator { callable };
+            let mut evaluator = PythonModelEvaluator {
+                callable,
+                model: Arc::clone(&self.inner),
+            };
             model
                 .apply_parameter_card_with(&card.inner, &mut evaluator)
                 .map_err(error::recompute)?;
@@ -1846,6 +1964,7 @@ impl PyModel {
         let mut model = self.inner.as_ref().clone();
         let mut evaluator = PythonModelEvaluator {
             callable: evaluator,
+            model: Arc::clone(&self.inner),
         };
         model
             .recompute_with(&mut evaluator)
@@ -2091,6 +2210,16 @@ else:
                 r#"
 model = fk.Model.from_json(MODEL_JSON)
 
+def plain(expression):
+    return expression.format(
+        max_line_length=None,
+        color_top_level_sum=False,
+        color_builtin_symbols=False,
+        bracket_level_colors=None,
+        multiplication_operator="*",
+        num_exp_as_superscript=False,
+    )
+
 electron = model.particle_by_pdg(11)
 positron = electron.antiparticle
 assert isinstance(positron, fk.Particle)
@@ -2129,7 +2258,7 @@ else:
 internal = model.parameter("double_mass")
 assert internal.nature == fk.ParameterNature.INTERNAL
 assert internal.parameter_type == fk.ParameterType.COMPLEX
-assert internal.expression == "2*mass"
+assert plain(internal.expression) == "2*mass"
 
 coupling = model.coupling("GC1")
 assert isinstance(coupling, fk.Coupling)
@@ -2139,31 +2268,32 @@ assert coupling.value == 2.0 + 0.0j
 vertex = model.vertex_rule("V1")
 assert isinstance(vertex, fk.VertexRule)
 assert vertex.particles == ["s", "s", "s"]
-assert vertex.color_structures == ["1"]
+assert [str(structure) for structure in vertex.color_structures] == ["1"]
 assert vertex.lorentz_structures == ["L1"]
 assert vertex.couplings == [["GC1"]]
-assert vertex.coupling_orders(model) == {"QED": 1}
+assert vertex.coupling_orders() == {"QED": 1}
 
 lorentz = model.lorentz_structure("L1")
 assert isinstance(lorentz, fk.LorentzStructure)
 assert lorentz.spins == [1, 1, 1]
-assert lorentz.structure == "1"
+assert plain(lorentz.structure) == "1"
 
 propagator = model.propagator("s_prop")
 assert isinstance(propagator, fk.Propagator)
 assert propagator.particle == "s"
-assert propagator.numerator == "1"
-assert propagator.denominator == "P^2-mass^2"
+assert plain(propagator.numerator) == "1"
+denominator = str(propagator.denominator)
+assert "P^2" in denominator and "mass^2" in denominator
 
 function = model.function("twice")
 assert isinstance(function, fk.ModelFunction)
 assert function.arguments == ["x"]
-assert function.expression == "2*x"
+assert plain(function.expression) == "2*x"
 
 form_factor = model.form_factor("FF1")
 assert isinstance(form_factor, fk.FormFactor)
 assert form_factor.type_name == "complex"
-assert form_factor.value == "twice(P(1)^2)"
+assert plain(form_factor.value) == "twice(P(1)^2)"
 
 assert all(isinstance(value, fk.Parameter) for value in model.parameters)
 assert all(isinstance(value, fk.Coupling) for value in model.couplings)
@@ -2179,7 +2309,7 @@ def evaluate(request):
     assert all(isinstance(value, fk.ModelExpression) for value in request.internal_parameters)
     assert all(isinstance(value, fk.ModelExpression) for value in request.couplings)
     assert request.internal_parameters[0].name == "double_mass"
-    assert request.internal_parameters[0].expression == "2*mass"
+    assert plain(request.internal_parameters[0].expression) == "2*mass"
     assert request.couplings[0].name == "GC1"
     assert request.functions[0].name == "twice"
     assert request.form_factors[0].name == "FF1"

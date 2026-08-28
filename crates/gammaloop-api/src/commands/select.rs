@@ -468,11 +468,7 @@ fn parse_vertex_signatures(values: &[String], state: &State) -> Result<Vec<Verte
         .map(|value| {
             let signature = VertexSignature::parse(value)?;
             for vertex_rule_name in signature.vertex_rule_names() {
-                if !state
-                    .model
-                    .vertex_rule_name_to_position
-                    .contains_key(vertex_rule_name)
-                {
+                if state.model.vertex_rule_id(vertex_rule_name).is_err() {
                     return Err(eyre!(
                         "Unknown vertex rule '{}' in vertex selection signature '{}'.",
                         vertex_rule_name,

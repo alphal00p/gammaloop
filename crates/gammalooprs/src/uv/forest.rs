@@ -1,6 +1,7 @@
 use crate::{
     GammaLoopContext, debug_tags,
     graph::{Graph, LMBext, cuts::CutSet, parse::string_utils::dot_attr_value},
+    model::Model,
     utils::{GS, W_},
     uv::{
         ApproximationType, Integrands,
@@ -65,6 +66,7 @@ impl CutForests {
     pub(crate) fn compute(
         &mut self,
         graph: &mut Graph,
+        model: &Model,
         vakint: &Vakint,
         orientation: OrientationProjection<'_>,
         settings: &UVgenerationSettings,
@@ -75,7 +77,7 @@ impl CutForests {
             .zip(self.cuts.cuts.iter())
             .zip(self.settings.iter())
         {
-            let localizer = Localizer::new(cuts, orientation);
+            let localizer = Localizer::new(cuts, orientation, model);
             debug_tags!(#forest,#uv;
                 n_terms = %forest.n_terms(),
                 "Computing cut forest");
@@ -239,9 +241,13 @@ impl Forest {
                     );
 
                     current.data.topo_order = i;
-                    current
-                        .data
-                        .compute_4d(graph, vakint, &parent.data, settings)?;
+                    current.data.compute_4d(
+                        graph,
+                        localizer.model,
+                        vakint,
+                        &parent.data,
+                        settings,
+                    )?;
 
                     match settings.final_integrand {
                         FinalIntegrandDimension::FourD => {

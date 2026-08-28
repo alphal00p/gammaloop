@@ -21,6 +21,7 @@ use tracing::debug;
 use crate::{
     graph::{Edge, FeynmanGraph, Graph, HedgeData, LMBext, LoopMomentumBasis, Vertex},
     integrands::process::param_builder::ParamBuilderGraph,
+    model::Model,
     momentum::sample::LoopIndex,
     numerator::{AppliedFeynmanRule, Numerator},
     utils::{GS, W_, symbolica_ext::DOD},
@@ -53,12 +54,14 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     fn denominator<S: SubGraphLike, T: Fn(&Edge) -> isize>(
         &self,
         subgraph: &S,
+        model: &Model,
         edge_powers: T,
     ) -> Atom;
 
     fn boundary_pdg_set<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
+        model: &Model,
     ) -> BTreeSet<isize>
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
@@ -69,7 +72,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             .included_iter()
             .filter_map(|hedge| {
                 let edge_id = graph[&hedge];
-                graph[edge_id].particle_pdg_code().map(|pdg| {
+                graph[edge_id].particle_pdg_code(model).map(|pdg| {
                     if graph.flow(hedge) == Flow::Source {
                         -pdg
                     } else {
@@ -80,7 +83,11 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             .collect()
     }
 
-    fn internal_pdg_set<E: UVE, V, H, S: SubGraphLike>(&self, subgraph: &S) -> BTreeSet<isize>
+    fn internal_pdg_set<E: UVE, V, H, S: SubGraphLike>(
+        &self,
+        subgraph: &S,
+        model: &Model,
+    ) -> BTreeSet<isize>
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
@@ -88,7 +95,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             .iter_edges_of(subgraph)
             .filter_map(|(pair, edge_id, _)| {
                 pair.is_paired()
-                    .then(|| self.as_ref()[edge_id].particle_pdg_code())
+                    .then(|| self.as_ref()[edge_id].particle_pdg_code(model))
                     .flatten()
             })
             .collect()
@@ -97,6 +104,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     fn has_massive_boundary_external<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
+        model: &Model,
     ) -> bool
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
@@ -104,26 +112,28 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         let graph = self.as_ref();
         graph.full_crown(subgraph).included_iter().any(|hedge| {
             let edge_id = graph[&hedge];
-            graph[edge_id].is_massive()
+            graph[edge_id].is_massive(model)
         })
     }
 
     fn ct_identifier<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
+        model: &Model,
     ) -> CTIdentifier
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
         CTIdentifier::new(
-            self.boundary_pdg_set(subgraph),
-            Some(self.internal_pdg_set(subgraph)),
+            self.boundary_pdg_set(subgraph, model),
+            Some(self.internal_pdg_set(subgraph, model)),
         )
     }
 
     fn approximation_scheme<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
+        model: &Model,
         settings: &UVgenerationSettings,
         dod: i32,
     ) -> ApproximationType
@@ -131,15 +141,16 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
         settings.approximation_scheme_for(
-            &self.ct_identifier(subgraph),
+            &self.ct_identifier(subgraph, model),
             dod,
-            self.has_massive_boundary_external(subgraph),
+            self.has_massive_boundary_external(subgraph, model),
         )
     }
 
     fn classify_spinney<E: UVE, V, H>(
         &self,
         spinney: InternalSubGraph,
+        model: &Model,
         settings: &UVgenerationSettings,
         lmb: &LoopMomentumBasis,
     ) -> Option<Spinney>
@@ -151,7 +162,8 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
             return None;
         }
 
-        let renormalization_scheme = self.approximation_scheme(&spinney.filter, settings, dod);
+        let renormalization_scheme =
+            self.approximation_scheme(&spinney.filter, model, settings, dod);
 
         if renormalization_scheme != ApproximationType::Unsubtracted {
             Spinney::with_scheme(spinney, self, lmb, renormalization_scheme, dod)
@@ -163,6 +175,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     fn classified_spinneys<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
+        model: &Model,
         settings: &UVgenerationSettings,
         lmb: &LoopMomentumBasis,
     ) -> Vec<Spinney>
@@ -175,7 +188,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
 
         self.spinneys(subgraph)
             .into_iter()
-            .filter_map(|spinney| self.classify_spinney(spinney, settings, lmb))
+            .filter_map(|spinney| self.classify_spinney(spinney, model, settings, lmb))
             .collect()
     }
 
@@ -200,6 +213,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     }
     fn all_limits<E, V, H, S: SubGraphLike>(
         &self,
+        model: &crate::model::Model,
         subgraph: &S,
         expr: &Atom,
         expansion: Symbol,
@@ -210,7 +224,7 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     {
         let mom_reps = self.normal_emr_replacement(subgraph, lmb, &[W_.x___], |_s| true);
 
-        let ose_reps = self.get_ose_replacements();
+        let ose_reps = self.get_ose_replacements(model);
         // for x in &mom_reps {
         //     println!("LMB replacement: {x}");
         // }
@@ -251,12 +265,17 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
         limits
     }
 
-    fn wood<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(&self, subgraph: &S) -> Wood
+    fn wood<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
+        &self,
+        subgraph: &S,
+        model: &Model,
+    ) -> Wood
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
         self.wood_with_settings(
             subgraph,
+            model,
             &UVgenerationSettings::default(),
             &self.as_ref().lmb_of(&self.as_ref().full_filter()),
         )
@@ -265,13 +284,17 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     fn wood_with_settings<E: UVE, V, H, S: SubGraphLike<Base = SuBitGraph>>(
         &self,
         subgraph: &S,
+        model: &Model,
         settings: &UVgenerationSettings,
         lmb: &LoopMomentumBasis,
     ) -> Wood
     where
         Self: AsRef<HedgeGraph<E, V, H>>,
     {
-        Wood::from_spinneys(self.classified_spinneys(subgraph, settings, lmb), self)
+        Wood::from_spinneys(
+            self.classified_spinneys(subgraph, model, settings, lmb),
+            self,
+        )
     }
 
     fn compute_dod<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(&self, subgraph: &S) -> i32;
@@ -370,13 +393,14 @@ impl UltravioletGraph for Graph {
     fn denominator<S: SubGraphLike, T: Fn(&Edge) -> isize>(
         &self,
         subgraph: &S,
+        model: &Model,
         edge_powers: T,
     ) -> Atom {
         let mut den = Atom::num(1);
 
         for (pair, eid, d) in self.underlying.iter_edges_of(subgraph) {
             if matches!(pair, HedgePair::Paired { .. }) {
-                let m2 = d.data.mass_atom().pow(2);
+                let m2 = d.data.mass_atom(model).pow(2);
                 let edge_power = edge_powers(d.data);
                 let is_power_negative = edge_power < 0;
                 let prop_den = GS.den(
@@ -413,12 +437,29 @@ impl UltravioletGraph for Graph {
     fn compute_dod<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(&self, subgraph: &S) -> i32 {
         let lmb = self.lmb_of(subgraph);
         let empty = self.underlying.empty_subgraph();
+        // Mass terms do not affect the leading UV degree. Building the power-
+        // counting denominator with zero masses keeps this structural query
+        // independent of model resolution while the physical denominator
+        // remains explicitly model-aware.
+        let mut denominator = Atom::one();
+        for (pair, edge_id, _) in self.underlying.iter_edges_of(subgraph) {
+            if pair.is_paired() {
+                denominator *= GS.den(
+                    usize::from(edge_id),
+                    function!(GS.emr_mom, usize::from(edge_id)),
+                    &Atom::Zero,
+                    spenso_lor_atom(usize::from(edge_id) as i32, usize::from(edge_id), GS.dim)
+                        .pow(2)
+                        .to_dots(),
+                );
+            }
+        }
         let integrand = self
             .numerator(subgraph, &empty)
             .to_d_dim(GS.dim)
             .get_single_atom()
             .unwrap()
-            / self.denominator(subgraph, |_| 1);
+            / denominator;
         let nloops: usize = self.n_loops(subgraph);
         self.uv_rescaled(subgraph.included(), nloops, &lmb, &integrand)
             .trailing_exponent()
@@ -441,7 +482,7 @@ impl UltravioletGraph for Graph {
 }
 
 pub trait UVE {
-    fn mass_atom(&self) -> Atom;
-    fn particle_pdg_code(&self) -> Option<isize>;
-    fn is_massive(&self) -> bool;
+    fn mass_atom(&self, model: &crate::model::Model) -> Atom;
+    fn particle_pdg_code(&self, model: &crate::model::Model) -> Option<isize>;
+    fn is_massive(&self, model: &crate::model::Model) -> bool;
 }

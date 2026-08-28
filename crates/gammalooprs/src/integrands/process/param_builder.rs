@@ -36,7 +36,7 @@ use crate::{
         amplitude::export::ExportAtomTo,
         evaluators::{InputParams, SliceMut},
     },
-    model::Model,
+    model::{Model, ModelGammaLoopExt},
     momentum::sample::{ExternalFourMomenta, MomentumSample},
     momentum::{Helicity, PolType},
     numerator::ParsingNet,
@@ -104,9 +104,9 @@ pub trait ParamBuilderGraph {
     fn iter_edge_ids(&self) -> impl Iterator<Item = EdgeIndex> + '_;
     fn external_spatial_params(&self) -> Vec<Atom>;
     fn loop_mom_params(&self, lmb: &LoopMomentumBasis) -> Vec<Atom>;
-    fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom;
+    fn explicit_ose_atom(&self, edge: EdgeIndex, model: &Model) -> Atom;
     // fn explicit_meduium_numerato(&self,edge)
-    fn get_ose_replacements(&self) -> Vec<Replacement>;
+    fn get_ose_replacements(&self, model: &Model) -> Vec<Replacement>;
 }
 
 macro_rules! define_gamma_loop_pairs {
@@ -1172,12 +1172,12 @@ impl<T: FloatLike> ParamBuilder<T> {
             .map(|edge_id| {
                 Replacement::new(
                     GS.ose(edge_id).to_pattern(),
-                    graph.explicit_ose_atom(edge_id).to_pattern(),
+                    graph.explicit_ose_atom(edge_id, model).to_pattern(),
                 )
             });
 
         for replacement in graph
-            .get_ose_replacements()
+            .get_ose_replacements(model)
             .into_iter()
             .chain(lmb_ose_replacements)
             .unique_by(|replacement| replacement.pat.to_atom())
@@ -1315,16 +1315,21 @@ impl<T: FloatLike> ParamBuilder<T> {
             let multiplicative_offset = value_index + 1;
             let mut pos = self.pairs.model_parameters.value_range.start * multiplicative_offset;
             let _value_index = multiplicative_offset - 1;
-            for cpl in model.couplings.values().filter(|c| c.value.is_some()) {
+            for cpl in model.couplings().iter().filter(|c| c.value.is_some()) {
                 if let Some(value) = cpl.value {
-                    values[pos] = value.map(F::from_f64);
+                    values[pos] = Complex::new(
+                        F::<T>::from_ff64(F::<f64>(value.re)),
+                        F::<T>::from_ff64(F::<f64>(value.im)),
+                    );
                     pos += multiplicative_offset;
                 }
             }
-            for param in model.parameters.values().filter(|p| p.value.is_some()) {
+            for param in model.parameters().iter().filter(|p| p.value.is_some()) {
                 if let Some(value) = param.value {
-                    let value =
-                        Complex::new(F::<T>::from_ff64(value.re), F::<T>::from_ff64(value.im));
+                    let value = Complex::new(
+                        F::<T>::from_ff64(F::<f64>(value.re)),
+                        F::<T>::from_ff64(F::<f64>(value.im)),
+                    );
                     values[pos] = value.clone();
                     pos += multiplicative_offset;
                 }

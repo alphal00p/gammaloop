@@ -1,6 +1,7 @@
 use crate::{
     debug_tags,
     graph::{Graph, LoopMomentumBasis, cuts::CutSet},
+    model::Model,
     momentum::Sign,
     settings::global::OrientationPattern,
     utils::GS,
@@ -67,12 +68,21 @@ pub trait ApproximationKernel<C> {
 
 pub struct UVCtx<'a> {
     pub graph: &'a Graph,
+    pub model: &'a crate::model::Model,
     pub settings: &'a UVgenerationSettings,
 }
 
 impl<'a> UVCtx<'a> {
-    pub fn new(graph: &'a Graph, settings: &'a UVgenerationSettings) -> Self {
-        Self { graph, settings }
+    pub fn new(
+        graph: &'a Graph,
+        model: &'a crate::model::Model,
+        settings: &'a UVgenerationSettings,
+    ) -> Self {
+        Self {
+            graph,
+            model,
+            settings,
+        }
     }
 }
 
@@ -314,11 +324,16 @@ impl Approximation {
     pub(crate) fn compute_4d(
         &mut self,
         graph: &Graph,
+        model: &Model,
         vakint: (&Vakint, &vakint::VakintSettings),
         dependent: &Self,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        let ctx = UVCtx { graph, settings };
+        let ctx = UVCtx {
+            graph,
+            model,
+            settings,
+        };
         debug_tags!(#generation,#uv,#fourd;
             simple = %self.simple_display(graph),
             "Computing 4D",

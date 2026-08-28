@@ -11,10 +11,7 @@ use linnet::{
     half_edge::{
         HedgeGraph,
         involution::{EdgeData, EdgeIndex, Hedge, HedgePair},
-        subgraph::{
-            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike,
-            SubSetOps, subset::SubSet,
-        },
+        subgraph::{HedgeNode, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike},
     },
     parser::DotGraph,
 };
@@ -28,10 +25,10 @@ use tracing::warn;
 use typed_index_collections::TiVec;
 
 use crate::{
-    cff::generation::SurfaceCache,
     define_index,
-    feyngen::diagram_generator::evaluate_overall_factor,
+    graph::global::evaluate_overall_factor,
     integrands::process::{ChannelIndex, LmbMultiChannelingSetup, ParamBuilder},
+    model::Model,
     momentum::{Dep, ExternalMomenta, PolDef, sample::ExternalIndex},
     numerator::GlobalPrefactor,
     processes::DotExportSettings,
@@ -39,6 +36,7 @@ use crate::{
     utils::{F, Length, ose_atom_from_index},
     uv::uv_graph::UVE,
 };
+use feynkit_cff::SurfaceCache;
 
 pub(crate) mod attribute_warnings;
 pub mod autogen;
@@ -49,6 +47,14 @@ pub mod global;
 pub struct VertexOrder(pub u8);
 
 define_index! {pub struct GroupId;}
+
+/// Canonical physical cut metadata translated mechanically from FeynKit.
+#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+pub struct FinalizedCut {
+    pub cut: OrientedCut,
+    pub left: SuBitGraph,
+    pub right: SuBitGraph,
+}
 
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = crate::GammaLoopContext)]
@@ -67,6 +73,8 @@ pub struct Graph {
     /// Only relevant for cross sections, but stored here for the parsing
     pub initial_state_cut: OrientedCut,
     pub polarizations: Vec<(PolDef, Atom)>,
+    /// Physical cuts selected and filtered by canonical FeynKit generation.
+    pub finalized_cuts: Vec<FinalizedCut>,
 }
 
 impl LogMessage for Graph {
@@ -180,7 +188,7 @@ impl Graph {
         externals
     }
 
-    pub(crate) fn random_externals(&self, seed: u64) -> Externals {
+    pub(crate) fn random_externals(&self, model: &Model, seed: u64) -> Externals {
         let mut rng = SmallRng::seed_from_u64(seed);
         let mom_range = -10.0..10.0;
 
@@ -189,7 +197,7 @@ impl Graph {
         let ext: SuBitGraph = self.external_filter();
 
         for (_, _, d) in self.iter_edges_of(&ext) {
-            let hel = d.data.random_helicity(seed);
+            let hel = d.data.random_helicity(model, seed);
             helicities.push(hel);
             if helicities.len() == 2 {
                 continue;
@@ -282,7 +290,7 @@ impl Graph {
                 .loop_edges
                 .iter()
                 .copied()
-                .filter(|edge_id| self.underlying[*edge_id].particle.is_massless())
+                .filter(|edge_id| matches!(self.underlying[*edge_id].mass, edge::EdgeMass::Zero))
                 .collect_vec();
 
             for mut combination in massless_loop_edges.into_iter().combinations(num_loops) {
@@ -519,56 +527,6 @@ impl Graph {
         None
     }
 
-    pub(crate) fn get_initial_state_tree(&self) -> (SuBitGraph, Vec<EdgeIndex>) {
-        let mut tree_like_edges = Vec::new();
-        let full_graph = self.underlying.full_filter();
-        let full_is_cut = self
-            .initial_state_cut
-            .left
-            .union(&self.initial_state_cut.right);
-
-        let full_graph_without_initial_state_cut = full_graph.subtract(&full_is_cut);
-
-        let mut result: SubSet<Hedge> = self.underlying.empty_subgraph();
-
-        for (pair, edge_id, _) in self
-            .underlying
-            .iter_edges_of(&full_graph_without_initial_state_cut)
-        {
-            if let HedgePair::Paired { source, sink } = pair {
-                let loop_signature = &self.loop_momentum_basis.edge_signatures[edge_id];
-                let is_tree_like = loop_signature.internal.iter().all(|sign| sign.is_zero());
-                if is_tree_like {
-                    tree_like_edges.push(edge_id);
-                    let source_node = self.underlying.node_id(source);
-                    let sink_node = self.underlying.node_id(sink);
-
-                    let source_connects_initial_state =
-                        self.underlying.iter_crown(source_node).any(|hedge| {
-                            let mut single_hedge_subgraph: SubSet<Hedge> =
-                                self.underlying.empty_subgraph();
-
-                            single_hedge_subgraph.add(hedge);
-
-                            single_hedge_subgraph.intersects(&full_is_cut)
-                        });
-
-                    if source_connects_initial_state {
-                        for hedge in self.underlying.iter_crown(source_node) {
-                            result.add(hedge);
-                        }
-                    } else {
-                        for hedge in self.underlying.iter_crown(sink_node) {
-                            result.add(hedge);
-                        }
-                    }
-                }
-            }
-        }
-
-        (result, tree_like_edges)
-    }
-
     pub(crate) fn get_raised_edge_groups(&self) -> Vec<Vec<EdgeIndex>> {
         let mut result = Vec::<Vec<EdgeIndex>>::new();
 
@@ -600,6 +558,7 @@ impl Graph {
     }
     pub(crate) fn classify_threshold_pinch(
         &self,
+        model: &Model,
         cut_boundary_edges: &[EdgeIndex],
         threshold_boundary_edges: &[EdgeIndex],
     ) -> ThresholdPinchStatus {
@@ -611,7 +570,7 @@ impl Graph {
         let boundary_mass_sum = |edges: &[EdgeIndex]| {
             edges
                 .iter()
-                .map(|edge_id| self[*edge_id].mass_atom())
+                .map(|edge_id| self[*edge_id].mass_atom(model))
                 .fold(Atom::new(), |sum, mass| sum + mass)
         };
 
@@ -737,8 +696,8 @@ pub fn get_cff_inverse_energy_product_impl<E, V, H, S: SubSetLike>(
 mod tests {
     use super::*;
     use crate::{
-        dot, graph::parse::from_dot::IntoGraph, initialisation::test_initialise,
-        momentum::signature::LoopExtSignature,
+        finalized_runtime_dot, graph::parse::from_dot::IntoFinalizedRuntimeGraph,
+        initialisation::test_initialise, momentum::signature::LoopExtSignature,
     };
     use std::sync::OnceLock;
 
@@ -758,15 +717,16 @@ mod tests {
         GRAPH
             .get_or_init(|| {
                 test_initialise().unwrap();
-                dot!(
+                finalized_runtime_dot!(
                     digraph lmb_selector {
+                        graph [projector=1]
                         edge [num=1 mass=0]
                         node [num=1]
-                        A -> B [id=0]
-                        A -> B [id=1]
-                        A -> B [id=2]
-                        A -> B [id=3]
-                        A -> B [id=4 mass=1]
+                        A -> B [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+                        A -> B [id=1 lmb_id=1 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                        A -> B [id=2 lmb_id=2 source="{ufo_order:2}" sink="{ufo_order:2}"]
+                        A -> B [id=3 lmb_id=3 source="{ufo_order:3}" sink="{ufo_order:3}"]
+                        A -> B [id=4 mass=1 source="{ufo_order:4}" sink="{ufo_order:4}"]
                     }
                 )
                 .unwrap()
@@ -867,20 +827,22 @@ mod tests {
     #[test]
     fn threshold_pinch_classification_distinguishes_fixed_and_multiparticle_boundaries() {
         let graph = selector_test_graph();
+        let model = crate::utils::load_generic_model("sm");
 
         assert_eq!(
-            graph.classify_threshold_pinch(&[EdgeIndex::from(0)], &[EdgeIndex::from(1)],),
+            graph.classify_threshold_pinch(&model, &[EdgeIndex::from(0)], &[EdgeIndex::from(1)],),
             ThresholdPinchStatus::Always,
         );
         assert_eq!(
             graph.classify_threshold_pinch(
+                &model,
                 &[EdgeIndex::from(0), EdgeIndex::from(1)],
                 &[EdgeIndex::from(2), EdgeIndex::from(3)],
             ),
             ThresholdPinchStatus::CanBecome,
         );
         assert_eq!(
-            graph.classify_threshold_pinch(&[EdgeIndex::from(0)], &[EdgeIndex::from(4)],),
+            graph.classify_threshold_pinch(&model, &[EdgeIndex::from(0)], &[EdgeIndex::from(4)],),
             ThresholdPinchStatus::NotProven,
         );
     }

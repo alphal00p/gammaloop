@@ -4929,7 +4929,7 @@ mod tests {
                 },
                 ModelParameterCompletionEntry {
                     name: "beta".to_string(),
-                    parameter_type: ParameterType::Imaginary,
+                    parameter_type: ParameterType::Complex,
                 },
             ],
             ..CompletionState::default()
@@ -4976,7 +4976,7 @@ mod tests {
                 },
                 ModelParameterCompletionEntry {
                     name: "gamma".to_string(),
-                    parameter_type: ParameterType::Imaginary,
+                    parameter_type: ParameterType::Complex,
                 },
             ],
             ..CompletionState::default()
@@ -5015,7 +5015,7 @@ mod tests {
             &CompletionState {
                 model_parameter_entries: vec![ModelParameterCompletionEntry {
                     name: "beta".to_string(),
-                    parameter_type: ParameterType::Imaginary,
+                    parameter_type: ParameterType::Complex,
                 }],
                 ..CompletionState::default()
             },

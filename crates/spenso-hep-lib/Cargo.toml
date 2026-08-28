@@ -12,8 +12,6 @@ symbolica = { workspace = true }
 
 ahash = { workspace = true, features = ["serde"] }
 xpct = "0.5.1"
-gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack" }
-
 [dev-dependencies]
 insta = { workspace = true, features = ["json", "ron", "toml", "yaml"] }
 tabled = { workspace = true }

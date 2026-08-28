@@ -146,9 +146,9 @@
       "parameter_type": "real",
       "value": [
         0.0075467711139788835,
-        -0.0
+        0.0
       ],
-      "expression": "UFO::{}::aEWM1^(-1)"
+      "expression": "1/aEWM1"
     },
     {
       "name": "G",
@@ -160,7 +160,7 @@
         1.2177157847767195,
         0.0
       ],
-      "expression": "2*UFO::{}::aS^(1/2)*𝜋^(1/2)"
+      "expression": "2*𝜋^(1/2)*aS^(1/2)"
     },
     {
       "name": "ee",
@@ -172,7 +172,7 @@
         0.3079537672443688,
         0.0
       ],
-      "expression": "2*UFO::{}::aEW^(1/2)*𝜋^(1/2)"
+      "expression": "2*𝜋^(1/2)*aEW^(1/2)"
     }
   ],
   "particles": [
@@ -189,7 +189,10 @@
       "charge": 0.0,
       "ghost_number": 0,
       "lepton_number": 0,
-      "y_charge": 0
+      "y_charge": 0,
+      "propagating": true,
+      "goldstoneboson": false,
+      "propagator": null
     },
     {
       "pdg_code": 1001,
@@ -204,7 +207,10 @@
       "charge": 0.0,
       "ghost_number": 0,
       "lepton_number": 0,
-      "y_charge": 0
+      "y_charge": 0,
+      "propagating": true,
+      "goldstoneboson": false,
+      "propagator": null
     },
     {
       "pdg_code": 1002,
@@ -219,7 +225,10 @@
       "charge": 0.0,
       "ghost_number": 0,
       "lepton_number": 0,
-      "y_charge": 0
+      "y_charge": 0,
+      "propagating": true,
+      "goldstoneboson": false,
+      "propagator": null
     }
   ],
   "propagators": [
@@ -227,19 +236,19 @@
       "name": "scalar_0_propFeynman",
       "particle": "scalar_0",
       "numerator": "1𝑖",
-      "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2"
+      "denominator": "P(idx(1,1))^2"
     },
     {
       "name": "scalar_1_propFeynman",
       "particle": "scalar_1",
       "numerator": "1𝑖",
-      "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::mass_scalar_1^2"
+      "denominator": "-mass_scalar_1^2+P(idx(1,1))^2"
     },
     {
       "name": "scalar_2_propFeynman",
       "particle": "scalar_2",
       "numerator": "1𝑖",
-      "denominator": "(UFO::{}::P(UFO::{}::idx(1,1)))^2+-1*UFO::{}::mass_scalar_2^2"
+      "denominator": "-mass_scalar_2^2+P(idx(1,1))^2"
     }
   ],
   "lorentz_structures": [
@@ -347,7 +356,7 @@
   "couplings": [
     {
       "name": "SCALAR_COUPLING",
-      "expression": "1𝑖*UFO::{}::lam",
+      "expression": "1𝑖*lam",
       "orders": [
         [
           "QCD",
@@ -6907,5 +6916,7 @@
         ]
       ]
     }
-  ]
+  ],
+  "functions": [],
+  "form_factors": []
 }
