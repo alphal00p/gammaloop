@@ -1,0 +1,17 @@
+#-
+#include fmft.frm
+
+CF p,vkdot;
+S {symbols};
+{additional_symbols}
+* sim indicates the massive ith denominator and 1/pi.pi the massless counterpart
+L integral = ({numerator})*({integral});
+* Loop evaluation
+#call fmft
+* expand up to O(ep^0)
+*#call exp4d(0)
+.sort
+
+#write<out.txt> \"%E\",integral
+
+.end

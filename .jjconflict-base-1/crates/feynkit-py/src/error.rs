@@ -34,7 +34,7 @@ define_exception!(
     FeynkitError,
     PyException,
     pyo3_stub_gen::TypeInfo::builtin("Exception"),
-    "Base exception for native FeynKit operations.\n\nExamples\n--------\nCatch any model, diagram, generation, CFF, or kinematics failure:\n\n>>> try:\n...     result = model.generate_diagrams(incoming, outgoing)\n... except fk.FeynkitError as error:\n...     print(error)"
+    "Base exception for native FeynKit operations.\n\nExamples\n--------\nCatch any model, diagram, generation, CFF, tensor-reduction, or kinematics failure:\n\n>>> try:\n...     result = model.generate_diagrams(incoming, outgoing)\n... except fk.FeynkitError as error:\n...     print(error)"
 );
 define_exception!(
     ModelError,
@@ -65,6 +65,12 @@ define_exception!(
     FeynkitError,
     pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
     "Invalid Lorentz transformation, momentum, or jet-clustering request.\n\nExamples\n--------\nKinematic-domain failures remain distinct from model errors:\n\n>>> try:\n...     jets = fk.JetDefinition.anti_kt(-0.4).cluster(momenta)\n... except fk.KinematicsError as error:\n...     print(error)"
+);
+define_exception!(
+    TensorReductionError,
+    FeynkitError,
+    pyo3_stub_gen::TypeInfo::unqualified("FeynkitError"),
+    "Failure while parsing or reducing a Lorentz tensor.\n\nExamples\n--------\nCatch unsupported tensor structures or an exceeded expansion budget:\n\n>>> try:\n...     scalar = reducer.reduce(numerator)\n... except fk.TensorReductionError as error:\n...     print(error)"
 );
 #[cfg(feature = "ufo")]
 define_exception!(
@@ -106,6 +112,10 @@ pub(crate) fn kinematics(error: impl std::fmt::Display) -> PyErr {
     KinematicsError::new_err(error.to_string())
 }
 
+pub(crate) fn tensor(error: feynkit_tensor::TensorReductionError) -> PyErr {
+    TensorReductionError::new_err(error.to_string())
+}
+
 #[cfg(feature = "ufo")]
 pub(crate) fn ufo(error: feynkit_ufo::UfoLoadError) -> PyErr {
     UfoLoadError::new_err(error.to_string())
@@ -119,6 +129,10 @@ pub(crate) fn register(module: &pyo3::Bound<'_, pyo3::types::PyModule>) -> pyo3:
     module.add("GenerationError", py.get_type::<GenerationError>())?;
     module.add("CffError", py.get_type::<CffError>())?;
     module.add("KinematicsError", py.get_type::<KinematicsError>())?;
+    module.add(
+        "TensorReductionError",
+        py.get_type::<TensorReductionError>(),
+    )?;
     #[cfg(feature = "ufo")]
     module.add("UfoLoadError", py.get_type::<UfoLoadError>())?;
     Ok(())

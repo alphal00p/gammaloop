@@ -230,7 +230,7 @@ class CffOrientation:
 
     Examples
     --------
-    >>> orientation = result.orientations[0]
+    >>> orientation = next(iter(result.orientations))
     >>> for product in orientation.denominator_products():
     ...     print([surface.symbol_name for surface in product])
     """
@@ -417,7 +417,7 @@ class CffSurface:
 
     Examples
     --------
-    >>> surface = result.surfaces[0]
+    >>> surface = next(iter(result.surfaces))
     >>> print(surface, surface.positive_energies, surface.external_shift)
     """
     @property
@@ -573,7 +573,7 @@ class Coupling:
 
     Examples
     --------
-    >>> coupling = model.couplings[0]
+    >>> coupling = next(iter(model.couplings))
     >>> coupling.orders
     {'QED': 1}
     """
@@ -627,7 +627,7 @@ class DiagramEdge:
 
     Examples
     --------
-    >>> edge = diagram.edges[0]
+    >>> edge = next(iter(diagram.edges))
     >>> particle = model.particle_by_pdg(edge.particle_pdg)
     >>> source, target = diagram.vertices[edge.source], diagram.vertices[edge.target]
     """
@@ -748,7 +748,7 @@ class DiagramGroup:
 
     Examples
     --------
-    >>> group = result.groups[0]
+    >>> group = next(iter(result.groups))
     >>> master_diagram = result.diagrams[group.master]
     """
     @property
@@ -776,7 +776,7 @@ class DiagramVertex:
 
     Examples
     --------
-    >>> vertex = diagram.vertices[0]
+    >>> vertex = next(iter(diagram.vertices))
     >>> if vertex.is_external:
     ...     print(vertex.external_state, vertex.external_index)
     ... else:
@@ -994,7 +994,7 @@ class FeynkitError(builtins.Exception):
 
     Examples
     --------
-    Catch any model, diagram, generation, CFF, or kinematics failure:
+    Catch any model, diagram, generation, CFF, tensor-reduction, or kinematics failure:
 
     >>> try:
     ...     result = model.generate_diagrams(incoming, outgoing)
@@ -1013,7 +1013,7 @@ class FeynmanDiagram:
 
     Examples
     --------
-    >>> diagram = result.diagrams[0]
+    >>> diagram = next(iter(result.diagrams))
     >>> diagram.validate()
     >>> diagram  # renders as a Linnest graph in Jupyter or Marimo
     """
@@ -1179,6 +1179,58 @@ class FeynmanDiagram:
         >>> projected_numerator = projector * diagram.numerator_expression()
         >>> projected_numerator
         """
+    def reduce_tensor_numerator(self, reducer: TensorReducer) -> Expression:
+        r"""
+        Reduce the finalized numerator and projector with a tensor reducer.
+
+        The result is a native Symbolica expression using ``spenso::dot`` and
+        ``spenso::g``. For a fully projected vacuum numerator, all Lorentz
+        indices disappear and only scalar invariants remain. Residual free
+        projector indices are preserved as metric tensors; use
+        :meth:`reduce_tensor_graphs` when scalar graph contributions are
+        required. The scalar numerator prefactor remains separate and is not
+        included in this expression.
+
+        Examples
+        --------
+        >>> from symbolica import E
+        >>> reducer = fk.TensorReducer.feynkit(E("4"))
+        >>> scalar_numerator = vacuum_diagram.reduce_tensor_numerator(reducer)
+        >>> scalar_numerator
+
+        Parameters
+        ----------
+        reducer : TensorReducer
+            Tensor projector and integrated-momentum selection to apply.
+        """
+    def reduce_tensor_graphs(self, reducer: TensorReducer) -> builtins.list[FeynmanDiagram]:
+        r"""
+        Split the tensor numerator into scalar contributions on this topology.
+
+        Each returned diagram has one compact reduction term as its numerator,
+        including that term's exact projector coefficient. The graph topology,
+        model, denominator data, and topology ID are preserved; deterministic
+        ``.tensor[index]`` name suffixes distinguish the derived contributions.
+        The external-state projector is consumed and reset to one, while the
+        scalar numerator prefactor is retained. The projection must be fully
+        contracted: any residual indexed Minkowski slot raises
+        ``TensorReductionError``. Use
+        :meth:`reduce_tensor_numerator` when residual free Lorentz indices are
+        intentional.
+
+        Examples
+        --------
+        >>> from symbolica import E
+        >>> reducer = fk.TensorReducer.feynkit(E("4"))
+        >>> scalar_graphs = vacuum_diagram.reduce_tensor_graphs(reducer)
+        >>> for contribution in scalar_graphs:
+        ...     print(contribution.name, contribution.numerator_expression())
+
+        Parameters
+        ----------
+        reducer : TensorReducer
+            Tensor projector and integrated-momentum selection to apply.
+        """
     def validate(self) -> None:
         r"""
         Validate particle and interaction references against a physics model.
@@ -1340,7 +1392,7 @@ class FormFactor:
 
     Examples
     --------
-    >>> form_factor = model.form_factors[0]
+    >>> form_factor = next(iter(model.form_factors))
     >>> form_factor.name
     'FF1'
     """
@@ -2057,7 +2109,7 @@ class GenerationOptions:
         --------
         >>> options.detect_zero_numerators()
         """
-    def group_identical_numerators(self, *, numerical_sample_seed: builtins.int = 3, number_of_numerical_samples: builtins.int = 5, differentiate_particle_masses_only: builtins.bool = True, fully_numerical_substitution: builtins.bool = False, check_canonical_numerator: builtins.bool = False) -> None:
+    def group_identical_numerators(self, *, numerical_sample_seed: builtins.int = 3, number_of_numerical_samples: builtins.int = 5, differentiate_particle_masses_only: builtins.bool = True, fully_numerical_substitution: builtins.bool = False, check_canonical_numerator: builtins.bool = False, symmetric_polarizations: builtins.bool = False) -> None:
         r"""
         Group diagrams only when their numerators are identical.
 
@@ -2077,8 +2129,10 @@ class GenerationOptions:
             Substitute scalar parameters as well as nonscalar indeterminates.
         check_canonical_numerator : bool, optional
             Try an exact canonical comparison before numerical sampling.
+        symmetric_polarizations : bool, optional
+            Reuse wavefunction samples across the two sides of a sewn external state.
         """
-    def group_numerators_up_to_sign(self, *, numerical_sample_seed: builtins.int = 3, number_of_numerical_samples: builtins.int = 5, differentiate_particle_masses_only: builtins.bool = True, fully_numerical_substitution: builtins.bool = False, check_canonical_numerator: builtins.bool = False) -> None:
+    def group_numerators_up_to_sign(self, *, numerical_sample_seed: builtins.int = 3, number_of_numerical_samples: builtins.int = 5, differentiate_particle_masses_only: builtins.bool = True, fully_numerical_substitution: builtins.bool = False, check_canonical_numerator: builtins.bool = False, symmetric_polarizations: builtins.bool = False) -> None:
         r"""
         Group diagrams whose numerators differ only by an overall sign.
 
@@ -2098,8 +2152,10 @@ class GenerationOptions:
             Substitute scalar parameters as well as nonscalar indeterminates.
         check_canonical_numerator : bool, optional
             Try an exact canonical comparison before numerical sampling.
+        symmetric_polarizations : bool, optional
+            Reuse wavefunction samples across the two sides of a sewn external state.
         """
-    def group_numerators_up_to_scalar(self, *, numerical_sample_seed: builtins.int = 3, number_of_numerical_samples: builtins.int = 5, differentiate_particle_masses_only: builtins.bool = True, fully_numerical_substitution: builtins.bool = False, check_canonical_numerator: builtins.bool = False) -> None:
+    def group_numerators_up_to_scalar(self, *, numerical_sample_seed: builtins.int = 3, number_of_numerical_samples: builtins.int = 5, differentiate_particle_masses_only: builtins.bool = True, fully_numerical_substitution: builtins.bool = False, check_canonical_numerator: builtins.bool = False, symmetric_polarizations: builtins.bool = False) -> None:
         r"""
         Group diagrams whose numerators differ by a scalar factor.
 
@@ -2119,6 +2175,8 @@ class GenerationOptions:
             Substitute scalar parameters as well as nonscalar indeterminates.
         check_canonical_numerator : bool, optional
             Try an exact canonical comparison before numerical sampling.
+        symmetric_polarizations : bool, optional
+            Reuse wavefunction samples across the two sides of a sewn external state.
         """
 
 @typing.final
@@ -2357,7 +2415,7 @@ class GroupMember:
 
     Examples
     --------
-    >>> member = result.groups[0].members[0]
+    >>> member = next(iter(next(iter(result.groups)).members))
     >>> diagram = result.diagrams[member.diagram]
     """
     @property
@@ -2540,7 +2598,7 @@ class Jet:
     Examples
     --------
     >>> jets = fk.JetDefinition.anti_kt(0.4).cluster(particles).jets
-    >>> leading_jet = jets[0]
+    >>> leading_jet = next(iter(jets))
     >>> leading_jet.momentum
     """
     @property
@@ -2818,7 +2876,7 @@ class LoopMomentumBasis:
 
     Examples
     --------
-    >>> basis = diagram.loop_momentum_bases(limit=1)[0]
+    >>> basis = next(iter(diagram.loop_momentum_bases(limit=1)))
     >>> len(basis.loop_edges) == diagram.loop_count
     True
     >>> assignments = basis.edge_signatures
@@ -2948,7 +3006,7 @@ class LorentzStructure:
 
     Examples
     --------
-    >>> lorentz = model.lorentz_structures[0]
+    >>> lorentz = next(iter(model.lorentz_structures))
     >>> lorentz.spins
     [2, 2, 3]
     """
@@ -3210,6 +3268,27 @@ class Model:
         name : str
             Coupling name.
         """
+    def expand_couplings(self, expression: Expression) -> Expression:
+        r"""
+        Replace named UFO vertex coefficients by their analytic expressions.
+
+        Generated diagrams retain coefficient symbols such as ``UFO::GC_11``
+        so numerical calculations can use the model's precomputed coupling
+        values. Call this method when inspecting or manipulating a numerator in
+        terms of Lagrangian parameters such as ``UFO::G`` or ``UFO::ee``. The
+        input expression and the stored diagram are unchanged.
+
+        Examples
+        --------
+        >>> stored = diagram.numerator_expression()
+        >>> analytic = model.expand_couplings(stored)
+        >>> analytic  # native Symbolica expression in model parameters
+
+        Parameters
+        ----------
+        expression : Expression
+            Symbolica expression containing named couplings from this model.
+        """
     def vertex_rule(self, name: builtins.str) -> VertexRule:
         r"""
         Look up a vertex rule by name.
@@ -3420,7 +3499,7 @@ class ModelFunction:
 
     Examples
     --------
-    >>> function = model.functions[0]
+    >>> function = next(iter(model.functions))
     >>> function.arguments
     ['z']
     """
@@ -3463,7 +3542,7 @@ class MomentumSignature:
 
     Examples
     --------
-    >>> basis = diagram.loop_momentum_bases(limit=1)[0]
+    >>> basis = next(iter(diagram.loop_momentum_bases(limit=1)))
     >>> edge_id, signature = next(iter(basis.edge_signatures.items()))
     >>> print(f"q_{edge_id} = {signature.format_momentum()}")
     """
@@ -4156,12 +4235,13 @@ class Process:
     def with_final_state_alternatives(self, alternatives: typing.Sequence[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]]) -> Process:
         r"""
         Return a process accepting any of the supplied final states.
-        Amplitudes accept exactly one alternative; cross-section alternatives cannot be empty.
+        Amplitudes accept exactly one alternative; cross sections may include an empty
+        alternative for a vacuum final state.
 
         Examples
         --------
-        >>> photon = model.particle_by_pdg(22)
-        >>> process = process.with_final_state_alternatives([[photon, photon], [23]])
+        >>> process = fk.Process.cross_section([11, -11], [22, 22])
+        >>> inclusive = process.with_final_state_alternatives([[22, 22], [13, -13]])
 
         Parameters
         ----------
@@ -4198,7 +4278,7 @@ class Propagator:
 
     Examples
     --------
-    >>> propagator = model.propagators[0]
+    >>> propagator = next(iter(model.propagators))
     >>> propagator.numerator / propagator.denominator
     """
     @property
@@ -4342,6 +4422,220 @@ class Rotation:
         momentum : FourMomentum
             Four-momentum whose spatial components are inverse-rotated.
         """
+
+@typing.final
+class TensorReducer:
+    r"""
+    Project Lorentz-tensor integrands onto Spenso invariants.
+
+    The reducer implements the symmetry-orbit form of the orthogonal
+    Weingarten projector. Repeated loop and projector momenta are kept in
+    compact contraction classes, making the common rank-20 vacuum projections
+    practical without constructing the full ``19!!`` pairing matrix.
+    Fully contracted projectors yield scalar ``spenso::dot`` invariants. If
+    projector indices remain free, the returned expression retains them as
+    explicit ``spenso::g`` tensors. Keep mixed high-rank reductions symbolic
+    in ``D`` until afterward: at fixed positive integer dimension below half
+    the rank, dimension-specific identities make the universal metric basis
+    singular. The all-equal isotropic fast path remains well defined.
+
+    Examples
+    --------
+    Select every native FeynKit momentum in a pure vacuum numerator:
+
+    >>> from symbolica import E
+    >>> reducer = fk.TensorReducer.feynkit(E("4"))
+    >>> scalar_numerator = reducer.reduce(vacuum_numerator)
+    >>> scalar_numerator
+
+    Parameters
+    ----------
+    dimension : Expression
+        Lorentz-space dimension, commonly ``D`` or ``4 - 2*eps``.
+    """
+    @property
+    def dimension(self) -> Expression:
+        r"""
+        Return the configured Lorentz-space dimension.
+        """
+    def __new__(cls, dimension: Expression) -> TensorReducer:
+        r"""
+        Construct a reducer without selecting an integrated momentum.
+
+        Add selectors with :meth:`with_integrated_head` or
+        :meth:`with_integrated_vector`. The object is immutable; each selector
+        returns a new reducer.
+
+        Examples
+        --------
+        >>> from symbolica import E
+        >>> reducer = fk.TensorReducer(E("4 - 2*eps")).with_integrated_head("Loop::k")
+
+        Parameters
+        ----------
+        dimension : Expression
+            Lorentz-space dimension used by every ``spenso::mink`` slot.
+        """
+    @staticmethod
+    def feynkit(dimension: Expression) -> TensorReducer:
+        r"""
+        Construct a reducer that selects every ``FeynKit::Momentum`` tensor.
+
+        This is the convenient constructor for vacuum numerators produced by
+        FeynKit's native Feynman-rule generator. It selects the entire
+        ``FeynKit::Momentum`` head and is therefore intended for pure vacuum
+        numerators, where every such momentum is integrated. If a graph still
+        contains external ``FeynKit::Momentum`` tensors, construct a reducer
+        with exact :meth:`with_integrated_vector` selectors for its internal
+        momenta instead.
+
+        Examples
+        --------
+        >>> from symbolica import E
+        >>> reducer = fk.TensorReducer.feynkit(E("4"))
+        >>> reduced = reducer.reduce(vacuum_diagram.numerator_expression())
+
+        Parameters
+        ----------
+        dimension : Expression
+            Lorentz-space dimension used by every ``spenso::mink`` slot. It
+            must match the dimension carried by the input expression.
+        """
+    def with_integrated_head(self, head: builtins.str) -> TensorReducer:
+        r"""
+        Select all rank-one tensors with the qualified Symbolica head name.
+
+        Examples
+        --------
+        >>> reducer = fk.TensorReducer(D).with_integrated_head("Loop::k")
+        >>> scalar = reducer.reduce(numerator)
+
+        Parameters
+        ----------
+        head : str
+            Qualified function name of the integrated vector.
+        """
+    def with_integrated_vector(self, vector: Expression) -> TensorReducer:
+        r"""
+        Select one exact compact Spenso vector.
+
+        A compact vector has a representation but no explicit index, for
+        example ``K(1, spenso::mink(D))``. This distinguishes different loop
+        momenta that share one tensor head.
+
+        Examples
+        --------
+        >>> k1 = K(1, mink(D))
+        >>> reducer = fk.TensorReducer(D).with_integrated_vector(k1)
+        >>> scalar = reducer.reduce(numerator)
+
+        Parameters
+        ----------
+        vector : Expression
+            Exact indexed-free vector to integrate.
+        """
+    def with_pairing_limit(self, limit: builtins.int) -> TensorReducer:
+        r"""
+        Set the labeled-pairing budget for unsymmetrized or free-index output.
+
+        Symmetric contraction-orbit paths do not consume this budget.
+
+        Examples
+        --------
+        >>> reducer = reducer.with_pairing_limit(200_000)
+
+        Parameters
+        ----------
+        limit : int
+            Maximum number of labeled perfect matchings to enumerate.
+        """
+    def with_pairing_product_limit(self, limit: builtins.int) -> TensorReducer:
+        r"""
+        Set the relative-pairing budget for residual free-index output.
+
+        Examples
+        --------
+        >>> reducer = reducer.with_pairing_product_limit(150_000_000)
+
+        Parameters
+        ----------
+        limit : int
+            Maximum Cartesian product of internal and projector matchings.
+        """
+    def with_output_term_limit(self, limit: builtins.int) -> TensorReducer:
+        r"""
+        Set the maximum number of distinct invariant output terms.
+
+        Examples
+        --------
+        >>> reducer = reducer.with_output_term_limit(20_000)
+
+        Parameters
+        ----------
+        limit : int
+            Maximum compact contraction classes to materialize.
+        """
+    def reduce(self, expression: Expression) -> Expression:
+        r"""
+        Reduce a Spenso tensor expression to one Symbolica expression.
+
+        Rank-one tensors must carry a final ``spenso::mink(D,index)`` argument.
+        Fully contracted projectors are returned as scalar ``spenso::dot``
+        invariants. Residual free projector pairs remain explicit
+        ``spenso::g`` tensors; this method intentionally does not reject
+        tensor-valued output. Odd-rank vacuum tensors vanish.
+
+        Examples
+        --------
+        A rank-two vacuum projection becomes a product of dot products divided
+        by the dimension:
+
+        >>> reduced = reducer.reduce(k(mu) * k(nu) * p(mu) * p(nu))
+        >>> reduced
+
+        Parameters
+        ----------
+        expression : Expression
+            Tensor numerator or projected tensor numerator to reduce.
+        """
+    def __repr__(self) -> builtins.str:
+        r"""
+        Return a concise description of the reducer configuration.
+
+        Examples
+        --------
+        >>> print(reducer)
+        """
+    def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
+        r"""
+        Write the reducer summary to an IPython pretty printer.
+
+        Examples
+        --------
+        IPython calls this method when formatting a reducer for text display.
+
+        Parameters
+        ----------
+        pretty : Any
+            The IPython pretty-printer object.
+        cycle : bool
+            Whether this object is part of a recursive formatting cycle.
+        """
+
+class TensorReductionError(FeynkitError):
+    r"""
+    Failure while parsing or reducing a Lorentz tensor.
+
+    Examples
+    --------
+    Catch unsupported tensor structures or an exceeded expansion budget:
+
+    >>> try:
+    ...     scalar = reducer.reduce(numerator)
+    ... except fk.TensorReductionError as error:
+    ...     print(error)
+    """
+    ...
 
 @typing.final
 class ThreeMomentum:
@@ -4824,7 +5118,7 @@ class VertexRule:
 
     Examples
     --------
-    >>> vertex = model.vertex_rules[0]
+    >>> vertex = next(iter(model.vertex_rules))
     >>> vertex.particles
     ['e+', 'e-', 'a']
     """

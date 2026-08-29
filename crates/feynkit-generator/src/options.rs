@@ -18,13 +18,24 @@ use symbolica::{
 
 use crate::{ParticleSelector, SelectorError, VertexSelector};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
 pub struct GraphGroupingOptions {
     pub numerical_sample_seed: u16,
     pub number_of_numerical_samples: usize,
     pub differentiate_particle_masses_only: bool,
     pub fully_numerical_substitution: bool,
     pub check_canonical_numerator: bool,
+    /// Reuse external wavefunction samples for the two sides of a sewn state.
+    pub symmetric_polarizations: bool,
 }
 
 impl Default for GraphGroupingOptions {
@@ -35,11 +46,22 @@ impl Default for GraphGroupingOptions {
             differentiate_particle_masses_only: true,
             fully_numerical_substitution: false,
             check_canonical_numerator: false,
+            symmetric_polarizations: false,
         }
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Default,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum NumeratorGrouping {
     #[default]
@@ -50,7 +72,17 @@ pub enum NumeratorGrouping {
     UpToScalar(GraphGroupingOptions),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
 pub struct SelfEnergyFilterOptions {
     pub veto_massive: bool,
     pub veto_massless: bool,
@@ -67,7 +99,17 @@ impl Default for SelfEnergyFilterOptions {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
 pub struct SnailFilterOptions {
     pub veto_attached_to_massive: bool,
     pub veto_attached_to_massless: bool,
@@ -84,14 +126,34 @@ impl Default for SnailFilterOptions {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
 pub struct TadpoleFilterOptions {
     pub veto_attached_to_massive: bool,
     pub veto_attached_to_massless: bool,
     pub only_scaleless: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
 pub struct SewnFilterOptions {
     pub filter_tadpoles: bool,
 }
@@ -114,7 +176,16 @@ impl Default for TadpoleFilterOptions {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum GenerationFilter {
     SelfEnergy(SelfEnergyFilterOptions),
@@ -282,8 +353,15 @@ pub struct GenerationOptions {
 /// Stable persistent portion of [`GenerationOptions`]. Callbacks and
 /// cancellation state are deliberately runtime-only and are restored to their
 /// defaults after deserialization.
-#[derive(Serialize, Deserialize, PartialEq, Eq)]
-struct GenerationOptionsSerde {
+#[derive(
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    bincode_trait_derive::Encode,
+    bincode_trait_derive::Decode,
+)]
+struct GenerationOptionsPersistent {
     threads: Option<usize>,
     max_vertices: Option<usize>,
     allow_self_loops: bool,
@@ -292,18 +370,18 @@ struct GenerationOptionsSerde {
     cut_amplitude_filters: Vec<GenerationFilter>,
     numerator_grouping: NumeratorGrouping,
     graph_prefix: String,
-    selected_diagram_ids: Option<BTreeSet<DiagramId>>,
+    selected_diagram_ids: Option<BTreeSet<u128>>,
     selected_diagram_names: Option<BTreeSet<String>>,
-    vetoed_diagram_ids: BTreeSet<DiagramId>,
+    vetoed_diagram_ids: BTreeSet<u128>,
     vetoed_diagram_names: BTreeSet<String>,
-    loop_momentum_bases: BTreeMap<DiagramId, Vec<EdgeId>>,
-    named_loop_momentum_bases: BTreeMap<String, Vec<EdgeId>>,
-    forced_cuts: Vec<BTreeSet<EdgeId>>,
+    loop_momentum_bases: BTreeMap<u128, Vec<usize>>,
+    named_loop_momentum_bases: BTreeMap<String, Vec<usize>>,
+    forced_cuts: Vec<BTreeSet<usize>>,
     numerator_prefactor: String,
     projector: Option<String>,
 }
 
-impl From<&GenerationOptions> for GenerationOptionsSerde {
+impl From<&GenerationOptions> for GenerationOptionsPersistent {
     fn from(options: &GenerationOptions) -> Self {
         Self {
             threads: options.threads,
@@ -314,13 +392,33 @@ impl From<&GenerationOptions> for GenerationOptionsSerde {
             cut_amplitude_filters: options.cut_amplitude_filters.clone(),
             numerator_grouping: options.numerator_grouping.clone(),
             graph_prefix: options.graph_prefix.clone(),
-            selected_diagram_ids: options.selected_diagram_ids.clone(),
+            selected_diagram_ids: options
+                .selected_diagram_ids
+                .as_ref()
+                .map(|ids| ids.iter().map(|id| id.0).collect()),
             selected_diagram_names: options.selected_diagram_names.clone(),
-            vetoed_diagram_ids: options.vetoed_diagram_ids.clone(),
+            vetoed_diagram_ids: options.vetoed_diagram_ids.iter().map(|id| id.0).collect(),
             vetoed_diagram_names: options.vetoed_diagram_names.clone(),
-            loop_momentum_bases: options.loop_momentum_bases.clone(),
-            named_loop_momentum_bases: options.named_loop_momentum_bases.clone(),
-            forced_cuts: options.forced_cuts.clone(),
+            loop_momentum_bases: options
+                .loop_momentum_bases
+                .iter()
+                .map(|(id, edges)| (id.0, edges.iter().map(|edge| edge.0).collect()))
+                .collect(),
+            named_loop_momentum_bases: options
+                .named_loop_momentum_bases
+                .iter()
+                .map(|(name, edges)| {
+                    (
+                        name.clone(),
+                        edges.iter().map(|edge| edge.0).collect::<Vec<_>>(),
+                    )
+                })
+                .collect(),
+            forced_cuts: options
+                .forced_cuts
+                .iter()
+                .map(|cut| cut.iter().map(|edge| edge.0).collect())
+                .collect(),
             numerator_prefactor: options.numerator_prefactor.to_canonical_string(),
             projector: options
                 .projector
@@ -335,7 +433,7 @@ impl Serialize for GenerationOptions {
     where
         S: serde::Serializer,
     {
-        GenerationOptionsSerde::from(self).serialize(serializer)
+        GenerationOptionsPersistent::from(self).serialize(serializer)
     }
 }
 
@@ -344,50 +442,34 @@ impl<'de> Deserialize<'de> for GenerationOptions {
     where
         D: serde::Deserializer<'de>,
     {
-        let persistent = GenerationOptionsSerde::deserialize(deserializer)?;
-        let parse = |expression: String, field: &str| {
-            Atom::parse(
-                &expression,
-                "feynkit_generation_options",
-                ParseSettings::default(),
-            )
-            .map_err(|message| {
-                serde::de::Error::custom(format!(
-                    "failed to parse {field} '{expression}': {message}"
-                ))
-            })
-        };
-        Ok(Self {
-            threads: persistent.threads,
-            max_vertices: persistent.max_vertices,
-            allow_self_loops: persistent.allow_self_loops,
-            allow_zero_flow_edges: persistent.allow_zero_flow_edges,
-            graph_filters: persistent.graph_filters,
-            cut_amplitude_filters: persistent.cut_amplitude_filters,
-            numerator_grouping: persistent.numerator_grouping,
-            graph_prefix: persistent.graph_prefix,
-            selected_diagram_ids: persistent.selected_diagram_ids,
-            selected_diagram_names: persistent.selected_diagram_names,
-            vetoed_diagram_ids: persistent.vetoed_diagram_ids,
-            vetoed_diagram_names: persistent.vetoed_diagram_names,
-            loop_momentum_bases: persistent.loop_momentum_bases,
-            named_loop_momentum_bases: persistent.named_loop_momentum_bases,
-            forced_cuts: persistent.forced_cuts,
-            numerator_prefactor: parse(persistent.numerator_prefactor, "numerator prefactor")?,
-            projector: persistent
-                .projector
-                .map(|projector| parse(projector, "projector"))
-                .transpose()?,
-            cancellation: CancellationToken::new(),
-            cancellation_check: None,
-            progress: None,
-        })
+        Self::from_persistent(GenerationOptionsPersistent::deserialize(deserializer)?)
+            .map_err(serde::de::Error::custom)
     }
 }
 
+impl bincode::Encode for GenerationOptions {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        bincode::Encode::encode(&GenerationOptionsPersistent::from(self), encoder)
+    }
+}
+
+impl<Context> bincode::Decode<Context> for GenerationOptions {
+    fn decode<D: bincode::de::Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        Self::from_persistent(bincode::Decode::decode(decoder)?)
+            .map_err(bincode::error::DecodeError::OtherString)
+    }
+}
+
+bincode::impl_borrow_decode!(GenerationOptions);
+
 impl PartialEq for GenerationOptions {
     fn eq(&self, other: &Self) -> bool {
-        GenerationOptionsSerde::from(self) == GenerationOptionsSerde::from(other)
+        GenerationOptionsPersistent::from(self) == GenerationOptionsPersistent::from(other)
     }
 }
 
@@ -421,6 +503,65 @@ impl Default for GenerationOptions {
 }
 
 impl GenerationOptions {
+    fn from_persistent(persistent: GenerationOptionsPersistent) -> Result<Self, String> {
+        let parse = |expression: String, field: &str| {
+            Atom::parse(
+                &expression,
+                "feynkit_generation_options",
+                ParseSettings::default(),
+            )
+            .map_err(|message| format!("failed to parse {field} '{expression}': {message}"))
+        };
+        Ok(Self {
+            threads: persistent.threads,
+            max_vertices: persistent.max_vertices,
+            allow_self_loops: persistent.allow_self_loops,
+            allow_zero_flow_edges: persistent.allow_zero_flow_edges,
+            graph_filters: persistent.graph_filters,
+            cut_amplitude_filters: persistent.cut_amplitude_filters,
+            numerator_grouping: persistent.numerator_grouping,
+            graph_prefix: persistent.graph_prefix,
+            selected_diagram_ids: persistent
+                .selected_diagram_ids
+                .map(|ids| ids.into_iter().map(DiagramId).collect()),
+            selected_diagram_names: persistent.selected_diagram_names,
+            vetoed_diagram_ids: persistent
+                .vetoed_diagram_ids
+                .into_iter()
+                .map(DiagramId)
+                .collect(),
+            vetoed_diagram_names: persistent.vetoed_diagram_names,
+            loop_momentum_bases: persistent
+                .loop_momentum_bases
+                .into_iter()
+                .map(|(id, edges)| {
+                    (
+                        DiagramId(id),
+                        edges.into_iter().map(EdgeId).collect::<Vec<_>>(),
+                    )
+                })
+                .collect(),
+            named_loop_momentum_bases: persistent
+                .named_loop_momentum_bases
+                .into_iter()
+                .map(|(name, edges)| (name, edges.into_iter().map(EdgeId).collect()))
+                .collect(),
+            forced_cuts: persistent
+                .forced_cuts
+                .into_iter()
+                .map(|cut| cut.into_iter().map(EdgeId).collect())
+                .collect(),
+            numerator_prefactor: parse(persistent.numerator_prefactor, "numerator prefactor")?,
+            projector: persistent
+                .projector
+                .map(|projector| parse(projector, "projector"))
+                .transpose()?,
+            cancellation: CancellationToken::new(),
+            cancellation_check: None,
+            progress: None,
+        })
+    }
+
     /// Resolve all boundary selectors to stable model IDs exactly once.
     pub(crate) fn resolve_selectors(&self, model: &Model) -> Result<Self, SelectorError> {
         fn resolve_filter(
@@ -673,7 +814,9 @@ impl GenerationOptions {
 mod tests {
     use symbolica::atom::Atom;
 
-    use super::GenerationOptions;
+    use super::{GenerationFilter, GenerationOptions, GraphGroupingOptions, NumeratorGrouping};
+    use crate::{ParticleSelector, VertexSelector};
+    use feynkit_graph::{DiagramId, EdgeId};
 
     #[test]
     fn projector_serde_distinguishes_automatic_from_explicit_one() {
@@ -688,5 +831,37 @@ mod tests {
         assert!(explicit_json.contains(r#""projector":"1""#));
         let explicit_roundtrip: GenerationOptions = serde_json::from_str(&explicit_json).unwrap();
         assert_eq!(explicit_roundtrip.projector, Some(Atom::one()));
+    }
+
+    #[test]
+    fn bincode_roundtrip_uses_native_enum_encoding() {
+        let options = GenerationOptions::default()
+            .threads(3)
+            .with_graph_filter(GenerationFilter::ParticleVeto(vec![
+                ParticleSelector::from("g"),
+                ParticleSelector::from(5_i64),
+            ]))
+            .with_cut_amplitude_filter(GenerationFilter::VertexAllow(vec![VertexSelector::from(
+                "V_42",
+            )]))
+            .numerator_grouping(NumeratorGrouping::UpToScalar(
+                GraphGroupingOptions::default(),
+            ))
+            .select_diagram_ids([DiagramId(17)])
+            .veto_diagram_ids([DiagramId(23)])
+            .with_loop_momentum_basis(DiagramId(17), [EdgeId(2), EdgeId(7)])
+            .with_named_loop_momentum_basis("FK0", [EdgeId(3), EdgeId(5)])
+            .forced_cuts([[EdgeId(1), EdgeId(4)]])
+            .projector(Atom::one());
+
+        let encoded = bincode::encode_to_vec(&options, bincode::config::standard()).unwrap();
+        let (decoded, consumed): (GenerationOptions, usize) =
+            bincode::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
+
+        assert_eq!(consumed, encoded.len());
+        assert_eq!(decoded, options);
+        assert!(!decoded.cancellation.is_cancelled());
+        assert!(decoded.cancellation_check.is_none());
+        assert!(decoded.progress.is_none());
     }
 }

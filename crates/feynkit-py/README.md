@@ -72,12 +72,25 @@ and returns `EvaluatedValues`; incomplete or unexpected results raise
 published on failure. Omitting `evaluator` from `with_parameter_card()` keeps
 the invalidation-only behavior.
 
+Generated numerators retain named UFO vertex coefficients such as
+`UFO::GC_11`. This lets numerical consumers reuse the model's precomputed
+coupling values without changing floating-point operation order. For analytic
+work in terms of Lagrangian parameters, use the native model operation:
+
+```python
+analytic_numerator = model.expand_couplings(diagram.numerator_expression())
+```
+
+The returned value is a new Symbolica `Expression`; the diagram and its
+serialized numerator keep the named coefficients.
+
 ## Native particle-physics workflows and notebook figures
 
 The common notebook workflows are native PyO3 methods, not a Python facade.
 Each operation lives on the object that owns its configuration:
 
 ```python
+from symbolica import E
 import symbolica.community.feynkit as fk
 
 model = fk.Model("models/sm.json")
@@ -88,11 +101,27 @@ result = model.generate_diagrams(
     [muon, muon.antiparticle],
     loops=1,
 )
-diagram = result.diagrams[0]
-cff = diagram.build_cff()
+projected_vacuum_diagram = result.diagrams[0]
+cff = projected_vacuum_diagram.build_cff()
+reducer = fk.TensorReducer.feynkit(E("4"))
+scalar_numerator = projected_vacuum_diagram.reduce_tensor_numerator(reducer)
+scalar_graphs = projected_vacuum_diagram.reduce_tensor_graphs(reducer)
 jets = fk.JetDefinition.anti_kt(0.4).cluster(final_state_momenta)
 loaded = fk.UfoLoader(restriction_name="massless").load("models/sm")
 ```
+
+`TensorReducer` consumes and emits the same Spenso tensor syntax used by the
+generated Feynman rules. It returns a concrete Symbolica `Expression`; exact
+loop-vector selectors and symmetry-orbit fast paths keep multiloop and
+rank-20 vacuum projections compact. Graph splitting requires a fully
+contracted result; use `reduce_tensor_numerator` when residual Lorentz indices
+are intentional. Diagram reduction combines the stored numerator with its
+external-state projector. Scalar graph splitting consumes and resets that
+projector while retaining the separate scalar numerator prefactor.
+`TensorReducer.feynkit(...)` selects the complete `FeynKit::Momentum` head and
+is intended for pure vacuum numerators. For a graph that still contains
+external FeynKit momenta, start with `TensorReducer(dimension)` and add exact
+`with_integrated_vector(...)` selectors for the internal momenta.
 
 `FeynmanDiagram.to_linnest()` emits the complete Typst/Linnest source used for
 figures. `to_svg()`, `to_html()`, `_repr_svg_()`, and `_repr_html_()` compile

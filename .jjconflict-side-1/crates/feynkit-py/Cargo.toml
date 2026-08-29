@@ -20,6 +20,7 @@ feynkit-generator = { version = "0.1.0", path = "../feynkit-generator" }
 feynkit-graph = { version = "0.1.0", path = "../feynkit-graph" }
 feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics" }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
+feynkit-tensor = { version = "0.1.0", path = "../feynkit-tensor" }
 feynkit-ufo = { version = "0.1.0", path = "../feynkit-ufo", optional = true }
 include_dir = { workspace = true }
 pyo3 = { workspace = true }
