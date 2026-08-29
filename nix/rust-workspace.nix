@@ -411,6 +411,7 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    "gammaloop-integration-tests" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-tensor" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-cff" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-generator" = ["crates/feynkit-model/tests/fixtures"];
@@ -427,6 +428,7 @@
       "tests/resources/graphs/epemttbar.dot"
     ];
     gammalooprs = [
+      "crates/gammalooprs/tests/fixtures/renormalization"
       "tests/resources/graphs/scalar/dod2_bubble.dot"
     ];
   };
