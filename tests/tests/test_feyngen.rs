@@ -53,20 +53,26 @@ fn evaluate_sign_origin(factor: AtomView<'_>) -> Atom {
                 .with(Atom::var(symbol!("x_")).to_pattern());
         }
     }
-    result
-        .replace(function!(
-            symbol!("NumeratorDependentGrouping"),
-            Atom::var(symbol!("GraphId_")),
-            Atom::var(symbol!("ratio_")),
-            Atom::var(symbol!("GraphSymmetryFactor_"))
-        ))
-        .with(function!(
-            symbol!("Group"),
-            Atom::var(symbol!("GraphId_")),
-            Atom::var(symbol!("ratio_")),
-            Atom::var(symbol!("GraphSymmetryFactor_"))
-        ))
-        .expand()
+    for head in [
+        symbol!("NumeratorDependentGrouping"),
+        symbol!("feynkit_generator::NumeratorDependentGrouping"),
+        symbol!("feynkit_generator_factor::NumeratorDependentGrouping"),
+    ] {
+        result = result
+            .replace(function!(
+                head,
+                Atom::var(symbol!("GraphId_")),
+                Atom::var(symbol!("ratio_")),
+                Atom::var(symbol!("GraphSymmetryFactor_"))
+            ))
+            .with(function!(
+                symbol!("Group"),
+                Atom::var(symbol!("GraphId_")),
+                Atom::var(symbol!("ratio_")),
+                Atom::var(symbol!("GraphSymmetryFactor_"))
+            ));
+    }
+    result.expand()
 }
 
 fn count_graphs_in_processes(cli: &CLIState) -> (usize, Atom) {
@@ -1114,7 +1120,7 @@ fn cp_fix_from_symbolica()->Result<()>{
     // Choose the model to consider
     cli.run_command("import model sm-default.json")?;
 
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-12*G^2*ee^(-2)+-9*G^2*Nc*ee^(-2)+9*G^2*Nc^(-1)*ee^(-2)");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,1,-1)+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(6,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(7,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(9,1,-1) = -12+-27/2*G^2*Nc*ee^(-2)+27/2*G^2*Nc^(-1)*ee^(-2)");//good
     Ok(())
 }
 
@@ -1127,8 +1133,8 @@ fn test_generate_sm_full_a_ddx() -> Result<()> {
     // Full particle contents
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"1 | -1 = -1");//good
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"47 | -47 = -47");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"37 | -35+Group(29,1,-1)+Group(30,1,-1)+Group(31,1,-1)+Group(32,1,-1) = -39");//less 37 vs 45 due to lorentz cancellations
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_sign",true)?,@"36 | -33+Group(29,1,-1)+Group(30,1,-1)+Group(32,1,-1)+Group(33,1,-1)+Group(35,1,-1)+Group(36,1,-1) = -39");//as above
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"37 | -35+Group(19,1,-1)+Group(20,1,-1)+Group(22,1,-1)+Group(23,1,-1) = -39");//less 37 vs 45 due to lorentz cancellations
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_sign",true)?,@"36 | -33+Group(19,1,-1)+Group(20,1,-1)+Group(22,1,-1)+Group(23,1,-1)+Group(25,1,-1)+Group(26,1,-1) = -39");//as above
 
     Ok(())
 }

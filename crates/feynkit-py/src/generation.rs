@@ -555,12 +555,13 @@ impl PyProcess {
     }
 
     /// Return a process accepting any of the supplied final states.
-    /// Amplitudes accept exactly one alternative; cross-section alternatives cannot be empty.
+    /// Amplitudes accept exactly one alternative; cross sections may include an empty
+    /// alternative for a vacuum final state.
     ///
     /// Examples
     /// --------
-    /// >>> photon = model.particle_by_pdg(22)
-    /// >>> process = process.with_final_state_alternatives([[photon, photon], [23]])
+    /// >>> process = fk.Process.cross_section([11, -11], [22, 22])
+    /// >>> inclusive = process.with_final_state_alternatives([[22, 22], [13, -13]])
     ///
     /// Parameters
     /// ----------
@@ -827,6 +828,7 @@ impl PyGenerationOptions {
         differentiate_particle_masses_only: bool,
         fully_numerical_substitution: bool,
         check_canonical_numerator: bool,
+        symmetric_polarizations: bool,
     ) -> GraphGroupingOptions {
         GraphGroupingOptions {
             numerical_sample_seed,
@@ -834,6 +836,7 @@ impl PyGenerationOptions {
             differentiate_particle_masses_only,
             fully_numerical_substitution,
             check_canonical_numerator,
+            symmetric_polarizations,
         }
     }
 }
@@ -1354,7 +1357,9 @@ impl PyGenerationOptions {
     ///     Substitute scalar parameters as well as nonscalar indeterminates.
     /// check_canonical_numerator : bool, optional
     ///     Try an exact canonical comparison before numerical sampling.
-    #[pyo3(signature = (*, numerical_sample_seed=3, number_of_numerical_samples=5, differentiate_particle_masses_only=true, fully_numerical_substitution=false, check_canonical_numerator=false))]
+    /// symmetric_polarizations : bool, optional
+    ///     Reuse wavefunction samples across the two sides of a sewn external state.
+    #[pyo3(signature = (*, numerical_sample_seed=3, number_of_numerical_samples=5, differentiate_particle_masses_only=true, fully_numerical_substitution=false, check_canonical_numerator=false, symmetric_polarizations=false))]
     fn group_identical_numerators(
         &mut self,
         numerical_sample_seed: u16,
@@ -1362,6 +1367,7 @@ impl PyGenerationOptions {
         differentiate_particle_masses_only: bool,
         fully_numerical_substitution: bool,
         check_canonical_numerator: bool,
+        symmetric_polarizations: bool,
     ) {
         let options = Self::grouping_options(
             numerical_sample_seed,
@@ -1369,6 +1375,7 @@ impl PyGenerationOptions {
             differentiate_particle_masses_only,
             fully_numerical_substitution,
             check_canonical_numerator,
+            symmetric_polarizations,
         );
         self.inner = self
             .inner
@@ -1394,7 +1401,9 @@ impl PyGenerationOptions {
     ///     Substitute scalar parameters as well as nonscalar indeterminates.
     /// check_canonical_numerator : bool, optional
     ///     Try an exact canonical comparison before numerical sampling.
-    #[pyo3(signature = (*, numerical_sample_seed=3, number_of_numerical_samples=5, differentiate_particle_masses_only=true, fully_numerical_substitution=false, check_canonical_numerator=false))]
+    /// symmetric_polarizations : bool, optional
+    ///     Reuse wavefunction samples across the two sides of a sewn external state.
+    #[pyo3(signature = (*, numerical_sample_seed=3, number_of_numerical_samples=5, differentiate_particle_masses_only=true, fully_numerical_substitution=false, check_canonical_numerator=false, symmetric_polarizations=false))]
     fn group_numerators_up_to_sign(
         &mut self,
         numerical_sample_seed: u16,
@@ -1402,6 +1411,7 @@ impl PyGenerationOptions {
         differentiate_particle_masses_only: bool,
         fully_numerical_substitution: bool,
         check_canonical_numerator: bool,
+        symmetric_polarizations: bool,
     ) {
         let options = Self::grouping_options(
             numerical_sample_seed,
@@ -1409,6 +1419,7 @@ impl PyGenerationOptions {
             differentiate_particle_masses_only,
             fully_numerical_substitution,
             check_canonical_numerator,
+            symmetric_polarizations,
         );
         self.inner = self
             .inner
@@ -1434,7 +1445,9 @@ impl PyGenerationOptions {
     ///     Substitute scalar parameters as well as nonscalar indeterminates.
     /// check_canonical_numerator : bool, optional
     ///     Try an exact canonical comparison before numerical sampling.
-    #[pyo3(signature = (*, numerical_sample_seed=3, number_of_numerical_samples=5, differentiate_particle_masses_only=true, fully_numerical_substitution=false, check_canonical_numerator=false))]
+    /// symmetric_polarizations : bool, optional
+    ///     Reuse wavefunction samples across the two sides of a sewn external state.
+    #[pyo3(signature = (*, numerical_sample_seed=3, number_of_numerical_samples=5, differentiate_particle_masses_only=true, fully_numerical_substitution=false, check_canonical_numerator=false, symmetric_polarizations=false))]
     fn group_numerators_up_to_scalar(
         &mut self,
         numerical_sample_seed: u16,
@@ -1442,6 +1455,7 @@ impl PyGenerationOptions {
         differentiate_particle_masses_only: bool,
         fully_numerical_substitution: bool,
         check_canonical_numerator: bool,
+        symmetric_polarizations: bool,
     ) {
         let options = Self::grouping_options(
             numerical_sample_seed,
@@ -1449,6 +1463,7 @@ impl PyGenerationOptions {
             differentiate_particle_masses_only,
             fully_numerical_substitution,
             check_canonical_numerator,
+            symmetric_polarizations,
         );
         self.inner = self
             .inner
@@ -1586,7 +1601,7 @@ impl PyGenerationReport {
 ///
 /// Examples
 /// --------
-/// >>> member = result.groups[0].members[0]
+/// >>> member = next(iter(next(iter(result.groups)).members))
 /// >>> diagram = result.diagrams[member.diagram]
 ///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -1671,7 +1686,7 @@ impl PyGroupMember {
 ///
 /// Examples
 /// --------
-/// >>> group = result.groups[0]
+/// >>> group = next(iter(result.groups))
 /// >>> master_diagram = result.diagrams[group.master]
 ///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]

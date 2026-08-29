@@ -48,6 +48,7 @@ const EDGE_SPEC: AttributeSpec = AttributeSpec {
     known: &[
         "dod",
         "is_cut",
+        "initial_state_connection",
         "is_dummy",
         "lmb_id",
         "mass",
@@ -55,6 +56,7 @@ const EDGE_SPEC: AttributeSpec = AttributeSpec {
         "name",
         "num",
         "particle",
+        "particle_id",
         "pdg",
         "vakint_edge_power",
     ],
@@ -71,6 +73,7 @@ const EDGE_SPEC: AttributeSpec = AttributeSpec {
         "lmb_rep",
         "penwidth",
         "pin",
+        "pos",
         "sink",
         "source",
         "style",

@@ -431,6 +431,12 @@
         "gammaloop-integration-tests" = [
           "tests/resources/fjcore"
         ];
+        "feynkit-py" = [
+          "crates/kurvst/typst/kurvst.wasm"
+          "crates/kurvst/typst/src"
+          "crates/linnest/typst/linnest.wasm"
+          "crates/linnest/typst/src"
+        ];
         clinnet = [
           "crates/clinnet/templates"
           "crates/kurvst/typst/kurvst.wasm"
@@ -454,6 +460,9 @@
           "crates/feynkit-model/tests/fixtures"
         ];
         "feynkit-model" = [
+          "crates/feynkit-model/tests/fixtures"
+        ];
+        "feynkit-tensor" = [
           "crates/feynkit-model/tests/fixtures"
         ];
         "feynkit-py" = [
@@ -2202,6 +2211,7 @@
             "feynkit-kinematics"
             "feynkit-model"
             "feynkit-py"
+            "feynkit-tensor"
             "feynkit-ufo"
           ];
         }

@@ -240,6 +240,8 @@ pub struct Process {
     symmetrize_external_fermions: bool,
 }
 
+bincode::impl_borrow_decode!(Process);
+
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum ProcessError {
     #[error("invalid generation type '{0}'")]
@@ -248,8 +250,6 @@ pub enum ProcessError {
     MissingFinalState,
     #[error("amplitude generation accepts exactly one final-state alternative")]
     MultipleAmplitudeFinalStates,
-    #[error("cross-section final-state alternative {alternative} is empty")]
-    EmptyCrossSectionFinalState { alternative: usize },
     #[error("invalid loop range {minimum}..={maximum}")]
     InvalidLoopRange { minimum: usize, maximum: usize },
 }
@@ -311,11 +311,6 @@ impl Process {
         }
         if self.generation_type == GenerationType::Amplitude && alternatives.len() != 1 {
             return Err(ProcessError::MultipleAmplitudeFinalStates);
-        }
-        if self.generation_type == GenerationType::CrossSection
-            && let Some(alternative) = alternatives.iter().position(Vec::is_empty)
-        {
-            return Err(ProcessError::EmptyCrossSectionFinalState { alternative });
         }
         self.outgoing_alternatives = alternatives;
         Ok(self)
@@ -394,11 +389,6 @@ impl Process {
         {
             return Err(ProcessError::MultipleAmplitudeFinalStates);
         }
-        if self.generation_type == GenerationType::CrossSection
-            && let Some(alternative) = self.outgoing_alternatives.iter().position(Vec::is_empty)
-        {
-            return Err(ProcessError::EmptyCrossSectionFinalState { alternative });
-        }
         Ok(())
     }
 }
@@ -408,15 +398,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn rejects_empty_cross_section_alternatives_but_accepts_vacuum_amplitudes() {
-        assert_eq!(
-            Process::cross_section(Vec::<i64>::new(), Vec::<i64>::new()).validate(),
-            Err(ProcessError::EmptyCrossSectionFinalState { alternative: 0 })
+    fn accepts_vacuum_processes_and_empty_cross_section_alternatives() {
+        assert!(
+            Process::cross_section(Vec::<i64>::new(), Vec::<i64>::new())
+                .validate()
+                .is_ok()
         );
-        assert_eq!(
+        assert!(
             Process::cross_section([1_i64], [1_i64])
-                .with_final_state_alternatives([Vec::<i64>::new(), vec![1]]),
-            Err(ProcessError::EmptyCrossSectionFinalState { alternative: 0 })
+                .with_final_state_alternatives([Vec::<i64>::new(), vec![1]])
+                .is_ok()
         );
         assert!(
             Process::amplitude(Vec::<i64>::new(), Vec::<i64>::new())

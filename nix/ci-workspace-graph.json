@@ -38,6 +38,7 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "feynkit-ufo"
     ],
     "feynkit-cff": [
@@ -49,7 +50,8 @@
       "feynkit-model",
       "idenso",
       "linnet",
-      "spenso"
+      "spenso",
+      "spenso-hep-lib"
     ],
     "feynkit-graph": [
       "feynkit-kinematics",
@@ -66,7 +68,13 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "feynkit-ufo"
+    ],
+    "feynkit-tensor": [
+      "feynkit-graph",
+      "idenso",
+      "spenso"
     ],
     "feynkit-ufo": [
       "feynkit-model"
@@ -222,6 +230,7 @@
       "feynkit-graph": [],
       "feynkit-kinematics": [],
       "feynkit-model": [],
+      "feynkit-tensor": [],
       "feynkit-ufo": []
     },
     "feynkit-cff": {
@@ -240,7 +249,8 @@
       ],
       "spenso": [
         "shadowing"
-      ]
+      ],
+      "spenso-hep-lib": []
     },
     "feynkit-graph": {
       "feynkit-kinematics": [],
@@ -259,7 +269,15 @@
       "feynkit-graph": [],
       "feynkit-kinematics": [],
       "feynkit-model": [],
+      "feynkit-tensor": [],
       "feynkit-ufo": []
+    },
+    "feynkit-tensor": {
+      "feynkit-graph": [],
+      "idenso": [],
+      "spenso": [
+        "shadowing"
+      ]
     },
     "feynkit-ufo": {
       "feynkit-model": []
@@ -427,6 +445,7 @@
     "feynkit-kinematics": "crates/feynkit-kinematics",
     "feynkit-model": "crates/feynkit-model",
     "feynkit-py": "crates/feynkit-py",
+    "feynkit-tensor": "crates/feynkit-tensor",
     "feynkit-ufo": "crates/feynkit-ufo",
     "gammaloop-api": "crates/gammaloop-api",
     "gammaloop-integration-tests": "tests",
@@ -461,6 +480,7 @@
     "feynkit-kinematics",
     "feynkit-model",
     "feynkit-py",
+    "feynkit-tensor",
     "feynkit-ufo",
     "gammaloop-api",
     "gammaloop-integration-tests",
@@ -515,9 +535,11 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "idenso",
       "linnet",
       "spenso",
+      "spenso-hep-lib",
       "spenso-macros",
       "symbolica-utils"
     ],
@@ -534,6 +556,7 @@
       "idenso",
       "linnet",
       "spenso",
+      "spenso-hep-lib",
       "spenso-macros",
       "symbolica-utils"
     ],
@@ -552,7 +575,19 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "feynkit-ufo",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-hep-lib",
+      "spenso-macros",
+      "symbolica-utils"
+    ],
+    "feynkit-tensor": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
       "idenso",
       "linnet",
       "spenso",
@@ -703,9 +738,11 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "idenso",
       "linnet",
       "spenso",
+      "spenso-hep-lib",
       "spenso-macros",
       "symbolica-utils"
     ],
@@ -722,6 +759,7 @@
       "idenso",
       "linnet",
       "spenso",
+      "spenso-hep-lib",
       "spenso-macros",
       "symbolica-utils"
     ],
@@ -740,6 +778,7 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "feynkit-ufo",
       "idenso",
       "linnet",
@@ -747,6 +786,16 @@
       "spenso-hep-lib",
       "spenso-macros",
       "spynso3",
+      "symbolica-utils"
+    ],
+    "feynkit-tensor": [
+      "feynkit-graph",
+      "feynkit-kinematics",
+      "feynkit-model",
+      "idenso",
+      "linnet",
+      "spenso",
+      "spenso-macros",
       "symbolica-utils"
     ],
     "feynkit-ufo": [
@@ -869,6 +918,7 @@
     "feynkit-kinematics",
     "feynkit-model",
     "feynkit-py",
+    "feynkit-tensor",
     "feynkit-ufo",
     "gammaloop-api",
     "gammaloop-integration-tests",
@@ -891,6 +941,7 @@
     "feynkit-kinematics",
     "feynkit-model",
     "feynkit-py",
+    "feynkit-tensor",
     "feynkit-ufo",
     "gammaloop-api",
     "gammaloop-integration-tests",
@@ -946,6 +997,7 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "feynkit-ufo"
     ],
     "feynkit-cff": [
@@ -958,7 +1010,8 @@
       "feynkit-model",
       "idenso",
       "linnet",
-      "spenso"
+      "spenso",
+      "spenso-hep-lib"
     ],
     "feynkit-graph": [
       "feynkit-kinematics",
@@ -975,8 +1028,15 @@
       "feynkit-graph",
       "feynkit-kinematics",
       "feynkit-model",
+      "feynkit-tensor",
       "feynkit-ufo",
       "spynso3"
+    ],
+    "feynkit-tensor": [
+      "feynkit-graph",
+      "feynkit-model",
+      "idenso",
+      "spenso"
     ],
     "feynkit-ufo": [
       "feynkit-model"
@@ -1135,6 +1195,7 @@
       "feynkit-graph": [],
       "feynkit-kinematics": [],
       "feynkit-model": [],
+      "feynkit-tensor": [],
       "feynkit-ufo": []
     },
     "feynkit-cff": {
@@ -1154,7 +1215,8 @@
       ],
       "spenso": [
         "shadowing"
-      ]
+      ],
+      "spenso-hep-lib": []
     },
     "feynkit-graph": {
       "feynkit-kinematics": [],
@@ -1173,8 +1235,17 @@
       "feynkit-graph": [],
       "feynkit-kinematics": [],
       "feynkit-model": [],
+      "feynkit-tensor": [],
       "feynkit-ufo": [],
       "spynso3": []
+    },
+    "feynkit-tensor": {
+      "feynkit-graph": [],
+      "feynkit-model": [],
+      "idenso": [],
+      "spenso": [
+        "shadowing"
+      ]
     },
     "feynkit-ufo": {
       "feynkit-model": []

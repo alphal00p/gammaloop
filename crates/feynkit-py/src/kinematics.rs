@@ -1129,7 +1129,7 @@ impl PyBoost {
 /// Examples
 /// --------
 /// >>> jets = fk.JetDefinition.anti_kt(0.4).cluster(particles).jets
-/// >>> leading_jet = jets[0]
+/// >>> leading_jet = next(iter(jets))
 /// >>> leading_jet.momentum
 ///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
