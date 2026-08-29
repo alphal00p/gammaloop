@@ -4054,13 +4054,11 @@ dependencies = [
 [[package]]
 name = "rustred"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=f050ef4a2780888f41b87fe2d4313b55f554544e#f050ef4a2780888f41b87fe2d4313b55f554544e"
+source = "git+https://github.com/alphal00p/rustred?rev=023962603feb070756d3715100878803045a1561#023962603feb070756d3715100878803045a1561"
 dependencies = [
  "rand 0.9.4",
  "rayon",
- "serde",
  "symbolica",
- "toml 1.1.2+spec-1.1.0",
 ]
 
 [[package]]
