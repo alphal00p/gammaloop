@@ -429,6 +429,7 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    "gammaloop-integration-tests" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-tensor" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-cff" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-generator" = ["crates/feynkit-model/tests/fixtures"];
@@ -447,6 +448,7 @@
     # Unit and integration tests embed these graph fixtures and snapshots with include_str!.
     "gammaloop-api" = ["tests/resources/graphs"];
     gammalooprs = [
+      "crates/gammalooprs/tests/fixtures/renormalization"
       "tests/resources/graphs"
       "crates/gammalooprs/tests/resources/uv_parametric_numerator"
     ];
