@@ -452,7 +452,7 @@ impl PyParameter {
 ///
 /// Examples
 /// --------
-/// >>> coupling = model.couplings[0]
+/// >>> coupling = next(iter(model.couplings))
 /// >>> coupling.orders
 /// {'QED': 1}
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -546,7 +546,7 @@ impl PyCoupling {
 ///
 /// Examples
 /// --------
-/// >>> vertex = model.vertex_rules[0]
+/// >>> vertex = next(iter(model.vertex_rules))
 /// >>> vertex.particles
 /// ['e+', 'e-', 'a']
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -684,7 +684,7 @@ impl PyVertexRule {
 ///
 /// Examples
 /// --------
-/// >>> lorentz = model.lorentz_structures[0]
+/// >>> lorentz = next(iter(model.lorentz_structures))
 /// >>> lorentz.spins
 /// [2, 2, 3]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -760,7 +760,7 @@ impl PyLorentzStructure {
 ///
 /// Examples
 /// --------
-/// >>> propagator = model.propagators[0]
+/// >>> propagator = next(iter(model.propagators))
 /// >>> propagator.numerator / propagator.denominator
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
@@ -844,7 +844,7 @@ impl PyPropagator {
 ///
 /// Examples
 /// --------
-/// >>> function = model.functions[0]
+/// >>> function = next(iter(model.functions))
 /// >>> function.arguments
 /// ['z']
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -918,7 +918,7 @@ impl PyModelFunction {
 ///
 /// Examples
 /// --------
-/// >>> form_factor = model.form_factors[0]
+/// >>> form_factor = next(iter(model.form_factors))
 /// >>> form_factor.name
 /// 'FF1'
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -1708,6 +1708,30 @@ impl PyModel {
             .coupling_id(name)
             .map(|id| PyCoupling::new(id, Arc::clone(&self.inner)))
             .map_err(error::model)
+    }
+
+    /// Replace named UFO vertex coefficients by their analytic expressions.
+    ///
+    /// Generated diagrams retain coefficient symbols such as ``UFO::GC_11``
+    /// so numerical calculations can use the model's precomputed coupling
+    /// values. Call this method when inspecting or manipulating a numerator in
+    /// terms of Lagrangian parameters such as ``UFO::G`` or ``UFO::ee``. The
+    /// input expression and the stored diagram are unchanged.
+    ///
+    /// Examples
+    /// --------
+    /// >>> stored = diagram.numerator_expression()
+    /// >>> analytic = model.expand_couplings(stored)
+    /// >>> analytic  # native Symbolica expression in model parameters
+    ///
+    /// Parameters
+    /// ----------
+    /// expression : Expression
+    ///     Symbolica expression containing named couplings from this model.
+    fn expand_couplings(&self, expression: &PythonExpression) -> PythonExpression {
+        PythonExpression {
+            expr: self.inner.expand_couplings(&expression.expr),
+        }
     }
 
     /// Return all interaction vertex rules in model order.

@@ -56,9 +56,10 @@ third-party = [
     { name = "pyo3-stub-gen" },
 ]
 
-# Publishable FeynKit crates must not depend on the private workspace hack.
-# Proc-macro crates also build on the host side and should not carry the hack
-# into normal target-side artifact archives.
+# Publishable libraries must not depend on the private workspace hack. Kurvst
+# also stays independent for its WebAssembly target. Proc-macro crates build on
+# the host side and should not carry the hack into normal target-side artifact
+# archives.
 [final-excludes]
 workspace-members = [
     "feynkit",
@@ -67,9 +68,15 @@ workspace-members = [
     "feynkit-graph",
     "feynkit-kinematics",
     "feynkit-model",
+    "feynkit-tensor",
     "feynkit-ufo",
     "gammaloop-tracing-filter-macros",
+    "kurvst",
+    "linnet",
+    "spenso",
+    "spenso-hep-lib",
     "spenso-macros",
+    "symbolica-utils",
 ]
 # These std feature anchors are maintained outside Hakari's generated section.
 # Keep traversing their dependencies, but do not emit duplicate declarations.

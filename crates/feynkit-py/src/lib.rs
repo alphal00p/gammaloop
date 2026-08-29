@@ -7,6 +7,7 @@ mod generation;
 mod graph;
 mod kinematics;
 mod model;
+mod tensor;
 #[cfg(feature = "ufo")]
 mod ufo;
 
@@ -31,6 +32,7 @@ pub use model::{
     PyModelExpression, PyModelFunction, PyParameter, PyParameterCard, PyParameterNature,
     PyParameterType, PyParticle, PyPropagator, PyVertexRule,
 };
+pub use tensor::PyTensorReducer;
 #[cfg(feature = "ufo")]
 pub use ufo::{PyLoadedModel, PyUfoLoadDiagnostics, PyUfoLoader};
 
@@ -58,6 +60,7 @@ pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
     generation::register(module)?;
     kinematics::register(module)?;
     cff::register(module)?;
+    tensor::register(module)?;
     #[cfg(feature = "ufo")]
     ufo::register(module)?;
     Ok(())
@@ -222,6 +225,7 @@ mod tests {
         assert_send::<PyModel>();
         assert_send::<PyGenerator>();
         assert_send::<PyFeynmanDiagram>();
+        assert_send::<PyTensorReducer>();
     }
 
     #[cfg(feature = "python_stubgen")]
@@ -270,6 +274,7 @@ assert not missing, f"native classes missing from the generated stub: {missing}"
                 "Generator",
                 "Process",
                 "FeynmanDiagram",
+                "TensorReducer",
                 "CffGenerator",
                 "FourMomentum",
                 "JetDefinition",
@@ -505,6 +510,7 @@ grouping_arguments = dict(
     differentiate_particle_masses_only=False,
     fully_numerical_substitution=True,
     check_canonical_numerator=True,
+    symmetric_polarizations=True,
 )
 assert grouping_options.group_identical_numerators(**grouping_arguments) is None
 assert grouping_options.group_numerators_up_to_sign(**grouping_arguments) is None

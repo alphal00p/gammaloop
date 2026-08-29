@@ -115,7 +115,6 @@ FEYNKIT_BRIDGE_UNITS = (
     "feynkit_runtime_half_edge",
     "feynkit_runtime_cuts",
     "translate_feynkit_atom",
-    "add_feynkit_sign",
     "feynkit_runtime_lmb",
     # These generic helpers are shared with the finalized-runtime importer, but
     # are part of the transitive path used by ``Graph::from_feynkit``. Keep
@@ -147,6 +146,15 @@ FORBIDDEN_MECHANICAL_BRIDGE_PATTERNS = (
     r"\bextract_vertex_particles\s*\(",
     r"\bprocess_vertex_hedges\s*\(",
 )
+
+# The runtime bridge must materialize the exact spanning tree already selected
+# by FeynKit after sewing cross-section cuts.  ``lmb_impl`` accepts that tree;
+# it does not search for or select a replacement basis.  Keep the exception
+# local to this one bridge unit so every other conversion helper remains
+# subject to the no-recanonicalization rule above.
+ALLOWED_MECHANICAL_BRIDGE_PATTERNS = {
+    "feynkit_runtime_lmb": {r"\blmb_impl\s*\("},
+}
 
 
 def cargo_metadata() -> dict[str, object]:
@@ -278,7 +286,10 @@ def mechanical_bridge_violations(source: str, relative: Path) -> list[str]:
         if function is None:
             violations.append(f"{relative}: canonical bridge unit `{unit}` is missing")
             continue
+        allowed_patterns = ALLOWED_MECHANICAL_BRIDGE_PATTERNS.get(unit, set())
         for pattern in FORBIDDEN_MECHANICAL_BRIDGE_PATTERNS:
+            if pattern in allowed_patterns:
+                continue
             if re.search(pattern, function):
                 violations.append(
                     f"{relative}:{unit}: repeats finalized FeynKit work ({pattern})"
@@ -452,6 +463,29 @@ impl Graph {
         for error in delegated_errors
     ):
         raise AssertionError("failed to reject physics work in a delegated bridge helper")
+
+    selected_tree_source = delegated_source.replace(
+        "fn feynkit_runtime_lmb() { copy_finalized_data(); }",
+        "fn feynkit_runtime_lmb() { graph.lmb_impl(full, tree, external); }",
+    )
+    selected_tree_errors = mechanical_bridge_violations(
+        selected_tree_source, Path("synthetic/graph/parse/mod.rs")
+    )
+    if any(":feynkit_runtime_lmb:" in error for error in selected_tree_errors):
+        raise AssertionError("failed to allow materializing FeynKit's selected tree")
+
+    reselection_source = delegated_source.replace(
+        "fn from_feynkit() { copy_finalized_data(); }",
+        "fn from_feynkit() { graph.lmb_impl(full, tree, external); }",
+    )
+    reselection_errors = mechanical_bridge_violations(
+        reselection_source, Path("synthetic/graph/parse/mod.rs")
+    )
+    if not any(
+        ":from_feynkit:" in error and "repeats finalized FeynKit work" in error
+        for error in reselection_errors
+    ):
+        raise AssertionError("failed to confine selected-tree materialization")
 
 
 def main() -> None:

@@ -78,8 +78,8 @@ use eyre::{Context, eyre};
 use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Orientation},
     subgraph::{
-        HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike,
-        SubSetOps,
+        HedgeNode, Inclusion, InternalSubGraph, ModifySubSet, OrientedCut, SuBitGraph,
+        SubGraphLike, SubSetLike, SubSetOps,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -1340,6 +1340,7 @@ pub struct CrossSectionGraph {
     pub source_nodes: HedgeNode,
     pub target_nodes: HedgeNode,
     pub cuts: TiVec<CutId, FinalizedCut>,
+    pub topology_threshold_candidates: Vec<FinalizedTopologyThresholdCandidate>,
     pub cut_esurface: TiVec<CutId, EnergySurface>,
     pub cut_esurface_id_map: TiVec<CutId, EnergySurfaceId>,
     pub derived_data: CrossSectionDerivedData,
@@ -1357,12 +1358,15 @@ impl CrossSectionGraph {
     pub(crate) fn new(mut graph: Graph) -> Self {
         let (source_node, target_node) = graph.get_source_and_target();
         let cuts = std::mem::take(&mut graph.finalized_cuts).into();
+        let topology_threshold_candidates =
+            std::mem::take(&mut graph.finalized_topology_threshold_candidates);
 
         Self {
             graph,
             source_nodes: source_node,
             target_nodes: target_node,
             cuts,
+            topology_threshold_candidates,
             cut_esurface: TiVec::new(),
             cut_esurface_id_map: TiVec::new(),
             derived_data: CrossSectionDerivedData::new_empty(),
@@ -2544,6 +2548,13 @@ impl CrossSectionGraph {
                 side_subgraph.sub(pair);
             }
         }
+        // A physical cut side is a hairy subgraph: cut lines and sewn initial
+        // states appear as boundary half-edges. Loop bases belong to its
+        // internal core. Passing the hairs to spanning-forest enumeration
+        // introduces boundary-only nodes that no internal forest can cover.
+        side_subgraph =
+            InternalSubGraph::cleaned_filter_pessimist(side_subgraph, &self.graph.underlying)
+                .filter;
 
         if self.graph.underlying.cyclotomatic_number(&side_subgraph) == 0 {
             return Ok(vec![Vec::new()]);
@@ -4078,7 +4089,7 @@ mod tests {
     fn cross_section_lmb_cut_edge_exclusion_prefers_massive_then_fermion_then_id() {
         test_initialise().unwrap();
         let model = crate::utils::load_generic_model("sm");
-        let graph = finalized_runtime_dot!(
+        let graph: crate::graph::Graph = finalized_runtime_dot!(
             digraph cut_edge_priority {
                 graph [projector=1]
                 edge [num=1]
@@ -4153,6 +4164,33 @@ mod tests {
             ),
             super::ThresholdCountertermStatus::ProvenNonExisting,
         );
+    }
+
+    #[test]
+    fn cut_side_lmbs_ignore_boundary_hairs() {
+        test_initialise().unwrap();
+        let model = crate::utils::load_generic_model("scalars");
+        let graph: crate::graph::Graph = finalized_runtime_dot!(
+            digraph hairy_cut_side {
+                graph [projector=1]
+                edge [num=1 particle="scalar_0"]
+                node [num=1]
+                ext [style=invis]
+                ext -> A [id=0 sink="{ufo_order:0}"]
+                A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                B -> C [id=2 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                C -> A [id=3 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            },
+            &model
+        )
+        .unwrap();
+        let side = graph.full_filter();
+        let cross_section = super::CrossSectionGraph::new(graph);
+
+        let edge_sets = cross_section.selected_cut_side_lmb_edge_sets(side).unwrap();
+
+        assert!(!edge_sets.is_empty());
+        assert!(edge_sets.iter().all(|edges| !edges.contains(&EdgeIndex(0))));
     }
 
     #[test]

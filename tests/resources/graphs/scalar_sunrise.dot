@@ -1,24 +1,28 @@
 digraph sunrise{
-    node [num = "1" ]
-    edge [num = "1" ]
-    e        [style=invis]
-    params = "CT(gammalooprs::uv::subgraph(linnet::S_47,0));CT(Approx(gammalooprs::uv::subgraph(linnet::S_y,0))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_y));CT(Approx(gammalooprs::uv::subgraph(linnet::S_3s,0))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_3s));CT(Approx(gammalooprs::uv::subgraph(linnet::S_3I,0))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_3I));CT(Approx(gammalooprs::uv::subgraph(linnet::S_44,0))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Approx(Approx(gammalooprs::uv::subgraph(linnet::S_y,0))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_y))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Approx(Approx(gammalooprs::uv::subgraph(linnet::S_3s,0))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_3s))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Approx(Approx(gammalooprs::uv::subgraph(linnet::S_3I,0))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_3I))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_y,0)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_y));CT(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_3s,0)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_3s));CT(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_3I,0)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_3I));CT(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_44,0)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Approx(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_y,0)))))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_y))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Approx(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_3s,0)))))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_3s))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Approx(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_3I,0)))))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_3I))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Truncate(Series(Integrate(Approx(Approx(gammalooprs::uv::subgraph(linnet::S_y,0))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_y)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Truncate(Series(Integrate(Approx(Approx(gammalooprs::uv::subgraph(linnet::S_3s,0))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_3s)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Truncate(Series(Integrate(Approx(Approx(gammalooprs::uv::subgraph(linnet::S_3I,0))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_3I)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Truncate(Series(Integrate(Approx(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_y,0)))))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_y)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Truncate(Series(Integrate(Approx(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_3s,0)))))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_3s)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Truncate(Series(Integrate(Approx(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_3I,0)))))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_3I)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44))"
+  num = "1";
+  overall_factor = "1";
+  overall_factor_evaluated = "1";
+  params = "CT(gammalooprs::uv::subgraph(linnet::S_47,0));CT(Approx(gammalooprs::uv::subgraph(linnet::S_y,0))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_y));CT(Approx(gammalooprs::uv::subgraph(linnet::S_3s,0))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_3s));CT(Approx(gammalooprs::uv::subgraph(linnet::S_3I,0))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_3I));CT(Approx(gammalooprs::uv::subgraph(linnet::S_44,0))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Approx(Approx(gammalooprs::uv::subgraph(linnet::S_y,0))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_y))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Approx(Approx(gammalooprs::uv::subgraph(linnet::S_3s,0))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_3s))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Approx(Approx(gammalooprs::uv::subgraph(linnet::S_3I,0))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_3I))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_y,0)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_y));CT(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_3s,0)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_3s));CT(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_3I,0)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_3I));CT(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_44,0)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Approx(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_y,0)))))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_y))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Approx(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_3s,0)))))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_3s))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Approx(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_3I,0)))))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_3I))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Truncate(Series(Integrate(Approx(Approx(gammalooprs::uv::subgraph(linnet::S_y,0))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_y)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Truncate(Series(Integrate(Approx(Approx(gammalooprs::uv::subgraph(linnet::S_3s,0))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_3s)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Truncate(Series(Integrate(Approx(Approx(gammalooprs::uv::subgraph(linnet::S_3I,0))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_3I)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Truncate(Series(Integrate(Approx(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_y,0)))))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_y)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Truncate(Series(Integrate(Approx(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_3s,0)))))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_3s)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44));CT(Truncate(Series(Integrate(Approx(Truncate(Series(Integrate(Approx(gammalooprs::uv::subgraph(linnet::S_3I,0)))))*gammalooprs::uv::subgraph(linnet::S_44,linnet::S_3I)))))*gammalooprs::uv::subgraph(linnet::S_47,linnet::S_44))";
+  projector = "1";
+  A[dod="0" num="1"];
+  B[dod="0" num="1"];
 
+  // S_47⊛0;
+  // S_47⊛y*K[S_y⊛0]; C * K[AB]
+  // S_47⊛3s*K[S_3s⊛0]; B * K[BC]
+  // S_47⊛3I*K[S_3I⊛0]; A * K[BC]
+  // S_47⊛44*K[S_44⊛0]; K[ABC]
+  // S_47⊛44*K[S_44⊛3I*K[S_3I⊛0]]; K[A * K[BC]]
+  // S_47⊛44*K[S_44⊛y*K[S_y⊛0]]; K[C * K[AB]]
+  // S_47⊛44*K[S_44⊛3s*K[S_3s⊛0]]; K[B * K[BC]]
+  // Spenso output hides the CT head and colors these histories magenta.
+  // Integrated histories add the ⟨...⟩, Σ(...), and Tr(...) wrappers.
 
-   // S_47⊛0;
-   // S_47⊛y*K[S_y⊛0]; C * K[AB]
-   // S_47⊛3s*K[S_3s⊛0]; B * K[BC]
-   // S_47⊛3I*K[S_3I⊛0]; A * K[BC]
-   // S_47⊛44*K[S_44⊛0]; K[ABC]
-   // S_47⊛44*K[S_44⊛3I*K[S_3I⊛0]]; K[A * K[BC]]
-   // S_47⊛44*K[S_44⊛y*K[S_y⊛0]]; K[C * K[AB]]
-   // S_47⊛44*K[S_44⊛3s*K[S_3s⊛0]]; K[B * K[BC]]
-   // Spenso output hides the CT head and colors these histories magenta.
-   // Integrated histories add the ⟨...⟩, Σ(...), and Tr(...) wrappers.
-
-    e -> A:1   [ id=3 particle=scalar_1]
-    B:0 -> e   [ id=4 particle=scalar_1]
-    A -> B    [ id=0 particle=scalar_1 lmb_id=0]
-    A -> B    [ id=1 particle=scalar_1 lmb_id=1]
-    A -> B    [ id=2 particle=scalar_1 ]
+  A:2	-> B:3	 [id=0 dir=none source="{ufo_order:1}" sink="{ufo_order:1}"  dod="-2" lmb_id="0" lmb_rep="K(0,a___)" name="e0" num="1" particle="scalar_1"];
+  A:4	-> B:5	 [id=1 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod="-2" lmb_id="1" lmb_rep="K(1,a___)" name="e1" num="1" particle="scalar_1"];
+  A:6	-> B:7	 [id=2 dir=none source="{ufo_order:3}" sink="{ufo_order:3}"  dod="-2" lmb_rep="-1*K(0,a___)+-1*K(1,a___)+P(0,a___)" name="e2" num="1" particle="scalar_1"];
+  ext3	 [style=invis];
+  ext3	-> A:1	 [id=3 dir=none sink="{ufo_order:0}" dod="-2" lmb_rep="P(0,a___)" name="e3" num="1" particle="scalar_1"];
+  ext4	 [style=invis];
+  B:0	-> ext4	 [id=4 dir=none source="{ufo_order:0}" dod="-2" lmb_rep="P(0,a___)" name="e4" num="1" particle="scalar_1"];
 }

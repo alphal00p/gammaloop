@@ -53,9 +53,7 @@ fn pole_part_uv_settings() -> UVgenerationSettings {
 // graph sign cannot be inferred from the ghost-edge count or applied globally.
 pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
     (model
-        .apply_parameter_replacement_rules(
-            &model.apply_coupling_replacement_rules(&atom.simplify_color().expand()),
-        )
+        .apply_parameter_replacement_rules(&model.expand_couplings(&atom.simplify_color().expand()))
         .replace(parse_lit!(gammalooprs::dim))
         .with(parse_lit!(4))
         .collect_factors()

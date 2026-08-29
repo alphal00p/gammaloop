@@ -56,20 +56,26 @@ fn evaluate_sign_origin(factor: AtomView<'_>) -> Atom {
                 .with(Atom::var(symbol!("x_")).to_pattern());
         }
     }
-    result
-        .replace(function!(
-            symbol!("NumeratorDependentGrouping"),
-            Atom::var(symbol!("GraphId_")),
-            Atom::var(symbol!("ratio_")),
-            Atom::var(symbol!("GraphSymmetryFactor_"))
-        ))
-        .with(function!(
-            symbol!("Group"),
-            Atom::var(symbol!("GraphId_")),
-            Atom::var(symbol!("ratio_")),
-            Atom::var(symbol!("GraphSymmetryFactor_"))
-        ))
-        .expand()
+    for head in [
+        symbol!("NumeratorDependentGrouping"),
+        symbol!("feynkit_generator::NumeratorDependentGrouping"),
+        symbol!("feynkit_generator_factor::NumeratorDependentGrouping"),
+    ] {
+        result = result
+            .replace(function!(
+                head,
+                Atom::var(symbol!("GraphId_")),
+                Atom::var(symbol!("ratio_")),
+                Atom::var(symbol!("GraphSymmetryFactor_"))
+            ))
+            .with(function!(
+                symbol!("Group"),
+                Atom::var(symbol!("GraphId_")),
+                Atom::var(symbol!("ratio_")),
+                Atom::var(symbol!("GraphSymmetryFactor_"))
+            ));
+    }
+    result.expand()
 }
 
 fn count_graphs_in_processes(cli: &CLIState) -> (usize, Atom) {

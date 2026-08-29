@@ -198,10 +198,13 @@ impl Graph {
             evaluate_overall_factor(self.overall_factor.as_view()).to_quoted(),
         );
 
-        if !self.finalized_cuts.is_empty() {
+        if !self.finalized_cuts.is_empty()
+            || !self.finalized_topology_threshold_candidates.is_empty()
+        {
             // Runtime DOT intentionally does not serialize canonical physical
-            // cuts. Cross-section artifacts must round-trip through
-            // FeynmanDiagram DOT, which owns the typed cut partitions.
+            // cuts or topology-threshold candidates. Cross-section artifacts
+            // must round-trip through FeynmanDiagram DOT, which owns both
+            // typed partition inventories.
             g.statements.insert(
                 "canonical_cuts_required".to_owned(),
                 "feynkit_diagram_dot".to_owned(),

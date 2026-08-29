@@ -14,13 +14,15 @@ feynkit-generator = { version = "0.1.0", path = "../feynkit-generator", optional
 feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", optional = true }
 feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics", optional = true }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model", optional = true }
+feynkit-tensor = { version = "0.1.0", path = "../feynkit-tensor", optional = true }
 feynkit-ufo = { version = "0.1.0", path = "../feynkit-ufo", optional = true }
 
 [features]
-default = ["cff", "generator", "graph", "kinematics", "model"]
+default = ["cff", "generator", "graph", "kinematics", "model", "tensor"]
 cff = ["graph", "dep:feynkit-cff"]
 generator = ["graph", "model", "dep:feynkit-generator"]
 graph = ["model", "dep:feynkit-graph"]
 kinematics = ["dep:feynkit-kinematics"]
 model = ["dep:feynkit-model"]
+tensor = ["graph", "dep:feynkit-tensor"]
 ufo = ["model", "dep:feynkit-ufo"]

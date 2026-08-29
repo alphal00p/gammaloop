@@ -274,7 +274,6 @@ pub trait ModelGammaLoopExt {
     fn contains_symbol(&self, symbol: &UFOSymbol) -> bool;
     fn get_symbol_value(&self, symbol: UFOSymbol) -> Option<Complex<F<f64>>>;
     fn generate_params(&self) -> Vec<Atom>;
-    fn apply_coupling_replacement_rules(&self, atom: &Atom) -> Atom;
     fn apply_parameter_replacement_rules(&self, atom: &Atom) -> Atom;
     fn get_description(
         &self,
@@ -545,20 +544,6 @@ impl ModelGammaLoopExt for Model {
                     .map(|parameter| Atom::from(UFOSymbol::from(&parameter.name))),
             )
             .collect()
-    }
-
-    fn apply_coupling_replacement_rules(&self, atom: &Atom) -> Atom {
-        let replacements = self
-            .couplings()
-            .iter()
-            .map(|coupling| {
-                Replacement::new(
-                    Atom::from(UFOSymbol::from(&coupling.name)).to_pattern(),
-                    coupling.expression.clone(),
-                )
-            })
-            .collect::<Vec<_>>();
-        atom.replace_multiple(&replacements)
     }
 
     fn apply_parameter_replacement_rules(&self, atom: &Atom) -> Atom {
