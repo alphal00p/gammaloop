@@ -1,7 +1,13 @@
+use ::rustred::algebra::CoefficientContextError;
+use ::rustred::family::IntegralFamilyError;
+use ::rustred::family::presentation::FamilyPresentationError;
+use ::rustred::tensor::TensorError;
 use symbolica::atom::{Atom, AtomView};
 use thiserror::Error;
 
 use crate::{Vakint, VakintError, VakintExpression, VakintSettings};
+
+mod rustred;
 
 /// Options for the native RustRed tensor-reduction backend.
 ///
@@ -37,11 +43,87 @@ pub enum TensorReductionError {
     /// The existing Vakint input or FORM path failed.
     #[error(transparent)]
     Vakint(#[from] VakintError),
-    /// The selected RustRed dependency does not yet expose the native tensor service.
+    /// The topology matcher could not identify this term.
+    #[error("RustRed tensor term {term} has no topology match: {integral}")]
+    RustRedUnrecognizedIntegral { term: usize, integral: String },
+    /// The matched family is outside the first native vertical slice.
     #[error(
-        "RustRed tensor reduction is unavailable because the current RustRed core dependency does not yet expose its native tensor-reduction service"
+        "RustRed tensor term {term} has {loop_count} loops and {propagator_count} propagators; the current native slice admits one-loop, one-propagator full bases"
     )]
-    RustRedUnavailable,
+    RustRedUnsupportedFamily {
+        term: usize,
+        loop_count: usize,
+        propagator_count: usize,
+    },
+    /// Unknown topologies do not yet carry enough authenticated conventions.
+    #[error("RustRed tensor term {term} matched an unknown topology")]
+    RustRedUnknownTopology { term: usize },
+    /// A canonical propagator could not be recovered after matching.
+    #[error("RustRed tensor term {term} is missing canonical propagator {propagator}")]
+    RustRedMissingPropagator { term: usize, propagator: usize },
+    /// Explicit long form must expose one bare loop-momentum label.
+    #[error(
+        "RustRed tensor term {term} has unsupported explicit input momentum {momentum} in propagator {propagator}; expected one bare k(integer) loop label"
+    )]
+    RustRedUnsupportedMomentum {
+        term: usize,
+        propagator: usize,
+        momentum: String,
+    },
+    /// The native slice accepts a nonzero exact scalar atom as its sole scale.
+    #[error(
+        "RustRed tensor term {term} has unsupported mass squared {mass} in propagator {propagator}; expected a nonzero exact number or symbol"
+    )]
+    RustRedUnsupportedMass {
+        term: usize,
+        propagator: usize,
+        mass: String,
+    },
+    /// Propagator powers must be exact machine-sized integers at this boundary.
+    #[error(
+        "RustRed tensor term {term} has unsupported power {power} in propagator {propagator}; expected an exact integer"
+    )]
+    RustRedUnsupportedPower {
+        term: usize,
+        propagator: usize,
+        power: String,
+    },
+    /// The configured epsilon spelling could not be parsed exactly.
+    #[error("RustRed could not parse Vakint's epsilon symbol {symbol:?}: {detail}")]
+    RustRedInvalidDimension { symbol: String, detail: String },
+    /// A required projector guard vanished under Vakint's dimension map.
+    #[error("RustRed tensor term {term} has singular specialized dimension {dimension}")]
+    RustRedSingularDimension { term: usize, dimension: String },
+    /// RustRed's exact coefficient domain could not be constructed.
+    #[error("RustRed coefficient-domain construction failed: {source}")]
+    RustRedCoefficientContext {
+        #[source]
+        source: CoefficientContextError,
+    },
+    /// RustRed rejected the affine integral-family bridge.
+    #[error("RustRed tensor term {term} rejected its affine family: {source}")]
+    RustRedFamily {
+        term: usize,
+        #[source]
+        source: IntegralFamilyError,
+    },
+    /// RustRed rejected the physical presentation supplied by Vakint.
+    #[error("RustRed tensor term {term} rejected its family presentation: {source}")]
+    RustRedPresentation {
+        term: usize,
+        #[source]
+        source: FamilyPresentationError,
+    },
+    /// RustRed's native projector rejected this numerator.
+    #[error("RustRed tensor projection failed for term {term}: {source}")]
+    RustRedTensor {
+        term: usize,
+        #[source]
+        source: TensorError,
+    },
+    /// The native result crossed a boundary not representable by this adapter.
+    #[error("RustRed tensor term {term} produced unsupported output: {detail}")]
+    RustRedUnsupportedOutput { term: usize, detail: String },
 }
 
 /// A tensor-reduction operation configured independently of [`VakintSettings`].
@@ -76,13 +158,10 @@ impl TensorReducer<'_> {
 }
 
 pub(crate) fn reduce_with_rustred(
-    _expression: &mut VakintExpression,
-    _vakint: &Vakint,
-    _settings: &VakintSettings,
-    _options: RustRedOptions,
+    expression: &mut VakintExpression,
+    vakint: &Vakint,
+    settings: &VakintSettings,
+    options: RustRedOptions,
 ) -> Result<(), TensorReductionError> {
-    // RustRed does not expose its native tensor service yet. Keep this boundary
-    // explicit: the future implementation belongs in RustRed core and this
-    // adapter must never contain a second CAS algorithm or fall back to FORM.
-    Err(TensorReductionError::RustRedUnavailable)
+    rustred::reduce(expression, vakint, settings, options)
 }

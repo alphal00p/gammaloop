@@ -3,6 +3,21 @@ use test_utils::{compare_output, get_vakint};
 use vakint::VakintSettings;
 use vakint::vakint_parse;
 
+#[test]
+fn default_tensor_builder_executes_the_legacy_form_backend() {
+    let vakint = get_vakint(VakintSettings::default());
+    let input = vakint_parse!("k(1,1)*k(1,2)*topo(I1L(muvsq,1))").unwrap();
+
+    let legacy = vakint.tensor_reduce(input.as_view()).unwrap();
+    let through_default = vakint
+        .vakint
+        .tensor_reducer(&vakint.settings)
+        .reduce(input.as_view())
+        .unwrap();
+
+    assert_eq!(through_default, legacy);
+}
+
 #[test_log::test]
 fn test_reduction_1l_a() {
     let vakint = get_vakint(VakintSettings {

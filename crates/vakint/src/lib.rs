@@ -719,11 +719,24 @@ fn get_node_ids(
     } else {
         return Err(VakintError::InvalidGenericExpression(format!(
             "Right node must be an integer: {}",
-            match_stack.get(&vk_symbol!("nl_")).unwrap()
+            match_stack.get(&vk_symbol!("nr_")).unwrap()
         )));
     };
 
-    Ok((id_node_left as usize, id_node_right as usize))
+    let id_node_left = usize::try_from(id_node_left).map_err(|_| {
+        VakintError::InvalidGenericExpression(format!(
+            "Left node must be a nonnegative machine-sized integer: {}",
+            match_stack.get(&vk_symbol!("nl_")).unwrap()
+        ))
+    })?;
+    let id_node_right = usize::try_from(id_node_right).map_err(|_| {
+        VakintError::InvalidGenericExpression(format!(
+            "Right node must be a nonnegative machine-sized integer: {}",
+            match_stack.get(&vk_symbol!("nr_")).unwrap()
+        ))
+    })?;
+
+    Ok((id_node_left, id_node_right))
 }
 
 #[allow(clippy::type_complexity)]
@@ -1313,43 +1326,49 @@ impl Integral {
                         }
                     }
 
-                    let input_prop_id = if let Some(i) = get_integer_from_atom(
+                    let Some(input_prop_id) = get_integer_from_atom(
                         m1.match_stack
                             .get(vk_symbol!(format!("id{}_", prop_id).as_str()))
                             .unwrap()
                             .to_atom()
                             .as_view(),
-                    ) {
-                        i as usize
-                    } else {
-                        panic!("Match id from input expression must be an integer.")
+                    )
+                    .and_then(|id| usize::try_from(id).ok()) else {
+                        continue 'outer;
                     };
 
                     // get the node ids in user's input for this prop as well as the one in the canonical expression
-                    let input_prop_match = get_prop_with_id(input, input_prop_id).unwrap();
-                    let (input_id_node_left, input_id_node_right) =
-                        get_node_ids(&input_prop_match).unwrap();
+                    let Some(input_prop_match) = get_prop_with_id(input, input_prop_id) else {
+                        continue 'outer;
+                    };
+                    let Ok((input_id_node_left, input_id_node_right)) =
+                        get_node_ids(&input_prop_match)
+                    else {
+                        continue 'outer;
+                    };
 
                     let canonical_ids = get_node_ids(&canonical_prop_match).unwrap();
 
-                    let (canonical_id_node_left, canonical_id_node_right) = (
-                        get_integer_from_atom(
-                            m1.match_stack
-                                .get(vk_symbol!(format!("n{}l_", canonical_ids.0).as_str()))
-                                .unwrap()
-                                .to_atom()
-                                .as_view(),
-                        )
-                        .unwrap() as usize,
-                        get_integer_from_atom(
-                            m1.match_stack
-                                .get(vk_symbol!(format!("n{}r_", canonical_ids.1).as_str()))
-                                .unwrap()
-                                .to_atom()
-                                .as_view(),
-                        )
-                        .unwrap() as usize,
-                    );
+                    let Some(canonical_id_node_left) = get_integer_from_atom(
+                        m1.match_stack
+                            .get(vk_symbol!(format!("n{}l_", canonical_ids.0).as_str()))
+                            .unwrap()
+                            .to_atom()
+                            .as_view(),
+                    )
+                    .and_then(|id| usize::try_from(id).ok()) else {
+                        continue 'outer;
+                    };
+                    let Some(canonical_id_node_right) = get_integer_from_atom(
+                        m1.match_stack
+                            .get(vk_symbol!(format!("n{}r_", canonical_ids.1).as_str()))
+                            .unwrap()
+                            .to_atom()
+                            .as_view(),
+                    )
+                    .and_then(|id| usize::try_from(id).ok()) else {
+                        continue 'outer;
+                    };
 
                     let is_edge_flipped = if (input_id_node_left, input_id_node_right)
                         == (canonical_id_node_left, canonical_id_node_right)
@@ -1376,8 +1395,7 @@ impl Integral {
                     if is_edge_flipped {
                         score_for_this_match.1 += 1;
                     }
-                    degeneracy_lifter_for_this_match
-                        .push((input_prop_id as i32 - prop_id as i32).unsigned_abs() as usize);
+                    degeneracy_lifter_for_this_match.push(input_prop_id.abs_diff(prop_id));
                     degeneracy_lifter_exact_for_this_match.push((input_prop_id, !is_edge_flipped));
                     replacement_rules
                         .edge_ids_canonical_to_input_map

@@ -303,6 +303,33 @@ fn test_unknown_integrals() {
     );
 }
 
+#[test]
+fn malformed_graph_identifiers_fail_without_panicking() {
+    let vakint = get_vakint(VakintSettings {
+        allow_unknown_integrals: false,
+        ..VakintSettings::default()
+    });
+    let malformed = [
+        try_parse!("vakint::topo(vakint::prop(-1,vakint::edge(1,1),vakint::k(1),muvsq,1))")
+            .unwrap(),
+        try_parse!("vakint::topo(vakint::prop(1/2,vakint::edge(1,1),vakint::k(1),muvsq,1))")
+            .unwrap(),
+        try_parse!("vakint::topo(vakint::prop(1,vakint::edge(x,1),vakint::k(1),muvsq,1))").unwrap(),
+        try_parse!("vakint::topo(vakint::prop(1,vakint::edge(-1,1),vakint::k(1),muvsq,1))")
+            .unwrap(),
+        try_parse!("vakint::topo(vakint::prop(1,vakint::edge(1/2,1),vakint::k(1),muvsq,1))")
+            .unwrap(),
+    ];
+
+    for input in malformed {
+        assert!(matches!(
+            vakint.to_canonical(input.as_view(), false),
+            Err(VakintError::UnreckognizedIntegral(_))
+                | Err(VakintError::InvalidGenericExpression(_))
+        ));
+    }
+}
+
 #[test_log::test]
 fn test_2l_pinched_matching() {
     let vakint = get_vakint(VakintSettings {
