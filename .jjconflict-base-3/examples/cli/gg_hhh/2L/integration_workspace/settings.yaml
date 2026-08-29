@@ -1,0 +1,38 @@
+general:
+  enable_cache: true
+kinematics:
+  externals:
+    type: constant
+    data:
+      momenta:
+      - - 500.0
+        - 0.0
+        - 0.0
+        - 500.0
+      - - 500.0
+        - 0.0
+        - 0.0
+        - -500.0
+      - - 438.5555662246945
+        - 155.3322001835378
+        - 348.0160396513587
+        - -177.3773615718412
+      - - 356.3696374921922
+        - -16.802389008511
+        - -318.7291102436005
+        - 97.48719163688098
+      - dependent
+      helicities:
+      - 1
+      - 1
+      - 0
+      - 0
+      - 0
+integrator:
+  n_start: 100
+  n_max: 1000000
+sampling:
+  type: discrete_graph_sampling
+  sample_orientations: true
+  sampling_type:
+    subtype: discrete_multi_channeling
