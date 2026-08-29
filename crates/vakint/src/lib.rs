@@ -5,11 +5,13 @@ pub mod fmft_numerics;
 pub mod graph;
 pub mod matad;
 pub mod matad_numerics;
+pub mod rustred_evaluation;
 pub mod symbols;
 pub mod tensor_reduction;
 pub mod topologies;
 pub mod utils;
 
+pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions};
 pub use tensor_reduction::{
     RustRedOptions, TensorReducer, TensorReductionError, TensorReductionMode,
 };
@@ -275,6 +277,8 @@ pub enum VakintError {
     FMFTError(String),
     #[error("Numerical evaluation error: {0}")]
     EvaluationError(String),
+    #[error(transparent)]
+    RustRedEvaluation(#[from] RustRedEvaluationError),
     #[error("unknown vakint error")]
     Unknown,
 }
@@ -1682,6 +1686,9 @@ pub enum EvaluationMethod {
     MATAD(MATADOptions),
     FMFT(FMFTOptions),
     PySecDec(PySecDecOptions),
+    /// Reserved scalar-reduction boundary; it remains unsupported until closing
+    /// RustRed IBP artifacts are shipped with Vakint.
+    RustRed(RustRedEvaluationOptions),
 }
 
 impl fmt::Display for EvaluationMethod {
@@ -1694,6 +1701,7 @@ impl fmt::Display for EvaluationMethod {
                 write!(f, "PySecDec ({})", opts)
                 //write!(f, "PySecDec")
             }
+            EvaluationMethod::RustRed(opts) => write!(f, "RustRed ({})", opts),
         }
     }
 }
@@ -1738,6 +1746,7 @@ impl EvaluationMethod {
                 .0
                 .iter()
                 .any(|m| matches!(m, EvaluationMethod::PySecDec(_))),
+            EvaluationMethod::RustRed(_) => false,
         }
     }
 
@@ -1755,6 +1764,7 @@ impl EvaluationMethod {
             EvaluationMethod::PySecDec(_) => {
                 vec![VakintDependency::FORM, VakintDependency::PySecDec]
             }
+            EvaluationMethod::RustRed(_) => vec![],
         }
     }
 
@@ -1770,6 +1780,7 @@ impl EvaluationMethod {
             EvaluationMethod::AlphaLoop(_) => {}
             EvaluationMethod::MATAD(_) => {}
             EvaluationMethod::FMFT(_) => {}
+            EvaluationMethod::RustRed(_) => {}
             EvaluationMethod::PySecDec(opts) => {
                 let mut f64_numerical_masses: HashMap<String, f64, std::hash::RandomState> =
                     numerical_params_complex
@@ -1828,6 +1839,9 @@ impl EvaluationMethod {
             EvaluationMethod::PySecDec(opts) => {
                 vakint.pysecdec_evaluate(settings, numerator, integral_specs, opts)
             }
+            EvaluationMethod::RustRed(opts) => {
+                vakint.rustred_evaluate(settings, numerator, integral_specs, opts)
+            }
         }?;
         // Simplify logarithms and zero powers knowing that all arguments are real
         Ok(simplify_real(result.as_view()))
@@ -1881,6 +1895,15 @@ impl EvaluationOrder {
     pub fn matad_only(matad_options: Option<MATADOptions>) -> Self {
         EvaluationOrder(vec![EvaluationMethod::MATAD(
             matad_options.unwrap_or_default(),
+        )])
+    }
+    /// Select only the reserved RustRed scalar evaluator.
+    ///
+    /// Until closing artifacts are shipped this order cannot evaluate an integral;
+    /// mixed orders safely continue to their next supported method instead.
+    pub fn rustred_only() -> Self {
+        EvaluationOrder(vec![EvaluationMethod::RustRed(
+            RustRedEvaluationOptions::default(),
         )])
     }
     pub fn fmft_only(fmft_options: Option<FMFTOptions>) -> Self {
@@ -5405,5 +5428,96 @@ mod tests {
 
         let a = Vakint::convert_from_dot_notation(expr.as_view());
         println!("a = {}", a);
+    }
+
+    #[test]
+    fn rustred_scalar_evaluation_is_opt_in_and_form_independent() {
+        let default_order = EvaluationOrder::default();
+        assert_eq!(default_order.0.len(), 4);
+        assert!(matches!(
+            default_order.0.as_slice(),
+            [
+                EvaluationMethod::AlphaLoop(_),
+                EvaluationMethod::MATAD(_),
+                EvaluationMethod::FMFT(_),
+                EvaluationMethod::PySecDec(_),
+            ]
+        ));
+
+        let rustred_order = EvaluationOrder::rustred_only();
+        let [EvaluationMethod::RustRed(options)] = rustred_order.0.as_slice() else {
+            panic!("rustred_only must contain exactly the RustRed scalar evaluator");
+        };
+        assert!(options.substitute_masters);
+        assert!(rustred_order.0[0].dependencies().is_empty());
+        assert_eq!(
+            rustred_order.to_string(),
+            "[RustRed (substitute_masters=true)]"
+        );
+    }
+
+    #[test]
+    fn rustred_scalar_dispatch_reports_the_unavailable_reducer() {
+        let vakint = Vakint::new().unwrap();
+        let settings = VakintSettings::default();
+        let integral = vk_parse!("topo(prop(1,edge(1,1),k(1),muvsq,1))").unwrap();
+        let mut integral_specs = vakint
+            .topologies
+            .match_topologies_to_user_input(integral.as_view(), false)
+            .unwrap()
+            .unwrap();
+        integral_specs.apply_replacement_rules().unwrap();
+        let numerator = Atom::num(1);
+        let method = EvaluationMethod::RustRed(RustRedEvaluationOptions::default());
+
+        let error = method
+            .evaluate_integral(&vakint, &settings, numerator.as_view(), &integral_specs)
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            VakintError::RustRedEvaluation(RustRedEvaluationError::ReducerUnavailable {
+                loop_count: 1
+            })
+        ));
+    }
+
+    #[test]
+    fn reserved_rustred_method_does_not_intercept_low_loop_fallbacks() {
+        let vakint = Vakint::new().unwrap();
+        let settings = VakintSettings::default();
+        let rustred = EvaluationMethod::RustRed(RustRedEvaluationOptions::default());
+        let alphaloop = EvaluationMethod::AlphaLoop(AlphaLoopOptions::default());
+        let representative_integrals = [
+            vk_parse!("topo(prop(1,edge(1,1),k(1),muvsq,1))").unwrap(),
+            vk_parse!(
+                "topo(\
+                    prop(1,edge(1,2),k(1),muvsq,1)\
+                   *prop(2,edge(1,2),k(2),muvsq,1)\
+                   *prop(3,edge(2,1),k(1)+k(2),muvsq,1)\
+                )"
+            )
+            .unwrap(),
+            vk_parse!(
+                "topo(\
+                    prop(1,edge(1,2),k(1),muvsq,1)\
+                   *prop(2,edge(2,3),k(2),muvsq,1)\
+                   *prop(3,edge(3,1),k(3),muvsq,1)\
+                   *prop(4,edge(1,4),k(3)-k(1),muvsq,1)\
+                   *prop(5,edge(2,4),k(1)-k(2),muvsq,1)\
+                   *prop(6,edge(3,4),k(2)-k(3),muvsq,1)\
+                )"
+            )
+            .unwrap(),
+        ];
+
+        for integral in representative_integrals {
+            let integral_specs = vakint
+                .topologies
+                .match_topologies_to_user_input(integral.as_view(), false)
+                .unwrap()
+                .unwrap();
+            assert!(!rustred.supports(&settings, &integral_specs.canonical_topology));
+            assert!(alphaloop.supports(&settings, &integral_specs.canonical_topology));
+        }
     }
 }

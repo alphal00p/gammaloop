@@ -15,8 +15,8 @@ use symbolica::domains::float::{Complex, Float, RealLike};
 use crate::symbols::S;
 use crate::{
     AlphaLoopOptions, EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor,
-    MATADOptions, NumericalEvaluationResult, PySecDecOptions, Vakint, VakintError,
-    VakintExpression, VakintSettings, vakint_symbol,
+    MATADOptions, NumericalEvaluationResult, PySecDecOptions, RustRedEvaluationOptions, Vakint,
+    VakintError, VakintExpression, VakintSettings, vakint_symbol,
 };
 
 #[cfg(feature = "python_stubgen")]
@@ -341,6 +341,38 @@ impl VakintEvaluationMethodWrapper {
     ) -> PyResult<VakintEvaluationMethodWrapper> {
         Ok(VakintEvaluationMethodWrapper {
             method: EvaluationMethod::AlphaLoop(AlphaLoopOptions::default()),
+        })
+    }
+
+    #[pyo3(signature = (substitute_masters = None))]
+    #[classmethod]
+    /// Create the reserved FORM-independent RustRed scalar-integral evaluation method.
+    ///
+    /// This method leaves Vakint's tensor-reduction selection unchanged. The scalar
+    /// boundary does not claim support for any topology until closing RustRed IBP
+    /// artifacts are shipped; in a mixed evaluation order Vakint therefore continues
+    /// to the next supported method.
+    ///
+    /// ## Examples
+    /// ```python
+    /// rustred_method = VakintEvaluationMethod.new_rustred_method(
+    ///     substitute_masters=True
+    /// )
+    /// ```
+    ///
+    /// Parameters
+    /// ----------
+    ///
+    /// substitute_masters : Optional[bool]
+    ///    Whether to substitute Vakint's known master evaluations. Default is True.
+    pub fn new_rustred_method(
+        _cls: &Bound<'_, PyType>,
+        substitute_masters: Option<bool>,
+    ) -> PyResult<VakintEvaluationMethodWrapper> {
+        Ok(VakintEvaluationMethodWrapper {
+            method: EvaluationMethod::RustRed(RustRedEvaluationOptions {
+                substitute_masters: substitute_masters.unwrap_or(true),
+            }),
         })
     }
 
@@ -860,5 +892,33 @@ impl VakintWrapper {
             .evaluate(&self.settings, integral_expression.expr.as_view())
             .map_err(vakint_to_python_error)?;
         Ok(result.into())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn python_rustred_method_constructor_preserves_its_option() {
+        Python::initialize();
+        Python::attach(|py| {
+            let class = py.get_type::<VakintEvaluationMethodWrapper>();
+
+            let default_method =
+                VakintEvaluationMethodWrapper::new_rustred_method(&class, None).unwrap();
+            let EvaluationMethod::RustRed(default_options) = default_method.method else {
+                panic!("constructor returned a non-RustRed evaluation method");
+            };
+            assert!(default_options.substitute_masters);
+
+            let unsubstituted_method =
+                VakintEvaluationMethodWrapper::new_rustred_method(&class, Some(false)).unwrap();
+            let EvaluationMethod::RustRed(unsubstituted_options) = unsubstituted_method.method
+            else {
+                panic!("constructor returned a non-RustRed evaluation method");
+            };
+            assert!(!unsubstituted_options.substitute_masters);
+        });
     }
 }
