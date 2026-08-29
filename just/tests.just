@@ -14,6 +14,7 @@ test_gammaloop *args:
         feynkit-kinematics
         feynkit-model
         feynkit-py
+        feynkit-tensor
         feynkit-ufo
         gammaloop-api
         gammalooprs
@@ -201,6 +202,7 @@ _test-ci TEST_NAME="" NEXTEST_FILTERSET="":
         feynkit-kinematics
         feynkit-model
         feynkit-py
+        feynkit-tensor
         feynkit-ufo
         gammaloop-api
         gammalooprs

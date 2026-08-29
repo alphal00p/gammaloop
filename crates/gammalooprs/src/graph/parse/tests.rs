@@ -1,11 +1,15 @@
-use linnet::half_edge::involution::{EdgeIndex, HedgePair};
+use feynkit_graph::{DiagramEdge, EdgeEndpoints, EdgeId, VertexId};
+use linnet::half_edge::{
+    involution::{EdgeIndex, HedgePair},
+    subgraph::SubSetLike,
+};
 use typed_index_collections::ti_vec;
 
-use super::Graph;
+use super::{Graph, feynkit_legacy_internal_order_key};
 use crate::{
     finalized_runtime_dot,
     graph::{
-        GraphGroup,
+        FeynmanGraph, GraphGroup,
         parse::{IntoFinalizedRuntimeGraph, complete_group_parsing},
     },
     initialisation::test_initialise,
@@ -43,6 +47,131 @@ fn parse_triangle_fixture(loop_edge: usize, loop_edge_mass: Option<i64>) -> Grap
     triangle_fixture(loop_edge, loop_edge_mass)
         .into_finalized_runtime_graph(&crate::utils::load_generic_model("scalars"))
         .unwrap()
+}
+
+#[test]
+fn legacy_internal_order_key_recovers_pre_normalized_fermion_flow() {
+    let model = crate::utils::load_generic_model("sm");
+    let forward = DiagramEdge::new(model.particle_id("u").unwrap(), true);
+    let reversed = DiagramEdge::new(model.particle_id("u~").unwrap(), true);
+
+    let forward_key = feynkit_legacy_internal_order_key(
+        &model,
+        EdgeId(7),
+        EdgeEndpoints {
+            source: VertexId(2),
+            target: VertexId(5),
+        },
+        &forward,
+    )
+    .unwrap();
+    let reversed_key = feynkit_legacy_internal_order_key(
+        &model,
+        EdgeId(7),
+        EdgeEndpoints {
+            source: VertexId(5),
+            target: VertexId(2),
+        },
+        &reversed,
+    )
+    .unwrap();
+
+    assert_eq!(reversed_key, forward_key);
+    assert_eq!(forward_key.2, 2);
+}
+
+fn split_forward_fixture(outgoing_momentum: &str, explicit_connection: bool) -> String {
+    let connection = if explicit_connection {
+        r#" is_cut="0" initial_state_connection="true""#
+    } else {
+        ""
+    };
+    format!(
+        r#"digraph split_forward {{
+            graph [projector="1"]
+            node [num="1"]
+            edge [pdg=1000 num="1" dir=none]
+            ext_in [style=invis]
+            ext_out [style=invis]
+            ext_in -> A [id=0 lmb_rep="P(0,a___)" sink="{{ufo_order:0}}"{connection}]
+            A -> B [id=1 lmb_id=0 lmb_rep="K(0,a___)" source="{{ufo_order:1}}" sink="{{ufo_order:0}}"]
+            A -> B [id=2 lmb_rep="-K(0,a___)+P(0,a___)" source="{{ufo_order:2}}" sink="{{ufo_order:1}}"]
+            B -> ext_out [id=3 lmb_rep="{outgoing_momentum}" source="{{ufo_order:2}}"{connection}]
+        }}"#
+    )
+}
+
+fn two_split_forward_connections_fixture() -> &'static str {
+    r#"digraph two_split_forward_connections {
+        graph [projector="1"]
+        node [num="1"]
+        edge [pdg=1000 num="1" dir=none]
+        in0 [style=invis]
+        out0 [style=invis]
+        in1 [style=invis]
+        out1 [style=invis]
+        in0 -> A [id=0 lmb_rep="P(0,a___)" sink="{ufo_order:0}" is_cut="0" initial_state_connection="true"]
+        in1 -> A [id=1 lmb_rep="P(1,a___)" sink="{ufo_order:1}" is_cut="1" initial_state_connection="true"]
+        A -> B [id=2 lmb_rep="P(0,a___)+P(1,a___)" source="{ufo_order:2}" sink="{ufo_order:0}"]
+        B -> out0 [id=3 lmb_rep="P(0,a___)" source="{ufo_order:1}" is_cut="0" initial_state_connection="true"]
+        B -> out1 [id=4 lmb_rep="P(1,a___)" source="{ufo_order:2}" is_cut="1" initial_state_connection="true"]
+    }"#
+}
+
+#[test]
+fn explicitly_marked_split_forward_endpoints_are_one_connection() {
+    test_initialise().unwrap();
+    let model = crate::utils::load_generic_model("scalars");
+    let graph: Graph = split_forward_fixture("P(0,a___)", true)
+        .into_finalized_runtime_graph(&model)
+        .unwrap();
+
+    assert!(graph.get_external_signature().is_empty());
+    assert_eq!(graph.loop_momentum_basis.ext_edges.len(), 1);
+    assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 1);
+
+    let serialized = graph.dot_serialize(&DotExportSettings {
+        split_xs_by_initial_states: true,
+        ..DotExportSettings::default()
+    });
+    assert_eq!(serialized.matches("is_cut=").count(), 2, "{serialized}");
+
+    let round_trip: Graph = serialized.into_finalized_runtime_graph(&model).unwrap();
+    assert!(round_trip.get_external_signature().is_empty());
+    assert_eq!(round_trip.loop_momentum_basis.ext_edges.len(), 1);
+}
+
+#[test]
+fn equal_external_momenta_without_explicit_markers_remain_distinct_legs() {
+    test_initialise().unwrap();
+    let graph: Graph = split_forward_fixture("P(0,a___)", false)
+        .into_finalized_runtime_graph(&crate::utils::load_generic_model("scalars"))
+        .unwrap();
+
+    assert_eq!(graph.get_external_signature().len(), 2);
+    assert_eq!(graph.loop_momentum_basis.ext_edges.len(), 2);
+    assert!(graph.initial_state_cut.is_empty());
+}
+
+#[test]
+fn multiple_undirected_forward_connections_survive_split_round_trip() {
+    test_initialise().unwrap();
+    let model = crate::utils::load_generic_model("scalars");
+    let graph: Graph = two_split_forward_connections_fixture()
+        .into_finalized_runtime_graph(&model)
+        .unwrap();
+    assert!(graph.get_external_signature().is_empty());
+    assert_eq!(graph.loop_momentum_basis.ext_edges.len(), 2);
+
+    let serialized = graph.dot_serialize(&DotExportSettings {
+        split_xs_by_initial_states: true,
+        ..DotExportSettings::default()
+    });
+    assert_eq!(serialized.matches("is_cut=").count(), 4, "{serialized}");
+
+    let round_trip: Graph = serialized.into_finalized_runtime_graph(&model).unwrap();
+    assert!(round_trip.get_external_signature().is_empty());
+    assert_eq!(round_trip.loop_momentum_basis.ext_edges.len(), 2);
 }
 
 #[test]

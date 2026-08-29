@@ -6,16 +6,12 @@ use std::{
 
 use crate::{
     graph::{
-        FinalizedCut, GraphGroup, GroupId, LoopMomentumBasis,
+        FinalizedCut, FinalizedTopologyThresholdCandidate, GraphGroup, GroupId, LoopMomentumBasis,
         attribute_warnings::warn_about_unknown_attributes, edge::EdgeExtraData,
     },
     integrands::process::ParamBuilder,
     model::{Model, ParticleId, ParticleIdGammaLoopExt},
-    momentum::{
-        SignOrZero,
-        sample::LoopIndex,
-        signature::{LoopExtSignature, SignatureLike},
-    },
+    momentum::sample::LoopIndex,
     numerator::{
         GlobalPrefactor,
         aind::{Aind, NewAind},
@@ -26,7 +22,8 @@ use crate::{
 };
 use feynkit_cff::SurfaceCache;
 use feynkit_graph::{
-    DiagramEndpoint as FeynkitDiagramEndpoint, DiagramHalfEdge as FeynkitDiagramHalfEdge,
+    DiagramEdge as FeynkitDiagramEdge, DiagramEndpoint as FeynkitDiagramEndpoint,
+    DiagramHalfEdge as FeynkitDiagramHalfEdge, EdgeEndpoints as FeynkitEdgeEndpoints,
     EdgeId as FeynkitEdgeId, ExternalState as FeynkitExternalState, FeynmanDiagram,
     VertexId as FeynkitVertexId,
 };
@@ -69,6 +66,25 @@ use super::{
     hedge_data::{NumIndices, ParseHedgeData},
     vertex::ParseVertex,
 };
+
+fn feynkit_legacy_internal_order_key(
+    model: &Model,
+    edge_id: FeynkitEdgeId,
+    endpoints: FeynkitEdgeEndpoints,
+    edge: &FeynkitDiagramEdge,
+) -> Result<(FeynkitVertexId, FeynkitVertexId, i64, FeynkitEdgeId)> {
+    let (source, target, particle) = if endpoints.source <= endpoints.target {
+        (endpoints.source, endpoints.target, edge.particle)
+    } else {
+        (
+            endpoints.target,
+            endpoints.source,
+            model.particle_by_id(edge.particle)?.antiparticle,
+        )
+    };
+    let signed_pdg = model.particle_by_id(particle)?.pdg_code;
+    Ok((source, target, signed_pdg, edge_id))
+}
 
 /// Extract oriented particles from hedges, filtering out dummy edges
 pub fn extract_oriented_particles_from_vertex_hedges<I, V>(
@@ -178,7 +194,7 @@ impl ParseGraph {
         diagram: &FeynmanDiagram,
         model: &Model,
         external_connections: &[(Option<usize>, Option<usize>)],
-    ) -> Result<Self> {
+    ) -> Result<(Self, BTreeMap<FeynkitEdgeId, usize>)> {
         #[derive(Clone, Copy)]
         struct ExternalEdge {
             edge: FeynkitEdgeId,
@@ -269,6 +285,14 @@ impl ParseGraph {
         }
 
         let mut seen_edges = BTreeSet::new();
+        // Half-edge insertion order determines spanning-forest enumeration and
+        // therefore the ordered channel LMB selected later by `build_lmbs`.
+        // EdgeIndex is instead the stable logical identity used by routing and
+        // serialized FeynKit metadata. Track those two orders independently so
+        // the graph preserves legacy channel-coordinate semantics while still
+        // exposing the canonical FeynKit edge IDs after initial-state sewing.
+        let mut logical_edge_targets = BTreeMap::new();
+        let mut next_logical_edge = 0_usize;
         let add_external =
             |external: ExternalEdge,
              flow: Flow,
@@ -291,6 +315,7 @@ impl ParseGraph {
                     .with_num(edge.numerator.clone());
                 data.feynkit_id = Some(external.edge);
                 data.is_cut = cut;
+                data.initial_state_connection = cut.is_some();
 
                 // A dangling runtime edge carries the process flow. If the
                 // FeynKit internal half-edge has the opposite flow, reverse only
@@ -330,6 +355,8 @@ impl ParseGraph {
                 if state != Some(FeynkitExternalState::Incoming) {
                     return Err(eyre!("FeynKit external leg {index} is not incoming"));
                 }
+                logical_edge_targets.insert(edge.edge, next_logical_edge);
+                next_logical_edge += 1;
                 add_external(
                     edge,
                     Flow::Sink,
@@ -347,9 +374,12 @@ impl ParseGraph {
                 let edge = *external_edges
                     .get(&index)
                     .ok_or_else(|| eyre!("missing outgoing FeynKit external leg {index}"))?;
+                logical_edge_targets.insert(edge.edge, next_logical_edge);
+                next_logical_edge += 1;
                 add_external(edge, Flow::Source, None, &mut seen_edges, &mut builder)?;
             }
         }
+        let mut internal_edges = Vec::new();
         for (edge_id, (endpoints, edge)) in &edges {
             if seen_edges.contains(edge_id) {
                 continue;
@@ -359,18 +389,29 @@ impl ParseGraph {
             {
                 continue;
             }
+            let legacy_order =
+                feynkit_legacy_internal_order_key(model, *edge_id, *endpoints, edge)?;
+            logical_edge_targets.insert(*edge_id, next_logical_edge);
+            next_logical_edge += 1;
+            internal_edges.push((*edge_id, *endpoints, edge, legacy_order));
+        }
+        // Match the canonical UFO/GammaLoop `sorted_g` topology order used by
+        // the legacy CFF construction. Stable FeynKit IDs remain only the
+        // tie-breaker for otherwise identical parallel edges.
+        internal_edges.sort_by_key(|(_, _, _, legacy_order)| *legacy_order);
+        for (edge_id, endpoints, edge, _) in internal_edges {
             let orientation = particle_orientation(model, edge.particle, edge.directed)?;
             let mut data = ParseEdge::new(edge.particle)
                 .with_label(format!("feynkit_edge_{}", edge_id.0))
                 .with_num(edge.numerator.clone());
-            data.feynkit_id = Some(*edge_id);
+            data.feynkit_id = Some(edge_id);
             builder.add_edge(
                 vertex_map[&endpoints.source],
                 vertex_map[&endpoints.target],
                 data,
                 orientation,
             );
-            seen_edges.insert(*edge_id);
+            seen_edges.insert(edge_id);
         }
         for (connection, (incoming, outgoing)) in external_connections.iter().enumerate() {
             if incoming.is_some()
@@ -380,6 +421,18 @@ impl ParseGraph {
                 let edge = *external_edges
                     .get(&index)
                     .ok_or_else(|| eyre!("missing outgoing FeynKit external leg {index}"))?;
+                let incoming_index = external_index(incoming.expect("incoming was checked"))?;
+                let incoming_edge = external_edges
+                    .get(&incoming_index)
+                    .ok_or_else(|| eyre!("missing incoming FeynKit external leg {incoming_index}"))?
+                    .edge;
+                let target = *logical_edge_targets.get(&incoming_edge).ok_or_else(|| {
+                    eyre!(
+                        "incoming FeynKit edge {} has no logical runtime edge",
+                        incoming_edge.0
+                    )
+                })?;
+                logical_edge_targets.insert(edge.edge, target);
                 add_external(
                     edge,
                     Flow::Source,
@@ -436,16 +489,19 @@ impl ParseGraph {
             graph[hedge].ufo_order = Some(order);
         }
 
-        Ok(Self {
-            global_data: ParseData {
-                name: diagram.name().to_owned(),
-                overall_factor: diagram.overall_factor().clone(),
-                projectors: Some(diagram.projector().clone()),
-                num: diagram.numerator_prefactor().clone(),
-                ..Default::default()
+        Ok((
+            Self {
+                global_data: ParseData {
+                    name: diagram.name().to_owned(),
+                    overall_factor: diagram.overall_factor().clone(),
+                    projectors: Some(diagram.projector().clone()),
+                    num: diagram.numerator_prefactor().clone(),
+                    ..Default::default()
+                },
+                graph,
             },
-            graph,
-        })
+            logical_edge_targets,
+        ))
     }
 }
 
@@ -458,7 +514,7 @@ impl ParseGraph {
             .contains_key("canonical_cuts_required")
         {
             return Err(eyre!(
-                "cross-section runtime DOT does not carry canonical physical cuts; import the canonical FeynmanDiagram DOT artifact through FeynKit instead"
+                "cross-section runtime DOT does not carry canonical physical cuts or topology-threshold candidates; import the canonical FeynmanDiagram DOT artifact through FeynKit instead"
             ));
         }
         let global_data = graph.global_data.into();
@@ -712,6 +768,52 @@ fn feynkit_runtime_half_edge(
         })
 }
 
+/// Return whether an authoritative FeynKit partition must be swapped into the
+/// legacy runtime initial-cut frame.
+///
+/// This must be determined before runtime sewing: both external edges in one
+/// connection become aliases of the same runtime edge, so their partition
+/// membership is no longer recoverable from the sewn half-edge sets alone.
+/// FeynKit stores source/incoming on the left, while GammaLoop's
+/// `initial_state_cut.left` is the retained sewn sink/outgoing half-edge.
+fn feynkit_partition_requires_runtime_swap(
+    diagram: &FeynmanDiagram,
+    left: &[FeynkitDiagramHalfEdge],
+    right: &[FeynkitDiagramHalfEdge],
+) -> Result<bool> {
+    let mut incoming = BTreeSet::new();
+    let mut outgoing = BTreeSet::new();
+    for (edge, endpoints, _) in diagram.edges() {
+        for (vertex, endpoint) in [
+            (endpoints.source, FeynkitDiagramEndpoint::Source),
+            (endpoints.target, FeynkitDiagramEndpoint::Target),
+        ] {
+            let Some(external) = diagram
+                .vertex(vertex)
+                .and_then(|vertex| vertex.external.as_ref())
+            else {
+                continue;
+            };
+            let half_edge = FeynkitDiagramHalfEdge { edge, endpoint };
+            match external.state {
+                FeynkitExternalState::Incoming => incoming.insert(half_edge),
+                FeynkitExternalState::Outgoing => outgoing.insert(half_edge),
+            };
+        }
+    }
+    let left = left.iter().copied().collect::<BTreeSet<_>>();
+    let right = right.iter().copied().collect::<BTreeSet<_>>();
+    let aligned = incoming.is_subset(&left) && outgoing.is_subset(&right);
+    let reversed = incoming.is_subset(&right) && outgoing.is_subset(&left);
+    match (aligned, reversed) {
+        (true, false) => Ok(true),
+        (false, true) => Ok(false),
+        _ => Err(eyre!(
+            "FeynKit s-t partition does not select one unambiguous incoming/outgoing side"
+        )),
+    }
+}
+
 fn feynkit_runtime_cuts(
     diagram: &FeynmanDiagram,
     graph: &NumGraph,
@@ -721,6 +823,11 @@ fn feynkit_runtime_cuts(
         .cuts()
         .iter()
         .map(|cut| {
+            let reversed = feynkit_partition_requires_runtime_swap(
+                diagram,
+                &cut.left.half_edges,
+                &cut.right.half_edges,
+            )?;
             let mut left = graph.empty_subgraph::<SuBitGraph>();
             for half_edge in &cut.left.half_edges {
                 left.add(feynkit_runtime_half_edge(*half_edge, mapping)?);
@@ -735,7 +842,52 @@ fn feynkit_runtime_cuts(
             }
             let cut = OrientedCut::from_underlying_strict(oriented_left, graph)
                 .map_err(|error| eyre!("invalid finalized FeynKit cut orientation: {error}"))?;
-            Ok(FinalizedCut { cut, left, right })
+            let mut finalized = FinalizedCut { cut, left, right };
+            if reversed {
+                std::mem::swap(&mut finalized.left, &mut finalized.right);
+                std::mem::swap(&mut finalized.cut.left, &mut finalized.cut.right);
+            }
+            Ok(finalized)
+        })
+        .collect()
+}
+
+fn feynkit_runtime_topology_threshold_candidates(
+    diagram: &FeynmanDiagram,
+    graph: &NumGraph,
+    mapping: &FeynkitRuntimeMap,
+) -> Result<Vec<FinalizedTopologyThresholdCandidate>> {
+    diagram
+        .topology_threshold_candidates()
+        .iter()
+        .map(|candidate| {
+            let reversed = feynkit_partition_requires_runtime_swap(
+                diagram,
+                &candidate.left,
+                &candidate.right,
+            )?;
+            let mut left = graph.empty_subgraph::<SuBitGraph>();
+            for half_edge in &candidate.left {
+                left.add(feynkit_runtime_half_edge(*half_edge, mapping)?);
+            }
+            let mut right = graph.empty_subgraph::<SuBitGraph>();
+            for half_edge in &candidate.right {
+                right.add(feynkit_runtime_half_edge(*half_edge, mapping)?);
+            }
+            let mut oriented_left = graph.empty_subgraph::<SuBitGraph>();
+            for half_edge in &candidate.cut {
+                oriented_left.add(feynkit_runtime_half_edge(*half_edge, mapping)?);
+            }
+            let cut =
+                OrientedCut::from_underlying_strict(oriented_left, graph).map_err(|error| {
+                    eyre!("invalid finalized FeynKit topology-threshold orientation: {error}")
+                })?;
+            let mut finalized = FinalizedTopologyThresholdCandidate { cut, left, right };
+            if reversed {
+                std::mem::swap(&mut finalized.left, &mut finalized.right);
+                std::mem::swap(&mut finalized.cut.left, &mut finalized.cut.right);
+            }
+            Ok(finalized)
         })
         .collect()
 }
@@ -887,18 +1039,6 @@ fn translate_feynkit_atom(atom: &Atom, mapping: &FeynkitRuntimeMap) -> Result<At
     Ok(translated)
 }
 
-fn add_feynkit_sign(left: SignOrZero, right: SignOrZero) -> Result<SignOrZero> {
-    match (left, right) {
-        (SignOrZero::Zero, value) | (value, SignOrZero::Zero) => Ok(value),
-        (SignOrZero::Plus, SignOrZero::Minus) | (SignOrZero::Minus, SignOrZero::Plus) => {
-            Ok(SignOrZero::Zero)
-        }
-        _ => Err(eyre!(
-            "identifying cross-section external momenta produced a coefficient outside -1, 0, 1"
-        )),
-    }
-}
-
 fn feynkit_runtime_lmb(
     diagram: &FeynmanDiagram,
     graph: &NumGraph,
@@ -920,7 +1060,7 @@ fn feynkit_runtime_lmb(
         }
     }
 
-    let loop_edges = source
+    let selected_loop_edges = source
         .loop_edges
         .iter()
         .map(|edge| {
@@ -934,93 +1074,84 @@ fn feynkit_runtime_lmb(
 
     // Runtime cross sections identify each incoming/outgoing pair as one cut
     // edge. Amplitudes retain the one canonical external edge per connection.
-    let mut external_groups = Vec::<Vec<FeynkitEdgeId>>::new();
     let mut ext_edges = Vec::new();
     for (connection, (incoming, outgoing)) in external_connections.iter().enumerate() {
-        let mut group = Vec::new();
-        for tag in [incoming, outgoing].into_iter().flatten() {
-            let edge = *external_edges
-                .get(&feynkit_tag_index(*tag)?)
-                .ok_or_else(|| eyre!("missing FeynKit external edge for tag {tag}"))?;
-            if !group.contains(&edge) {
-                group.push(edge);
-            }
-        }
         let runtime = if incoming.is_some() && outgoing.is_some() {
             EdgeIndex::from(connection)
         } else {
+            let tag = (*incoming)
+                .or(*outgoing)
+                .ok_or_else(|| eyre!("external connection {connection} contains no FeynKit leg"))?;
+            let edge = *external_edges
+                .get(&feynkit_tag_index(tag)?)
+                .ok_or_else(|| eyre!("missing FeynKit external edge for tag {tag}"))?;
             *mapping
                 .edges
-                .get(group.first().ok_or_else(|| {
-                    eyre!("external connection {connection} contains no FeynKit leg")
-                })?)
+                .get(&edge)
                 .ok_or_else(|| eyre!("missing runtime external edge for connection {connection}"))?
         };
-        external_groups.push(group);
         ext_edges.push(runtime);
     }
 
-    let source_external_positions = source
-        .external_edges
-        .iter()
-        .enumerate()
-        .map(|(index, edge)| (*edge, index))
-        .collect::<BTreeMap<_, _>>();
-    let mut origins = BTreeMap::<EdgeIndex, FeynkitEdgeId>::new();
-    for (source_edge, runtime_edge) in &mapping.edges {
-        origins.entry(*runtime_edge).or_insert(*source_edge);
-    }
-    for (connection, group) in external_groups.iter().enumerate() {
-        if let Some(incoming) = group.first() {
-            origins.insert(ext_edges[connection], *incoming);
+    // Materialize the already-selected FeynKit tree in the sewn runtime frame.
+    // In particular, the cut edge retained by sewing defines each incoming
+    // momentum with the runtime +P convention; transporting a pre-sewing
+    // signature through a reversed retained partner would incorrectly yield
+    // -P. This call propagates signatures only and never chooses another tree.
+    let mut full = graph.full_filter();
+    for (pair, _, edge) in graph.iter_edges() {
+        if edge.data.is_dummy {
+            full.sub(pair);
         }
     }
+    let external = graph.internal_crown(&full);
+    let mut basis = graph
+        .lmb_impl(&full, &tree, external)
+        .map_err(|error| eyre!("failed to materialize the selected FeynKit tree: {error}"))?;
 
-    let mut edge_signatures = Vec::with_capacity(graph.n_edges());
-    for runtime_index in 0..graph.n_edges() {
-        let runtime = EdgeIndex(runtime_index);
-        let origin = origins
-            .get(&runtime)
-            .ok_or_else(|| eyre!("runtime edge {runtime} has no FeynKit origin"))?;
-        let signature = source.edge_signatures.get(origin).ok_or_else(|| {
-            eyre!(
-                "FeynKit loop-momentum basis has no signature for edge {}",
-                origin.0
-            )
-        })?;
-        let negate = mapping.momentum_signs.get(origin) == Some(&-1);
-        let internal = SignatureLike::from_iter(
-            signature
-                .loops
+    for (connection, (incoming, outgoing)) in external_connections.iter().enumerate() {
+        if incoming.is_some() && outgoing.is_some() {
+            let edge = EdgeIndex::from(connection);
+            let loop_index = basis
+                .loop_edges
                 .iter()
-                .map(|sign| if negate { -sign } else { sign }),
-        );
-        let mut external = Vec::with_capacity(external_groups.len());
-        for group in &external_groups {
-            let mut coefficient = SignOrZero::Zero;
-            for edge in group {
-                let Some(position) = source_external_positions.get(edge) else {
-                    continue;
-                };
-                let sign = signature.external.get(*position).ok_or_else(|| {
-                    eyre!("FeynKit external signature is shorter than its external-edge basis")
+                .position(|candidate| *candidate == edge)
+                .ok_or_else(|| {
+                    eyre!(
+                        "sewn initial-state edge {edge} is not independent of the selected FeynKit tree"
+                    )
                 })?;
-                coefficient = add_feynkit_sign(coefficient, sign)?;
-            }
-            external.push(if negate { -coefficient } else { coefficient });
+            basis.put_loop_to_ext(LoopIndex(loop_index));
         }
-        edge_signatures.push(LoopExtSignature {
-            internal,
-            external: SignatureLike::from_iter(external),
-        });
     }
 
-    Ok(LoopMomentumBasis {
-        tree,
-        loop_edges: loop_edges.into(),
-        ext_edges: ext_edges.into(),
-        edge_signatures: edge_signatures.into(),
-    })
+    let materialized = basis.loop_edges.iter().copied().collect::<BTreeSet<_>>();
+    let selected = selected_loop_edges.iter().copied().collect::<BTreeSet<_>>();
+    if materialized != selected {
+        return Err(eyre!(
+            "selected FeynKit loop edges {selected:?} materialized as {materialized:?} after sewing"
+        ));
+    }
+    for (target, edge) in selected_loop_edges.iter().enumerate() {
+        let current = basis
+            .loop_edges
+            .iter()
+            .position(|candidate| candidate == edge)
+            .ok_or_else(|| eyre!("selected FeynKit loop edge {edge} disappeared after sewing"))?;
+        if current != target {
+            basis.swap_loops(LoopIndex(current), LoopIndex(target));
+        }
+    }
+
+    let materialized_externals = basis.ext_edges.iter().copied().collect::<BTreeSet<_>>();
+    let selected_externals = ext_edges.iter().copied().collect::<BTreeSet<_>>();
+    if materialized_externals != selected_externals {
+        return Err(eyre!(
+            "FeynKit external edges {selected_externals:?} materialized as {materialized_externals:?} after sewing"
+        ));
+    }
+    basis.canonicalize_external_order(&ext_edges);
+    Ok(basis)
 }
 
 fn display_graph_source_path(path: &Path) -> PathBuf {
@@ -1101,7 +1232,8 @@ impl Graph {
         let model = diagram.model();
         let external_connections = feynkit_external_connections(diagram)?;
 
-        let mut parsed = ParseGraph::from_feynkit_diagram(diagram, model, &external_connections)?;
+        let (mut parsed, logical_edge_targets) =
+            ParseGraph::from_feynkit_diagram(diagram, model, &external_connections)?;
         parsed.global_data.group_id = group_id;
         parsed.global_data.is_group_master = is_group_master;
         let (mut initial_data, mut graph) = Self::extract_initial_data(&parsed, model)?;
@@ -1112,8 +1244,15 @@ impl Graph {
                     matches!((left.data.is_cut, right.data.is_cut), (Some(a), Some(b)) if a == b)
                 },
                 |left_flow, left, right_flow, right| match (left_flow, right_flow) {
-                    (Flow::Sink, Flow::Source) => (Flow::Sink, left),
-                    (Flow::Source, Flow::Sink) => (Flow::Source, right),
+                    // FeynKit inserts the incoming half of every sewn
+                    // connection before its outgoing partner.  Orient the
+                    // resulting runtime edge from the incoming attachment to
+                    // the outgoing attachment while retaining the incoming
+                    // payload.  This is the legacy GammaLoop +P coordinate
+                    // frame; keeping the dangling incoming `Sink` flow would
+                    // reverse every dependent external signature.
+                    (Flow::Sink, Flow::Source) => (Flow::Source, left),
+                    (Flow::Source, Flow::Sink) => (Flow::Sink, right),
                     _ => panic!(
                         "cannot sew FeynKit cut hedges with flows {left_flow:?} and {right_flow:?}"
                     ),
@@ -1122,6 +1261,37 @@ impl Graph {
             .map_err(|error| eyre!("FeynKit graph sewing failed: {error:?}"))?;
         let mut cut_result = Self::process_cut_edges(&graph)?;
         cut_result.permute(&mut graph)?;
+
+        let logical_edge_mappings = graph
+            .iter_edges()
+            .map(|(_, runtime_edge, edge)| {
+                let feynkit_id = edge.data.feynkit_id.ok_or_else(|| {
+                    eyre!("runtime edge {runtime_edge} lost its transient FeynKit identity")
+                })?;
+                let target = logical_edge_targets
+                    .get(&feynkit_id)
+                    .copied()
+                    .ok_or_else(|| {
+                        eyre!(
+                            "FeynKit edge {} has no logical runtime edge target",
+                            feynkit_id.0
+                        )
+                    })?;
+                Ok((runtime_edge.0, target))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let logical_edge_permutation = Permutation::from_mappings(
+            logical_edge_mappings,
+            graph.n_edges(),
+        )
+        .map_err(|error| {
+            eyre!(
+                "FeynKit logical edge targets do not form a permutation of {} runtime edges: \
+                 {error:?}",
+                graph.n_edges(),
+            )
+        })?;
+        <HedgeGraph<_, _, _> as Swap<EdgeIndex>>::permute(&mut graph, &logical_edge_permutation);
 
         let mapping = feynkit_runtime_map(diagram, &graph, &external_connections)?;
         for (_, _, vertex) in graph.iter_nodes_mut() {
@@ -1148,6 +1318,8 @@ impl Graph {
         let initial_state_cut =
             OrientedCut::from_underlying_strict(cut_result.initial_hedges, &graph)?;
         let mut finalized_cuts = feynkit_runtime_cuts(diagram, &graph, &mapping)?;
+        let mut finalized_topology_threshold_candidates =
+            feynkit_runtime_topology_threshold_candidates(diagram, &graph, &mapping)?;
         for cut in &mut finalized_cuts {
             // Before sewing, FeynKit cut sides contain ordinary external legs.
             // Sewing identifies each incoming/outgoing pair and would make
@@ -1156,8 +1328,10 @@ impl Graph {
             // external basis, so discard the sewn partner half-edges from the
             // side subgraphs while retaining the physical oriented cut.
             cut.left.subtract_with(&initial_state_cut.right);
-            cut.right.subtract_with(&initial_state_cut.right);
+            cut.right.subtract_with(&initial_state_cut.left);
         }
+        finalized_cuts.sort_by(|left, right| left.cut.cmp(&right.cut));
+        finalized_topology_threshold_candidates.sort_by(|left, right| left.cut.cmp(&right.cut));
 
         let loop_momentum_basis =
             feynkit_runtime_lmb(diagram, &graph, &mapping, &external_connections)?;
@@ -1196,7 +1370,38 @@ impl Graph {
             is_group_master: initial_data.is_group_master,
             param_builder,
             finalized_cuts,
+            finalized_topology_threshold_candidates,
         };
+        let initial_state_tree = result.get_initial_state_tree().0;
+        for candidate in &mut result.finalized_topology_threshold_candidates {
+            // Match the former `all_st_cuts_for_cs` normalization exactly:
+            // sewn initial-state halves never belong to a topology threshold,
+            // and its loop-independent attachment tree belongs to neither side.
+            candidate
+                .cut
+                .left
+                .subtract_with(&result.initial_state_cut.left);
+            candidate
+                .cut
+                .right
+                .subtract_with(&result.initial_state_cut.left);
+            candidate
+                .cut
+                .left
+                .subtract_with(&result.initial_state_cut.right);
+            candidate
+                .cut
+                .right
+                .subtract_with(&result.initial_state_cut.right);
+            candidate
+                .left
+                .subtract_with(&result.initial_state_cut.right);
+            candidate
+                .right
+                .subtract_with(&result.initial_state_cut.left);
+            candidate.left.subtract_with(&initial_state_tree);
+            candidate.right.subtract_with(&initial_state_tree);
+        }
         result.param_builder = ParamBuilder::new(
             &result,
             model,
@@ -1238,7 +1443,7 @@ impl Graph {
                     graph.global_data.name
                 ));
             }
-            if data.data.is_cut.is_some() {
+            if data.data.is_cut.is_some() && !data.data.initial_state_connection {
                 return Err(eyre!(
                     "finalized runtime DOT graph '{}' contains cross-section sewing metadata but no canonical physical cuts; import the canonical FeynmanDiagram DOT artifact through FeynKit instead",
                     graph.global_data.name
@@ -1313,6 +1518,7 @@ impl Graph {
             is_group_master: initial_data.is_group_master,
             param_builder,
             finalized_cuts: Vec::new(),
+            finalized_topology_threshold_candidates: Vec::new(),
         };
 
         let external_momentum_edge_order = g.external_momentum_edge_order();

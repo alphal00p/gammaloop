@@ -1368,6 +1368,7 @@ impl AmplitudeGraph {
                 .assume_positive_external_energies
                 && !is_known_existing_at_generation
                 && !esurface.external_shift_is_strictly_negative_for_positive_energies(
+                    &self.graph.loop_momentum_basis,
                     &incoming_externals,
                     &outgoing_externals,
                 )
