@@ -291,17 +291,56 @@ fn rustred_rejects_caller_spelled_private_momentum_labels() {
 }
 
 #[test]
-fn rustred_multi_loop_explicit_routing_has_a_typed_no_form_boundary() {
+fn rustred_accepts_a_replayable_alternate_two_loop_routing() {
+    let vakint = Vakint::new().unwrap();
+    let settings = VakintSettings {
+        form_exe_path: "/this/path/must/not/be/invoked/by/rustred".into(),
+        use_dot_product_notation: true,
+        ..VakintSettings::default()
+    };
+    // Two edges expose the input basis and the third is their difference.
+    // Vakint's chosen graph match supplies the signed canonical basis map;
+    // replaying all three squared momenta proves the routing equivalent.
+    let input = vakint_parse!(
+        "k(11,mu)*k(11,nu)*topo(\
+            prop(9,edge(7,10),k(11),muvsq,1)*\
+            prop(33,edge(7,10),-k(11)+k(22),muvsq,2)*\
+            prop(55,edge(10,7),k(22),muvsq,1)\
+        )"
+    )
+    .unwrap();
+
+    let reduced = vakint
+        .tensor_reducer(&settings)
+        .mode(TensorReductionMode::RustRed(RustRedOptions::new()))
+        .reduce(input.as_view())
+        .unwrap();
+    let expected = vakint_parse!(
+        "-(2*ε-4)^-1*dot(k(1),k(1))*g(mu,nu)*topo(\
+            prop(1,edge(1,2),k(1),muvsq,1)*\
+            prop(2,edge(1,2),k(2),muvsq,1)*\
+            prop(3,edge(2,1),k(1)+k(2),muvsq,2)\
+        )"
+    )
+    .unwrap();
+
+    assert_eq!(reduced, expected);
+}
+
+#[test]
+fn rustred_rejects_a_non_equivalent_two_loop_routing_before_canonicalization() {
     let vakint = Vakint::new().unwrap();
     let settings = VakintSettings {
         form_exe_path: "/this/path/must/not/be/invoked/by/rustred".into(),
         ..VakintSettings::default()
     };
+    // With the same basis witness as the valid alternate routing, the middle
+    // edge would replay to 2*k(1)+k(2), not the matched canonical k(2).
     let input = vakint_parse!(
-        "k(11,mu)*k(22,nu)*topo(\
+        "k(11,mu)^2*topo(\
             prop(9,edge(7,10),k(11),muvsq,1)*\
-            prop(33,edge(7,10),k(22),muvsq,2)*\
-            prop(55,edge(10,7),k(11)+k(22),muvsq,1)\
+            prop(33,edge(7,10),k(11)+k(22),muvsq,2)*\
+            prop(55,edge(10,7),k(22),muvsq,1)\
         )"
     )
     .unwrap();
@@ -314,7 +353,7 @@ fn rustred_multi_loop_explicit_routing_has_a_typed_no_form_boundary() {
 
     assert!(matches!(
         error,
-        TensorReductionError::RustRedExplicitRoutingUnsupported { loop_count: 2, .. }
+        TensorReductionError::RustRedUnsupportedMomentum { propagator: 33, .. }
     ));
 }
 

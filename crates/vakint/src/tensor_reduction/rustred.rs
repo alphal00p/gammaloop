@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use ::rustred::algebra::CoefficientContext;
 use ::rustred::family::ScalarProductCoordinate;
 use ::rustred::tensor::{
@@ -7,14 +9,14 @@ use ::rustred::tensor::{
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::coefficient::CoefficientView;
 use symbolica::function;
-use symbolica::id::Pattern;
+use symbolica::id::{Pattern, Replacement};
 
 use super::{RustRedOptions, TensorReductionError};
 use crate::symbols::S;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::{
-    Topology, Vakint, VakintExpression, VakintSettings, VakintTerm, get_integer_from_atom,
-    get_prop_with_id,
+    Topology, Vakint, VakintExpression, VakintSettings, VakintTerm, get_individual_momenta,
+    get_integer_from_atom, get_prop_with_id,
 };
 
 mod momentum_labels;
@@ -204,35 +206,108 @@ fn validate_explicit_input_routing(
     if !contains_function_head(term.integral.as_view(), S.prop) {
         return Ok(());
     }
-    if loop_count != 1 {
+
+    let matched = replacement_rules.canonical_topology.get_integral();
+    let canonical_expression = matched
+        .canonical_expression
+        .as_ref()
+        .expect("registered Vakint topologies always have a canonical expression");
+    let mut input_loop_labels = HashSet::new();
+    let mut routed_propagators = Vec::new();
+    for canonical_id in 1..=matched.n_props {
+        let Some(canonical_propagator) =
+            get_prop_with_id(canonical_expression.as_view(), canonical_id)
+        else {
+            continue;
+        };
+        let input_id = replacement_rules
+            .edge_ids_canonical_to_input_map
+            .get(&canonical_id)
+            .copied()
+            .ok_or(TensorReductionError::RustRedMissingPropagator {
+                term: term_index,
+                propagator: canonical_id,
+            })?;
+        let input_propagator = get_prop_with_id(term.integral.as_view(), input_id).ok_or(
+            TensorReductionError::RustRedMissingPropagator {
+                term: term_index,
+                propagator: input_id,
+            },
+        )?;
+        let input_momentum = input_propagator
+            .get(&vk_symbol!("q_"))
+            .expect("Vakint's explicit propagator matcher always captures momentum");
+        let individual_momenta =
+            get_individual_momenta(input_momentum.as_view()).map_err(|_| {
+                TensorReductionError::RustRedUnsupportedMomentum {
+                    term: term_index,
+                    propagator: input_id,
+                    momentum: input_momentum.to_string(),
+                }
+            })?;
+        if individual_momenta.is_empty() || individual_momenta.iter().any(|(head, _)| *head != S.k)
+        {
+            return Err(TensorReductionError::RustRedUnsupportedMomentum {
+                term: term_index,
+                propagator: input_id,
+                momentum: input_momentum.to_string(),
+            });
+        }
+        input_loop_labels.extend(
+            individual_momenta
+                .into_iter()
+                .map(|(_, (id, _))| function!(S.k, id)),
+        );
+        let canonical_momentum = canonical_propagator
+            .get(&vk_symbol!("q_"))
+            .expect("Vakint's canonical propagator matcher always captures momentum");
+        routed_propagators.push((input_id, input_momentum.clone(), canonical_momentum.clone()));
+    }
+
+    // A graph with L independent integrations must expose exactly L input
+    // loop labels. More labels let an unconstrained propagator momentum pose
+    // as a new integration variable; fewer cannot span the canonical basis.
+    if input_loop_labels.len() != loop_count {
+        let (propagator, momentum, _) = routed_propagators.first().ok_or(
+            TensorReductionError::RustRedExplicitRoutingUnsupported {
+                term: term_index,
+                loop_count,
+            },
+        )?;
+        return Err(TensorReductionError::RustRedUnsupportedMomentum {
+            term: term_index,
+            propagator: *propagator,
+            momentum: momentum.to_string(),
+        });
+    }
+    if replacement_rules.numerator_substitutions.len() != loop_count {
         return Err(TensorReductionError::RustRedExplicitRoutingUnsupported {
             term: term_index,
             loop_count,
         });
     }
-    let input_propagator = replacement_rules
-        .edge_ids_canonical_to_input_map
-        .get(&1)
-        .copied()
-        .ok_or(TensorReductionError::RustRedMissingPropagator {
-            term: term_index,
-            propagator: 1,
-        })?;
-    let propagator = get_prop_with_id(term.integral.as_view(), input_propagator).ok_or(
-        TensorReductionError::RustRedMissingPropagator {
-            term: term_index,
-            propagator: input_propagator,
-        },
-    )?;
-    let momentum = propagator
-        .get(&vk_symbol!("q_"))
-        .expect("Vakint's explicit propagator matcher always captures momentum");
-    if !is_bare_loop_momentum(momentum.as_view()) {
-        return Err(TensorReductionError::RustRedUnsupportedMomentum {
-            term: term_index,
-            propagator: input_propagator,
-            momentum: momentum.to_string(),
-        });
+
+    // Replay the exact simultaneous substitution that Vakint will apply to
+    // the numerator. Every matched input denominator must become the square
+    // of its canonical momentum (an overall propagator sign is immaterial).
+    let replay = replacement_rules
+        .numerator_substitutions
+        .iter()
+        .map(|(source, target)| {
+            Replacement::new(source.clone().to_pattern(), target.clone().to_pattern())
+        })
+        .collect::<Vec<_>>();
+    for (input_id, input_momentum, canonical_momentum) in routed_propagators {
+        let replayed = input_momentum.replace_multiple(&replay).expand();
+        let canonical = canonical_momentum.expand();
+        let reversed = (-canonical.clone()).expand();
+        if replayed != canonical && replayed != reversed {
+            return Err(TensorReductionError::RustRedUnsupportedMomentum {
+                term: term_index,
+                propagator: input_id,
+                momentum: input_momentum.to_string(),
+            });
+        }
     }
     Ok(())
 }
@@ -319,19 +394,6 @@ fn contains_function_head(atom: AtomView<'_>, head: symbolica::atom::Symbol) -> 
         }
         AtomView::Num(_) | AtomView::Var(_) => false,
     }
-}
-
-fn is_bare_loop_momentum(momentum: AtomView<'_>) -> bool {
-    let AtomView::Fun(function) = momentum else {
-        return false;
-    };
-    function.get_symbol() == S.k
-        && function.get_nargs() == 1
-        && function
-            .iter()
-            .next()
-            .and_then(get_integer_from_atom)
-            .is_some()
 }
 
 fn is_exact_real_scalar(atom: AtomView<'_>) -> bool {
@@ -511,6 +573,53 @@ mod tests {
         assert!(matches!(
             error,
             TensorReductionError::RustRedReservedMomentumLabel { term: 1, .. }
+        ));
+        assert_eq!(expression, original);
+    }
+
+    #[test]
+    fn invalid_explicit_routing_does_not_publish_prior_term_projection() {
+        let vakint = Vakint::new().unwrap();
+        let settings = VakintSettings {
+            form_exe_path: "/this/path/must/not/be/invoked/by/rustred".into(),
+            ..VakintSettings::default()
+        };
+        let valid = VakintExpression::try_from(
+            vk_parse!("k(1,mu)*k(1,nu)*topo(I1L(muvsq,1))")
+                .unwrap()
+                .as_view(),
+        )
+        .unwrap()
+        .0
+        .pop()
+        .unwrap();
+        let attack = VakintExpression::try_from(
+            vk_parse!(
+                "k(11,mu)^2*topo(\
+                    prop(9,edge(7,10),k(11),muvsq,1)*\
+                    prop(33,edge(7,10),k(11)+k(22),muvsq,2)*\
+                    prop(55,edge(10,7),k(22),muvsq,1)\
+                )"
+            )
+            .unwrap()
+            .as_view(),
+        )
+        .unwrap()
+        .0
+        .pop()
+        .unwrap();
+        let mut expression = VakintExpression(vec![valid, attack]);
+        let original = expression.clone();
+
+        let error = reduce(&mut expression, &vakint, &settings, RustRedOptions::new()).unwrap_err();
+
+        assert!(matches!(
+            error,
+            TensorReductionError::RustRedUnsupportedMomentum {
+                term: 1,
+                propagator: 33,
+                ..
+            }
         ));
         assert_eq!(expression, original);
     }

@@ -62,10 +62,10 @@ pub enum TensorReductionError {
     /// A canonical propagator could not be recovered after matching.
     #[error("RustRed tensor term {term} is missing canonical propagator {propagator}")]
     RustRedMissingPropagator { term: usize, propagator: usize },
-    /// Multi-loop explicit routing remains owned by Vakint's matcher until it
-    /// can export a replayable routing witness to the native bridge.
+    /// An explicit routing is admitted only when Vakint's matcher exports a
+    /// complete replayable loop-basis witness.
     #[error(
-        "RustRed tensor term {term} uses an explicit {loop_count}-loop propagator routing; use a registered short topology until the matcher exports native routing evidence"
+        "RustRed tensor term {term} uses an explicit {loop_count}-loop propagator routing that cannot be replayed from a complete matcher basis witness; use a registered short topology instead"
     )]
     RustRedExplicitRoutingUnsupported { term: usize, loop_count: usize },
     /// A physical propagator momentum is not a nonzero integer-linear
