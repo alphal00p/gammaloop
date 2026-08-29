@@ -1,11 +1,5 @@
-use ::rustred::algebra::{CoefficientContext, ExactAlgebraLimits};
-use ::rustred::family::presentation::{
-    CommonMassScale, DenominatorRole, FamilyConventions, FamilyPresentation, MetricConvention,
-    MomentumCombination, MomentumRouting, PhysicalPropagator, PropagatorConvention,
-};
-use ::rustred::family::{
-    AffineDenominator, IntegralFamily, IntegralFamilyError, IntegralKey, ScalarProductCoordinate,
-};
+use ::rustred::algebra::CoefficientContext;
+use ::rustred::family::ScalarProductCoordinate;
 use ::rustred::tensor::{
     TensorGuardOrigin, TensorHeads, TensorLane, TensorLimits, TensorMomenta, TensorProjection,
     TensorService,
@@ -23,44 +17,39 @@ use crate::{
     get_prop_with_id,
 };
 
+mod momentum_labels;
+mod vacuum_family;
+
+use momentum_labels::MomentumLabels;
+use vacuum_family::{PhysicalVacuumPropagator, VacuumFamilyCache, VacuumFamilySpec};
+
 pub(super) fn reduce(
     expression: &mut VakintExpression,
     vakint: &Vakint,
     settings: &VakintSettings,
     _options: RustRedOptions,
 ) -> Result<(), TensorReductionError> {
-    // The abstract one-loop bridge is independent of the matched mass value
-    // and propagator power, so authenticate it once per expression rather
-    // than once per term.
-    let (presentation, coefficient_context) = one_loop_family(0)?;
     let heads = TensorHeads::try_new(S.k, S.p, S.g, S.dot).map_err(|source| {
         TensorReductionError::RustRedTensor {
             term: 0,
             source: source.into(),
         }
     })?;
-    let loop_labels = vec![Atom::num(1)];
-    let service = TensorService::try_new(
-        &presentation,
-        TensorLane::SingleScaleVacuum,
-        heads,
-        TensorMomenta::new(loop_labels.clone(), Vec::new()),
-        TensorLimits::default(),
-    )
-    .map_err(|source| TensorReductionError::RustRedTensor { term: 0, source })?;
 
     // Keep the operation transactional: topology canonicalization and native
     // projection become visible only if every input term is admitted.
     let mut projected = expression.clone();
+    let mut family_cache = VacuumFamilyCache::default();
+    let momentum_labels = MomentumLabels::new();
     for (term_index, term) in projected.0.iter_mut().enumerate() {
         project_term(
             term,
             term_index,
             vakint,
             settings,
-            &service,
-            &coefficient_context,
-            &loop_labels,
+            heads,
+            momentum_labels,
+            &mut family_cache,
         )?;
     }
     *expression = projected;
@@ -72,10 +61,14 @@ fn project_term(
     term_index: usize,
     vakint: &Vakint,
     settings: &VakintSettings,
-    service: &TensorService<'_>,
-    coefficient_context: &CoefficientContext,
-    loop_labels: &[Atom],
+    heads: TensorHeads,
+    momentum_labels: MomentumLabels,
+    family_cache: &mut VacuumFamilyCache,
 ) -> Result<(), TensorReductionError> {
+    // Reject caller-spelled private heads before Vakint's canonicalizer can
+    // interpret the surrounding expression, then repeat the check on the
+    // normalized boundary value immediately before adapter tagging.
+    momentum_labels.reject_reserved_input(term_index, term.numerator.as_view())?;
     let replacement_rules = vakint
         .topologies
         .match_topologies_to_user_input(term.integral.as_view(), settings.allow_unknown_integrals)?
@@ -88,65 +81,94 @@ fn project_term(
         return Err(TensorReductionError::RustRedUnknownTopology { term: term_index });
     }
     let matched = replacement_rules.canonical_topology.get_integral();
-    if matched.n_loops != 1 || matched.n_props != 1 {
-        return Err(TensorReductionError::RustRedUnsupportedFamily {
-            term: term_index,
-            loop_count: matched.n_loops,
-            propagator_count: matched.n_props,
-        });
-    }
-    validate_explicit_input_routing(term, term_index, &replacement_rules)?;
+    let loop_count = matched.n_loops;
+    let propagator_count = matched.n_props;
+    validate_explicit_input_routing(term, term_index, loop_count, &replacement_rules)?;
 
     // This is the existing Vakint matcher/routing engine. In particular,
     // numerator substitutions are simultaneous; the adapter never invents a
     // second routing or dispatches on a topology name.
     term.canonicalize(settings, &replacement_rules, false)?;
-    let propagator = get_prop_with_id(term.integral.as_view(), 1).ok_or(
-        TensorReductionError::RustRedMissingPropagator {
-            term: term_index,
-            propagator: 1,
-        },
+    let canonical_loop_ids = canonical_loop_ids(term_index, loop_count)?;
+    let loop_momenta = canonical_loop_ids
+        .iter()
+        .map(|label| function!(S.k, label.clone()))
+        .collect::<Vec<_>>();
+    let mut physical_propagators = Vec::with_capacity(propagator_count);
+    for propagator_id in 1..=propagator_count {
+        // Contracted registry topologies retain the parent topology's
+        // `n_props`; the canonical expression is authoritative for which
+        // physical rows survive the pinch.
+        let Some(propagator) = get_prop_with_id(term.integral.as_view(), propagator_id) else {
+            continue;
+        };
+        let momentum = propagator
+            .get(&vk_symbol!("q_"))
+            .expect("Vakint's canonical propagator matcher always captures momentum");
+        let momentum_row =
+            canonical_momentum_row(term_index, propagator_id, momentum, &loop_momenta)?;
+        let mass = propagator
+            .get(&vk_symbol!("mUVsq_"))
+            .expect("Vakint's canonical propagator matcher always captures mass");
+        let power = propagator
+            .get(&vk_symbol!("pow_"))
+            .expect("Vakint's canonical propagator matcher always captures power");
+        let power = get_integer_from_atom(power.as_view()).ok_or_else(|| {
+            TensorReductionError::RustRedUnsupportedPower {
+                term: term_index,
+                propagator: propagator_id,
+                power: power.to_string(),
+            }
+        })?;
+        physical_propagators.push(PhysicalVacuumPropagator::new(
+            propagator_id,
+            momentum_row,
+            mass.clone(),
+            power,
+        ));
+    }
+
+    let bridge = family_cache.bind(
+        term_index,
+        VacuumFamilySpec::new(loop_count, physical_propagators),
     )?;
-    let momentum = propagator
-        .get(&vk_symbol!("q_"))
-        .expect("Vakint's canonical propagator matcher always captures momentum");
-    let expected_momentum = function!(S.k, Atom::num(1));
-    if momentum != &expected_momentum {
-        return Err(TensorReductionError::RustRedUnsupportedMomentum {
+    let retained_denominator_count = bridge
+        .physical_denominator_ids()
+        .len()
+        .checked_add(bridge.appended_coordinate_ordinals().len())
+        .ok_or_else(|| TensorReductionError::RustRedUnsupportedOutput {
             term: term_index,
-            propagator: 1,
-            momentum: momentum.to_string(),
+            detail: "retained vacuum denominator count overflowed".to_owned(),
+        })?;
+    if retained_denominator_count != bridge.presentation().family().denominator_count() {
+        return Err(TensorReductionError::RustRedUnsupportedOutput {
+            term: term_index,
+            detail: "vacuum-family role witness does not cover every denominator".to_owned(),
         });
     }
-    let mass = propagator
-        .get(&vk_symbol!("mUVsq_"))
-        .expect("Vakint's canonical propagator matcher always captures mass");
-    if mass.is_zero() || !is_exact_real_scalar(mass.as_view()) {
-        return Err(TensorReductionError::RustRedUnsupportedMass {
-            term: term_index,
-            propagator: 1,
-            mass: mass.to_string(),
-        });
-    }
-    let power = propagator
-        .get(&vk_symbol!("pow_"))
-        .expect("Vakint's canonical propagator matcher always captures power");
-    let power = get_integer_from_atom(power.as_view()).ok_or_else(|| {
-        TensorReductionError::RustRedUnsupportedPower {
-            term: term_index,
-            propagator: 1,
-            power: power.to_string(),
-        }
+    // Normalize indexed contractions before crossing the native boundary.
+    // The private labels retain Vakint's loop/external type even when both use
+    // the same numeric ID, and collect external vectors that occur only in a
+    // pre-existing scalar `dot`.
+    let dot_numerator = Vakint::convert_to_dot_notation(term.numerator.as_view());
+    momentum_labels.reject_reserved_input(term_index, dot_numerator.as_view())?;
+    let (rustred_numerator, external_labels) = momentum_labels.encode(dot_numerator.as_view());
+    let loop_labels = momentum_labels.loop_labels(term_index, loop_count)?;
+    let service = TensorService::try_new(
+        bridge.presentation(),
+        TensorLane::Auto,
+        heads,
+        TensorMomenta::new(loop_labels.clone(), external_labels),
+        TensorLimits::default(),
+    )
+    .map_err(|source| TensorReductionError::RustRedTensor {
+        term: term_index,
+        source,
     })?;
 
     let dimension = parse_dimension(settings)?;
-    let base_integral =
-        IntegralKey::try_new([power]).map_err(|source| TensorReductionError::RustRedTensor {
-            term: term_index,
-            source: source.into(),
-        })?;
     let projection = service
-        .project(&term.numerator, &base_integral)
+        .project(&rustred_numerator, bridge.base_integral())
         .map_err(|source| TensorReductionError::RustRedTensor {
             term: term_index,
             source,
@@ -154,11 +176,12 @@ fn project_term(
     let projected_numerator = projection_to_vakint(
         term_index,
         &projection,
-        coefficient_context,
+        bridge.presentation().family().coefficient_context(),
         &dimension,
-        mass,
-        loop_labels,
+        bridge.common_mass_squared(),
+        &loop_labels,
     )?;
+    let projected_numerator = momentum_labels.decode(term_index, projected_numerator.as_view())?;
     term.numerator = if settings.use_dot_product_notation {
         projected_numerator
     } else {
@@ -171,6 +194,7 @@ fn project_term(
 fn validate_explicit_input_routing(
     term: &VakintTerm,
     term_index: usize,
+    loop_count: usize,
     replacement_rules: &crate::ReplacementRules,
 ) -> Result<(), TensorReductionError> {
     // Short topology notation carries the registry's canonical routing by
@@ -179,6 +203,12 @@ fn validate_explicit_input_routing(
     // RustRed family proof is built.
     if !contains_function_head(term.integral.as_view(), S.prop) {
         return Ok(());
+    }
+    if loop_count != 1 {
+        return Err(TensorReductionError::RustRedExplicitRoutingUnsupported {
+            term: term_index,
+            loop_count,
+        });
     }
     let input_propagator = replacement_rules
         .edge_ids_canonical_to_input_map
@@ -205,6 +235,68 @@ fn validate_explicit_input_routing(
         });
     }
     Ok(())
+}
+
+fn canonical_loop_ids(
+    term_index: usize,
+    loop_count: usize,
+) -> Result<Vec<Atom>, TensorReductionError> {
+    (1..=loop_count)
+        .map(|label| {
+            i64::try_from(label).map(Atom::num).map_err(|_| {
+                TensorReductionError::RustRedUnsupportedOutput {
+                    term: term_index,
+                    detail: format!("canonical loop label {label} does not fit in i64"),
+                }
+            })
+        })
+        .collect()
+}
+
+fn canonical_momentum_row(
+    term_index: usize,
+    propagator_id: usize,
+    momentum: &Atom,
+    loop_momenta: &[Atom],
+) -> Result<Vec<i64>, TensorReductionError> {
+    let mut row = vec![0; loop_momenta.len()];
+    for (monomial, coefficient) in momentum.coefficient_list::<i16>(loop_momenta) {
+        if monomial == Atom::num(1) {
+            if coefficient.is_zero() {
+                continue;
+            }
+            return Err(TensorReductionError::RustRedUnsupportedMomentum {
+                term: term_index,
+                propagator: propagator_id,
+                momentum: momentum.to_string(),
+            });
+        }
+        let Some(loop_index) = loop_momenta
+            .iter()
+            .position(|candidate| candidate == &monomial)
+        else {
+            return Err(TensorReductionError::RustRedUnsupportedMomentum {
+                term: term_index,
+                propagator: propagator_id,
+                momentum: momentum.to_string(),
+            });
+        };
+        row[loop_index] = get_integer_from_atom(coefficient.as_view()).ok_or_else(|| {
+            TensorReductionError::RustRedUnsupportedMomentum {
+                term: term_index,
+                propagator: propagator_id,
+                momentum: momentum.to_string(),
+            }
+        })?;
+    }
+    if row.iter().all(|coefficient| *coefficient == 0) {
+        return Err(TensorReductionError::RustRedUnsupportedMomentum {
+            term: term_index,
+            propagator: propagator_id,
+            momentum: momentum.to_string(),
+        });
+    }
+    Ok(row)
 }
 
 fn contains_function_head(atom: AtomView<'_>, head: symbolica::atom::Symbol) -> bool {
@@ -270,67 +362,6 @@ fn parse_dimension(settings: &VakintSettings) -> Result<Atom, TensorReductionErr
     // Retain Vakint/FORM's established canonical spelling while representing
     // the exact same dimension d = 4 - 2 epsilon.
     Ok(Atom::num(-1) * (Atom::num(2) * epsilon - Atom::num(4)))
-}
-
-fn one_loop_family(
-    term_index: usize,
-) -> Result<(FamilyPresentation, CoefficientContext), TensorReductionError> {
-    let coefficients = CoefficientContext::try_new(["d", "m2"])
-        .map_err(|source| TensorReductionError::RustRedCoefficientContext { source })?;
-    let dimension = coefficients
-        .parameter("d")
-        .expect("the adapter registers the dimension parameter");
-    let mass = coefficients
-        .parameter("m2")
-        .expect("the adapter registers the mass parameter");
-    let negative_mass = coefficients
-        .try_neg(&mass, ExactAlgebraLimits::default())
-        .map_err(|source| TensorReductionError::RustRedFamily {
-            term: term_index,
-            source: IntegralFamilyError::ExactAlgebra(source),
-        })?;
-    let family = IntegralFamily::new(
-        "vakint-native-one-loop-vacuum",
-        vec!["k1".to_owned()],
-        Vec::new(),
-        coefficients.clone(),
-        dimension,
-        vec![AffineDenominator::new(
-            negative_mass,
-            vec![coefficients.one()],
-        )],
-        Vec::new(),
-        vec![coefficients.zero()],
-    )
-    .map_err(|source| TensorReductionError::RustRedFamily {
-        term: term_index,
-        source,
-    })?;
-    let presentation = FamilyPresentation::try_new(
-        family,
-        vec![DenominatorRole::Physical(PhysicalPropagator::new(
-            "propagator-1".to_owned(),
-            MomentumCombination::new(vec![coefficients.one()], Vec::new()),
-            mass.clone(),
-        ))],
-        MomentumRouting::new(
-            vec!["k1".to_owned()],
-            Vec::new(),
-            vec![vec![coefficients.one()]],
-            vec![Vec::new()],
-            Vec::new(),
-        ),
-        FamilyConventions::new(
-            MetricConvention::MinkowskiMostlyMinus,
-            PropagatorConvention::MOMENTUM_SQUARED_MINUS_MASS_SQUARED,
-        ),
-        Some(CommonMassScale::new(mass)),
-    )
-    .map_err(|source| TensorReductionError::RustRedPresentation {
-        term: term_index,
-        source,
-    })?;
-    Ok((presentation, coefficients))
 }
 
 fn projection_to_vakint(
@@ -431,7 +462,7 @@ fn scalar_product_to_vakint(
                     detail: format!("loop scalar-product index {right} is out of range"),
                 }
             })?;
-            Ok(S.dot(function!(S.k, left.clone()), function!(S.k, right.clone())))
+            Ok(S.dot(left, right))
         }
         ScalarProductCoordinate::LoopExternal { .. } => {
             Err(TensorReductionError::RustRedUnsupportedOutput {
@@ -440,5 +471,47 @@ fn scalar_product_to_vakint(
                     .to_owned(),
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reserved_input_label_failure_does_not_publish_prior_term_projection() {
+        let vakint = Vakint::new().unwrap();
+        let settings = VakintSettings {
+            form_exe_path: "/this/path/must/not/be/invoked/by/rustred".into(),
+            ..VakintSettings::default()
+        };
+        let valid = VakintExpression::try_from(
+            vk_parse!("k(1,mu)*k(1,nu)*topo(I1L(muvsq,1))")
+                .unwrap()
+                .as_view(),
+        )
+        .unwrap()
+        .0
+        .pop()
+        .unwrap();
+        let attack = VakintExpression::try_from(
+            vk_parse!("k(rustred_loop_label(1),mu)*topo(I1L(muvsq,1))")
+                .unwrap()
+                .as_view(),
+        )
+        .unwrap()
+        .0
+        .pop()
+        .unwrap();
+        let mut expression = VakintExpression(vec![valid, attack]);
+        let original = expression.clone();
+
+        let error = reduce(&mut expression, &vakint, &settings, RustRedOptions::new()).unwrap_err();
+
+        assert!(matches!(
+            error,
+            TensorReductionError::RustRedReservedMomentumLabel { term: 1, .. }
+        ));
+        assert_eq!(expression, original);
     }
 }

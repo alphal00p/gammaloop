@@ -1,5 +1,6 @@
 use ::rustred::algebra::CoefficientContextError;
 use ::rustred::family::IntegralFamilyError;
+use ::rustred::family::isp::IspCompletionError;
 use ::rustred::family::presentation::FamilyPresentationError;
 use ::rustred::tensor::TensorError;
 use symbolica::atom::{Atom, AtomView};
@@ -46,9 +47,9 @@ pub enum TensorReductionError {
     /// The topology matcher could not identify this term.
     #[error("RustRed tensor term {term} has no topology match: {integral}")]
     RustRedUnrecognizedIntegral { term: usize, integral: String },
-    /// The matched family is outside the first native vertical slice.
+    /// A matched family has no physical vacuum basis for this native slice.
     #[error(
-        "RustRed tensor term {term} has {loop_count} loops and {propagator_count} propagators; the current native slice admits one-loop, one-propagator full bases"
+        "RustRed tensor term {term} has {loop_count} loops and {propagator_count} physical propagators; the native vacuum bridge needs at least one loop and one propagator"
     )]
     RustRedUnsupportedFamily {
         term: usize,
@@ -61,18 +62,31 @@ pub enum TensorReductionError {
     /// A canonical propagator could not be recovered after matching.
     #[error("RustRed tensor term {term} is missing canonical propagator {propagator}")]
     RustRedMissingPropagator { term: usize, propagator: usize },
-    /// Explicit long form must expose one bare loop-momentum label.
+    /// Multi-loop explicit routing remains owned by Vakint's matcher until it
+    /// can export a replayable routing witness to the native bridge.
     #[error(
-        "RustRed tensor term {term} has unsupported explicit input momentum {momentum} in propagator {propagator}; expected one bare k(integer) loop label"
+        "RustRed tensor term {term} uses an explicit {loop_count}-loop propagator routing; use a registered short topology until the matcher exports native routing evidence"
+    )]
+    RustRedExplicitRoutingUnsupported { term: usize, loop_count: usize },
+    /// A physical propagator momentum is not a nonzero integer-linear
+    /// combination of the canonical loop basis.
+    #[error(
+        "RustRed tensor term {term} has unsupported momentum {momentum} in propagator {propagator}; expected a nonzero integer-linear combination of canonical loop momenta"
     )]
     RustRedUnsupportedMomentum {
         term: usize,
         propagator: usize,
         momentum: String,
     },
-    /// The native slice accepts a nonzero exact scalar atom as its sole scale.
+    /// Adapter-private momentum labels are reserved and cannot be supplied by
+    /// a caller, even though Symbolica function heads are globally spellable.
     #[error(
-        "RustRed tensor term {term} has unsupported mass squared {mass} in propagator {propagator}; expected a nonzero exact number or symbol"
+        "RustRed tensor term {term} contains adapter-reserved momentum label head {head}; reserved labels cannot appear in input"
+    )]
+    RustRedReservedMomentumLabel { term: usize, head: String },
+    /// The vacuum lane accepts one common nonzero exact scalar mass squared.
+    #[error(
+        "RustRed tensor term {term} has unsupported mass squared {mass} in propagator {propagator}; expected the same nonzero exact number or symbol on every physical propagator"
     )]
     RustRedUnsupportedMass {
         term: usize,
@@ -106,6 +120,13 @@ pub enum TensorReductionError {
         term: usize,
         #[source]
         source: IntegralFamilyError,
+    },
+    /// RustRed could not complete the independent physical rows with ISPs.
+    #[error("RustRed tensor term {term} could not complete its vacuum family: {source}")]
+    RustRedIspCompletion {
+        term: usize,
+        #[source]
+        source: IspCompletionError,
     },
     /// RustRed rejected the physical presentation supplied by Vakint.
     #[error("RustRed tensor term {term} rejected its family presentation: {source}")]
