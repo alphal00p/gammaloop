@@ -1,5 +1,6 @@
 {
-  "git+https://github.com/symbolica-dev/symbolica?branch=dev#2.2.0": "1n6ws0x37i3g5frab2k20b0233vh33x6di9hgw4bd9d3lqfwrhv8",
-  "git+https://github.com/symbolica-dev/symbolica?branch=dev#graphica@2.1.0": "1n6ws0x37i3g5frab2k20b0233vh33x6di9hgw4bd9d3lqfwrhv8",
-  "git+https://github.com/symbolica-dev/symbolica?branch=dev#numerica@2.2.0": "1n6ws0x37i3g5frab2k20b0233vh33x6di9hgw4bd9d3lqfwrhv8"
+  "git+https://github.com/alphal00p/rustred?rev=f050ef4a2780888f41b87fe2d4313b55f554544e#rustred@0.1.0": "1rgw40gpgvd2m2vzn75k1rqmp93pb07agyxlgxbpf7h6r0bk3pfj",
+  "git+https://github.com/symbolica-dev/symbolica?rev=77c137481904b8a5531ede86e3ef36b82beed7fd#2.2.0": "18pa9dhn1l5gw384cmxvjdfank84vqv6hb59cv274k0hy4plw00y",
+  "git+https://github.com/symbolica-dev/symbolica?rev=77c137481904b8a5531ede86e3ef36b82beed7fd#graphica@2.1.0": "18pa9dhn1l5gw384cmxvjdfank84vqv6hb59cv274k0hy4plw00y",
+  "git+https://github.com/symbolica-dev/symbolica?rev=77c137481904b8a5531ede86e3ef36b82beed7fd#numerica@2.2.0": "18pa9dhn1l5gw384cmxvjdfank84vqv6hb59cv274k0hy4plw00y"
 }

@@ -42,6 +42,7 @@ rand = "0.9.4"
 ratatui = "0.30.0"
 rayon = "1.5"
 regex = "1.12.3"
+rustred = { git = "https://github.com/alphal00p/rustred", rev = "f050ef4a2780888f41b87fe2d4313b55f554544e" }
 schemars = "1.2.1"
 serde = "1.0.228"
 serde_json = "1"
@@ -52,7 +53,7 @@ spenso = { path = "crates/spenso/" }
 spenso-hep-lib = { path = "crates/spenso-hep-lib/" }
 spenso-macros = { path = "crates/spenso-macros/" }
 symbolica-utils = { path = "crates/symbolica-utils/" }
-symbolica = { version = "2.2.0", default-features = false, features = ["gmp", "native_code_generation"] }
+symbolica = { version = "=2.2.0", default-features = false, features = ["gmp"] }
 sysinfo = "0.33.1"
 tabled = "0.20.0"
 thiserror = "2.0"
@@ -68,15 +69,9 @@ walkdir = "2.5.0"
 which = "8.0.0"
 
 [patch.crates-io]
-# graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-# numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-# symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
-# graphica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
-# numerica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
-# symbolica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "77c137481904b8a5531ede86e3ef36b82beed7fd" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "77c137481904b8a5531ede86e3ef36b82beed7fd" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "77c137481904b8a5531ede86e3ef36b82beed7fd" }
 
 [profile.bench]
 opt-level = 3

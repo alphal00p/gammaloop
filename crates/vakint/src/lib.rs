@@ -6,8 +6,13 @@ pub mod graph;
 pub mod matad;
 pub mod matad_numerics;
 pub mod symbols;
+pub mod tensor_reduction;
 pub mod topologies;
 pub mod utils;
+
+pub use tensor_reduction::{
+    RustRedOptions, TensorReducer, TensorReductionError, TensorReductionMode,
+};
 
 use crate::utils::set_precision_in_polynomial_atom;
 use ahash::RandomState;
@@ -2644,10 +2649,32 @@ impl VakintExpression {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
+        self.tensor_reduce_form(vakint, settings)
+    }
+
+    fn tensor_reduce_form(
+        &mut self,
+        vakint: &Vakint,
+        settings: &VakintSettings,
+    ) -> Result<(), VakintError> {
         for term in self.0.iter_mut() {
             term.tensor_reduce(vakint, settings)?;
         }
         Ok(())
+    }
+
+    pub(crate) fn tensor_reduce_in_mode(
+        &mut self,
+        vakint: &Vakint,
+        settings: &VakintSettings,
+        mode: TensorReductionMode,
+    ) -> Result<(), TensorReductionError> {
+        match mode {
+            TensorReductionMode::Form => Ok(self.tensor_reduce_form(vakint, settings)?),
+            TensorReductionMode::RustRed(options) => {
+                tensor_reduction::reduce_with_rustred(self, vakint, settings, options)
+            }
+        }
     }
 
     pub fn evaluate_integral(
@@ -5313,6 +5340,17 @@ Evaluated (n_loops=1, mu_r=1) :
         let mut vakint_expr = VakintExpression::try_from(input)?;
         vakint_expr.tensor_reduce(self, settings)?;
         Ok(vakint_expr.into())
+    }
+
+    /// Configures an additive tensor backend without changing [`VakintSettings`].
+    ///
+    /// The returned operation defaults to the existing FORM implementation.
+    pub fn tensor_reducer<'a>(&'a self, settings: &'a VakintSettings) -> TensorReducer<'a> {
+        TensorReducer {
+            vakint: self,
+            settings,
+            mode: TensorReductionMode::default(),
+        }
     }
 
     pub fn evaluate_integral(

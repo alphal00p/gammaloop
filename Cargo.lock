@@ -1659,6 +1659,7 @@ name = "gammaloop-workspace-hack"
 version = "0.1.0"
 dependencies = [
  "ahash 0.8.12",
+ "aho-corasick",
  "anstream",
  "arrayvec",
  "bincode 2.0.1",
@@ -1694,6 +1695,7 @@ dependencies = [
  "regex-automata",
  "regex-syntax",
  "rug",
+ "rust-embed-utils",
  "rustix 1.1.4",
  "serde",
  "serde_core",
@@ -1877,7 +1879,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "2.1.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a511209dce2ca99925fe87f8b18e4bf03"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=77c137481904b8a5531ede86e3ef36b82beed7fd#77c137481904b8a5531ede86e3ef36b82beed7fd"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -2891,7 +2893,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "2.2.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a511209dce2ca99925fe87f8b18e4bf03"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=77c137481904b8a5531ede86e3ef36b82beed7fd#77c137481904b8a5531ede86e3ef36b82beed7fd"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -4050,6 +4052,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "rustred"
+version = "0.1.0"
+source = "git+https://github.com/alphal00p/rustred?rev=f050ef4a2780888f41b87fe2d4313b55f554544e#f050ef4a2780888f41b87fe2d4313b55f554544e"
+dependencies = [
+ "rand 0.9.4",
+ "rayon",
+ "serde",
+ "symbolica",
+ "toml 1.1.2+spec-1.1.0",
+]
+
+[[package]]
 name = "rustversion"
 version = "1.0.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4674,7 +4688,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "2.2.0"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=dev#0441bd7a511209dce2ca99925fe87f8b18e4bf03"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=77c137481904b8a5531ede86e3ef36b82beed7fd#77c137481904b8a5531ede86e3ef36b82beed7fd"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",
@@ -5522,6 +5536,7 @@ dependencies = [
  "pyo3-stub-gen",
  "regex",
  "rug",
+ "rustred",
  "string-template-plus",
  "symbolica",
  "test-log",
