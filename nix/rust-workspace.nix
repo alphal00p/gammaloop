@@ -425,6 +425,7 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    "feynkit-tensor" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-cff" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-generator" = ["crates/feynkit-model/tests/fixtures"];
     "feynkit-model" = ["crates/feynkit-model/tests/fixtures"];

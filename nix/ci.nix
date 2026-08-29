@@ -8,7 +8,7 @@
   groups = [
     {
       name = "feynkit";
-      packages = ["feynkit" "feynkit-cff" "feynkit-generator" "feynkit-graph" "feynkit-kinematics" "feynkit-model" "feynkit-py" "feynkit-ufo"];
+      packages = ["feynkit" "feynkit-cff" "feynkit-generator" "feynkit-graph" "feynkit-kinematics" "feynkit-model" "feynkit-py" "feynkit-tensor" "feynkit-ufo"];
     }
     {
       name = "core";

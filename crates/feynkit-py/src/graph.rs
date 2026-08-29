@@ -4,6 +4,7 @@ use feynkit_graph::{
     DiagramEdge, DiagramVertex, FeynmanDiagram, LoopMomentumBasis, MomentumSignature,
 };
 use feynkit_model::Model;
+use feynkit_tensor::FeynmanDiagramTensorExt;
 use pyo3::{
     exceptions::PyTypeError,
     prelude::*,
@@ -24,6 +25,7 @@ use crate::{
     error,
     kinematics::{PyFourMomentum, PyThreeMomentum},
     model::PyModel,
+    tensor::PyTensorReducer,
 };
 
 pub(crate) fn parse_symbolic_annotation(value: &str) -> Result<PythonExpression, String> {
@@ -39,7 +41,7 @@ pub(crate) fn parse_symbolic_annotation(value: &str) -> Result<PythonExpression,
 ///
 /// Examples
 /// --------
-/// >>> vertex = diagram.vertices[0]
+/// >>> vertex = next(iter(diagram.vertices))
 /// >>> if vertex.is_external:
 /// ...     print(vertex.external_state, vertex.external_index)
 /// ... else:
@@ -226,7 +228,7 @@ impl PyDiagramVertex {
 ///
 /// Examples
 /// --------
-/// >>> edge = diagram.edges[0]
+/// >>> edge = next(iter(diagram.edges))
 /// >>> particle = model.particle_by_pdg(edge.particle_pdg)
 /// >>> source, target = diagram.vertices[edge.source], diagram.vertices[edge.target]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -375,7 +377,7 @@ impl PyDiagramEdge {
 ///
 /// Examples
 /// --------
-/// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
+/// >>> basis = next(iter(diagram.loop_momentum_bases(limit=1)))
 /// >>> edge_id, signature = next(iter(basis.edge_signatures.items()))
 /// >>> print(f"q_{edge_id} = {signature.format_momentum()}")
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -531,7 +533,7 @@ impl PyMomentumSignature {
 ///
 /// Examples
 /// --------
-/// >>> basis = diagram.loop_momentum_bases(limit=1)[0]
+/// >>> basis = next(iter(diagram.loop_momentum_bases(limit=1)))
 /// >>> len(basis.loop_edges) == diagram.loop_count
 /// True
 /// >>> assignments = basis.edge_signatures
@@ -894,7 +896,7 @@ submit! {
 ///
 /// Examples
 /// --------
-/// >>> diagram = result.diagrams[0]
+/// >>> diagram = next(iter(result.diagrams))
 /// >>> diagram.validate()
 /// >>> diagram  # renders as a Linnest graph in Jupyter or Marimo
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -1063,6 +1065,68 @@ impl PyFeynmanDiagram {
         PythonExpression {
             expr: self.inner.projector().clone(),
         }
+    }
+
+    /// Reduce the finalized numerator and projector with a tensor reducer.
+    ///
+    /// The result is a native Symbolica expression using ``spenso::dot`` and
+    /// ``spenso::g``. For a fully projected vacuum numerator, all Lorentz
+    /// indices disappear and only scalar invariants remain. Residual free
+    /// projector indices are preserved as metric tensors; use
+    /// :meth:`reduce_tensor_graphs` when scalar graph contributions are
+    /// required. The scalar numerator prefactor remains separate and is not
+    /// included in this expression.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import E
+    /// >>> reducer = fk.TensorReducer.feynkit(E("4"))
+    /// >>> scalar_numerator = vacuum_diagram.reduce_tensor_numerator(reducer)
+    /// >>> scalar_numerator
+    ///
+    /// Parameters
+    /// ----------
+    /// reducer : TensorReducer
+    ///     Tensor projector and integrated-momentum selection to apply.
+    fn reduce_tensor_numerator(&self, reducer: &PyTensorReducer) -> PyResult<PythonExpression> {
+        self.inner
+            .reduce_tensor_numerator(&reducer.inner)
+            .map(|reduction| PythonExpression {
+                expr: reduction.into_expression(),
+            })
+            .map_err(error::tensor)
+    }
+
+    /// Split the tensor numerator into scalar contributions on this topology.
+    ///
+    /// Each returned diagram has one compact reduction term as its numerator,
+    /// including that term's exact projector coefficient. The graph topology,
+    /// model, denominator data, and topology ID are preserved; deterministic
+    /// ``.tensor[index]`` name suffixes distinguish the derived contributions.
+    /// The external-state projector is consumed and reset to one, while the
+    /// scalar numerator prefactor is retained. The projection must be fully
+    /// contracted: any residual indexed Minkowski slot raises
+    /// ``TensorReductionError``. Use
+    /// :meth:`reduce_tensor_numerator` when residual free Lorentz indices are
+    /// intentional.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import E
+    /// >>> reducer = fk.TensorReducer.feynkit(E("4"))
+    /// >>> scalar_graphs = vacuum_diagram.reduce_tensor_graphs(reducer)
+    /// >>> for contribution in scalar_graphs:
+    /// ...     print(contribution.name, contribution.numerator_expression())
+    ///
+    /// Parameters
+    /// ----------
+    /// reducer : TensorReducer
+    ///     Tensor projector and integrated-momentum selection to apply.
+    fn reduce_tensor_graphs(&self, reducer: &PyTensorReducer) -> PyResult<Vec<PyFeynmanDiagram>> {
+        self.inner
+            .reduce_tensor_graphs(&reducer.inner)
+            .map(|diagrams| diagrams.into_iter().map(Into::into).collect())
+            .map_err(error::tensor)
     }
 
     /// Return the loop-momentum routing selected during generation.
