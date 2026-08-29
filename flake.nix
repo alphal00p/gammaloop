@@ -481,7 +481,11 @@
           "crates/feynkit-py/python/symbolica/community/feynkit/__init__.py"
           "crates/feynkit-py/tests/fixtures"
         ];
+        "gammaloop-integration-tests" = [
+          "crates/feynkit-model/tests/fixtures"
+        ];
         gammalooprs = [
+          "crates/gammalooprs/tests/fixtures/renormalization"
           "tests/resources/graphs/scalar/dod2_bubble.dot"
         ];
       };
