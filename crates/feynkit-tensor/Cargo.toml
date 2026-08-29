@@ -1,0 +1,20 @@
+[package]
+name = "feynkit-tensor"
+version = "0.1.0"
+edition.workspace = true
+description = "Symmetry-aware tensor reduction for the feynkit ecosystem"
+repository = "https://github.com/alphal00p/gammaloop"
+license = "MIT OR Apache-2.0"
+readme = "README.md"
+keywords = ["feynman", "hep", "tensor", "physics"]
+categories = ["science"]
+
+[dependencies]
+feynkit-graph = { workspace = true }
+idenso = { version = "0.3.0", path = "../idenso" }
+spenso = { version = "0.6.0", path = "../spenso", features = ["shadowing"] }
+symbolica = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+feynkit-model = { workspace = true }

@@ -1,8 +1,8 @@
 use std::ffi::CString;
 
-use feynkit_graph::FeynmanDiagram;
+use feynkit_graph::{DiagramEdge, DiagramVertex, FeynmanDiagram};
 use feynkit_model::Model;
-use feynkit_py::{FeynkitModule, PyFeynmanDiagram};
+use feynkit_py::{FeynkitModule, PyFeynmanDiagram, PyModel};
 use pyo3::{
     prelude::*,
     types::{PyCFunction, PyDict, PyList, PyModule},
@@ -75,6 +75,31 @@ fn remove_wrapper(py: Python<'_>, community: &Bound<'_, PyModule>, name: &str) -
     community.delattr(name)
 }
 
+fn tensor_diagram(
+    model: &Model,
+    name: &str,
+    numerator: Atom,
+    numerator_prefactor: Atom,
+    projector: Atom,
+) -> FeynmanDiagram {
+    let rule = model.vertex_rule_id("V_3_SCALAR_000").unwrap();
+    let particle = model.particle_id("scalar_0").unwrap();
+    let mut left = DiagramVertex::interaction("left", rule);
+    left.numerator = numerator.clone();
+    let mut builder = FeynmanDiagram::builder(model.clone(), name)
+        .numerator(numerator)
+        .numerator_prefactor(numerator_prefactor)
+        .projector(projector);
+    let left = builder.add_vertex(left);
+    let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
+    for _ in 0..3 {
+        builder
+            .add_edge(left, right, DiagramEdge::new(particle, false))
+            .unwrap();
+    }
+    builder.build().unwrap()
+}
+
 #[test]
 fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
     Python::initialize();
@@ -105,27 +130,112 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
             let feynkit = PyModule::import(py, "symbolica.community.feynkit")?;
             let spenso = PyModule::import(py, "symbolica.community.spenso")?;
             let model = Model::from_json(MODEL_JSON).expect("fixture is a valid model");
-            let diagram = FeynmanDiagram::builder(model, "shared-kernel")
-                .overall_factor(
-                    Atom::parse("x + 1", "feynkit_py_test", ParseSettings::default()).unwrap(),
-                )
-                .build()
-                .expect("empty test diagram is valid");
+            let tensor_numerator = Atom::parse(
+                "k(spenso::mink(D,mu))*k(spenso::mink(D,nu))",
+                "feynkit_py_test",
+                ParseSettings::default(),
+            )
+            .unwrap();
+            let tensor_projector = Atom::parse(
+                "p(spenso::mink(D,mu))*p(spenso::mink(D,nu))",
+                "feynkit_py_test",
+                ParseSettings::default(),
+            )
+            .unwrap();
+            let free_tensor_numerator = Atom::parse(
+                "k(spenso::mink(D,mu))*k(spenso::mink(D,nu))",
+                "feynkit_py_test",
+                ParseSettings::default(),
+            )
+            .unwrap();
+            let free_tensor_diagram = tensor_diagram(
+                &model,
+                "free-tensor",
+                free_tensor_numerator,
+                Atom::one(),
+                Atom::one(),
+            );
+            let diagram = tensor_diagram(
+                &model,
+                "shared-kernel",
+                tensor_numerator,
+                Atom::parse("y + 2", "feynkit_py_test", ParseSettings::default()).unwrap(),
+                tensor_projector,
+            )
+            .with_overall_factor(
+                Atom::parse("x + 1", "feynkit_py_test", ParseSettings::default()).unwrap(),
+            );
             let diagram = Py::new(py, PyFeynmanDiagram::from(diagram))?;
+            let free_tensor_diagram = Py::new(py, PyFeynmanDiagram::from(free_tensor_diagram))?;
+            let model = Py::new(py, PyModel::from(model))?;
             let locals = PyDict::new(py);
             locals.set_item("core", &core)?;
             locals.set_item("diagram", diagram)?;
+            locals.set_item("free_tensor_diagram", free_tensor_diagram)?;
+            locals.set_item("model", model)?;
             locals.set_item("feynkit", feynkit)?;
             locals.set_item("spenso", spenso)?;
             let assertions = CString::new(
                 r#"
 feynkit_expression = diagram.overall_factor_expression()
 spenso_expression = spenso.TensorName("T").to_expression()
+named_coupling = core.S("UFO::SCALAR_COUPLING")
+expanded_coupling = model.expand_couplings(named_coupling)
+
+tensor_dimension = core.S("feynkit_py_test::D")
+tensor_mu = core.S("feynkit_py_test::mu")
+tensor_nu = core.S("feynkit_py_test::nu")
+mink = core.S("spenso::mink")
+dot = core.S("spenso::dot")
+loop_momentum = core.S("feynkit_py_test::k")
+projector_momentum = core.S("feynkit_py_test::p")
+tensor_input = (
+    loop_momentum(mink(tensor_dimension, tensor_mu))
+    * loop_momentum(mink(tensor_dimension, tensor_nu))
+    * projector_momentum(mink(tensor_dimension, tensor_mu))
+    * projector_momentum(mink(tensor_dimension, tensor_nu))
+)
+tensor_reducer = feynkit.TensorReducer(tensor_dimension).with_integrated_head(
+    "feynkit_py_test::k"
+)
+tensor_reduced = tensor_reducer.reduce(tensor_input)
+diagram_tensor_reduced = diagram.reduce_tensor_numerator(tensor_reducer)
+scalar_graphs = diagram.reduce_tensor_graphs(tensor_reducer)
+free_tensor_reduced = free_tensor_diagram.reduce_tensor_numerator(tensor_reducer)
+try:
+    free_tensor_diagram.reduce_tensor_graphs(tensor_reducer)
+except feynkit.TensorReductionError:
+    pass
+else:
+    raise AssertionError("scalar graph splitting accepted residual free Lorentz indices")
+tensor_expected = (
+    dot(loop_momentum(mink(tensor_dimension)), loop_momentum(mink(tensor_dimension)))
+    * dot(
+        projector_momentum(mink(tensor_dimension)),
+        projector_momentum(mink(tensor_dimension)),
+    )
+    / tensor_dimension
+)
+numerator_prefactor = core.S("feynkit_py_test::y") + 2
 
 assert diagram.__class__ is feynkit.FeynmanDiagram
 assert type(feynkit_expression) is core.Expression
 assert type(spenso_expression) is core.Expression
 assert type(feynkit_expression + spenso_expression) is core.Expression
+assert type(expanded_coupling) is core.Expression
+assert expanded_coupling == model.coupling("SCALAR_COUPLING").expression
+assert named_coupling == core.S("UFO::SCALAR_COUPLING")
+assert type(tensor_reduced) is core.Expression
+assert tensor_reduced == tensor_expected
+assert type(diagram_tensor_reduced) is core.Expression
+assert diagram_tensor_reduced == tensor_expected
+assert len(scalar_graphs) == 1
+assert scalar_graphs[0].numerator_expression() == tensor_expected
+assert scalar_graphs[0].projector_expression() == 1
+assert scalar_graphs[0].numerator_prefactor_expression() == numerator_prefactor
+assert scalar_graphs[0].overall_factor_expression() == feynkit_expression
+scalar_graphs[0].validate()
+assert type(free_tensor_reduced) is core.Expression
 "#,
             )
             .unwrap();

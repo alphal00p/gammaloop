@@ -114,7 +114,9 @@ impl GroupingChoice {
             graph_grouping_options.fully_numerical_substitution =
                 fully_numerical_substitution_when_comparing_numerators;
         }
-        let _ = symmetric_polarizations;
+        if let Some(symmetric_polarizations) = symmetric_polarizations {
+            graph_grouping_options.symmetric_polarizations = symmetric_polarizations;
+        }
         match self {
             GroupingChoice::GroupIdenticalGraphsUpToScalarRescaling => {
                 NumeratorGrouping::UpToScalar(graph_grouping_options)
@@ -1729,15 +1731,20 @@ fn feyngen_from_spec_args(
     };
     let first_outgoing = outgoing_alternatives.first().cloned().unwrap_or_default();
     let process = match generation_type {
+        // The legacy shell accepts alternative amplitude finals so it can
+        // preserve and display the complete process specification. Canonical
+        // FeynKit generation deliberately represents one amplitude final
+        // state at a time, as the generator has always consumed the first
+        // alternative here.
         GenerationType::Amplitude => {
             GenerationProcess::amplitude(initial_pdgs.to_vec(), first_outgoing)
         }
         GenerationType::CrossSection => {
             GenerationProcess::cross_section(initial_pdgs.to_vec(), first_outgoing)
+                .with_final_state_alternatives(outgoing_alternatives)
+                .expect("the parser produces a non-empty final-state alternative list")
         }
     }
-    .with_final_state_alternatives(outgoing_alternatives)
-    .expect("the parser produces a valid final-state specification")
     .symmetrize_initial(sym_init)
     .symmetrize_final(sym_final)
     .symmetrize_left_right(sym_left_right)

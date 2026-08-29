@@ -1,8 +1,9 @@
 //! The standalone FeynKit particle-physics toolbox.
 //!
 //! This crate contains no implementation logic. It provides a stable, feature-
-//! gated facade over the focused `feynkit-*` crates. Raw UFO loading is not a
-//! default feature because it requires an attached Python interpreter.
+//! gated facade over the focused `feynkit-*` crates, including the native
+//! Spenso tensor reducer. Raw UFO loading is not a default feature because it
+//! requires an attached Python interpreter.
 
 #![forbid(unsafe_code)]
 
@@ -16,6 +17,8 @@ pub use feynkit_graph as graph;
 pub use feynkit_kinematics as kinematics;
 #[cfg(feature = "model")]
 pub use feynkit_model as model;
+#[cfg(feature = "tensor")]
+pub use feynkit_tensor as tensor;
 #[cfg(feature = "ufo")]
 pub use feynkit_ufo as ufo;
 
@@ -33,6 +36,11 @@ pub use feynkit_kinematics::{
 };
 #[cfg(feature = "model")]
 pub use feynkit_model::{Model, ParameterCard};
+#[cfg(feature = "tensor")]
+pub use feynkit_tensor::{
+    ContractionOrbit, CosetType, FeynmanDiagramTensorExt, OrthogonalWeingarten, TensorReducer,
+    TensorReduction, TensorReductionError, TensorReductionTerm, WeingartenError,
+};
 #[cfg(feature = "ufo")]
 pub use feynkit_ufo::{LoadedModel, UfoLoadOptions, UfoLoader};
 
@@ -42,7 +50,8 @@ pub use feynkit_ufo::{LoadedModel, UfoLoadOptions, UfoLoader};
     feature = "generator",
     feature = "graph",
     feature = "kinematics",
-    feature = "model"
+    feature = "model",
+    feature = "tensor"
 ))]
 mod tests {
     #[test]
@@ -52,5 +61,6 @@ mod tests {
         let _ = std::any::TypeId::of::<super::Generator>();
         let _ = std::any::TypeId::of::<super::CffGenerator>();
         let _ = std::any::TypeId::of::<super::FourMomentum<f64>>();
+        let _ = std::any::TypeId::of::<super::TensorReducer>();
     }
 }

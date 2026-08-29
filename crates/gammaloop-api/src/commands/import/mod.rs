@@ -1,9 +1,12 @@
 use std::{
-    env,
+    env, fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use clap::Subcommand;
+use feynkit_graph::FeynmanDiagram;
+use gammalooprs::feyngen::feynkit::FeynmanDiagramGammaLoopExt;
 use gammalooprs::graph::Graph;
 use model::ImportModel;
 use schemars::JsonSchema;
@@ -100,7 +103,7 @@ impl Import {
                     "Loading graphs from '{}'",
                     Self::display_graph_import_path(&resolved_path).display()
                 );
-                let graphs = Graph::from_finalized_runtime_path(&resolved_path, &state.model)?;
+                let graphs = Self::load_graphs(&resolved_path, &state.model)?;
                 state.import_graphs(
                     graphs,
                     process_name,
@@ -112,6 +115,60 @@ impl Import {
             }
             Import::Model(im) => im.run(state),
         }
+    }
+
+    fn load_graphs(path: &Path, model: &gammalooprs::model::Model) -> Result<Vec<Graph>> {
+        if path.is_dir() {
+            let mut files = fs::read_dir(path)
+                .with_context(|| format!("Could not read graph directory '{}'.", path.display()))?
+                .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+                .filter(|path| path.extension().is_some_and(|extension| extension == "dot"))
+                .collect::<Vec<_>>();
+            files.sort();
+            if files.is_empty() {
+                return Err(eyre!(
+                    "No .dot files found in directory: {}",
+                    path.display()
+                ));
+            }
+            return files
+                .iter()
+                .map(|path| Self::load_graph_file(path, model))
+                .collect::<Result<Vec<_>>>()
+                .map(|sets| sets.into_iter().flatten().collect());
+        }
+        Self::load_graph_file(path, model)
+    }
+
+    fn load_graph_file(path: &Path, model: &gammalooprs::model::Model) -> Result<Vec<Graph>> {
+        let input = fs::read_to_string(path)
+            .with_context(|| format!("Could not read graph file '{}'.", path.display()))?;
+        if !input.contains("model_fingerprint") {
+            return Graph::from_finalized_runtime_string(&input, model).with_context(|| {
+                format!(
+                    "Could not import finalized runtime graphs from '{}'.",
+                    path.display()
+                )
+            });
+        }
+
+        let diagrams =
+            FeynmanDiagram::from_dot_set(Arc::new(model.clone()), &input).with_context(|| {
+                format!(
+                    "Could not import canonical FeynKit diagrams from '{}'.",
+                    path.display()
+                )
+            })?;
+        if diagrams.is_empty() {
+            return Err(eyre!(
+                "No canonical FeynKit diagrams found in '{}'.",
+                path.display()
+            ));
+        }
+        diagrams
+            .iter()
+            .map(|diagram| diagram.to_gamma_loop_graph(None, true).map_err(Into::into))
+            .collect()
     }
 
     fn resolve_graph_import_path(path: &Path, state_folder: &Path) -> Result<PathBuf> {
@@ -181,5 +238,42 @@ impl Import {
             }
         }
         normalized
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use feynkit_generator::{GenerationOptions, Generator, Process};
+
+    use super::*;
+
+    #[test]
+    fn imports_canonical_feynkit_dot_sets_with_typed_cuts() -> Result<()> {
+        let model = gammalooprs::model::Model::from_json(include_str!(
+            "../../../../../assets/models/json/scalars/scalars_2p_3p.json"
+        ))?;
+        let generated = Generator::new(Arc::new(model.clone())).generate(
+            &Process::cross_section(["scalar_1"], ["scalar_1", "scalar_1"])
+                .with_loop_count(1, 1)?,
+            &GenerationOptions::default().threads(1).max_vertices(4),
+        )?;
+        assert!(!generated.diagrams.is_empty());
+        let dot = generated
+            .diagrams
+            .iter()
+            .map(FeynmanDiagram::to_dot)
+            .collect::<Result<Vec<_>, _>>()?
+            .join("\n");
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("canonical.dot");
+        fs::write(&path, dot)?;
+
+        let imported = Import::load_graph_file(&path, &model)?;
+
+        assert_eq!(imported.len(), generated.diagrams.len());
+        assert!(imported
+            .iter()
+            .all(|graph| !graph.finalized_cuts.is_empty()));
+        Ok(())
     }
 }

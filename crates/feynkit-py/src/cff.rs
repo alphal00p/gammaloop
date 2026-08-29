@@ -23,7 +23,7 @@ use crate::{error, graph::PyFeynmanDiagram};
 ///
 /// Examples
 /// --------
-/// >>> surface = result.surfaces[0]
+/// >>> surface = next(iter(result.surfaces))
 /// >>> print(surface, surface.positive_energies, surface.external_shift)
 ///
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -174,7 +174,7 @@ impl PyCffSurface {
 ///
 /// Examples
 /// --------
-/// >>> orientation = result.orientations[0]
+/// >>> orientation = next(iter(result.orientations))
 /// >>> for product in orientation.denominator_products():
 /// ...     print([surface.symbol_name for surface in product])
 ///

@@ -630,6 +630,14 @@ pub trait ColorSimplifier {
     /// Simplifies color structures with explicit chain/trace settings.
     fn simplify_color_with(&self, settings: ColorSimplifySettings) -> Atom;
 
+    /// Replace concrete QCD fundamental and adjoint dimensions by their
+    /// parametric SU(Nc) expressions while preserving all color indices.
+    ///
+    /// This is useful for exact color-algebra comparisons: public expressions
+    /// may use the physical `cof(3)` and `coad(8)` representations, while an
+    /// intermediate symbolic calculation should retain its `Nc` dependence.
+    fn to_parametric_color(&self) -> Atom;
+
     /// Rewrites `Nc`/`NA` scalar factors into the `CA`, `CF` Casimir basis.
     fn to_color_casimir(&self) -> Atom;
 
@@ -658,6 +666,10 @@ impl ColorSimplifier for Atom {
 
     fn simplify_color_with(&self, settings: ColorSimplifySettings) -> Atom {
         self.as_view().simplify_color_with(settings)
+    }
+
+    fn to_parametric_color(&self) -> Atom {
+        self.as_view().to_parametric_color()
     }
 
     fn to_color_casimir(&self) -> Atom {
@@ -700,6 +712,18 @@ impl ColorSimplifier for AtomView<'_> {
 
     fn simplify_color_with(&self, settings: ColorSimplifySettings) -> Atom {
         ColorAlgebraSimplifier { settings }.run(*self)
+    }
+
+    fn to_parametric_color(&self) -> Atom {
+        let adjoint = ColorAdjoint {};
+        let fundamental = ColorFundamental {};
+        let nc = Atom::var(CS.nc);
+        self.replace(adjoint.to_symbolic([RS.d_, RS.a_]))
+            .with(
+                adjoint.to_symbolic([nc.clone().pow(Atom::num(2)) - Atom::one(), Atom::var(RS.a_)]),
+            )
+            .replace(fundamental.to_symbolic([RS.d_, RS.a_]))
+            .with(fundamental.to_symbolic([nc, Atom::var(RS.a_)]))
     }
 
     fn collect_color_constants(&self) -> Atom {

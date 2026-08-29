@@ -18,6 +18,7 @@ linnet = { workspace = true, features = ["symbolica"] }
 rayon = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 spenso = { workspace = true, features = ["shadowing"] }
+spenso-hep-lib = { workspace = true }
 symbolica = { workspace = true, default-features = false }
 thiserror = { workspace = true }
 

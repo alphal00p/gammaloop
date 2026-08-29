@@ -24,6 +24,7 @@ feynkit-graph = { version = "0.1.0", path = "crates/feynkit-graph/" }
 feynkit-kinematics = { version = "0.1.0", path = "crates/feynkit-kinematics/" }
 feynkit-model = { version = "0.1.0", path = "crates/feynkit-model/" }
 feynkit-py = { version = "0.1.0", path = "crates/feynkit-py/" }
+feynkit-tensor = { version = "0.1.0", path = "crates/feynkit-tensor/" }
 feynkit-ufo = { version = "0.1.0", path = "crates/feynkit-ufo/" }
 gammaloop-api = { path = "crates/gammaloop-api/" }
 gammaloop-tracing-filter = { path = "crates/gammaloop-tracing-filter/" }
@@ -70,7 +71,7 @@ tracing = "0.1.44"
 tracing-appender = "0.2.4"
 tracing-indicatif = "0.3.13"
 tracing-subscriber = "0.3.23"
-typed-index-collections = "3.5.0"
+typed-index-collections = "=3.3.0"
 vakint = { path = "crates/vakint/" }
 walkdir = "2.5.0"
 

@@ -99,6 +99,21 @@ fn test_color_simplification() {
 }
 
 #[test]
+fn concrete_qcd_representations_can_be_made_parametric() {
+    test_initialize();
+    let nc = Atom::var(CS.nc);
+    let adjoint_index = Atom::var(s!(a));
+    let fundamental_index = Atom::var(s!(i));
+    let concrete = ColorAdjoint {}.to_symbolic([Atom::num(8), adjoint_index.clone()])
+        * ColorFundamental {}.to_symbolic([Atom::num(3), fundamental_index.clone()]);
+    let expected = ColorAdjoint {}
+        .to_symbolic([nc.clone().pow(Atom::num(2)) - Atom::one(), adjoint_index])
+        * ColorFundamental {}.to_symbolic([nc, fundamental_index]);
+
+    assert_eq!(concrete.to_parametric_color(), expected);
+}
+
+#[test]
 fn two_fs() {
     test_initialize();
 

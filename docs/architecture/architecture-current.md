@@ -99,6 +99,7 @@ through GammaLoop's application state:
 | `feynkit-graph` | Linnet-backed finalized diagram IR, external/cut metadata, canonical symbolic numerators and factors, DOT/serde support, and selected loop-momentum routing |
 | `feynkit-generator` | The complete deterministic generation pipeline: topology expansion, interaction assignment, filters, canonicalization, fermion flow, numerator/projector construction, routing, zero detection, and tensor-aware grouping |
 | `feynkit-cff` | Canonical CFF topology, orientations, surfaces, shared caches, expression forests, residues, raised surfaces, and ordinary/contracted/UV generation |
+| `feynkit-tensor` | Spenso-native vacuum tensor reduction, contraction-orbit compression, and exact orthogonal-Weingarten coefficient tables |
 | `feynkit` | Feature-gated, zero-logic Rust facade; core generation is enabled by default and raw UFO loading uses the opt-in `ufo` feature |
 | `feynkit-py` | Symbolica community binding for `symbolica.community.feynkit`, including generated type stubs and direct Symbolica expression conversion |
 
@@ -108,6 +109,8 @@ Within this family, dependencies point from foundations to consumers:
 feynkit-model ------> feynkit-graph, feynkit-generator, feynkit-ufo
 feynkit-kinematics -> feynkit-graph
 feynkit-graph ------> feynkit-generator, feynkit-cff
+feynkit-graph,
+spenso, idenso ------> feynkit-tensor
 
 focused crates -> feynkit / feynkit-py
 ```

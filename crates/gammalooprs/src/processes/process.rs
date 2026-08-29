@@ -119,9 +119,7 @@ fn saved_child_dirs(root: &Path, expected_binary: &str, kind: &str) -> Result<Ve
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct ProcessDefinition {
-    #[bincode(with_serde)]
     pub process: GenerationProcess,
-    #[bincode(with_serde)]
     pub generation_options: GenerationOptions,
     pub folder_name: String,
     pub process_id: usize,
@@ -1204,7 +1202,8 @@ mod tests {
             let encoded = bincode::encode_to_vec(&def, bincode::config::standard()).unwrap();
             let model_sm = load_generic_model("sm");
 
-            let mut state_file = std::fs::File::create("state_map.bin").unwrap();
+            let temp = fresh_temp_dir("process-definition-state-map");
+            let mut state_file = std::fs::File::create(temp.join("state_map.bin")).unwrap();
             symbolica::state::State::export(&mut state_file).unwrap();
             let state_map = symbolica::state::State::import(&mut state_file, None).unwrap();
 
@@ -1221,6 +1220,8 @@ mod tests {
                 )
                 .unwrap();
             assert_eq!(def, decoded);
+            drop(state_file);
+            fs::remove_dir_all(temp).unwrap();
         }
     }
 }

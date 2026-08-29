@@ -2,13 +2,16 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
     fs,
     path::Path,
+    sync::OnceLock,
 };
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use symbolica::{
     atom::{Atom, AtomCore},
+    id::Replacement,
     parser::ParseSettings,
     printer::PrintOptions,
+    symbol,
 };
 
 use crate::{
@@ -428,6 +431,7 @@ pub struct Model {
     functions: Vec<ModelFunction>,
     form_factors: Vec<ModelFormFactor>,
     indexes: ModelIndexes,
+    coupling_replacement_rules: OnceLock<Vec<Replacement>>,
 }
 
 impl Model {
@@ -655,6 +659,7 @@ impl Model {
             functions,
             form_factors,
             indexes,
+            coupling_replacement_rules: OnceLock::new(),
         })
     }
 
@@ -1013,6 +1018,30 @@ impl Model {
         self.couplings
             .get(id.index())
             .ok_or_else(|| self.not_found(EntityKind::Coupling, &id.index().to_string()))
+    }
+
+    /// Replace named UFO vertex coefficients by their analytic model expressions.
+    ///
+    /// Generated diagrams deliberately retain symbols such as `UFO::GC_11` so
+    /// numerical consumers can use the model's precomputed coupling values.
+    /// This non-mutating expansion is the explicit boundary for symbolic
+    /// inspection and algebra in terms of the underlying model parameters.
+    pub fn expand_couplings(&self, expression: &Atom) -> Atom {
+        expression.replace_multiple(self.coupling_replacement_rules())
+    }
+
+    fn coupling_replacement_rules(&self) -> &[Replacement] {
+        self.coupling_replacement_rules.get_or_init(|| {
+            self.couplings
+                .iter()
+                .map(|coupling| {
+                    Replacement::new(
+                        Atom::var(symbol!(&format!("UFO::{}", coupling.name))).to_pattern(),
+                        coupling.expression.clone(),
+                    )
+                })
+                .collect()
+        })
     }
 
     pub fn order_id(&self, name: &str) -> Result<OrderId, ModelError> {
@@ -1843,6 +1872,24 @@ mod tests {
                 .unwrap(),
             model.form_factor("FF1").unwrap()
         );
+    }
+
+    #[test]
+    fn expands_named_couplings_without_mutating_the_source_expression() {
+        let model = Model::from_json(&model_json("GC1")).unwrap();
+        let named_coupling = Atom::var(symbol!("UFO::GC1"));
+        let unknown_coupling = Atom::var(symbol!("UFO::GC_UNKNOWN"));
+        let source = named_coupling.clone() * 2 + unknown_coupling.clone();
+
+        let expanded = model.expand_couplings(&source);
+        let expected = model.coupling("GC1").unwrap().expression.clone() * 2 + unknown_coupling;
+
+        assert_eq!(expanded, expected);
+        assert_eq!(
+            source,
+            named_coupling * 2 + Atom::var(symbol!("UFO::GC_UNKNOWN"))
+        );
+        assert_eq!(model.expand_couplings(&expanded), expanded);
     }
 
     #[test]

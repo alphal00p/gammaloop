@@ -24,8 +24,10 @@ use linnet::{
         HedgeGraph, NodeIndex,
         builder::HedgeGraphBuilder,
         involution::{Flow, HedgePair, Orientation},
+        subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps},
+        tree::SimpleTraversalTree,
     },
-    parser::DotGraph,
+    parser::{DotGraph, set::DotGraphSet},
 };
 use serde::{Deserialize, Serialize};
 use symbolica::{
@@ -243,6 +245,23 @@ pub struct DiagramCut {
     pub right: DiagramCutSide,
 }
 
+/// One topology-only threshold candidate retained during cross-section finalization.
+///
+/// Unlike [`DiagramCut`], this partition is not required to match the requested
+/// physical final state. It records the complete, process-independent s-channel
+/// cut inventory used to construct threshold counterterms downstream. Keeping
+/// this metadata separate prevents topology candidates from being mistaken for
+/// physical Cutkosky cuts.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct DiagramThresholdCandidate {
+    /// The half-edge on the left side of every oriented crossing edge.
+    pub cut: Vec<DiagramHalfEdge>,
+    /// Every half-edge belonging to the source side of the partition.
+    pub left: Vec<DiagramHalfEdge>,
+    /// Every half-edge belonging to the target side of the partition.
+    pub right: Vec<DiagramHalfEdge>,
+}
+
 /// Side label used by the auxiliary cut-incidence graph in a canonical key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -263,6 +282,9 @@ pub enum CanonicalDiagramVertex {
         side: CanonicalCutSide,
         coupling_orders: BTreeMap<String, usize>,
         loop_count: usize,
+    },
+    TopologyThresholdSide {
+        side: CanonicalCutSide,
     },
 }
 
@@ -450,6 +472,11 @@ pub enum DiagramError {
     DotExternalIndexOverflow(usize),
     #[error("failed to parse DOT: {0}")]
     DotParse(String),
+    #[error("diagram DOT model fingerprint {serialized} does not match supplied model {actual}")]
+    DotModelFingerprintMismatch {
+        serialized: String,
+        actual: ModelFingerprint,
+    },
     #[error("failed to serialize or parse diagram JSON: {0}")]
     Json(#[from] serde_json::Error),
     #[error("failed to parse diagram {field} '{expression}': {message}")]
@@ -492,10 +519,14 @@ pub enum DiagramError {
     MissingCrossSectionCuts,
     #[error("invalid physical cut {cut}: {message}")]
     InvalidCut { cut: usize, message: String },
+    #[error("invalid topology threshold candidate {candidate}: {message}")]
+    InvalidThresholdCandidate { candidate: usize, message: String },
     #[error(
         "diagram-wide numerator differs from the product of the vertex and edge numerator fragments"
     )]
     NumeratorFragmentMismatch,
+    #[error("cannot replace the numerator of a diagram without a non-external vertex")]
+    MissingNumeratorAnchor,
     #[error("diagram invariant failed while {operation}: {message}")]
     Invariant {
         operation: &'static str,
@@ -535,6 +566,7 @@ struct DiagramSerde {
     projector: String,
     loop_momentum_basis: LoopMomentumBasis,
     cuts: Vec<DiagramCut>,
+    topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -568,6 +600,7 @@ pub struct FeynmanDiagram {
     projector: Atom,
     loop_momentum_basis: LoopMomentumBasis,
     cuts: Vec<DiagramCut>,
+    topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
 }
 
 impl Serialize for FeynmanDiagram {
@@ -637,6 +670,11 @@ impl FeynmanDiagram {
         &self.cuts
     }
 
+    /// Complete topology-only s-channel inventory used for threshold construction.
+    pub fn topology_threshold_candidates(&self) -> &[DiagramThresholdCandidate] {
+        &self.topology_threshold_candidates
+    }
+
     pub fn underlying(&self) -> &HedgeGraph<DiagramEdge, DiagramVertex> {
         &self.graph
     }
@@ -672,7 +710,8 @@ impl FeynmanDiagram {
             .numerator(self.numerator.clone())
             .numerator_prefactor(self.numerator_prefactor.clone())
             .projector(self.projector.clone())
-            .cuts(self.cuts.clone());
+            .cuts(self.cuts.clone())
+            .topology_threshold_candidates(self.topology_threshold_candidates.clone());
         for (id, vertex) in self.vertices() {
             builder.add_vertex(map_vertex(id, vertex));
         }
@@ -758,6 +797,41 @@ impl FeynmanDiagram {
                         .add_edge(side, vertex.0, false, CanonicalEdgeColor::CutMembership)
                         .map_err(|error| DiagramError::Invariant {
                             operation: "encoding canonical cut membership",
+                            message: error.to_string(),
+                        })?;
+                }
+            }
+        }
+        for candidate in &self.topology_threshold_candidates {
+            let left = graph.add_node(CanonicalDiagramVertex::TopologyThresholdSide {
+                side: CanonicalCutSide::Left,
+            });
+            let right = graph.add_node(CanonicalDiagramVertex::TopologyThresholdSide {
+                side: CanonicalCutSide::Right,
+            });
+            graph
+                .add_edge(left, right, false, CanonicalEdgeColor::CutPair)
+                .map_err(|error| DiagramError::Invariant {
+                    operation: "deriving the diagram ID",
+                    message: error.to_string(),
+                })?;
+            for (side, half_edges) in [(left, &candidate.left), (right, &candidate.right)] {
+                let vertices = half_edges
+                    .iter()
+                    .filter_map(|half_edge| {
+                        endpoints
+                            .get(&half_edge.edge)
+                            .map(|endpoints| match half_edge.endpoint {
+                                DiagramEndpoint::Source => endpoints.source,
+                                DiagramEndpoint::Target => endpoints.target,
+                            })
+                    })
+                    .collect::<BTreeSet<_>>();
+                for vertex in vertices {
+                    graph
+                        .add_edge(side, vertex.0, false, CanonicalEdgeColor::CutMembership)
+                        .map_err(|error| DiagramError::Invariant {
+                            operation: "encoding canonical topology-threshold membership",
                             message: error.to_string(),
                         })?;
                 }
@@ -864,13 +938,26 @@ impl FeynmanDiagram {
                 reverse_half_edge(half_edge);
             }
         }
+        let mut topology_threshold_candidates = self.topology_threshold_candidates.clone();
+        for candidate in &mut topology_threshold_candidates {
+            for half_edge in &mut candidate.cut {
+                reverse_half_edge(half_edge);
+            }
+            for half_edge in &mut candidate.left {
+                reverse_half_edge(half_edge);
+            }
+            for half_edge in &mut candidate.right {
+                reverse_half_edge(half_edge);
+            }
+        }
         let mut builder = Self::builder(Arc::clone(&self.model), &self.name)
             .symmetry_factor(self.symmetry_factor)
             .overall_factor(self.overall_factor.clone())
             .numerator(self.numerator.clone())
             .numerator_prefactor(self.numerator_prefactor.clone())
             .projector(self.projector.clone())
-            .cuts(cuts);
+            .cuts(cuts)
+            .topology_threshold_candidates(topology_threshold_candidates);
         for (_, vertex) in self.vertices() {
             builder.add_vertex(vertex.clone());
         }
@@ -944,6 +1031,50 @@ impl FeynmanDiagram {
         self
     }
 
+    /// Return this diagram with a replacement scalar or tensor numerator.
+    ///
+    /// The replacement becomes the numerator fragment of the first
+    /// non-external vertex; every other vertex and edge fragment becomes one.
+    /// This keeps the aggregate numerator authoritative while preserving the
+    /// interaction and particle assignments needed to interpret the topology.
+    /// A diagram without a non-external vertex cannot own such a replacement.
+    /// Diagram IDs identify the model-resolved topology and remain unchanged.
+    pub fn with_numerator(self, numerator: Atom) -> Result<Self, DiagramError> {
+        let anchor = self
+            .vertices()
+            .find_map(|(id, vertex)| (!vertex.is_external()).then_some(id))
+            .ok_or(DiagramError::MissingNumeratorAnchor)?;
+        let anchor_numerator = numerator.clone();
+        let mut replaced = self.map_data(
+            |id, vertex| {
+                let mut vertex = vertex.clone();
+                vertex.numerator = if id == anchor {
+                    anchor_numerator.clone()
+                } else {
+                    Atom::one()
+                };
+                vertex
+            },
+            |_, _, edge| {
+                let mut edge = edge.clone();
+                edge.numerator = Atom::one();
+                edge
+            },
+        )?;
+        replaced.numerator = numerator;
+        replaced.validate()?;
+        Ok(replaced)
+    }
+
+    /// Return this diagram with a replacement external-state projector.
+    ///
+    /// The projector is numerator payload and therefore does not alter the
+    /// topology-derived diagram ID.
+    pub fn with_projector(mut self, projector: Atom) -> Self {
+        self.projector = projector;
+        self
+    }
+
     /// Replace the finalized physical cuts and refresh the content-derived ID.
     pub fn with_cuts(mut self, mut cuts: Vec<DiagramCut>) -> Result<Self, DiagramError> {
         for cut in &mut cuts {
@@ -962,26 +1093,414 @@ impl FeynmanDiagram {
         Ok(self)
     }
 
+    /// Replace the complete topology-only threshold inventory.
+    pub fn with_topology_threshold_candidates(
+        mut self,
+        mut candidates: Vec<DiagramThresholdCandidate>,
+    ) -> Result<Self, DiagramError> {
+        for candidate in &mut candidates {
+            candidate.cut.sort();
+            candidate.cut.dedup();
+            candidate.left.sort();
+            candidate.left.dedup();
+            candidate.right.sort();
+            candidate.right.dedup();
+        }
+        candidates.sort();
+        candidates.dedup();
+        self.topology_threshold_candidates = candidates;
+        self.validate()?;
+        self.id = DiagramId::from_key(self.model.fingerprint(), &self.structural_key()?)?;
+        Ok(self)
+    }
+
+    /// Install topology-only threshold candidates from complete half-edge partitions.
+    pub fn with_topology_threshold_partitions(
+        self,
+        partitions: Vec<(Vec<DiagramHalfEdge>, Vec<DiagramHalfEdge>)>,
+    ) -> Result<Self, DiagramError> {
+        let vertex_half_edges = self.vertex_half_edges();
+        let candidates = partitions
+            .into_iter()
+            .enumerate()
+            .map(|(candidate, (left, right))| {
+                self.cut_from_partitions(candidate, &left, &right, &vertex_half_edges)
+                    .map(|cut| DiagramThresholdCandidate {
+                        cut: cut.cut,
+                        left: cut.left.half_edges,
+                        right: cut.right.half_edges,
+                    })
+                    .map_err(|error| match error {
+                        DiagramError::InvalidCut { message, .. } => {
+                            DiagramError::InvalidThresholdCandidate { candidate, message }
+                        }
+                        error => error,
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        self.with_topology_threshold_candidates(candidates)
+    }
+
+    /// Install physical cuts from authoritative left/right half-edge partitions.
+    ///
+    /// The oriented crossing endpoints, coupling-order summaries, and loop
+    /// counts are derived from this diagram's finalized topology. This is the
+    /// appropriate constructor when a valid partition is transported onto an
+    /// isomorphic representative whose interaction assignment may differ.
+    /// Supplied half-edge IDs must already use this diagram's edge-ID frame.
+    pub fn with_cut_partitions(
+        self,
+        partitions: Vec<(Vec<DiagramHalfEdge>, Vec<DiagramHalfEdge>)>,
+    ) -> Result<Self, DiagramError> {
+        let vertex_half_edges = self.vertex_half_edges();
+        let cuts = partitions
+            .into_iter()
+            .enumerate()
+            .map(|(cut, (left, right))| {
+                self.cut_from_partitions(cut, &left, &right, &vertex_half_edges)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        self.with_cuts(cuts)
+    }
+
+    fn vertex_half_edges(&self) -> Vec<Vec<DiagramHalfEdge>> {
+        let mut vertex_half_edges = vec![Vec::new(); self.graph.n_nodes()];
+        for (edge, endpoints, _) in self.edges() {
+            vertex_half_edges[endpoints.source.0].push(DiagramHalfEdge {
+                edge,
+                endpoint: DiagramEndpoint::Source,
+            });
+            vertex_half_edges[endpoints.target.0].push(DiagramHalfEdge {
+                edge,
+                endpoint: DiagramEndpoint::Target,
+            });
+        }
+        vertex_half_edges
+    }
+
+    fn summarize_cut_side(
+        &self,
+        half_edges: &BTreeSet<DiagramHalfEdge>,
+        vertex_half_edges: &[Vec<DiagramHalfEdge>],
+    ) -> Result<DiagramCutSide, DiagramError> {
+        let vertices = vertex_half_edges
+            .iter()
+            .enumerate()
+            .filter_map(|(vertex, incident)| {
+                incident
+                    .first()
+                    .is_some_and(|edge| half_edges.contains(edge))
+                    .then_some(VertexId(vertex))
+            })
+            .collect::<BTreeSet<_>>();
+        let internal = vertices
+            .iter()
+            .copied()
+            .filter(|vertex| {
+                self.vertex(*vertex)
+                    .is_some_and(|vertex| !vertex.is_external())
+            })
+            .collect::<BTreeSet<_>>();
+        let mut coupling_orders = BTreeMap::new();
+        for vertex in &internal {
+            if let Some(rule) = self.vertex(*vertex).and_then(|vertex| vertex.interaction) {
+                for (name, order) in self
+                    .model
+                    .vertex_rule_by_id(rule)?
+                    .coupling_orders(&self.model)
+                {
+                    *coupling_orders.entry(name).or_insert(0) += order;
+                }
+            }
+        }
+        let internal_edges = self
+            .edges()
+            .filter(|(_, endpoints, _)| {
+                internal.contains(&endpoints.source) && internal.contains(&endpoints.target)
+            })
+            .map(|(edge, endpoints, _)| (edge, endpoints))
+            .collect::<Vec<_>>();
+        let mut remaining = internal.clone();
+        let mut components = 0;
+        while let Some(start) = remaining.pop_first() {
+            components += 1;
+            let mut queue = VecDeque::from([start]);
+            while let Some(vertex) = queue.pop_front() {
+                for (_, endpoints) in &internal_edges {
+                    let neighbor = if endpoints.source == vertex {
+                        Some(endpoints.target)
+                    } else if endpoints.target == vertex {
+                        Some(endpoints.source)
+                    } else {
+                        None
+                    };
+                    if let Some(neighbor) = neighbor
+                        && remaining.remove(&neighbor)
+                    {
+                        queue.push_back(neighbor);
+                    }
+                }
+            }
+        }
+        Ok(DiagramCutSide {
+            half_edges: half_edges.iter().copied().collect(),
+            coupling_orders,
+            loop_count: internal_edges.len() + components - internal.len(),
+        })
+    }
+
+    fn cut_from_partitions(
+        &self,
+        cut: usize,
+        left_half_edges: &[DiagramHalfEdge],
+        right_half_edges: &[DiagramHalfEdge],
+        vertex_half_edges: &[Vec<DiagramHalfEdge>],
+    ) -> Result<DiagramCut, DiagramError> {
+        let left = left_half_edges.iter().copied().collect::<BTreeSet<_>>();
+        let right = right_half_edges.iter().copied().collect::<BTreeSet<_>>();
+        if left.len() != left_half_edges.len() || right.len() != right_half_edges.len() {
+            return Err(DiagramError::InvalidCut {
+                cut,
+                message: "half-edge sets contain duplicates".to_owned(),
+            });
+        }
+        let universe = self
+            .edges()
+            .flat_map(|(edge, _, _)| {
+                [
+                    DiagramHalfEdge {
+                        edge,
+                        endpoint: DiagramEndpoint::Source,
+                    },
+                    DiagramHalfEdge {
+                        edge,
+                        endpoint: DiagramEndpoint::Target,
+                    },
+                ]
+            })
+            .collect::<BTreeSet<_>>();
+        if !left.is_disjoint(&right)
+            || left.union(&right).copied().collect::<BTreeSet<_>>() != universe
+        {
+            return Err(DiagramError::InvalidCut {
+                cut,
+                message: "left and right half-edge partitions are not disjoint and complementary"
+                    .to_owned(),
+            });
+        }
+
+        let mut oriented = BTreeSet::new();
+        for (edge, _, _) in self.edges() {
+            let source = DiagramHalfEdge {
+                edge,
+                endpoint: DiagramEndpoint::Source,
+            };
+            let target = DiagramHalfEdge {
+                edge,
+                endpoint: DiagramEndpoint::Target,
+            };
+            match (left.contains(&source), left.contains(&target)) {
+                (true, false) => {
+                    oriented.insert(source);
+                }
+                (false, true) => {
+                    oriented.insert(target);
+                }
+                _ => {}
+            }
+        }
+        for (vertex, incident) in vertex_half_edges.iter().enumerate() {
+            if incident.first().is_some_and(|first| {
+                incident
+                    .iter()
+                    .any(|edge| left.contains(edge) != left.contains(first))
+            }) {
+                return Err(DiagramError::InvalidCut {
+                    cut,
+                    message: format!("vertex {vertex} is split between the two sides"),
+                });
+            }
+        }
+
+        Ok(DiagramCut {
+            cut: oriented.into_iter().collect(),
+            left: self.summarize_cut_side(&left, vertex_half_edges)?,
+            right: self.summarize_cut_side(&right, vertex_half_edges)?,
+        })
+    }
+
     /// Select a spanning-forest routing by its ordered independent edges.
     pub fn with_loop_momentum_edges(mut self, requested: &[EdgeId]) -> Result<Self, DiagramError> {
         let requested_set: BTreeSet<_> = requested.iter().copied().collect();
-        let basis = self
-            .loop_momentum_bases()?
-            .into_iter()
-            .find(|basis| {
-                basis.loop_edges.len() == requested.len()
-                    && basis
-                        .loop_edges
-                        .iter()
-                        .all(|edge| requested_set.contains(edge))
-            })
-            .ok_or_else(|| DiagramError::InvalidLoopMomentumEdges {
+        let topology = self.topology();
+        let tree_edges = topology
+            .internal_edges
+            .iter()
+            .copied()
+            .filter(|edge| !requested_set.contains(edge))
+            .collect::<Vec<_>>();
+        if requested.len() != requested_set.len()
+            || tree_edges.len() + requested.len() != topology.internal_edges.len()
+            || !topology.is_spanning_forest(&tree_edges)
+        {
+            return Err(DiagramError::InvalidLoopMomentumEdges {
                 requested: requested.to_vec(),
                 available: self.loop_momentum_basis.loop_edges.clone(),
-            })?
+            });
+        }
+        let basis = topology
+            .basis(tree_edges)?
             .with_loop_edge_order(requested)?;
         self.loop_momentum_basis = basis;
         Ok(self)
+    }
+
+    /// Select a spanning-forest routing by its ordered tree edges.
+    ///
+    /// The requested edges are validated and materialized directly. This is
+    /// useful when a generator already chose a deterministic spanning forest:
+    /// it does not enumerate the other spanning forests of the diagram.
+    pub fn with_loop_momentum_tree_edges(
+        mut self,
+        requested: &[EdgeId],
+    ) -> Result<Self, DiagramError> {
+        let requested_set: BTreeSet<_> = requested.iter().copied().collect();
+        let topology = self.topology();
+        let tree_size = topology
+            .internal_vertices
+            .len()
+            .saturating_sub(topology.components.len());
+        let internal = topology
+            .internal_edges
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        if requested.len() != tree_size
+            || requested.len() != requested_set.len()
+            || !requested_set.is_subset(&internal)
+            || !topology.is_spanning_forest(requested)
+        {
+            return Err(DiagramError::InvalidLoopMomentumBasis(format!(
+                "requested tree edges {requested:?} do not form a spanning forest"
+            )));
+        }
+        self.loop_momentum_basis = topology.basis(requested.to_vec())?;
+        Ok(self)
+    }
+
+    /// Select the first depth-first basis for an explicit internal-edge order.
+    ///
+    /// Paired cross-section connections root the traversal at the attachment
+    /// retained as hedge zero by legacy sewing (the outgoing side), in
+    /// connection order. One-sided amplitude connections use their only
+    /// attachment. No other spanning forests are enumerated. Generators can
+    /// therefore reproduce a pre-existing half-edge insertion convention
+    /// without moving topology or routing ownership into a downstream runtime.
+    pub fn with_first_loop_momentum_basis_in_edge_order(
+        self,
+        ordered: &[EdgeId],
+    ) -> Result<Self, DiagramError> {
+        let topology = self.topology();
+        let internal = topology
+            .internal_edges
+            .iter()
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let ordered_set = ordered.iter().copied().collect::<BTreeSet<_>>();
+        if ordered.len() != ordered_set.len() || ordered_set != internal {
+            return Err(DiagramError::InvalidLoopMomentumBasis(format!(
+                "ordered internal edges {ordered:?} do not match the diagram topology"
+            )));
+        }
+        if ordered.is_empty() {
+            return self.with_loop_momentum_tree_edges(&[]);
+        }
+
+        let mut builder = HedgeGraphBuilder::<EdgeId, ()>::new();
+        let nodes = self
+            .vertices()
+            .filter(|(_, data)| !data.is_external())
+            .map(|(vertex, _)| (vertex, builder.add_node(())))
+            .collect::<BTreeMap<_, _>>();
+        let endpoints = self
+            .edges()
+            .map(|(edge, endpoints, _)| (edge, endpoints))
+            .collect::<BTreeMap<_, _>>();
+        let mut external_attachments =
+            BTreeMap::<usize, (Option<VertexId>, Option<VertexId>)>::new();
+        for (_, endpoints, _) in self.edges() {
+            let external = self
+                .vertex(endpoints.source)
+                .and_then(|vertex| vertex.external.as_ref())
+                .map(|external| (external, endpoints.target))
+                .or_else(|| {
+                    self.vertex(endpoints.target)
+                        .and_then(|vertex| vertex.external.as_ref())
+                        .map(|external| (external, endpoints.source))
+                });
+            if let Some((external, attachment)) = external {
+                let connection = external_attachments.entry(external.connection).or_default();
+                match external.state {
+                    ExternalState::Incoming => connection.0 = Some(attachment),
+                    ExternalState::Outgoing => connection.1 = Some(attachment),
+                }
+            }
+        }
+        for edge in ordered {
+            let endpoints = endpoints.get(edge).ok_or_else(|| DiagramError::Invariant {
+                operation: "selecting the first ordered loop-momentum basis",
+                message: format!("missing internal edge {}", edge.0),
+            })?;
+            builder.add_edge(
+                nodes[&endpoints.source],
+                nodes[&endpoints.target],
+                *edge,
+                Orientation::Undirected,
+            );
+        }
+        let ordered_graph: HedgeGraph<EdgeId, ()> = builder.into();
+        let full = ordered_graph.full_filter();
+        let roots = external_attachments
+            .values()
+            .filter_map(|(incoming, outgoing)| (*outgoing).or(*incoming))
+            .collect::<Vec<_>>();
+        let mut remaining = full.clone();
+        let mut forest: SuBitGraph = ordered_graph.empty_subgraph();
+        let mut root_nodes = roots
+            .into_iter()
+            .filter_map(|vertex| nodes.get(&vertex).copied())
+            .collect::<Vec<_>>();
+        while !remaining.is_empty() {
+            let root = root_nodes
+                .iter()
+                .position(|node| {
+                    ordered_graph
+                        .iter_crown(*node)
+                        .any(|hedge| remaining.includes(&hedge))
+                })
+                .map(|position| root_nodes.remove(position))
+                .unwrap_or_else(|| {
+                    let hedge = remaining
+                        .included_iter()
+                        .next()
+                        .expect("a non-empty subgraph has an included half-edge");
+                    ordered_graph.node_id(hedge)
+                });
+            let tree =
+                SimpleTraversalTree::depth_first_traverse(&ordered_graph, &full, &root, None)
+                    .map_err(|error| {
+                        DiagramError::InvalidLoopMomentumBasis(format!(
+                            "ordered depth-first traversal failed: {error:?}"
+                        ))
+                    })?;
+            forest.union_with(&tree.tree_subgraph);
+            remaining.subtract_with(&tree.covers(&full));
+        }
+        let tree_edges = ordered_graph
+            .iter_edges_of(&forest)
+            .map(|(_, _, edge)| *edge.data)
+            .collect::<Vec<_>>();
+        self.with_loop_momentum_tree_edges(&tree_edges)
     }
 
     pub fn to_json(&self) -> Result<String, DiagramError> {
@@ -997,7 +1516,7 @@ impl FeynmanDiagram {
     pub fn validate(&self) -> Result<(), DiagramError> {
         let mut degrees = vec![0_usize; self.graph.n_nodes()];
         let mut fragment_numerator = Atom::one();
-        let mut external_connections = BTreeMap::<usize, Vec<ExternalState>>::new();
+        let mut external_connections = BTreeMap::<usize, Vec<(ExternalState, EdgeId)>>::new();
         let mut vertex_slots = vec![BTreeSet::new(); self.graph.n_nodes()];
         let mut vertex_half_edges = vec![Vec::new(); self.graph.n_nodes()];
         for (edge_id, endpoints, edge) in self.edges() {
@@ -1034,17 +1553,17 @@ impl FeynmanDiagram {
             fragment_numerator *= &edge.numerator;
         }
         for (vertex_id, vertex) in self.vertices() {
-            if let Some(external) = &vertex.external {
-                external_connections
-                    .entry(external.connection)
-                    .or_default()
-                    .push(external.state);
-            }
             if vertex.external.is_some() && degrees[vertex_id.0] != 1 {
                 return Err(DiagramError::InvalidExternalDegree {
                     vertex: vertex_id.0,
                     degree: degrees[vertex_id.0],
                 });
+            }
+            if let Some(external) = &vertex.external {
+                external_connections
+                    .entry(external.connection)
+                    .or_default()
+                    .push((external.state, vertex_half_edges[vertex_id.0][0].edge));
             }
             let actual = vertex_slots[vertex_id.0]
                 .iter()
@@ -1112,11 +1631,16 @@ impl FeynmanDiagram {
             }
         }
         let mut has_paired_external_connection = false;
+        let mut paired_external_edges = BTreeSet::new();
         for (connection, states) in external_connections {
             match states.as_slice() {
                 [_] => {}
-                [left, right] if left != right => has_paired_external_connection = true,
-                [state, _] => {
+                [(left, left_edge), (right, right_edge)] if left != right => {
+                    has_paired_external_connection = true;
+                    paired_external_edges.insert(*left_edge);
+                    paired_external_edges.insert(*right_edge);
+                }
+                [(state, _), _] => {
                     return Err(DiagramError::InvalidExternalConnectionStates {
                         connection,
                         state: state.as_str(),
@@ -1140,165 +1664,89 @@ impl FeynmanDiagram {
                     .to_owned(),
             });
         }
+        if !has_paired_external_connection && !self.topology_threshold_candidates.is_empty() {
+            return Err(DiagramError::InvalidThresholdCandidate {
+                candidate: 0,
+                message: "topology threshold candidates require paired incoming/outgoing external connections"
+                    .to_owned(),
+            });
+        }
 
-        let universe = self
-            .edges()
-            .flat_map(|(edge, _, _)| {
-                [
-                    DiagramHalfEdge {
-                        edge,
-                        endpoint: DiagramEndpoint::Source,
-                    },
-                    DiagramHalfEdge {
-                        edge,
-                        endpoint: DiagramEndpoint::Target,
-                    },
-                ]
-            })
-            .collect::<BTreeSet<_>>();
         for (cut_index, cut) in self.cuts.iter().enumerate() {
-            let left = cut.left.half_edges.iter().copied().collect::<BTreeSet<_>>();
-            let right = cut
-                .right
-                .half_edges
-                .iter()
-                .copied()
-                .collect::<BTreeSet<_>>();
             let oriented = cut.cut.iter().copied().collect::<BTreeSet<_>>();
-            if left.len() != cut.left.half_edges.len()
-                || right.len() != cut.right.half_edges.len()
-                || oriented.len() != cut.cut.len()
-            {
+            if oriented.len() != cut.cut.len() {
                 return Err(DiagramError::InvalidCut {
                     cut: cut_index,
                     message: "half-edge sets contain duplicates".to_owned(),
                 });
             }
-            if !left.is_disjoint(&right)
-                || left.union(&right).copied().collect::<BTreeSet<_>>() != universe
-            {
-                return Err(DiagramError::InvalidCut {
-                    cut: cut_index,
-                    message:
-                        "left and right half-edge partitions are not disjoint and complementary"
-                            .to_owned(),
-                });
-            }
-            let mut expected_oriented = BTreeSet::new();
-            for (edge, _, _) in self.edges() {
-                let source = DiagramHalfEdge {
-                    edge,
-                    endpoint: DiagramEndpoint::Source,
-                };
-                let target = DiagramHalfEdge {
-                    edge,
-                    endpoint: DiagramEndpoint::Target,
-                };
-                match (left.contains(&source), left.contains(&target)) {
-                    (true, false) => {
-                        expected_oriented.insert(source);
-                    }
-                    (false, true) => {
-                        expected_oriented.insert(target);
-                    }
-                    _ => {}
-                }
-            }
-            if oriented != expected_oriented {
+            let normalized = self.cut_from_partitions(
+                cut_index,
+                &cut.left.half_edges,
+                &cut.right.half_edges,
+                &vertex_half_edges,
+            )?;
+            if oriented != normalized.cut.iter().copied().collect::<BTreeSet<_>>() {
                 return Err(DiagramError::InvalidCut {
                     cut: cut_index,
                     message: "oriented cut endpoints do not equal the crossing edges".to_owned(),
                 });
             }
-
-            for (vertex, incident) in vertex_half_edges.iter().enumerate() {
-                if incident.first().is_some_and(|first| {
-                    incident
-                        .iter()
-                        .any(|edge| left.contains(edge) != left.contains(first))
-                }) {
-                    return Err(DiagramError::InvalidCut {
-                        cut: cut_index,
-                        message: format!("vertex {vertex} is split between the two sides"),
-                    });
-                }
-            }
-
-            let summarize = |side: &BTreeSet<DiagramHalfEdge>| {
-                let vertices = vertex_half_edges
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(vertex, incident)| {
-                        incident
-                            .first()
-                            .is_some_and(|edge| side.contains(edge))
-                            .then_some(VertexId(vertex))
-                    })
-                    .collect::<BTreeSet<_>>();
-                let internal = vertices
-                    .iter()
-                    .copied()
-                    .filter(|vertex| {
-                        self.vertex(*vertex)
-                            .is_some_and(|vertex| !vertex.is_external())
-                    })
-                    .collect::<BTreeSet<_>>();
-                let mut coupling_orders = BTreeMap::new();
-                for vertex in &internal {
-                    if let Some(rule) = self.vertex(*vertex).and_then(|vertex| vertex.interaction) {
-                        for (name, order) in self
-                            .model
-                            .vertex_rule_by_id(rule)?
-                            .coupling_orders(&self.model)
-                        {
-                            *coupling_orders.entry(name).or_insert(0) += order;
-                        }
-                    }
-                }
-                let internal_edges = self
-                    .edges()
-                    .filter(|(_, endpoints, _)| {
-                        internal.contains(&endpoints.source) && internal.contains(&endpoints.target)
-                    })
-                    .map(|(edge, endpoints, _)| (edge, endpoints))
-                    .collect::<Vec<_>>();
-                let mut remaining = internal.clone();
-                let mut components = 0;
-                while let Some(start) = remaining.pop_first() {
-                    components += 1;
-                    let mut queue = VecDeque::from([start]);
-                    while let Some(vertex) = queue.pop_front() {
-                        for (_, endpoints) in &internal_edges {
-                            let neighbor = if endpoints.source == vertex {
-                                Some(endpoints.target)
-                            } else if endpoints.target == vertex {
-                                Some(endpoints.source)
-                            } else {
-                                None
-                            };
-                            if let Some(neighbor) = neighbor
-                                && remaining.remove(&neighbor)
-                            {
-                                queue.push_back(neighbor);
-                            }
-                        }
-                    }
-                }
-                Ok::<_, DiagramError>((
-                    coupling_orders,
-                    internal_edges.len() + components - internal.len(),
-                ))
-            };
-            let (left_orders, left_loops) = summarize(&left)?;
-            let (right_orders, right_loops) = summarize(&right)?;
-            if (left_orders, left_loops) != (cut.left.coupling_orders.clone(), cut.left.loop_count)
-                || (right_orders, right_loops)
-                    != (cut.right.coupling_orders.clone(), cut.right.loop_count)
+            if (normalized.left.coupling_orders, normalized.left.loop_count)
+                != (cut.left.coupling_orders.clone(), cut.left.loop_count)
+                || (
+                    normalized.right.coupling_orders,
+                    normalized.right.loop_count,
+                ) != (cut.right.coupling_orders.clone(), cut.right.loop_count)
             {
                 return Err(DiagramError::InvalidCut {
                     cut: cut_index,
                     message: "stored side coupling orders or loop counts do not match the finalized topology"
                         .to_owned(),
+                });
+            }
+        }
+        for (candidate_index, candidate) in self.topology_threshold_candidates.iter().enumerate() {
+            let oriented = candidate.cut.iter().copied().collect::<BTreeSet<_>>();
+            if oriented.len() != candidate.cut.len() {
+                return Err(DiagramError::InvalidThresholdCandidate {
+                    candidate: candidate_index,
+                    message: "half-edge sets contain duplicates".to_owned(),
+                });
+            }
+            let normalized = self
+                .cut_from_partitions(
+                    candidate_index,
+                    &candidate.left,
+                    &candidate.right,
+                    &vertex_half_edges,
+                )
+                .map_err(|error| match error {
+                    DiagramError::InvalidCut { message, .. } => {
+                        DiagramError::InvalidThresholdCandidate {
+                            candidate: candidate_index,
+                            message,
+                        }
+                    }
+                    error => error,
+                })?;
+            if candidate
+                .cut
+                .iter()
+                .filter(|half_edge| !paired_external_edges.contains(&half_edge.edge))
+                .count()
+                <= 1
+            {
+                return Err(DiagramError::InvalidThresholdCandidate {
+                    candidate: candidate_index,
+                    message: "threshold candidates must cross at least two non-initial-state edges"
+                        .to_owned(),
+                });
+            }
+            if oriented != normalized.cut.iter().copied().collect::<BTreeSet<_>>() {
+                return Err(DiagramError::InvalidThresholdCandidate {
+                    candidate: candidate_index,
+                    message: "oriented cut endpoints do not equal the crossing edges".to_owned(),
                 });
             }
         }
@@ -1320,10 +1768,12 @@ impl FeynmanDiagram {
             .collect::<Vec<_>>()
             .join(",");
         let cuts = serde_json::to_string(&self.cuts)?;
+        let topology_threshold_candidates =
+            serde_json::to_string(&self.topology_threshold_candidates)?;
         writeln!(output, "digraph feynkit {{")?;
         writeln!(
             output,
-            "  graph [feynkit_name={}, model_fingerprint={}, symmetry_factor={}, overall_factor={}, numerator={}, numerator_prefactor={}, projector={}, loop_momentum_edges={}, cuts={}];",
+            "  graph [feynkit_name={}, model_fingerprint={}, symmetry_factor={}, overall_factor={}, numerator={}, numerator_prefactor={}, projector={}, loop_momentum_edges={}, cuts={}, topology_threshold_candidates={}];",
             Self::dot_string(&self.name)?,
             Self::dot_string(&self.model.fingerprint().to_string())?,
             self.symmetry_factor,
@@ -1333,6 +1783,7 @@ impl FeynmanDiagram {
             Self::dot_string(&self.projector.to_canonical_string())?,
             Self::dot_string(&loop_momentum_edges)?,
             Self::dot_string(&cuts)?,
+            Self::dot_string(&topology_threshold_candidates)?,
         )?;
 
         for (id, vertex) in self.vertices() {
@@ -1366,7 +1817,7 @@ impl FeynmanDiagram {
                 ", numerator={}",
                 Self::dot_string(&vertex.numerator.to_canonical_string())?
             )?;
-            writeln!(output, "]; ")?;
+            writeln!(output, "];")?;
         }
 
         for (id, endpoints, edge) in self.edges() {
@@ -1392,7 +1843,7 @@ impl FeynmanDiagram {
                 ", numerator={}",
                 Self::dot_string(&edge.numerator.to_canonical_string())?
             )?;
-            writeln!(output, "]; ")?;
+            writeln!(output, "];")?;
         }
         writeln!(output, "}}")?;
         Ok(output)
@@ -1411,11 +1862,11 @@ impl FeynmanDiagram {
                 target: "graph".to_owned(),
                 attribute: "model_fingerprint",
             })?;
-        if serialized_fingerprint != &model.fingerprint().to_string() {
-            return Err(DiagramError::InvalidDotAttribute {
-                target: "graph".to_owned(),
-                attribute: "model_fingerprint",
-                value: serialized_fingerprint.clone(),
+        let actual_fingerprint = model.fingerprint();
+        if serialized_fingerprint != &actual_fingerprint.to_string() {
+            return Err(DiagramError::DotModelFingerprintMismatch {
+                serialized: serialized_fingerprint.clone(),
+                actual: actual_fingerprint,
             });
         }
         let name = parsed
@@ -1499,6 +1950,26 @@ impl FeynmanDiagram {
                         value: cuts.clone(),
                     })
             })?;
+        let topology_threshold_candidates = parsed
+            .global_data
+            .statements
+            .get("topology_threshold_candidates")
+            .ok_or_else(|| DiagramError::MissingDotAttribute {
+                target: "graph".to_owned(),
+                attribute: "topology_threshold_candidates",
+            })
+            .and_then(|candidates| {
+                let decoded = serde_json::from_str::<String>(&format!("\"{candidates}\""));
+                decoded
+                    .and_then(|candidates| {
+                        serde_json::from_str::<Vec<DiagramThresholdCandidate>>(&candidates)
+                    })
+                    .map_err(|_| DiagramError::InvalidDotAttribute {
+                        target: "graph".to_owned(),
+                        attribute: "topology_threshold_candidates",
+                        value: candidates.clone(),
+                    })
+            })?;
 
         let mut builder = Self::builder(Arc::clone(&model), name)
             .symmetry_factor(symmetry_factor)
@@ -1509,7 +1980,8 @@ impl FeynmanDiagram {
                 numerator_prefactor,
             )?)
             .projector(Self::parse_expression("projector", projector)?)
-            .cuts(cuts);
+            .cuts(cuts)
+            .topology_threshold_candidates(topology_threshold_candidates);
         let mut node_map = BTreeMap::new();
         for (node, _, data) in parsed.iter_nodes() {
             let target = format!("vertex {}", node.0);
@@ -1761,6 +2233,30 @@ impl FeynmanDiagram {
         Ok(diagram)
     }
 
+    /// Parse one or more stable FeynKit DOT diagrams from a single document.
+    ///
+    /// Each graph must use the dialect emitted by [`Self::to_dot`] and must
+    /// carry the same model fingerprint as `model`. This is the canonical
+    /// import path for a set of finalized cross-section diagrams because their
+    /// typed physical cuts are retained graph by graph.
+    pub fn from_dot_set(
+        model: impl Into<Arc<Model>>,
+        input: &str,
+    ) -> Result<Vec<Self>, DiagramError> {
+        let model = model.into();
+        let parsed = DotGraphSet::from_string(input)
+            .map_err(|error| DiagramError::DotParse(error.to_string()))?;
+        parsed
+            .set
+            .into_iter()
+            .zip(parsed.global_data)
+            .map(|(graph, global_data)| {
+                let graph = DotGraph { graph, global_data };
+                Self::from_dot(Arc::clone(&model), &graph.debug_dot())
+            })
+            .collect()
+    }
+
     pub fn loop_count(&self) -> usize {
         let topology = self.topology();
         topology.internal_edges.len() + topology.components.len() - topology.internal_vertices.len()
@@ -1862,6 +2358,7 @@ impl FeynmanDiagram {
             projector: self.projector.to_canonical_string(),
             loop_momentum_basis: self.loop_momentum_basis.clone(),
             cuts: self.cuts.clone(),
+            topology_threshold_candidates: self.topology_threshold_candidates.clone(),
         }
     }
 
@@ -1887,7 +2384,8 @@ impl FeynmanDiagram {
             )?)
             .projector(Self::parse_expression("projector", data.projector)?)
             .loop_momentum_basis(data.loop_momentum_basis)
-            .cuts(data.cuts);
+            .cuts(data.cuts)
+            .topology_threshold_candidates(data.topology_threshold_candidates);
         for vertex in data.vertices {
             builder.add_vertex(DiagramVertex {
                 name: vertex.name,
@@ -1983,6 +2481,7 @@ pub struct FeynmanDiagramBuilder {
     projector: Atom,
     loop_momentum_basis: Option<LoopMomentumBasis>,
     cuts: Vec<DiagramCut>,
+    topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
 }
 
 impl FeynmanDiagramBuilder {
@@ -1999,6 +2498,7 @@ impl FeynmanDiagramBuilder {
             projector: Atom::one(),
             loop_momentum_basis: None,
             cuts: Vec::new(),
+            topology_threshold_candidates: Vec::new(),
         }
     }
 
@@ -2037,6 +2537,14 @@ impl FeynmanDiagramBuilder {
 
     pub fn cuts(mut self, cuts: Vec<DiagramCut>) -> Self {
         self.cuts = cuts;
+        self
+    }
+
+    pub fn topology_threshold_candidates(
+        mut self,
+        candidates: Vec<DiagramThresholdCandidate>,
+    ) -> Self {
+        self.topology_threshold_candidates = candidates;
         self
     }
 
@@ -2102,6 +2610,16 @@ impl FeynmanDiagramBuilder {
         }
         self.cuts.sort();
         self.cuts.dedup();
+        for candidate in &mut self.topology_threshold_candidates {
+            candidate.cut.sort();
+            candidate.cut.dedup();
+            candidate.left.sort();
+            candidate.left.dedup();
+            candidate.right.sort();
+            candidate.right.dedup();
+        }
+        self.topology_threshold_candidates.sort();
+        self.topology_threshold_candidates.dedup();
         let mut external_indices = BTreeSet::new();
         let mut degrees = vec![0_usize; self.vertices.len()];
         for vertex in &self.vertices {
@@ -2158,6 +2676,7 @@ impl FeynmanDiagramBuilder {
                 edge_signatures: BTreeMap::new(),
             }),
             cuts: self.cuts,
+            topology_threshold_candidates: self.topology_threshold_candidates,
         };
         if diagram.loop_momentum_basis.edge_signatures.is_empty() && diagram.graph.n_edges() != 0 {
             diagram.loop_momentum_basis = diagram
@@ -2608,6 +3127,69 @@ mod tests {
             .unwrap()
     }
 
+    fn cut_scalar_bubble() -> FeynmanDiagram {
+        let model = scalar_model();
+        let rule = model.vertex_rule_id("V_1").unwrap();
+        let particle = model.particle_id("phi").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "cut-scalar-bubble");
+        let incoming = builder.add_vertex(DiagramVertex::external_in_connection(
+            "p-in",
+            0,
+            ExternalState::Incoming,
+            0,
+        ));
+        let left_vertex = builder.add_vertex(DiagramVertex::interaction("left", rule));
+        let right_vertex = builder.add_vertex(DiagramVertex::interaction("right", rule));
+        let outgoing = builder.add_vertex(DiagramVertex::external_in_connection(
+            "p-out",
+            1,
+            ExternalState::Outgoing,
+            0,
+        ));
+        let scalar = || DiagramEdge::new(particle, false);
+        let incoming_edge = builder.add_edge(incoming, left_vertex, scalar()).unwrap();
+        let first_loop_edge = builder
+            .add_edge(left_vertex, right_vertex, scalar())
+            .unwrap();
+        let second_loop_edge = builder
+            .add_edge(left_vertex, right_vertex, scalar())
+            .unwrap();
+        let outgoing_edge = builder.add_edge(right_vertex, outgoing, scalar()).unwrap();
+        let half_edge = |edge, endpoint| DiagramHalfEdge { edge, endpoint };
+        let left = vec![
+            half_edge(incoming_edge, DiagramEndpoint::Source),
+            half_edge(incoming_edge, DiagramEndpoint::Target),
+            half_edge(first_loop_edge, DiagramEndpoint::Source),
+            half_edge(second_loop_edge, DiagramEndpoint::Source),
+        ];
+        let right = vec![
+            half_edge(first_loop_edge, DiagramEndpoint::Target),
+            half_edge(second_loop_edge, DiagramEndpoint::Target),
+            half_edge(outgoing_edge, DiagramEndpoint::Source),
+            half_edge(outgoing_edge, DiagramEndpoint::Target),
+        ];
+        let cut = vec![
+            half_edge(first_loop_edge, DiagramEndpoint::Source),
+            half_edge(second_loop_edge, DiagramEndpoint::Source),
+        ];
+        let side = |half_edges| DiagramCutSide {
+            half_edges,
+            coupling_orders: BTreeMap::new(),
+            loop_count: 0,
+        };
+        let diagram = builder
+            .cuts(vec![DiagramCut {
+                cut: cut.clone(),
+                left: side(left.clone()),
+                right: side(right.clone()),
+            }])
+            .topology_threshold_candidates(vec![DiagramThresholdCandidate { cut, left, right }])
+            .build()
+            .unwrap();
+        diagram.validate().unwrap();
+        diagram
+    }
+
     fn fermion_model() -> Arc<Model> {
         Arc::new(Model::from_json(
             r#"{
@@ -2654,11 +3236,77 @@ mod tests {
         assert_eq!(from_json.loop_count(), 1);
         assert_eq!(from_json.vertices().count(), 4);
 
-        let from_dot =
-            FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap();
+        let dot = diagram.to_dot().unwrap();
+        assert!(
+            dot.lines().all(|line| line.trim_end() == line),
+            "canonical DOT must not contain trailing whitespace"
+        );
+        let from_dot = FeynmanDiagram::from_dot(diagram.model_arc(), &dot).unwrap();
         assert_eq!(from_dot.name(), "bubble");
         assert_eq!(from_dot.loop_count(), 1);
         assert_eq!(from_dot.edges().count(), 4);
+    }
+
+    #[test]
+    fn dot_set_round_trip() {
+        let first = cut_scalar_line().with_name("first");
+        let second = cut_scalar_line().with_name("second");
+        let input = format!("{}\n{}", first.to_dot().unwrap(), second.to_dot().unwrap());
+        let diagrams = FeynmanDiagram::from_dot_set(first.model_arc(), &input).unwrap();
+
+        assert_eq!(
+            diagrams
+                .iter()
+                .map(|diagram| diagram.name())
+                .collect::<Vec<_>>(),
+            ["first", "second"]
+        );
+        assert!(
+            diagrams
+                .iter()
+                .all(|diagram| diagram.cuts() == first.cuts())
+        );
+    }
+
+    #[test]
+    fn replacing_a_numerator_preserves_identity_and_fragment_invariants() {
+        let diagram = one_loop();
+        let topology_id = diagram.id();
+        let replaced = diagram.with_numerator(Atom::num(7)).unwrap();
+
+        assert_eq!(replaced.id(), topology_id);
+        assert_eq!(replaced.numerator(), &Atom::num(7));
+        assert_eq!(
+            replaced
+                .vertices()
+                .filter(|(_, vertex)| !vertex.is_external())
+                .filter(|(_, vertex)| vertex.numerator != Atom::one())
+                .count(),
+            1
+        );
+        assert!(
+            replaced
+                .edges()
+                .all(|(_, _, edge)| edge.numerator == Atom::one())
+        );
+        replaced.validate().unwrap();
+        let from_json =
+            FeynmanDiagram::from_json(replaced.model_arc(), &replaced.to_json().unwrap()).unwrap();
+        let from_dot =
+            FeynmanDiagram::from_dot(replaced.model_arc(), &replaced.to_dot().unwrap()).unwrap();
+        assert_eq!(from_json.numerator(), &Atom::num(7));
+        assert_eq!(from_dot.numerator(), &Atom::num(7));
+    }
+
+    #[test]
+    fn replacing_a_numerator_requires_a_non_external_anchor() {
+        let diagram = FeynmanDiagram::builder(scalar_model(), "empty")
+            .build()
+            .unwrap();
+        assert!(matches!(
+            diagram.with_numerator(Atom::num(7)),
+            Err(DiagramError::MissingNumeratorAnchor)
+        ));
     }
 
     #[test]
@@ -2680,6 +3328,167 @@ mod tests {
             diagram.with_cuts(vec![invalid_cut]),
             Err(DiagramError::InvalidCut { cut: 0, message })
                 if message.contains("crossing edges")
+        ));
+    }
+
+    #[test]
+    fn validates_and_round_trips_topology_threshold_candidates() {
+        let diagram = cut_scalar_bubble();
+        let expected = diagram.topology_threshold_candidates().to_vec();
+        assert_eq!(expected.len(), 1);
+        assert_eq!(expected[0].cut.len(), 2);
+
+        let from_json =
+            FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json().unwrap()).unwrap();
+        assert_eq!(from_json.topology_threshold_candidates(), expected);
+
+        let from_dot =
+            FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap();
+        assert_eq!(from_dot.topology_threshold_candidates(), expected);
+
+        let rebuilt = diagram
+            .clone()
+            .with_topology_threshold_partitions(vec![(
+                expected[0].left.clone(),
+                expected[0].right.clone(),
+            )])
+            .unwrap();
+        assert_eq!(rebuilt.topology_threshold_candidates(), expected);
+
+        let without_candidates = diagram
+            .clone()
+            .with_topology_threshold_candidates(Vec::new())
+            .unwrap();
+        assert_ne!(diagram.id(), without_candidates.id());
+        assert_ne!(
+            diagram.canonical_key().unwrap(),
+            without_candidates.canonical_key().unwrap()
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_topology_threshold_candidates() {
+        let diagram = cut_scalar_bubble();
+        let source = diagram.topology_threshold_candidates()[0].clone();
+
+        let mut incomplete = source.clone();
+        incomplete.right.pop();
+        assert!(matches!(
+            diagram
+                .clone()
+                .with_topology_threshold_candidates(vec![incomplete]),
+            Err(DiagramError::InvalidThresholdCandidate {
+                candidate: 0,
+                message
+            }) if message.contains("disjoint and complementary")
+        ));
+
+        let mut wrong_crossing = source.clone();
+        wrong_crossing.cut.pop();
+        assert!(matches!(
+            diagram
+                .clone()
+                .with_topology_threshold_candidates(vec![wrong_crossing]),
+            Err(DiagramError::InvalidThresholdCandidate {
+                candidate: 0,
+                message
+            }) if message.contains("at least two non-initial-state edges")
+        ));
+
+        let mut split = source;
+        let moved = split.left.pop().unwrap();
+        split.right.push(moved);
+        assert!(matches!(
+            diagram
+                .clone()
+                .with_topology_threshold_candidates(vec![split]),
+            Err(DiagramError::InvalidThresholdCandidate {
+                candidate: 0,
+                message
+            }) if message.contains("is split")
+        ));
+
+        let candidate = diagram.topology_threshold_candidates()[0].clone();
+        assert!(matches!(
+            one_loop().with_topology_threshold_candidates(vec![candidate]),
+            Err(DiagramError::InvalidThresholdCandidate {
+                candidate: 0,
+                message
+            }) if message.contains("paired incoming/outgoing")
+        ));
+
+        let line = cut_scalar_line();
+        let source = |edge| DiagramHalfEdge {
+            edge: EdgeId(edge),
+            endpoint: DiagramEndpoint::Source,
+        };
+        let target = |edge| DiagramHalfEdge {
+            edge: EdgeId(edge),
+            endpoint: DiagramEndpoint::Target,
+        };
+        assert!(matches!(
+            line.with_topology_threshold_candidates(vec![DiagramThresholdCandidate {
+                cut: vec![source(0), target(1)],
+                left: vec![source(0), target(1)],
+                right: vec![target(0), source(1)],
+            }]),
+            Err(DiagramError::InvalidThresholdCandidate {
+                candidate: 0,
+                message
+            }) if message.contains("non-initial-state")
+        ));
+    }
+
+    #[test]
+    fn cut_partitions_recompute_crossings_and_side_summaries() {
+        let diagram = cut_scalar_line();
+        let source = diagram.cuts()[0].clone();
+        let rebuilt = diagram
+            .clone()
+            .with_cut_partitions(vec![(
+                source.left.half_edges.clone(),
+                source.right.half_edges.clone(),
+            )])
+            .unwrap();
+        assert_eq!(rebuilt.cuts(), diagram.cuts());
+        rebuilt.validate().unwrap();
+
+        let mirrored = diagram
+            .with_cut_partitions(vec![(
+                source.right.half_edges.clone(),
+                source.left.half_edges.clone(),
+            )])
+            .unwrap();
+        assert_eq!(mirrored.cuts()[0].cut.len(), source.cut.len());
+        assert_ne!(mirrored.cuts()[0].cut, source.cut);
+        assert!(mirrored.cuts()[0].left.coupling_orders.is_empty());
+        assert_eq!(mirrored.cuts()[0].left.loop_count, 0);
+        mirrored.validate().unwrap();
+    }
+
+    #[test]
+    fn cut_partitions_reject_incomplete_and_split_vertices() {
+        let diagram = cut_scalar_line();
+        let source = diagram.cuts()[0].clone();
+        let mut incomplete_right = source.right.half_edges.clone();
+        incomplete_right.pop();
+        assert!(matches!(
+            diagram.clone().with_cut_partitions(vec![(
+                source.left.half_edges.clone(),
+                incomplete_right,
+            )]),
+            Err(DiagramError::InvalidCut { cut: 0, message })
+                if message.contains("disjoint and complementary")
+        ));
+
+        let mut split_left = source.left.half_edges.clone();
+        let moved = split_left.remove(1);
+        let mut split_right = source.right.half_edges.clone();
+        split_right.push(moved);
+        assert!(matches!(
+            diagram.with_cut_partitions(vec![(split_left, split_right)]),
+            Err(DiagramError::InvalidCut { cut: 0, message })
+                if message.contains("vertex 1 is split")
         ));
     }
 
@@ -2841,6 +3650,15 @@ mod tests {
         assert_eq!(bases.len(), 1);
         assert_eq!(bases[0].tree_edges.len(), 3);
         assert_eq!(bases[0].loop_edges.len(), 1);
+
+        let direct = diagram
+            .with_loop_momentum_tree_edges(&[EdgeId(0), EdgeId(1), EdgeId(3)])
+            .unwrap();
+        assert_eq!(
+            direct.loop_momentum_basis().tree_edges,
+            vec![EdgeId(0), EdgeId(1), EdgeId(3)]
+        );
+        assert_eq!(direct.loop_momentum_basis().loop_edges, vec![EdgeId(2)]);
     }
 
     #[test]

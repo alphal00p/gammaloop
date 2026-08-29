@@ -165,7 +165,8 @@ from the rendered PDF.
 ## Repository Map
 
 - `crates/feynkit/` and `crates/feynkit-*/` hold the standalone model, graph,
-  generation, CFF, kinematics, UFO, and Python-binding toolkits.
+  generation, CFF, kinematics, tensor-reduction, UFO, and Python-binding
+  toolkits.
 - `crates/gammalooprs/src/` holds GammaLoop-specific runtime, evaluation, and
   application integration code.
 - `crates/gammaloop-api/` is the workspace member for the Rust API and Python

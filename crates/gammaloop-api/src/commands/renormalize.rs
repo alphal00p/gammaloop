@@ -110,12 +110,13 @@ impl Renormalize {
                 .renormalization_part(&state.model, &settings)?
                 .expression;
 
-            part = state
-                .model
-                .apply_parameter_replacement_rules(&state.model.apply_coupling_replacement_rules(
-                    &part.simplify_color().expand().simplify_metrics().to_dots(),
-                ))
-                .collect_factors();
+            part =
+                state
+                    .model
+                    .apply_parameter_replacement_rules(&state.model.expand_couplings(
+                        &part.simplify_color().expand().simplify_metrics().to_dots(),
+                    ))
+                    .collect_factors();
 
             if self.align_to_rqft {
                 part = (part

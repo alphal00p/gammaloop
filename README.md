@@ -157,12 +157,13 @@ relativistic kinematics without importing `gammalooprs` or `gammaloop-api`.
 | `feynkit-graph` | Linnet-backed `FeynmanDiagram` IR, JSON/DOT I/O, model validation, and loop-momentum bases |
 | `feynkit-generator` | Typed amplitude/cross-section definitions, diagram generation, filters, factors, numerator construction, and grouping |
 | `feynkit-cff` | Topological Cross-Free Family orientations, surfaces, expression trees, and generation-local caches |
+| `feynkit-tensor` | Symmetry-orbit Lorentz tensor reduction in Spenso notation, with exact orthogonal-Weingarten projectors through high rank |
 | `feynkit` | Zero-logic Rust facade over the standalone crates |
 | `feynkit-py` | `symbolica.community.feynkit` bindings with native Symbolica expression exchange and generated stubs |
 
 The dependency graph is downward-only: model and kinematics types feed graph
-construction, model and graph types feed generation, graphs feed CFF
-construction, and the model also feeds optional UFO loading. GammaLoop is a
+construction, model and graph types feed generation, graphs feed CFF and tensor
+operations, and the model also feeds optional UFO loading. GammaLoop is a
 consumer of these crates; application state, settings, integrands, evaluators,
 events, observables, and UV subtraction remain in GammaLoop.
 
@@ -171,10 +172,10 @@ GammaLoop adapter retains tensor-evaluated numerator comparisons,
 symmetric-polarization sampling, and gamma-closure validation because those
 operations depend on GammaLoop's tensor-evaluation machinery.
 
-The default `feynkit` features provide model, graph, generator, CFF, and
-kinematics APIs. Raw UFO loading is deliberately opt-in because it requires an
-attached Python interpreter and the `ufo-model-loader` package. A normalized
-JSON model needs no Python linkage:
+The default `feynkit` features provide model, graph, generator, CFF,
+kinematics, and tensor-reduction APIs. Raw UFO loading is deliberately opt-in
+because it requires an attached Python interpreter and the
+`ufo-model-loader` package. A normalized JSON model needs no Python linkage:
 
 ```rust
 use feynkit::{GenerationOptions, Generator, Model, Process};

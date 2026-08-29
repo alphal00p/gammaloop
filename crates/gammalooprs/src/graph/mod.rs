@@ -11,7 +11,10 @@ use linnet::{
     half_edge::{
         HedgeGraph,
         involution::{EdgeData, EdgeIndex, Hedge, HedgePair},
-        subgraph::{HedgeNode, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike},
+        subgraph::{
+            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike,
+            SubSetOps,
+        },
     },
     parser::DotGraph,
 };
@@ -56,6 +59,17 @@ pub struct FinalizedCut {
     pub right: SuBitGraph,
 }
 
+/// Topology-only threshold candidate translated from finalized FeynKit metadata.
+///
+/// This is deliberately distinct from [`FinalizedCut`]: it is the complete
+/// s-channel topology inventory and is not a process-selected physical cut.
+#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+pub struct FinalizedTopologyThresholdCandidate {
+    pub cut: OrientedCut,
+    pub left: SuBitGraph,
+    pub right: SuBitGraph,
+}
+
 #[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = crate::GammaLoopContext)]
 pub struct Graph {
@@ -75,6 +89,8 @@ pub struct Graph {
     pub polarizations: Vec<(PolDef, Atom)>,
     /// Physical cuts selected and filtered by canonical FeynKit generation.
     pub finalized_cuts: Vec<FinalizedCut>,
+    /// Complete topology-only threshold inventory finalized by FeynKit.
+    pub finalized_topology_threshold_candidates: Vec<FinalizedTopologyThresholdCandidate>,
 }
 
 impl LogMessage for Graph {
@@ -525,6 +541,54 @@ impl Graph {
         }
 
         None
+    }
+
+    /// Return the loop-momentum-independent tree attached to the sewn initial state.
+    ///
+    /// Canonical FeynKit threshold partitions still include this tree. Runtime
+    /// threshold construction historically removes it after sewing, so the
+    /// mechanical bridge applies this exact topology cleanup once.
+    pub(crate) fn get_initial_state_tree(&self) -> (SuBitGraph, Vec<EdgeIndex>) {
+        let mut tree_like_edges = Vec::new();
+        let full_graph = self.underlying.full_filter();
+        let full_initial_state_cut = self
+            .initial_state_cut
+            .left
+            .union(&self.initial_state_cut.right);
+        let graph_without_initial_state_cut = full_graph.subtract(&full_initial_state_cut);
+        let mut result = self.underlying.empty_subgraph::<SuBitGraph>();
+
+        for (pair, edge_id, _) in self
+            .underlying
+            .iter_edges_of(&graph_without_initial_state_cut)
+        {
+            if let HedgePair::Paired { source, sink } = pair
+                && self.loop_momentum_basis.edge_signatures[edge_id]
+                    .internal
+                    .iter()
+                    .all(|sign| sign.is_zero())
+            {
+                tree_like_edges.push(edge_id);
+                let source_node = self.underlying.node_id(source);
+                let sink_node = self.underlying.node_id(sink);
+                let source_connects_initial_state =
+                    self.underlying.iter_crown(source_node).any(|hedge| {
+                        let mut one_hedge = self.underlying.empty_subgraph::<SuBitGraph>();
+                        one_hedge.add(hedge);
+                        one_hedge.intersects(&full_initial_state_cut)
+                    });
+                let initial_node = if source_connects_initial_state {
+                    source_node
+                } else {
+                    sink_node
+                };
+                for hedge in self.underlying.iter_crown(initial_node) {
+                    result.add(hedge);
+                }
+            }
+        }
+
+        (result, tree_like_edges)
     }
 
     pub(crate) fn get_raised_edge_groups(&self) -> Vec<Vec<EdgeIndex>> {

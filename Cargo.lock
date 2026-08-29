@@ -1444,6 +1444,7 @@ dependencies = [
  "feynkit-graph",
  "feynkit-kinematics",
  "feynkit-model",
+ "feynkit-tensor",
  "feynkit-ufo",
 ]
 
@@ -1476,6 +1477,7 @@ dependencies = [
  "serde",
  "serde_json",
  "spenso",
+ "spenso-hep-lib",
  "symbolica",
  "thiserror 2.0.18",
 ]
@@ -1527,6 +1529,7 @@ dependencies = [
  "feynkit-graph",
  "feynkit-kinematics",
  "feynkit-model",
+ "feynkit-tensor",
  "feynkit-ufo",
  "include_dir",
  "pyo3",
@@ -1535,6 +1538,18 @@ dependencies = [
  "spynso3",
  "symbolica",
  "tempfile",
+]
+
+[[package]]
+name = "feynkit-tensor"
+version = "0.1.0"
+dependencies = [
+ "feynkit-graph",
+ "feynkit-model",
+ "idenso",
+ "spenso",
+ "symbolica",
+ "thiserror 2.0.18",
 ]
 
 [[package]]
@@ -1834,6 +1849,7 @@ dependencies = [
  "toml_writer",
  "tracing",
  "tracing-subscriber",
+ "typed-index-collections",
  "winnow 0.7.15",
  "winnow 1.0.2",
  "zerocopy",
@@ -5438,9 +5454,9 @@ dependencies = [
 
 [[package]]
 name = "typed-index-collections"
-version = "3.5.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "898160f1dfd383b4e92e17f0512a7d62f3c51c44937b23b6ffc3a1614a8eaccd"
+checksum = "3fd393dbd1e7b23e0cab7396570309b4068aa504e9dac2cd41d827583b4e9ab7"
 dependencies = [
  "bincode 2.0.1",
  "serde",
