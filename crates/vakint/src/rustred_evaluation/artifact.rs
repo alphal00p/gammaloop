@@ -7,6 +7,9 @@ use super::RustRedEvaluationError;
 const K1_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k1.rr");
 const K3_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k3.rr");
 
+// The embedded files and the pinned RustRed revision are one atomic build-time
+// contract. Decode only the current RustRed schema: obsolete artifact schemas
+// intentionally have no Vakint migration, compatibility reader, or fallback.
 static K1_ARTIFACT: LazyLock<Result<ClosedArtifact, String>> =
     LazyLock::new(|| ClosedArtifact::decode_durable(K1_BYTES).map_err(|error| error.to_string()));
 static K3_ARTIFACT: LazyLock<Result<ClosedArtifact, String>> =

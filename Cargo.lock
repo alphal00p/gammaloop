@@ -4054,7 +4054,7 @@ dependencies = [
 [[package]]
 name = "rustred"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=222f1868dd2991b7651a1be7577db4d59a8bb52b#222f1868dd2991b7651a1be7577db4d59a8bb52b"
+source = "git+https://github.com/alphal00p/rustred?rev=407f6193e283bc174b967c86dba16b717f93a263#407f6193e283bc174b967c86dba16b717f93a263"
 dependencies = [
  "rand 0.9.4",
  "rayon",
