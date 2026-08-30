@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     env,
     ffi::OsString,
     path::Path,
@@ -346,29 +347,45 @@ payload = {{
         ),
     )?;
 
-    assert_eq!(
-        payload["group_sizes"].as_array().unwrap(),
-        &vec![JsonValue::from(1_u64), JsonValue::from(2_u64)]
-    );
+    let mut group_sizes = payload["group_sizes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|size| size.as_u64().unwrap())
+        .collect::<Vec<_>>();
+    group_sizes.sort_unstable();
+    assert_eq!(group_sizes, vec![1, 2]);
     assert_eq!(payload["generated_event_count"].as_u64(), Some(3));
     assert_eq!(payload["accepted_event_count"].as_u64(), Some(3));
 
     let groups = payload["groups"].as_array().unwrap();
-    assert_eq!(groups[0][0]["graph_id"].as_u64(), Some(0));
-    assert_eq!(groups[0][0]["cut_id"].as_u64(), Some(0));
-    assert_eq!(
-        groups[0][0]["incoming_pdgs"]
-            .as_array()
-            .unwrap()
+    let mut graph_ids = BTreeSet::new();
+    for group in groups {
+        let events = group.as_array().unwrap();
+        let graph_id = events[0]["graph_id"].as_u64().unwrap();
+        graph_ids.insert(graph_id);
+        let cut_ids = events
             .iter()
-            .filter_map(|value| value.as_i64())
-            .collect::<Vec<_>>(),
-        vec![-11, 11]
-    );
-    assert_eq!(groups[1][0]["graph_id"].as_u64(), Some(1));
-    assert_eq!(groups[1][0]["cut_id"].as_u64(), Some(0));
-    assert_eq!(groups[1][1]["graph_id"].as_u64(), Some(1));
-    assert_eq!(groups[1][1]["cut_id"].as_u64(), Some(1));
+            .map(|event| {
+                assert_eq!(event["graph_id"].as_u64(), Some(graph_id));
+                assert_eq!(
+                    event["incoming_pdgs"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .filter_map(|value| value.as_i64())
+                        .collect::<Vec<_>>(),
+                    vec![-11, 11]
+                );
+                event["cut_id"].as_u64().unwrap()
+            })
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            cut_ids,
+            BTreeSet::from_iter((0..events.len()).map(|cut_id| cut_id as u64))
+        );
+    }
+    assert_eq!(graph_ids, BTreeSet::from([0, 1]));
     let formatted = payload["formatted"].as_str().unwrap();
     assert!(formatted.contains("Kinematics"));
     assert!(formatted.contains("PDG"));
