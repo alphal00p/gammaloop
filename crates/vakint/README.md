@@ -9,6 +9,28 @@ To this end, it uses a combination of [`Symbolica`](https://symbolica.io/) and [
 
 * numerically, if the topology is not known, using the sector decomposition algorithm implemented in `pySecDec`[https://arxiv.org/pdf/1703.09692].
 
+For supported one- and two-loop equal-mass vacuum families, the opt-in
+`EvaluationOrder::rustred_only()` scalar backend instead applies closing IBP
+artifacts shipped with Vakint and reuses Vakint's pure-Rust master
+substitutions. This scalar tail neither invokes nor falls back to FORM. The
+default evaluation order is unchanged; tensor-bearing inputs continue to use
+Vakint's existing tensor prepass before scalar evaluation.
+
+```rust
+use vakint::{EvaluationOrder, Vakint, VakintSettings, vakint_parse};
+
+let vakint = Vakint::new()?;
+let settings = VakintSettings {
+    evaluation_order: EvaluationOrder::rustred_only(),
+    ..VakintSettings::default()
+};
+let result = vakint.evaluate_integral(
+    &settings,
+    vakint_parse!("topo(I2L(1,2,1,1))")?.as_view(),
+)?;
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
 ## Python usage
 
 `Vakint` is also part of the [`symbolica-community`](https://github.com/benruijl/symbolica-community) `Python` module where vaccuum graphs can be evaluated directly using the `Python` API exposed in that module.

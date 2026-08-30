@@ -1686,8 +1686,7 @@ pub enum EvaluationMethod {
     MATAD(MATADOptions),
     FMFT(FMFTOptions),
     PySecDec(PySecDecOptions),
-    /// Reserved scalar-reduction boundary; it remains unsupported until closing
-    /// RustRed IBP artifacts are shipped with Vakint.
+    /// FORM-independent scalar reduction through shipped RustRed IBP artifacts.
     RustRed(RustRedEvaluationOptions),
 }
 
@@ -1746,7 +1745,9 @@ impl EvaluationMethod {
                 .0
                 .iter()
                 .any(|m| matches!(m, EvaluationMethod::PySecDec(_))),
-            EvaluationMethod::RustRed(_) => false,
+            EvaluationMethod::RustRed(options) => {
+                rustred_evaluation::supports(settings, topology, options)
+            }
         }
     }
 
@@ -1897,10 +1898,7 @@ impl EvaluationOrder {
             matad_options.unwrap_or_default(),
         )])
     }
-    /// Select only the reserved RustRed scalar evaluator.
-    ///
-    /// Until closing artifacts are shipped this order cannot evaluate an integral;
-    /// mixed orders safely continue to their next supported method instead.
+    /// Select only the FORM-independent RustRed scalar evaluator.
     pub fn rustred_only() -> Self {
         EvaluationOrder(vec![EvaluationMethod::RustRed(
             RustRedEvaluationOptions::default(),
@@ -5457,7 +5455,7 @@ mod tests {
     }
 
     #[test]
-    fn rustred_scalar_dispatch_reports_the_unavailable_reducer() {
+    fn rustred_scalar_dispatch_reduces_a_matched_one_loop_integral() {
         let vakint = Vakint::new().unwrap();
         let settings = VakintSettings::default();
         let integral = vk_parse!("topo(prop(1,edge(1,1),k(1),muvsq,1))").unwrap();
@@ -5468,21 +5466,18 @@ mod tests {
             .unwrap();
         integral_specs.apply_replacement_rules().unwrap();
         let numerator = Atom::num(1);
-        let method = EvaluationMethod::RustRed(RustRedEvaluationOptions::default());
+        let method = EvaluationMethod::RustRed(RustRedEvaluationOptions {
+            substitute_masters: false,
+        });
 
-        let error = method
+        let reduced = method
             .evaluate_integral(&vakint, &settings, numerator.as_view(), &integral_specs)
-            .unwrap_err();
-        assert!(matches!(
-            error,
-            VakintError::RustRedEvaluation(RustRedEvaluationError::ReducerUnavailable {
-                loop_count: 1
-            })
-        ));
+            .unwrap();
+        assert!(reduced.to_canonical_string().contains("Gam(1,1)"));
     }
 
     #[test]
-    fn reserved_rustred_method_does_not_intercept_low_loop_fallbacks() {
+    fn rustred_support_is_limited_to_shipped_matcher_classes() {
         let vakint = Vakint::new().unwrap();
         let settings = VakintSettings::default();
         let rustred = EvaluationMethod::RustRed(RustRedEvaluationOptions::default());
@@ -5510,14 +5505,40 @@ mod tests {
             .unwrap(),
         ];
 
-        for integral in representative_integrals {
-            let integral_specs = vakint
+        for (index, integral) in representative_integrals.into_iter().enumerate() {
+            let mut integral_specs = vakint
                 .topologies
                 .match_topologies_to_user_input(integral.as_view(), false)
                 .unwrap()
                 .unwrap();
-            assert!(!rustred.supports(&settings, &integral_specs.canonical_topology));
+            integral_specs.apply_replacement_rules().unwrap();
+            assert_eq!(
+                rustred.supports(&settings, &integral_specs.canonical_topology),
+                index < 2
+            );
             assert!(alphaloop.supports(&settings, &integral_specs.canonical_topology));
+        }
+    }
+
+    #[test]
+    fn rustred_support_checks_concrete_mass_power_and_artifact_domain() {
+        let vakint = Vakint::new().unwrap();
+        let settings = VakintSettings::default();
+        let rustred = EvaluationMethod::RustRed(RustRedEvaluationOptions::default());
+        let inadmissible = [
+            vk_parse!("topo(prop(1,edge(1,1),k(1),0,1))").unwrap(),
+            vk_parse!("topo(prop(1,edge(1,1),k(1),muvsq,1/2))").unwrap(),
+            vk_parse!("topo(I2L(muvsq,9223372036854775807,1,1))").unwrap(),
+        ];
+
+        for integral in inadmissible {
+            let mut integral_specs = vakint
+                .topologies
+                .match_topologies_to_user_input(integral.as_view(), false)
+                .unwrap()
+                .unwrap();
+            integral_specs.apply_replacement_rules().unwrap();
+            assert!(!rustred.supports(&settings, &integral_specs.canonical_topology));
         }
     }
 }

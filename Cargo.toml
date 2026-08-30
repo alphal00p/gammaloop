@@ -42,7 +42,7 @@ rand = "0.9.4"
 ratatui = "0.30.0"
 rayon = "1.5"
 regex = "1.12.3"
-rustred = { git = "https://github.com/alphal00p/rustred", rev = "1c8af5cf2cbad5a4634740346654b5da386b5298" }
+rustred = { git = "https://github.com/alphal00p/rustred", rev = "222f1868dd2991b7651a1be7577db4d59a8bb52b" }
 schemars = "1.2.1"
 serde = "1.0.228"
 serde_json = "1"

@@ -346,12 +346,12 @@ impl VakintEvaluationMethodWrapper {
 
     #[pyo3(signature = (substitute_masters = None))]
     #[classmethod]
-    /// Create the reserved FORM-independent RustRed scalar-integral evaluation method.
+    /// Create the opt-in FORM-independent RustRed scalar-integral evaluation method.
     ///
-    /// This method leaves Vakint's tensor-reduction selection unchanged. The scalar
-    /// boundary does not claim support for any topology until closing RustRed IBP
-    /// artifacts are shipped; in a mixed evaluation order Vakint therefore continues
-    /// to the next supported method.
+    /// This method leaves Vakint's tensor-reduction selection unchanged. It uses
+    /// shipped closing artifacts for supported one- and two-loop equal-mass vacuum
+    /// families. Tensor-bearing inputs still use Vakint's separately selected tensor
+    /// prepass; only the scalar reduction and master-substitution tail is FORM-free.
     ///
     /// ## Examples
     /// ```python
