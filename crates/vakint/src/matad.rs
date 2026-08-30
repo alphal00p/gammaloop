@@ -316,6 +316,174 @@ impl MATAD {
 
         Ok(r)
     }
+
+    /// Materialize an exact expression already reduced to MATAD's master basis.
+    ///
+    /// This boundary is deliberately independent of FORM: MATAD's reducer calls
+    /// it after restoring FORM's private mass placeholder, while native scalar
+    /// reducers can call it after mapping their typed masters directly to the
+    /// same physical-mass basis. `euclidean_sign_power` is present only for a
+    /// reducer whose input integral used Euclidean propagators; a Minkowski
+    /// reducer maps the sign of each terminal master before entering this method
+    /// and passes `None`.
+    pub(crate) fn finalize_reduced_masters(
+        &self,
+        mut evaluated_integral: Atom,
+        loop_count: i64,
+        euclidean_sign_power: Option<i64>,
+        muv_sq_atom: &Atom,
+        options: &MATADOptions,
+    ) -> Result<Atom, VakintError> {
+        let settings = &self.settings;
+        let mut normalization = vk_parse!(
+            format!(
+                "(
+                    (𝑖*(𝜋^((4-2*{eps})/2)))\
+                  * (exp(-EulerGamma))^({eps})\
+                  * (exp(-logmUVmu-log_mu_sq))^({eps})\
+                 )^{loop_count}",
+                eps = settings.epsilon_symbol,
+            )
+            .as_str()
+        )
+        .unwrap();
+
+        if let Some(sign_power) = euclidean_sign_power {
+            // MATAD reduces Euclidean propagators, so convert the target back
+            // to Vakint's Minkowski convention after the reduction.
+            normalization *= vk_parse!(format!("((-1)^{sign_power})").as_str()).unwrap();
+        }
+
+        // Adjust normalization factor.
+        let mut complete_normalization = normalization
+            * settings
+                .get_integral_normalization_factor_atom()?
+                .replace(S.n_loops.to_pattern())
+                .with(Atom::num(loop_count).to_pattern());
+        complete_normalization = complete_normalization
+            .replace(Atom::var(vk_symbol!(settings.epsilon_symbol.as_str())).to_pattern())
+            .with(vk_parse!("ep").unwrap().to_pattern());
+
+        evaluated_integral *= complete_normalization;
+
+        if options.expand_masters {
+            let expansion_depth = settings.number_of_terms_in_epsilon_expansion - loop_count - 1;
+            if options.direct_numerical_substition {
+                debug!(
+                    "{}: Substitute masters directly with their numerical values, with terms up to and including {}^{} ...",
+                    "MATAD".green(),
+                    settings.epsilon_symbol,
+                    expansion_depth
+                );
+                evaluated_integral =
+                    self.substitute_masters_directly(evaluated_integral.as_view())?;
+            } else {
+                debug!(
+                    "{}: Expanding masters and including terms up to and including {}^{} ...",
+                    "MATAD".green(),
+                    settings.epsilon_symbol,
+                    expansion_depth
+                );
+                evaluated_integral = self.expand_matad_masters(evaluated_integral.as_view())?;
+            }
+            // Temporary work around for series bug in Symbolica
+            // evaluated_integral = vk_parse!("(any___)^-1").unwrap().replace_all(
+            //     evaluated_integral.as_view(),
+            //     &PatternOrMap::Map(Box::new(move |match_in| {
+            //         Atom::num(1) / match_in.get(S.any___).unwrap().to_atom().expand()
+            //     })),
+            //     None,
+            //     None,
+            // );
+            debug!(
+                "{}: Series expansion of the result up to and including terms of order {}^{} ...",
+                "MATAD".green(),
+                settings.epsilon_symbol,
+                expansion_depth
+            );
+            evaluated_integral = match evaluated_integral.series(
+                vk_symbol!("ep"),
+                Atom::Zero.as_view(),
+                Rational::from(expansion_depth),
+            ) {
+                Ok(a) => a,
+                Err(e) => return Err(VakintError::SymbolicaError(e.to_string())),
+            }
+            .to_atom();
+
+            // Sanity check.
+            if let Some(m) = evaluated_integral
+                .pattern_match(&vk_parse!("Oep(x_,y_)").unwrap().to_pattern(), None, None)
+                .next()
+            {
+                return Err(VakintError::MATADError(format!(
+                    "MATAD expansion yielded terms beyond expansion depth supported: Oep({},{})",
+                    m.get(&S.x_).unwrap(),
+                    m.get(&S.y_).unwrap(),
+                )));
+            }
+            if options.direct_numerical_substition {
+                debug!(
+                    "{}: Substituting PolyGamma and period constants...",
+                    "MATAD".green()
+                );
+                evaluated_integral = evaluated_integral.expand();
+                evaluated_integral = self.substitute_poly_gamma(evaluated_integral.as_view())?;
+                evaluated_integral =
+                    self.substitute_additional_constants(evaluated_integral.as_view())?;
+            } else if options.susbstitute_masters {
+                debug!("{}: Substituting masters with HPLs ...", "MATAD".green());
+                evaluated_integral = self.substitute_masters(evaluated_integral.as_view())?;
+                if options.substitute_hpls {
+                    // Expanding here is important to improve efficiency and avoid symbolica bugs with floating point coefficients
+                    evaluated_integral = evaluated_integral.expand();
+                    debug!("{}: Substituting HPLs with numerics ...", "MATAD".green());
+                    evaluated_integral = self.substitute_hpls(evaluated_integral.as_view())?;
+                    evaluated_integral =
+                        self.substitute_poly_gamma(evaluated_integral.as_view())?;
+                    evaluated_integral =
+                        self.substitute_additional_constants(evaluated_integral.as_view())?;
+                }
+            }
+            // Sanity check.
+            if let Some(m) = evaluated_integral
+                .pattern_match(&vk_parse!("Oep(x_,y_)").unwrap().to_pattern(), None, None)
+                .next()
+            {
+                return Err(VakintError::MATADError(format!(
+                    "MATAD expansion yielded terms beyond expansion depth supported: Oep({},{})",
+                    m.get(&S.x_).unwrap(),
+                    m.get(&S.y_).unwrap(),
+                )));
+            }
+        }
+
+        evaluated_integral = evaluated_integral
+            .replace(vk_parse!("ep").unwrap().to_pattern())
+            .with(Atom::var(vk_symbol!(settings.epsilon_symbol.as_str())).to_pattern());
+
+        if !settings.use_dot_product_notation {
+            evaluated_integral = Vakint::convert_from_dot_notation(evaluated_integral.as_view());
+        }
+
+        let log_muv_mu_sq = function!(
+            Symbol::LOG,
+            muv_sq_atom.clone() / Atom::var(vk_symbol!(settings.mu_r_sq_symbol.as_str()))
+        );
+        let log_mu_sq = function!(
+            Symbol::LOG,
+            Atom::var(vk_symbol!(settings.mu_r_sq_symbol.as_str()))
+        );
+
+        evaluated_integral = evaluated_integral
+            .replace(vk_parse!("logmUVmu").unwrap().to_pattern())
+            .with(log_muv_mu_sq.to_pattern());
+        evaluated_integral = evaluated_integral
+            .replace(vk_parse!("log_mu_sq").unwrap().to_pattern())
+            .with(log_mu_sq.to_pattern());
+
+        Ok(evaluated_integral)
+    }
 }
 
 impl Vakint {
@@ -608,7 +776,7 @@ impl Vakint {
                     .unwrap()
                     .to_pattern(),
             );
-        // Use may have "stupidly" also kept odd powers in the numerator
+        // A user may also have retained odd powers of the mass in a numerator.
         evaluated_integral = evaluated_integral
             .replace(vk_parse!("M^pow_").unwrap().to_pattern())
             .when(Condition::from((S.pow_, odd_condition())))
@@ -625,159 +793,12 @@ impl Vakint {
                     .unwrap()
                     .to_pattern(),
             );
-        let mut matad_normalization_correction = vk_parse!(
-            format!(
-                "(
-                    (𝑖*(𝜋^((4-2*{eps})/2)))\
-                  * (exp(-EulerGamma))^({eps})\
-                  * (exp(-logmUVmu-log_mu_sq))^({eps})\
-                 )^{n_loops}",
-                eps = settings.epsilon_symbol,
-                n_loops = integral.n_loops
-            )
-            .as_str()
+        matad.finalize_reduced_masters(
+            evaluated_integral,
+            integral.n_loops as i64,
+            Some(powers.iter().sum()),
+            &muv_sq_atom,
+            options,
         )
-        .unwrap();
-
-        // Since MATAD uses euclidean denominator, we must adjust the overall sign by (-1) per quadratic denominator with power one.
-        matad_normalization_correction *=
-            vk_parse!(format!("((-1)^{})", powers.iter().sum::<i64>()).as_str()).unwrap();
-
-        // Adjust normalization factor
-        let mut complete_normalization = matad_normalization_correction
-            * settings
-                .get_integral_normalization_factor_atom()?
-                .replace(S.n_loops.to_pattern())
-                .with(Atom::num(integral.n_loops as i64).to_pattern());
-        complete_normalization = complete_normalization
-            .replace(Atom::var(vk_symbol!(settings.epsilon_symbol.as_str())).to_pattern())
-            .with(vk_parse!("ep").unwrap().to_pattern());
-
-        evaluated_integral *= complete_normalization;
-
-        if options.expand_masters {
-            let expansion_depth =
-                settings.number_of_terms_in_epsilon_expansion - (integral.n_loops as i64) - 1;
-            if options.direct_numerical_substition {
-                debug!(
-                    "{}: Substitute masters directly with their numerical values, with terms up to and including {}^{} ...",
-                    "MATAD".green(),
-                    settings.epsilon_symbol,
-                    expansion_depth
-                );
-                evaluated_integral =
-                    matad.substitute_masters_directly(evaluated_integral.as_view())?;
-            } else {
-                debug!(
-                    "{}: Expanding masters and including terms up to and including {}^{} ...",
-                    "MATAD".green(),
-                    settings.epsilon_symbol,
-                    expansion_depth
-                );
-                evaluated_integral = matad.expand_matad_masters(evaluated_integral.as_view())?;
-            }
-            // Temporary work around for series bug in Symbolica
-            // evaluated_integral = vk_parse!("(any___)^-1").unwrap().replace_all(
-            //     evaluated_integral.as_view(),
-            //     &PatternOrMap::Map(Box::new(move |match_in| {
-            //         Atom::num(1) / match_in.get(S.any___).unwrap().to_atom().expand()
-            //     })),
-            //     None,
-            //     None,
-            // );
-            debug!(
-                "{}: Series expansion of the result up to and including terms of order {}^{} ...",
-                "MATAD".green(),
-                settings.epsilon_symbol,
-                expansion_depth
-            );
-            evaluated_integral = match evaluated_integral.series(
-                vk_symbol!("ep"),
-                Atom::Zero.as_view(),
-                Rational::from(expansion_depth),
-            ) {
-                Ok(a) => a,
-                Err(e) => return Err(VakintError::SymbolicaError(e.to_string())),
-            }
-            .to_atom();
-
-            // Sanity check
-            if let Some(m) = evaluated_integral
-                .pattern_match(&vk_parse!("Oep(x_,y_)").unwrap().to_pattern(), None, None)
-                .next()
-            {
-                return Err(VakintError::MATADError(format!(
-                    "MATAD expansion yielded terms beyond expansion depth supported: Oep({},{})",
-                    m.get(&S.x_).unwrap(),
-                    m.get(&S.y_).unwrap(),
-                )));
-            }
-            if options.direct_numerical_substition {
-                debug!(
-                    "{}: Substituting PolyGamma and period constants...",
-                    "MATAD".green()
-                );
-                evaluated_integral = evaluated_integral.expand();
-                evaluated_integral = matad.substitute_poly_gamma(evaluated_integral.as_view())?;
-                evaluated_integral =
-                    matad.substitute_additional_constants(evaluated_integral.as_view())?;
-            } else if options.susbstitute_masters {
-                debug!("{}: Substituting masters with HPLs ...", "MATAD".green());
-                evaluated_integral = matad.substitute_masters(evaluated_integral.as_view())?;
-                if options.substitute_hpls {
-                    // Expanding here is important to improve efficiency and avoid symbolica bugs with floating point coefficients
-                    evaluated_integral = evaluated_integral.expand();
-                    debug!("{}: Substituting HPLs with numerics ...", "MATAD".green());
-                    evaluated_integral = matad.substitute_hpls(evaluated_integral.as_view())?;
-                    evaluated_integral =
-                        matad.substitute_poly_gamma(evaluated_integral.as_view())?;
-                    evaluated_integral =
-                        matad.substitute_additional_constants(evaluated_integral.as_view())?;
-                }
-            }
-            // Sanity check
-            if let Some(m) = evaluated_integral
-                .pattern_match(&vk_parse!("Oep(x_,y_)").unwrap().to_pattern(), None, None)
-                .next()
-            {
-                return Err(VakintError::FMFTError(format!(
-                    "FMFT expansion yielded terms beyond expansion depth supported: Oep({},{})",
-                    m.get(&S.x_).unwrap(),
-                    m.get(&S.y_).unwrap(),
-                )));
-            }
-        }
-
-        evaluated_integral = evaluated_integral
-            .replace(vk_parse!("ep").unwrap().to_pattern())
-            .with(Atom::var(vk_symbol!(settings.epsilon_symbol.as_str())).to_pattern());
-
-        if !settings.use_dot_product_notation {
-            evaluated_integral = Vakint::convert_from_dot_notation(evaluated_integral.as_view());
-        }
-
-        let log_muv_mu_sq = function!(
-            Symbol::LOG,
-            muv_sq_atom / Atom::var(vk_symbol!(settings.mu_r_sq_symbol.as_str()))
-        );
-
-        let log_mu_sq = function!(
-            Symbol::LOG,
-            Atom::var(vk_symbol!(settings.mu_r_sq_symbol.as_str()))
-        );
-
-        evaluated_integral = evaluated_integral
-            .replace(vk_parse!("logmUVmu").unwrap().to_pattern())
-            .with((log_muv_mu_sq).to_pattern());
-        evaluated_integral = evaluated_integral
-            .replace(vk_parse!("log_mu_sq").unwrap().to_pattern())
-            .with((log_mu_sq).to_pattern());
-
-        // println!(
-        //     "evaluated_integral: {}",
-        //     evaluated_integral.to_canonical_string()
-        // );
-
-        Ok(evaluated_integral)
     }
 }
