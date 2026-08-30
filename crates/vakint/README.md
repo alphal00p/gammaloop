@@ -16,6 +16,12 @@ substitutions. This scalar tail neither invokes nor falls back to FORM. The
 default evaluation order is unchanged; tensor-bearing inputs continue to use
 Vakint's existing tensor prepass before scalar evaluation.
 
+The embedded artifacts and Vakint's pinned RustRed revision form one atomic
+build-time contract and must use RustRed's current artifact schema. Vakint does
+not migrate or decode obsolete RustRed artifact schemas. This is separate from
+Vakint's backward-compatibility contract for its public API, defaults, and
+existing FORM-backed evaluation methods.
+
 ```rust
 use vakint::{EvaluationOrder, Vakint, VakintSettings, vakint_parse};
 
