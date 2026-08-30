@@ -1,19 +1,23 @@
 use std::sync::LazyLock;
 
-use rustred::foundry::artifact::ClosedArtifact;
+use rustred::foundry::artifact::{ArtifactPersistenceError, ClosedArtifact};
 
 use super::RustRedEvaluationError;
 
 const K1_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k1.rr");
 const K3_BYTES: &[u8] = include_bytes!("../../data/rustred/unit_mass_vacuum_k3.rr");
 
+fn decode_current_artifact(bytes: &[u8]) -> Result<ClosedArtifact, ArtifactPersistenceError> {
+    ClosedArtifact::decode_durable(bytes)
+}
+
 // The embedded files and the pinned RustRed revision are one atomic build-time
 // contract. Decode only the current RustRed schema: obsolete artifact schemas
 // intentionally have no Vakint migration, compatibility reader, or fallback.
 static K1_ARTIFACT: LazyLock<Result<ClosedArtifact, String>> =
-    LazyLock::new(|| ClosedArtifact::decode_durable(K1_BYTES).map_err(|error| error.to_string()));
+    LazyLock::new(|| decode_current_artifact(K1_BYTES).map_err(|error| error.to_string()));
 static K3_ARTIFACT: LazyLock<Result<ClosedArtifact, String>> =
-    LazyLock::new(|| ClosedArtifact::decode_durable(K3_BYTES).map_err(|error| error.to_string()));
+    LazyLock::new(|| decode_current_artifact(K3_BYTES).map_err(|error| error.to_string()));
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum ArtifactFamily {
@@ -71,5 +75,27 @@ impl ArtifactFamily {
             }
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rustred::foundry::artifact::ArtifactPersistenceError;
+
+    use super::{K1_BYTES, decode_current_artifact};
+
+    #[test]
+    fn embedded_artifact_contract_rejects_obsolete_schemas() {
+        let schema_offset = b"RRIBP\0\r\n".len();
+        for schema in [1_u32, 2] {
+            let mut obsolete = K1_BYTES.to_vec();
+            obsolete[schema_offset..schema_offset + std::mem::size_of::<u32>()]
+                .copy_from_slice(&schema.to_le_bytes());
+            assert!(matches!(
+                decode_current_artifact(&obsolete),
+                Err(ArtifactPersistenceError::UnsupportedSchema { actual })
+                    if actual == schema
+            ));
+        }
     }
 }
