@@ -23,6 +23,51 @@ const COMPARISON_REL_THRESHOLD: f64 = 1.0e-25;
 // No error on anylic expressions
 const MAX_PULL: f64 = 0.0e0;
 
+enum ThreeLoopPeerMode {
+    Legacy,
+    RustRedNumericalParity,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compare_three_loop_peers(
+    mode: ThreeLoopPeerMode,
+    settings: VakintSettings,
+    rustred_tensor_prepass: TensorPrepass,
+    input: AtomView,
+    numerical_masses: HashMap<String, symbolica::domains::float::Float>,
+    numerical_external_momenta: HashMap<usize, vakint::Momentum>,
+    relative_threshold: f64,
+    max_pull: f64,
+    quiet: bool,
+) {
+    match mode {
+        ThreeLoopPeerMode::Legacy => compare_two_evaluations(
+            settings,
+            (
+                (&EvaluationOrder::alphaloop_only(), true),
+                (&EvaluationOrder::matad_only(None), true),
+            ),
+            input,
+            numerical_masses,
+            numerical_external_momenta,
+            relative_threshold,
+            max_pull,
+            quiet,
+        ),
+        ThreeLoopPeerMode::RustRedNumericalParity => compare_evaluations(
+            settings,
+            &alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly),
+            rustred_tensor_prepass,
+            input,
+            numerical_masses,
+            numerical_external_momenta,
+            relative_threshold,
+            max_pull,
+            quiet,
+        ),
+    }
+}
+
 #[test_log::test]
 fn test_integrate_1l_no_numerator() {
     for pow in 1..=6 {
@@ -108,10 +153,21 @@ fn test_integrate_2l_no_numerator() {
 
 #[test_log::test]
 fn test_integrate_3l_basketball_a() {
+    test_integrate_3l_basketball_a_with_mode(ThreeLoopPeerMode::Legacy);
+}
+
+#[test]
+#[ignore = "pending certified sector-complete K=6 artifact"]
+fn rustred_numerical_parity_3l_basketball_a() {
+    test_integrate_3l_basketball_a_with_mode(ThreeLoopPeerMode::RustRedNumericalParity);
+}
+
+fn test_integrate_3l_basketball_a_with_mode(mode: ThreeLoopPeerMode) {
     #[rustfmt::skip]
-    compare_two_evaluations(
+    compare_three_loop_peers(
+        mode,
         VakintSettings { run_time_decimal_precision: N_DIGITS_ANLYTICAL_EVALUATION, number_of_terms_in_epsilon_expansion: 3, ..VakintSettings::default()},
-        ((&EvaluationOrder::alphaloop_only() ,true),(&EvaluationOrder::matad_only(None) ,true)),
+        TensorPrepass::Form,
         vakint_parse!(
             "( k(1, 1)^2 )*topo(
                 prop(1, edge(2, 1), k(1), muvsq, 1)*\
@@ -135,10 +191,21 @@ fn test_integrate_3l_basketball_a() {
 
 #[test_log::test]
 fn test_integrate_3l_basketball_b() {
+    test_integrate_3l_basketball_b_with_mode(ThreeLoopPeerMode::Legacy);
+}
+
+#[test]
+#[ignore = "pending certified sector-complete K=6 artifact"]
+fn rustred_numerical_parity_3l_basketball_b() {
+    test_integrate_3l_basketball_b_with_mode(ThreeLoopPeerMode::RustRedNumericalParity);
+}
+
+fn test_integrate_3l_basketball_b_with_mode(mode: ThreeLoopPeerMode) {
     #[rustfmt::skip]
-    compare_two_evaluations(
+    compare_three_loop_peers(
+        mode,
         VakintSettings { run_time_decimal_precision: N_DIGITS_ANLYTICAL_EVALUATION, number_of_terms_in_epsilon_expansion: 3, ..VakintSettings::default()},
-        ((&EvaluationOrder::alphaloop_only() ,true),(&EvaluationOrder::matad_only(None) ,true)),
+        TensorPrepass::Form,
         vakint_parse!(
             "( k(3, 1)^2 )*topo(
                 prop(1, edge(2, 1), k(1), muvsq, 1)*\
@@ -162,10 +229,21 @@ fn test_integrate_3l_basketball_b() {
 
 #[test_log::test]
 fn test_integrate_3l_no_numerator() {
+    test_integrate_3l_no_numerator_with_mode(ThreeLoopPeerMode::Legacy);
+}
+
+#[test]
+#[ignore = "pending certified sector-complete K=6 artifact"]
+fn rustred_numerical_parity_3l_no_numerator() {
+    test_integrate_3l_no_numerator_with_mode(ThreeLoopPeerMode::RustRedNumericalParity);
+}
+
+fn test_integrate_3l_no_numerator_with_mode(mode: ThreeLoopPeerMode) {
     #[rustfmt::skip]
-    compare_two_evaluations(
+    compare_three_loop_peers(
+        mode,
         VakintSettings { run_time_decimal_precision: N_DIGITS_ANLYTICAL_EVALUATION, number_of_terms_in_epsilon_expansion: 4, ..VakintSettings::default()},
-        ((&EvaluationOrder::alphaloop_only() ,true),(&EvaluationOrder::matad_only(None) ,true)),
+        TensorPrepass::Skip,
         vakint_parse!(
             "( 1 )
             *topo(\
@@ -192,10 +270,21 @@ fn test_integrate_3l_no_numerator() {
 
 #[test_log::test]
 fn test_integrate_3l_rank_4() {
+    test_integrate_3l_rank_4_with_mode(ThreeLoopPeerMode::Legacy);
+}
+
+#[test]
+#[ignore = "pending certified sector-complete K=6 artifact"]
+fn rustred_numerical_parity_3l_rank_4() {
+    test_integrate_3l_rank_4_with_mode(ThreeLoopPeerMode::RustRedNumericalParity);
+}
+
+fn test_integrate_3l_rank_4_with_mode(mode: ThreeLoopPeerMode) {
     #[rustfmt::skip]
-    compare_two_evaluations(
+    compare_three_loop_peers(
+        mode,
         VakintSettings { run_time_decimal_precision: N_DIGITS_ANLYTICAL_EVALUATION, number_of_terms_in_epsilon_expansion: 4, ..VakintSettings::default()},
-        ((&EvaluationOrder::alphaloop_only() ,true),(&EvaluationOrder::matad_only(None) ,true)),
+        TensorPrepass::Form,
         vakint_parse!(
             "(
                   k(1,11)*k(2,11)*k(1,22)*k(2,22)
@@ -226,10 +315,21 @@ fn test_integrate_3l_rank_4() {
 
 #[test_log::test]
 fn test_integrate_3l_rank_4_different_scales() {
+    test_integrate_3l_rank_4_different_scales_with_mode(ThreeLoopPeerMode::Legacy);
+}
+
+#[test]
+#[ignore = "pending certified sector-complete K=6 artifact"]
+fn rustred_numerical_parity_3l_rank_4_different_scales() {
+    test_integrate_3l_rank_4_different_scales_with_mode(ThreeLoopPeerMode::RustRedNumericalParity);
+}
+
+fn test_integrate_3l_rank_4_different_scales_with_mode(mode: ThreeLoopPeerMode) {
     #[rustfmt::skip]
-    compare_two_evaluations(
+    compare_three_loop_peers(
+        mode,
         VakintSettings { run_time_decimal_precision: N_DIGITS_ANLYTICAL_EVALUATION, number_of_terms_in_epsilon_expansion: 4, ..VakintSettings::default()},
-        ((&EvaluationOrder::alphaloop_only() ,true),(&EvaluationOrder::matad_only(None) ,true)),
+        TensorPrepass::Form,
         vakint_parse!(
             "(
                   k(1,11)*k(2,11)*k(1,22)*k(2,22)

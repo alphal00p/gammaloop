@@ -328,9 +328,7 @@ impl EvaluationTestLane {
 
 /// The three strict scalar-reduction peers used by the Stage-1 acceptance suite.
 #[allow(dead_code)]
-pub fn alphaloop_matad_rustred_lanes(
-    rustred_parity: RustRedParityPolicy,
-) -> [EvaluationTestLane; 3] {
+pub fn alphaloop_matad_lanes() -> [EvaluationTestLane; 2] {
     [
         EvaluationTestLane::oracle(
             EvaluationOrder::alphaloop_only(),
@@ -340,15 +338,25 @@ pub fn alphaloop_matad_rustred_lanes(
             EvaluationOrder::matad_only(None),
             EvaluationTestInput::TensorReduced,
         ),
+    ]
+}
+
+/// The existing AlphaLoop/MATAD oracle pair, extended by a strict RustRed lane.
+#[allow(dead_code)]
+pub fn alphaloop_matad_rustred_lanes(
+    rustred_parity: RustRedParityPolicy,
+) -> [EvaluationTestLane; 3] {
+    let [alphaloop, matad] = alphaloop_matad_lanes();
+    [
+        alphaloop,
+        matad,
         EvaluationTestLane::rustred_scalar(EvaluationTestInput::TensorReduced, rustred_parity),
     ]
 }
 
-/// Existing analytic fallback order, an explicit MATAD oracle, and RustRed.
+/// The existing analytic/MATAD oracle pair.
 #[allow(dead_code)]
-pub fn analytic_matad_rustred_lanes(
-    rustred_parity: RustRedParityPolicy,
-) -> [EvaluationTestLane; 3] {
+pub fn analytic_matad_lanes() -> [EvaluationTestLane; 2] {
     [
         EvaluationTestLane::oracle(
             EvaluationOrder::analytic_only(),
@@ -358,6 +366,18 @@ pub fn analytic_matad_rustred_lanes(
             EvaluationOrder::matad_only(None),
             EvaluationTestInput::TensorReduced,
         ),
+    ]
+}
+
+/// Existing analytic/MATAD oracles, extended by a strict RustRed lane.
+#[allow(dead_code)]
+pub fn analytic_matad_rustred_lanes(
+    rustred_parity: RustRedParityPolicy,
+) -> [EvaluationTestLane; 3] {
+    let [analytic, matad] = analytic_matad_lanes();
+    [
+        analytic,
+        matad,
         EvaluationTestLane::rustred_scalar(EvaluationTestInput::TensorReduced, rustred_parity),
     ]
 }
