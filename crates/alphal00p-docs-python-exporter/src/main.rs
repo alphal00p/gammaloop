@@ -468,14 +468,26 @@ def validate(runtime_module, stub_source):
             include_str!("../../../docs/api/python/linnet-py.pyi")
         );
         for declaration in [
-            "def __iter__(self) -> typing.Iterator[builtins.str]",
-            "def keys(self) -> builtins.list[builtins.str]",
-            "def items(self) -> builtins.list[tuple[builtins.str, builtins.str]]",
-            "def update(self, other: typing.Mapping[builtins.str, builtins.str])",
-            "def popitem(self) -> tuple[builtins.str, builtins.str]",
+            "_NativeValue: typing.TypeAlias = (",
+            "def __new__(cls, *, encode_node: typing.Callable[[NodeValue], DotVertexData]",
+            "def build(*items: _GraphItem, name: _OptionalString = None",
+            "def map(self, *, node: typing.Callable[[Node], typing.Any] | None = None",
+            "def render(self, output: builtins.str | os.PathLike[builtins.str], *, config: RenderConfig | None = None)",
+            "node_selector: _NodeSelector = ...",
+            "node_outset: _AutoNumber = ...",
+            "_Padding: typing.TypeAlias = builtins.int | builtins.float | _NativeArray | _NativeDict | Insets",
+            "show_node_index: _Boolean = ...",
+            "def call(self, *args: _NativeValue, **kwargs: _NativeValue) -> TypstCall",
         ] {
             assert!(canonical.contains(declaration), "missing `{declaration}`");
         }
+        for legacy_or_broad in ["**kwargs: typing.Any", "**drawing", "slf:"] {
+            assert!(
+                !canonical.contains(legacy_or_broad),
+                "unexpected `{legacy_or_broad}`"
+            );
+        }
+        assert_eq!(canonical.matches("def anchor(self)").count(), 1);
     }
 
     #[cfg(feature = "gammaloop")]

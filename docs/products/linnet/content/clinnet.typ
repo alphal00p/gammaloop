@@ -6,8 +6,9 @@
 Clinnet is Linnet's command-line companion for documentation and diagram workflows. The Cargo
 package is named `clinnet`, while the installed executable is named `linnet`. It recursively
 finds DOT files, renders one PDF per graph through Typst, and assembles those PDFs into a grid.
-Use the Rust library for graph algorithms; use Clinnet when the input is already DOT and the
-desired result is a browsable set of figures.
+Use the Rust library for graph algorithms, the `linnet-py` `Graph` API for typed programmatic
+drawing, and Clinnet when the input is already DOT and the desired result is a browsable set of
+figures.
 
 == Install and render a directory
 
@@ -40,11 +41,11 @@ The final command scans `examples/` recursively. With default paths it creates:
   rebuild.
 ])
 
-== Customize templates and inputs
+== Configure the V1 templates
 
 Use `--figure-template` for each individual figure and `--grid-template` for the combined PDF.
 Repeat `--style` for extra files whose contents must invalidate the figure cache. Repeat
-`--input key=value` to expose strings through Typst's `sys.inputs` in both compilation stages:
+`--input key=value` for the CLI's recognized typed configuration overrides:
 
 // docs-example: syntax
 ```sh
@@ -52,24 +53,63 @@ linnet --build-dir build draw graphs \
   --figure-template templates/figure.typ \
   --grid-template templates/grid.typ \
   --style templates/colors.typ \
+  --input steps=250 \
   --input theme=dark \
-  --input scale=1.5 \
+  --input accent=teal \
+  --input columns=4 \
   --output-path build/review.pdf
 ```
 
-Clinnet supplies `data-path`, `data_path`, and a derived `title` to the figure template in
-addition to caller inputs. `--output-path` selects the final grid PDF; it is not a figure-template
-input. Input values are strings; parse them in Typst when a number or boolean is required. The
-embedded defaults include the canonical Linnest and Kurvst package trees, so a custom template
-can use the same graph-layout and curve primitives. Continue to the
+Clinnet parses values before constructing the native Typst configuration. Figure `steps` and
+`seed` become generic layout options; every other accepted figure input is staged as typed
+`config.options` for the selected template to interpret. In the example, `theme` and `accent`
+are application-defined settings rather than Clinnet modes. Grid overrides cover its rows,
+columns, page geometry, alignment, labels, and page numbers. Inputs are never published as
+`sys.inputs`.
+
+Each figure render stages the DOT topology and an ephemeral entrypoint. That entrypoint imports
+the selected template, constructs `config`, adds `data-path`, and calls the mandatory
+`render(config)` export:
+
+```typst
+#import "layout.typ": layout
+
+#let render(config) = {
+  set page(width: auto, height: auto)
+  context layout(config)
+}
+```
+
+The Typst command receives only the entrypoint, output, and root paths, so large configurations
+do not produce large process argument lists. `--output-path` selects the final grid PDF; it is not
+a figure configuration field. Plain strings stay escaped data, and custom templates do not have a
+legacy top-level compilation path. The embedded defaults include the canonical Linnest and Kurvst
+package trees, so a custom template can use the same graph-layout and curve primitives. Continue
+to the
 #link("guides/linnest/")[Linnest Typst API] for graph construction, layout, inspection, and
 drawing rather than copying its wrapper surface into a Clinnet template guide.
 
+#callout("Generic and GammaLoop templates", [
+  Clinnet's bundled template is generic: it attaches typed element records, applies final labels
+  and styles before ordered layout passes, and draws the result. GammaLoop writes a separate V1
+  bundle under `drawings/templates/`, including its generated `edge-style.typ`. Select that
+  bundle's `figure.typ` when particle colors and decorations, momentum annotations, amplitude
+  ordering, or cut-matched cross-section labels are required. Both templates implement the same
+  `render(config)` contract, while only GammaLoop's template assigns meaning to its domain
+  options.
+])
+
+`--style` records an imported file as a cache dependency; it does not inject or execute that file.
+The selected template must import it normally through Typst's module system. Clinnet does not
+recursively discover every custom import, so repeat `--style` for imports whose changes must
+invalidate cached figures.
+
 #boundary("Templates must share a Typst project root", [
-  Clinnet chooses the narrowest existing directory that contains the template and its inputs.
-  A Typst import outside that tree, a missing style file, or a template moved without its
-  dependencies fails before a PDF is produced. Keep the templates and imported assets beneath
-  one project directory and read the full Typst error printed by Clinnet.
+  Clinnet chooses the narrowest existing directory that contains the template, staged topology,
+  and explicit renderer dependencies. A Typst import outside that tree, a missing style file, or
+  a template moved without its dependencies fails before a PDF is produced. Keep templates and
+  imported assets beneath one project directory and read the full Typst error printed by
+  Clinnet.
 ])
 
 == Make a targeted rebuild

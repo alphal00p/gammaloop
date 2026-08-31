@@ -6,7 +6,8 @@ seed := "42"
 columns := "3"
 rows := "5"
 
-drawing_styles := "--style drawings/templates/edge-style.typ --style drawings/templates/layout.typ --style drawings/templates/layout-core.typ --style drawings/templates/crates/linnest/typst/src/lib.typ --style drawings/templates/crates/linnest/typst/src/graph.typ --style drawings/templates/crates/linnest/typst/src/subgraph.typ --style drawings/templates/crates/linnest/typst/src/draw.typ --style drawings/templates/crates/linnest/typst/src/physics-edge-style.typ --style drawings/templates/crates/linnest/typst/src/curve.typ --style drawings/templates/crates/linnest/typst/linnest.wasm --style drawings/templates/crates/kurvst/typst/src/lib.typ --style drawings/templates/crates/kurvst/typst/kurvst.wasm"
+drawing_styles := "--style drawings/templates/edge-style.typ --style drawings/templates/layout.typ --style drawings/templates/layout-core.typ --style drawings/templates/physics-edge-style.typ --style drawings/templates/impl/physics-edge-style.typ --style drawings/templates/crates/linnest/typst/src/lib.typ --style drawings/templates/crates/linnest/typst/src/graph.typ --style drawings/templates/crates/linnest/typst/src/subgraph.typ --style drawings/templates/crates/linnest/typst/src/draw.typ --style drawings/templates/crates/linnest/typst/src/curve.typ --style drawings/templates/crates/linnest/typst/linnest.wasm --style drawings/templates/crates/kurvst/typst/src/lib.typ --style drawings/templates/crates/kurvst/typst/kurvst.wasm"
+drawing_templates := "--figure-template drawings/templates/figure.typ --grid-template drawings/templates/grid.typ"
 
 # Output names used by the drawing mode demo recipes
 draw_default_output := "drawings-default.pdf"
@@ -38,6 +39,7 @@ momentum_line_thickness := "1.0pt"
 _draw-output OUTPUT *EXTRA_INPUTS:
 	linnet \
 	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
+	  {{drawing_templates}} \
 	  {{drawing_styles}} \
 	  --input steps={{steps}} \
 	  --input seed={{seed}} \
@@ -60,6 +62,7 @@ draw-default *EXTRA_INPUTS:
 draw-momentum *EXTRA_INPUTS:
 	linnet \
 	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
+	  {{drawing_templates}} \
 	  --input 'momentum-arrows={{momentum_arrows}}' \
 	  --input 'momentum-arrow-mark={{momentum_mark}}' \
 	  --input 'momentum-arrow-paint={{momentum_paint}}' \
@@ -76,6 +79,7 @@ draw-momentum *EXTRA_INPUTS:
 draw-momentum-labels *EXTRA_INPUTS:
 	linnet \
 	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
+	  {{drawing_templates}} \
 	  --input 'momentum-arrows={{momentum_arrows}}' \
 	  --input 'momentum-arrow-mark={{momentum_mark}}' \
 	  --input 'momentum-arrow-paint={{momentum_paint}}' \
@@ -95,6 +99,7 @@ draw-momentum-labels *EXTRA_INPUTS:
 draw-momentum-lines *EXTRA_INPUTS:
 	linnet \
 	  --build-dir drawings draw . {{EXTRA_INPUTS}} \
+	  {{drawing_templates}} \
 	  --input 'momentum-arrows={{momentum_arrows}}' \
 	  --input 'momentum-arrow-mark={{momentum_line_mark}}' \
 	  --input 'momentum-arrow-paint={{momentum_line_paint}}' \

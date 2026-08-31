@@ -8,6 +8,12 @@
 #let graph-bytes(graph) = _impl.graph-bytes(graph)
 #let with-bytes(graph, graph-bytes) = _impl.with-bytes(graph, graph-bytes)
 
+/// Construct a graph from a versioned Linnest graph-spec CBOR document.
+///
+/// This is the native renderer boundary. Unlike @parse, it does not parse DOT.
+/// -> dictionary
+#let from-spec(input) = _impl.from-spec(input)
+
 /// Build one graph object from a stream of node and edge items.
 ///
 /// Use @node, @source, @sink, and @edge to create graph items. Positional items
@@ -246,7 +252,10 @@
 /// - `pos` is parsed as node placement. Simple numeric values are exposed as
 ///   `node.pos`; extended placement values are used by
 ///   #api-link("layout-", "layout"). `pin` is an explicit layout constraint and
-///   is not exposed as a public statement.
+///   is not exposed as a public statement. The `pos-x-set` and `pos-y-set`
+///   record fields say which axes were explicitly supplied, including for
+///   partial placements whose resolved `pos` contains both coordinates. @dot
+///   preserves them as canonical Linnest DOT extension attributes.
 ///
 /// ````example
 /// #let src = ```dot
@@ -317,8 +326,10 @@
 /// - `pos` is parsed as the edge control-point placement. `pin` is an explicit
 ///   edge layout constraint. `shift`, `label-pos`, `label-angle`, and `bend`
 ///   are parsed into edge geometry fields; except for `pin`, they also remain
-///   available as statements. Other edge attributes are preserved as edge
-///   statements.
+///   available as statements. The `pos-x-set` and `pos-y-set` record fields
+///   identify explicitly supplied axes, including partial placements; @dot
+///   preserves them as canonical Linnest DOT extension attributes. Other edge
+///   attributes are preserved as edge statements.
 ///
 /// ````example
 /// #let src = ```dot
@@ -390,11 +401,11 @@
 ///
 /// ````example
 /// #let src = ```dot
-/// digraph { a [id=0, pos="0,0"]; b [id=1, pos="2,0!"]; }
+/// digraph { a [id=0, pos="0,0"]; b [id=1, pos="2,0!"]; a -> b; }
 /// ```
-/// #let parsed-nodes = nodes(parse(src.text).first())
-/// #parsed-nodes.map(n => n.pos)
-/// #parsed-nodes.map(n => n.statements.at("pos-mode", default: none))
+/// #let parsed = parse(src.text).first()
+/// #nodes(parsed).map(n => n.pos)
+/// #nodes(layout(parsed, steps: 10, seed: 1)).map(n => n.pos)
 /// ````
 ///
 /// - `pos="ref(node:<id>)+dx,dy!"` and `pos="ref(edge:<id>)+dx,dy!"` reference
@@ -737,6 +748,8 @@
 /// leave the record unchanged, `(data: value)` to set new native data, or
 /// structural fields such as `pos`, `shift`, and `statements` to patch data
 /// seen by later layout calls.
+/// Source and sink callbacks may likewise patch `statement`, `port-label`, and
+/// `compass` before subgraph and layout operations run.
 ///
 /// ```example
 /// #let g = build({ node(<a>) })

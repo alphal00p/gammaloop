@@ -124,6 +124,7 @@ type LinkValidationState<'a> = (
     &'a mut LinkedPageIndex,
     &'a mut LinkRewriteIndex,
     &'a mut LocalPathIndex,
+    Option<&'a str>,
 );
 
 #[derive(Clone, Debug)]
@@ -1142,7 +1143,9 @@ impl SiteBuilder {
             "docs/assets/typst/marks/local-unitarity.typ",
             "docs/assets/typst/marks/gammaloop.typ",
             "docs/assets/typst/marks/spenso.typ",
+            "assets/embedded/drawing/templates/impl/physics-edge-style.typ",
             "assets/embedded/drawing/templates/layout-core.typ",
+            "assets/embedded/drawing/templates/physics-edge-style.typ",
             "docs/assets/typst/portal-graphs/figure.typ",
             "docs/assets/typst/portal-graphs/layout.typ",
             "docs/assets/typst/portal-graphs/edge-style.typ",
@@ -1684,19 +1687,30 @@ impl SiteBuilder {
         };
 
         let requested_output = absolute_from(&self.root, &request.output);
-        ensure_safe_output(&self.root, &requested_output)?;
-        let preview_work = if scope == BuildScope::ProductPreview {
+        let resolved_output = ensure_safe_output(&self.root, &requested_output)?;
+        let snapshot_build = scope == BuildScope::FullSite && tag.is_some();
+        let isolated_work = if scope == BuildScope::ProductPreview || snapshot_build {
             let target = self.root.join("target");
             fs::create_dir_all(&target)?;
-            Some(
-                TempDirBuilder::new()
-                    .prefix("alphal00p-product-preview-")
-                    .tempdir_in(target)?,
-            )
+            let work = TempDirBuilder::new()
+                .prefix(if scope == BuildScope::ProductPreview {
+                    "alphal00p-product-preview-"
+                } else {
+                    "alphal00p-snapshot-build-"
+                })
+                .tempdir_in(target)?;
+            let resolved_work = fs::canonicalize(work.path())?;
+            ensure!(
+                !resolved_work.starts_with(&resolved_output)
+                    && !resolved_output.starts_with(&resolved_work),
+                "documentation output overlaps isolated build workspace {}",
+                work.path().display()
+            );
+            Some(work)
         } else {
             None
         };
-        let output = preview_work
+        let output = isolated_work
             .as_ref()
             .map_or_else(|| requested_output.clone(), |work| work.path().join("site"));
         fs::create_dir_all(&output)
@@ -1729,11 +1743,95 @@ impl SiteBuilder {
             }
             BuildScope::ProductPreview => {
                 self.write_product_preview(&output, selected[0], request.channel, tag)?;
-                clear_stale_staging(&output)?;
             }
         }
-        self.validate_generated_links(&output, request.include_rustdoc)?;
+        clear_stale_staging(&output)?;
+        self.validate_generated_links(&output, request.include_rustdoc, tag)?;
         if scope == BuildScope::ProductPreview {
+            replace_generated_tree(&output, &requested_output)?;
+        } else if snapshot_build {
+            let tag = tag.expect("snapshot builds have a validated tag");
+            for product in &selected {
+                let relative = Path::new("products")
+                    .join(&product.id)
+                    .join("snapshots")
+                    .join(tag);
+                let generated = output.join(&relative);
+                let existing = requested_output.join(&relative);
+                if existing.exists() {
+                    ensure!(
+                        directories_equal(&generated, &existing)?,
+                        "immutable snapshot differs from {}",
+                        existing.display()
+                    );
+                }
+            }
+            // Validation normalizes generated Rustdoc links. Compare every existing
+            // snapshot before carrying the other published product routes into the
+            // validated candidate; replacing the tree then prunes stale global files.
+            if requested_output.exists() {
+                let metadata = fs::symlink_metadata(&requested_output)?;
+                ensure!(
+                    metadata.is_dir() && !metadata.file_type().is_symlink(),
+                    "documentation destination is not a directory: {}",
+                    requested_output.display()
+                );
+                for entry in WalkDir::new(&requested_output) {
+                    let entry = entry?;
+                    ensure!(
+                        entry.file_type().is_dir() || entry.file_type().is_file(),
+                        "unsupported documentation artifact {}",
+                        entry.path().display()
+                    );
+                }
+
+                for product in &selected {
+                    let existing_product = requested_output.join("products").join(&product.id);
+                    let generated_product = output.join("products").join(&product.id);
+                    let existing_index = existing_product.join("index.html");
+                    let generated_index = generated_product.join("index.html");
+                    if existing_index.exists() && !generated_index.exists() {
+                        let metadata = fs::symlink_metadata(&existing_index)?;
+                        ensure!(
+                            metadata.is_file() && !metadata.file_type().is_symlink(),
+                            "unsupported documentation artifact {}",
+                            existing_index.display()
+                        );
+                        fs::copy(&existing_index, &generated_index)?;
+                    }
+
+                    let existing_latest = existing_product.join("latest");
+                    let generated_latest = generated_product.join("latest");
+                    if existing_latest.exists() && !generated_latest.exists() {
+                        copy_tree(&existing_latest, &generated_latest)?;
+                    }
+
+                    let existing_snapshots = existing_product.join("snapshots");
+                    if existing_snapshots.exists() {
+                        let metadata = fs::symlink_metadata(&existing_snapshots)?;
+                        ensure!(
+                            metadata.is_dir() && !metadata.file_type().is_symlink(),
+                            "unsupported documentation artifact {}",
+                            existing_snapshots.display()
+                        );
+                        for entry in fs::read_dir(existing_snapshots)? {
+                            let entry = entry?;
+                            if entry.file_name() == Path::new(tag).as_os_str() {
+                                continue;
+                            }
+                            ensure!(
+                                entry.file_type()?.is_dir(),
+                                "unsupported documentation artifact {}",
+                                entry.path().display()
+                            );
+                            copy_tree(
+                                &entry.path(),
+                                &generated_product.join("snapshots").join(entry.file_name()),
+                            )?;
+                        }
+                    }
+                }
+            }
             replace_generated_tree(&output, &requested_output)?;
         }
         Ok(())
@@ -2188,7 +2286,7 @@ impl SiteBuilder {
     ) -> Result<String> {
         let mut rendered = String::from(
             "= Python API reference <supported-api-catalog>\n\
-             The supported Python packages available in this version are listed below. The HTML manual provides a separate page for every public class and function; this printable edition keeps a compact inventory. Rust APIs use canonical Rustdoc in the HTML manual.\n",
+             The supported Python packages available in this version are listed below. The HTML manual provides a separate page for every public class, function, and constant; this printable edition keeps a compact inventory. Rust APIs use canonical Rustdoc in the HTML manual.\n",
         );
         for component in &product.python_components {
             // Everything beyond this boundary consumes the neutral catalog
@@ -2632,7 +2730,7 @@ impl SiteBuilder {
             })
             .unwrap_or_default();
         cards.push_str(&format!(
-            "<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Canonical Rustdoc</p><h2><a href=\"reference/rust/\">Rust API</a></h2><p>{} crates in their native Rust documentation interface, with authored guidance for choosing the right boundary.</p></article><article class=\"reference-hub-card\"><p class=\"portal-kicker\">Python-native reference</p><h2><a href=\"reference/python/\">Python API</a></h2><p>{} modules with one flat page per supported class or function; stubs remain downloadable for type checkers.</p></article>",
+            "<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Canonical Rustdoc</p><h2><a href=\"reference/rust/\">Rust API</a></h2><p>{} crates in their native Rust documentation interface, with authored guidance for choosing the right boundary.</p></article><article class=\"reference-hub-card\"><p class=\"portal-kicker\">Python-native reference</p><h2><a href=\"reference/python/\">Python API</a></h2><p>{} modules with one flat page per supported class, function, or constant; stubs remain downloadable for type checkers.</p></article>",
             product.rust_components.len(),
             product.python_components.len(),
         ));
@@ -2641,7 +2739,7 @@ impl SiteBuilder {
             .iter()
             .any(|page| page.route == "reference/typst/");
         if has_typst {
-            cards.push_str("<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Typst-native reference</p><h2><a href=\"reference/typst/\">Typst API</a></h2><p>Package exports grouped by graph construction, layout, drawing, physics, and subgraph operations.</p></article>");
+            cards.push_str("<article class=\"reference-hub-card\"><p class=\"portal-kicker\">Typst-native reference</p><h2><a href=\"reference/typst/\">Typst API</a></h2><p>Package exports grouped by graph construction, layout, drawing, domain templates, and subgraph operations.</p></article>");
         }
         if let Some((route, title)) = supplemental_reference(&product.id) {
             cards.push_str(&format!(
@@ -2653,7 +2751,7 @@ impl SiteBuilder {
         fs::create_dir_all(&destination)?;
         let mut interface_shapes = vec!["native Rustdoc for crates"];
         if !product.python_components.is_empty() {
-            interface_shapes.push("class and function pages for Python");
+            interface_shapes.push("class, function, and constant pages for Python");
         }
         if has_typst {
             interface_shapes.push("focused function and module pages for Typst");
@@ -2860,7 +2958,6 @@ impl SiteBuilder {
         if let Some((reference_heading, reference_scope)) = match page.route.as_str() {
             "reference/typst/graph/" => Some(("graph", Some("graph"))),
             "reference/typst/layout/" | "reference/typst/drawing/" => Some(("reference", None)),
-            "reference/typst/physics/" => Some(("physics", Some("physics"))),
             "reference/typst/subgraph/" => Some(("subgraph", Some("subgraph"))),
             _ => None,
         } {
@@ -4760,7 +4857,12 @@ impl SiteBuilder {
         Ok(())
     }
 
-    fn validate_generated_links(&self, output: &Path, include_rustdoc: bool) -> Result<()> {
+    fn validate_generated_links(
+        &self,
+        output: &Path,
+        include_rustdoc: bool,
+        snapshot_tag: Option<&str>,
+    ) -> Result<()> {
         let patterns = LinkValidationPatterns::new()?;
         let documented_revision = self.git_commit();
         let roots = [output.to_path_buf()];
@@ -4849,7 +4951,12 @@ impl SiteBuilder {
                             &documented_revision,
                             &mut failures,
                             &patterns,
-                            (&mut linked_pages, &mut link_rewrites, &mut local_paths),
+                            (
+                                &mut linked_pages,
+                                &mut link_rewrites,
+                                &mut local_paths,
+                                snapshot_tag,
+                            ),
                         )?;
                     }
                 }
@@ -4880,7 +4987,12 @@ impl SiteBuilder {
                         &documented_revision,
                         &mut failures,
                         &patterns,
-                        (&mut linked_pages, &mut link_rewrites, &mut local_paths),
+                        (
+                            &mut linked_pages,
+                            &mut link_rewrites,
+                            &mut local_paths,
+                            snapshot_tag,
+                        ),
                     )?;
                 }
             }
@@ -5746,8 +5858,7 @@ fn append_rendered_page_search(
         .strip_prefix("reference/typst/")
         .map(|route| route.trim_matches('/'))
         .filter(|route| !route.is_empty() && !route.contains('/'));
-    let module_scope =
-        typst_scope.filter(|scope| matches!(*scope, "graph" | "physics" | "subgraph"));
+    let module_scope = typst_scope.filter(|scope| matches!(*scope, "graph" | "subgraph"));
     let mut in_generated_reference = false;
     for heading in headings {
         if heading.level == 2 && module_scope == Some(heading.title.as_str()) {
@@ -5864,7 +5975,7 @@ fn python_item_routes(catalog: &DocCatalog) -> BTreeMap<String, String> {
                 .filter(|segment| segment.as_str() != "exports")
                 .cloned()
                 .collect::<Vec<_>>();
-            segments.push(item.name.clone());
+            segments.push(python_item_disambiguated_segment(item, &item.name));
             (
                 anchor,
                 format!(
@@ -5909,6 +6020,7 @@ fn api_item_kind_label(kind: alphal00p_docs_schema::DocItemKind) -> &'static str
         alphal00p_docs_schema::DocItemKind::Command => "Command",
         alphal00p_docs_schema::DocItemKind::Setting => "Setting",
         alphal00p_docs_schema::DocItemKind::PythonClass => "Class",
+        alphal00p_docs_schema::DocItemKind::PythonConstant => "Constant",
         alphal00p_docs_schema::DocItemKind::ContentPage => "Page",
     }
 }
@@ -6175,7 +6287,7 @@ fn render_python_catalog_for_module(
     let routes = python_item_routes(catalog);
     let item_links = python_item_links(catalog, &routes);
     let mut body = format!(
-        "<p><code>{}</code> · version {}</p><p>Choose a public class or function below. Each symbol has its own page with a conventional signature-first layout, flat member sections, stable links, and source-backed details.</p><section class=\"reference-coverage\" aria-labelledby=\"python-inventory-title\"><h2 id=\"python-inventory-title\">API inventory</h2><p>The generated inventory distinguishes the supported module API from names that are merely reachable through the extension.</p><div class=\"reference-coverage-grid\"><article><strong>{}</strong><span>supported exports</span><small>one page per supported class or function</small></article><article><strong>{}</strong><span>implementation-detail exports</span><small>checked for drift but intentionally omitted from the public reference</small></article></div></section>",
+        "<p><code>{}</code> · version {}</p><p>Choose a public class, function, or constant below. Each symbol has its own page with a conventional signature-first layout, flat member sections, stable links, and source-backed details.</p><section class=\"reference-coverage\" aria-labelledby=\"python-inventory-title\"><h2 id=\"python-inventory-title\">API inventory</h2><p>The generated inventory distinguishes the supported module API from names that are merely reachable through the extension.</p><div class=\"reference-coverage-grid\"><article><strong>{}</strong><span>supported exports</span><small>one page per supported class, function, or constant</small></article><article><strong>{}</strong><span>implementation-detail exports</span><small>checked for drift but intentionally omitted from the public reference</small></article></div></section>",
         escape_html(module),
         escape_html(&catalog.component.version),
         supported.len(),
@@ -6193,7 +6305,7 @@ fn render_python_catalog_for_module(
     ));
     let filter_id = format!("{}-symbol-filter", slug(&catalog.component.id));
     body.push_str(&format!(
-        "<div data-reference-filter-root><div class=\"reference-tools\"><label for=\"{}\">Filter public classes and functions</label><input id=\"{}\" type=\"search\" data-reference-filter placeholder=\"Try a class or function name\"><output data-reference-filter-count aria-live=\"polite\"></output></div><div class=\"api-symbol-list\" data-reference-filter-scope>",
+        "<div data-reference-filter-root><div class=\"reference-tools\"><label for=\"{}\">Filter public classes, functions, and constants</label><input id=\"{}\" type=\"search\" data-reference-filter placeholder=\"Try a class, function, or constant name\"><output data-reference-filter-count aria-live=\"polite\"></output></div><div class=\"api-symbol-list\" data-reference-filter-scope>",
         escape_html(&filter_id),
         escape_html(&filter_id),
     ));
@@ -7361,9 +7473,17 @@ fn render_doc_text_omitting_parameters(
     rendered
 }
 
+fn python_item_disambiguated_segment(item: &DocItem, value: &str) -> String {
+    match item.kind {
+        alphal00p_docs_schema::DocItemKind::PythonConstant => format!("{value}-constant"),
+        alphal00p_docs_schema::DocItemKind::PythonFunction => format!("{value}-function"),
+        _ => value.to_owned(),
+    }
+}
+
 fn api_item_anchor(path: &[String], item: &DocItem) -> String {
-    let mut parts = path.iter().map(String::as_str).collect::<Vec<_>>();
-    parts.push(&item.id);
+    let mut parts = path.to_vec();
+    parts.push(python_item_disambiguated_segment(item, &item.id));
     slug(&parts.join("-"))
 }
 
@@ -7939,7 +8059,7 @@ fn remove_symlink(path: &Path) -> std::io::Result<()> {
     }
 }
 
-fn ensure_safe_output(root: &Path, output: &Path) -> Result<()> {
+fn ensure_safe_output(root: &Path, output: &Path) -> Result<PathBuf> {
     ensure!(
         output != Path::new("/"),
         "refusing to write documentation to /"
@@ -7954,7 +8074,18 @@ fn ensure_safe_output(root: &Path, output: &Path) -> Result<()> {
             .any(|component| component == Component::ParentDir),
         "documentation output cannot contain '..'"
     );
-    Ok(())
+    let canonical_root = fs::canonicalize(root)
+        .wrap_err_with(|| format!("failed to resolve workspace root {}", root.display()))?;
+    let existing = closest_existing_directory(output)
+        .context("documentation output has no existing directory ancestor")?;
+    let canonical_existing = fs::canonicalize(&existing)
+        .wrap_err_with(|| format!("failed to resolve {}", existing.display()))?;
+    let resolved_output = canonical_existing.join(output.strip_prefix(&existing)?);
+    ensure!(
+        resolved_output != canonical_root && !canonical_root.starts_with(&resolved_output),
+        "documentation output cannot contain the workspace root"
+    );
+    Ok(resolved_output)
 }
 
 fn clear_stale_staging(output: &Path) -> Result<()> {
@@ -9085,6 +9216,31 @@ fn escape_html(value: &str) -> String {
 }
 
 fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
+    let source_metadata = fs::symlink_metadata(source)?;
+    ensure!(
+        source_metadata.is_dir() && !source_metadata.file_type().is_symlink(),
+        "documentation source is not a directory: {}",
+        source.display()
+    );
+    match fs::symlink_metadata(destination) {
+        Ok(metadata) => {
+            ensure!(
+                metadata.is_dir() && !metadata.file_type().is_symlink(),
+                "documentation destination is not a directory: {}",
+                destination.display()
+            );
+            for entry in WalkDir::new(destination) {
+                let entry = entry?;
+                ensure!(
+                    entry.file_type().is_dir() || entry.file_type().is_file(),
+                    "unsupported documentation artifact {}",
+                    entry.path().display()
+                );
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
     fs::create_dir_all(destination)?;
     for entry in WalkDir::new(source) {
         let entry = entry?;
@@ -9111,6 +9267,21 @@ fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
 }
 
 fn replace_generated_tree(source: &Path, destination: &Path) -> Result<()> {
+    let resolved_source = fs::canonicalize(source)
+        .wrap_err_with(|| format!("failed to resolve {}", source.display()))?;
+    let existing_destination = closest_existing_directory(destination)
+        .context("documentation destination has no existing directory ancestor")?;
+    let resolved_destination = fs::canonicalize(&existing_destination)
+        .wrap_err_with(|| format!("failed to resolve {}", existing_destination.display()))?
+        .join(destination.strip_prefix(&existing_destination)?);
+    ensure!(
+        resolved_source != resolved_destination
+            && !resolved_source.starts_with(&resolved_destination)
+            && !resolved_destination.starts_with(&resolved_source),
+        "cannot replace overlapping documentation trees {} and {}",
+        source.display(),
+        destination.display()
+    );
     let metadata = match fs::symlink_metadata(destination) {
         Ok(metadata) => Some(metadata),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
@@ -9138,6 +9309,11 @@ fn directory_files(root: &Path) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
                 entry.path().strip_prefix(root)?.to_path_buf(),
                 fs::read(entry.path())?,
             );
+        } else if !entry.file_type().is_dir() {
+            bail!(
+                "unsupported documentation artifact {}",
+                entry.path().display()
+            );
         }
     }
     Ok(files)
@@ -9154,8 +9330,8 @@ fn validate_local_target(
     patterns: &LinkValidationPatterns,
     state: LinkValidationState<'_>,
 ) -> Result<()> {
-    let (linked_pages, link_rewrites, local_paths) = state;
-    let Some(resolved) = resolve_local_link(output, link.source, link.href, local_paths) else {
+    let (linked_pages, link_rewrites, local_paths, snapshot_tag) = state;
+    let Some(mut resolved) = resolve_local_link(output, link.source, link.href, local_paths) else {
         return Ok(());
     };
     let source_display = link
@@ -9170,7 +9346,7 @@ fn validate_local_target(
         ));
         return Ok(());
     }
-    let target_is_file = local_paths
+    let mut target_is_file = local_paths
         .entry(resolved.clone())
         .or_insert_with(|| {
             fs::metadata(&resolved)
@@ -9179,6 +9355,53 @@ fn validate_local_target(
         })
         .as_ref()
         .is_some_and(|file_type| file_type.is_file());
+    if !target_is_file
+        && let Some(tag) = snapshot_tag
+        && link
+            .source
+            .strip_prefix(output)
+            .is_ok_and(|source| source.starts_with("developers"))
+        && let Ok(relative) = resolved.strip_prefix(output)
+    {
+        let mut components = relative.components();
+        if matches!(components.next(), Some(Component::Normal(part)) if part == "products")
+            && let Some(Component::Normal(product)) = components.next()
+            && matches!(components.next(), Some(Component::Normal(part)) if part == "latest")
+        {
+            // Snapshot bundles are merged beside the deployed `latest` tree. Validate
+            // developer links to that tree against the same route in this snapshot.
+            let mut candidate = output
+                .join("products")
+                .join(product)
+                .join("snapshots")
+                .join(tag);
+            candidate.extend(components.map(|component| component.as_os_str()));
+            let candidate_is_directory = local_paths
+                .entry(candidate.clone())
+                .or_insert_with(|| {
+                    fs::metadata(&candidate)
+                        .ok()
+                        .map(|metadata| metadata.file_type())
+                })
+                .as_ref()
+                .is_some_and(|file_type| file_type.is_dir());
+            if candidate_is_directory {
+                candidate.push("index.html");
+            }
+            target_is_file = local_paths
+                .entry(candidate.clone())
+                .or_insert_with(|| {
+                    fs::metadata(&candidate)
+                        .ok()
+                        .map(|metadata| metadata.file_type())
+                })
+                .as_ref()
+                .is_some_and(|file_type| file_type.is_file());
+            if target_is_file {
+                resolved = candidate;
+            }
+        }
+    }
     if !target_is_file {
         let target_path = link.href.split(['?', '#']).next().unwrap_or_default();
         let inherited_rust_path = target_path.contains("::")
@@ -9579,7 +9802,7 @@ mod tests {
         fs::create_dir_all(&package).unwrap();
         fs::write(package.join("lib.typ"), "#let package-asset = true\n").unwrap();
         builder
-            .validate_generated_links(site.path(), false)
+            .validate_generated_links(site.path(), false, None)
             .unwrap();
 
         let leaked = site
@@ -9588,7 +9811,7 @@ mod tests {
         fs::create_dir_all(leaked.parent().unwrap()).unwrap();
         fs::write(&leaked, "= Changelog\n").unwrap();
         let error = builder
-            .validate_generated_links(site.path(), false)
+            .validate_generated_links(site.path(), false, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains(
             "authored Typst source was published instead of rendered: products/linnet/latest/reference/content/changelog.typ"
@@ -10333,9 +10556,43 @@ mod tests {
         .unwrap();
 
         let error = builder
-            .validate_generated_links(&output, false)
+            .validate_generated_links(&output, false, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains("escapes generated output root"));
+    }
+
+    #[test]
+    fn snapshot_developer_links_validate_against_the_same_snapshot_route() {
+        let builder = SiteBuilder::discover().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let developer = output
+            .path()
+            .join("developers/architecture/example/index.html");
+        let snapshot = output
+            .path()
+            .join("products/linnet/snapshots/v1.2.3/guides/clinnet/index.html");
+        fs::create_dir_all(developer.parent().unwrap()).unwrap();
+        fs::create_dir_all(snapshot.parent().unwrap()).unwrap();
+        fs::write(&snapshot, r#"<h1 id="python-api">Python API</h1>"#).unwrap();
+        fs::write(
+            &developer,
+            r#"<a href="/products/linnet/latest/guides/clinnet/#python-api">Clinnet</a>"#,
+        )
+        .unwrap();
+
+        builder
+            .validate_generated_links(output.path(), false, Some("v1.2.3"))
+            .unwrap();
+
+        fs::write(
+            developer,
+            r#"<a href="/products/linnet/latest/guides/misspelled/">broken</a>"#,
+        )
+        .unwrap();
+        let error = builder
+            .validate_generated_links(output.path(), false, Some("v1.2.3"))
+            .unwrap_err();
+        assert!(format!("{error:#}").contains("guides/misspelled"));
     }
 
     #[test]
@@ -10351,10 +10608,10 @@ mod tests {
         .unwrap();
 
         builder
-            .validate_generated_links(output.path(), false)
+            .validate_generated_links(output.path(), false, None)
             .unwrap();
         let error = builder
-            .validate_generated_links(output.path(), true)
+            .validate_generated_links(output.path(), true, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains("missing.html"));
     }
@@ -10406,7 +10663,7 @@ mod tests {
         fs::write(rustdoc.join("guide"), "extensionless page").unwrap();
 
         builder
-            .validate_generated_links(output.path(), true)
+            .validate_generated_links(output.path(), true, None)
             .unwrap();
         let normalized = fs::read_to_string(rustdoc.join("index.html")).unwrap();
         assert!(normalized.contains("HREF = \"enum.Value.html#variant.Grouped\""));
@@ -10433,7 +10690,7 @@ mod tests {
         .unwrap();
 
         let error = builder
-            .validate_generated_links(output.path(), false)
+            .validate_generated_links(output.path(), false, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains("missing fragment"));
     }
@@ -10454,7 +10711,7 @@ mod tests {
         .unwrap();
 
         builder
-            .validate_generated_links(output.path(), false)
+            .validate_generated_links(output.path(), false, None)
             .unwrap();
     }
 
@@ -10474,7 +10731,7 @@ mod tests {
         .unwrap();
 
         let error = builder
-            .validate_generated_links(output.path(), false)
+            .validate_generated_links(output.path(), false, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains("missing fragment"));
     }
@@ -10503,7 +10760,7 @@ mod tests {
         fs::write(&search_index, &search).unwrap();
 
         let error = builder
-            .validate_generated_links(output.path(), true)
+            .validate_generated_links(output.path(), true, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains("missing fragment"));
         assert_eq!(fs::read(search_index).unwrap(), search);
@@ -10526,7 +10783,7 @@ mod tests {
         )
         .unwrap();
         builder
-            .validate_generated_links(output.path(), false)
+            .validate_generated_links(output.path(), false, None)
             .unwrap();
 
         fs::write(
@@ -10537,7 +10794,7 @@ mod tests {
         )
         .unwrap();
         let error = builder
-            .validate_generated_links(output.path(), false)
+            .validate_generated_links(output.path(), false, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains("missing repository source"));
 
@@ -10551,7 +10808,7 @@ mod tests {
             )
             .unwrap();
             let error = builder
-                .validate_generated_links(output.path(), false)
+                .validate_generated_links(output.path(), false, None)
                 .unwrap_err();
             assert!(format!("{error:#}").contains("missing repository source file"));
         }
@@ -10562,7 +10819,7 @@ mod tests {
         )
         .unwrap();
         let error = builder
-            .validate_generated_links(output.path(), false)
+            .validate_generated_links(output.path(), false, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains("does not match documented revision"));
     }
@@ -10998,7 +11255,7 @@ mod tests {
                 .write_product_preview(output.path(), product, BuildChannel::Latest, None)
                 .unwrap();
             builder
-                .validate_generated_links(output.path(), false)
+                .validate_generated_links(output.path(), false, None)
                 .unwrap();
 
             let entrypoint = fs::read_to_string(output.path().join("index.html")).unwrap();
@@ -11050,7 +11307,7 @@ mod tests {
             .unwrap();
 
         let error = builder
-            .validate_generated_links(output.path(), false)
+            .validate_generated_links(output.path(), false, None)
             .unwrap_err();
         assert!(format!("{error:#}").contains("missing fragment"));
     }
@@ -11070,6 +11327,53 @@ mod tests {
         assert_eq!(
             python_human_callable_signature("def version() -> str:"),
             "version() -> str"
+        );
+    }
+
+    #[test]
+    fn python_constants_keep_their_annotated_signature_and_label() {
+        let mut item = DocItem::new(
+            "AUTO",
+            "AUTO",
+            "AUTO",
+            alphal00p_docs_schema::DocItemKind::PythonConstant,
+        );
+        item.signature = Some("AUTO: Auto".to_owned());
+
+        assert_eq!(api_item_kind_label(item.kind), "Constant");
+        assert_eq!(
+            python_item_display_signature(&item).as_deref(),
+            Some("AUTO: Auto")
+        );
+        let class = DocItem::new(
+            "Auto",
+            "Auto",
+            "Auto",
+            alphal00p_docs_schema::DocItemKind::PythonClass,
+        );
+        assert_eq!(api_item_anchor(&[], &item), "auto-constant");
+        assert_eq!(api_item_anchor(&[], &class), "auto");
+        assert_eq!(
+            python_item_disambiguated_segment(&item, &item.name),
+            "AUTO-constant"
+        );
+        let function = DocItem::new(
+            "edge",
+            "edge",
+            "edge",
+            alphal00p_docs_schema::DocItemKind::PythonFunction,
+        );
+        let edge = DocItem::new(
+            "Edge",
+            "Edge",
+            "Edge",
+            alphal00p_docs_schema::DocItemKind::PythonClass,
+        );
+        assert_eq!(api_item_anchor(&[], &function), "edge-function");
+        assert_eq!(api_item_anchor(&[], &edge), "edge");
+        assert_eq!(
+            python_item_disambiguated_segment(&function, &function.name),
+            "edge-function"
         );
     }
 
@@ -11464,6 +11768,121 @@ mod tests {
     }
 
     #[test]
+    fn copying_generated_trees_requires_a_directory_source() {
+        let temporary = tempfile::tempdir().unwrap();
+        let source = temporary.path().join("source.html");
+        let destination = temporary.path().join("destination");
+        fs::write(&source, "not a generated tree").unwrap();
+
+        let error = copy_tree(&source, &destination).unwrap_err();
+
+        assert!(format!("{error:#}").contains("documentation source is not a directory"));
+        assert!(!destination.exists());
+    }
+
+    #[test]
+    fn replacing_generated_trees_rejects_overlapping_paths() {
+        let temporary = tempfile::tempdir().unwrap();
+        let destination = temporary.path().join("site");
+        let source = destination.join("candidate");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(destination.join("keep.html"), "keep").unwrap();
+
+        let error = replace_generated_tree(&source, &destination).unwrap_err();
+
+        assert!(format!("{error:#}").contains("overlapping documentation trees"));
+        assert_eq!(
+            fs::read_to_string(destination.join("keep.html")).unwrap(),
+            "keep"
+        );
+        assert!(source.is_dir());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn safe_outputs_reject_a_symlink_alias_to_the_workspace_root() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().join("workspace");
+        let alias = temporary.path().join("alias");
+        fs::create_dir(&root).unwrap();
+        symlink(&root, &alias).unwrap();
+
+        let error = ensure_safe_output(&root, &alias).unwrap_err();
+
+        assert!(format!("{error:#}").contains("cannot contain the workspace root"));
+        assert!(root.is_dir());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn replacing_generated_trees_resolves_symlinked_ancestors() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = tempfile::tempdir().unwrap();
+        let work = temporary.path().join("work");
+        let source = work.join("site");
+        let alias = temporary.path().join("alias");
+        fs::create_dir_all(&source).unwrap();
+        fs::write(source.join("keep.html"), "keep").unwrap();
+        symlink(&work, &alias).unwrap();
+
+        let error = replace_generated_tree(&source, &alias.join("site")).unwrap_err();
+
+        assert!(format!("{error:#}").contains("overlapping documentation trees"));
+        assert_eq!(
+            fs::read_to_string(source.join("keep.html")).unwrap(),
+            "keep"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copying_generated_trees_rejects_destination_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = tempfile::tempdir().unwrap();
+        let source = temporary.path().join("source");
+        let destination = temporary.path().join("destination");
+        let external = temporary.path().join("external");
+        fs::create_dir_all(source.join("developers")).unwrap();
+        fs::create_dir_all(&destination).unwrap();
+        fs::create_dir_all(&external).unwrap();
+        fs::write(source.join("developers/index.html"), "generated").unwrap();
+        fs::write(external.join("keep.html"), "keep").unwrap();
+        symlink(&external, destination.join("developers")).unwrap();
+
+        let error = copy_tree(&source, &destination).unwrap_err();
+
+        assert!(format!("{error:#}").contains("unsupported documentation artifact"));
+        assert_eq!(
+            fs::read_to_string(external.join("keep.html")).unwrap(),
+            "keep"
+        );
+        assert!(!external.join("index.html").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn immutable_directory_comparison_rejects_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = tempfile::tempdir().unwrap();
+        let generated = temporary.path().join("generated");
+        let existing = temporary.path().join("existing");
+        fs::create_dir_all(&generated).unwrap();
+        fs::create_dir_all(&existing).unwrap();
+        fs::write(generated.join("index.html"), "same").unwrap();
+        fs::write(existing.join("index.html"), "same").unwrap();
+        symlink(generated.join("index.html"), existing.join("extra.html")).unwrap();
+
+        let error = directories_equal(&generated, &existing).unwrap_err();
+
+        assert!(format!("{error:#}").contains("unsupported documentation artifact"));
+    }
+
+    #[test]
     fn checked_in_registry_is_valid() {
         SiteBuilder::discover().unwrap().check().unwrap();
     }
@@ -11805,6 +12224,12 @@ mod tests {
                 .join("docs/assets/typst/portal-graphs/layout.typ"),
         )
         .unwrap();
+        let portal_edge_style = fs::read_to_string(
+            builder
+                .root
+                .join("docs/assets/typst/portal-graphs/edge-style.typ"),
+        )
+        .unwrap();
         for structural_contract in [
             "#let edge-label-style(edge)",
             "#let autogen-external-edge-fields(",
@@ -11812,7 +12237,9 @@ mod tests {
             "#let bind-layout(",
             "graph.parse(input)",
             "graph.style(",
-            "apply-layout(graph-bytes, ..layout-options)",
+            "for pass in passes {",
+            "graph-bytes = apply-layout(",
+            "_layout-pass(",
             "draw(",
         ] {
             assert!(
@@ -11821,8 +12248,15 @@ mod tests {
             );
         }
         assert!(canonical_layout.contains("#import \"layout-core.typ\": bind-layout"));
+        assert!(canonical_layout.contains("#import \"physics-edge-style.typ\" as physics"));
         assert!(portal_layout.contains(
             "#import \"../../../../assets/embedded/drawing/templates/layout-core.typ\": ("
+        ));
+        assert!(portal_layout.contains(
+            "#import \"../../../../assets/embedded/drawing/templates/physics-edge-style.typ\" as physics"
+        ));
+        assert!(portal_edge_style.contains(
+            "#import \"../../../../assets/embedded/drawing/templates/physics-edge-style.typ\": ("
         ));
         assert!(portal_layout.contains("cetz.draw.bezier("));
         for (name, adapter) in [

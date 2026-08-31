@@ -7,7 +7,10 @@ use crate::half_edge::{
     involution::{EdgeIndex, Flow, Orientation},
 };
 
-use super::{strip_quotes, subgraph_free::Edge, DotHedgeData, GlobalData, NodeIdOrDangling};
+use super::{
+    dot_id, dot_value, strip_quotes, subgraph_free::Edge, DotHedgeData, DotParseError,
+    ExplicitIdKind, GlobalData, NodeIdOrDangling,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(
@@ -22,27 +25,35 @@ pub struct DotEdgeData {
     pub edge_id: Option<EdgeIndex>,
 }
 
-impl FromIterator<(String, String)> for DotEdgeData {
-    fn from_iter<T: IntoIterator<Item = (String, String)>>(iter: T) -> Self {
+impl DotEdgeData {
+    fn from_statements(
+        iter: impl IntoIterator<Item = (String, String)>,
+    ) -> Result<Self, DotParseError> {
         let mut edge_id = None;
-        let statements: BTreeMap<String, String> = iter
-            .into_iter()
-            .filter_map(|(k, v)| match k.as_str() {
+        let mut statements = BTreeMap::new();
+        for (key, value) in iter {
+            match key.as_str() {
                 "id" => {
-                    edge_id = Some(EdgeIndex::from(strip_quotes(&v).parse::<usize>().unwrap()));
-                    None
+                    edge_id = Some(EdgeIndex::from(value.parse::<usize>().map_err(
+                        |source| DotParseError::InvalidExplicitId {
+                            kind: ExplicitIdKind::Edge,
+                            value: value.to_string(),
+                            source,
+                        },
+                    )?));
                 }
-                _ => Some((k, strip_quotes(&v).to_string())),
-            })
-            .collect();
+                _ => {
+                    statements.insert(key, value);
+                }
+            }
+        }
 
-        DotEdgeData {
+        Ok(DotEdgeData {
             payload: None,
             local_statements: BTreeMap::new(),
             statements,
-
             edge_id,
-        }
+        })
     }
 }
 
@@ -56,7 +67,7 @@ impl Display for DotEdgeData {
             if !first {
                 write!(f, " ")?;
             }
-            write!(f, "{key}=\"{value}\"")?;
+            write!(f, "{}={}", dot_id(key), dot_value(value))?;
             first = false;
         }
 
@@ -131,43 +142,63 @@ impl Default for DotEdgeData {
 }
 
 impl DotEdgeData {
+    #[allow(clippy::type_complexity)]
     pub fn from_parser(
         edge: Edge,
         map: &BTreeMap<String, NodeIdOrDangling>,
         is_digraph: impl Into<Orientation>,
         global_data: &GlobalData,
-    ) -> (
-        Self,
-        Orientation,
-        HedgeData<DotHedgeData>,
-        Either<HedgeData<DotHedgeData>, Flow>,
-    ) {
+    ) -> Result<
+        (
+            Self,
+            Orientation,
+            HedgeData<DotHedgeData>,
+            Either<HedgeData<DotHedgeData>, Flow>,
+        ),
+        DotParseError,
+    > {
         let mut orientation = is_digraph.into();
-        let mut source_data = DotHedgeData::from(edge.source_port());
-        let mut sink_data = DotHedgeData::from(edge.sink_port());
-        let local_statements = edge.attr.clone().into_iter().collect();
+        let mut source_data = DotHedgeData::from_parser(edge.source_port())?;
+        let mut sink_data = DotHedgeData::from_parser(edge.sink_port())?;
+        let local_statements = edge
+            .attr
+            .iter()
+            .map(|(key, value)| (strip_quotes(key), strip_quotes(value)))
+            .collect();
         let mut statements = global_data.edge_statements.clone();
-        statements.extend(edge.attr.into_iter().filter_map(|(key, value)| {
+        if let Some(value) = statements.remove("dir") {
+            orientation = match value.as_str() {
+                "forward" => Orientation::Default,
+                "back" => Orientation::Reversed,
+                "none" => Orientation::Undirected,
+                _ => return Err(DotParseError::InvalidEdgeDirection { value }),
+            };
+        }
+        for (key, value) in edge.attr {
+            let key = strip_quotes(&key);
             let stripped_value = strip_quotes(&value);
             match key.as_str() {
-                "dir" => match stripped_value {
+                "dir" => match stripped_value.as_str() {
                     "forward" => orientation = Orientation::Default,
                     "back" => orientation = Orientation::Reversed,
                     "none" => orientation = Orientation::Undirected,
-                    _ => panic!("Invalid edge direction"),
+                    _ => {
+                        return Err(DotParseError::InvalidEdgeDirection {
+                            value: stripped_value,
+                        });
+                    }
                 },
                 "source" => {
-                    source_data.statement = Some(stripped_value.to_string());
+                    source_data.statement = Some(stripped_value);
                 }
                 "sink" => {
-                    sink_data.statement = Some(stripped_value.to_string());
+                    sink_data.statement = Some(stripped_value);
                 }
                 _ => {
-                    return Some((key, stripped_value.to_string()));
+                    statements.insert(key, stripped_value);
                 }
             }
-            None
-        }));
+        }
 
         let source = map[&edge.from.id].clone();
 
@@ -176,7 +207,7 @@ impl DotEdgeData {
         let (edge, source, target) = match (source, target) {
             (NodeIdOrDangling::Id(source), NodeIdOrDangling::Id(target)) => {
                 //Full edge
-                let mut dot_edge: DotEdgeData = statements.into_iter().collect();
+                let mut dot_edge = DotEdgeData::from_statements(statements)?;
                 dot_edge.local_statements = local_statements;
                 (
                     dot_edge,
@@ -190,10 +221,10 @@ impl DotEdgeData {
                         .into_iter()
                         .filter(|(a, _)| !(a.as_str() == "shape" || a.as_str() == "label")),
                 );
-                let mut dot_edge: DotEdgeData = statements.into_iter().collect();
+                let mut dot_edge = DotEdgeData::from_statements(statements)?;
                 dot_edge.local_statements = local_statements;
                 if !sink_data.is_none() {
-                    panic!("Sink edge cannot have data:{sink_data}");
+                    return Err(DotParseError::ExternalSinkEndpointData);
                 }
                 (
                     dot_edge,
@@ -207,10 +238,10 @@ impl DotEdgeData {
                         .into_iter()
                         .filter(|(a, _)| !(a.as_str() == "shape" || a.as_str() == "label")),
                 );
-                let mut dot_edge: DotEdgeData = statements.into_iter().collect();
+                let mut dot_edge = DotEdgeData::from_statements(statements)?;
                 dot_edge.local_statements = local_statements;
                 if !source_data.is_none() {
-                    panic!("Source edge cannot have data:{source_data}");
+                    return Err(DotParseError::ExternalSourceEndpointData);
                 }
 
                 (
@@ -219,9 +250,11 @@ impl DotEdgeData {
                     Either::Right(Flow::Sink),
                 )
             }
-            _ => panic!("Cannot connect an edge to two external nodes"),
+            (NodeIdOrDangling::Dangling { .. }, NodeIdOrDangling::Dangling { .. }) => {
+                return Err(DotParseError::EdgeBetweenExternalNodes)
+            }
         };
 
-        (edge, orientation, source, target)
+        Ok((edge, orientation, source, target))
     }
 }

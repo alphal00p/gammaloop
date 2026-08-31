@@ -421,6 +421,19 @@ The reference has no examples. It does not explain the spanning-forest result fr
 `cycle_basis`, the left/cut/right parts of `all_cuts`, traversal flags, callback
 signatures, mutation failures, or proxy lifetime and write-through behavior.
 
+*Progress (`yvzwlsms`):* the Python API guide now demonstrates atomic node/edge insertion,
+split/connect rewiring, stale-view behavior, named `CutPartition` results, and bounded bond
+enumeration. The generated stub exposes those contracts directly, and real-wheel regressions cover
+both node stores, arbitrary payload identity, rollback, cut orientation, and deterministic result
+ordering. Runnable traversal-flag and callback-failure journeys remain open.
+
+*Progress (`sxssmmuv`):* direction-basis semantics now distinguish the underlying flow required by
+GammaLoop momentum routing from superficial reversed/undirected orientation. The guide also covers
+boundary selections, traversal-tree relationships, bounded circuit enumeration, single-bond and
+tadpole queries, cut orientation/winding access, and non-mutating transitive reduction. Focused
+real-wheel regressions exercise both node stores; a complete runnable callback-failure journey
+remains open.
+
 *Complete when:* DOT parse/build → indexing → components/cycle basis → checked result
 is runnable, and compound returns, callbacks, proxies, and mutation behavior have
 local semantic contracts.

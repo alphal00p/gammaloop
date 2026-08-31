@@ -97,7 +97,7 @@ use ahash::{AHashMap, AHashSet};
 
 use bitvec::prelude::*;
 use bitvec::slice::IterOnes;
-use builder::{HedgeData, HedgeGraphBuilder};
+use builder::{HedgeData, HedgeGraphBuilder, HedgeNodeBuilder};
 use hedgevec::{Accessors, SmartEdgeVec};
 use indexmap::IndexSet;
 use involution::{
@@ -416,6 +416,69 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         // Check smart edge vec
         self.edge_store.check_hedge_pairs()?;
         Ok(())
+    }
+
+    /// Rebuilds this graph with a different node-storage backend.
+    ///
+    /// Edge and half-edge storage is moved unchanged, so edge and half-edge IDs remain stable.
+    /// Node order, data, and incidence are retained as long as the source store represents a
+    /// valid partition.
+    ///
+    /// Forest stores may retain inactive roots after [`Self::identify_nodes`]. Those roots cannot
+    /// be represented by every backend, so this method returns an error instead of silently
+    /// dropping their data. Call [`Self::forget_identification_history`] explicitly before
+    /// conversion when compaction and the resulting node-ID changes are acceptable.
+    pub fn into_node_store<M>(self) -> Result<HedgeGraph<E, V, H, M>, HedgeGraphError>
+    where
+        M: NodeStorageOps<NodeData = V>,
+    {
+        self.node_store.check_nodes()?;
+        let mut topology = self
+            .node_store
+            .to_forest::<(), ()>(|_| ())
+            .cast::<crate::tree::child_vec::ChildVecStore<()>>();
+        let retained = topology.forget_identification_history();
+        let retained_count: NodeIndex = retained.len();
+        if retained_count.0 != 0 {
+            return Err(HedgeGraphError::NodesDoNotPartition(
+                "node store retains inactive identification roots".to_owned(),
+            ));
+        }
+
+        let n_hedges = self.n_hedges();
+        let node_store_hedges: Hedge = self.node_store.len();
+        let hedge_data_hedges: Hedge = self.hedge_data.len();
+        if node_store_hedges.0 != n_hedges || hedge_data_hedges.0 != n_hedges {
+            return Err(HedgeGraphError::DataLengthMismatch);
+        }
+
+        let HedgeGraph {
+            hedge_data,
+            edge_store,
+            node_store,
+        } = self;
+        let crowns = node_store.new_nodevec(|_, neighbors, _| neighbors.collect::<Vec<_>>());
+        let node_data = node_store.drain().collect::<Vec<_>>();
+        let crown_count: NodeIndex = crowns.len();
+        if crown_count.0 != node_data.len() {
+            return Err(HedgeGraphError::DataLengthMismatch);
+        }
+
+        let mut nodes = Vec::with_capacity(crown_count.0);
+        for ((crown_id, hedges), (data_id, data)) in crowns.into_iter().zip(node_data) {
+            if crown_id != data_id {
+                return Err(HedgeGraphError::DataLengthMismatch);
+            }
+            nodes.push(HedgeNodeBuilder { data, hedges });
+        }
+
+        let node_store = M::build(nodes, n_hedges);
+        node_store.check_nodes()?;
+        Ok(HedgeGraph {
+            hedge_data,
+            edge_store,
+            node_store,
+        })
     }
 
     /// Deletes all half-edges specified in the `subgraph` from the graph.
@@ -1997,18 +2060,53 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         self.all_cuts(source, target)
     }
 
-    pub fn tadpoles(&self, externals: &[NodeIndex]) -> Vec<SuBitGraph> {
+    /// Finds tadpole components relative to a non-empty set of terminal nodes.
+    ///
+    /// The terminals must resolve to distinct structural nodes, be valid node
+    /// indices, and have at least one incident half-edge. Results are sorted by
+    /// their structural bitsets.
+    pub fn tadpoles(&self, externals: &[NodeIndex]) -> Result<Vec<SuBitGraph>, TadpoleError> {
+        if externals.is_empty() {
+            return Err(TadpoleError::EmptyTerminals);
+        }
+
+        let n_nodes = self.n_nodes();
+        if let Some(&terminal) = externals.iter().find(|terminal| terminal.0 >= n_nodes) {
+            return Err(TadpoleError::InvalidTerminal { terminal, n_nodes });
+        }
+
+        let mut seen_terminals = BTreeSet::new();
+        let mut terminals = Vec::with_capacity(externals.len());
+        for &terminal in externals {
+            let hedge = self
+                .iter_crown(terminal)
+                .next()
+                .ok_or(TadpoleError::TerminalWithoutIncidentHalfEdge(terminal))?;
+            let canonical = self.node_id(hedge);
+            if !seen_terminals.insert(canonical) {
+                return Err(TadpoleError::DuplicateTerminal(terminal));
+            }
+            terminals.push(canonical);
+        }
+
         let mut identified: HedgeGraph<(), (), (), N::OpStorage<()>> = self.just_structure();
 
-        let n = identified.identify_nodes(externals, ());
-        let hairs = identified.iter_crown(n).next().unwrap();
+        let n = identified.identify_nodes(&terminals, ());
+        let mut terminal_edges: SuBitGraph = identified.empty_subgraph();
+        for hedge in identified.iter_crown(n) {
+            terminal_edges.add(hedge);
+            terminal_edges.add(identified.inv(hedge));
+        }
+        if terminal_edges.is_empty() {
+            return Err(TadpoleError::TerminalWithoutIncidentHalfEdge(externals[0]));
+        }
 
         let non_bridges = identified.non_bridges();
-        identified
+        let mut tadpoles = identified
             .connected_components(&non_bridges)
             .into_iter()
             .filter_map(|mut a| {
-                if !a.includes(&hairs) {
+                if a.empty_intersection(&terminal_edges) {
                     let full: SuBitGraph = a.covers(self);
 
                     for i in full.included_iter() {
@@ -2020,7 +2118,10 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
                     None
                 }
             })
-            .collect()
+            .collect::<Vec<_>>();
+        tadpoles.sort();
+        tadpoles.dedup();
+        Ok(tadpoles)
     }
 
     pub fn all_bonds<R: RangeBounds<usize>>(&self, size: &R) -> Vec<SuBitGraph> {
@@ -2513,8 +2614,40 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         partitions
     }
 
-    pub fn all_cycles(&self) -> Vec<Cycle> {
-        Cycle::all_sum_powerset_filter_map(&self.cycle_basis().0, &|mut c| {
+    /// Enumerates every circuit in the graph in structural order.
+    ///
+    /// Enumeration is exponential in the cycle-space rank. `max_cycle_rank`
+    /// is an explicit caller-selected bound checked before enumeration starts.
+    pub fn all_cycles(&self, max_cycle_rank: usize) -> Result<Vec<Cycle>, CycleEnumerationError> {
+        self.all_cycles_of(&self.full_filter(), max_cycle_rank)
+    }
+
+    /// Enumerates every circuit contained in `subgraph` in structural order.
+    ///
+    /// Enumeration is exponential in the subgraph's cycle-space rank.
+    /// `max_cycle_rank` is checked before enumeration starts.
+    pub fn all_cycles_of<S: SubSetLike<Base = SuBitGraph> + SubGraphLike>(
+        &self,
+        subgraph: &S,
+        max_cycle_rank: usize,
+    ) -> Result<Vec<Cycle>, CycleEnumerationError> {
+        let basis = self.paton_cycle_basis(subgraph.included())?.0;
+        let rank = basis.len();
+        if rank > max_cycle_rank {
+            return Err(CycleEnumerationError::RankLimitExceeded {
+                rank,
+                max_cycle_rank,
+            });
+        }
+        let max_supported = usize::BITS as usize - 1;
+        if rank > max_supported {
+            return Err(CycleEnumerationError::RankNotRepresentable {
+                rank,
+                max_supported,
+            });
+        }
+
+        let mut cycles = Cycle::all_sum_powerset_filter_map(&basis, &|mut c| {
             if c.is_circuit(self) {
                 c.loop_count = Some(1);
                 Some(c)
@@ -2522,9 +2655,14 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
                 None
             }
         })
-        .unwrap()
+        .map_err(|_| CycleEnumerationError::RankNotRepresentable {
+            rank,
+            max_supported,
+        })?
         .into_iter()
-        .collect()
+        .collect::<Vec<_>>();
+        cycles.sort();
+        Ok(cycles)
     }
 
     pub fn all_cycle_sym_diffs(&self) -> Result<Vec<InternalSubGraph>, TryFromIntError> {
@@ -2663,9 +2801,23 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         spinneys
     }
 
-    pub fn all_spinneys_alt(&self) -> AHashSet<InternalSubGraph> {
+    /// Enumerates spinneys from all circuits up to `max_cycle_rank`.
+    ///
+    /// This alternative implementation performs two exponential powerset
+    /// enumerations and returns an error before either one is unrepresentable.
+    pub fn all_spinneys_alt(
+        &self,
+        max_cycle_rank: usize,
+    ) -> Result<AHashSet<InternalSubGraph>, CycleEnumerationError> {
         let mut spinneys = AHashSet::new();
-        let cycles = self.all_cycles();
+        let cycles = self.all_cycles(max_cycle_rank)?;
+        let max_supported = usize::BITS as usize - 1;
+        if cycles.len() > max_supported {
+            return Err(CycleEnumerationError::PowerSetNotRepresentable {
+                elements: cycles.len(),
+                max_supported,
+            });
+        }
 
         let mut pset = PowersetIterator::<usize>::new(cycles.len() as u8);
         pset.next(); //Skip empty set
@@ -2683,7 +2835,7 @@ impl<E, V, H, N: NodeStorageOps<NodeData = V>> HedgeGraph<E, V, H, N> {
         for c in cycles {
             spinneys.insert(c.internal_graph(self));
         }
-        spinneys
+        Ok(spinneys)
     }
 }
 
@@ -3199,6 +3351,64 @@ where
             self.next()
         }
     }
+}
+
+/// Errors returned by exhaustive cycle-based enumeration.
+#[derive(Debug, Error)]
+pub enum CycleEnumerationError {
+    /// The cycle-space rank exceeds the caller-selected bound.
+    #[error("cycle-space rank {rank} exceeds the explicit enumeration limit {max_cycle_rank}")]
+    RankLimitExceeded {
+        /// The graph or subgraph's cycle-space rank.
+        rank: usize,
+        /// The caller-selected maximum rank.
+        max_cycle_rank: usize,
+    },
+    /// The cycle-space powerset cannot be represented by this platform.
+    #[error(
+        "cycle-space rank {rank} cannot be represented by the powerset iterator; maximum supported rank is {max_supported}"
+    )]
+    RankNotRepresentable {
+        /// The graph or subgraph's cycle-space rank.
+        rank: usize,
+        /// The largest rank supported by the powerset iterator.
+        max_supported: usize,
+    },
+    /// A secondary powerset cannot be represented by this platform.
+    #[error(
+        "a powerset of {elements} elements cannot be represented; maximum supported size is {max_supported}"
+    )]
+    PowerSetNotRepresentable {
+        /// The number of elements in the requested powerset.
+        elements: usize,
+        /// The largest size supported by the powerset iterator.
+        max_supported: usize,
+    },
+    /// Constructing the graph or subgraph's cycle basis failed.
+    #[error("cannot construct a cycle basis: {0}")]
+    CycleBasis(#[from] HedgeGraphError),
+}
+
+/// Invalid terminal sets supplied to [`HedgeGraph::tadpoles`].
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum TadpoleError {
+    /// No terminal nodes were supplied.
+    #[error("at least one external terminal is required")]
+    EmptyTerminals,
+    /// A terminal node index is outside the graph.
+    #[error("terminal {terminal} is outside the graph's {n_nodes} nodes")]
+    InvalidTerminal {
+        /// The invalid terminal index.
+        terminal: NodeIndex,
+        /// The graph's node count.
+        n_nodes: usize,
+    },
+    /// A terminal resolves to a structural node already represented in the set.
+    #[error("terminal {0} resolves to a structural node that appears more than once")]
+    DuplicateTerminal(NodeIndex),
+    /// A terminal node has no incident half-edge.
+    #[error("terminal {0} has no incident half-edge")]
+    TerminalWithoutIncidentHalfEdge(NodeIndex),
 }
 
 #[derive(Debug, Error)]

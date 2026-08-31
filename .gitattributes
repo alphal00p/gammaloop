@@ -1,0 +1,2 @@
+*.pdf binary
+crates/linnet-py/vendor/typst-packages/** -whitespace

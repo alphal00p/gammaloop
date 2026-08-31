@@ -9,7 +9,6 @@ use crate::{
     graph::{
         FeynmanGraph, Graph,
         cuts::{CutSet, ResidueSelector},
-        parse::string_utils::dot_statement_value,
     },
     integrands::process::ProcessIntegrand,
     processes::DotExportSettings,
@@ -316,7 +315,7 @@ fn node_expression_to_dot(
     dot_graph
         .global_data
         .statements
-        .insert("forest_name".into(), dot_statement_value(forest_name));
+        .insert("forest_name".into(), forest_name.to_owned());
     dot_graph
         .global_data
         .statements
@@ -325,17 +324,17 @@ fn node_expression_to_dot(
         .global_data
         .statements
         .insert("forest_node_index".into(), term.node_index.to_string());
-    dot_graph.global_data.statements.insert(
-        "forest_node_key".into(),
-        dot_statement_value(&term.node_key),
-    );
+    dot_graph
+        .global_data
+        .statements
+        .insert("forest_node_key".into(), term.node_key.clone());
     dot_graph
         .global_data
         .statements
         .insert("forest_term_index".into(), term.term_index.to_string());
     dot_graph.global_data.statements.insert(
         "forest_residue_index".into(),
-        dot_statement_value(&residue_suffix(term.residue_index)),
+        residue_suffix(term.residue_index),
     );
     let full_num = term
         .numerator
@@ -344,7 +343,7 @@ fn node_expression_to_dot(
     dot_graph
         .global_data
         .statements
-        .insert("full_num".into(), dot_statement_value(&full_num));
+        .insert("full_num".into(), full_num);
 
     let mut dot = Vec::new();
     dot_graph

@@ -184,6 +184,8 @@
           ./crates/linnest/typst/linnest.wasm
           ./crates/linnest/typst/src
           ./crates/linnest/typst/typst.toml
+          ./crates/linnet-py/README.md
+          ./crates/linnet-py/vendor
           ./crates/vakint/form_src
           ./crates/vakint/templates
         ];
@@ -218,7 +220,9 @@
               ./tests/resources/graphs/epemttbar.dot
               ./pyproject.toml
               ./crates/linnet-py/pyproject.toml
+              ./crates/linnet-py/uv.lock
               ./crates/linnet-py/linnet_py.pyi
+              ./crates/linnet-py/examples/physics_render_settings.py
               ./crates/linnet-py/tests/test_basic.py
             ]
           );
@@ -530,8 +534,19 @@
 
         workspacePackageProductionExtraSourceRoots = {
           "alphal00p-docs-catalogs" = [
+            "crates/gammaloop-api/src/commands/evaluate_samples.rs"
+            "crates/gammaloop-api/src/commands/generate.rs"
+            "crates/gammaloop-api/src/commands/import/model.rs"
+            "crates/gammaloop-api/src/commands/integrate.rs"
+            "crates/gammaloop-api/src/integrand_info.rs"
             "crates/gammaloop-api/src/lib.rs"
+            "crates/gammaloop-api/src/session.rs"
+            "crates/gammaloop-api/src/state.rs"
+            "crates/gammalooprs/src/integrands/evaluation.rs"
+            "crates/gammalooprs/src/integrands/mod.rs"
             "crates/gammalooprs/src/lib.rs"
+            "crates/gammalooprs/src/observables/mod.rs"
+            "crates/gammalooprs/src/settings/mod.rs"
             "crates/idenso/src/color/macros.rs"
             "crates/idenso/src/cook.rs"
             "crates/idenso/src/dirac/macros.rs"
@@ -541,14 +556,20 @@
             "crates/idenso/src/selective_expand.rs"
             "crates/linnet/src/half_edge.rs"
             "crates/linnet/src/half_edge/builder.rs"
+            "crates/linnet/src/half_edge/involution.rs"
+            "crates/linnet/src/half_edge/nodestore.rs"
+            "crates/linnet/src/half_edge/subgraph.rs"
             "crates/linnet/src/half_edge/subgraph/subset.rs"
             "crates/linnet/src/half_edge/tree.rs"
             "crates/linnet/src/parser/mod.rs"
             "crates/spenso-hep-lib/src/lib.rs"
             "crates/spenso-macros/src/lib.rs"
             "crates/spenso/src/contraction.rs"
+            "crates/spenso/src/network/contract.rs"
             "crates/spenso/src/network/mod.rs"
+            "crates/spenso/src/network/parsing/mod.rs"
             "crates/spenso/src/structure.rs"
+            "crates/spenso/src/symbolic_parallelism.rs"
             "crates/spenso/src/tensors/data/dense.rs"
             "crates/spenso/src/tensors/data/sparse.rs"
             "crates/spenso/src/tensors/parametric.rs"
@@ -587,6 +608,19 @@
             "crates/linnest/typst/src"
             "crates/linnest/typst/typst.toml"
           ];
+          "linnet-py" = [
+            "crates/linnet-py/LICENSE"
+            "crates/linnet-py/README.md"
+            "crates/kurvst/typst/LICENSE"
+            "crates/kurvst/typst/kurvst.wasm"
+            "crates/kurvst/typst/src"
+            "crates/kurvst/typst/typst.toml"
+            "crates/linnest/typst/linnest.wasm"
+            "crates/linnest/typst/LICENSE"
+            "crates/linnest/typst/src"
+            "crates/linnest/typst/typst.toml"
+            "crates/linnet-py/vendor"
+          ];
           vakint = [
             "crates/vakint/form_src"
             "crates/vakint/templates"
@@ -607,8 +641,26 @@
         };
 
         workspacePackageRuntimeTestExtraSourceRoots = {
+          "alphal00p-docs-builder" = [
+            "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
+            "assets/embedded/drawing/templates/layout-core.typ"
+            "assets/embedded/drawing/templates/layout.typ"
+            "assets/embedded/drawing/templates/physics-edge-style.typ"
+            "assets/gammalooplogo-dark.svg"
+            "assets/gammalooplogo-light.svg"
+            "crates/idenso/CHANGELOG.typ"
+            "crates/linnet/CHANGELOG.typ"
+            "crates/spenso/CHANGELOG.typ"
+            "docs"
+            "scripts/render-docs-svg-assets.sh"
+          ];
           "alphal00p-docs-catalogs" = [
             "docs/api/python"
+          ];
+          clinnet = [
+            "assets/embedded/drawing/templates/impl/physics-edge-style.typ"
+            "assets/embedded/drawing/templates/layout-core.typ"
+            "assets/embedded/drawing/templates/physics-edge-style.typ"
           ];
           "gammaloop-api" = [
             "tests/resources/graphs/scalar_bubble.dot"
@@ -1542,6 +1594,7 @@
             [
               "--locked"
               "--no-default-features"
+              "--lib"
             ]
             ++ map (package: "-p ${lib.escapeShellArg package}") selectedPackages
             ++ lib.optional (featureArgs != "") featureArgs
@@ -1595,6 +1648,9 @@
         ];
         nextestPython = pkgs.python313.withPackages (pythonPackages: [
           pythonPackages.numpy
+        ]);
+        linnetPython = pkgs.python313.withPackages (pythonPackages: [
+          pythonPackages.typst
         ]);
 
         # Common arguments can be set here to avoid repeating them later
@@ -1787,6 +1843,7 @@
             nickel
             nls
             docsTypst
+            linnetPython
             roboto
             cargo-nextest
             pkg-config
@@ -1822,6 +1879,7 @@
             RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
             GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
             TYPST_FONT_PATHS = docsFontPath;
+            TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
 
             CC = nixCc;
             CXX = nixCxx;
@@ -2065,7 +2123,7 @@
               cargoWithProfile test --locked --no-run -p alphal00p-docs-examples
               cargo clean --profile ${docsCargoProfile} -p alphal00p-docs-examples
               cargoWithProfile build --locked -p alphal00p-docs-builder
-              cargoWithProfile build --locked -p linnet-py --features extension-module,abi3-py310
+              cargoWithProfile build --locked -p linnet-py --lib --features extension-module,abi3-py310
               ${documentationRustdocBuildCommands}
               cargoWithProfile build --locked -p alphal00p-docs-catalogs \
                 --features ${lib.escapeShellArg documentationCatalogFeatures} \
@@ -3046,6 +3104,7 @@
             pkgs.uv
           ];
           TYPST_FONT_PATHS = docsFontPath;
+          TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
           ALPHAL00P_DOCS_CARGO_PROFILE = docsCargoProfile;
           doNotLinkInheritedArtifacts = true;
           doInstallCargoArtifacts = false;
@@ -3096,7 +3155,7 @@
           cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
           linnet_python="$TMPDIR/alphal00p-docs-linnet-python"
           export UV_CACHE_DIR="$TMPDIR/alphal00p-docs-uv-cache"
-          uv venv "$linnet_python" --python "$PYO3_PYTHON"
+          uv venv "$linnet_python" --python "${linnetPython}/bin/python3" --system-site-packages
           VIRTUAL_ENV="$linnet_python" maturin develop \
             --uv \
             --offline \
@@ -3183,6 +3242,15 @@
                 --snapshot-tag v0.3.4 \
                 --output "$docs_snapshot" \
                 --rustdoc-target-root "$docs_rustdoc"
+              mkdir -p "$docs_snapshot/developers" \
+                "$docs_snapshot/.staging" \
+                "$docs_snapshot/products/gammaloop/latest" \
+                "$docs_snapshot/products/gammaloop/snapshots/legacy"
+              printf 'removed developer route\n' > "$docs_snapshot/developers/removed-before-rebuild.txt"
+              printf 'stale staging\n' > "$docs_snapshot/.staging/incomplete.txt"
+              printf 'latest route\n' > "$docs_snapshot/products/gammaloop/latest/.note"
+              printf 'product redirect\n' > "$docs_snapshot/products/gammaloop/index.html"
+              printf 'historical snapshot\n' > "$docs_snapshot/products/gammaloop/snapshots/legacy/.note"
               cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- \
                 build \
                 --product all \
@@ -3190,6 +3258,11 @@
                 --snapshot-tag v0.3.4 \
                 --output "$docs_snapshot" \
                 --rustdoc-target-root "$docs_rustdoc"
+              test ! -e "$docs_snapshot/developers/removed-before-rebuild.txt"
+              test ! -e "$docs_snapshot/.staging"
+              grep -Fq 'latest route' "$docs_snapshot/products/gammaloop/latest/.note"
+              grep -Fq 'product redirect' "$docs_snapshot/products/gammaloop/index.html"
+              grep -Fq 'historical snapshot' "$docs_snapshot/products/gammaloop/snapshots/legacy/.note"
 
               docs_pages_test="$TMPDIR/alphal00p-docs-pages-test"
               mkdir -p "$docs_pages_test/products/gammaloop/snapshots/legacy"
@@ -3293,7 +3366,7 @@
               grep -Fq 'class="alphal00p-rustdoc-bar"' \
                 "$out/products/gammaloop/latest/reference/rust/src/gammalooprs/lib.rs.html"
               test -s "$out/products/linnet/latest/reference/typst/index.html"
-              for typst_page in graph layout drawing physics subgraph; do
+              for typst_page in graph layout drawing templates subgraph; do
                 test -s \
                   "$out/products/linnet/latest/reference/typst/$typst_page/index.html"
               done
@@ -3301,7 +3374,7 @@
                 "$out/products/linnet/latest/search-index.json"
               ! grep -Fq '"title": "Parameters"' \
                 "$out/products/linnet/latest/search-index.json"
-              grep -Fq '/products/gammaloop/latest/guides/kurvst/' \
+              grep -Fq '../../../../gammaloop/latest/guides/kurvst/' \
                 "$out/products/linnet/latest/reference/typst/index.html"
             '';
           }
@@ -3351,7 +3424,8 @@
               if [ -d target ]; then
                 chmod -R u+w target
               fi
-              cargoWithProfile test --doc ${ciArgs.cargoExtraArgs}
+              cargoWithProfile test --doc ${ciArgs.cargoExtraArgs} \
+                --exclude alphal00p-docs-python-exporter
             '';
             checkPhaseCargoCommand = "";
             doCheck = false;
@@ -3528,6 +3602,10 @@
               "alphal00p-docs-python-exporter"
               "alphal00p-docs-schema"
             ];
+            runtimeInputs = [
+              nextestPython
+              pkgs.gitMinimal
+            ];
           }
           {
             name = "integration";
@@ -3634,7 +3712,10 @@
             packageSourcePackages = target.packages;
             testSourcePackages = target.packages;
             runtimeTestSourcePackages = target.runtimeTestSourcePackages or target.packages;
-            extraFilesets = [ ./.config/nextest.toml ];
+            extraFilesets = [
+              ./.config/nextest.toml
+            ]
+            ++ lib.optionals (target.name == "docs") documentationDeveloperScopeSources;
           };
 
         nextestFeatureArgsFor =
@@ -3792,6 +3873,7 @@
                 pkgs.gcc
                 nextestFailureSummary
               ]
+              ++ (target.runtimeInputs or [ ])
               ++ lib.optionals (nextestUsesPythonModule target) [ nextestPython ];
               CC = nixCc;
               CXX = nixCxx;
@@ -3814,6 +3896,15 @@
                 cp -R ${nextestRuntimeSrcFor target}/. /build/source/
                 chmod -R u+w /build/source
                 cd /build/source
+                ${lib.optionalString (target.name == "docs") ''
+                  export ALPHAL00P_DOCS_GIT_COMMIT=${lib.escapeShellArg nixCiBarrierRevision}
+                  export ALPHAL00P_DOCS_GIT_TIMESTAMP=${lib.escapeShellArg (toString self.lastModified)}
+                  mkdir -p "$NIX_BUILD_TOP/nextest-tmp"
+                  export TMPDIR="$NIX_BUILD_TOP/nextest-tmp"
+                ''}
+                mkdir -p .cargo .cargo-home
+                cp ${cargoVendorDir}/config.toml .cargo/config.toml
+                export CARGO_HOME="$PWD/.cargo-home"
                 # Workspace-root discovery checks these directories even for test
                 # targets that do not consume any files from them.
                 mkdir -p tests/resources examples/cli
@@ -3844,6 +3935,8 @@
                   rm -f ${lib.escapeShellArg nextestJunitPath}
                   cargo nextest run \
                     --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target package} \
+                    --extract-to . \
+                    --extract-overwrite \
                     --workspace-remap . \
                     ${nextestBaseExtraArgs}
                   package_status=$?

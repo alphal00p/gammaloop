@@ -35,6 +35,47 @@ fn empty_config_bytes() -> Vec<u8> {
     bytes
 }
 
+#[derive(Serialize)]
+struct TestGraphSpecEnvelope<'a, T> {
+    schema: &'static str,
+    version: u32,
+    graph: &'a T,
+}
+
+fn encode_graph_spec<T: Serialize>(graph: &T) -> Vec<u8> {
+    encode_cbor(&TestGraphSpecEnvelope {
+        schema: crate::GRAPH_SPEC_SCHEMA,
+        version: crate::GRAPH_SPEC_VERSION,
+        graph,
+    })
+}
+
+#[test]
+fn graph_spec_rejects_unknown_schema_and_version() {
+    let graph = TestGraphSpec {
+        name: "empty".to_owned(),
+        statements: BTreeMap::new(),
+        nodes: Vec::new(),
+        edges: Vec::new(),
+    };
+    let schema = encode_cbor(&TestGraphSpecEnvelope {
+        schema: "other-graph-spec",
+        version: crate::GRAPH_SPEC_VERSION,
+        graph: &graph,
+    });
+    assert!(graph_from_spec_bytes(&schema)
+        .unwrap_err()
+        .contains("Invalid graph spec schema"));
+    let version = encode_cbor(&TestGraphSpecEnvelope {
+        schema: crate::GRAPH_SPEC_SCHEMA,
+        version: crate::GRAPH_SPEC_VERSION + 1,
+        graph: &graph,
+    });
+    assert!(graph_from_spec_bytes(&version)
+        .unwrap_err()
+        .contains("Unsupported graph spec version"));
+}
+
 #[test]
 fn parsed_dot_layout_keys_do_not_configure_layout() {
     let graph = TypstGraph::from_dot(
@@ -191,7 +232,22 @@ fn dot_pos_constraint_value_replaces_external_pin_attribute() {
         edge.data.statements.get("pos").map(String::as_str),
         Some("0,0")
     );
-    assert!(!edge.data.statements.contains_key("pin"));
+    assert_eq!(
+        edge.data.statements.get("pin").map(String::as_str),
+        Some("x:@-left,y:@edge0")
+    );
+
+    let serialized = typst_graph.to_dot_graph().debug_dot();
+    let reparsed = TypstGraph::parse(&serialized).unwrap();
+    let (_, _, edge) = reparsed.iter_edges().next().unwrap();
+    assert!(matches!(
+        edge.data.constraints.x,
+        Constraint::Grouped(_, ShiftDirection::NegativeOnly)
+    ));
+    assert!(matches!(
+        edge.data.constraints.y,
+        Constraint::Grouped(_, ShiftDirection::Any)
+    ));
 }
 
 #[test]
@@ -201,7 +257,7 @@ fn dot_pos_axis_constraints_support_numeric_partial_pins() {
         dot!(digraph {
             a [id=0 pos="x:2!"]
             b [id=1 pos="y:-1!"]
-            a -> b
+            a -> b [pos="x:5!"]
         })
         .unwrap(),
         &figment,
@@ -214,13 +270,46 @@ fn dot_pos_axis_constraints_support_numeric_partial_pins() {
 
     assert_eq!(nodes[&0].pos.x, 2.0);
     assert_eq!(nodes[&0].pos.y, 0.0);
+    assert_eq!((nodes[&0].start_x, nodes[&0].start_y), (true, false));
     assert!(matches!(nodes[&0].constraints.x, Constraint::Fixed));
     assert!(matches!(nodes[&0].constraints.y, Constraint::Free));
 
     assert_eq!(nodes[&1].pos.x, 0.0);
     assert_eq!(nodes[&1].pos.y, -1.0);
+    assert_eq!((nodes[&1].start_x, nodes[&1].start_y), (false, true));
     assert!(matches!(nodes[&1].constraints.x, Constraint::Free));
     assert!(matches!(nodes[&1].constraints.y, Constraint::Fixed));
+
+    let (_, _, edge) = typst_graph.iter_edges().next().unwrap();
+    assert_eq!(edge.data.pos.x, 5.0);
+    assert_eq!(edge.data.pos.y, 0.0);
+    assert_eq!((edge.data.start_x, edge.data.start_y), (true, false));
+
+    let serialized = typst_graph.to_dot_graph().debug_dot();
+    let mut reparsed = TypstGraph::parse(&serialized).unwrap();
+    let mut nodes = BTreeMap::new();
+    for (_, _, node) in reparsed.iter_nodes() {
+        nodes.insert(node.name.as_deref().unwrap(), node);
+    }
+    assert!(matches!(nodes["a"].constraints.x, Constraint::Fixed));
+    assert!(matches!(nodes["a"].constraints.y, Constraint::Free));
+    assert!(matches!(nodes["b"].constraints.x, Constraint::Free));
+    assert!(matches!(nodes["b"].constraints.y, Constraint::Fixed));
+
+    let (_, _, edge) = reparsed.iter_edges().next().unwrap();
+    assert_eq!((edge.data.start_x, edge.data.start_y), (true, false));
+    assert!(matches!(edge.data.constraints.x, Constraint::Fixed));
+    assert!(matches!(edge.data.constraints.y, Constraint::Free));
+
+    reparsed.layout();
+    let mut nodes = BTreeMap::new();
+    for (_, _, node) in reparsed.iter_nodes() {
+        nodes.insert(node.name.as_deref().unwrap(), node);
+    }
+    assert_eq!(nodes["a"].pos.x, 2.0);
+    assert_eq!(nodes["b"].pos.y, -1.0);
+    let (_, _, edge) = reparsed.iter_edges().next().unwrap();
+    assert_eq!(edge.data.pos.x, 5.0);
 }
 
 #[test]
@@ -371,6 +460,8 @@ struct TestStructuralPatch {
     nodes: Vec<TestNodeStructuralPatch>,
     #[serde(default)]
     edges: Vec<TestEdgeStructuralPatch>,
+    #[serde(default)]
+    hedges: Vec<TestHedgeStructuralPatch>,
 }
 
 #[derive(Serialize)]
@@ -395,6 +486,18 @@ struct TestEdgeStructuralPatch {
     bend: Option<f64>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     statements: BTreeMap<String, String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "kebab-case")]
+struct TestHedgeStructuralPatch {
+    index: usize,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    statement: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    port_label: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    compass: Option<&'static str>,
 }
 
 #[derive(Serialize)]
@@ -589,7 +692,7 @@ fn test_graph_spec_constructor_reads_nodes_edges_and_subgraphs() {
         ],
     };
 
-    let graph = graph_from_spec_bytes(&encode_cbor(&spec)).unwrap();
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&spec)).unwrap();
     let info: TypstDotGraphInfo =
         ciborium::de::from_reader(graph_info_bytes(&graph).unwrap().as_slice()).unwrap();
     assert_eq!(info.name, "constructed");
@@ -636,7 +739,7 @@ fn test_graph_spec_constructor_reads_nodes_edges_and_subgraphs() {
 
 #[test]
 fn graph_spec_underscore_compass_round_trips_through_archived_views() {
-    let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&TestGraphSpec {
         name: "underscore".to_string(),
         statements: BTreeMap::new(),
         nodes: vec![
@@ -756,7 +859,7 @@ fn test_graph_spec_data_are_opaque_and_survive_layout() {
         }],
     };
 
-    let graph = graph_from_spec_bytes(&encode_cbor(&spec)).unwrap();
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&spec)).unwrap();
     assert_data(&graph);
 
     let laid_out = layout_parsed_graph_bytes(&graph, &empty_config_bytes()).unwrap();
@@ -845,7 +948,7 @@ fn test_named_node_and_edge_data_api() {
 
     let mut edge_statements = one_statement("__linnest-edge-name", "e1");
     edge_statements.insert("label".to_string(), "a-b".to_string());
-    let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&TestGraphSpec {
         name: "named-data".to_string(),
         statements: BTreeMap::new(),
         nodes: vec![
@@ -911,8 +1014,54 @@ fn test_named_node_and_edge_data_api() {
 }
 
 #[test]
+fn graph_spec_edge_name_is_first_class() {
+    #[derive(Serialize)]
+    struct NamedGraphSpec {
+        nodes: Vec<TestNodeSpec>,
+        edges: Vec<NamedEdgeSpec>,
+    }
+
+    #[derive(Serialize)]
+    struct NamedEdgeSpec {
+        name: &'static str,
+        source: TestEndpointSpec,
+        sink: TestEndpointSpec,
+    }
+
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&NamedGraphSpec {
+        nodes: vec![
+            TestNodeSpec {
+                name: "a".to_owned(),
+                statements: BTreeMap::new(),
+            },
+            TestNodeSpec {
+                name: "b".to_owned(),
+                statements: BTreeMap::new(),
+            },
+        ],
+        edges: vec![NamedEdgeSpec {
+            name: "a-to-b",
+            source: TestEndpointSpec {
+                node: 0,
+                compass: None,
+                statement: None,
+            },
+            sink: TestEndpointSpec {
+                node: 1,
+                compass: None,
+                statement: None,
+            },
+        }],
+    }))
+    .unwrap();
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
+    assert_eq!(edges[0].name.as_deref(), Some("a-to-b"));
+    assert!(!edges[0].statements.contains_key("__linnest-edge-name"));
+}
+
+#[test]
 fn fixed_length_label_layout_keeps_label_radius() {
-    let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&TestGraphSpec {
         name: "fixed-label".to_string(),
         statements: BTreeMap::new(),
         nodes: vec![TestNodeSpec {
@@ -964,7 +1113,7 @@ fn fixed_length_label_layout_keeps_label_radius() {
 
 #[test]
 fn dangling_tangent_label_layout_keeps_paired_labels_normal() {
-    let graph = graph_from_spec_bytes(&encode_cbor(&TestPlacementGraphSpec {
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&TestPlacementGraphSpec {
         name: "dangling-tangent-label".to_string(),
         nodes: vec![
             TestPlacedNodeSpec {
@@ -1104,7 +1253,7 @@ fn test_graph_spec_applies_explicit_edge_and_half_edge_ids() {
         id: usize,
     }
 
-    let graph = graph_from_spec_bytes(&encode_cbor(&HalfIdGraphSpec {
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&HalfIdGraphSpec {
         name: "half-ids".to_string(),
         nodes: vec![
             IndexedNodeSpec {
@@ -1207,12 +1356,14 @@ fn test_graph_spec_uses_first_class_placements() {
         }],
     };
 
-    let graph = graph_from_spec_bytes(&encode_cbor(&spec)).unwrap();
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&spec)).unwrap();
     let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&graph).unwrap());
     let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
 
     assert_eq!(nodes[0].pos, Some(crate::TypstPoint { x: 1.0, y: 2.0 }));
     assert_eq!(nodes[1].pos, Some(crate::TypstPoint { x: 4.0, y: 1.0 }));
+    assert_eq!((nodes[0].pos_x_set, nodes[0].pos_y_set), (true, true));
+    assert_eq!((nodes[1].pos_x_set, nodes[1].pos_y_set), (true, true));
     assert_eq!(
         nodes[0].statements.get("label").map(String::as_str),
         Some("left")
@@ -1220,6 +1371,7 @@ fn test_graph_spec_uses_first_class_placements() {
     assert!(!nodes[0].statements.contains_key("pos"));
     assert!(!nodes[0].statements.contains_key("pin"));
     assert_eq!(edges[0].pos, Some(crate::TypstPoint { x: 0.0, y: 0.5 }));
+    assert_eq!((edges[0].pos_x_set, edges[0].pos_y_set), (true, true));
     assert!(!edges[0].statements.contains_key("pos"));
     assert!(!edges[0].statements.contains_key("pin"));
 
@@ -1237,7 +1389,7 @@ fn test_graph_spec_uses_first_class_placements() {
 
 #[test]
 fn test_graph_structural_patch_updates_edge_position() {
-    let graph = graph_from_spec_bytes(&encode_cbor(&TestPlacementGraphSpec {
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&TestPlacementGraphSpec {
         name: "patchable".to_string(),
         nodes: vec![
             TestPlacedNodeSpec {
@@ -1284,6 +1436,15 @@ fn test_graph_structural_patch_updates_edge_position() {
 
     let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&graph).unwrap());
     assert_eq!(edges[0].pos, Some(crate::TypstPoint { x: 0.5, y: 0.0 }));
+    assert_eq!((edges[0].pos_x_set, edges[0].pos_y_set), (false, false));
+
+    let dot: String = decode_cbor(&graph_dot_bytes(&graph).unwrap());
+    let reparsed = decode_graphs(&parse_dot_graphs_bytes(dot.as_bytes()).unwrap()).remove(0);
+    let reparsed_edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&reparsed).unwrap());
+    assert_eq!(
+        (reparsed_edges[0].pos_x_set, reparsed_edges[0].pos_y_set),
+        (false, false)
+    );
 
     let patched = graph_apply_structural_patches_bytes(
         &graph,
@@ -1307,12 +1468,14 @@ fn test_graph_structural_patch_updates_edge_position() {
                 bend: Some(0.75),
                 statements: BTreeMap::new(),
             }],
+            hedges: Vec::new(),
         }),
     )
     .unwrap();
 
     let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&patched).unwrap());
     assert_eq!(edges[0].pos, Some(crate::TypstPoint { x: 0.0, y: 10.0 }));
+    assert_eq!((edges[0].pos_x_set, edges[0].pos_y_set), (true, true));
     assert_eq!(
         edges[0].label_pos,
         Some(crate::TypstPoint { x: 1.5, y: -0.5 })
@@ -1322,6 +1485,8 @@ fn test_graph_structural_patch_updates_edge_position() {
     let dot: String = decode_cbor(&graph_dot_bytes(&patched).unwrap());
     assert!(dot.contains("pin=\"x:@+right,y:10\""), "{dot}");
     assert!(dot.contains("bend=\"0.75rad\""), "{dot}");
+    assert!(dot.contains("\"pos-x-set\"=\"true\""), "{dot}");
+    assert!(dot.contains("\"pos-y-set\"=\"true\""), "{dot}");
 }
 
 #[test]
@@ -1338,6 +1503,7 @@ fn test_graph_structural_statement_patch_does_not_pin_nodes() {
                 statements: BTreeMap::from([("layout-width".to_string(), "4".to_string())]),
             }],
             edges: Vec::new(),
+            hedges: Vec::new(),
         }),
     )
     .unwrap();
@@ -1356,6 +1522,46 @@ fn test_graph_structural_statement_patch_does_not_pin_nodes() {
         nodes[1].pos.as_ref().unwrap().y < -0.1,
         "statement-only structural patches must not freeze layout positions: {nodes:?}"
     );
+}
+
+#[test]
+fn test_graph_structural_patch_updates_half_edge_fields() {
+    let parsed = parse_dot_graphs_bytes(br#"digraph { a:0 -> b:1 [id=0]; }"#).unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+
+    let patched = graph_apply_structural_patches_bytes(
+        &graph,
+        &encode_cbor(&TestStructuralPatch {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+            hedges: vec![
+                TestHedgeStructuralPatch {
+                    index: 0,
+                    statement: Some("source-statement"),
+                    port_label: Some("source-port"),
+                    compass: Some("e"),
+                },
+                TestHedgeStructuralPatch {
+                    index: 1,
+                    statement: Some("sink-statement"),
+                    port_label: Some("sink-port"),
+                    compass: Some("w"),
+                },
+            ],
+        }),
+    )
+    .unwrap();
+
+    let edges: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&patched).unwrap());
+    let edge = &edges[0];
+    let source = edge.source.as_ref().unwrap();
+    let sink = edge.sink.as_ref().unwrap();
+    assert_eq!(source.statement.as_deref(), Some("source-statement"));
+    assert_eq!(source.port_label.as_deref(), Some("source-port"));
+    assert_eq!(source.compass.as_deref(), Some("e"));
+    assert_eq!(sink.statement.as_deref(), Some("sink-statement"));
+    assert_eq!(sink.port_label.as_deref(), Some("sink-port"));
+    assert_eq!(sink.compass.as_deref(), Some("w"));
 }
 
 #[test]
@@ -1386,6 +1592,7 @@ fn test_graph_structural_statement_patch_preserves_grouped_edge_constraints() {
                     ("label-height".to_string(), "1".to_string()),
                 ]),
             }],
+            hedges: Vec::new(),
         }),
     )
     .unwrap();
@@ -1439,7 +1646,7 @@ fn test_graph_spec_axis_modes_pin_axes_independently() {
         y_mode: Option<&'static str>,
     }
 
-    let graph = graph_from_spec_bytes(&encode_cbor(&AxisModeGraphSpec {
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&AxisModeGraphSpec {
         name: "axis-modes".to_string(),
         nodes: vec![
             AxisModeNodeSpec {
@@ -1503,7 +1710,7 @@ fn test_graph_spec_placement_defaults_to_pin() {
         edges: Vec::new(),
     };
 
-    let graph = graph_from_spec_bytes(&encode_cbor(&spec)).unwrap();
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&spec)).unwrap();
     let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&graph).unwrap());
     assert_eq!(nodes[0].pos, Some(crate::TypstPoint { x: 1.0, y: 2.0 }));
 
@@ -1566,7 +1773,7 @@ fn test_graph_spec_constructor_preserves_default_statements() {
         }],
     };
 
-    let graph = graph_from_spec_bytes(&encode_cbor(&spec)).unwrap();
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&spec)).unwrap();
     let nodes: Vec<TypstDotNode> = decode_cbor(&graph_nodes_bytes(&graph).unwrap());
     assert_eq!(
         nodes[0].statements.get("eval").map(String::as_str),
@@ -1594,7 +1801,7 @@ fn test_graph_spec_constructor_preserves_default_statements() {
 
 #[test]
 fn test_archived_graph_and_subgraph_api() {
-    let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&TestGraphSpec {
         name: "constructed".to_string(),
         statements: BTreeMap::new(),
         nodes: vec![
@@ -1647,7 +1854,7 @@ fn test_archived_graph_and_subgraph_api() {
 
 #[test]
 fn test_graph_spec_preserves_default_statements() {
-    let graph = graph_from_spec_bytes(&encode_cbor(&TestTemplatedGraphSpec {
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&TestTemplatedGraphSpec {
         name: "constructed".to_string(),
         statements: BTreeMap::new(),
         default_edge_statements: BTreeMap::from([
@@ -1719,7 +1926,7 @@ fn test_graph_spec_preserves_default_statements() {
 
 #[test]
 fn test_graph_join_matches_half_edge_statement() {
-    let left = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+    let left = graph_from_spec_bytes(&encode_graph_spec(&TestGraphSpec {
         name: "left".to_string(),
         statements: BTreeMap::new(),
         nodes: vec![TestNodeSpec {
@@ -1737,7 +1944,7 @@ fn test_graph_join_matches_half_edge_statement() {
         }],
     }))
     .unwrap();
-    let right = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+    let right = graph_from_spec_bytes(&encode_graph_spec(&TestGraphSpec {
         name: "right".to_string(),
         statements: BTreeMap::new(),
         nodes: vec![TestNodeSpec {
@@ -1798,7 +2005,7 @@ fn test_single_graph_layout_mutates_graph_bytes() {
 
 #[test]
 fn test_dot_layout_layers_directed_graph() {
-    let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&TestGraphSpec {
         name: "dot".to_string(),
         statements: BTreeMap::new(),
         nodes: vec![
@@ -2931,7 +3138,7 @@ fn test_fixed_node_tree_layout_straightens_existing_edges() {
 
 #[test]
 fn test_layout_preserves_hedge_compass_subgraphs() {
-    let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&TestGraphSpec {
         name: "compass".to_string(),
         statements: BTreeMap::new(),
         nodes: vec![
@@ -2975,7 +3182,7 @@ fn test_layout_preserves_hedge_compass_subgraphs() {
 
 #[test]
 fn test_layout_handles_disconnected_spec_nodes() {
-    let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+    let graph = graph_from_spec_bytes(&encode_graph_spec(&TestGraphSpec {
         name: "demo".to_string(),
         statements: BTreeMap::new(),
         nodes: vec![
@@ -3036,7 +3243,7 @@ fn test_layout_handles_disconnected_spec_nodes() {
 #[test]
 fn test_force_center_gravity_keeps_disconnected_nodes_close() {
     fn max_node_radius(g_center: &str) -> f64 {
-        let graph = graph_from_spec_bytes(&encode_cbor(&TestGraphSpec {
+        let graph = graph_from_spec_bytes(&encode_graph_spec(&TestGraphSpec {
             name: "demo".to_string(),
             statements: BTreeMap::new(),
             nodes: vec![

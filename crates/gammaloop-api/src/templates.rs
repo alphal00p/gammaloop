@@ -13,6 +13,7 @@ pub struct Assets;
 #[derive(RustEmbed)]
 #[folder = "$CARGO_MANIFEST_DIR/../../assets/embedded/drawing/templates"]
 #[include = "*.typ"]
+#[include = "impl/*.typ"]
 struct GammaLoopTemplateAssets;
 
 #[derive(RustEmbed)]
@@ -94,17 +95,19 @@ mod tests {
         assert!(templates.join("grid.typ").is_file());
         assert!(templates.join("layout.typ").is_file());
         assert!(templates.join("layout-core.typ").is_file());
+        assert!(templates.join("physics-edge-style.typ").is_file());
+        assert!(templates.join("impl/physics-edge-style.typ").is_file());
         assert!(fs::read_to_string(templates.join("grid.typ"))?.contains("page_format"));
-        let figure = fs::read_to_string(templates.join("figure.typ"))?;
-        assert!(figure.contains("amplitude-mode"));
-        assert!(figure.contains("cross-section-mode"));
-        assert!(figure.contains("show-node-index"));
-        assert!(figure.contains("unit: 1.5"));
         let layout = fs::read_to_string(templates.join("layout.typ"))?;
         assert!(layout.contains("#import \"layout-core.typ\": bind-layout"));
+        assert!(layout.contains("#import \"physics-edge-style.typ\" as physics"));
         assert!(layout.contains("#let layout = bind-layout("));
         assert!(!layout.contains("graph.parse(input)"));
         let layout_core = fs::read_to_string(templates.join("layout-core.typ"))?;
+        assert!(layout_core.contains("amplitude-mode"));
+        assert!(layout_core.contains("cross-section-mode"));
+        assert!(layout_core.contains("show-node-index"));
+        assert!(layout_core.contains("default: style-options.at(\"unit\", default: 1.5)"));
         assert!(layout_core.contains("autogen-external-edge-fields"));
         assert!(layout_core.contains("momentum-index"));
         assert!(layout_core.contains("$(p_#index)$"));
@@ -122,6 +125,12 @@ mod tests {
         assert!(templates
             .join("crates/linnest/typst/src/impl/graph.typ")
             .is_file());
+        assert!(!templates
+            .join("crates/linnest/typst/src/physics-edge-style.typ")
+            .exists());
+        assert!(!templates
+            .join("crates/linnest/typst/src/impl/physics-edge-style.typ")
+            .exists());
         assert!(templates.join("crates/kurvst/typst/kurvst.wasm").is_file());
         assert!(templates.join("crates/kurvst/typst/src/lib.typ").is_file());
         assert!(templates.join("crates/kurvst/typst/src/impl.typ").is_file());
@@ -133,6 +142,9 @@ mod tests {
         Assets::extract_justfile(tempdir.path())?;
         let justfile = fs::read_to_string(tempdir.path().join("justfile"))?;
         assert!(justfile.contains("--style drawings/templates/layout-core.typ"));
+        assert!(justfile.contains("--style drawings/templates/physics-edge-style.typ"));
+        assert!(justfile.contains("--style drawings/templates/impl/physics-edge-style.typ"));
+        assert!(!justfile.contains("crates/linnest/typst/src/physics-edge-style.typ"));
         assert!(justfile.contains("momentum_line_mark := \"auto\""));
         assert!(justfile.contains("show_node_index := \"true\""));
         assert!(justfile.contains("show_particle := \"false\""));

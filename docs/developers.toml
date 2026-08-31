@@ -81,10 +81,13 @@ anchor = "pub mod cff;"
 digest = "25cda2dff8fd5a5c01f6b00c42311089a120e503"
 
 [[section.note.scope]]
+# No-impact attestation 2026-08-28: tadpole-filter validation failures now
+# warn and reject the candidate instead of panicking; generation ownership and
+# the documented filtering pipeline are unchanged.
 path = "crates/gammalooprs/src/feyngen/diagram_generator.rs"
 symbol = "gammalooprs::feyngen::DiagramGenerator::generate"
 anchor = "pub fn generate("
-digest = "9dfe1cebc820269c5784de100912053bf605613f"
+digest = "427e8b01ddfcf6d71cd2add4e8e16a0f92126caf"
 
 [[section.note]]
 id = "integration-dashboard"
@@ -199,10 +202,13 @@ topics = ["drawing", "typst"]
 review_triggers = ["crates/gammaloop-api/src/commands/save.rs", "crates/gammaloop-api/src/templates.rs", "crates/gammalooprs/src/graph/parse/from_dot.rs", "crates/gammalooprs/src/model/mod.rs", "crates/linnest/typst/**", "assets/embedded/drawing/**"]
 
 [[section.note.scope]]
+# Reviewed 2026-08-28: GammaLoop now extracts its domain physics module from
+# its own template bundle; the extraction API and destination contract remain
+# unchanged.
 path = "crates/gammaloop-api/src/templates.rs"
 symbol = "gammaloop_api::templates::Assets::extract_templates"
 anchor = "pub fn extract_templates<P: AsRef<Path>>"
-digest = "6a4b2fc71790f146c77bc6686401f3094eea2430"
+digest = "c3d1ef9ba1d26c5bfdca07d92433afa0cb9d83ab"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
@@ -220,10 +226,12 @@ topics = ["drawing", "dot", "typst"]
 review_triggers = ["crates/gammaloop-api/src/commands/save.rs", "crates/gammaloop-api/src/templates.rs", "crates/gammalooprs/src/graph/parse/from_dot.rs", "crates/gammalooprs/src/model/mod.rs", "crates/linnet/src/**", "crates/linnest/src/**", "crates/linnest/typst/src/**", "crates/kurvst/src/**", "crates/kurvst/typst/src/**", "crates/clinnet/src/**", "assets/embedded/drawing/templates/**"]
 
 [[section.note.scope]]
+# Reviewed 2026-08-28: Linnest no longer re-exports GammaLoop's physics
+# template; the generic layout-sequence API remains unchanged.
 path = "crates/linnest/typst/src/lib.typ"
 symbol = "linnest::typst::layout-sequence"
 anchor = "#let layout-sequence = layouts.sequence"
-digest = "82e7f18d12a2707349685de415a6c32af1b53418"
+digest = "df4d9c7e162b3d67227e4d3fcd660b19a1bca0e0"
 
 [[section.note]]
 id = "spenso-symbolica-syntax-and-rewrites"
@@ -379,12 +387,18 @@ topics = ["half-edge", "subgraph", "dot", "serialization", "algorithms"]
 review_triggers = ["crates/linnet/src/lib.rs", "crates/linnet/src/half_edge.rs", "crates/linnet/src/half_edge/**", "crates/linnet/src/parser/**", "crates/linnet/src/permutation.rs", "crates/linnet/src/tree/**", "crates/linnet/src/union_find/**", "crates/linnet/src/drawing.rs", "crates/linnet/src/num_traits.rs", "crates/linnet/Cargo.toml"]
 
 [[section.note.scope]]
+# Documentation-impact attestation 2026-08-26: the architecture note now
+# documents exact node-store conversion, retained-history rejection, and
+# explicit empty-crown extraction.
+# Documentation-impact attestation 2026-08-28: the architecture note now
+# documents selectable directedness, history-safe topological traversal, and
+# bounded cycle/tadpole enumeration.
 path = "crates/linnet/src/half_edge.rs"
 symbol = "linnet::half_edge::HedgeGraph"
 anchor = "pub struct HedgeGraph<E, V, H = NoData, S: NodeStorage<NodeData = V> = DefaultNodeStore<V>> {"
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
 # public graph-invariant and DOT parsing documentation without changing behavior.
-digest = "899105d1558d0f52d4ea0abf0df2b7072c690aef"
+digest = "a1c12db2c1f4cdd31650a2232b6b7a5831dfcf18"
 
 [[section.note.scope]]
 path = "crates/linnet/src/half_edge/involution.rs"
@@ -392,7 +406,9 @@ symbol = "linnet::half_edge::involution::Involution"
 anchor = "pub struct Involution<E = EdgeIndex> {"
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
 # public involution invariants and terminology without changing behavior.
-digest = "6e8478c6f7cae54185a93ab8aedadc6f6d8fc937"
+# The 2026-08-27 serializer fix quotes endpoint statements without changing
+# graph invariants.
+digest = "2c3b0f19a5d4a991b493c75e3b0bb3294be302d6"
 
 [[section.note.scope]]
 path = "crates/linnet/src/half_edge/subgraph.rs"
@@ -401,12 +417,20 @@ anchor = "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {"
 digest = "05983dad9fdb3db00351c9e536a439ce48efd94b"
 
 [[section.note.scope]]
+# Documentation-impact attestation 2026-08-21: malformed DOT endpoint,
+# direction, and ID failures are now explicit parser errors, as documented by
+# the DOT interchange boundary in the architecture note.
+# Documentation-impact attestation 2026-08-26: the subsequent parser change is
+# a semantics-preserving Clippy rewrite of empty graph-name formatting.
 path = "crates/linnet/src/parser/mod.rs"
 symbol = "linnet::parser::DotGraph"
 anchor = "pub struct DotGraph<N: NodeStorage<NodeData = DotVertexData> = DefaultNodeStore<DotVertexData>> {"
 # No architecture impact: the 2026-08-21 APIDOC-002 review corrected the
 # documented DOT parser path, added a round trip, and qualified its macro link.
-digest = "1df42cfeb08467f7848a45711b712d1c22c77e20"
+# The 2026-08-26 serializer cleanup only omits empty attribute lists.
+# The 2026-08-27 regression covers canonical endpoint-statement escaping and
+# one-pass decoding of the reserved terminal-backslash transport.
+digest = "0c85e45e482bc3862306d867973f7ffdad5d56e1"
 
 [[section.note]]
 id = "vakint-architecture"
@@ -695,12 +719,35 @@ topics = ["nix", "ci", "cache", "documentation"]
 review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/**", "crates/gammaloop-workspace-hack/**"]
 
 [[section.note.scope]]
+# Documentation-impact attestation 2026-08-26: the CI repair completes the
+# documented per-package archive/runtime-source boundary by staging the exact
+# documentation sources and tools, restoring vendored Cargo configuration,
+# extracting archives into the reconstructed workspace root, and isolating the
+# Python stub exporter from the feature-unified workspace doctest pass.
 path = "flake.nix"
 symbol = "alphal00pDocsCargoArtifacts"
 anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
 # No cache-architecture impact: the documentation source filter now includes the
 # double-triangle test fixture consumed by the deterministic About-page SVG.
-digest = "692adae64fe7a7fd3aa0e51ac7ba8b0d10919d5d"
+# The snapshot gate now also verifies stale routes are pruned while published
+# product channels survive; this does not change the documented cache graph.
+# Its Kurvst assertion follows the generated deployment-relative product link.
+# No cache-architecture impact 2026-08-28: the source filters follow the
+# GammaLoop-owned layout and physics templates for split Clinnet tests and
+# stage the linked Python-only custom-theme example for documentation builds;
+# the final docs assertion follows the replacement domain-templates route.
+# Reviewed 2026-08-28: typst-py 0.15 and its preview-package cache extend
+# only the terminal Linnet Python/docs runtime closure, as documented; the
+# reusable Cargo producer boundary is unchanged.
+# Reviewed 2026-08-31: linnet-py's production source closure now includes its
+# embedded Linnest/Kurvst and pinned CeTZ/oxifmt renderer assets. This makes the
+# standalone wheel independent of Clinnet and the external documentation
+# package cache; the assets intentionally key producers that compile linnet-py
+# and remain excluded from unrelated per-crate producer source sets.
+# Reviewed 2026-08-31: the same terminal source closure now carries the MIT
+# notices embedded with linnet-py, Linnest, and Kurvst. This changes packaging
+# inputs but not the producer partition or cache-reuse architecture.
+digest = "188504937418859942a6770ca21a4f4e0a7ff125"
 
 [[section]]
 id = "documentation"
@@ -728,7 +775,17 @@ symbol = "alphal00p_docs_builder::SiteBuilder::check"
 anchor = "pub fn check(&self) -> Result<()> {"
 # No documentation-system architecture impact: the getting-started guides use the
 # existing registry, Typst renderer, example harness, and generated navigation pipeline.
-digest = "04d98b6a8f2ef2b454abdec082d07c20409557f7"
+# No-impact attestation: collision-safe Python symbol routes change generated
+# API navigation only; architecture-note lifecycle enforcement is unchanged.
+# Snapshot validation checks intentional developer links to the deployed latest
+# tree against the same generated route without changing publication topology.
+# Its validation-state grouping is a Clippy-only refactor with identical behavior.
+# Snapshot candidates are now normalized before immutable comparison, replace
+# stale global output, and retain existing product channels and snapshot tags.
+# No documentation-system architecture impact 2026-08-28: portal dependency
+# validation follows the GammaLoop-owned template path, and generated Linnet
+# navigation describes domain templates instead of the removed physics route.
+digest = "3e6a11d88c3c7f6959479902a910ab36d4ae577c"
 
 [[section.note]]
 id = "documentation-improvement-plan"

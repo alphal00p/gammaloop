@@ -1,20 +1,13 @@
-#import "crates/linnest/typst/src/lib.typ": draw, graph, layout as apply-layout
+// Clinnet's public template path adapts its DOT input to Linnest's generic renderer.
+#import "crates/linnest/typst/src/render/layout.typ": *
+#import "crates/linnest/typst/src/lib.typ": graph
 
-#let layout(
-  input,
-  split-edge: true,
-  scope: (:),
-  columns: 1fr,
-  unit: 1,
-  additional-data: (:),
-) = {
-  let graphs = graph.parse(input)
-  let diags = ()
-  for graph-bytes in graphs {
-    let graph-bytes = apply-layout(graph-bytes, ..additional-data)
-    diags.push(draw(graph-bytes, scope: scope, unit: unit, title: auto))
+#let layout(config) = {
+  let path = config.at("data-path", default: none)
+  if path == none {
+    panic("render config requires data-path")
   }
-  for d in diags{
-    d
+  for parsed in graph.parse(read(path)) {
+    layout-graph(config, parsed)
   }
 }

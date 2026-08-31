@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Linnet source on
-2026-08-18.
+2026-08-28.
 
 This note covers the `linnet` Rust crate. `clinnet` is a separate command-line renderer and
 `linnest` owns Typst layout and drawing; neither is part of Linnet's graph core.
@@ -56,6 +56,11 @@ The default build resolves `DefaultNodeStore` to `NodeStorageVec`. The two fores
 stores are mutually exclusive features. The distinction matters: vector-backed node
 identification can invalidate previous `NodeIndex` values, whereas the forest-backed
 implementations preserve identification history until it is explicitly forgotten.
+`HedgeGraph::into_node_store` consumes a graph and rebuilds only its node store: node order,
+payloads, and incidence are retained, while edge and half-edge storage and IDs move unchanged.
+The conversion preserves active isolated nodes but rejects retained forest identification roots;
+callers must explicitly forget that history first when compaction and changed node IDs are
+acceptable.
 
 == Construction and data flow
 
@@ -72,15 +77,27 @@ HedgeGraphBuilder
 
 Mutation methods update all three stores. Adding an edge extends half-edge data, edge storage,
 and node incidence. Extraction and deletion partition the same half-edge set in each store.
+Complete-node extraction also moves explicitly selected empty-crown nodes, which have no
+half-edge representation in that partition.
 Joining extends the stores and then revalidates node incidence; sewing converts matched identity
 half-edges into pairs. `HedgeGraph::check` verifies involutivity and that every `EdgeIndex` points
 to the same `HedgePair` recorded by `SmartEdgeVec`. Node-store operations provide the additional
 partition and incidence checks.
 
 Algorithms consume the graph together with an explicit subgraph when boundary behavior matters.
-Traversal and cycle/cut routines operate on those views. Topological sort counts incoming
-half-edges by `Flow` and rejects cycles; transitive closure and reduction first require that DAG
-check, then add or delete complete half-edge pairs rather than one side of an edge.
+Traversal and cycle/cut routines operate on those views. Directed algorithms take a
+`DirectionBasis`: `Underlying` follows the involution's source/sink roles, while `Superficial`
+applies each edge's `Orientation` and omits superficially undirected edges. Dangling and
+subgraph-split edges do not form complete directed arcs. Full topological sort canonicalizes
+identification-history aliases with shared incidence, counts incoming arcs in the selected basis,
+and rejects cycles; transitive closure and reduction first require that DAG check, then add or
+delete complete half-edge pairs rather than one side of an edge.
+
+Exhaustive circuit enumeration requires an explicit cycle-rank bound and rejects powersets that
+the platform cannot represent before enumeration. Tadpole classification similarly validates and
+canonicalizes a non-empty terminal set, compares components against every terminal-incident edge,
+and returns deduplicated structural results. These guards make malformed input return errors and
+keep retained node-identification history on canonical structural paths instead of panic paths.
 
 DOT interchange follows a separate adapter path:
 
@@ -97,7 +114,8 @@ DOT text/file
 Invisible endpoint nodes represent dangling edges. `dir` controls superficial orientation, while
 the endpoint side determines underlying flow. Serialization maps caller data into the DOT data
 types and writes through a caller-provided `fmt::Write` or `io::Write`; DOT parsing separately
-offers string- and file-based entry points.
+offers string- and file-based entry points. Malformed direction, endpoint, and explicit-ID data
+are reported as parser errors; they do not panic or publish a partially constructed graph.
 
 == Feature and persistence boundaries
 
@@ -129,10 +147,11 @@ change the involution and node-incidence contracts.
 == Verification and related documentation
 
 Unit tests live beside the implementation and exercise involution and node-store consistency,
-extraction/join/sew operations, subgraphs and cuts, DOT round trips, permutations, union-find,
-topological and transitive algorithms, and optional archived views. Snapshot tests pin graph,
-cycle, ordering, and DOT representations. The default boundary is exercised with
-`cargo test -p linnet`; the `rkyv` archive path requires that feature explicitly.
+exact vector/forest conversion, extraction/join/sew operations, subgraphs and cuts, DOT round
+trips, permutations, union-find, topological and transitive algorithms, and optional archived
+views. Snapshot tests pin graph, cycle, ordering, and DOT representations. The default boundary
+is exercised with `cargo test -p linnet`; the `rkyv` archive path requires that feature
+explicitly.
 
 For supported usage, start with the
 #link("../../../products/linnet/latest/tutorial/")[first-graph tutorial], continue with the

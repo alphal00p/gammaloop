@@ -1639,7 +1639,13 @@ impl ProcessDefinition {
                     .filter_map(|(id, _, n)| if n.is_external() { Some(id) } else { None })
                     .collect();
 
-                let connected_components_before = he_graph.tadpoles(&externals).len() + 1;
+                let connected_components_before = match he_graph.tadpoles(&externals) {
+                    Ok(tadpoles) => tadpoles.len() + 1,
+                    Err(error) => {
+                        warn!("Cannot classify cross-section tadpoles: {error}");
+                        return false;
+                    }
+                };
                 for (i, f) in external_connections {
                     if let (Some(i), Some(f)) = (i, f) {
                         let i = he_graph
