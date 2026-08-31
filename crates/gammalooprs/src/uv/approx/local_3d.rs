@@ -845,19 +845,28 @@ impl Local3DLoopRescaling {
         move |integrand| {
             if current.renormalization_scheme() == ApproximationType::VacuumLimit {
                 let reduced = current.reduced_subgraph(given);
-                let reduced_edges = ctx.graph.iter_edges_of(&reduced).map(|(_, edge, _)| edge);
+                let reduced_edges = ctx
+                    .graph
+                    .iter_edges_of(&reduced)
+                    .map(|(_, edge, _)| edge)
+                    .collect::<Vec<_>>();
+                let momentum_splits = reduced_edges
+                    .iter()
+                    .map(|&edge| GS.split_mom_pattern_simple(edge))
+                    .collect::<Vec<_>>();
                 let vacuum = ctx.graph.make_thermal_distributions_explicit(
                     integrand,
                     ThermalDistributionLimit::Vacuum,
-                    reduced_edges,
+                    reduced_edges.into_iter(),
                     ThermalDistributionReplacement::All,
                 )?;
-                return Ok(vacuum
+                return Ok((vacuum
                     * ctx
                         .graph
                         .numerator(&reduced, given.subgraph())
                         .get_single_atom()
-                        .unwrap());
+                        .unwrap())
+                .replace_multiple(&momentum_splits));
             }
 
             let active_lmb = active_subgraph
