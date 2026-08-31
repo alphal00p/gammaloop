@@ -7,7 +7,10 @@ use symbolica::{
     domains::rational::Rational,
     function,
 };
-use test_utils::{TestVakint, compare_two_evaluations, get_vakint};
+use test_utils::{
+    RustRedParityPolicy, TensorPrepass, TestVakint, alphaloop_matad_rustred_lanes,
+    compare_evaluations, compare_two_evaluations, get_vakint,
+};
 use vakint::{
     EvaluationOrder, NumericalEvaluationResult, Vakint, VakintSettings, matad::MATAD, vakint_parse,
     vakint_symbol,
@@ -24,9 +27,10 @@ const MAX_PULL: f64 = 0.0e0;
 fn test_integrate_1l_no_numerator() {
     for pow in 1..=6 {
         #[rustfmt::skip]
-        compare_two_evaluations(
+        compare_evaluations(
             VakintSettings { run_time_decimal_precision: N_DIGITS_ANLYTICAL_EVALUATION, number_of_terms_in_epsilon_expansion: 4, ..VakintSettings::default()},
-            ((&EvaluationOrder::alphaloop_only() ,true),(&EvaluationOrder::matad_only(None) ,true)),
+            &alphaloop_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
+            TensorPrepass::Skip,
             vakint_parse!(
                 format!("( 1 )
                 *topo(\
@@ -51,9 +55,10 @@ fn test_integrate_1l_no_numerator() {
 fn test_integrate_1l_no_numerator_squared_mass() {
     for pow in 1..=2 {
         #[rustfmt::skip]
-        compare_two_evaluations(
+        compare_evaluations(
             VakintSettings { run_time_decimal_precision: N_DIGITS_ANLYTICAL_EVALUATION, number_of_terms_in_epsilon_expansion: 4, ..VakintSettings::default()},
-            ((&EvaluationOrder::alphaloop_only() ,true),(&EvaluationOrder::matad_only(None) ,true)),
+            &alphaloop_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
+            TensorPrepass::Skip,
             vakint_parse!(
                 format!("( 2*user_space::muv - user_space::muv^2 )
                 *topo(\
@@ -77,9 +82,10 @@ fn test_integrate_1l_no_numerator_squared_mass() {
 #[test_log::test]
 fn test_integrate_2l_no_numerator() {
     #[rustfmt::skip]
-    compare_two_evaluations(
+    compare_evaluations(
         VakintSettings { run_time_decimal_precision: N_DIGITS_ANLYTICAL_EVALUATION, number_of_terms_in_epsilon_expansion: 4, ..VakintSettings::default()},
-        ((&EvaluationOrder::alphaloop_only() ,true),(&EvaluationOrder::matad_only(None) ,true)),
+        &alphaloop_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
+        TensorPrepass::Skip,
         vakint_parse!(
             "(1)*topo(\
             prop(1,edge(1,2),k(1),muvsq,1)\

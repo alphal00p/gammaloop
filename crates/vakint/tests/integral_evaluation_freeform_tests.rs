@@ -10,7 +10,10 @@ use std::vec;
 use symbolica::try_parse;
 use vakint::{Vakint, VakintSettings};
 
-use crate::test_utils::compare_vakint_evaluation_vs_reference;
+use crate::test_utils::{
+    RustRedParityPolicy, TensorPrepass, alphaloop_matad_rustred_lanes,
+    compare_vakint_evaluation_vs_reference, compare_vakint_evaluations_vs_reference,
+};
 use vakint::{externals_from_f64, params_from_f64};
 
 const N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS: u32 = 32;
@@ -23,9 +26,10 @@ const MAX_PULL: f64 = 1.0e99;
 fn test_integrate_1l_decorated_indices_alphaloop() {
     #[rustfmt::skip]
     Vakint::initialize_vakint_symbols();
-    compare_vakint_evaluation_vs_reference(
+    compare_vakint_evaluations_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 3, integral_normalization_factor: LoopNormalizationFactor::MSbar, mu_r_sq_symbol: "some_space::{positive,scalar}::DDmursq".into(),..VakintSettings::default()},
-        EvaluationOrder::alphaloop_only(),
+        &alphaloop_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
+        TensorPrepass::Form,
         try_parse!(
             "( (user_space::DDsigma(user_space::some_args) + user_space::{scalar}::DDsigma2(user_space::some_args) + user_space::{symmetric,real}::DDsigma3(user_space::some_args))*vakint::p(1,user_space::mink4(4,33))*vakint::p(2,user_space::mink4(4,33))*vakint::p(1,user_space::mink4(4,11))*vakint::p(2,user_space::mink4(4,22))+vakint::k(3,user_space::mink4(4,11))*vakint::k(3,user_space::mink4(4,22)) + vakint::k(3,user_space::mink4(4,77))*vakint::p(1,user_space::mink4(4,77)) ) \
              * vakint::topo( vakint::prop(9,vakint::edge(66,66),vakint::k(3),user_space::{real}::DDMUVsq,1 ))\
@@ -60,9 +64,10 @@ fn test_integrate_1l_decorated_indices_alphaloop() {
 fn test_integrate_1l_decorated_indices_matad() {
     #[rustfmt::skip]
     Vakint::initialize_vakint_symbols();
-    compare_vakint_evaluation_vs_reference(
+    compare_vakint_evaluations_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 3, integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
-        EvaluationOrder::matad_only(None),
+        &alphaloop_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
+        TensorPrepass::Form,
         try_parse!(
             "( (user_space::CCsigma(user_space::some_args) + user_space::{scalar}::CCsigma2(user_space::some_args) + user_space::{real,symmetric}::CCsigma3(user_space::some_args))*vakint::p(1,user_space::mink4(4,33))*vakint::p(2,user_space::mink4(4,33))*vakint::p(1,user_space::mink4(4,11))*vakint::p(2,user_space::mink4(4,22))+vakint::k(3,user_space::mink4(4,11))*vakint::k(3,user_space::mink4(4,22)) + vakint::k(3,user_space::mink4(4,77))*vakint::p(1,user_space::mink4(4,77)) ) \
              * vakint::topo( vakint::prop(9,vakint::edge(66,66),vakint::k(3),user_space::MUVsq,1 ))\

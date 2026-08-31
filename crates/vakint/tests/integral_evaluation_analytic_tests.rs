@@ -15,13 +15,21 @@ use symbolica::{
 use test_utils::{compare_numerical_output, compare_output, get_vakint};
 use vakint::{Vakint, VakintSettings};
 
-use crate::test_utils::compare_vakint_evaluation_vs_reference;
+use crate::test_utils::{
+    RustRedParityPolicy, TensorPrepass, analytic_matad_rustred_lanes,
+    compare_vakint_evaluation_vs_reference, compare_vakint_evaluations_vs_reference,
+    run_multi_lane_acceptance,
+};
 use vakint::{externals_from_f64, params_from_f64, vakint_parse};
 
 const N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS: u32 = 32;
 
 #[test_log::test]
 fn test_integrate_1l_a() {
+    run_multi_lane_acceptance(test_integrate_1l_a_body);
+}
+
+fn test_integrate_1l_a_body() {
     let mut vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
         use_dot_product_notation: true,
@@ -34,18 +42,13 @@ fn test_integrate_1l_a() {
         ..VakintSettings::default()
     });
 
-    let mut integral = vakint
-        .to_canonical(
-            vakint_parse!(
-                "(k(1,1)*k(1,2)+k(1,3)*p(1,3))*topo(\
+    let input = vakint_parse!(
+        "(k(1,1)*k(1,2)+k(1,3)*p(1,3))*topo(\
                 prop(1,edge(1,1),k(1),muvsq,1)\
             )"
-            )
-            .unwrap()
-            .as_view(),
-            true,
-        )
-        .unwrap();
+    )
+    .unwrap();
+    let mut integral = vakint.to_canonical(input.as_view(), true).unwrap();
 
     integral = vakint.tensor_reduce(integral.as_view()).unwrap();
 
@@ -167,24 +170,45 @@ fn test_integrate_1l_a() {
         "Full eval (metric substituted with 1):\n{}",
         numerical_full_eval_ref.unwrap()
     );
+    let numerical_reference = vec![
+        (-1, ("0.0".into(), "1.583143494411528e-3".into())),
+        (0, ("0.0".into(), "2.374715241617292e-3".into())),
+        (1, ("0.0".into(), "4.072584448553507e-3".into())),
+        (2, ("0.0".into(), "4.287176196638421e-3".into())),
+    ];
     compare_numerical_output(
         numerical_full_eval_ref,
-        vec![
-            (-1, ("0.0".into(), "1.583143494411528e-3".into())),
-            (0, ("0.0".into(), "2.374715241617292e-3".into())),
-            (1, ("0.0".into(), "4.072584448553507e-3".into())),
-            (2, ("0.0".into(), "4.287176196638421e-3".into())),
-        ],
+        numerical_reference.clone(),
         vakint.settings.run_time_decimal_precision,
+    );
+
+    compare_vakint_evaluations_vs_reference(
+        VakintSettings {
+            allow_unknown_integrals: false,
+            use_dot_product_notation: true,
+            mu_r_sq_symbol: format!("{}::mursq", vakint::NAMESPACE),
+            integral_normalization_factor: LoopNormalizationFactor::MSbar,
+            run_time_decimal_precision: 16,
+            ..VakintSettings::default()
+        },
+        &analytic_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
+        TensorPrepass::Form,
+        input.as_view(),
+        params,
+        HashMap::default(),
+        numerical_reference,
+        16,
+        1.0,
     );
 }
 
 #[test_log::test]
 fn test_integrate_1l_simple() {
     #[rustfmt::skip]
-    compare_vakint_evaluation_vs_reference(
+    compare_vakint_evaluations_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 2, integral_normalization_factor: LoopNormalizationFactor::pySecDec,..VakintSettings::default()},
-        EvaluationOrder::analytic_only(),
+        &analytic_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
+        TensorPrepass::Skip,
         vakint_parse!(
             "( 1 )*topo(\
                 prop(1,edge(1,1),k(1),muvsq,1)\
@@ -206,9 +230,10 @@ fn test_integrate_1l_simple() {
 #[test_log::test]
 fn test_integrate_1l_simple_squared_mass() {
     #[rustfmt::skip]
-    compare_vakint_evaluation_vs_reference(
+    compare_vakint_evaluations_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 2, integral_normalization_factor: LoopNormalizationFactor::pySecDec,..VakintSettings::default()},
-        EvaluationOrder::analytic_only(),
+        &analytic_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
+        TensorPrepass::Skip,
         vakint_parse!(
             "(  2*user_space::muv - user_space::muv^2 )*topo(\
                 prop(1,edge(1,1),k(1),user_space::muv^2,1)\
@@ -230,9 +255,10 @@ fn test_integrate_1l_simple_squared_mass() {
 #[test_log::test]
 fn test_integrate_1l_cross_product() {
     #[rustfmt::skip]
-    compare_vakint_evaluation_vs_reference(
+    compare_vakint_evaluations_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 5, integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
-        EvaluationOrder::analytic_only(),
+        &analytic_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
+        TensorPrepass::Form,
         vakint_parse!(
             "(k(1,11)*p(1,11)*k(1,12)*p(1,12))*topo(\
                 prop(1,edge(1,1),k(1),muvsq,2)\
@@ -261,9 +287,10 @@ fn test_integrate_1l_cross_product() {
 #[test_log::test]
 fn test_integrate_1l_cross_product_with_additional_symbols_numerator() {
     #[rustfmt::skip]
-    compare_vakint_evaluation_vs_reference(
+    compare_vakint_evaluations_vs_reference(
         VakintSettings{number_of_terms_in_epsilon_expansion: 5, integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
-        EvaluationOrder::analytic_only(),
+        &analytic_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
+        TensorPrepass::Form,
         vakint_parse!(
             "(user_space::A*k(1,11)*p(1,11)*k(1,12)*p(1,12)+user_space::B)*topo(\
                 prop(1,edge(1,1),k(1),muvsq,2)\
@@ -292,9 +319,10 @@ fn test_integrate_1l_cross_product_with_additional_symbols_numerator() {
 #[test_log::test]
 fn test_integrate_1l_dot_product_external() {
     #[rustfmt::skip]
-    compare_vakint_evaluation_vs_reference(
+    compare_vakint_evaluations_vs_reference(
         VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
-        EvaluationOrder::analytic_only(),
+        &analytic_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
+        TensorPrepass::Form,
         vakint_parse!(
             "(k(1,1)*p(1,1)*k(1,2)*p(2,2))*topo(\
                 prop(1,edge(1,1),k(1),muvsq,1)\
@@ -322,9 +350,10 @@ fn test_integrate_1l_dot_product_external() {
 #[test_log::test]
 fn test_integrate_2l() {
     #[rustfmt::skip]
-    compare_vakint_evaluation_vs_reference(
+    compare_vakint_evaluations_vs_reference(
         VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
-        EvaluationOrder::analytic_only(),
+        &analytic_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
+        TensorPrepass::Skip,
         vakint_parse!(
             "(1)*topo(\
                 prop(1,edge(1,2),k(1),muvsq,1)\
