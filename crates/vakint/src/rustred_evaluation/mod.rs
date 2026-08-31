@@ -3,6 +3,7 @@
 mod artifact;
 mod matching;
 mod materialize;
+mod terminal;
 
 use std::fmt;
 
