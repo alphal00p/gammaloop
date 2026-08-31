@@ -10,7 +10,6 @@ use crate::symbols::S;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::{MATADOptions, Vakint, VakintSettings};
 
-use super::artifact::ArtifactFamily;
 use super::matching::MatchedScalarFamily;
 use super::{RustRedEvaluationError, RustRedEvaluationOptions};
 
@@ -85,7 +84,13 @@ pub(super) fn evaluate(
             let exponent = i64::try_from(exponent)
                 .map_err(|_| RustRedEvaluationError::MassExponentOverflow { exponent })?;
             let scale = matched.mass_squared.clone().pow(Atom::num(exponent));
-            let terminal = terminal_master(matched.family, master, &matched.mass_squared)?;
+            let terminal = matched.family.terminals()?.materialize(
+                matched.family,
+                master,
+                matched.loop_count,
+                &matched.mass_squared,
+                options.substitute_masters,
+            )?;
             raw_masters +=
                 exact_coefficient * scale * terminal * lowered.scalar_spectator().clone();
         }
@@ -112,27 +117,4 @@ pub(super) fn evaluate(
         .map_err(|error| RustRedEvaluationError::Reduction {
             detail: format!("Vakint master materialization failed: {error}"),
         })
-}
-
-fn terminal_master(
-    family: ArtifactFamily,
-    master: &IntegralKey,
-    mass_squared: &Atom,
-) -> Result<Atom, RustRedEvaluationError> {
-    // MATAD's exact output canonicalizes Gamma(-1+ep) to Gamma(1+ep).
-    // Retaining that canonical basis makes raw backend comparisons purely
-    // rational, without teaching the adapter a second Gamma simplifier.
-    let tadpole = mass_squared.clone()
-        * vk_parse!("Gam(1,1)/(ep*(ep-1))")
-            .expect("Vakint's canonical MATAD tadpole master parses");
-    match (family, master.powers()) {
-        (ArtifactFamily::UnitMassVacuumK1, [1]) => Ok(-tadpole),
-        (ArtifactFamily::UnitMassVacuumK3, [1, 1, 1]) => Ok(-mass_squared.clone()
-            * vk_parse!("miT111").expect("Vakint's MATAD sunset master parses")),
-        (ArtifactFamily::UnitMassVacuumK3, [0, 1, 1]) => Ok(tadpole.pow(Atom::num(2))),
-        _ => Err(RustRedEvaluationError::UnsupportedMaster {
-            family: family.name(),
-            powers: master.powers().to_vec(),
-        }),
-    }
 }
