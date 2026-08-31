@@ -173,6 +173,7 @@ _OptionalNumber: typing.TypeAlias = _Number | None
 _EdgeLengthResolver: typing.TypeAlias = EdgeLengthResolution | _ValueExpression | _FunctionExpression | Inherit
 _OptionalPadding: typing.TypeAlias = _Padding | None
 _TemplatePath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | None | Inherit
+_SourceRootPath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | None | Inherit
 _RenderStyle: typing.TypeAlias = GraphStyleOptions | None | Inherit
 _RenderLayouts: typing.TypeAlias = LayoutOptions | None | Inherit
 _RenderDrawing: typing.TypeAlias = DrawOptions | None | Inherit

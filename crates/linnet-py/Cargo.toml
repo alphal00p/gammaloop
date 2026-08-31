@@ -13,14 +13,18 @@ crate-type = ["cdylib", "rlib"]
 name = "linnet_py"
 
 [dependencies]
-clinnet = { workspace = true, default-features = false }
 dot-parser = { workspace = true }
 linnet = { workspace = true }
+linnest = { workspace = true }
+# Maturin follows path dependencies into sdists; render.rs embeds Kurvst's Typst assets.
+kurvst = { path = "../kurvst" }
 pyo3 = { workspace = true, features = ["multiple-pymethods"] }
 pyo3-stub-gen = { workspace = true, default-features = false }
+rust-embed = { version = "8.4", features = ["debug-embed", "include-exclude", "interpolate-folder-path"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tempfile = "3.8"
+walkdir = { workspace = true }
 
 [build-dependencies]
 pyo3-build-config = { workspace = true }

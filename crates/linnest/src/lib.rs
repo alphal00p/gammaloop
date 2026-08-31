@@ -12,16 +12,19 @@ pub use api::{
     parse_dot_graphs_bytes,
 };
 pub use graph_api::{
-    graph_apply_structural_patches_bytes, graph_archived_compass_subgraph_bytes,
-    graph_archived_subgraph_bytes, graph_compass_subgraph_bytes, graph_cycle_basis_bytes,
-    graph_dot_bytes, graph_edge_data_by_name_bytes, graph_edges_bytes,
-    graph_edges_of_archived_subgraph_bytes, graph_edges_of_bytes, graph_from_spec_bytes,
-    graph_info_bytes, graph_join_by_edge_key_bytes, graph_join_by_hedge_key_bytes,
-    graph_node_data_by_name_bytes, graph_nodes_bytes, graph_nodes_of_archived_subgraph_bytes,
-    graph_nodes_of_bytes, graph_set_edge_data_by_name_bytes, graph_set_node_data_by_name_bytes,
+    encode_graph_spec_bytes, graph_apply_structural_patches_bytes,
+    graph_archived_compass_subgraph_bytes, graph_archived_subgraph_bytes,
+    graph_compass_subgraph_bytes, graph_cycle_basis_bytes, graph_dot_bytes,
+    graph_edge_data_by_name_bytes, graph_edges_bytes, graph_edges_of_archived_subgraph_bytes,
+    graph_edges_of_bytes, graph_from_spec_bytes, graph_info_bytes, graph_join_by_edge_key_bytes,
+    graph_join_by_hedge_key_bytes, graph_node_data_by_name_bytes, graph_nodes_bytes,
+    graph_nodes_of_archived_subgraph_bytes, graph_nodes_of_bytes,
+    graph_set_edge_data_by_name_bytes, graph_set_node_data_by_name_bytes,
     graph_spanning_forests_bytes, graph_subgraph_bytes, graph_with_data_bytes,
     subgraph_contains_hedge_bytes, subgraph_hedges_bytes, subgraph_label_bytes, TypstDotEdge,
-    TypstDotEndpoint, TypstDotGraphInfo, TypstDotNode, TypstPoint,
+    TypstDotEndpoint, TypstDotGraphInfo, TypstDotNode, TypstEdgeSpec, TypstEndpointSpec,
+    TypstGraphSpec, TypstGraphSpecEnvelope, TypstNodeSpec, TypstPlacementSpec, TypstPoint,
+    GRAPH_SPEC_SCHEMA, GRAPH_SPEC_VERSION,
 };
 pub use pin::PinConstraint;
 

@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use dot_parser::ast::CompassPt;
 use linnet::half_edge::involution::{EdgeIndex, Flow, Hedge, HedgePair};
-use linnet::half_edge::nodestore::{NodeStorageOps, NodeStorageVec};
+use linnet::half_edge::nodestore::NodeStorageVec;
 use linnet::half_edge::{HedgeGraph, NodeIndex};
 use linnet::parser::{DotEdgeData, DotGraph, DotHedgeData, DotVertexData, GlobalData};
 use pyo3::class::gc::{PyTraverseError, PyVisit};
@@ -522,7 +522,6 @@ const EDGE_METADATA: &str = "linnet_codec_edge_metadata";
 const ELEMENT_NAME: &str = "linnet_name";
 const SOURCE_HEDGE_DATA: &str = "linnet_codec_source_half_edge";
 const SINK_HEDGE_DATA: &str = "linnet_codec_sink_half_edge";
-const RENDER_EDGE_NAME: &str = "linnet_render_edge_name";
 
 #[derive(Serialize, Deserialize)]
 struct GlobalEnvelope {
@@ -1260,72 +1259,6 @@ pub(crate) fn encode_graph(
         .apply_explicit_id_ordering()
         .map_err(|error| PyValueError::new_err(error.to_string()))?;
     Ok(graph.debug_dot())
-}
-
-fn topology_dot_for<N>(
-    graph: &HedgeGraph<EdgeRecord, NodeRecord, HalfEdgeRecord, N>,
-    graph_name: Option<String>,
-) -> PyResult<String>
-where
-    N: NodeStorageOps<NodeData = NodeRecord>,
-{
-    let mut node_index = 0;
-    let raw = graph.map_data_ref(
-        |_, _, node| {
-            let raw = DotVertexData {
-                name: node.name.clone(),
-                index: Some(NodeIndex(node_index)),
-                payload: None,
-                statements: BTreeMap::new(),
-            };
-            node_index += 1;
-            raw
-        },
-        |_, edge_index, _, edge| {
-            let mut raw = DotEdgeData {
-                payload: None,
-                statements: BTreeMap::new(),
-                local_statements: BTreeMap::new(),
-                edge_id: Some(edge_index),
-            };
-            if let Some(name) = &edge.data.name {
-                raw.statements
-                    .insert(RENDER_EDGE_NAME.to_owned(), name.clone());
-            }
-            edge.map(|_| raw)
-        },
-        |hedge, _| DotHedgeData {
-            id: Some(hedge),
-            ..Default::default()
-        },
-    );
-    let mut graph = DotGraph {
-        // GlobalData is a DOT-codec concern. Rendering stages only topology;
-        // typed drawing state travels separately in the V1 configuration.
-        global_data: GlobalData {
-            name: graph_name.unwrap_or_else(|| "linnet".to_owned()),
-            payload: None,
-            statements: BTreeMap::new(),
-            edge_statements: BTreeMap::new(),
-            node_statements: BTreeMap::new(),
-        },
-        graph: raw,
-    };
-    graph
-        .apply_explicit_id_ordering()
-        .map_err(|error| PyValueError::new_err(error.to_string()))?;
-    Ok(graph.debug_dot())
-}
-
-pub(crate) fn topology_dot(_py: Python<'_>, graph: &PyGraph) -> PyResult<String> {
-    let state = graph.state.borrow();
-    let state = state
-        .as_ref()
-        .ok_or_else(|| PyReferenceError::new_err("graph has been cleared"))?;
-    match &state.graph {
-        PyHedgeGraph::Vec(graph) => topology_dot_for(graph, state.name.clone()),
-        PyHedgeGraph::Forest(graph) => topology_dot_for(graph, state.name.clone()),
-    }
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
