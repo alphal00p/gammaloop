@@ -403,7 +403,7 @@ def _(graph):
             render_error = f"{type(error).__name__}: {error}"
             rendered_svg = None
             typst_source = None
-    return prepared_render, render_error, rendered_svg, typst_source
+    return render_error, rendered_svg, typst_source
 
 
 @app.cell
@@ -427,7 +427,7 @@ def _(mo, parse_error, render_error, rendered_svg):
 
 
 @app.cell
-def _(mo, parse_error, render_error, typst_source):
+def _(mo, typst_source):
     if typst_source is None:
         _source_panel = mo.md(
             "Fix the DOT or rendering error to inspect the generated Typst."
@@ -507,6 +507,21 @@ def _(graph, mo):
             ]
         )
     _details
+    return
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell
+def _():
     return
 
 

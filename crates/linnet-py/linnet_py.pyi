@@ -234,6 +234,7 @@ _OptionalNumber: typing.TypeAlias = _Number | None
 _EdgeLengthResolver: typing.TypeAlias = EdgeLengthResolution | _ValueExpression | _FunctionExpression | Inherit
 _OptionalPadding: typing.TypeAlias = _Padding | None
 _TemplatePath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | None | Inherit
+_SourceRootPath: typing.TypeAlias = builtins.str | os.PathLike[builtins.str] | None | Inherit
 _RenderStyle: typing.TypeAlias = GraphStyleOptions | None | Inherit
 _RenderLayouts: typing.TypeAlias = LayoutOptions | None | Inherit
 _RenderDrawing: typing.TypeAlias = DrawOptions | None | Inherit
@@ -750,7 +751,7 @@ class OrientedCut:
 @typing.final
 class PreparedRender:
     r"""
-    One Typst render whose generated entrypoint and staged topology share a lifetime.
+    One Typst render whose generated entrypoint, topology, and source modules share a lifetime.
     """
     @property
     def typst_source(self) -> builtins.str:
@@ -1044,6 +1045,10 @@ class RenderConfig:
     @template.setter
     def template(self, value: _TemplatePath) -> None: ...
     @property
+    def source_root(self) -> _SourceRootPath: ...
+    @source_root.setter
+    def source_root(self, value: _SourceRootPath) -> None: ...
+    @property
     def title(self) -> _AutoOptionalStaticContent: ...
     @title.setter
     def title(self, value: _AutoOptionalStaticContent) -> None: ...
@@ -1069,7 +1074,7 @@ class RenderConfig:
     def template_options(self, value: _TemplateOptions) -> None: ...
     def overlay(self, overlay: RenderConfig) -> RenderConfig: ...
     def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, template: _TemplatePath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderConfig: ...
+    def __new__(cls, *, template: _TemplatePath = ..., source_root: _SourceRootPath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderConfig: ...
 
 @typing.final
 class Stroke:
@@ -1187,7 +1192,6 @@ class TypstModule:
     r"""
     A local or package Typst module whose exports can be referenced safely.
     """
-    def __new__(cls, path: builtins.str | os.PathLike[builtins.str]) -> TypstModule: ...
     @staticmethod
     def file(path: builtins.str | os.PathLike[builtins.str]) -> TypstModule: ...
     @staticmethod

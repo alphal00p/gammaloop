@@ -186,6 +186,7 @@ macro_rules! drawing_class {
         $rust:ident,
         $python:literal,
         $fields:ident,
+        $text_signature:literal,
         [$($getter:ident, $setter:ident, $property:ident, $name:literal, $stub_type:literal);+ $(;)?]
     ) => {
         #[doc = $doc]
@@ -262,7 +263,7 @@ macro_rules! drawing_class {
         #[pymethods]
         impl $rust {
             #[new]
-            #[pyo3(signature = (**values))]
+            #[pyo3(signature = (**values), text_signature = $text_signature)]
             #[gen_stub(skip)]
             fn new(py: Python<'_>, values: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
                 Ok(Self {
@@ -341,6 +342,7 @@ drawing_class!(
     PyNodeDrawing,
     "NodeDrawing",
     NODE_FIELDS,
+    "(*, label=..., placement=..., shift=..., rank=..., minimum_size=..., maximum_size=..., style=..., label_style=..., extensions=...)",
     [
         label, set_label, label, "label", "_OptionalStaticContent";
         placement, set_placement, placement, "placement", "_PlacementValue";
@@ -358,6 +360,7 @@ drawing_class!(
     PyEdgeDrawing,
     "EdgeDrawing",
     EDGE_FIELDS,
+    "(*, label=..., placement=..., label_position=..., label_offset=..., label_angle=..., bend=..., routing=..., minimum_length=..., same_rank=..., style=..., label_style=..., decoration=..., extensions=...)",
     [
         label, set_label, label, "label", "_OptionalStaticContent";
         placement, set_placement, placement, "placement", "_PlacementValue";
@@ -379,6 +382,7 @@ drawing_class!(
     PyHalfEdgeDrawing,
     "HalfEdgeDrawing",
     HEDGE_FIELDS,
+    "(*, label=..., statement=..., port_label=..., compass=..., anchor=..., routing=..., style=..., extensions=...)",
     [
         label, set_label, label, "label", "_OptionalStaticContent";
         statement, set_statement, statement, "statement", "_DrawingString";

@@ -1,5 +1,6 @@
 import copy
 import gc
+import inspect
 import json
 import os
 import re
@@ -2363,6 +2364,7 @@ class TestTypedTypstSurface(unittest.TestCase):
         config = lp.RenderConfig()
         for value in (
             config.template,
+            config.source_root,
             config.title,
             config.style,
             config.layouts,
@@ -2376,6 +2378,8 @@ class TestTypedTypstSurface(unittest.TestCase):
         self.assertIsNone(config.template)
         config.template = Path("template with spaces.typ")
         self.assertEqual(Path(config.template), Path("template with spaces.typ"))
+        config.source_root = Path("project with spaces")
+        self.assertEqual(Path(config.source_root), Path("project with spaces"))
         with self.assertRaisesRegex(TypeError, "unknown RenderConfig option"):
             lp.RenderConfig(typst_executable="typst")
 
@@ -2424,6 +2428,7 @@ class TestTypedTypstSurface(unittest.TestCase):
 
         for field in (
             "template",
+            "source_root",
             "layouts",
             "drawing",
             "selectors",
@@ -2589,7 +2594,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             source_data = UserHalfEdgePayload("producer")
             sink_data = UserHalfEdgePayload("consumer")
             left = lp.node("left", data=node_data[0], label="explicit left")
-            right = lp.node("right", data=node_data[1])
+            right = lp.node("right", data=node_data[1], label=lp.INHERIT)
             connection = lp.edge(
                 lp.source(left, data=source_data, statement="explicit source"),
                 "connection",
@@ -2933,6 +2938,8 @@ class TestTypedTypstSurface(unittest.TestCase):
             lp.RenderConfig(unknown_option=True)
 
     def test_module_references_calls_and_binds_are_typed_values(self):
+        with self.assertRaises(TypeError):
+            lp.TypstModule("styles.typ")
         module = lp.TypstModule.file("styles.typ")
         function = module.function("edge_style")
         drawing = lp.EdgeDrawing(
@@ -2951,6 +2958,35 @@ class TestTypedTypstSurface(unittest.TestCase):
                 reference.call()
             with self.subTest(reference=reference), self.assertRaises(TypeError):
                 reference.bind(fill="red")
+
+    def test_typed_option_constructors_expose_explicit_runtime_signatures(self):
+        constructors = (
+            lp.NodeDrawing,
+            lp.EdgeDrawing,
+            lp.HalfEdgeDrawing,
+            lp.Stroke,
+            lp.Insets,
+            lp.Mark,
+            lp.DrawingSelectors,
+            lp.GraphStyleOptions,
+            lp.LayoutOptions,
+            lp.DrawOptions,
+            lp.RenderConfig,
+        )
+        for constructor in constructors:
+            with self.subTest(constructor=constructor):
+                parameters = inspect.signature(constructor).parameters.values()
+                self.assertNotIn(
+                    inspect.Parameter.VAR_KEYWORD,
+                    (parameter.kind for parameter in parameters),
+                )
+        self.assertNotIn(
+            inspect.Parameter.VAR_KEYWORD,
+            (
+                parameter.kind
+                for parameter in inspect.signature(lp.LayoutOptions.then).parameters.values()
+            ),
+        )
 
     def test_typst_package_references_validate_every_component(self):
         self.assertIn(
@@ -3003,7 +3039,7 @@ class TestRendering(unittest.TestCase):
     def test_typst_py_version_matches_the_supported_typst_runtime(self):
         self.assertEqual(typst.__version__, "0.15.0")
 
-    def test_render_calls_typst_py_with_format_and_environment(self):
+    def test_render_calls_typst_py_with_bundled_packages_and_environment(self):
         with TemporaryDirectory(prefix="linnet typst py ") as directory:
             root = Path(directory)
             template = root / "template.typ"
@@ -3013,16 +3049,51 @@ class TestRendering(unittest.TestCase):
                 render_config=lp.RenderConfig(template=template),
             )
             calls = []
+            local_packages = root / "local packages"
+            package_cache = root / "package cache"
+            for package_root, name in (
+                (local_packages, "local-only"),
+                (package_cache, "cache-only"),
+            ):
+                manifest = package_root / "preview" / name / "1.0.0" / "typst.toml"
+                manifest.parent.mkdir(parents=True)
+                manifest.write_text("[package]\n", encoding="utf-8")
 
             def compile_typst(input, **kwargs):
                 self.assertTrue(Path(input).is_file())
                 self.assertTrue(Path(kwargs["root"]).is_dir())
+                package_store = Path(kwargs["package_cache_path"])
+                self.assertEqual(Path(kwargs["package_path"]), package_store)
+                self.assertTrue(
+                    (
+                        package_store
+                        / "preview"
+                        / "cetz"
+                        / "0.5.1"
+                        / "typst.toml"
+                    ).is_file()
+                )
+                self.assertTrue(
+                    (
+                        package_store
+                        / "preview"
+                        / "oxifmt"
+                        / "1.0.0"
+                        / "typst.toml"
+                    ).is_file()
+                )
+                self.assertTrue(
+                    (package_store / "preview" / "local-only" / "1.0.0" / "typst.toml").is_file()
+                )
+                self.assertTrue(
+                    (package_store / "preview" / "cache-only" / "1.0.0" / "typst.toml").is_file()
+                )
                 Path(kwargs["output"]).write_bytes(b"rendered")
                 calls.append(kwargs)
 
             environment = {
-                "TYPST_PACKAGE_PATH": str(root / "local packages"),
-                "TYPST_PACKAGE_CACHE_PATH": str(root / "package cache"),
+                "TYPST_PACKAGE_PATH": str(local_packages),
+                "TYPST_PACKAGE_CACHE_PATH": str(package_cache),
                 "TYPST_FONT_PATHS": os.pathsep.join(
                     (str(root / "font one"), str(root / "font two"))
                 ),
@@ -3038,9 +3109,8 @@ class TestRendering(unittest.TestCase):
 
             self.assertEqual([call["format"] for call in calls], ["pdf", "svg", "png"])
             for call in calls:
-                self.assertEqual(Path(call["package_path"]), root / "local packages")
                 self.assertEqual(
-                    Path(call["package_cache_path"]), root / "package cache"
+                    Path(call["package_path"]), Path(call["package_cache_path"])
                 )
                 self.assertEqual(
                     list(map(Path, call["font_paths"])),
@@ -3074,16 +3144,71 @@ class TestRendering(unittest.TestCase):
             ):
                 graph.to_svg()
 
+    def test_custom_source_root_preserves_parent_relative_imports(self):
+        with TemporaryDirectory(prefix="linnet source root ") as directory:
+            project = Path(directory) / "project"
+            templates = project / "templates"
+            templates.mkdir(parents=True)
+            (project / "shared.typ").write_text(
+                "#let body = [shared import]\n", encoding="utf-8"
+            )
+            template = templates / "template.typ"
+            template.write_text(
+                '#import "../shared.typ": body\n#let render(config) = body\n',
+                encoding="utf-8",
+            )
+            graph = lp.build(
+                lp.node("only"),
+                render_config=lp.RenderConfig(
+                    template=template,
+                    source_root=project,
+                ),
+            )
+
+            self.assertIn("<svg", graph.to_svg())
+
+    def test_source_staging_does_not_infer_a_generic_src_ancestor(self):
+        with TemporaryDirectory(prefix="linnet narrow source root ") as directory:
+            root = Path(directory)
+            (root / "outside.txt").write_text("do not stage", encoding="utf-8")
+            project = root / "src" / "project"
+            project.mkdir(parents=True)
+            template = project / "template.typ"
+            template.write_text("#let render(config) = [ok]\n", encoding="utf-8")
+            graph = lp.build(
+                lp.node("only"),
+                render_config=lp.RenderConfig(template=template),
+            )
+
+            def compile_typst(input, **kwargs):
+                self.assertTrue(Path(input).is_file())
+                staged_sources = Path(kwargs["root"]) / "user-sources"
+                self.assertEqual(list(staged_sources.rglob("outside.txt")), [])
+                self.assertEqual(
+                    [path.name for path in staged_sources.rglob("template.typ")],
+                    ["template.typ"],
+                )
+                return b"<svg>narrow</svg>"
+
+            with patch.object(typst, "compile", side_effect=compile_typst):
+                self.assertEqual(graph.to_svg(), "<svg>narrow</svg>")
+
     def test_prepared_render_keeps_source_and_compilation_correlated(self):
         with TemporaryDirectory(prefix="linnet prepared render ") as directory:
             root = Path(directory)
             template = root / "template.typ"
-            template.write_text("#let render(config) = [ok]\n", encoding="utf-8")
+            template_source = "#let render(config) = [ok]\n"
+            template.write_text(template_source, encoding="utf-8")
+            module_path = root / "prepared module.typ"
+            module_source = "#let title = [prepared module]\n"
+            module_path.write_text(module_source, encoding="utf-8")
+            module = lp.TypstModule.file(module_path)
             selector_calls = []
             graph = lp.build(
                 lp.node("only"),
                 render_config=lp.RenderConfig(
                     template=template,
+                    title=module.content("title"),
                     selectors=lp.DrawingSelectors(
                         node=lambda node: (
                             selector_calls.append(node.index)
@@ -3097,13 +3222,26 @@ class TestRendering(unittest.TestCase):
             source = prepared.typst_source
             self.assertEqual(selector_calls, [0])
             self.assertIn("prepared node", source)
-            self.assertIn("_clinnet_template.render(_clinnet_config)", source)
+            self.assertIn("_linnet_template.render(_linnet_config)", source)
+            template.unlink()
+            module_path.unlink()
             entrypoints = []
 
             def compile_typst(input, **kwargs):
                 entrypoint = Path(input)
                 entrypoints.append(entrypoint)
                 self.assertEqual(entrypoint.read_text(encoding="utf-8"), source)
+                render_root = Path(kwargs["root"])
+                imported = [
+                    render_root / match.lstrip("/")
+                    for match in re.findall(r'^#import "([^"]+)"', source, re.MULTILINE)
+                ]
+                self.assertTrue(all(path.is_file() for path in imported))
+                imported_sources = {
+                    path.read_text(encoding="utf-8") for path in imported
+                }
+                self.assertIn(template_source, imported_sources)
+                self.assertIn(module_source, imported_sources)
                 if output := kwargs.get("output"):
                     Path(output).write_bytes(b"rendered")
                     return None
@@ -3129,14 +3267,14 @@ class TestRendering(unittest.TestCase):
 
         with TemporaryDirectory(prefix="linnet topology ") as directory:
             root = Path(directory)
-            staged_dot = root / "staged topology.dot"
+            staged_spec = root / "staged topology.cbor"
             template = root / "template.typ"
             template.write_text("#let render(config) = [ok]\n", encoding="utf-8")
 
             def compile_typst(input, **kwargs):
                 self.assertEqual(kwargs["format"], "svg")
-                staged_dot.write_bytes(
-                    Path(input).with_name("diagram.dot").read_bytes()
+                staged_spec.write_bytes(
+                    Path(input).with_name("diagram.cbor").read_bytes()
                 )
                 return b"<svg>fake</svg>"
 
@@ -3166,13 +3304,14 @@ class TestRendering(unittest.TestCase):
             self.assertEqual(graph.node_store, lp.NodeStore.Forest)
             with patch.object(typst, "compile", side_effect=compile_typst):
                 self.assertEqual(graph.to_svg(), "<svg>fake</svg>")
-            topology = staged_dot.read_text(encoding="utf-8")
-            self.assertIn("left node", topology)
-            self.assertIn(r"right \"node\"", topology)
-            self.assertIn("linnet_render_edge_name", topology)
-            self.assertIn("propagator edge", topology)
-            self.assertIn("render graph", topology)
-            self.assertNotIn("MUST_NOT_STAGE", topology)
+            topology = staged_spec.read_bytes()
+            self.assertIn(b"linnest-graph-spec", topology)
+            self.assertIn(b"left node", topology)
+            self.assertIn(b'right "node"', topology)
+            self.assertNotIn(b"__linnest-edge-name", topology)
+            self.assertIn(b"propagator edge", topology)
+            self.assertIn(b"render graph", topology)
+            self.assertNotIn(b"MUST_NOT_STAGE", topology)
 
     def test_default_renderer_accepts_typed_placement(self):
         left = lp.node("left", placement=lp.Placement.Start)
@@ -3318,7 +3457,7 @@ class TestRendering(unittest.TestCase):
             template.write_text(
                 "#let render(config) = {\n"
                 "  let helpers = config.elements.nodes.at(0)\n"
-                '  let parsed = helpers.at("inspect-parse")(read(config.at("data-path"))).first()\n'
+                '  let parsed = helpers.at("inspect-from-spec")(read(config.at("graph-spec-path"), encoding: none))\n'
                 "  let attach = half-edge => {\n"
                 "    let drawing = config.elements.hedges.at(half-edge.hedge)\n"
                 "    let patch = (data: drawing)\n"
@@ -3353,7 +3492,7 @@ class TestRendering(unittest.TestCase):
             left = lp.node(
                 "left node",
                 extensions={
-                    "inspect-parse": graph_module.function("parse"),
+                    "inspect-from-spec": graph_module.function("from-spec"),
                     "inspect-map": graph_module.function("map"),
                     "inspect-nodes": graph_module.function("nodes"),
                     "token": "left-node",

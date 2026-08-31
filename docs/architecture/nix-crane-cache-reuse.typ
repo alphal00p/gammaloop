@@ -1457,12 +1457,16 @@ they still validate the content being published.
 The terminal documentation derivation tests `linnet-py` in a virtual
 environment based on a Nix-composed Python that includes `typst-py`
 0.15.0. System site packages keep that wheel dependency available to
-the offline installer. The same terminal derivation exposes the package
-tree from `docsTypst` through `TYPST_PACKAGE_CACHE_PATH`; the Python
-binding forwards it to its in-process compiler so CeTZ and MiTeX never
-require a network fetch. This extends only the documentation/runtime
-closure and does not admit Python wheels or Typst packages into the
-reusable Cargo producer key.
+the offline installer. `linnet-py` embeds its pinned CeTZ and oxifmt
+package trees and passes the staged copy to its in-process compiler, so
+its graph renderer never requires a network fetch or the documentation
+package cache. The broader documentation renderer still receives the
+package tree from `docsTypst` for MiTeX and other authored assets. These
+embedded package trees are compile-time `RustEmbed` inputs, so they
+intentionally enter the source key for `linnet-py` and aggregate Cargo
+producers that compile it. The package-specific source map keeps them out
+of unrelated per-crate producers, while downloaded Python wheels remain
+confined to the terminal documentation/runtime closure.
 
 The final Pages derivation remains terminal. Its identity includes all
 rendered documentation sources, the publication channel and optional

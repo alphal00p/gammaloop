@@ -1,7 +1,7 @@
 = GammaLoop Drawing Architecture
 
 #quote(block: true)[
-#strong[Status:] Current contract; audited against the implementation on 2026-08-28
+#strong[Status:] Current contract; audited against the implementation on 2026-08-31
 
 The pipeline, ownership, DOT parser fields, typed rendering data, path styles, and subgraph
 sections describe the implemented drawing stack. The superseded `*-eval` and
@@ -31,25 +31,29 @@ rendering run has these steps:
    its app templates there (`figure.typ`, `grid.typ`, `layout.typ`, `layout-core.typ`), while the
    shared Linnest/Kurvst package files keep their canonical workspace layout
    under `drawings/templates/crates/{linnest,kurvst}/typst/`.
-+ Clinnet's shared preparation layer stages the topology DOT and one generated Typst entrypoint
-   for each graph. The `linnet` CLI compiles it with an external Typst 0.15 executable.
-   `linnet-py` passes the same prepared entrypoint and project root to `typst-py` 0.15.0 for
-   in-process compilation; it does not discover or launch an executable.
-+ The entrypoint statically imports the selected template, imports each referenced user module
-   once, constructs the native configuration dictionary, adds the staged `data-path`, and calls
-   the template's mandatory `render(config)` export. Configuration is not flattened into
-   `sys.inputs`. Its size does not change Clinnet's process argument list, and the Python path has
-   no compiler subprocess arguments at all.
-+ The generic rendering path materializes Clinnet's embedded figure/layout templates and the
-   embedded Linnest and Kurvst package assets. It has no particle, momentum, amplitude, or
-   cross-section mode. The GammaLoop path supplies its generated template bundle instead, binding
-   the model-specific `edge-style.typ` callbacks and interpreting GammaLoop-owned options for its
-   generic, amplitude, and cross-section presets.
-+ The selected `layout.typ` parses the staged DOT topology, attaches the typed node, edge, and
-   half-edge records from `config.elements`, and patches half-edge statements, port labels, and
-   compass points into the native graph by topology index. It applies final labels and styles with
-   `graph.style`, and only then runs the ordered layout passes and `draw`. Label and node
-   measurements therefore participate in spacing.
++ Clinnet stages the input DOT and a generated Typst entrypoint for each graph, then the `linnet`
+   CLI compiles it with an external Typst 0.15 executable. Its thin DOT adapter parses that input
+   and delegates graph styling, layout, and drawing to Linnest's generic renderer.
++ `linnet-py` owns a separate in-process preparation boundary. It serializes only names, indices,
+   incidence, flow, and orientation into a versioned `linnest-graph-spec` CBOR document; arbitrary
+   Python `.data` and DOT `GlobalData` never enter it. The wheel embeds Linnest, Kurvst, CeTZ 0.5.1,
+   and oxifmt 1.0.0, stages them with the graph spec, and invokes `typst-py` 0.15.0 directly. It has
+   no Clinnet library dependency and does not discover or launch a Typst executable.
++ Both preparers invoke Typst with constant-sized process arguments. Their generated entrypoints
+   statically import the selected template and each referenced user module once, materialize the
+   native configuration dictionary, and call the template's mandatory `render(config)` export.
+   Configuration is not
+   flattened into `sys.inputs`; the Python entrypoint adds `graph-spec-path`, while Clinnet adds
+   `data-path` for its DOT adapter.
++ Linnest owns the generic figure/layout implementation. It has no particle, momentum, amplitude,
+   or cross-section mode. The GammaLoop path supplies its generated template bundle instead,
+   binding the model-specific `edge-style.typ` callbacks and interpreting GammaLoop-owned options
+   for its generic, amplitude, and cross-section presets.
++ The generic renderer receives a native graph from either `graph.from-spec` or Clinnet's DOT
+   adapter, attaches the typed node, edge, and half-edge records from `config.elements`, and patches
+   half-edge statements, port labels, and compass points by topology index. It applies final labels
+   and styles with `graph.style`, and only then runs the ordered layout passes and `draw`. Label and
+   node measurements therefore participate in spacing.
 + `draw` uses ordinary Linnest node and edge styles for a model-neutral graph. GammaLoop's selected
    template installs the particle and momentum callbacks from `edge-style.typ`. It draws edges and
    labels first, then nodes last so nodes sit on top of edges.
@@ -71,17 +75,18 @@ Python strings remain data.
   invisible DOT nodes into dangling half-edges and preserves unconsumed
   attributes as statement dictionaries.
 
-/ `crates/linnest`: Provides the Typst-facing wasm plugin and Typst wrappers. It parses DOT into
-  graph bytes, lays out node and edge positions, exposes graph queries, and
-  provides the domain-neutral CeTZ draw API.
+/ `crates/linnest`: Provides the Typst-facing wasm plugin and Typst wrappers. It parses DOT or a
+  versioned native graph spec into graph bytes, owns the generic `render(config)` implementation,
+  lays out node and edge positions, exposes graph queries, and provides the domain-neutral CeTZ
+  draw API.
 
 / `crates/kurvst`: Provides the Typst-facing curve wasm plugin. It splits and trims Bezier
   curves, builds Hobby curves through edge layout points, and generates wave,
   zigzag, and coil path patterns.
 
-/ `crates/clinnet`: Provides the shared external-Typst V1 renderer, embedded generic Clinnet,
-  Linnest, and Kurvst assets, and the `linnet` CLI used to batch-render DOT files and assemble
-  grid PDFs. Every custom figure template must export `render(config)`.
+/ `crates/clinnet`: Provides the external-Typst CLI used to batch-render DOT files and assemble
+  grid PDFs. Its generic template is a thin DOT-ingestion adapter over Linnest's renderer. Every
+  custom figure template must export `render(config)`.
 
 / `crates/linnet-py`: Owns Linnet `HedgeGraph` topology through a selectable vector or forest node
   store. It exposes declarative construction, graph-bound subgraphs, topology algorithms and
@@ -89,9 +94,10 @@ Python strings remain data.
   typed drawing metadata and render configuration, explicit DOT codecs, and module references.
   Subgraphs retain Linnet's native half-edge set and add only the zero-crown node IDs that the set
   cannot represent, keeping isolated nodes visible to Python graph operations.
-  Its rendering methods and notebook SVG display reuse Clinnet's prepared project, then compile it
-  in-process through the `typst` Python package. This is a second compiler backend for the same
-  rendering contract, not a separate template or staging implementation.
+  Its rendering methods and notebook SVG display prepare a versioned CBOR topology and typed Typst
+  configuration, then compile the staged standalone project in-process through the `typst` Python
+  package. It shares Linnest's renderer with Clinnet but owns its native preparation and package
+  staging.
 
 GammaLoop's particle policy is not part of Clinnet's generic embedded template. Python callers
 that want GammaLoop particle colors, labels, path decorations, or mode presets select the
@@ -121,8 +127,8 @@ DOT conversion is a separate, explicit boundary. Python import and export requir
 The canonical Linnest codec retains its supported drawing subset while dropping arbitrary element
 `.data`; the topology codec drops element data and drawing. Both preserve graph and element names
 and the separate `GlobalData`. Rendering does not use either codec to guess a representation for
-arbitrary `.data`: it stages topology separately and sends typed drawing records through
-`config.elements`.
+arbitrary `.data`: it stages a versioned topology-only CBOR graph spec separately and sends typed
+drawing records through `config.elements`.
 
 The same DOT file may contain both kinds of data for drawing. If a manually
 decorated DOT file is later fed back into GammaLoop's physics parser, keep in

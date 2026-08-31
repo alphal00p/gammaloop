@@ -184,6 +184,8 @@
           ./crates/linnest/typst/linnest.wasm
           ./crates/linnest/typst/src
           ./crates/linnest/typst/typst.toml
+          ./crates/linnet-py/README.md
+          ./crates/linnet-py/vendor
           ./crates/vakint/form_src
           ./crates/vakint/templates
         ];
@@ -605,6 +607,19 @@
             "crates/linnest/typst/linnest.wasm"
             "crates/linnest/typst/src"
             "crates/linnest/typst/typst.toml"
+          ];
+          "linnet-py" = [
+            "crates/linnet-py/LICENSE"
+            "crates/linnet-py/README.md"
+            "crates/kurvst/typst/LICENSE"
+            "crates/kurvst/typst/kurvst.wasm"
+            "crates/kurvst/typst/src"
+            "crates/kurvst/typst/typst.toml"
+            "crates/linnest/typst/linnest.wasm"
+            "crates/linnest/typst/LICENSE"
+            "crates/linnest/typst/src"
+            "crates/linnest/typst/typst.toml"
+            "crates/linnet-py/vendor"
           ];
           vakint = [
             "crates/vakint/form_src"

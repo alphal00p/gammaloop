@@ -24,7 +24,6 @@ use crate::{default_figment, PinConstraint, TypstGraph};
 
 type DotBuilder = HedgeGraphBuilder<DotEdgeData, DotVertexData, DotHedgeData>;
 const TYPST_EDGE_NAME_KEY: &str = "__linnest-edge-name";
-const RENDER_EDGE_NAME_KEY: &str = "linnet_render_edge_name";
 
 fn normalize_statement_key(key: &str) -> String {
     key.trim().trim_matches('"').to_string()
@@ -57,6 +56,7 @@ pub struct TypstPoint {
 
 #[derive(
     Debug,
+    Serialize,
     Deserialize,
     Clone,
     Copy,
@@ -74,7 +74,7 @@ enum PlacementMode {
     Pin,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct TypstPlacementSpec {
     #[serde(default)]
@@ -95,14 +95,14 @@ pub struct TypstPlacementSpec {
     dy: Option<f64>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(untagged)]
 enum TypstPlacementCoord {
     Number(TypstNumber),
     Group(TypstPlacementGroup),
 }
 
-#[derive(Debug, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
 #[serde(untagged)]
 enum TypstNumber {
     Float(f64),
@@ -110,7 +110,7 @@ enum TypstNumber {
     Unsigned(u64),
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 struct TypstPlacementGroup {
     kind: String,
@@ -179,7 +179,7 @@ pub struct TypstDotEdge {
     pub statements: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct TypstGraphSpec {
     #[serde(default)]
@@ -198,7 +198,7 @@ pub struct TypstGraphSpec {
     pub edges: Vec<TypstEdgeSpec>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct TypstNodeSpec {
     #[serde(default)]
     pub name: Option<String>,
@@ -212,9 +212,11 @@ pub struct TypstNodeSpec {
     pub statements: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct TypstEdgeSpec {
+    #[serde(default)]
+    pub name: Option<String>,
     #[serde(default)]
     pub source: Option<TypstEndpointSpec>,
     #[serde(default)]
@@ -233,7 +235,7 @@ pub struct TypstEdgeSpec {
     pub statements: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub struct TypstEndpointSpec {
     pub node: usize,
@@ -249,6 +251,51 @@ pub struct TypstEndpointSpec {
     pub compass: Option<String>,
     #[serde(default)]
     pub in_subgraph: bool,
+}
+
+pub const GRAPH_SPEC_SCHEMA: &str = "linnest-graph-spec";
+pub const GRAPH_SPEC_VERSION: u32 = 1;
+
+/// Versioned wire envelope shared by native renderers and the Typst plugin.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct TypstGraphSpecEnvelope {
+    pub schema: String,
+    pub version: u32,
+    pub graph: TypstGraphSpec,
+}
+
+#[derive(Serialize)]
+struct TypstGraphSpecRefEnvelope<'a> {
+    schema: &'static str,
+    version: u32,
+    graph: &'a TypstGraphSpec,
+}
+
+impl TypstGraphSpecEnvelope {
+    pub fn new(graph: TypstGraphSpec) -> Self {
+        Self {
+            schema: GRAPH_SPEC_SCHEMA.to_owned(),
+            version: GRAPH_SPEC_VERSION,
+            graph,
+        }
+    }
+
+    fn into_graph(self) -> Result<TypstGraphSpec, String> {
+        if self.schema != GRAPH_SPEC_SCHEMA {
+            return Err(format!(
+                "Invalid graph spec schema {:?}; expected {GRAPH_SPEC_SCHEMA:?}",
+                self.schema
+            ));
+        }
+        if self.version != GRAPH_SPEC_VERSION {
+            return Err(format!(
+                "Unsupported graph spec version {}; expected {GRAPH_SPEC_VERSION}",
+                self.version
+            ));
+        }
+        Ok(self.graph)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -417,9 +464,19 @@ fn encode_subgraph(subgraph: &SuBitGraph) -> Result<Vec<u8>, String> {
 }
 
 pub fn graph_from_spec_bytes(arg: &[u8]) -> Result<Vec<u8>, String> {
-    let spec: TypstGraphSpec = ciborium::de::from_reader(arg)
+    let envelope: TypstGraphSpecEnvelope = ciborium::de::from_reader(arg)
         .map_err(|err| format!("Failed to deserialize graph spec: {err}"))?;
-    encode_typst_graph(&typst_graph_from_dot(graph_from_spec(spec)?))
+    encode_typst_graph(&typst_graph_from_dot(graph_from_spec(
+        envelope.into_graph()?,
+    )?))
+}
+
+pub fn encode_graph_spec_bytes(spec: &TypstGraphSpec) -> Result<Vec<u8>, String> {
+    encode_cbor(&TypstGraphSpecRefEnvelope {
+        schema: GRAPH_SPEC_SCHEMA,
+        version: GRAPH_SPEC_VERSION,
+        graph: spec,
+    })
 }
 
 pub fn graph_with_data_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<u8>, String> {
@@ -503,7 +560,6 @@ pub fn graph_set_edge_data_by_name_bytes(arg: &[u8], arg2: &[u8]) -> Result<Vec<
                 .data
                 .statements
                 .get(TYPST_EDGE_NAME_KEY)
-                .or_else(|| data.data.statements.get(RENDER_EDGE_NAME_KEY))
                 .map(String::as_str)
                 == Some(patch.name.as_str()))
             .then_some(index)
@@ -1081,8 +1137,7 @@ fn graph_info(graph: &ArchivedDotGraphView<'_>) -> TypstDotGraphInfo {
 
 fn archived_edge_name(edge: ArchivedDotEdgeView<'_>) -> Option<String> {
     edge.data.statements.iter().find_map(|(key, value)| {
-        matches!(key.as_str(), TYPST_EDGE_NAME_KEY | RENDER_EDGE_NAME_KEY)
-            .then(|| value.as_str().to_string())
+        (key.as_str() == TYPST_EDGE_NAME_KEY).then(|| value.as_str().to_string())
     })
 }
 
@@ -1167,7 +1222,10 @@ fn add_edge_to_builder(
             mode: PlacementMode::Start,
         })
     });
-    let local_statements = apply_placement_statements(edge.statements, placement.as_ref());
+    let mut local_statements = apply_placement_statements(edge.statements, placement.as_ref());
+    if let Some(name) = edge.name {
+        local_statements.insert(TYPST_EDGE_NAME_KEY.to_owned(), name);
+    }
     let edge_data = DotEdgeData {
         payload: edge.data,
         statements: merged_statements(&global_data.edge_statements, &local_statements),
@@ -1635,7 +1693,6 @@ fn public_statements(mut statements: BTreeMap<String, String>) -> BTreeMap<Strin
         "pos-mode",
         "pin",
         TYPST_EDGE_NAME_KEY,
-        RENDER_EDGE_NAME_KEY,
     ] {
         statements.remove(key);
     }
