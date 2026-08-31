@@ -24,6 +24,54 @@ use vakint::{externals_from_f64, params_from_f64, vakint_parse};
 
 const N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS: u32 = 32;
 
+enum ThreeLoopReferenceMode {
+    Legacy(EvaluationOrder),
+    RustRedNumericalParity,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compare_three_loop_reference(
+    mode: ThreeLoopReferenceMode,
+    settings: VakintSettings,
+    rustred_tensor_prepass: TensorPrepass,
+    input: symbolica::atom::AtomView,
+    numerical_masses: ahash::HashMap<String, symbolica::domains::float::Float>,
+    numerical_external_momenta: ahash::HashMap<usize, vakint::Momentum>,
+    expected_output: Vec<(i64, (String, String))>,
+    precision: u32,
+    max_pull: f64,
+) {
+    match mode {
+        ThreeLoopReferenceMode::Legacy(evaluation_order) => {
+            // Keep the pre-existing acceptance path byte-for-byte equivalent:
+            // one selected backend and Vakint's historical FORM tensor prepass.
+            compare_vakint_evaluation_vs_reference(
+                settings,
+                evaluation_order,
+                input,
+                numerical_masses,
+                numerical_external_momenta,
+                expected_output,
+                precision,
+                max_pull,
+            );
+        }
+        ThreeLoopReferenceMode::RustRedNumericalParity => {
+            compare_vakint_evaluations_vs_reference(
+                settings,
+                &analytic_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly),
+                rustred_tensor_prepass,
+                input,
+                numerical_masses,
+                numerical_external_momenta,
+                expected_output,
+                precision,
+                max_pull,
+            );
+        }
+    }
+}
+
 #[test_log::test]
 fn test_integrate_1l_a() {
     run_multi_lane_acceptance(test_integrate_1l_a_body);
@@ -382,10 +430,23 @@ fn test_integrate_2l() {
 
 #[test_log::test]
 fn test_integrate_3l() {
-    #[rustfmt::skip]
-    compare_vakint_evaluation_vs_reference(
-        VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
+    test_integrate_3l_with_mode(ThreeLoopReferenceMode::Legacy(
         EvaluationOrder::alphaloop_only(),
+    ));
+}
+
+#[test]
+#[ignore = "pending certified sector-complete K=6 artifact"]
+fn rustred_numerical_parity_3l() {
+    test_integrate_3l_with_mode(ThreeLoopReferenceMode::RustRedNumericalParity);
+}
+
+fn test_integrate_3l_with_mode(mode: ThreeLoopReferenceMode) {
+    #[rustfmt::skip]
+    compare_three_loop_reference(
+        mode,
+        VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
+        TensorPrepass::Skip,
         vakint_parse!(
             "(1)*topo(\
                  prop(1,edge(1,2),k(1),muvsq,1)\
@@ -415,10 +476,23 @@ fn test_integrate_3l() {
 
 #[test_log::test]
 fn test_integrate_3l_rank_4() {
-    #[rustfmt::skip]
-    compare_vakint_evaluation_vs_reference(
-        VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
+    test_integrate_3l_rank_4_with_mode(ThreeLoopReferenceMode::Legacy(
         EvaluationOrder::alphaloop_only(),
+    ));
+}
+
+#[test]
+#[ignore = "pending certified sector-complete K=6 artifact"]
+fn rustred_numerical_parity_3l_rank_4() {
+    test_integrate_3l_rank_4_with_mode(ThreeLoopReferenceMode::RustRedNumericalParity);
+}
+
+fn test_integrate_3l_rank_4_with_mode(mode: ThreeLoopReferenceMode) {
+    #[rustfmt::skip]
+    compare_three_loop_reference(
+        mode,
+        VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
+        TensorPrepass::Form,
         vakint_parse!(
             "(
                   k(1,11)*k(2,11)*k(1,22)*k(2,22)
@@ -453,10 +527,25 @@ fn test_integrate_3l_rank_4() {
 
 #[test_log::test]
 fn test_integrate_3l_rank_4_additional_symbols_numerator() {
+    test_integrate_3l_rank_4_additional_symbols_numerator_with_mode(
+        ThreeLoopReferenceMode::Legacy(EvaluationOrder::alphaloop_only()),
+    );
+}
+
+#[test]
+#[ignore = "pending certified sector-complete K=6 artifact"]
+fn rustred_numerical_parity_3l_rank_4_additional_symbols_numerator() {
+    test_integrate_3l_rank_4_additional_symbols_numerator_with_mode(
+        ThreeLoopReferenceMode::RustRedNumericalParity,
+    );
+}
+
+fn test_integrate_3l_rank_4_additional_symbols_numerator_with_mode(mode: ThreeLoopReferenceMode) {
     #[rustfmt::skip]
-    compare_vakint_evaluation_vs_reference(
+    compare_three_loop_reference(
+        mode,
         VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar,..VakintSettings::default()},
-        EvaluationOrder::alphaloop_only(),
+        TensorPrepass::Form,
         vakint_parse!(
             "(
                   user_space::A*k(1,11)*k(2,11)*k(1,22)*k(2,22)
@@ -494,10 +583,26 @@ fn test_integrate_3l_rank_4_additional_symbols_numerator() {
 
 #[test_log::test]
 fn test_integrate_3l_rank_4_matad() {
+    test_integrate_3l_rank_4_matad_with_mode(ThreeLoopReferenceMode::Legacy(
+        EvaluationOrder::matad_only(Some(MATADOptions {
+            direct_numerical_substition: true,
+            ..MATADOptions::default()
+        })),
+    ));
+}
+
+#[test]
+#[ignore = "pending certified sector-complete K=6 artifact"]
+fn rustred_numerical_parity_3l_rank_4_matad() {
+    test_integrate_3l_rank_4_matad_with_mode(ThreeLoopReferenceMode::RustRedNumericalParity);
+}
+
+fn test_integrate_3l_rank_4_matad_with_mode(mode: ThreeLoopReferenceMode) {
     #[rustfmt::skip]
-    compare_vakint_evaluation_vs_reference(
+    compare_three_loop_reference(
+        mode,
         VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar, number_of_terms_in_epsilon_expansion: 5,..VakintSettings::default()},
-        EvaluationOrder::matad_only(Some(MATADOptions {direct_numerical_substition: true,..MATADOptions::default()})),
+        TensorPrepass::Form,
         vakint_parse!(
             "(
                   k(1,11)*k(2,11)*k(1,22)*k(2,22)
@@ -533,10 +638,30 @@ fn test_integrate_3l_rank_4_matad() {
 
 #[test_log::test]
 fn test_integrate_3l_rank_4_matad_additional_symbols_numerator() {
+    test_integrate_3l_rank_4_matad_additional_symbols_numerator_with_mode(
+        ThreeLoopReferenceMode::Legacy(EvaluationOrder::matad_only(Some(MATADOptions {
+            direct_numerical_substition: true,
+            ..MATADOptions::default()
+        }))),
+    );
+}
+
+#[test]
+#[ignore = "pending certified sector-complete K=6 artifact"]
+fn rustred_numerical_parity_3l_rank_4_matad_additional_symbols_numerator() {
+    test_integrate_3l_rank_4_matad_additional_symbols_numerator_with_mode(
+        ThreeLoopReferenceMode::RustRedNumericalParity,
+    );
+}
+
+fn test_integrate_3l_rank_4_matad_additional_symbols_numerator_with_mode(
+    mode: ThreeLoopReferenceMode,
+) {
     #[rustfmt::skip]
-    compare_vakint_evaluation_vs_reference(
+    compare_three_loop_reference(
+        mode,
         VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar, number_of_terms_in_epsilon_expansion: 5,..VakintSettings::default()},
-        EvaluationOrder::matad_only(Some(MATADOptions {direct_numerical_substition: true,..MATADOptions::default()})),
+        TensorPrepass::Form,
         vakint_parse!(
             "(
                   user_space::A*k(1,11)*k(2,11)*k(1,22)*k(2,22)
@@ -575,10 +700,23 @@ fn test_integrate_3l_rank_4_matad_additional_symbols_numerator() {
 
 #[test_log::test]
 fn test_integrate_3l_matad() {
+    test_integrate_3l_matad_with_mode(ThreeLoopReferenceMode::Legacy(EvaluationOrder::matad_only(
+        None,
+    )));
+}
+
+#[test]
+#[ignore = "pending certified sector-complete K=6 artifact"]
+fn rustred_numerical_parity_3l_matad() {
+    test_integrate_3l_matad_with_mode(ThreeLoopReferenceMode::RustRedNumericalParity);
+}
+
+fn test_integrate_3l_matad_with_mode(mode: ThreeLoopReferenceMode) {
     #[rustfmt::skip]
-    compare_vakint_evaluation_vs_reference(
+    compare_three_loop_reference(
+        mode,
         VakintSettings{integral_normalization_factor: LoopNormalizationFactor::MSbar, number_of_terms_in_epsilon_expansion: 5,..VakintSettings::default()},
-        EvaluationOrder::matad_only(None),
+        TensorPrepass::Skip,
         vakint_parse!(
             "(1)*topo(\
                  prop(1,edge(1,2),k(1),muvsq,1)\

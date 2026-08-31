@@ -352,6 +352,383 @@ fn form_tensor_prepass_then_rustred_scalar_matches_matad() {
 }
 
 #[derive(Clone, Copy)]
+struct ActiveExactAcceptance {
+    legacy_test: &'static str,
+    rustred_driver: &'static str,
+    concrete_inputs: usize,
+    form_prepass_inputs: usize,
+    policy: RustRedParityPolicy,
+}
+
+const PYSECDEC_PEER_DRIVER: &str = "rustred_scalar_evaluation_tests::rustred_covers_applicable_pysecdec_peer_inputs_through_two_loops";
+
+// Exhaustive single-common-mass AlphaLoop/MATAD acceptance inventory below
+// K=6. Backend-specific duplicates and non-common-mass PySecDec cases are
+// deliberately outside this scalar-reduction matrix.
+const ACTIVE_EXACT_ACCEPTANCE: [ActiveExactAcceptance; 21] = [
+    ActiveExactAcceptance {
+        legacy_test: "integral_alphaloop_vs_matad_tests::test_integrate_1l_no_numerator",
+        rustred_driver: "integral_alphaloop_vs_matad_tests::test_integrate_1l_no_numerator",
+        concrete_inputs: 6,
+        form_prepass_inputs: 0,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_alphaloop_vs_matad_tests::test_integrate_1l_no_numerator_squared_mass",
+        rustred_driver: "integral_alphaloop_vs_matad_tests::test_integrate_1l_no_numerator_squared_mass",
+        concrete_inputs: 2,
+        form_prepass_inputs: 0,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_alphaloop_vs_matad_tests::test_integrate_2l_no_numerator",
+        rustred_driver: "integral_alphaloop_vs_matad_tests::test_integrate_2l_no_numerator",
+        concrete_inputs: 1,
+        form_prepass_inputs: 0,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_evaluation_analytic_tests::test_integrate_1l_a",
+        rustred_driver: "integral_evaluation_analytic_tests::test_integrate_1l_a",
+        concrete_inputs: 1,
+        form_prepass_inputs: 1,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_evaluation_analytic_tests::test_integrate_1l_simple",
+        rustred_driver: "integral_evaluation_analytic_tests::test_integrate_1l_simple",
+        concrete_inputs: 1,
+        form_prepass_inputs: 0,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_evaluation_analytic_tests::test_integrate_1l_simple_squared_mass",
+        rustred_driver: "integral_evaluation_analytic_tests::test_integrate_1l_simple_squared_mass",
+        concrete_inputs: 1,
+        form_prepass_inputs: 0,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_evaluation_analytic_tests::test_integrate_1l_cross_product",
+        rustred_driver: "integral_evaluation_analytic_tests::test_integrate_1l_cross_product",
+        concrete_inputs: 1,
+        form_prepass_inputs: 1,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_evaluation_analytic_tests::test_integrate_1l_cross_product_with_additional_symbols_numerator",
+        rustred_driver: "integral_evaluation_analytic_tests::test_integrate_1l_cross_product_with_additional_symbols_numerator",
+        concrete_inputs: 1,
+        form_prepass_inputs: 1,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_evaluation_analytic_tests::test_integrate_1l_dot_product_external",
+        rustred_driver: "integral_evaluation_analytic_tests::test_integrate_1l_dot_product_external",
+        concrete_inputs: 1,
+        form_prepass_inputs: 1,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_evaluation_analytic_tests::test_integrate_2l",
+        rustred_driver: "integral_evaluation_analytic_tests::test_integrate_2l",
+        concrete_inputs: 1,
+        form_prepass_inputs: 0,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_evaluation_freeform_tests::test_integrate_1l_decorated_indices_alphaloop",
+        rustred_driver: "integral_evaluation_freeform_tests::test_integrate_1l_decorated_indices_alphaloop",
+        concrete_inputs: 1,
+        form_prepass_inputs: 1,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_evaluation_freeform_tests::test_integrate_1l_decorated_indices_matad",
+        rustred_driver: "integral_evaluation_freeform_tests::test_integrate_1l_decorated_indices_matad",
+        concrete_inputs: 1,
+        form_prepass_inputs: 1,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_comparison_vs_pysecdec_tests::test_integrate_1l_pysecdec",
+        rustred_driver: PYSECDEC_PEER_DRIVER,
+        concrete_inputs: 1,
+        form_prepass_inputs: 0,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_comparison_vs_pysecdec_tests::test_integrate_1l_pysecdec_non_unit_mass",
+        rustred_driver: PYSECDEC_PEER_DRIVER,
+        concrete_inputs: 1,
+        form_prepass_inputs: 0,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_comparison_vs_pysecdec_tests::test_integrate_1l_pysecdec_non_unit_scale",
+        rustred_driver: PYSECDEC_PEER_DRIVER,
+        concrete_inputs: 1,
+        form_prepass_inputs: 0,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_comparison_vs_pysecdec_tests::test_integrate_1l_pysecdec_num_rank_two",
+        rustred_driver: PYSECDEC_PEER_DRIVER,
+        concrete_inputs: 1,
+        form_prepass_inputs: 1,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_comparison_vs_pysecdec_tests::test_integrate_1l_pysecdec_dot_product_external",
+        rustred_driver: PYSECDEC_PEER_DRIVER,
+        concrete_inputs: 1,
+        form_prepass_inputs: 1,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_comparison_vs_pysecdec_tests::test_integrate_2l_pysecdec",
+        rustred_driver: PYSECDEC_PEER_DRIVER,
+        concrete_inputs: 1,
+        form_prepass_inputs: 0,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_comparison_vs_pysecdec_tests::test_integrate_2l_pysecdec_pinched",
+        rustred_driver: PYSECDEC_PEER_DRIVER,
+        concrete_inputs: 1,
+        form_prepass_inputs: 0,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_comparison_vs_pysecdec_tests::test_integrate_2l_pysecdec_pinched_other_lmb",
+        rustred_driver: PYSECDEC_PEER_DRIVER,
+        concrete_inputs: 1,
+        form_prepass_inputs: 0,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+    ActiveExactAcceptance {
+        legacy_test: "integral_comparison_vs_pysecdec_tests::test_integrate_2l_pysecdec_rank_four_num",
+        rustred_driver: PYSECDEC_PEER_DRIVER,
+        concrete_inputs: 1,
+        form_prepass_inputs: 1,
+        policy: RustRedParityPolicy::ExactMatadBasis,
+    },
+];
+
+fn acceptance_source(qualified_test: &str) -> &'static str {
+    let (file, _) = qualified_test
+        .split_once("::")
+        .expect("acceptance inventory entries use file::function names");
+    match file {
+        "integral_alphaloop_vs_matad_tests" => {
+            include_str!("integral_alphaloop_vs_matad_tests.rs")
+        }
+        "integral_comparison_vs_pysecdec_tests" => {
+            include_str!("integral_comparison_vs_pysecdec_tests.rs")
+        }
+        "integral_evaluation_analytic_tests" => {
+            include_str!("integral_evaluation_analytic_tests.rs")
+        }
+        "integral_evaluation_freeform_tests" => {
+            include_str!("integral_evaluation_freeform_tests.rs")
+        }
+        "rustred_scalar_evaluation_tests" => include_str!("rustred_scalar_evaluation_tests.rs"),
+        _ => panic!("unknown acceptance source {file}"),
+    }
+}
+
+fn assert_inventory_function_exists(qualified_test: &str) {
+    let (_, function) = qualified_test
+        .split_once("::")
+        .expect("acceptance inventory entries use file::function names");
+    assert!(
+        acceptance_source(qualified_test).contains(format!("fn {function}()").as_str()),
+        "acceptance inventory function {qualified_test} is not executable"
+    );
+}
+
+#[test]
+fn active_exact_acceptance_inventory_is_exhaustive_and_live() {
+    assert_eq!(ACTIVE_EXACT_ACCEPTANCE.len(), 21);
+    assert_eq!(
+        ACTIVE_EXACT_ACCEPTANCE
+            .iter()
+            .map(|case| case.concrete_inputs)
+            .sum::<usize>(),
+        27
+    );
+    assert_eq!(
+        ACTIVE_EXACT_ACCEPTANCE
+            .iter()
+            .map(|case| case.form_prepass_inputs)
+            .sum::<usize>(),
+        9
+    );
+    for case in ACTIVE_EXACT_ACCEPTANCE {
+        assert!(case.concrete_inputs > 0);
+        assert!(case.form_prepass_inputs <= case.concrete_inputs);
+        assert_eq!(case.policy, RustRedParityPolicy::ExactMatadBasis);
+        assert_inventory_function_exists(case.legacy_test);
+        assert_inventory_function_exists(case.rustred_driver);
+    }
+}
+
+/// Always-run AlphaLoop/MATAD/RustRed coverage for the single-common-mass
+/// one- and two-loop inputs whose historical tests use optional PySecDec.
+///
+/// The PySecDec comparisons remain untouched and optional. This peer matrix
+/// ensures those inputs still exercise the strict FORM-free RustRed scalar
+/// tail even on builders that do not have PySecDec installed.
+#[test]
+fn rustred_covers_applicable_pysecdec_peer_inputs_through_two_loops() {
+    let cases = [
+        (
+            "integral_comparison_vs_pysecdec_tests::test_integrate_1l_pysecdec",
+            vakint_parse!("topo(prop(1,edge(1,1),k(1),muvsq,1))").unwrap(),
+            1.0,
+            1.0,
+            TensorPrepass::Skip,
+        ),
+        (
+            "integral_comparison_vs_pysecdec_tests::test_integrate_1l_pysecdec_non_unit_mass",
+            vakint_parse!("topo(prop(1,edge(1,1),k(1),muvsq,1))").unwrap(),
+            2.0,
+            1.0,
+            TensorPrepass::Skip,
+        ),
+        (
+            "integral_comparison_vs_pysecdec_tests::test_integrate_1l_pysecdec_non_unit_scale",
+            vakint_parse!("topo(prop(1,edge(1,1),k(1),muvsq,1))").unwrap(),
+            1.0,
+            2.0,
+            TensorPrepass::Skip,
+        ),
+        (
+            "integral_comparison_vs_pysecdec_tests::test_integrate_1l_pysecdec_num_rank_two",
+            vakint_parse!(
+                "((k(1,33)*k(1,33))^2+k(1,55)*p(1,55))*\
+                 topo(prop(1,edge(1,1),k(1),muvsq,1))"
+            )
+            .unwrap(),
+            1.0,
+            2.0,
+            TensorPrepass::Form,
+        ),
+        (
+            "integral_comparison_vs_pysecdec_tests::test_integrate_1l_pysecdec_dot_product_external",
+            vakint_parse!(
+                "(k(1,1)*p(1,1)*k(1,2)*p(2,2))*\
+                 topo(prop(1,edge(1,1),k(1),muvsq,1))"
+            )
+            .unwrap(),
+            1.0,
+            1.0,
+            TensorPrepass::Form,
+        ),
+        (
+            "integral_comparison_vs_pysecdec_tests::test_integrate_2l_pysecdec",
+            vakint_parse!(
+                "topo(\
+                    prop(1,edge(1,2),k(1),muvsq,1)*\
+                    prop(2,edge(1,2),k(2),muvsq,1)*\
+                    prop(3,edge(2,1),k(1)+k(2),muvsq,1)\
+                )"
+            )
+            .unwrap(),
+            1.0,
+            2.0,
+            TensorPrepass::Skip,
+        ),
+        (
+            "integral_comparison_vs_pysecdec_tests::test_integrate_2l_pysecdec_pinched",
+            vakint_parse!(
+                "topo(\
+                    prop(1,edge(1,1),k(1),muvsq,1)*\
+                    prop(2,edge(1,1),k(2),muvsq,1)\
+                )"
+            )
+            .unwrap(),
+            1.0,
+            1.0,
+            TensorPrepass::Skip,
+        ),
+        (
+            "integral_comparison_vs_pysecdec_tests::test_integrate_2l_pysecdec_pinched_other_lmb",
+            vakint_parse!(
+                "topo(\
+                    prop(1,edge(1,1),k(1),muvsq,1)*\
+                    prop(3,edge(1,1),k(1)+k(2),muvsq,1)\
+                )"
+            )
+            .unwrap(),
+            1.0,
+            1.0,
+            TensorPrepass::Skip,
+        ),
+        (
+            "integral_comparison_vs_pysecdec_tests::test_integrate_2l_pysecdec_rank_four_num",
+            vakint_parse!(
+                "(\
+                    k(1,11)*k(2,22)*k(1,11)*k(2,22)+\
+                    p(1,11)*k(1,11)*k(1,22)*p(1,22)+\
+                    p(1,11)*p(2,11)*k(2,22)*k(2,22)\
+                )*topo(\
+                    prop(1,edge(1,2),k(1),muvsq,1)*\
+                    prop(2,edge(1,2),k(2),muvsq,1)*\
+                    prop(3,edge(2,1),k(1)+k(2),muvsq,1)\
+                )"
+            )
+            .unwrap(),
+            1.0,
+            2.0,
+            TensorPrepass::Form,
+        ),
+    ];
+    for (legacy_test, input, mass_squared, renormalization_scale, tensor_prepass) in cases {
+        let numerical_masses = params_from_f64(
+            &[
+                ("muvsq".to_owned(), mass_squared),
+                ("mursq".to_owned(), renormalization_scale),
+            ]
+            .into_iter()
+            .collect(),
+            32,
+        );
+        let numerical_external_momenta = vakint::externals_from_f64(
+            &(1..=2)
+                .map(|index| {
+                    (
+                        index,
+                        (
+                            17.0 * ((index + 1) as f64),
+                            4.0 * ((index + 2) as f64),
+                            3.0 * ((index + 3) as f64),
+                            12.0 * ((index + 4) as f64),
+                        ),
+                    )
+                })
+                .collect(),
+            32,
+        );
+        compare_evaluations(
+            VakintSettings {
+                run_time_decimal_precision: 32,
+                ..VakintSettings::default()
+            },
+            &alphaloop_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
+            tensor_prepass,
+            input.as_view(),
+            numerical_masses,
+            numerical_external_momenta,
+            1.0e-25,
+            0.0,
+            true,
+        );
+        eprintln!("covered RustRed peer input from {legacy_test}");
+    }
+}
+
+#[derive(Clone, Copy)]
 enum K6PeerSuite {
     AlphaLoopMatad,
     AnalyticMatad,
@@ -368,76 +745,88 @@ impl K6PeerSuite {
 
 #[derive(Clone, Copy)]
 struct PendingK6Acceptance {
-    legacy_test: &'static str,
-    tensor_prepass: bool,
+    oracle_test: &'static str,
+    rustred_fixture: &'static str,
+    tensor_prepass: TensorPrepass,
     parity: RustRedParityPolicy,
     peer_suite: K6PeerSuite,
 }
 
 const PENDING_K6_CORE_ACCEPTANCE: [PendingK6Acceptance; 11] = [
     PendingK6Acceptance {
-        legacy_test: "integral_alphaloop_vs_matad_tests::test_integrate_3l_basketball_a",
-        tensor_prepass: true,
+        oracle_test: "integral_alphaloop_vs_matad_tests::test_integrate_3l_basketball_a",
+        rustred_fixture: "integral_alphaloop_vs_matad_tests::rustred_numerical_parity_3l_basketball_a",
+        tensor_prepass: TensorPrepass::Form,
         parity: RustRedParityPolicy::NumericalOnly,
         peer_suite: K6PeerSuite::AlphaLoopMatad,
     },
     PendingK6Acceptance {
-        legacy_test: "integral_alphaloop_vs_matad_tests::test_integrate_3l_basketball_b",
-        tensor_prepass: true,
+        oracle_test: "integral_alphaloop_vs_matad_tests::test_integrate_3l_basketball_b",
+        rustred_fixture: "integral_alphaloop_vs_matad_tests::rustred_numerical_parity_3l_basketball_b",
+        tensor_prepass: TensorPrepass::Form,
         parity: RustRedParityPolicy::NumericalOnly,
         peer_suite: K6PeerSuite::AlphaLoopMatad,
     },
     PendingK6Acceptance {
-        legacy_test: "integral_alphaloop_vs_matad_tests::test_integrate_3l_no_numerator",
-        tensor_prepass: false,
+        oracle_test: "integral_alphaloop_vs_matad_tests::test_integrate_3l_no_numerator",
+        rustred_fixture: "integral_alphaloop_vs_matad_tests::rustred_numerical_parity_3l_no_numerator",
+        tensor_prepass: TensorPrepass::Skip,
         parity: RustRedParityPolicy::NumericalOnly,
         peer_suite: K6PeerSuite::AlphaLoopMatad,
     },
     PendingK6Acceptance {
-        legacy_test: "integral_alphaloop_vs_matad_tests::test_integrate_3l_rank_4",
-        tensor_prepass: true,
+        oracle_test: "integral_alphaloop_vs_matad_tests::test_integrate_3l_rank_4",
+        rustred_fixture: "integral_alphaloop_vs_matad_tests::rustred_numerical_parity_3l_rank_4",
+        tensor_prepass: TensorPrepass::Form,
         parity: RustRedParityPolicy::NumericalOnly,
         peer_suite: K6PeerSuite::AlphaLoopMatad,
     },
     PendingK6Acceptance {
-        legacy_test: "integral_alphaloop_vs_matad_tests::test_integrate_3l_rank_4_different_scales",
-        tensor_prepass: true,
+        oracle_test: "integral_alphaloop_vs_matad_tests::test_integrate_3l_rank_4_different_scales",
+        rustred_fixture: "integral_alphaloop_vs_matad_tests::rustred_numerical_parity_3l_rank_4_different_scales",
+        tensor_prepass: TensorPrepass::Form,
         parity: RustRedParityPolicy::NumericalOnly,
         peer_suite: K6PeerSuite::AlphaLoopMatad,
     },
     PendingK6Acceptance {
-        legacy_test: "integral_evaluation_analytic_tests::test_integrate_3l",
-        tensor_prepass: false,
+        oracle_test: "integral_evaluation_analytic_tests::test_integrate_3l",
+        rustred_fixture: "integral_evaluation_analytic_tests::rustred_numerical_parity_3l",
+        tensor_prepass: TensorPrepass::Skip,
         parity: RustRedParityPolicy::NumericalOnly,
         peer_suite: K6PeerSuite::AnalyticMatad,
     },
     PendingK6Acceptance {
-        legacy_test: "integral_evaluation_analytic_tests::test_integrate_3l_rank_4",
-        tensor_prepass: true,
+        oracle_test: "integral_evaluation_analytic_tests::test_integrate_3l_rank_4",
+        rustred_fixture: "integral_evaluation_analytic_tests::rustred_numerical_parity_3l_rank_4",
+        tensor_prepass: TensorPrepass::Form,
         parity: RustRedParityPolicy::NumericalOnly,
         peer_suite: K6PeerSuite::AnalyticMatad,
     },
     PendingK6Acceptance {
-        legacy_test: "integral_evaluation_analytic_tests::test_integrate_3l_rank_4_additional_symbols_numerator",
-        tensor_prepass: true,
+        oracle_test: "integral_evaluation_analytic_tests::test_integrate_3l_rank_4_additional_symbols_numerator",
+        rustred_fixture: "integral_evaluation_analytic_tests::rustred_numerical_parity_3l_rank_4_additional_symbols_numerator",
+        tensor_prepass: TensorPrepass::Form,
         parity: RustRedParityPolicy::NumericalOnly,
         peer_suite: K6PeerSuite::AnalyticMatad,
     },
     PendingK6Acceptance {
-        legacy_test: "integral_evaluation_analytic_tests::test_integrate_3l_rank_4_matad",
-        tensor_prepass: true,
+        oracle_test: "integral_evaluation_analytic_tests::test_integrate_3l_rank_4_matad",
+        rustred_fixture: "integral_evaluation_analytic_tests::rustred_numerical_parity_3l_rank_4_matad",
+        tensor_prepass: TensorPrepass::Form,
         parity: RustRedParityPolicy::NumericalOnly,
         peer_suite: K6PeerSuite::AnalyticMatad,
     },
     PendingK6Acceptance {
-        legacy_test: "integral_evaluation_analytic_tests::test_integrate_3l_rank_4_matad_additional_symbols_numerator",
-        tensor_prepass: true,
+        oracle_test: "integral_evaluation_analytic_tests::test_integrate_3l_rank_4_matad_additional_symbols_numerator",
+        rustred_fixture: "integral_evaluation_analytic_tests::rustred_numerical_parity_3l_rank_4_matad_additional_symbols_numerator",
+        tensor_prepass: TensorPrepass::Form,
         parity: RustRedParityPolicy::NumericalOnly,
         peer_suite: K6PeerSuite::AnalyticMatad,
     },
     PendingK6Acceptance {
-        legacy_test: "integral_evaluation_analytic_tests::test_integrate_3l_matad",
-        tensor_prepass: false,
+        oracle_test: "integral_evaluation_analytic_tests::test_integrate_3l_matad",
+        rustred_fixture: "integral_evaluation_analytic_tests::rustred_numerical_parity_3l_matad",
+        tensor_prepass: TensorPrepass::Skip,
         parity: RustRedParityPolicy::NumericalOnly,
         peer_suite: K6PeerSuite::AnalyticMatad,
     },
@@ -461,7 +850,7 @@ struct SupplementalThreeLoopTest {
 // AlphaLoop/MATAD numerical-parity matrix above. PySecDec remains non-gating;
 // matching and tensor-mode tests exercise different layers; the MATAD records
 // are offline closure diagnostics rather than RustRed acceptance.
-const SUPPLEMENTAL_THREE_LOOP_TESTS: [SupplementalThreeLoopTest; 8] = [
+const SUPPLEMENTAL_THREE_LOOP_TESTS: [SupplementalThreeLoopTest; 9] = [
     SupplementalThreeLoopTest {
         test: "integral_comparison_vs_pysecdec_tests::test_integrate_3l_pysecdec",
         role: SupplementalThreeLoopRole::OptionalPySecDec,
@@ -492,6 +881,10 @@ const SUPPLEMENTAL_THREE_LOOP_TESTS: [SupplementalThreeLoopTest; 8] = [
     },
     SupplementalThreeLoopTest {
         test: "k6_matad_oracle_tests::matad_k6_representative_laurent_records",
+        role: SupplementalThreeLoopRole::MatadK6Oracle,
+    },
+    SupplementalThreeLoopTest {
+        test: "k6_matad_oracle_tests::matad_k6_artifact_terminal_catalog_records",
         role: SupplementalThreeLoopRole::MatadK6Oracle,
     },
 ];
@@ -618,11 +1011,24 @@ pending_k6_numerical_parity_test!(
 
 #[test]
 fn k6_core_acceptance_inventory_is_explicitly_pending() {
-    let names = PENDING_K6_CORE_ACCEPTANCE
+    let oracle_names = PENDING_K6_CORE_ACCEPTANCE
         .iter()
-        .map(|case| case.legacy_test)
+        .map(|case| case.oracle_test)
         .collect::<BTreeSet<_>>();
-    assert_eq!(names.len(), 11, "pending K6 cases must remain unique");
+    let fixture_names = PENDING_K6_CORE_ACCEPTANCE
+        .iter()
+        .map(|case| case.rustred_fixture)
+        .collect::<BTreeSet<_>>();
+    assert_eq!(
+        oracle_names.len(),
+        11,
+        "pending K6 oracle cases must remain unique"
+    );
+    assert_eq!(
+        fixture_names.len(),
+        11,
+        "pending K6 RustRed fixtures must remain unique"
+    );
     assert!(
         PENDING_K6_CORE_ACCEPTANCE
             .iter()
@@ -634,26 +1040,29 @@ fn k6_core_acceptance_inventory_is_explicitly_pending() {
             lanes[2].rustred_parity(),
             Some(RustRedParityPolicy::NumericalOnly),
             "{} must be promoted as a numerical-only RustRed lane",
-            case.legacy_test
+            case.rustred_fixture
         );
         assert!(lanes[2].forbids_form_after_prepass());
+
+        assert_inventory_function_exists(case.oracle_test);
+        assert_inventory_function_exists(case.rustred_fixture);
     }
     assert_eq!(
         PENDING_K6_CORE_ACCEPTANCE
             .iter()
-            .filter(|case| case.tensor_prepass)
+            .filter(|case| case.tensor_prepass == TensorPrepass::Form)
             .count(),
         8
     );
     assert_eq!(
-        names
+        oracle_names
             .iter()
             .filter(|name| name.starts_with("integral_alphaloop_vs_matad_tests::"))
             .count(),
         5
     );
     assert_eq!(
-        names
+        oracle_names
             .iter()
             .filter(|name| name.starts_with("integral_evaluation_analytic_tests::"))
             .count(),
@@ -664,12 +1073,12 @@ fn k6_core_acceptance_inventory_is_explicitly_pending() {
         .iter()
         .map(|case| case.test)
         .collect::<BTreeSet<_>>();
-    assert_eq!(supplemental_names.len(), 8);
+    assert_eq!(supplemental_names.len(), 9);
     for (role, expected) in [
         (SupplementalThreeLoopRole::OptionalPySecDec, 4),
         (SupplementalThreeLoopRole::TopologyMatching, 1),
         (SupplementalThreeLoopRole::FrozenExperimentalTensorMode, 1),
-        (SupplementalThreeLoopRole::MatadK6Oracle, 2),
+        (SupplementalThreeLoopRole::MatadK6Oracle, 3),
     ] {
         assert_eq!(
             SUPPLEMENTAL_THREE_LOOP_TESTS
