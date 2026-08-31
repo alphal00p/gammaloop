@@ -5,8 +5,9 @@
 //! production RustRed scalar path. Run them serially with `--ignored --nocapture`
 //! to obtain the exact canonical records printed below.
 
-use std::{collections::HashMap, env};
+use std::{collections::HashMap, env, fs};
 
+use rustred::foundry::artifact::ClosedArtifact;
 use symbolica::{
     atom::{Atom, AtomCore},
     domains::float::SingleFloat,
@@ -143,6 +144,20 @@ fn oracle_form_path() -> String {
         .expect("offline K6 oracle requires VAKINT_K6_ORACLE_FORM_PATH or FORM_PATH")
 }
 
+fn bounded_oracle_setting(name: &str, default: u32, lower: u32, upper: u32) -> u32 {
+    let value = env::var(name)
+        .map(|raw| {
+            raw.parse::<u32>()
+                .unwrap_or_else(|error| panic!("{name} must be an integer: {error}"))
+        })
+        .unwrap_or(default);
+    assert!(
+        (lower..=upper).contains(&value),
+        "{name}={value} is outside the offline-oracle bound {lower}..={upper}"
+    );
+    value
+}
+
 fn matad_settings(expand_masters: bool, precision: u32) -> VakintSettings {
     VakintSettings {
         form_exe_path: oracle_form_path(),
@@ -157,6 +172,18 @@ fn matad_settings(expand_masters: bool, precision: u32) -> VakintSettings {
         allow_unknown_integrals: false,
         ..VakintSettings::default()
     }
+}
+
+fn k6_input(powers: &[i64]) -> Atom {
+    assert_eq!(powers.len(), 6, "a K=6 MATAD key must have six powers");
+    vakint_parse!(
+        format!(
+            "topo(I3L(muvsq,{},{},{},{},{},{}))",
+            powers[0], powers[1], powers[2], powers[3], powers[4], powers[5]
+        )
+        .as_str()
+    )
+    .unwrap()
 }
 
 fn fnv1a64(bytes: &[u8]) -> u64 {
@@ -388,4 +415,125 @@ fn matad_k6_representative_laurent_records() {
             case.name, case.powers, numerical, case.name
         );
     }
+}
+
+/// Offline bridge from a certified RustRed artifact's complete terminal-key
+/// set to Vakint-owned numerical Laurent catalog records.
+///
+/// This deliberately lives behind an ignored test and an explicit artifact
+/// path. FORM/MATAD is an offline oracle only; the generated records are
+/// reviewed and checked in beside the artifact, and ordinary RustRed
+/// evaluation never executes this path.
+#[test]
+#[ignore = "offline oracle: expands every terminal of VAKINT_K6_ORACLE_ARTIFACT_PATH with FORM/MATAD"]
+fn matad_k6_artifact_terminal_catalog_records() {
+    const MAX_TERMINALS: usize = 512;
+
+    let artifact_path = env::var("VAKINT_K6_ORACLE_ARTIFACT_PATH")
+        .expect("offline terminal oracle requires VAKINT_K6_ORACLE_ARTIFACT_PATH");
+    let artifact_bytes = fs::read(&artifact_path).unwrap_or_else(|error| {
+        panic!("could not read RustRed artifact {artifact_path:?}: {error}")
+    });
+    let artifact = ClosedArtifact::decode_durable(&artifact_bytes).unwrap_or_else(|error| {
+        panic!("could not decode current-schema RustRed artifact {artifact_path:?}: {error}")
+    });
+    assert_eq!(
+        artifact.arity(),
+        6,
+        "the three-loop terminal bridge only accepts a K=6 artifact"
+    );
+    assert!(
+        !artifact.masters().is_empty(),
+        "a closed artifact must expose at least one terminal"
+    );
+    assert!(
+        artifact.masters().len() <= MAX_TERMINALS,
+        "artifact exposes {} terminals, exceeding the explicit offline bound {MAX_TERMINALS}",
+        artifact.masters().len()
+    );
+
+    let precision = bounded_oracle_setting("VAKINT_K6_ORACLE_PRECISION", 80, 32, 20_000);
+    // Vakint's MATAD backend deliberately supports at most five requested
+    // epsilon terms. A deeper terminal oracle needs a different extraction
+    // path rather than an apparently accepted setting that dispatch rejects.
+    let epsilon_terms = bounded_oracle_setting("VAKINT_K6_ORACLE_EPSILON_TERMS", 5, 3, 5);
+    let mut settings = matad_settings(true, precision);
+    settings.number_of_terms_in_epsilon_expansion = i64::from(epsilon_terms);
+    let vakint = Vakint::new().unwrap();
+    let parameter_values = HashMap::from([("muvsq".to_owned(), 1.0), ("mursq".to_owned(), 1.0)]);
+    let parameters = vakint.params_from_f64(&settings, &parameter_values);
+
+    println!(
+        "K6_TERMINAL_MANIFEST_BEGIN schema={} algorithm={:?} family={:?} terminals={} precision={} epsilon_terms={}",
+        artifact.schema().stable_id(),
+        artifact.algorithm_id(),
+        artifact.family_fingerprint(),
+        artifact.masters().len(),
+        precision,
+        epsilon_terms,
+    );
+    for master in artifact.masters() {
+        let powers = master.powers();
+        let input = k6_input(powers);
+        let result = vakint
+            .evaluate_integral(&settings, input.as_view())
+            .unwrap_or_else(|error| {
+                panic!("MATAD failed for artifact terminal {powers:?}: {error}")
+            });
+        let (numerical, error) = Vakint::full_numerical_evaluation(
+            &settings,
+            result.as_view(),
+            &parameters,
+            &HashMap::default(),
+            None,
+        )
+        .unwrap_or_else(|error| {
+            panic!("numerical evaluation failed for artifact terminal {powers:?}: {error}")
+        });
+        assert!(
+            error.is_none(),
+            "artifact terminal {powers:?} unexpectedly carried an error series"
+        );
+        let coefficients = numerical.get_epsilon_coefficients();
+        assert!(
+            !coefficients.is_empty(),
+            "artifact terminal {powers:?} returned no Laurent coefficients"
+        );
+        assert!(
+            coefficients
+                .windows(2)
+                .all(|pair| pair[1].0 == pair[0].0 + 1),
+            "artifact terminal {powers:?} returned a non-contiguous Laurent series: {numerical}"
+        );
+        assert!(
+            coefficients
+                .iter()
+                .all(|(_, coefficient)| coefficient.im.is_zero()),
+            "artifact terminal {powers:?} returned a complex vacuum value: {numerical}"
+        );
+
+        let leading_power = coefficients[0].0;
+        let rendered = coefficients
+            .iter()
+            .map(|(_, coefficient)| coefficient.re.to_string())
+            .collect::<Vec<_>>();
+        for coefficient in &rendered {
+            let _ = vakint_parse!(coefficient.as_str()).unwrap_or_else(|error| {
+                panic!(
+                    "MATAD rendered an unparsable coefficient for artifact terminal {powers:?}: {coefficient}: {error}"
+                )
+            });
+        }
+        let canonical_record = format!("{:?};{};{}", powers, leading_power, rendered.join(";"));
+
+        println!("    TerminalSource::numerical_laurent(&{powers:?}, {leading_power}, &[");
+        for coefficient in &rendered {
+            println!("        {coefficient:?},");
+        }
+        println!(
+            "    ]), // fnv1a64={:#018x}",
+            fnv1a64(canonical_record.as_bytes())
+        );
+    }
+    println!("K6_TERMINAL_MANIFEST_END");
 }
