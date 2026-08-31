@@ -8,6 +8,12 @@
 #let graph-bytes(graph) = _impl.graph-bytes(graph)
 #let with-bytes(graph, graph-bytes) = _impl.with-bytes(graph, graph-bytes)
 
+/// Construct a graph from a versioned Linnest graph-spec CBOR document.
+///
+/// This is the native renderer boundary. Unlike @parse, it does not parse DOT.
+/// -> dictionary
+#let from-spec(input) = _impl.from-spec(input)
+
 /// Build one graph object from a stream of node and edge items.
 ///
 /// Use @node, @source, @sink, and @edge to create graph items. Positional items

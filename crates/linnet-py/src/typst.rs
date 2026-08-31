@@ -5,6 +5,7 @@
 //! values can only enter through an explicit module export reference.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt::Write;
 use std::path::{Path, PathBuf};
 
 use pyo3::class::gc::{PyTraverseError, PyVisit};
@@ -59,6 +60,63 @@ fn identifier(value: &str, what: &str) -> PyResult<String> {
 
 fn option_name(value: &str) -> PyResult<String> {
     identifier(value, "named argument")
+}
+
+fn package_specification(value: &str) -> PyResult<String> {
+    let Some((namespace, name_version)) = value
+        .strip_prefix('@')
+        .and_then(|value| value.split_once('/'))
+    else {
+        return Err(PyValueError::new_err(
+            "Typst package must look like '@namespace/name:version'",
+        ));
+    };
+    let Some((name, version)) = name_version.split_once(':') else {
+        return Err(PyValueError::new_err(
+            "Typst package must look like '@namespace/name:version'",
+        ));
+    };
+    let valid_component = |component: &str| {
+        !component.is_empty()
+            && component.chars().all(|character| {
+                character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.' | '+')
+            })
+    };
+    if !valid_component(namespace) || !valid_component(name) || !valid_component(version) {
+        return Err(PyValueError::new_err(
+            "Typst package must look like '@namespace/name:version'",
+        ));
+    }
+    Ok(value.to_owned())
+}
+
+pub(crate) fn typst_string(value: &str) -> String {
+    let mut output = String::with_capacity(value.len() + 2);
+    output.push('"');
+    for character in value.chars() {
+        match character {
+            '\\' => output.push_str("\\\\"),
+            '"' => output.push_str("\\\""),
+            '\n' => output.push_str("\\n"),
+            '\r' => output.push_str("\\r"),
+            '\t' => output.push_str("\\t"),
+            character if character.is_control() => {
+                let _ = write!(output, "\\u{{{:x}}}", character as u32);
+            }
+            character => output.push(character),
+        }
+    }
+    output.push('"');
+    output
+}
+
+fn typst_float(value: f64) -> String {
+    let value = value.to_string();
+    if value.contains(['.', 'e', 'E']) {
+        value
+    } else {
+        format!("{value}.0")
+    }
 }
 
 /// Renderer-owned module dependency collected from typed native values.
@@ -447,99 +505,96 @@ impl NativeValue {
         }
     }
 
-    fn to_clinnet(
-        &self,
-        aliases: &BTreeMap<TypstModuleSource, String>,
-    ) -> PyResult<clinnet::TypstValue> {
-        use clinnet::TypstValue as Value;
-
+    fn source(&self, aliases: &BTreeMap<TypstModuleSource, String>) -> PyResult<String> {
         Ok(match self {
             Self::Inherit => {
                 return Err(PyValueError::new_err(
                     "INHERIT cannot be serialized outside an option dictionary",
                 ));
             }
-            Self::None => Value::None,
-            Self::Auto => Value::Auto,
-            Self::Bool(value) => Value::Bool(*value),
-            Self::Int(value) => Value::Integer(*value),
-            Self::Float(value) => Value::Float(*value),
-            Self::String(value) => Value::String(value.clone()),
-            Self::Enum(value) => value.to_clinnet(),
-            Self::Array(values) => Value::Array(
-                values
-                    .iter()
-                    .map(|value| value.to_clinnet(aliases))
-                    .collect::<PyResult<_>>()?,
-            ),
+            Self::None => "none".to_owned(),
+            Self::Auto => "auto".to_owned(),
+            Self::Bool(value) => value.to_string(),
+            Self::Int(value) => value.to_string(),
+            Self::Float(value) => typst_float(*value),
+            Self::String(value) => typst_string(value),
+            Self::Enum(value) => value.source(),
+            Self::Array(values) => tuple_source(values, aliases)?,
             Self::Dict(values) | Self::Stroke(values) | Self::Mark(values) => {
-                Value::Dictionary(clinnet_dict(values, aliases)?)
+                dictionary_source(values, aliases)?
             }
             Self::Insets(values) => {
                 if let Some(value) = values.get("all") {
                     if !matches!(value, Self::Inherit) {
-                        return value.to_clinnet(aliases);
+                        return value.source(aliases);
                     }
                 }
-                Value::Dictionary(clinnet_dict(values, aliases)?)
+                dictionary_source(values, aliases)?
             }
-            Self::Length(value, unit) => Value::Length(*value, unit.to_clinnet()),
-            Self::Ratio(value) => Value::Ratio(*value),
-            Self::RelativeLength { ratio, length } => Value::RelativeLength {
-                ratio: *ratio,
-                length: length
-                    .as_ref()
-                    .map(|(value, unit)| (*value, unit.to_clinnet())),
-            },
-            Self::Angle(value, unit) => Value::Angle(
-                *value,
-                match unit.as_str() {
-                    "deg" => clinnet::TypstAngleUnit::Deg,
-                    "rad" => clinnet::TypstAngleUnit::Rad,
-                    _ => {
-                        return Err(PyValueError::new_err(format!(
-                            "unsupported Typst angle unit {unit:?}"
-                        )));
-                    }
-                },
-            ),
-            Self::Fraction(value) => Value::Fraction(*value),
-            Self::Color(ColorValue::Named(value)) => Value::NamedColor(value.clone()),
-            Self::Color(ColorValue::Hex(value)) => Value::HexColor(value.clone()),
+            Self::Length(value, unit) => {
+                format!("{}{unit}", typst_float(*value), unit = unit.name())
+            }
+            Self::Ratio(value) => format!("{}%", typst_float(*value)),
+            Self::RelativeLength { ratio, length } => {
+                let mut terms = Vec::with_capacity(2);
+                if let Some(value) = ratio {
+                    terms.push(format!("{}%", typst_float(*value)));
+                }
+                if let Some((value, unit)) = length {
+                    terms.push(format!("{}{unit}", typst_float(*value), unit = unit.name()));
+                }
+                format!("({})", terms.join(" + "))
+            }
+            Self::Angle(value, unit) => format!("{}{unit}", typst_float(*value)),
+            Self::Fraction(value) => format!("{}fr", typst_float(*value)),
+            Self::Color(ColorValue::Named(value)) => value.clone(),
+            Self::Color(ColorValue::Hex(value)) => format!("rgb({})", typst_string(value)),
             Self::Color(ColorValue::Rgba(red, green, blue, alpha)) => {
-                Value::Rgba(*red, *green, *blue, *alpha)
+                let mut components = vec![red.to_string(), green.to_string(), blue.to_string()];
+                if let Some(alpha) = alpha {
+                    components.push(alpha.to_string());
+                }
+                format!("rgb({})", components.join(", "))
             }
-            Self::Dash(DashValue::Named(value)) => Value::String(value.clone()),
+            Self::Dash(DashValue::Named(value)) => typst_string(value),
             Self::Dash(DashValue::Pattern { array, phase }) => {
-                let array = Value::Array(
-                    array
-                        .iter()
-                        .map(|value| value.to_clinnet(aliases))
-                        .collect::<PyResult<_>>()?,
-                );
+                let array = tuple_source(array, aliases)?;
                 if let Some(phase) = phase {
-                    Value::Dictionary(BTreeMap::from([
-                        ("array".to_owned(), array),
-                        ("phase".to_owned(), phase.to_clinnet(aliases)?),
-                    ]))
+                    let fields = [
+                        format!("({}): {array}", typst_string("array")),
+                        format!("({}): {}", typst_string("phase"), phase.source(aliases)?),
+                    ];
+                    format!("({})", fields.join(", "))
                 } else {
                     array
                 }
             }
-            Self::Text(value) => Value::Text {
-                text: value.text.clone(),
-                options: clinnet_dict(&value.options, aliases)?,
-            },
-            Self::Math(value) => Value::Math {
-                symbol: value.symbol.clone(),
-                subscript: value.subscript.as_ref().map(MathScript::to_clinnet),
-                superscript: value.superscript.as_ref().map(MathScript::to_clinnet),
-            },
-            Self::Expression(expression) => expression.to_clinnet(aliases)?,
+            Self::Text(value) => {
+                let mut arguments = vec![typst_string(&value.text)];
+                for (name, value) in value
+                    .options
+                    .iter()
+                    .filter(|(_, value)| !matches!(value, Self::Inherit))
+                {
+                    arguments.push(format!("{name}: {}", value.source(aliases)?));
+                }
+                format!("text({})", arguments.join(", "))
+            }
+            Self::Math(value) => {
+                let mut math = value.symbol.clone();
+                if let Some(script) = &value.subscript {
+                    let _ = write!(math, "_({})", script.source());
+                }
+                if let Some(script) = &value.superscript {
+                    let _ = write!(math, "^({})", script.source());
+                }
+                format!("${math}$")
+            }
+            Self::Expression(expression) => expression.source(aliases)?,
         })
     }
 
-    fn clinnet_config(&self) -> PyResult<(clinnet::TypstConfig, Vec<TypstImport>)> {
+    fn render_source(&self) -> PyResult<(String, Vec<TypstImport>)> {
         let mut modules = BTreeSet::new();
         self.collect_modules(&mut modules);
         let imports = modules
@@ -554,14 +609,12 @@ impl NativeValue {
             .iter()
             .map(|import| (import.source.clone(), import.alias.clone()))
             .collect();
-        let clinnet::TypstValue::Dictionary(fields) = self.to_clinnet(&aliases)? else {
+        if !matches!(self, Self::Dict(_)) {
             return Err(PyTypeError::new_err(
                 "render configuration must be a dictionary",
             ));
-        };
-        let config = clinnet::TypstConfig::new(fields)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
-        Ok((config, imports))
+        }
+        Ok((self.source(&aliases)?, imports))
     }
 
     fn kind(&self) -> &'static str {
@@ -594,11 +647,9 @@ impl NativeValue {
 }
 
 impl NativeEnum {
-    fn to_clinnet(self) -> clinnet::TypstValue {
+    fn source(self) -> String {
         let value = match self {
-            Self::DebugLevel(value) => {
-                return clinnet::TypstValue::Integer(i64::from(value.level()));
-            }
+            Self::DebugLevel(value) => return value.level().to_string(),
             Self::LayoutAlgorithm(value) => value.typst_name(),
             Self::LayoutDirection(value) => value.typst_name(),
             Self::LabelLayout(value) => value.typst_name(),
@@ -620,79 +671,99 @@ impl NativeEnum {
             Self::MarkOrientation(value) => value.typst_name(),
             Self::MarkDirection(value) => value.typst_name(),
         };
-        clinnet::TypstValue::String(value.to_owned())
-    }
-}
-
-impl LengthUnit {
-    fn to_clinnet(&self) -> clinnet::TypstLengthUnit {
-        match self {
-            Self::Pt => clinnet::TypstLengthUnit::Pt,
-            Self::Mm => clinnet::TypstLengthUnit::Mm,
-            Self::Cm => clinnet::TypstLengthUnit::Cm,
-            Self::In => clinnet::TypstLengthUnit::In,
-            Self::Em => clinnet::TypstLengthUnit::Em,
-        }
+        typst_string(value)
     }
 }
 
 impl MathScript {
-    fn to_clinnet(&self) -> clinnet::TypstMathScript {
+    fn source(&self) -> String {
         match self {
-            Self::Symbol(value) => clinnet::TypstMathScript::Symbol(value.clone()),
-            Self::Integer(value) => clinnet::TypstMathScript::Integer(*value),
+            Self::Symbol(value) => value.clone(),
+            Self::Integer(value) => value.to_string(),
         }
     }
 }
 
 impl TypstExpression {
-    fn to_clinnet(
-        &self,
-        aliases: &BTreeMap<TypstModuleSource, String>,
-    ) -> PyResult<clinnet::TypstValue> {
+    fn source(&self, aliases: &BTreeMap<TypstModuleSource, String>) -> PyResult<String> {
         Ok(match self {
-            Self::Symbol(symbol) => clinnet::TypstValue::ModuleSymbol {
-                alias: aliases.get(&symbol.module).cloned().ok_or_else(|| {
+            Self::Symbol(symbol) => format!(
+                "{}.{}",
+                aliases.get(&symbol.module).ok_or_else(|| {
                     PyValueError::new_err("internal error: missing Typst module alias")
                 })?,
-                path: symbol.path.clone(),
-            },
-            Self::Call { callee, arguments } => clinnet::TypstValue::Call {
-                callee: Box::new(callee.to_clinnet(aliases)?),
-                positional: clinnet_values(&arguments.positional, aliases)?,
-                named: clinnet_dict(&arguments.named, aliases)?,
-            },
+                symbol.path.join(".")
+            ),
+            Self::Call { callee, arguments } => format!(
+                "{}({})",
+                callee.source(aliases)?,
+                arguments.source(aliases)?
+            ),
             Self::Bind {
                 function,
                 arguments,
-            } => clinnet::TypstValue::Bind {
-                function: Box::new(function.to_clinnet(aliases)?),
-                positional: clinnet_values(&arguments.positional, aliases)?,
-                named: clinnet_dict(&arguments.named, aliases)?,
-            },
+            } => format!(
+                "{}.with({})",
+                function.source(aliases)?,
+                arguments.source(aliases)?
+            ),
         })
     }
 }
 
-fn clinnet_values(
-    values: &[NativeValue],
-    aliases: &BTreeMap<TypstModuleSource, String>,
-) -> PyResult<Vec<clinnet::TypstValue>> {
-    values
-        .iter()
-        .map(|value| value.to_clinnet(aliases))
-        .collect()
+impl CallArguments {
+    fn source(&self, aliases: &BTreeMap<TypstModuleSource, String>) -> PyResult<String> {
+        let mut arguments = self
+            .positional
+            .iter()
+            .map(|value| value.source(aliases))
+            .collect::<PyResult<Vec<_>>>()?;
+        for (name, value) in self
+            .named
+            .iter()
+            .filter(|(_, value)| !matches!(value, NativeValue::Inherit))
+        {
+            arguments.push(format!("{name}: {}", value.source(aliases)?));
+        }
+        Ok(arguments.join(", "))
+    }
 }
 
-fn clinnet_dict(
+fn tuple_source(
+    values: &[NativeValue],
+    aliases: &BTreeMap<TypstModuleSource, String>,
+) -> PyResult<String> {
+    let values = values
+        .iter()
+        .map(|value| value.source(aliases))
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(if values.len() == 1 {
+        format!("({},)", values[0])
+    } else {
+        format!("({})", values.join(", "))
+    })
+}
+
+fn dictionary_source(
     values: &BTreeMap<String, NativeValue>,
     aliases: &BTreeMap<TypstModuleSource, String>,
-) -> PyResult<BTreeMap<String, clinnet::TypstValue>> {
-    values
+) -> PyResult<String> {
+    let entries = values
         .iter()
         .filter(|(_, value)| !matches!(value, NativeValue::Inherit))
-        .map(|(name, value)| Ok((name.clone(), value.to_clinnet(aliases)?)))
-        .collect()
+        .map(|(name, value)| {
+            Ok(format!(
+                "({}): {}",
+                typst_string(name),
+                value.source(aliases)?
+            ))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    Ok(if entries.is_empty() {
+        "(:)".to_owned()
+    } else {
+        format!("({})", entries.join(", "))
+    })
 }
 
 /// Type of the `AUTO` sentinel, which requests automatic selection.
@@ -1632,7 +1703,10 @@ struct PyStroke {
 #[pymethods]
 impl PyStroke {
     #[new]
-    #[pyo3(signature = (**kwargs))]
+    #[pyo3(
+        signature = (**kwargs),
+        text_signature = "(*, paint=..., thickness=..., cap=..., join=..., dash=..., miter_limit=...)"
+    )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         Ok(Self {
@@ -1733,7 +1807,10 @@ struct PyInsets {
 #[pymethods]
 impl PyInsets {
     #[new]
-    #[pyo3(signature = (**kwargs))]
+    #[pyo3(
+        signature = (**kwargs),
+        text_signature = "(*, all=..., x=..., y=..., left=..., right=..., top=..., bottom=...)"
+    )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         let values = parse_options(kwargs, INSET_FIELDS)?;
@@ -1783,7 +1860,10 @@ struct PyMark {
 #[pymethods]
 impl PyMark {
     #[new]
-    #[pyo3(signature = (**kwargs))]
+    #[pyo3(
+        signature = (**kwargs),
+        text_signature = "(*, start=..., end=..., fill=..., stroke=..., scale=..., anchor=..., shorten_to=...)"
+    )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         let values = parse_options(kwargs, MARK_FIELDS)?;
@@ -1939,8 +2019,8 @@ struct PyTypstModule {
 #[gen_stub_pymethods]
 #[pymethods]
 impl PyTypstModule {
-    #[new]
-    fn new(
+    #[staticmethod]
+    fn file(
         #[gen_stub(override_type(type_repr="builtins.str | os.PathLike[builtins.str]", imports=("builtins", "os")))]
         path: PathBuf,
     ) -> Self {
@@ -1950,18 +2030,8 @@ impl PyTypstModule {
     }
 
     #[staticmethod]
-    fn file(
-        #[gen_stub(override_type(type_repr="builtins.str | os.PathLike[builtins.str]", imports=("builtins", "os")))]
-        path: PathBuf,
-    ) -> Self {
-        Self::new(path)
-    }
-
-    #[staticmethod]
     fn package(specification: String) -> PyResult<Self> {
-        clinnet::TypstModule::package("_linnet_validate", specification.clone()).map_err(|_| {
-            PyValueError::new_err("Typst package must look like '@namespace/name:version'")
-        })?;
+        package_specification(&specification)?;
         Ok(Self {
             source: TypstModuleSource::Package(specification),
         })
@@ -2431,7 +2501,10 @@ struct PyDrawingSelectors {
 #[pymethods]
 impl PyDrawingSelectors {
     #[new]
-    #[pyo3(signature = (**kwargs))]
+    #[pyo3(
+        signature = (**kwargs),
+        text_signature = "(*, node=..., edge=..., source=..., sink=...)"
+    )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         let mut settings = SelectorSettings::default();
@@ -2447,7 +2520,7 @@ impl PyDrawingSelectors {
                     _ => {
                         return Err(PyTypeError::new_err(format!(
                             "unknown DrawingSelectors option {key:?}"
-                        )))
+                        )));
                     }
                 }
             }
@@ -2482,7 +2555,10 @@ struct PyGraphStyleOptions {
 #[pymethods]
 impl PyGraphStyleOptions {
     #[new]
-    #[pyo3(signature = (**kwargs))]
+    #[pyo3(
+        signature = (**kwargs),
+        text_signature = "(*, scope=..., unit=..., node_label=..., node_label_style=..., node_style=..., edge_label=..., edge_label_style=...)"
+    )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         Ok(Self {
@@ -2600,7 +2676,10 @@ struct PyLayoutOptions {
 #[pymethods]
 impl PyLayoutOptions {
     #[new]
-    #[pyo3(signature = (**kwargs))]
+    #[pyo3(
+        signature = (**kwargs),
+        text_signature = "(*, subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., edge_edge_repulsion=..., directional_force=..., label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
+    )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         Ok(Self {
@@ -2623,7 +2702,10 @@ impl PyLayoutOptions {
         })
     }
 
-    #[pyo3(signature = (**kwargs))]
+    #[pyo3(
+        signature = (**kwargs),
+        text_signature = "($self, *, subgraph=..., viewport_width=..., viewport_height=..., tree_dx=..., tree_dy=..., steps=..., seed=..., step=..., step_shrink=..., cool=..., accept_floor=..., early_tolerance=..., temperature=..., delta=..., beta=..., spring_strength=..., centering_strength=..., epochs=..., crossing_penalty=..., dangling_repulsion=..., edge_edge_repulsion=..., directional_force=..., label_length_scale=..., label_spring=..., label_charge=..., label_steps=..., label_layout=..., label_step=..., label_early_tolerance=..., label_max_delta_scale=..., edge_vertex_repulsion=..., epsilon=..., incremental_energy=..., algorithm=..., nodes=..., direction=..., rank_align=..., roots=..., rank_same=..., route_edge_weight=..., route_exit_weight=..., route_label_width_scale=..., route_label_width_cap=..., z_spring=..., z_spring_growth=..., length_scale=...)"
+    )]
     #[gen_stub(skip)]
     fn then(&self, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         let mut passes = self.passes.clone();
@@ -2737,7 +2819,10 @@ struct PyDrawOptions {
 #[pymethods]
 impl PyDrawOptions {
     #[new]
-    #[pyo3(signature = (**kwargs))]
+    #[pyo3(
+        signature = (**kwargs),
+        text_signature = "(*, scope=..., unit=..., title=..., subgraph=..., debug=..., node_radius=..., node_min_radius=..., node_label_padding=..., node_fill=..., node_stroke=..., node_outset=..., node_label_style=..., node_style=..., node_label=..., draw_node=..., edge_stroke=..., edge_offset=..., edge_length=..., edge_ratio=..., edge_resolve_length=..., edge_accuracy=..., edge_optimize=..., source_style=..., sink_style=..., edge_label=..., edge_label_style=..., edge_omega=..., edge_trim_accuracy=..., padding=..., debug_edge_radius=..., debug_edge_fill=..., debug_edge_stroke=..., debug_edge_label_fill=..., subgraph_edge_style=..., subgraph_edge_underlay=...)"
+    )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         Ok(Self {
@@ -2801,6 +2886,7 @@ fn deep_overlay(
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PyRenderConfig {
     template: PathSetting,
+    source_root: PathSetting,
     values: BTreeMap<String, NativeValue>,
     selectors: SelectorSettings,
 }
@@ -2809,7 +2895,10 @@ pub(crate) struct PyRenderConfig {
 #[pymethods]
 impl PyRenderConfig {
     #[new]
-    #[pyo3(signature = (**kwargs))]
+    #[pyo3(
+        signature = (**kwargs),
+        text_signature = "(*, template=..., source_root=..., title=..., style=..., layouts=..., drawing=..., selectors=..., template_options=...)"
+    )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
         let mut config = Self::default();
@@ -2839,6 +2928,20 @@ impl PyRenderConfig {
         #[gen_stub(override_type(type_repr = "_TemplatePath"))] value: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
         self.assign("template", value)
+    }
+
+    #[getter]
+    #[gen_stub(override_return_type(type_repr = "_SourceRootPath"))]
+    fn source_root(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.path_setting(py, &self.source_root)
+    }
+
+    #[setter]
+    fn set_source_root(
+        &mut self,
+        #[gen_stub(override_type(type_repr = "_SourceRootPath"))] value: &Bound<'_, PyAny>,
+    ) -> PyResult<()> {
+        self.assign("source_root", value)
     }
 
     #[getter]
@@ -2986,8 +3089,9 @@ impl PyRenderConfig {
 
     fn __repr__(&self) -> String {
         format!(
-            "RenderConfig(template={:?}, fields={})",
+            "RenderConfig(template={:?}, source_root={:?}, fields={})",
             self.template.resolved(),
+            self.source_root.resolved(),
             self.values.len()
         )
     }
@@ -3069,7 +3173,7 @@ pyo3_stub_gen::inventory::submit! {
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         class PyRenderConfig:
-            def __new__(cls, *, template: _TemplatePath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderConfig: ...
+            def __new__(cls, *, template: _TemplatePath = ..., source_root: _SourceRootPath = ..., title: _AutoOptionalStaticContent = ..., style: _RenderStyle = ..., layouts: _RenderLayouts = ..., drawing: _RenderDrawing = ..., selectors: _RenderSelectors = ..., template_options: _TemplateOptions = ...) -> RenderConfig: ...
     "# }
 }
 
@@ -3084,6 +3188,17 @@ impl PyRenderConfig {
                 } else {
                     PathSetting::Value(value.extract::<PathBuf>().map_err(|_| {
                         PyTypeError::new_err("template must be a path, None, or INHERIT")
+                    })?)
+                };
+            }
+            "source_root" => {
+                self.source_root = if value.extract::<PyRef<'_, PyInherit>>().is_ok() {
+                    PathSetting::Inherit
+                } else if value.is_none() {
+                    PathSetting::None
+                } else {
+                    PathSetting::Value(value.extract::<PathBuf>().map_err(|_| {
+                        PyTypeError::new_err("source_root must be a path, None, or INHERIT")
                     })?)
                 };
             }
@@ -3215,6 +3330,7 @@ impl PyRenderConfig {
     fn merged(&self, overlay: &Self) -> Self {
         Self {
             template: self.template.overlay(&overlay.template),
+            source_root: self.source_root.overlay(&overlay.source_root),
             values: deep_overlay(&self.values, &overlay.values),
             selectors: self.selectors.overlay(&overlay.selectors),
         }
@@ -3235,9 +3351,10 @@ impl PyRenderConfig {
 /// Resolved renderer transport plus its closed native Typst configuration.
 #[derive(Debug)]
 pub(crate) struct RenderConfigTransport {
-    pub(crate) config: clinnet::TypstConfig,
+    pub(crate) config_source: String,
     pub(crate) imports: Vec<TypstImport>,
     pub(crate) template: Option<PathBuf>,
+    pub(crate) source_root: Option<PathBuf>,
     pub(crate) selectors: SelectorCallbacks,
 }
 
@@ -3433,9 +3550,9 @@ impl TypstExpression {
                     identifier(part, "module export")?;
                 }
                 if let TypstModuleSource::Package(package) = &symbol.module {
-                    clinnet::TypstModule::package("_linnet_validate", package.clone()).map_err(
-                        |_| PyValueError::new_err("decoded Typst package reference is invalid"),
-                    )?;
+                    package_specification(package).map_err(|_| {
+                        PyValueError::new_err("decoded Typst package reference is invalid")
+                    })?;
                 }
             }
             Self::Call { callee, arguments } => {
@@ -3632,6 +3749,10 @@ pub(crate) fn inherit(py: Python<'_>) -> Py<PyAny> {
     inherit_singleton(py).into_any()
 }
 
+pub(crate) fn is_inherit(value: &Bound<'_, PyAny>) -> bool {
+    value.extract::<PyRef<'_, PyInherit>>().is_ok()
+}
+
 const NODE_DRAWING_FIELDS: &[FieldSpec] = &[
     FieldSpec::new("label", "label", ValueRule::Content).none(),
     FieldSpec::new("shift", "shift", ValueRule::Point).none(),
@@ -3721,7 +3842,10 @@ fn validate_placement(value: &NativeValue) -> PyResult<()> {
         )),
         NativeValue::Dict(values) => {
             const FIELDS: &[&str] = &["x", "y", "ref", "dx", "dy", "mode", "x-mode", "y-mode"];
-            if let Some(field) = values.keys().find(|field| !FIELDS.contains(&field.as_str())) {
+            if let Some(field) = values
+                .keys()
+                .find(|field| !FIELDS.contains(&field.as_str()))
+            {
                 return Err(PyTypeError::new_err(format!(
                     "unknown placement field {field:?}"
                 )));
@@ -3748,8 +3872,13 @@ fn validate_placement(value: &NativeValue) -> PyResult<()> {
                         }
                         _ => false,
                     };
-                    if !matches!(coordinate, NativeValue::None | NativeValue::Int(_) | NativeValue::Float(_) | NativeValue::Expression(_))
-                        && !valid_group
+                    if !matches!(
+                        coordinate,
+                        NativeValue::None
+                            | NativeValue::Int(_)
+                            | NativeValue::Float(_)
+                            | NativeValue::Expression(_)
+                    ) && !valid_group
                     {
                         return Err(PyTypeError::new_err(format!(
                             "placement {field} must be a number, group dictionary, module value, or None"
@@ -3771,7 +3900,13 @@ fn validate_placement(value: &NativeValue) -> PyResult<()> {
             }
             for field in ["dx", "dy"] {
                 if let Some(offset) = values.get(field) {
-                    if !matches!(offset, NativeValue::None | NativeValue::Int(_) | NativeValue::Float(_) | NativeValue::Expression(_)) {
+                    if !matches!(
+                        offset,
+                        NativeValue::None
+                            | NativeValue::Int(_)
+                            | NativeValue::Float(_)
+                            | NativeValue::Expression(_)
+                    ) {
                         return Err(PyTypeError::new_err(format!(
                             "placement {field} must be a number, module value, or None"
                         )));
@@ -3783,9 +3918,11 @@ fn validate_placement(value: &NativeValue) -> PyResult<()> {
                 None | Some(NativeValue::Enum(NativeEnum::Placement(PyPlacement::Pin)))
             );
             if pin
-                && !["x", "y", "ref", "dx", "dy"]
-                    .iter()
-                    .any(|field| values.get(*field).is_some_and(|value| !matches!(value, NativeValue::None)))
+                && !["x", "y", "ref", "dx", "dy"].iter().any(|field| {
+                    values
+                        .get(*field)
+                        .is_some_and(|value| !matches!(value, NativeValue::None))
+                })
             {
                 return Err(PyValueError::new_err(
                     "pin placement must constrain x, y, ref, dx, or dy",
@@ -3918,7 +4055,7 @@ pub(crate) fn compass_value(py: Python<'_>, value: &str) -> PyResult<Py<PyAny>> 
         _ => {
             return Err(PyValueError::new_err(format!(
                 "unknown DOT compass keyword {value:?}"
-            )))
+            )));
         }
     };
     Ok(Py::new(py, value)?.into_any())
@@ -4005,11 +4142,12 @@ pub(crate) fn render_config_transport(
     let config = effective_render_config(py, base, overlay)?;
     let elements = native_from_py(elements.as_any(), 0)?;
     elements.validate(0)?;
-    let (native_config, imports) = config.native(elements).clinnet_config()?;
+    let (config_source, imports) = config.native(elements).render_source()?;
     Ok(RenderConfigTransport {
-        config: native_config,
+        config_source,
         imports,
         template: config.template.resolved(),
+        source_root: config.source_root.resolved(),
         selectors: config.selectors.resolved(py),
     })
 }

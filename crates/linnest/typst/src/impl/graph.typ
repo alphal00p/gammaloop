@@ -1228,19 +1228,23 @@
   let node-keys = _node-name-map(keyed-nodes)
   _check-edge-names(keyed-edges)
   let graph-bytes_ = _plugin.graph_from_spec(cbor.encode((
-    name: name,
-    data: none,
-    statements: _flat-statements(statements, "graph.build statements"),
-    default-edge-statements: _flat-statements(default-edge-statements, "graph.build default-edge-statements"),
-    default-node-statements: _flat-statements(default-node-statements, "graph.build default-node-statements"),
-    nodes: keyed-nodes.map(node => _resolved-node-spec(
-      node,
-      node-keys,
-    )),
-    edges: keyed-edges.map(edge => _resolved-edge-spec(
-      edge,
-      node-keys,
-    )),
+    schema: "linnest-graph-spec",
+    version: 1,
+    graph: (
+      name: name,
+      data: none,
+      statements: _flat-statements(statements, "graph.build statements"),
+      default-edge-statements: _flat-statements(default-edge-statements, "graph.build default-edge-statements"),
+      default-node-statements: _flat-statements(default-node-statements, "graph.build default-node-statements"),
+      nodes: keyed-nodes.map(node => _resolved-node-spec(
+        node,
+        node-keys,
+      )),
+      edges: keyed-edges.map(edge => _resolved-edge-spec(
+        edge,
+        node-keys,
+      )),
+    ),
   )))
   let native-data = _native-data-from-build(
     graph-bytes_,
@@ -1253,6 +1257,12 @@
     default-sink-data,
   )
   _graph-object(graph-bytes_, native-data)
+}
+#let from-spec(input) = {
+  if type(input) != bytes {
+    panic("graph.from-spec: input must be bytes")
+  }
+  _graph-object(_plugin.graph_from_spec(input), _empty-native-data())
 }
 #let node(options, ..args) = {
   let name = options.name

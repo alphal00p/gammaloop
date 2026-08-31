@@ -43,6 +43,35 @@ def _():
         port_label: str | None
         compass: str | None
 
+    def grouped_placement(attributes: dict[str, str]) -> dict[str, object] | None:
+        """Translate GammaLoop's grouped DOT coordinates to typed drawing data."""
+
+        raw = attributes.get("pos") or attributes.get("pin")
+        if raw is None:
+            return None
+
+        placement: dict[str, object] = {"mode": lp.Placement.Pin}
+        for component in raw.strip().strip('"()').split(","):
+            axis, separator, coordinate = component.strip().partition(":")
+            if separator == "" or axis not in {"x", "y"}:
+                continue
+            coordinate = coordinate.strip().removesuffix("!")
+            if coordinate.startswith("@"):
+                group = coordinate[1:]
+            elif coordinate.startswith(("+@", "-@")):
+                group = coordinate[0] + coordinate[2:]
+            else:
+                continue
+            side = group[0] if group.startswith(("+", "-")) else None
+            name = group[1:] if side is not None else group
+            placement[axis] = {
+                "kind": "group",
+                "name": name,
+                "side": side,
+            }
+
+        return placement if len(placement) > 1 else None
+
     def physics_dot_codec() -> lp.DotCodec:
         """Map ordinary physics DOT attributes to arbitrary Python payloads."""
 
@@ -82,6 +111,7 @@ def _():
 
         def decode_edge(value: lp.DotEdgeData) -> lp.EdgeValue:
             attributes = dict(value.statements)
+            placement = grouped_placement(attributes)
             return lp.EdgeValue(
                 data=Propagator(
                     value.edge_id,
@@ -90,7 +120,12 @@ def _():
                     value.payload,
                     attributes,
                     dict(value.local_statements),
-                )
+                ),
+                drawing=(
+                    lp.EdgeDrawing(placement=placement)
+                    if placement is not None
+                    else None
+                ),
             )
 
         def encode_half_edge(value: lp.HalfEdgeValue) -> lp.DotHalfEdgeData:
@@ -403,7 +438,7 @@ def _(graph):
             render_error = f"{type(error).__name__}: {error}"
             rendered_svg = None
             typst_source = None
-    return prepared_render, render_error, rendered_svg, typst_source
+    return render_error, rendered_svg, typst_source
 
 
 @app.cell
@@ -427,21 +462,12 @@ def _(mo, parse_error, render_error, rendered_svg):
 
 
 @app.cell
-def _(mo, parse_error, render_error, typst_source):
+def _(mo, typst_source):
     if typst_source is None:
         _source_panel = mo.md(
             "Fix the DOT or rendering error to inspect the generated Typst."
         )
     else:
-        _source_viewer = mo.ui.code_editor(
-            value=typst_source,
-            language="text",
-            disabled=True,
-            min_height=260,
-            max_height=560,
-            show_copy_button=True,
-            label="Generated Typst entrypoint",
-        )
         _source_panel = mo.vstack(
             [
                 mo.md(r"""
@@ -450,7 +476,7 @@ def _(mo, parse_error, render_error, typst_source):
                 This is the exact staged entrypoint used for the SVG above.
                 It updates with the DOT and rendering controls.
                 """),
-                _source_viewer,
+                mo.md(f"```typst\n{typst_source}\n```"),
             ]
         )
     _source_panel
@@ -507,6 +533,21 @@ def _(graph, mo):
             ]
         )
     _details
+    return
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell
+def _():
+    return
+
+
+@app.cell
+def _():
     return
 
 

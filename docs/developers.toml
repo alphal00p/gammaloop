@@ -739,7 +739,15 @@ anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
 # Reviewed 2026-08-28: typst-py 0.15 and its preview-package cache extend
 # only the terminal Linnet Python/docs runtime closure, as documented; the
 # reusable Cargo producer boundary is unchanged.
-digest = "f068ae2540cb182d7700b84abf345e11354cde29"
+# Reviewed 2026-08-31: linnet-py's production source closure now includes its
+# embedded Linnest/Kurvst and pinned CeTZ/oxifmt renderer assets. This makes the
+# standalone wheel independent of Clinnet and the external documentation
+# package cache; the assets intentionally key producers that compile linnet-py
+# and remain excluded from unrelated per-crate producer source sets.
+# Reviewed 2026-08-31: the same terminal source closure now carries the MIT
+# notices embedded with linnet-py, Linnest, and Kurvst. This changes packaging
+# inputs but not the producer partition or cache-reuse architecture.
+digest = "188504937418859942a6770ca21a4f4e0a7ff125"
 
 [[section]]
 id = "documentation"

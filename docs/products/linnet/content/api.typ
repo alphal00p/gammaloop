@@ -43,7 +43,8 @@ its required feature and your `Cargo.toml` before using it.
 #boundary("Rendering runs through Typst", [
   Linnet can compute layout coordinates, but the supported renderer is not a native Rust drawing
   backend. Clinnet invokes an external Typst 0.15 executable for command-line figure batches;
-  `linnet-py` uses the `typst` Python package to compile the same prepared project in-process.
+  `linnet-py` uses the `typst` Python package to compile the same Linnest render contract
+  in-process from its own native graph-spec preparation.
   Use #link("guides/clinnet/")[Clinnet] for batch rendering, or use
   #link("guides/linnest/")[Linnest] when a Typst document owns the final drawing.
 ])
@@ -321,13 +322,18 @@ suffix. `to_svg(config=None)` returns SVG text, and `_repr_svg_()` supports note
 the only high-level rendering methods; there are no raw command-line inputs or string-expression
 escape hatches. The Python distribution depends on `typst` 0.15.0 and compiles in-process without
 looking up or launching a Typst executable. Generated inputs and imported modules remain alive
-until compilation completes.
+until compilation completes. The wheel has no Clinnet dependency and embeds the Linnest, Kurvst,
+CeTZ 0.5.1, and oxifmt 1.0.0 assets required by its default renderer, so that path does not depend
+on an installed Typst package cache or a network fetch.
 
 For inspection tools, `prepare_render(config=None)` evaluates selectors once and returns a
 `PreparedRender`. Its `typst_source` property is the exact generated entrypoint subsequently used
-by `to_svg()` or `render(path)` on that preparation. It keeps the ephemeral entrypoint, topology
-DOT, and bundled assets alive; referenced user templates and modules retain their ordinary
-file-backed semantics.
+by `to_svg()` or `render(path)` on that preparation. It keeps the ephemeral entrypoint, versioned
+topology-only CBOR graph spec, bundled assets, and snapshots of referenced user template/module
+source trees alive. Editing or deleting the original files after preparation therefore cannot
+change that preparation. The graph spec contains structural names, indices, incidence, flow, and
+orientation, while typed drawing values travel in `config.elements`; it is not a hidden DOT
+serialization and never inspects arbitrary Python `.data`.
 
 The shipped notebook display is generic and model-neutral, including for graphs with dangling
 edges. It never infers amplitude, cross-section, particle, or momentum semantics from topology.
@@ -338,6 +344,7 @@ configuration layer unchanged, while `None` becomes Typst `none`.
 ```python
 domain_template = RenderConfig(
     template="templates/domain-figure.typ",
+    source_root=".",
     template_options={
         "theme": "review",
         "accent": Color("teal"),
@@ -349,6 +356,12 @@ domain_template = RenderConfig(
 not Linnet, defines that open schema. Its values still use the closed native-value model; it is
 not a dictionary of Typst source strings.
 
+`source_root` identifies the project tree staged for file-based templates and modules. Set it when
+a source imports files outside its own directory, such as `../shared.typ`. Without an explicit
+root, Linnet uses the nearest ancestor containing `typst.toml`, or otherwise the source file's
+parent directory; it does not infer project boundaries from generic directory names such as
+`src`.
+
 `graph.render_config` is a live mutable object: assign its fields directly, or replace the whole
 configuration. The nested style, layout, drawing, and selector option objects are immutable
 values, and their getters return copies, so replace those fields rather than trying to mutate a
@@ -359,7 +372,7 @@ Python drawing selectors belong on `RenderConfig.selectors`. They may inspect ar
 but must return the corresponding detached `NodeDrawing`, `EdgeDrawing`, or `HalfEdgeDrawing`, or
 `None` when no defaults apply. Selector fields fill only drawing fields that are absent on the
 element, so explicit element drawing remains authoritative. Only the validated drawing snapshot
-crosses the process boundary. The example above happens to color an application-defined edge
+crosses the Python-to-Typst boundary. The example above happens to color an application-defined edge
 payload; custom particle styling works the same way and is not a special Linnet mode:
 
 ```python
@@ -437,8 +450,10 @@ A custom rendering template is a Typst module with one mandatory V1 export:
 }
 ```
 
-The bundled generic and GammaLoop templates use this same contract. The generic template ignores
-unknown domain concepts. GammaLoop's template owns its mode presets, particle decoration,
+The bundled generic template uses this contract and ignores unknown domain concepts. A custom
+template that needs the native topology can import Linnest's `graph.typ` and call
+`graph.from-spec(read(config.at("graph-spec-path"), encoding: none))`. GammaLoop's separately
+selected template uses the same contract and owns its mode presets, particle decoration,
 momentum arrowheads and index labels, amplitude edge ordering and side labels, cut-ID-matched
 cross-section side labels, directional placement, and label-aware sizing. Python selects that
 template explicitly and passes its template-specific settings through `template_options`.
