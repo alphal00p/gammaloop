@@ -327,9 +327,9 @@ impl Default for PySecDecSettings {
 #[serde(rename_all = "lowercase")]
 pub enum VakintTensorReductionMethod {
     /// Historical FORM implementation shipped with AlphaLoop.
-    #[default]
     AlphaLoop,
     /// Native, FORM-less FeynKit tensor projector.
+    #[default]
     FeynKit,
 }
 
@@ -452,7 +452,7 @@ impl Default for VakintSettings {
                 "matad".to_string(),
                 "fmft".to_string(),
             ],
-            tensor_reduction_method: VakintTensorReductionMethod::AlphaLoop,
+            tensor_reduction_method: VakintTensorReductionMethod::FeynKit,
             matad: MATADSettings::default(),
             alphaloop: AlphaLoopSettings::default(),
             fmft: FMFTSettings::default(),
@@ -598,23 +598,9 @@ mod tests {
     }
 
     #[test]
-    fn vakint_tensor_reduction_defaults_to_alphaloop() {
+    fn vakint_tensor_reduction_defaults_to_feynkit() {
         let settings = VakintSettings::default();
-
-        assert_eq!(
-            settings.tensor_reduction_method,
-            VakintTensorReductionMethod::AlphaLoop
-        );
-        assert_eq!(
-            TensorReductionMethod::from(settings.tensor_reduction_method),
-            TensorReductionMethod::AlphaLoop
-        );
-    }
-
-    #[test]
-    fn vakint_tensor_reduction_deserializes_feynkit_and_maps_to_core() {
-        let settings: VakintSettings =
-            toml::from_str(r#"tensor_reduction_method = "feynkit""#).unwrap();
+        let deserialized: VakintSettings = toml::from_str("").unwrap();
 
         assert_eq!(
             settings.tensor_reduction_method,
@@ -624,9 +610,28 @@ mod tests {
             TensorReductionMethod::from(settings.tensor_reduction_method),
             TensorReductionMethod::FeynKit
         );
+        assert_eq!(
+            deserialized.tensor_reduction_method,
+            settings.tensor_reduction_method
+        );
+    }
+
+    #[test]
+    fn vakint_tensor_reduction_deserializes_alphaloop_and_maps_to_core() {
+        let settings: VakintSettings =
+            toml::from_str(r#"tensor_reduction_method = "alphaloop""#).unwrap();
+
+        assert_eq!(
+            settings.tensor_reduction_method,
+            VakintTensorReductionMethod::AlphaLoop
+        );
+        assert_eq!(
+            TensorReductionMethod::from(settings.tensor_reduction_method),
+            TensorReductionMethod::AlphaLoop
+        );
 
         let serialized = toml::to_string(&settings).unwrap();
-        assert!(serialized.contains(r#"tensor_reduction_method = "feynkit""#));
+        assert!(serialized.contains(r#"tensor_reduction_method = "alphaloop""#));
         assert_eq!(
             toml::from_str::<VakintSettings>(&serialized).unwrap(),
             settings

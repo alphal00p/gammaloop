@@ -1940,8 +1940,8 @@ pub enum InputFloatRationalizationPrecision {
 /// not require FORM for numerator reduction.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum TensorReductionMethod {
-    #[default]
     AlphaLoop,
+    #[default]
     FeynKit,
 }
 
@@ -2195,7 +2195,7 @@ impl Default for VakintSettings {
             allow_unknown_integrals: true,
             clean_tmp_dir: env::var("VAKINT_NO_CLEAN_TMP_DIR").is_err(),
             evaluation_order: EvaluationOrder::default(),
-            tensor_reduction_method: TensorReductionMethod::AlphaLoop,
+            tensor_reduction_method: TensorReductionMethod::FeynKit,
             // Default to a three-loop UV subtraction problem, for which alphaLoop implementation can be used.
             number_of_terms_in_epsilon_expansion: 4,
             precision_for_input_float_rationalization:

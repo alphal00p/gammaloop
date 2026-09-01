@@ -527,7 +527,7 @@ impl VakintWrapper {
     /// evaluation_order : Optional[Sequence[VakintEvaluationMethod]]
     ///     A list of `VakintEvaluationMethod` instances specifying the order in which evaluation methods are to be applied. Default is all available methods in a sensible order.
     /// tensor_reduction_method : Optional[str]
-    ///     Numerator tensor-reduction backend: "alphaloop" uses the historical FORM projector, while "feynkit" is native and does not require FORM. Default is "alphaloop".
+    ///     Numerator tensor-reduction backend: "feynkit" is the default, native backend and does not require FORM; "alphaloop" explicitly selects the historical FORM projector.
     /// epsilon_symbol : Optional[Expression]
     ///     The symbol to be used for the dimensional regularisation parameter epsilon. Default is "ε".
     /// mu_r_sq_symbol : Optional[Expression]
@@ -620,9 +620,10 @@ impl VakintWrapper {
             evaluation_order: eval_order,
             tensor_reduction_method: tensor_reduction_method
                 .as_deref()
-                .unwrap_or("alphaloop")
-                .parse::<TensorReductionMethod>()
-                .map_err(vakint_to_python_error)?,
+                .map(str::parse::<TensorReductionMethod>)
+                .transpose()
+                .map_err(vakint_to_python_error)?
+                .unwrap_or_default(),
             // This quantity is typically set equal to *one plus the maximum loop count* of the UV regularisation problem considered.
             // For example when considering a 2-loop problem, then:
             //   a) for the nested one-loop integrals appearing, the single pole, finite term *and* order-epsilon term will need to be considered.

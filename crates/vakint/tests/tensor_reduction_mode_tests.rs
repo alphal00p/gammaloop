@@ -104,6 +104,40 @@ fn feynkit_expanded_without_form() -> TestVakint {
     })
 }
 
+#[test]
+fn tensor_reduction_defaults_to_formless_feynkit() {
+    assert_eq!(
+        TensorReductionMethod::default(),
+        TensorReductionMethod::FeynKit
+    );
+
+    let settings = VakintSettings {
+        allow_unknown_integrals: true,
+        clean_tmp_dir: true,
+        form_exe_path: "/definitely/not/a/form/executable".into(),
+        use_dot_product_notation: true,
+        ..VakintSettings::default()
+    };
+    assert_eq!(
+        settings.tensor_reduction_method,
+        TensorReductionMethod::FeynKit
+    );
+
+    let vakint = get_vakint(settings);
+    let input =
+        vakint_parse!("k(1,1)*k(1,2)*p(1,1)*p(1,2)*topo(default_feynkit_reduction)").unwrap();
+    let expected =
+        vakint_parse!("dot(k(1),k(1))*dot(p(1),p(1))/(4-2*ε)*topo(default_feynkit_reduction)")
+            .unwrap();
+
+    let output = vakint.tensor_reduce(input.as_view()).unwrap();
+    let difference = (output - &expected).expand().together();
+    assert!(
+        difference.is_zero(),
+        "default FeynKit reduction differs from its expected value: {difference}"
+    );
+}
+
 fn projected_input(fixture: ProjectedFixture) -> Atom {
     assert_eq!(fixture.loop_ids.len(), fixture.projector_ids.len());
     let numerator = fixture
