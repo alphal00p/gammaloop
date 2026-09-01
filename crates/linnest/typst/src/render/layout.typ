@@ -520,10 +520,10 @@
   let defaults = (
     scope: (:),
     unit: 1.5,
-    node-label: auto,
+    node-label: node => [$n_(#node.vid)$],
     node-label-style: (padding: 0.08),
     node-style: (:),
-    edge-label: none,
+    edge-label: edge => [$e_(#edge.eid)$],
     edge-label-style: (:),
   )
   let effective = _effective-options(defaults, style-options, draw-options)

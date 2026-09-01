@@ -15,7 +15,6 @@ use linnet::half_edge::{EdgeAccessors, HedgeGraph, HedgeGraphError, NodeIndex};
 use linnet::permutation::Permutation;
 use linnet::tree::{child_vec::ChildVecStore, Forest};
 use pyo3::prelude::*;
-use pyo3_stub_gen::derive::gen_stub_pyclass_enum;
 
 use crate::graph::{EdgeRecord, HalfEdgeRecord, NodeRecord};
 
@@ -25,7 +24,10 @@ type VecGraph = HedgeGraph<EdgeRecord, NodeRecord, HalfEdgeRecord, VecNodeStore<
 type ForestGraph = HedgeGraph<EdgeRecord, NodeRecord, HalfEdgeRecord, ForestNodeStore<NodeRecord>>;
 
 /// Storage strategy used for graph nodes.
-#[gen_stub_pyclass_enum]
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum
+)]
 #[pyclass(from_py_object, eq, eq_int, name = "NodeStore")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PyNodeStore {

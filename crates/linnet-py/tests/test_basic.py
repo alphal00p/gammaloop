@@ -2555,7 +2555,7 @@ class TestTypedTypstSurface(unittest.TestCase):
 
             def compile_typst(input, **kwargs):
                 self.assertEqual(kwargs["format"], "svg")
-                entrypoint.write_text(Path(input).read_text(encoding="utf-8"))
+                entrypoint.write_bytes(input["main.typ"])
                 return b"<svg>fake</svg>"
 
             invalid_selectors = (
@@ -2772,6 +2772,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             title=lp.TextLabel("all drawing fields"),
             subgraph=[[True, False], [False, True]],
             debug=lp.DebugLevel.EdgePositions,
+            show_half_edge_ids=True,
             node_radius=[0.2, 0.3],
             node_min_radius=0.1,
             node_label_padding=0.08,
@@ -2898,6 +2899,8 @@ class TestTypedTypstSurface(unittest.TestCase):
             lp.GraphStyleOptions(unit=lp.AUTO)
         with self.assertRaises(TypeError):
             lp.DrawOptions(node_outset=lp.Length.pt(1))
+        with self.assertRaises(TypeError):
+            lp.DrawOptions(show_half_edge_ids=1)
         lp.DrawOptions(subgraph=[[True, False], [False, True]])
         lp.DrawOptions(
             subgraph=[
@@ -2984,7 +2987,9 @@ class TestTypedTypstSurface(unittest.TestCase):
             inspect.Parameter.VAR_KEYWORD,
             (
                 parameter.kind
-                for parameter in inspect.signature(lp.LayoutOptions.then).parameters.values()
+                for parameter in inspect.signature(
+                    lp.LayoutOptions.then
+                ).parameters.values()
             ),
         )
 
@@ -3039,14 +3044,20 @@ class TestRendering(unittest.TestCase):
     def test_typst_py_version_matches_the_supported_typst_runtime(self):
         self.assertEqual(typst.__version__, "0.15.0")
 
-    def test_render_calls_typst_py_with_bundled_packages_and_environment(self):
+    def test_render_calls_typst_py_with_virtual_project_and_package_environment(self):
         with TemporaryDirectory(prefix="linnet typst py ") as directory:
             root = Path(directory)
             template = root / "template.typ"
             template.write_text("#let render(config) = [ok]\n", encoding="utf-8")
+            module_path = root / "drawing module.typ"
+            module_path.write_text("#let title = [virtual project]\n", encoding="utf-8")
+            module = lp.TypstModule.file(module_path)
             graph = lp.build(
                 lp.node("only"),
-                render_config=lp.RenderConfig(template=template),
+                render_config=lp.RenderConfig(
+                    template=template,
+                    title=module.content("title"),
+                ),
             )
             calls = []
             local_packages = root / "local packages"
@@ -3060,33 +3071,62 @@ class TestRendering(unittest.TestCase):
                 manifest.write_text("[package]\n", encoding="utf-8")
 
             def compile_typst(input, **kwargs):
-                self.assertTrue(Path(input).is_file())
-                self.assertTrue(Path(kwargs["root"]).is_dir())
+                render_root = Path(kwargs["root"])
+                self.assertIn(b"_linnet_template.render", input["main.typ"])
+                self.assertNotIn("diagram.cbor", input)
+                self.assertIn(
+                    b"linnest-graph-spec",
+                    (render_root / "diagram.cbor").read_bytes(),
+                )
+                self.assertNotIn("crates/linnest/typst/linnest.wasm", input)
+                self.assertTrue(
+                    (render_root / "crates/linnest/typst/linnest.wasm")
+                    .read_bytes()
+                    .startswith(b"\0asm")
+                )
+                self.assertNotIn("crates/kurvst/typst/kurvst.wasm", input)
+                self.assertTrue(
+                    (render_root / "crates/kurvst/typst/kurvst.wasm")
+                    .read_bytes()
+                    .startswith(b"\0asm")
+                )
+                self.assertEqual(
+                    input["user-sources/0/template.typ"],
+                    b"#let render(config) = [ok]\n",
+                )
+                self.assertEqual(
+                    input["user-sources/0/drawing module.typ"],
+                    b"#let title = [virtual project]\n",
+                )
                 package_store = Path(kwargs["package_cache_path"])
                 self.assertEqual(Path(kwargs["package_path"]), package_store)
                 self.assertTrue(
                     (
-                        package_store
-                        / "preview"
-                        / "cetz"
-                        / "0.5.1"
-                        / "typst.toml"
+                        package_store / "preview" / "cetz" / "0.5.1" / "typst.toml"
+                    ).is_file()
+                )
+                self.assertTrue(
+                    (
+                        package_store / "preview" / "oxifmt" / "1.0.0" / "typst.toml"
                     ).is_file()
                 )
                 self.assertTrue(
                     (
                         package_store
                         / "preview"
-                        / "oxifmt"
+                        / "local-only"
                         / "1.0.0"
                         / "typst.toml"
                     ).is_file()
                 )
                 self.assertTrue(
-                    (package_store / "preview" / "local-only" / "1.0.0" / "typst.toml").is_file()
-                )
-                self.assertTrue(
-                    (package_store / "preview" / "cache-only" / "1.0.0" / "typst.toml").is_file()
+                    (
+                        package_store
+                        / "preview"
+                        / "cache-only"
+                        / "1.0.0"
+                        / "typst.toml"
+                    ).is_file()
                 )
                 Path(kwargs["output"]).write_bytes(b"rendered")
                 calls.append(kwargs)
@@ -3167,7 +3207,7 @@ class TestRendering(unittest.TestCase):
 
             self.assertIn("<svg", graph.to_svg())
 
-    def test_source_staging_does_not_infer_a_generic_src_ancestor(self):
+    def test_source_collection_does_not_infer_a_generic_src_ancestor(self):
         with TemporaryDirectory(prefix="linnet narrow source root ") as directory:
             root = Path(directory)
             (root / "outside.txt").write_text("do not stage", encoding="utf-8")
@@ -3181,11 +3221,15 @@ class TestRendering(unittest.TestCase):
             )
 
             def compile_typst(input, **kwargs):
-                self.assertTrue(Path(input).is_file())
-                staged_sources = Path(kwargs["root"]) / "user-sources"
-                self.assertEqual(list(staged_sources.rglob("outside.txt")), [])
+                render_root = Path(kwargs["root"])
+                self.assertFalse(any(path.endswith("outside.txt") for path in input))
+                self.assertEqual(list(render_root.rglob("outside.txt")), [])
                 self.assertEqual(
-                    [path.name for path in staged_sources.rglob("template.typ")],
+                    [
+                        Path(path).name
+                        for path in input
+                        if path.endswith("template.typ")
+                    ],
                     ["template.typ"],
                 )
                 return b"<svg>narrow</svg>"
@@ -3225,21 +3269,17 @@ class TestRendering(unittest.TestCase):
             self.assertIn("_linnet_template.render(_linnet_config)", source)
             template.unlink()
             module_path.unlink()
-            entrypoints = []
+            projects = []
 
             def compile_typst(input, **kwargs):
-                entrypoint = Path(input)
-                entrypoints.append(entrypoint)
-                self.assertEqual(entrypoint.read_text(encoding="utf-8"), source)
-                render_root = Path(kwargs["root"])
+                projects.append(dict(input))
+                self.assertEqual(input["main.typ"].decode(), source)
                 imported = [
-                    render_root / match.lstrip("/")
+                    match.lstrip("/")
                     for match in re.findall(r'^#import "([^"]+)"', source, re.MULTILINE)
                 ]
-                self.assertTrue(all(path.is_file() for path in imported))
-                imported_sources = {
-                    path.read_text(encoding="utf-8") for path in imported
-                }
+                self.assertTrue(all(path in input for path in imported))
+                imported_sources = {input[path].decode() for path in imported}
                 self.assertIn(template_source, imported_sources)
                 self.assertIn(module_source, imported_sources)
                 if output := kwargs.get("output"):
@@ -3252,12 +3292,11 @@ class TestRendering(unittest.TestCase):
                 output = root / "nested" / "prepared.svg"
                 self.assertEqual(prepared.render(output), output)
             self.assertEqual(selector_calls, [0])
-            self.assertEqual(len(entrypoints), 2)
-            self.assertEqual(entrypoints[0], entrypoints[1])
-            self.assertTrue(entrypoints[0].is_file())
+            self.assertEqual(len(projects), 2)
+            self.assertEqual(projects[0], projects[1])
             self.assertEqual(output.read_bytes(), b"rendered")
 
-    def test_render_stages_structural_names_without_python_data(self):
+    def test_render_transports_structural_names_without_python_data(self):
         class Opaque:
             def __str__(self):
                 raise AssertionError("renderer must not stringify Python data")
@@ -3274,7 +3313,7 @@ class TestRendering(unittest.TestCase):
             def compile_typst(input, **kwargs):
                 self.assertEqual(kwargs["format"], "svg")
                 staged_spec.write_bytes(
-                    Path(input).with_name("diagram.cbor").read_bytes()
+                    (Path(kwargs["root"]) / "diagram.cbor").read_bytes()
                 )
                 return b"<svg>fake</svg>"
 
@@ -3349,6 +3388,85 @@ class TestRendering(unittest.TestCase):
         )
         with patch.dict(os.environ, {"PATH": ""}):
             self.assertIn("<svg", graph.to_svg())
+
+    def test_default_renderer_labels_indices_and_optional_half_edge_indices(self):
+        left = lp.node("descriptive left name")
+        right = lp.node("descriptive right name")
+        graph = lp.build(
+            left,
+            right,
+            lp.edge(lp.source(left), "descriptive edge name", lp.sink(right)),
+            render_config=lp.RenderConfig(
+                layouts=lp.LayoutOptions(
+                    algorithm=lp.LayoutAlgorithm.Force,
+                    seed=7,
+                    steps=40,
+                    label_steps=10,
+                ),
+            ),
+        )
+
+        automatic_ids = graph.to_svg()
+        without_indices = graph.to_svg(
+            config=lp.RenderConfig(
+                style=lp.GraphStyleOptions(node_label=None, edge_label=None),
+            )
+        )
+        automatic_ids_with_half_edges = graph.to_svg(
+            config=lp.RenderConfig(
+                drawing=lp.DrawOptions(show_half_edge_ids=True),
+            )
+        )
+        explicit_math_ids = graph.to_svg(
+            config=lp.RenderConfig(
+                drawing=lp.DrawOptions(show_half_edge_ids=True),
+                selectors=lp.DrawingSelectors(
+                    node=lambda node: lp.NodeDrawing(
+                        label=lp.MathSymbol("n", subscript=node.index)
+                    ),
+                    edge=lambda edge: lp.EdgeDrawing(
+                        label=lp.MathSymbol("e", subscript=edge.index)
+                    ),
+                    source=lambda half_edge: lp.HalfEdgeDrawing(
+                        label=lp.MathSymbol("h", subscript=half_edge.index)
+                    ),
+                    sink=lambda half_edge: lp.HalfEdgeDrawing(
+                        label=lp.MathSymbol("h", subscript=half_edge.index)
+                    ),
+                ),
+            )
+        )
+        self.assertIn("<svg", automatic_ids)
+        self.assertNotEqual(automatic_ids, without_indices)
+        self.assertNotEqual(automatic_ids, automatic_ids_with_half_edges)
+        self.assertEqual(automatic_ids_with_half_edges, explicit_math_ids)
+
+        labelled = lp.build(
+            left,
+            right,
+            lp.edge(
+                lp.source(left, label=lp.TextLabel("source endpoint")),
+                "descriptive edge name",
+                lp.sink(right),
+            ),
+            render_config=graph.render_config,
+        )
+        self.assertNotEqual(automatic_ids, labelled.to_svg())
+
+        loop = lp.node("loop")
+        self_loop = lp.build(
+            loop,
+            lp.edge(lp.source(loop), "loop", lp.sink(loop)),
+            render_config=graph.render_config,
+        )
+        self.assertIn(
+            "<svg",
+            self_loop.to_svg(
+                config=lp.RenderConfig(
+                    drawing=lp.DrawOptions(show_half_edge_ids=True),
+                )
+            ),
+        )
 
     def test_notebook_display_is_generic_and_specialized_options_are_custom(self):
         node_data = {
@@ -3609,7 +3727,7 @@ class TestRendering(unittest.TestCase):
 
             def compile_typst(input, **kwargs):
                 self.assertEqual(kwargs["format"], "svg")
-                entrypoint.write_text(Path(input).read_text(encoding="utf-8"))
+                entrypoint.write_bytes(input["main.typ"])
                 return b"<svg>fake</svg>"
 
             with patch.object(

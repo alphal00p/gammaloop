@@ -13,13 +13,15 @@ use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyIndexError, PyReferenceError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyAny;
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
 
 use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyNode, PyOrientation};
 use crate::native_graph::PyHedgeGraph;
 
 /// Selects which notion of edge direction a directed algorithm follows.
-#[gen_stub_pyclass_enum]
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum
+)]
 #[pyclass(from_py_object, eq, eq_int, name = "DirectionBasis")]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PyDirectionBasis {
@@ -40,7 +42,7 @@ impl From<PyDirectionBasis> for DirectionBasis {
 }
 
 /// A graph-bound structural selection.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "Subgraph")]
 pub struct PySubgraph {
     graph: Option<Py<PyGraph>>,
@@ -132,7 +134,8 @@ fn isolated_node_indices(graph: &PyHedgeGraph) -> BTreeSet<usize> {
         .collect()
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PySubgraph {
     #[getter]
@@ -379,7 +382,7 @@ impl PySubgraph {
 }
 
 /// A cycle in a particular graph revision.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "Cycle")]
 pub struct PyCycle {
     graph: Option<Py<PyGraph>>,
@@ -408,7 +411,8 @@ impl PyCycle {
     }
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyCycle {
     #[getter]
@@ -448,7 +452,7 @@ impl PyCycle {
 }
 
 /// An oriented cut in a particular graph revision.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "OrientedCut")]
 pub struct PyOrientedCut {
     graph: Option<Py<PyGraph>>,
@@ -482,7 +486,7 @@ impl PyOrientedCut {
 }
 
 /// One source-side, oriented-boundary, target-side cut partition.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "CutPartition")]
 pub struct PyCutPartition {
     graph: Option<Py<PyGraph>>,
@@ -503,7 +507,8 @@ impl PyCutPartition {
     }
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyCutPartition {
     #[getter]
@@ -585,7 +590,8 @@ impl PyCutPartition {
     }
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyOrientedCut {
     fn side(&self, py: Python<'_>, left: bool) -> PyResult<PySubgraph> {
@@ -680,7 +686,7 @@ impl PyOrientedCut {
 }
 
 /// A graph-bound DFS or BFS traversal tree.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "TraversalTree")]
 pub struct PyTraversalTree {
     graph: Option<Py<PyGraph>>,
@@ -729,7 +735,8 @@ impl PyTraversalTree {
     }
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyTraversalTree {
     #[getter]
@@ -983,11 +990,8 @@ fn check_hedge(index: Hedge, n_hedges: usize) -> PyResult<Hedge> {
         .ok_or_else(|| PyIndexError::new_err("half-edge index out of range"))
 }
 
-#[gen_stub_pymethods]
-#[pymethods]
 impl PyGraph {
-    #[pyo3(signature = ())]
-    fn full_subgraph(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<PySubgraph> {
+    pub(crate) fn full_subgraph(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<PySubgraph> {
         let revision = slf.borrow(py).revision()?;
         let (filter, isolated_nodes) = selected_filter(&slf, py, revision, None)?;
         Ok(PySubgraph::with_isolated_nodes(
@@ -998,8 +1002,7 @@ impl PyGraph {
         ))
     }
 
-    #[pyo3(signature = ())]
-    fn empty_subgraph(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<PySubgraph> {
+    pub(crate) fn empty_subgraph(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<PySubgraph> {
         let revision = slf.borrow(py).revision()?;
         let size = slf
             .borrow(py)
@@ -1016,15 +1019,11 @@ impl PyGraph {
         ))
     }
 
-    #[pyo3(signature = (*, nodes=Vec::new(), edges=Vec::new(), half_edges=Vec::new()))]
-    fn subgraph(
+    pub(crate) fn subgraph(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="typing.Sequence[builtins.int | builtins.str]", imports=("builtins", "typing")))]
         nodes: Vec<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr="typing.Sequence[builtins.int | builtins.str]", imports=("builtins", "typing")))]
         edges: Vec<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr="typing.Sequence[builtins.int]", imports=("builtins", "typing")))]
         half_edges: Vec<usize>,
     ) -> PyResult<PySubgraph> {
         let revision = slf.borrow(py).revision()?;
@@ -1072,15 +1071,11 @@ impl PyGraph {
         ))
     }
 
-    #[pyo3(signature = (*, node=None, edge=None, half_edge=None))]
-    fn filter(
+    pub(crate) fn filter(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[Node], builtins.bool] | None", imports=("builtins", "typing")))]
         node: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[Edge], builtins.bool] | None", imports=("builtins", "typing")))]
         edge: Option<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge], builtins.bool] | None", imports=("builtins", "typing")))]
         half_edge: Option<Py<PyAny>>,
     ) -> PyResult<PySubgraph> {
         let revision = slf.borrow(py).revision()?;
@@ -1146,8 +1141,7 @@ impl PyGraph {
         ))
     }
 
-    #[pyo3(signature = (subgraph))]
-    fn nodes_of(
+    pub(crate) fn nodes_of(
         slf: Py<PyGraph>,
         py: Python<'_>,
         subgraph: &PySubgraph,
@@ -1171,8 +1165,7 @@ impl PyGraph {
             .collect()
     }
 
-    #[pyo3(signature = (subgraph))]
-    fn edges_of(
+    pub(crate) fn edges_of(
         slf: Py<PyGraph>,
         py: Python<'_>,
         subgraph: &PySubgraph,
@@ -1195,8 +1188,7 @@ impl PyGraph {
             .collect()
     }
 
-    #[pyo3(signature = (subgraph))]
-    fn half_edges_of(
+    pub(crate) fn half_edges_of(
         slf: Py<PyGraph>,
         py: Python<'_>,
         subgraph: &PySubgraph,
@@ -1207,8 +1199,7 @@ impl PyGraph {
     }
 
     /// Return selected half-edges that lie on the selection's internal boundary.
-    #[pyo3(signature = (subgraph))]
-    fn internal_boundary(
+    pub(crate) fn internal_boundary(
         slf: Py<PyGraph>,
         py: Python<'_>,
         subgraph: &PySubgraph,
@@ -1228,8 +1219,11 @@ impl PyGraph {
     }
 
     /// Return all boundary half-edges incident to nodes touched by the selection.
-    #[pyo3(signature = (subgraph))]
-    fn boundary(slf: Py<PyGraph>, py: Python<'_>, subgraph: &PySubgraph) -> PyResult<PySubgraph> {
+    pub(crate) fn boundary(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: &PySubgraph,
+    ) -> PyResult<PySubgraph> {
         let revision = slf.borrow(py).revision()?;
         subgraph.ensure_owner(py, &slf, revision)?;
         let boundary = {
@@ -1245,8 +1239,7 @@ impl PyGraph {
     }
 
     /// Return dangling/external half-edges as a composable structural selection.
-    #[pyo3(signature = ())]
-    fn external_half_edges(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<PySubgraph> {
+    pub(crate) fn external_half_edges(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<PySubgraph> {
         let revision = slf.borrow(py).revision()?;
         let external = {
             let graph = slf.borrow(py);
@@ -1256,8 +1249,7 @@ impl PyGraph {
         Ok(PySubgraph::new(slf.clone_ref(py), revision, external))
     }
 
-    #[pyo3(signature = (subgraph=None))]
-    fn connected_components(
+    pub(crate) fn connected_components(
         slf: Py<PyGraph>,
         py: Python<'_>,
         subgraph: Option<&PySubgraph>,
@@ -1288,8 +1280,7 @@ impl PyGraph {
         Ok(components)
     }
 
-    #[pyo3(signature = (subgraph=None))]
-    fn count_connected_components(
+    pub(crate) fn count_connected_components(
         slf: Py<PyGraph>,
         py: Python<'_>,
         subgraph: Option<&PySubgraph>,
@@ -1306,8 +1297,7 @@ impl PyGraph {
             + isolated_nodes.len())
     }
 
-    #[pyo3(signature = (subgraph=None))]
-    fn is_connected(
+    pub(crate) fn is_connected(
         slf: Py<PyGraph>,
         py: Python<'_>,
         subgraph: Option<&PySubgraph>,
@@ -1320,8 +1310,7 @@ impl PyGraph {
         Ok(graph.count_connected_components(&filter) + isolated_nodes.len() <= 1)
     }
 
-    #[pyo3(signature = (subgraph=None))]
-    fn cyclomatic_number(
+    pub(crate) fn cyclomatic_number(
         slf: Py<PyGraph>,
         py: Python<'_>,
         subgraph: Option<&PySubgraph>,
@@ -1340,13 +1329,10 @@ impl PyGraph {
     /// Test directed reachability within an optional structural selection.
     ///
     /// Both endpoints must belong to the selected subgraph; otherwise this raises `ValueError`.
-    #[pyo3(signature = (source, target, *, subgraph=None, direction=PyDirectionBasis::Underlying))]
-    fn is_reachable(
+    pub(crate) fn is_reachable(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
         source: &Bound<'_, PyAny>,
-        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
         target: &Bound<'_, PyAny>,
         subgraph: Option<&PySubgraph>,
         direction: PyDirectionBasis,
@@ -1385,8 +1371,7 @@ impl PyGraph {
     /// Return a deterministic topological order for the selected directed graph.
     ///
     /// Explicitly selected zero-crown nodes appear first in ascending graph order.
-    #[pyo3(signature = (*, subgraph=None, direction=PyDirectionBasis::Underlying))]
-    fn topological_order(
+    pub(crate) fn topological_order(
         slf: Py<PyGraph>,
         py: Python<'_>,
         subgraph: Option<&PySubgraph>,
@@ -1416,8 +1401,7 @@ impl PyGraph {
     }
 
     /// Return a new graph with directionally redundant DAG edges removed.
-    #[pyo3(signature = (*, direction=PyDirectionBasis::Underlying))]
-    fn transitive_reduction(
+    pub(crate) fn transitive_reduction(
         slf: Py<PyGraph>,
         py: Python<'_>,
         direction: PyDirectionBasis,
@@ -1437,11 +1421,9 @@ impl PyGraph {
         Ok(PyGraph::from_state(candidate))
     }
 
-    #[pyo3(signature = (root, *, subgraph=None, include=None))]
-    fn depth_first_traverse(
+    pub(crate) fn depth_first_traverse(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="builtins.int | builtins.str", imports=("builtins")))]
         root: &Bound<'_, PyAny>,
         subgraph: Option<&PySubgraph>,
         include: Option<usize>,
@@ -1449,11 +1431,9 @@ impl PyGraph {
         Self::traverse(slf, py, root, subgraph, include, true)
     }
 
-    #[pyo3(signature = (root, *, subgraph=None, include=None))]
-    fn breadth_first_traverse(
+    pub(crate) fn breadth_first_traverse(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="builtins.int | builtins.str", imports=("builtins")))]
         root: &Bound<'_, PyAny>,
         subgraph: Option<&PySubgraph>,
         include: Option<usize>,
@@ -1461,8 +1441,7 @@ impl PyGraph {
         Self::traverse(slf, py, root, subgraph, include, false)
     }
 
-    #[pyo3(signature = (subgraph=None))]
-    fn bridges(
+    pub(crate) fn bridges(
         slf: Py<PyGraph>,
         py: Python<'_>,
         subgraph: Option<&PySubgraph>,
@@ -1477,8 +1456,7 @@ impl PyGraph {
         Ok(PySubgraph::new(slf.clone_ref(py), revision, bridges))
     }
 
-    #[pyo3(signature = (subgraph=None))]
-    fn cycle_basis(
+    pub(crate) fn cycle_basis(
         slf: Py<PyGraph>,
         py: Python<'_>,
         subgraph: Option<&PySubgraph>,
@@ -1507,8 +1485,7 @@ impl PyGraph {
         ))
     }
 
-    #[pyo3(signature = (subgraph=None))]
-    fn all_spanning_forests(
+    pub(crate) fn all_spanning_forests(
         slf: Py<PyGraph>,
         py: Python<'_>,
         subgraph: Option<&PySubgraph>,
@@ -1543,8 +1520,7 @@ impl PyGraph {
     /// Enumerate inclusion-minimal cutsets with an inclusive boundary-size range.
     ///
     /// Bounds default to `[1, unbounded]`; `min_size=0` is rejected because a bond is non-empty.
-    #[pyo3(signature = (*, subgraph=None, min_size=None, max_size=None))]
-    fn all_bonds(
+    pub(crate) fn all_bonds(
         slf: Py<PyGraph>,
         py: Python<'_>,
         subgraph: Option<&PySubgraph>,
@@ -1586,8 +1562,7 @@ impl PyGraph {
     }
 
     /// Find one native inclusion-minimal cutset within an inclusive size range.
-    #[pyo3(signature = (*, subgraph=None, min_size=None, max_size=None))]
-    fn find_bond(
+    pub(crate) fn find_bond(
         slf: Py<PyGraph>,
         py: Python<'_>,
         subgraph: Option<&PySubgraph>,
@@ -1622,8 +1597,7 @@ impl PyGraph {
     ///
     /// `max_results` bounds all non-empty combinations of a cycle basis, not only
     /// the combinations that ultimately form circuits.
-    #[pyo3(signature = (*, max_results, subgraph=None))]
-    fn all_cycles(
+    pub(crate) fn all_cycles(
         slf: Py<PyGraph>,
         py: Python<'_>,
         max_results: usize,
@@ -1671,11 +1645,9 @@ impl PyGraph {
     }
 
     /// Enumerate tadpole components after identifying a non-empty terminal node set.
-    #[pyo3(signature = (externals))]
-    fn tadpoles(
+    pub(crate) fn tadpoles(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="typing.Sequence[Node | builtins.int | builtins.str]", imports=("builtins", "typing")))]
         externals: Vec<Py<PyAny>>,
     ) -> PyResult<Vec<PySubgraph>> {
         let revision = slf.borrow(py).revision()?;
@@ -1706,13 +1678,10 @@ impl PyGraph {
     }
 
     /// Enumerate all native separating partitions between two disjoint, non-empty node groups.
-    #[pyo3(signature = (source, target))]
-    fn all_cuts(
+    pub(crate) fn all_cuts(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr="typing.Sequence[builtins.int | builtins.str]", imports=("builtins", "typing")))]
         source: Vec<Py<PyAny>>,
-        #[gen_stub(override_type(type_repr="typing.Sequence[builtins.int | builtins.str]", imports=("builtins", "typing")))]
         target: Vec<Py<PyAny>>,
     ) -> PyResult<Vec<PyCutPartition>> {
         if source.is_empty() || target.is_empty() {
@@ -1787,7 +1756,7 @@ impl PyGraph {
 }
 
 impl PyGraph {
-    fn traverse(
+    pub(crate) fn traverse(
         slf: Py<PyGraph>,
         py: Python<'_>,
         root: &Bound<'_, PyAny>,

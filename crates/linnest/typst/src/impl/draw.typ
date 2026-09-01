@@ -1250,12 +1250,49 @@
     panic("draw: dangling graph edge has no position; call layout(...) or pass pos: to graph.edge/build")
   }
 }
+
+#let _half-edge-label(half-edge, show-ids) = {
+  let data = half-edge.at("data", default: (:))
+  if type(data) == dictionary and data.keys().contains("label") {
+    _as-content(data.label)
+  } else if show-ids {
+    [$h_(#half-edge.hedge)$]
+  } else {
+    none
+  }
+}
+
+#let _half-edge-label-pos(segments, t, side, fallback) = {
+  if segments == none or segments.len() == 0 {
+    return fallback
+  }
+  let target = t * segments.len()
+  let segment = segments.last()
+  let segment-t = 1
+  for (index, candidate) in segments.enumerate() {
+    if target >= index and target < index + 1 {
+      segment = candidate
+      segment-t = target - index
+    }
+  }
+  let point = curve-api.cubic-point(segment, segment-t)
+  let tangent = curve-api.cubic-tangent(segment, segment-t)
+  let length = _point-length(tangent)
+  let normal = if length <= 1e-9 {
+    (0, 0.12 * side)
+  } else {
+    _point-scale((-_point-y(tangent), _point-x(tangent)), 0.12 * side / length)
+  }
+  _point-add(point, normal)
+}
+
 #let draw(graph, options) = {
   let scope = options.scope
   let unit = options.unit
   let title = options.title
   let subgraph = options.subgraph
   let debug = options.debug
+  let show-half-edge-ids = options.show-half-edge-ids
   let node-radius = options.node-radius
   let node-min-radius = options.node-min-radius
   let node-label-padding = options.node-label-padding
@@ -1450,6 +1487,13 @@
           let layer-count = calc.max(source-style-layers.len(), sink-style-layers.len())
           let ev-label = _content(edge-label, edge-data, _as-content(data-label))
           let edge-label-draw-style = _style(graph-edge-label-style, edge-data) + _style(edge-label-style, edge-data)
+          let source-label-segments = none
+          let sink-label-segments = none
+          let self-loop = (
+            source-half-edge != none
+              and sink-half-edge != none
+              and source-half-edge.node == sink-half-edge.node
+          )
 
           for layer-index in range(0, layer-count) {
             let source-layer = _style-layer(source-style-layers, layer-index)
@@ -1500,6 +1544,12 @@
                   label-pos: label-pos,
                 ),
               )
+              if source-label-segments == none and halves.source.len() > 0 {
+                source-label-segments = halves.source
+              }
+              if sink-label-segments == none and halves.sink.len() > 0 {
+                sink-label-segments = halves.sink
+              }
               if source-style-value != none and source-in-subgraph and subgraph-edge-underlay {
                 for subgraph-style in source-subgraph-styles {
                   for element in (
@@ -1556,6 +1606,16 @@
                 _node-anchor-point(node-boxes.at(source-half-edge.node), source-anchor)
               }
               let bend = edge.at("bend", default: none)
+              if source-label-segments == none and source-geometry-style != none {
+                source-label-segments = _geometry-segments(
+                  _bent-line-segment(line-start, edge.pos, bend),
+                  source-geometry-style,
+                  0,
+                  0,
+                  label-pos,
+                  auto,
+                )
+              }
               if source-style-value != none and source-in-subgraph and subgraph-edge-underlay {
                 for subgraph-style in source-subgraph-styles {
                   for element in _pattern-dangling(
@@ -1587,6 +1647,16 @@
                 _node-anchor-point(node-boxes.at(sink-half-edge.node), sink-anchor)
               }
               let bend = edge.at("bend", default: none)
+              if sink-label-segments == none and sink-geometry-style != none {
+                sink-label-segments = _geometry-segments(
+                  _bent-line-segment(edge.pos, line-end, bend),
+                  sink-geometry-style,
+                  0,
+                  0,
+                  label-pos,
+                  auto,
+                )
+              }
               if sink-style-value != none and sink-in-subgraph and subgraph-edge-underlay {
                 for subgraph-style in sink-subgraph-styles {
                   for element in _pattern-dangling(
@@ -1610,6 +1680,42 @@
 
           if ev-label != none {
             elements.push(cetz.draw.content(_point(label-pos), ev-label, padding: 0, ..edge-label-draw-style))
+          }
+
+          for half-edge in (source-half-edge, sink-half-edge) {
+            if half-edge != none {
+              let label = _half-edge-label(half-edge, show-half-edge-ids)
+              if label != none {
+                let node-pos = _node-pos(nodes.at(half-edge.node))
+                let fallback-direction = _point-sub(edge.pos, node-pos)
+                let fallback-length = _point-length(fallback-direction)
+                let fallback-normal = if fallback-length <= 1e-9 {
+                  (0, 0.12)
+                } else {
+                  _point-scale(
+                    (-_point-y(fallback-direction), _point-x(fallback-direction)),
+                    0.12 / fallback-length,
+                  )
+                }
+                let fallback = _point-add(
+                  _point-lerp(node-pos, edge.pos, 0.38),
+                  fallback-normal,
+                )
+                let source = source-half-edge != none and half-edge.hedge == source-half-edge.hedge
+                let segments = if source {
+                  source-label-segments
+                } else {
+                  sink-label-segments
+                }
+                let t = if source or self-loop { 0.38 } else { 0.62 }
+                let side = if source { 1 } else { -1 }
+                elements.push(cetz.draw.content(
+                  _half-edge-label-pos(segments, t, side, fallback),
+                  text(size: 0.65em)[#label],
+                  padding: 0,
+                ))
+              }
+            }
           }
 
           if debug-level >= 2 {

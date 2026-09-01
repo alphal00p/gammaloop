@@ -13,7 +13,6 @@ use pyo3::exceptions::{PyOverflowError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyAny, PyBool, PyDict, PyFloat, PyInt, PyList, PyModule, PyString, PyTuple};
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
 use serde::{Deserialize, Serialize};
 
 use crate::drawing::{DrawingKind, PyEdgeDrawing, PyHalfEdgeDrawing, PyNodeDrawing};
@@ -767,14 +766,16 @@ fn dictionary_source(
 }
 
 /// Type of the `AUTO` sentinel, which requests automatic selection.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(skip_from_py_object, frozen, name = "Auto")]
 #[derive(Clone, Copy, Debug)]
 struct PyAuto;
 
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::module_variable!("linnet_py", "AUTO", PyAuto);
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyAuto {
     fn __repr__(&self) -> &'static str {
@@ -791,14 +792,16 @@ impl PyAuto {
 }
 
 /// Type of the `INHERIT` sentinel, which preserves a lower-precedence setting.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(skip_from_py_object, frozen, name = "Inherit")]
 #[derive(Clone, Copy, Debug)]
 struct PyInherit;
 
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::module_variable!("linnet_py", "INHERIT", PyInherit);
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyInherit {
     fn __repr__(&self) -> &'static str {
@@ -822,7 +825,7 @@ macro_rules! typst_string_enum {
         }
     ) => {
         $(#[$meta])*
-        #[gen_stub_pyclass_enum]
+        #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass_enum)]
         #[pyclass(from_py_object, eq, eq_int, name = $python)]
         #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
         #[serde(rename_all = "kebab-case")]
@@ -978,7 +981,10 @@ typst_string_enum! {
 }
 
 /// Finite debug detail accepted by Linnest's drawing layer.
-#[gen_stub_pyclass_enum]
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum
+)]
 #[pyclass(from_py_object, eq, eq_int, name = "DebugLevel")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -1081,7 +1087,7 @@ typst_string_enum! {
 }
 
 /// A Typst length such as `2pt` or `1.2em`.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "Length")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyLength {
@@ -1089,7 +1095,8 @@ struct PyLength {
     unit: LengthUnit,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyLength {
     #[new]
@@ -1145,14 +1152,15 @@ impl PyLength {
 }
 
 /// A Typst ratio expressed in percent.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "Ratio")]
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PyRatio {
     percent: f64,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyRatio {
     #[new]
@@ -1178,7 +1186,7 @@ impl PyRatio {
 }
 
 /// A sum of a Typst ratio and length.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "RelativeLength")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyRelativeLength {
@@ -1186,7 +1194,8 @@ struct PyRelativeLength {
     length: Option<(f64, LengthUnit)>,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyRelativeLength {
     #[new]
@@ -1215,7 +1224,7 @@ impl PyRelativeLength {
 }
 
 /// A Typst angle in degrees or radians.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "Angle")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyAngle {
@@ -1223,7 +1232,8 @@ struct PyAngle {
     unit: String,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyAngle {
     #[new]
@@ -1257,14 +1267,15 @@ impl PyAngle {
 }
 
 /// A Typst fractional track size such as `1fr`.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "Fraction")]
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PyFraction {
     value: f64,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyFraction {
     #[new]
@@ -1285,14 +1296,15 @@ impl PyFraction {
 }
 
 /// A safe Typst color value.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "Color")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyColor {
     value: ColorValue,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyColor {
     #[new]
@@ -1692,14 +1704,15 @@ const STROKE_FIELDS: &[FieldSpec] = &[
 ];
 
 /// A typed Typst stroke dictionary.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "Stroke")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyStroke {
     values: BTreeMap<String, NativeValue>,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyStroke {
     #[new]
@@ -1720,14 +1733,15 @@ impl PyStroke {
 }
 
 /// A named or explicit Typst dash pattern.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "Dash")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyDash {
     value: DashValue,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDash {
     #[new]
@@ -1796,14 +1810,15 @@ const INSET_FIELDS: &[FieldSpec] = &[
 ];
 
 /// Typed CeTZ/Typst inset values.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "Insets")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyInsets {
     values: BTreeMap<String, NativeValue>,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyInsets {
     #[new]
@@ -1849,14 +1864,15 @@ const MARK_FIELDS: &[FieldSpec] = &[
 ];
 
 /// Typed CeTZ mark configuration.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "Mark")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyMark {
     values: BTreeMap<String, NativeValue>,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyMark {
     #[new]
@@ -1909,14 +1925,15 @@ const TEXT_FIELDS: &[FieldSpec] = &[
 ];
 
 /// Literal text content with optional typed text styling.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "TextLabel")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyTextLabel {
     value: TextValue,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyTextLabel {
     #[new]
@@ -1968,14 +1985,15 @@ fn math_script(value: &Bound<'_, PyAny>, what: &str) -> PyResult<MathScript> {
 }
 
 /// Safe mathematical identifier content, optionally with scripts.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "MathSymbol")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyMathSymbol {
     value: MathValue,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyMathSymbol {
     #[new]
@@ -2009,14 +2027,15 @@ impl PyMathSymbol {
 }
 
 /// A local or package Typst module whose exports can be referenced safely.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "TypstModule")]
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct PyTypstModule {
     source: TypstModuleSource,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyTypstModule {
     #[staticmethod]
@@ -2108,14 +2127,15 @@ fn call_arguments(
 }
 
 /// A typed export from a Typst module.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "TypstRef")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyTypstRef {
     expression: TypstExpression,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyTypstRef {
     #[pyo3(signature = (*args, **kwargs))]
@@ -2177,14 +2197,15 @@ impl PyTypstRef {
 }
 
 /// A call to an explicitly imported Typst function.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "TypstCall")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyTypstCall {
     expression: TypstExpression,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyTypstCall {
     fn __repr__(&self) -> &'static str {
@@ -2193,14 +2214,15 @@ impl PyTypstCall {
 }
 
 /// A Typst function partially applied through its native `.with` method.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "TypstBind")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyTypstBind {
     expression: TypstExpression,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyTypstBind {
     #[pyo3(signature = (*args, **kwargs))]
@@ -2490,14 +2512,15 @@ pub(crate) struct SelectorCallbacks {
 }
 
 /// Per-render Python callbacks returning typed drawing patches.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(skip_from_py_object, name = "DrawingSelectors")]
 #[derive(Clone, Debug, Default)]
 struct PyDrawingSelectors {
     settings: SelectorSettings,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDrawingSelectors {
     #[new]
@@ -2544,14 +2567,15 @@ impl PyDrawingSelectors {
 }
 
 /// Options applied by `linnest.graph.style` before layout measurement.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "GraphStyleOptions")]
 #[derive(Clone, Debug, Default, PartialEq)]
 struct PyGraphStyleOptions {
     values: BTreeMap<String, NativeValue>,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyGraphStyleOptions {
     #[new]
@@ -2665,14 +2689,15 @@ const LAYOUT_FIELDS: &[FieldSpec] = &[
 ];
 
 /// One or more ordered Linnest layout passes.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "LayoutOptions")]
 #[derive(Clone, Debug, PartialEq)]
 struct PyLayoutOptions {
     passes: Vec<BTreeMap<String, NativeValue>>,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyLayoutOptions {
     #[new]
@@ -2737,6 +2762,7 @@ const DRAW_FIELDS: &[FieldSpec] = &[
         .auto(),
     FieldSpec::new("subgraph", "subgraph", ValueRule::DrawSubgraphs).none(),
     FieldSpec::new("debug", "debug", ValueRule::Enum(EnumKind::DebugLevel)),
+    FieldSpec::new("show_half_edge_ids", "show-half-edge-ids", ValueRule::Bool),
     FieldSpec::new("node_radius", "node-radius", ValueRule::Radius).auto(),
     FieldSpec::new(
         "node_min_radius",
@@ -2808,20 +2834,21 @@ const DRAW_FIELDS: &[FieldSpec] = &[
 ];
 
 /// Full typed option surface for `linnest.draw`.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, frozen, name = "DrawOptions")]
 #[derive(Clone, Debug, Default, PartialEq)]
 struct PyDrawOptions {
     values: BTreeMap<String, NativeValue>,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDrawOptions {
     #[new]
     #[pyo3(
         signature = (**kwargs),
-        text_signature = "(*, scope=..., unit=..., title=..., subgraph=..., debug=..., node_radius=..., node_min_radius=..., node_label_padding=..., node_fill=..., node_stroke=..., node_outset=..., node_label_style=..., node_style=..., node_label=..., draw_node=..., edge_stroke=..., edge_offset=..., edge_length=..., edge_ratio=..., edge_resolve_length=..., edge_accuracy=..., edge_optimize=..., source_style=..., sink_style=..., edge_label=..., edge_label_style=..., edge_omega=..., edge_trim_accuracy=..., padding=..., debug_edge_radius=..., debug_edge_fill=..., debug_edge_stroke=..., debug_edge_label_fill=..., subgraph_edge_style=..., subgraph_edge_underlay=...)"
+        text_signature = "(*, scope=..., unit=..., title=..., subgraph=..., debug=..., show_half_edge_ids=..., node_radius=..., node_min_radius=..., node_label_padding=..., node_fill=..., node_stroke=..., node_outset=..., node_label_style=..., node_style=..., node_label=..., draw_node=..., edge_stroke=..., edge_offset=..., edge_length=..., edge_ratio=..., edge_resolve_length=..., edge_accuracy=..., edge_optimize=..., source_style=..., sink_style=..., edge_label=..., edge_label_style=..., edge_omega=..., edge_trim_accuracy=..., padding=..., debug_edge_radius=..., debug_edge_fill=..., debug_edge_stroke=..., debug_edge_label_fill=..., subgraph_edge_style=..., subgraph_edge_underlay=...)"
     )]
     #[gen_stub(skip)]
     fn new(kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Self> {
@@ -2881,7 +2908,7 @@ fn deep_overlay(
 }
 
 /// Complete typed rendering configuration.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(skip_from_py_object, name = "RenderConfig")]
 #[derive(Clone, Debug, Default)]
 pub(crate) struct PyRenderConfig {
@@ -2891,7 +2918,8 @@ pub(crate) struct PyRenderConfig {
     selectors: SelectorSettings,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyRenderConfig {
     #[new]
@@ -3107,6 +3135,7 @@ impl PyRenderConfig {
     }
 }
 
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         class PyStroke:
@@ -3114,6 +3143,7 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         class PyInsets:
@@ -3121,6 +3151,7 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         class PyMark:
@@ -3128,6 +3159,7 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         class PyTextLabel:
@@ -3135,6 +3167,7 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         import typing
@@ -3144,6 +3177,7 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         class PyDrawingSelectors:
@@ -3151,6 +3185,7 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         import typing
@@ -3161,15 +3196,17 @@ pyo3_stub_gen::inventory::submit! {
     "# }
 }
 
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         import typing
 
         class PyDrawOptions:
-            def __new__(cls, *, scope: _Dictionary = ..., unit: _AutoLengthValue = ..., title: _AutoOptionalStaticContent = ..., subgraph: _DrawSubgraphs = ..., debug: _DebugValue = ..., node_radius: _AutoRadius = ..., node_min_radius: _Number = ..., node_label_padding: _Number = ..., node_fill: _Paint = ..., node_stroke: _StrokeValue = ..., node_outset: _AutoNumber = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., node_label: _AutoOptionalContent = ..., draw_node: _AutoFunction = ..., edge_stroke: _StrokeValue = ..., edge_offset: _Number = ..., edge_length: _OptionalNumber = ..., edge_ratio: _OptionalNumber = ..., edge_resolve_length: _EdgeLengthResolver = ..., edge_accuracy: _Number = ..., edge_optimize: _Boolean = ..., source_style: _OptionalStyleLayers = ..., sink_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _OptionalStyle = ..., edge_omega: _Number = ..., edge_trim_accuracy: _Number = ..., padding: _OptionalPadding = ..., debug_edge_radius: _Number = ..., debug_edge_fill: _Paint = ..., debug_edge_stroke: _StrokeValue = ..., debug_edge_label_fill: _Paint = ..., subgraph_edge_style: _Style = ..., subgraph_edge_underlay: _Boolean = ...) -> DrawOptions: ...
+            def __new__(cls, *, scope: _Dictionary = ..., unit: _AutoLengthValue = ..., title: _AutoOptionalStaticContent = ..., subgraph: _DrawSubgraphs = ..., debug: _DebugValue = ..., show_half_edge_ids: _Boolean = ..., node_radius: _AutoRadius = ..., node_min_radius: _Number = ..., node_label_padding: _Number = ..., node_fill: _Paint = ..., node_stroke: _StrokeValue = ..., node_outset: _AutoNumber = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., node_label: _AutoOptionalContent = ..., draw_node: _AutoFunction = ..., edge_stroke: _StrokeValue = ..., edge_offset: _Number = ..., edge_length: _OptionalNumber = ..., edge_ratio: _OptionalNumber = ..., edge_resolve_length: _EdgeLengthResolver = ..., edge_accuracy: _Number = ..., edge_optimize: _Boolean = ..., source_style: _OptionalStyleLayers = ..., sink_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _OptionalStyle = ..., edge_omega: _Number = ..., edge_trim_accuracy: _Number = ..., padding: _OptionalPadding = ..., debug_edge_radius: _Number = ..., debug_edge_fill: _Paint = ..., debug_edge_stroke: _StrokeValue = ..., debug_edge_label_fill: _Paint = ..., subgraph_edge_style: _Style = ..., subgraph_edge_underlay: _Boolean = ...) -> DrawOptions: ...
     "# }
 }
 
+#[cfg(feature = "python_stubgen")]
 pyo3_stub_gen::inventory::submit! {
     pyo3_stub_gen::derive::gen_methods_from_python! { r#"
         class PyRenderConfig:

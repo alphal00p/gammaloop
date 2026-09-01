@@ -11,7 +11,6 @@ use linnet::half_edge::involution::{Flow, Hedge, HedgePair, Orientation};
 use pyo3::exceptions::{PyReferenceError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyBytes, PyDict, PyDictMethods, PyList, PyListMethods, PyModule};
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 use rust_embed::RustEmbed;
 use walkdir::WalkDir;
 
@@ -28,6 +27,8 @@ const KURVST_PACKAGE_DIR: &str = "crates/kurvst/typst";
 const TYPST_PACKAGES_DIR: &str = "typst-packages";
 const USER_SOURCES_DIR: &str = "user-sources";
 const DEFAULT_TEMPLATE: &str = "crates/linnest/typst/src/render/figure.typ";
+const ENTRYPOINT: &str = "main.typ";
+const TOPOLOGY: &str = "diagram.cbor";
 
 #[derive(RustEmbed)]
 #[folder = "$CARGO_MANIFEST_DIR/../linnest/typst"]
@@ -327,7 +328,7 @@ fn topology_spec(graph: &PyGraph) -> PyResult<Vec<u8>> {
             statements: BTreeMap::new(),
         });
     }
-    // GlobalData is a DOT-codec concern. Rendering stages only topology;
+    // GlobalData is a DOT-codec concern. Rendering transports only topology;
     // typed drawing state travels separately in the V1 configuration.
     let spec = TypstGraphSpec {
         name: Some(state.name.clone().unwrap_or_else(|| "linnet".to_owned())),
@@ -344,8 +345,8 @@ fn topology_spec(graph: &PyGraph) -> PyResult<Vec<u8>> {
 fn prepare(topology: Vec<u8>, transport: RenderConfigTransport) -> PyResult<PreparedRender> {
     let build_dir =
         tempfile::tempdir().map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-    stage_default_assets(build_dir.path())?;
     let build_root = canonicalize(build_dir.path(), "render directory")?;
+    write_embedded_assets::<EmbeddedTypstPackages>(&build_root.join(TYPST_PACKAGES_DIR))?;
     let package_store = canonicalize(
         &build_root.join(TYPST_PACKAGES_DIR),
         "bundled Typst package store",
@@ -363,13 +364,11 @@ fn prepare(topology: Vec<u8>, transport: RenderConfigTransport) -> PyResult<Prep
             copy_directory(&path, &package_store, description)?;
         }
     }
-    let topology_path = build_root.join("diagram.cbor");
-    fs::write(&topology_path, topology).map_err(|error| {
-        PyRuntimeError::new_err(format!(
-            "failed to stage topology {}: {error}",
-            topology_path.display()
-        ))
-    })?;
+
+    let mut files = BTreeMap::new();
+    insert_embedded_assets::<EmbeddedLinnestPackage>(&mut files, &build_root, LINNEST_PACKAGE_DIR)?;
+    insert_embedded_assets::<EmbeddedKurvstPackage>(&mut files, &build_root, KURVST_PACKAGE_DIR)?;
+    write_project_asset(&build_root, TOPOLOGY, &topology)?;
 
     let mut source_paths = transport.template.iter().cloned().collect::<Vec<_>>();
     source_paths.extend(transport.imports.iter().filter_map(|import| {
@@ -379,18 +378,19 @@ fn prepare(topology: Vec<u8>, transport: RenderConfigTransport) -> PyResult<Prep
             None
         }
     }));
-    let mut staged_sources =
-        stage_user_sources(&build_root, &source_paths, transport.source_root.as_deref())?
-            .into_iter();
+    let mut staged_sources = collect_user_sources(
+        &mut files,
+        &build_root,
+        &source_paths,
+        transport.source_root.as_deref(),
+    )?
+    .into_iter();
     let template = if transport.template.is_some() {
         staged_sources
             .next()
-            .ok_or_else(|| PyRuntimeError::new_err("failed to stage Typst template"))?
+            .ok_or_else(|| PyRuntimeError::new_err("failed to collect Typst template"))?
     } else {
-        canonicalize(
-            &build_root.join(DEFAULT_TEMPLATE),
-            "default Linnest template",
-        )?
+        DEFAULT_TEMPLATE.to_owned()
     };
     let module_files = transport
         .imports
@@ -399,36 +399,71 @@ fn prepare(topology: Vec<u8>, transport: RenderConfigTransport) -> PyResult<Prep
             TypstModuleSource::File(_) => staged_sources
                 .next()
                 .map(Some)
-                .ok_or_else(|| PyRuntimeError::new_err("failed to stage Typst module")),
+                .ok_or_else(|| PyRuntimeError::new_err("failed to collect Typst module")),
             TypstModuleSource::Package(_) => Ok(None),
         })
         .collect::<PyResult<Vec<_>>>()?;
-    let entrypoint = build_root.join("render.typ");
-    let source = entrypoint_source(
-        &transport,
-        &template,
-        &module_files,
-        &topology_path,
-        &build_root,
-    )?;
-    fs::write(&entrypoint, source).map_err(|error| {
-        PyRuntimeError::new_err(format!(
-            "failed to stage Typst entrypoint {}: {error}",
-            entrypoint.display()
-        ))
-    })?;
+    let source = entrypoint_source(&transport, &template, &module_files, TOPOLOGY)?;
+    files.insert(ENTRYPOINT.to_owned(), source.into_bytes());
     Ok(PreparedRender {
         _build_dir: build_dir,
-        entrypoint,
+        files,
         root: build_root,
         package_store,
     })
 }
 
-fn stage_default_assets(root: &Path) -> PyResult<()> {
-    write_embedded_assets::<EmbeddedLinnestPackage>(&root.join(LINNEST_PACKAGE_DIR))?;
-    write_embedded_assets::<EmbeddedKurvstPackage>(&root.join(KURVST_PACKAGE_DIR))?;
-    write_embedded_assets::<EmbeddedTypstPackages>(&root.join(TYPST_PACKAGES_DIR))
+fn insert_embedded_assets<E: RustEmbed>(
+    files: &mut BTreeMap<String, Vec<u8>>,
+    build_root: &Path,
+    root: &str,
+) -> PyResult<()> {
+    for path in E::iter() {
+        let contents = E::get(path.as_ref()).ok_or_else(|| {
+            PyRuntimeError::new_err(format!("embedded render asset {path} is missing"))
+        })?;
+        insert_project_asset(
+            files,
+            build_root,
+            &format!("{root}/{}", path.replace('\\', "/")),
+            contents.data.as_ref(),
+        )?;
+    }
+    Ok(())
+}
+
+fn insert_project_asset(
+    files: &mut BTreeMap<String, Vec<u8>>,
+    build_root: &Path,
+    path: &str,
+    contents: &[u8],
+) -> PyResult<()> {
+    // typst-py's multi-file input decodes every value as UTF-8. Keep binary
+    // assets in the project filesystem (MEMFS in Pyodide) at the same paths.
+    if std::str::from_utf8(contents).is_ok() {
+        files.insert(path.to_owned(), contents.to_vec());
+        Ok(())
+    } else {
+        write_project_asset(build_root, path, contents)
+    }
+}
+
+fn write_project_asset(build_root: &Path, path: &str, contents: &[u8]) -> PyResult<()> {
+    let target = build_root.join(path);
+    if let Some(parent) = target.parent() {
+        fs::create_dir_all(parent).map_err(|error| {
+            PyRuntimeError::new_err(format!(
+                "failed to create render asset directory {}: {error}",
+                parent.display()
+            ))
+        })?;
+    }
+    fs::write(&target, contents).map_err(|error| {
+        PyRuntimeError::new_err(format!(
+            "failed to stage render asset {}: {error}",
+            target.display()
+        ))
+    })
 }
 
 fn write_embedded_assets<E: RustEmbed>(root: &Path) -> PyResult<()> {
@@ -503,12 +538,13 @@ fn copy_directory(source: &Path, target: &Path, description: &str) -> PyResult<(
     Ok(())
 }
 
-fn stage_user_sources(
+fn collect_user_sources(
+    files: &mut BTreeMap<String, Vec<u8>>,
     build_root: &Path,
     paths: &[PathBuf],
     configured_root: Option<&Path>,
-) -> PyResult<Vec<PathBuf>> {
-    let mut roots = Vec::<(PathBuf, PathBuf)>::new();
+) -> PyResult<Vec<String>> {
+    let mut roots = Vec::<(PathBuf, String)>::new();
     let configured_root = configured_root
         .map(|root| canonicalize(root, "Typst source root"))
         .transpose()?;
@@ -553,46 +589,71 @@ fn stage_user_sources(
             {
                 target.clone()
             } else {
-                let target = build_root
-                    .join(USER_SOURCES_DIR)
-                    .join(roots.len().to_string());
-                copy_directory(&source_root, &target, "Typst source tree")?;
+                let target = format!("{USER_SOURCES_DIR}/{}", roots.len());
+                collect_directory(
+                    files,
+                    build_root,
+                    &source_root,
+                    &target,
+                    "Typst source tree",
+                )?;
                 roots.push((source_root.clone(), target.clone()));
                 target
             };
-            Ok(target_root.join(relative))
+            Ok(format!(
+                "{target_root}/{}",
+                relative.to_string_lossy().replace('\\', "/")
+            ))
         })
         .collect()
 }
 
-fn typst_root_path(path: &Path, root: &Path) -> PyResult<String> {
-    let path = canonicalize(path, "Typst input")?;
-    let relative = path.strip_prefix(root).map_err(|_| {
-        PyRuntimeError::new_err(format!(
-            "Typst input {} is outside project root {}",
-            path.display(),
-            root.display()
-        ))
-    })?;
-    Ok(typst_string(&format!(
-        "/{}",
-        relative.to_string_lossy().replace('\\', "/")
-    )))
+fn collect_directory(
+    files: &mut BTreeMap<String, Vec<u8>>,
+    build_root: &Path,
+    source: &Path,
+    target: &str,
+    description: &str,
+) -> PyResult<()> {
+    for entry in WalkDir::new(source).follow_links(true) {
+        let entry = entry.map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let relative = entry.path().strip_prefix(source).map_err(|error| {
+            PyRuntimeError::new_err(format!(
+                "failed to collect {description} {}: {error}",
+                entry.path().display()
+            ))
+        })?;
+        let path = format!("{target}/{}", relative.to_string_lossy().replace('\\', "/"));
+        let contents = fs::read(entry.path()).map_err(|error| {
+            PyRuntimeError::new_err(format!(
+                "failed to collect {description} {}: {error}",
+                entry.path().display()
+            ))
+        })?;
+        insert_project_asset(files, build_root, &path, &contents)?;
+    }
+    Ok(())
+}
+
+fn typst_project_path(path: &str) -> String {
+    typst_string(&format!("/{path}"))
 }
 
 fn entrypoint_source(
     transport: &RenderConfigTransport,
-    template: &Path,
-    module_files: &[Option<PathBuf>],
-    topology_path: &Path,
-    root: &Path,
+    template: &str,
+    module_files: &[Option<String>],
+    topology_path: &str,
 ) -> PyResult<String> {
-    let template = typst_root_path(template, root)?;
-    let topology_path = typst_root_path(topology_path, root)?;
+    let template = typst_project_path(template);
+    let topology_path = typst_project_path(topology_path);
     let mut source = format!("#import {template} as _linnet_template\n");
     for (module, file) in transport.imports.iter().zip(module_files) {
         let module_source = match (&module.source, file) {
-            (TypstModuleSource::File(_), Some(path)) => typst_root_path(path, root)?,
+            (TypstModuleSource::File(_), Some(path)) => typst_project_path(path),
             (TypstModuleSource::Package(package), None) => typst_string(package),
             _ => {
                 return Err(PyRuntimeError::new_err(
@@ -612,20 +673,25 @@ fn entrypoint_source(
     Ok(source)
 }
 
-/// One Typst render whose generated entrypoint, topology, and source modules share a lifetime.
-#[gen_stub_pyclass]
+/// One Typst render whose virtual project and generated entrypoint share a lifetime.
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(module = "linnet_py", frozen)]
 pub(crate) struct PreparedRender {
     _build_dir: tempfile::TempDir,
-    entrypoint: PathBuf,
+    files: BTreeMap<String, Vec<u8>>,
     root: PathBuf,
     package_store: PathBuf,
 }
 
 impl PreparedRender {
     fn typst_source_value(&self) -> PyResult<String> {
-        fs::read_to_string(&self.entrypoint)
-            .map_err(|error| PyRuntimeError::new_err(error.to_string()))
+        String::from_utf8(
+            self.files
+                .get(ENTRYPOINT)
+                .expect("prepared render has an entrypoint")
+                .clone(),
+        )
+        .map_err(|error| PyRuntimeError::new_err(error.to_string()))
     }
 
     fn render_to(&self, py: Python<'_>, output: PathBuf) -> PyResult<PathBuf> {
@@ -672,7 +738,8 @@ impl PreparedRender {
     }
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PreparedRender {
     /// Return the exact generated Typst entrypoint for this preparation.
@@ -726,7 +793,11 @@ fn compile_typst<'py>(
     format: &str,
 ) -> PyResult<Bound<'py, PyAny>> {
     let kwargs = PyDict::new(py);
-    kwargs.set_item("input", &prepared.entrypoint)?;
+    let input = PyDict::new(py);
+    for (path, contents) in &prepared.files {
+        input.set_item(path, PyBytes::new(py, contents))?;
+    }
+    kwargs.set_item("input", input)?;
     kwargs.set_item("root", &prepared.root)?;
     kwargs.set_item("format", format)?;
     if let Some(output) = output {

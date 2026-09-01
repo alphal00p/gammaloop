@@ -1,6 +1,7 @@
 //! Python bindings for Linnet's typed graph, DOT, and Typst drawing APIs.
 
 use pyo3::prelude::*;
+#[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::define_stub_info_gatherer;
 
 mod dot;
@@ -23,11 +24,13 @@ fn linnet_py(module: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+#[cfg(feature = "python_stubgen")]
 define_stub_info_gatherer!(stub_info);
 
 // Rust's `PyAny` boundary is intentionally wider than the Python API: values
 // are recursively checked before they can cross into Typst.  Keep the aliases
 // here so manual signatures and generated signatures share one closed model.
+#[cfg(feature = "python_stubgen")]
 const STUB_TYPE_ALIASES: &str = r#"class _TypstValueRef(typing.Protocol): ...
 class _TypstContentRef(typing.Protocol): ...
 class _TypstFunctionRef(typing.Protocol):
@@ -182,6 +185,7 @@ _TemplateOptions: typing.TypeAlias = _NativeDict | None | Inherit
 "#;
 
 /// Render the installed and documented Python surface from one stub inventory.
+#[cfg(feature = "python_stubgen")]
 pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
     let info = stub_info()?;
     let module = info

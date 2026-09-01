@@ -1,3 +1,12 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "linnet-py==0.1.0",
+#     "marimo==0.24.0",
+#     "typst==0.15.0",
+# ]
+# ///
+
 # ruff: noqa: B018, PLR1711  # Cell outputs and empty returns are Marimo syntax.
 
 import marimo
@@ -28,7 +37,6 @@ def _():
 
         edge_id: int | None
         particle: str
-        momentum: str | None
         payload: list[int] | None
         attributes: dict[str, str]
         local_attributes: dict[str, str]
@@ -42,6 +50,19 @@ def _():
         payload: list[int] | None
         port_label: str | None
         compass: str | None
+
+    @dataclass(frozen=True)
+    class ForceSimulation:
+        """Typed controls for the notebook's force-layout pass."""
+
+        steps: int
+        seed: int
+        directional_force: float
+        spring_strength: float
+        beta: float
+        dangling_repulsion: float
+        edge_edge_repulsion: float
+        label_steps: int
 
     def grouped_placement(attributes: dict[str, str]) -> dict[str, object] | None:
         """Translate GammaLoop's grouped DOT coordinates to typed drawing data."""
@@ -98,10 +119,6 @@ def _():
             record = value.data
             attributes = dict(record.attributes)
             attributes["particle"] = record.particle
-            if record.momentum is None:
-                attributes.pop("lmb_rep", None)
-            else:
-                attributes["lmb_rep"] = record.momentum
             return lp.DotEdgeData(
                 edge_id=record.edge_id,
                 payload=record.payload,
@@ -116,7 +133,6 @@ def _():
                 data=Propagator(
                     value.edge_id,
                     attributes.get("particle", "fermion"),
-                    attributes.get("lmb_rep"),
                     value.payload,
                     attributes,
                     dict(value.local_statements),
@@ -158,13 +174,42 @@ def _():
             decode_half_edge=decode_half_edge,
         )
 
-    def physics_render_settings(
+    def diagram_render_settings(
         layout_algorithm: lp.LayoutAlgorithm,
         *,
+        force_simulation: ForceSimulation,
+        feynman_styling: bool,
+        show_half_edge_ids: bool,
         show_momenta: bool,
         show_indices: bool,
     ) -> lp.RenderConfig:
-        """Return one custom physics-flavored ``RenderConfig``."""
+        """Return either a bare or Python-defined Feynman ``RenderConfig``."""
+
+        if layout_algorithm == lp.LayoutAlgorithm.Force:
+            layouts = lp.LayoutOptions(
+                algorithm=lp.LayoutAlgorithm.Force,
+                direction=lp.LayoutDirection.Right,
+                seed=force_simulation.seed,
+                steps=force_simulation.steps,
+                directional_force=force_simulation.directional_force,
+                spring_strength=force_simulation.spring_strength,
+                beta=force_simulation.beta,
+                dangling_repulsion=force_simulation.dangling_repulsion,
+                edge_edge_repulsion=force_simulation.edge_edge_repulsion,
+                label_steps=force_simulation.label_steps,
+            )
+        else:
+            layouts = lp.LayoutOptions(
+                algorithm=lp.LayoutAlgorithm.StableLayered,
+                direction=lp.LayoutDirection.Right,
+                label_steps=force_simulation.label_steps,
+            )
+
+        if not feynman_styling:
+            return lp.RenderConfig(
+                layouts=layouts,
+                drawing=lp.DrawOptions(show_half_edge_ids=show_half_edge_ids),
+            )
 
         black = lp.Color("black")
         blue = lp.Color("blue")
@@ -273,25 +318,10 @@ def _():
 
             return lp.HalfEdgeDrawing(style=tuple(layers))
 
-        if layout_algorithm == lp.LayoutAlgorithm.Force:
-            layouts = lp.LayoutOptions(
-                algorithm=lp.LayoutAlgorithm.Force,
-                direction=lp.LayoutDirection.Right,
-                seed=19,
-                steps=320,
-                directional_force=0.45,
-                label_steps=80,
-            )
-        else:
-            layouts = lp.LayoutOptions(
-                algorithm=lp.LayoutAlgorithm.StableLayered,
-                direction=lp.LayoutDirection.Right,
-                label_steps=80,
-            )
-
         return lp.RenderConfig(
             layouts=layouts,
             drawing=lp.DrawOptions(
+                show_half_edge_ids=show_half_edge_ids,
                 node_fill=lp.Color("white"),
                 node_stroke=lp.Stroke(
                     paint=black,
@@ -307,54 +337,55 @@ def _():
         )
 
     default_dot = r"""digraph GL05 {
-      num = "1";
-      overall_factor = "(AutG(1))^(-1)*ExternalFermionOrderingSign(1)*InternalFermionLoopSign(-1)*NumeratorIndependentSymmetryGrouping(4)";
-      overall_factor_evaluated = "-4";
-      projector = "epsilon(0)*epsilon(1)*epsilon-bar(2)*epsilon-bar(3)";
+      ext [style=invis];
+      ext -> 3 [dir=none, particle="a", pin="x:@-left"];
+      ext -> 2 [dir=none, particle="a", pin="x:@-left"];
+      5 -> ext [dir=none, particle="a", pin="x:@+right"];
+      4 -> ext [dir=none, particle="a", pin="x:@+right"];
 
-      0 [int_id="V_137"];
-      1 [int_id="V_137"];
-      2 [int_id="V_134"];
-      3 [int_id="V_134"];
-      4 [int_id="V_134"];
-      5 [int_id="V_134"];
-
-      exte0 [style=invis];
-      exte0 -> 3:0 [id=0, dir=none, lmb_rep="P(0,a___)", particle="a", pin="x:@-left"];
-      exte1 [style=invis];
-      exte1 -> 2:1 [id=1, dir=none, lmb_rep="P(1,a___)", particle="a", pin="x:@-left"];
-      exte2 [style=invis];
-      5:2 -> exte2 [id=2, dir=none, lmb_rep="P(2,a___)", particle="a", pin="x:@+right"];
-      exte3 [style=invis];
-      4:3 -> exte3 [id=3, dir=none, lmb_rep="-P(2,a___)+P(0,a___)+P(1,a___)", particle="a", pin="x:@+right"];
-
-      0:4 -> 1:5 [id=4, lmb_id="0", lmb_rep="K(0,a___)", particle="t"];
-      0:6 -> 1:7 [id=5, dir=none, lmb_rep="-K(0,a___)+K(1,a___)", particle="g"];
-      5:8 -> 0:9 [id=6, lmb_rep="K(1,a___)", particle="t"];
-      1:10 -> 4:11 [id=7, lmb_id="1", lmb_rep="K(1,a___)", particle="t"];
-      3:12 -> 2:13 [id=8, lmb_rep="-P(1,a___)+K(1,a___)+P(2,a___)", particle="t"];
-      2:14 -> 5:15 [id=9, lmb_rep="K(1,a___)+P(2,a___)", particle="t"];
-      4:16 -> 3:17 [id=10, lmb_rep="-P(0,a___)-P(1,a___)+K(1,a___)+P(2,a___)", particle="t"];
+      0 -> 1 [particle="t"];
+      0 -> 1 [dir=none, particle="g"];
+      5 -> 0 [particle="t"];
+      1 -> 4 [particle="t"];
+      3 -> 2 [particle="t"];
+      2 -> 5 [particle="t"];
+      4 -> 3 [particle="t"];
     }"""
-    return default_dot, lp, mo, physics_dot_codec, physics_render_settings
+    return (
+        ForceSimulation,
+        default_dot,
+        diagram_render_settings,
+        lp,
+        mo,
+        physics_dot_codec,
+    )
 
 
 @app.cell
 def _(mo):
     mo.md(r"""
-    # Physics rendering from editable DOT
+    # DOT rendering with optional Feynman styling
 
-    This notebook parses ordinary DOT into a native Linnet `Graph`, then applies
-    a physics-flavored rendering configuration assembled entirely in Python.
-    Its particle geometry and independent momentum-arrow layer mirror
-    GammaLoop's current Linnest template, but remain an example rather than a
-    built-in Linnet mode.
+    This notebook parses ordinary DOT into a native Linnet `Graph`. Its default
+    view applies a physics-flavored rendering configuration assembled entirely
+    in Python, but the Feynman-styling toggle can leave the same graph as a bare
+    generic Linnet rendering instead.
 
-    The notebook-local `DotCodec` maps `particle`, momentum, vertex, and port
-    records into arbitrary Python dataclass instances. Only the selectors'
-    typed drawing results cross into Typst. Invisible DOT vertices represent
+    The notebook-local `DotCodec` maps particle, vertex, and port records into
+    arbitrary Python dataclass instances. Only the selectors' typed drawing
+    results cross into Typst. Invisible DOT vertices represent
     external legs, and edge direction retains the underlying source/sink flow
     used by the momentum arrows.
+
+    Bare mode retains the selected layout and grouped DOT coordinates while
+    omitting the particle patterns, colors, direction marks, momentum arrows,
+    and physics `pᵢ` / `nᵢ` labels. It uses generic `eᵢ` / `nᵢ` structural IDs
+    instead. The optional `hᵢ` half-edge IDs work in either mode; momentum and
+    physics-index controls apply only to Feynman mode.
+
+    The force-simulation panel updates after a slider is released. Its label
+    relaxation setting applies after either layout; the other settings apply
+    only when the Force layout is selected.
 
     The read-only panel below the diagram shows the exact generated Typst
     entrypoint compiled for the current view.
@@ -370,7 +401,7 @@ def _(default_dot, lp, mo):
         min_height=440,
         max_height=700,
         debounce=400,
-        label="Editable physics DOT",
+        label="Editable DOT",
     )
     layout_algorithm = mo.ui.dropdown(
         options={
@@ -380,39 +411,193 @@ def _(default_dot, lp, mo):
         value="Force",
         label="Layout",
     )
+    feynman_styling = mo.ui.checkbox(
+        value=True,
+        label="Feynman diagram styling",
+    )
     show_momenta = mo.ui.checkbox(value=True, label="Momentum arrows")
     show_indices = mo.ui.checkbox(value=True, label="pᵢ / nᵢ labels")
+    show_half_edge_ids = mo.ui.checkbox(value=False, label="hᵢ half-edge IDs")
     mo.vstack(
         [
             mo.hstack(
-                [layout_algorithm, show_momenta, show_indices],
+                [
+                    feynman_styling,
+                    layout_algorithm,
+                    show_momenta,
+                    show_indices,
+                    show_half_edge_ids,
+                ],
                 justify="start",
+                wrap=True,
                 gap=1.5,
             ),
             dot_source,
         ]
     )
-    return dot_source, layout_algorithm, show_indices, show_momenta
+    return (
+        dot_source,
+        feynman_styling,
+        layout_algorithm,
+        show_half_edge_ids,
+        show_indices,
+        show_momenta,
+    )
+
+
+@app.cell
+def _(mo):
+    force_steps = mo.ui.slider(
+        40,
+        640,
+        20,
+        320,
+        debounce=True,
+        show_value=True,
+        label="Force iterations",
+    )
+    force_seed = mo.ui.slider(
+        0,
+        99,
+        1,
+        19,
+        debounce=True,
+        show_value=True,
+        label="Seed",
+    )
+    directional_force = mo.ui.slider(
+        0,
+        5,
+        0.05,
+        0.45,
+        debounce=True,
+        show_value=True,
+        label="Directional force",
+    )
+    spring_strength = mo.ui.slider(
+        1,
+        100,
+        1,
+        11,
+        debounce=True,
+        show_value=True,
+        label="Spring strength",
+    )
+    beta = mo.ui.slider(
+        0,
+        250,
+        5,
+        50,
+        debounce=True,
+        show_value=True,
+        label="Vertex repulsion (β)",
+    )
+    dangling_repulsion = mo.ui.slider(
+        0,
+        10,
+        0.1,
+        5,
+        debounce=True,
+        show_value=True,
+        label="External-leg repulsion",
+    )
+    edge_edge_repulsion = mo.ui.slider(
+        0,
+        0.5,
+        0.01,
+        0.1,
+        debounce=True,
+        show_value=True,
+        label="Edge–edge repulsion",
+    )
+    label_steps = mo.ui.slider(
+        0,
+        200,
+        10,
+        80,
+        debounce=True,
+        show_value=True,
+        label="Label relaxation steps",
+    )
+    mo.vstack(
+        [
+            mo.md(
+                "### Force simulation\n\n"
+                "Changes render after releasing a slider. The first seven controls "
+                "apply only to Force; label relaxation runs after either layout."
+            ),
+            force_steps,
+            force_seed,
+            directional_force,
+            spring_strength,
+            beta,
+            dangling_repulsion,
+            edge_edge_repulsion,
+            label_steps,
+        ],
+        gap=0.75,
+    )
+    return (
+        beta,
+        dangling_repulsion,
+        directional_force,
+        edge_edge_repulsion,
+        force_seed,
+        force_steps,
+        label_steps,
+        spring_strength,
+    )
 
 
 @app.cell
 def _(
+    ForceSimulation,
+    beta,
+    dangling_repulsion,
+    directional_force,
+    edge_edge_repulsion,
+    force_seed,
+    force_steps,
+    label_steps,
+    spring_strength,
+):
+    force_simulation = ForceSimulation(
+        steps=force_steps.value,
+        seed=force_seed.value,
+        directional_force=directional_force.value,
+        spring_strength=spring_strength.value,
+        beta=beta.value,
+        dangling_repulsion=dangling_repulsion.value,
+        edge_edge_repulsion=edge_edge_repulsion.value,
+        label_steps=label_steps.value,
+    )
+    return force_simulation
+
+
+@app.cell
+def _(
+    diagram_render_settings,
     dot_source,
+    feynman_styling,
+    force_simulation,
     layout_algorithm,
     lp,
     physics_dot_codec,
-    physics_render_settings,
+    show_half_edge_ids,
     show_indices,
     show_momenta,
 ):
     try:
         graph = lp.Graph.from_dot(dot_source.value, physics_dot_codec())
-        graph.render_config = physics_render_settings(
+        graph.render_config = diagram_render_settings(
             layout_algorithm.value,
+            force_simulation=force_simulation,
+            feynman_styling=feynman_styling.value,
+            show_half_edge_ids=show_half_edge_ids.value,
             show_momenta=show_momenta.value,
             show_indices=show_indices.value,
         )
-        graph.render_config.title = graph.name or "Parsed physics graph"
+        graph.render_config.title = graph.name or "Parsed DOT graph"
         parse_error = None
     except (RuntimeError, TypeError, ValueError) as error:
         graph = None
@@ -456,7 +641,9 @@ def _(mo, parse_error, render_error, rendered_svg):
             title="Typst rendering failed",
         )
     else:
-        _output = mo.Html(rendered_svg)
+        _output = mo.Html(
+            f'<div data-linnet-render-ready="physics">{rendered_svg}</div>'
+        )
     _output
     return
 
@@ -476,7 +663,14 @@ def _(mo, typst_source):
                 This is the exact staged entrypoint used for the SVG above.
                 It updates with the DOT and rendering controls.
                 """),
-                mo.md(f"```typst\n{typst_source}\n```"),
+                mo.ui.code_editor(
+                    value=typst_source,
+                    language="text",
+                    disabled=True,
+                    min_height=320,
+                    max_height=700,
+                    label="Generated Typst (read-only)",
+                ),
             ]
         )
     _source_panel
@@ -506,7 +700,6 @@ def _(graph, mo):
                     "source": _source,
                     "sink": _sink,
                     "particle": _edge.data.particle,
-                    "momentum": _edge.data.momentum or "",
                     "orientation": str(_edge.orientation)
                     .removeprefix("Orientation.")
                     .lower(),
@@ -528,7 +721,6 @@ def _(graph, mo):
                     pagination=False,
                     selection=None,
                     show_download=False,
-                    wrapped_columns=["momentum"],
                 ),
             ]
         )

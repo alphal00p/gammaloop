@@ -258,6 +258,9 @@
   /// Debug level. `1` enables CeTZ canvas debug; `2` also marks edge positions.
   /// -> bool | int
   debug: false,
+  /// Show `h_i` beside every half-edge without an explicit endpoint label.
+  /// -> bool
+  show-half-edge-ids: false,
   /// Default CeTZ node radius. Use `auto` to fit the node label. -> auto | int | float | array
   node-radius: auto,
   /// Minimum radius used when `node-radius` is `auto`. -> int | float
@@ -377,6 +380,7 @@
       title: title,
       subgraph: subgraph,
       debug: debug,
+      show-half-edge-ids: show-half-edge-ids,
       node-radius: node-radius,
       node-min-radius: node-min-radius,
       node-label-padding: node-label-padding,

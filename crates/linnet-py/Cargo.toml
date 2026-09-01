@@ -12,14 +12,20 @@ name = "linnet_py"
 crate-type = ["cdylib", "rlib"]
 name = "linnet_py"
 
+[[bin]]
+name = "stubgen"
+path = "src/bin/stubgen.rs"
+required-features = ["python_stubgen"]
+
 [dependencies]
 dot-parser = { workspace = true }
 linnet = { workspace = true }
 linnest = { workspace = true }
 # Maturin follows path dependencies into sdists; render.rs embeds Kurvst's Typst assets.
 kurvst = { path = "../kurvst" }
-pyo3 = { workspace = true, features = ["multiple-pymethods"] }
-pyo3-stub-gen = { workspace = true, default-features = false }
+pyo3 = { workspace = true }
+pyo3-stub-gen = { workspace = true, default-features = false, optional = true }
+pyo3-stub-gen-derive = { workspace = true, default-features = false }
 rust-embed = { version = "8.4", features = ["debug-embed", "include-exclude", "interpolate-folder-path"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
@@ -28,8 +34,10 @@ walkdir = { workspace = true }
 
 [build-dependencies]
 pyo3-build-config = { workspace = true }
+walkdir = { workspace = true }
 
 [features]
 default = []
 abi3-py310 = ["pyo3/abi3-py310"]
 extension-module = ["pyo3/extension-module"]
+python_stubgen = ["dep:pyo3-stub-gen"]

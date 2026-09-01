@@ -26,3 +26,4 @@ wasm-minimal-protocol = "0.2.0"
 
 [features]
 custom = []
+typst-plugin = ["custom"]

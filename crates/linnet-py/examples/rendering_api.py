@@ -1,3 +1,12 @@
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "linnet-py==0.1.0",
+#     "marimo==0.24.0",
+#     "typst==0.15.0",
+# ]
+# ///
+
 # ruff: noqa: B018, PLR1711  # Cell outputs and empty returns are Marimo syntax.
 
 import marimo
@@ -72,13 +81,17 @@ def _(lp, mo):
         value=False,
         label="Custom Python line theme (optional)",
     )
+    show_half_edge_ids = mo.ui.checkbox(
+        value=False,
+        label="Half-edge IDs (optional)",
+    )
     controls = mo.hstack(
-        [node_store, layout_algorithm, custom_theme],
+        [node_store, layout_algorithm, custom_theme, show_half_edge_ids],
         justify="start",
         gap=1.5,
     )
     controls
-    return custom_theme, layout_algorithm, node_store
+    return custom_theme, layout_algorithm, node_store, show_half_edge_ids
 
 
 @app.cell
@@ -90,6 +103,7 @@ def _(
     layout_algorithm,
     lp,
     node_store,
+    show_half_edge_ids,
 ):
     runtime_context = object()
     receive_data = TaskRecord("platform", 3, runtime_context)
@@ -213,6 +227,7 @@ def _(
     graph.render_config = lp.RenderConfig(
         title="Document intake workflow",
         layouts=_layouts,
+        drawing=lp.DrawOptions(show_half_edge_ids=show_half_edge_ids.value),
     )
     if custom_theme.value:
         _channel_colors = {
@@ -269,7 +284,8 @@ def _(custom_theme, graph, mo):
     ## Automatic rich display
 
     The next cell returns the `Graph` itself, so Marimo discovers
-    `_repr_svg_()` and performs a fresh render. {_overlay_note}
+    `_repr_svg_()` and performs a fresh render. Generic drawings show
+    $n_i$ and $e_i$; the optional control adds $h_i$. {_overlay_note}
 
     `{graph!r}`
     """)
@@ -300,7 +316,7 @@ def _(graph, mo):
                 override this render without mutating `graph.render_config`.
                 """
             ),
-            mo.Html(svg),
+            mo.Html(f'<div data-linnet-render-ready="generic">{svg}</div>'),
         ]
     )
     explicit_render

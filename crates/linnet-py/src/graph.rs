@@ -12,21 +12,22 @@ use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyIndexError, PyKeyError, PyReferenceError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyTuple, PyType};
-use pyo3_stub_gen::derive::{
-    gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pyfunction, gen_stub_pymethods,
-};
 
-use crate::dot::{self, PyDotCodec, PyGlobalData};
+use crate::dot::{self, PyDotCodec, PyEdgeValue, PyGlobalData, PyNodeValue};
 use crate::drawing::{
     copy_drawing, drawing_dict, PyEdgeDrawing, PyHalfEdgeDrawing, PyNodeDrawing, EDGE_FIELDS,
     HEDGE_FIELDS, NODE_FIELDS,
 };
 use crate::native_graph::{PyHedgeGraph, PyNodeStore};
+use crate::topology::{PyCutPartition, PyCycle, PyDirectionBasis, PySubgraph, PyTraversalTree};
 
 static SPEC_ID: AtomicU64 = AtomicU64::new(0);
 
 /// The directed role of a half-edge within its edge.
-#[gen_stub_pyclass_enum]
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum
+)]
 #[pyclass(from_py_object, eq, eq_int, name = "Flow")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PyFlow {
@@ -53,7 +54,10 @@ impl From<Flow> for PyFlow {
 }
 
 /// How an edge's declared endpoints determine its logical direction.
-#[gen_stub_pyclass_enum]
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyclass_enum
+)]
 #[pyclass(from_py_object, eq, eq_int, name = "Orientation")]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum PyOrientation {
@@ -84,7 +88,7 @@ impl From<Orientation> for PyOrientation {
 }
 
 /// A reusable declarative node description accepted by `build()` and `Graph.add_node()`.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "NodeSpec")]
 pub struct PyNodeSpec {
     token: u64,
@@ -112,7 +116,8 @@ impl PyNodeSpec {
     }
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyNodeSpec {
     #[getter]
@@ -177,7 +182,7 @@ impl EndpointRole {
 }
 
 /// A declarative edge endpoint produced by `source()` or `sink()`.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "HalfEdgeSpec")]
 pub struct PyHalfEdgeSpec {
     node: Option<Py<PyAny>>,
@@ -186,7 +191,8 @@ pub struct PyHalfEdgeSpec {
     drawing: Option<Py<PyDict>>,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyHalfEdgeSpec {
     #[getter]
@@ -231,7 +237,7 @@ impl PyHalfEdgeSpec {
 }
 
 /// A reusable declarative edge description accepted by `build()` and `Graph.add_edge()`.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "EdgeSpec")]
 pub struct PyEdgeSpec {
     name: Option<String>,
@@ -242,7 +248,8 @@ pub struct PyEdgeSpec {
     orientation: PyOrientation,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyEdgeSpec {
     #[getter]
@@ -294,13 +301,16 @@ impl PyEdgeSpec {
 }
 
 /// Describe a node while preserving its arbitrary Python data by identity.
-#[gen_stub_pyfunction(python = r#"
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyfunction(python = r#"
     import typing
 
     def node(name: _OptionalString = None, *, data: typing.Any = None, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., shift: _DrawingPoint = ..., rank: _OptionalInteger = ..., minimum_size: _OptionalNumber = ..., maximum_size: _OptionalNumber = ..., style: _OptionalStyle = ..., label_style: _OptionalStyle = ..., extensions: _NativeDict = ...) -> NodeSpec:
         """Describe a node while preserving its arbitrary Python data by identity."""
         ...
-"#)]
+"#)
+)]
 #[pyfunction(signature = (name=None, *, data=None, **drawing))]
 pub fn node(
     py: Python<'_>,
@@ -342,13 +352,16 @@ fn endpoint(
 }
 
 /// Attach a source endpoint resolved by `build()` or `Graph.add_edge()`.
-#[gen_stub_pyfunction(python = r#"
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyfunction(python = r#"
     import typing
 
     def source(node: _EndpointTarget, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
         """Attach a source endpoint. Build resolves specs, names, indices, and live-node keys; incremental insertion resolves current graph references."""
         ...
-"#)]
+"#)
+)]
 #[pyfunction(signature = (node, *, data=None, **drawing))]
 pub fn source(
     py: Python<'_>,
@@ -360,13 +373,16 @@ pub fn source(
 }
 
 /// Attach a sink endpoint resolved by `build()` or `Graph.add_edge()`.
-#[gen_stub_pyfunction(python = r#"
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyfunction(python = r#"
     import typing
 
     def sink(node: _EndpointTarget, *, data: typing.Any = None, label: _OptionalStaticContent = ..., statement: _DrawingString = ..., port_label: _DrawingString = ..., compass: _CompassValue = ..., anchor: _AnchorValue = ..., routing: _RoutingValue = ..., style: _OptionalStyleLayers = ..., extensions: _NativeDict = ...) -> HalfEdgeSpec:
         """Attach a sink endpoint. Build resolves specs, names, indices, and live-node keys; incremental insertion resolves current graph references."""
         ...
-"#)]
+"#)
+)]
 #[pyfunction(signature = (node, *, data=None, **drawing))]
 pub fn sink(
     py: Python<'_>,
@@ -378,13 +394,16 @@ pub fn sink(
 }
 
 /// Describe an edge from one or two endpoint specs.
-#[gen_stub_pyfunction(python = r#"
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyfunction(python = r#"
     import typing
 
     def edge(first: HalfEdgeSpec, name: _OptionalString = None, second: _OptionalHalfEdgeSpec = None, *, data: typing.Any = None, orientation: Orientation = Orientation.Default, label: _OptionalStaticContent = ..., placement: _PlacementValue = ..., label_position: _DrawingPoint = ..., label_offset: _OptionalNumber = ..., label_angle: _DrawingAngle = ..., bend: _DrawingAngle = ..., routing: _RoutingValue = ..., minimum_length: _OptionalInteger = ..., same_rank: _OptionalBoolean = ..., style: _OptionalStyleLayers = ..., label_style: _OptionalStyle = ..., decoration: _DrawingDecoration = ..., extensions: _NativeDict = ...) -> EdgeSpec:
         """Describe an edge from one or two endpoint specs."""
         ...
-"#)]
+"#)
+)]
 #[pyfunction(signature = (first, name=None, second=None, *, data=None, orientation=PyOrientation::Default, **drawing))]
 pub fn edge(
     py: Python<'_>,
@@ -501,7 +520,7 @@ impl GraphState {
 }
 
 /// An owned topology with arbitrary element data and typed rendering configuration.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "Graph")]
 pub struct PyGraph {
     pub(crate) state: RefCell<Option<GraphState>>,
@@ -615,7 +634,7 @@ enum ViewIndex {
 macro_rules! graph_view {
     ($doc:literal, $rust:ident, $python:literal, $index_variant:ident) => {
         #[doc = $doc]
-        #[gen_stub_pyclass]
+        #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
         #[pyclass(unsendable, name = $python)]
         pub struct $rust {
             graph: Option<Py<PyGraph>>,
@@ -760,7 +779,8 @@ impl PyEdge {
     }
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyNode {
     #[getter]
@@ -850,7 +870,8 @@ impl PyNode {
     }
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyEdge {
     #[getter]
@@ -944,7 +965,8 @@ impl PyEdge {
     }
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyHalfEdge {
     #[getter]
@@ -1093,7 +1115,8 @@ fn view_for(
     })
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyGraph {
     #[new]
@@ -1542,6 +1565,444 @@ impl PyGraph {
         crate::render::graph_to_svg(py, &slf, None)
     }
 
+    #[pyo3(name = "full_subgraph", signature = ())]
+    fn py_full_subgraph(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<PySubgraph> {
+        Self::full_subgraph(slf, py)
+    }
+
+    #[pyo3(name = "empty_subgraph", signature = ())]
+    fn py_empty_subgraph(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<PySubgraph> {
+        Self::empty_subgraph(slf, py)
+    }
+
+    #[pyo3(
+        name = "subgraph",
+        signature = (*, nodes=Vec::new(), edges=Vec::new(), half_edges=Vec::new())
+    )]
+    fn py_subgraph(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="typing.Sequence[builtins.int | builtins.str]", imports=("builtins", "typing")))]
+        nodes: Vec<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr="typing.Sequence[builtins.int | builtins.str]", imports=("builtins", "typing")))]
+        edges: Vec<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr="typing.Sequence[builtins.int]", imports=("builtins", "typing")))]
+        half_edges: Vec<usize>,
+    ) -> PyResult<PySubgraph> {
+        Self::subgraph(slf, py, nodes, edges, half_edges)
+    }
+
+    #[pyo3(
+        name = "filter",
+        signature = (*, node=None, edge=None, half_edge=None)
+    )]
+    fn py_filter(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="typing.Callable[[Node], builtins.bool] | None", imports=("builtins", "typing")))]
+        node: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr="typing.Callable[[Edge], builtins.bool] | None", imports=("builtins", "typing")))]
+        edge: Option<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge], builtins.bool] | None", imports=("builtins", "typing")))]
+        half_edge: Option<Py<PyAny>>,
+    ) -> PyResult<PySubgraph> {
+        Self::filter(slf, py, node, edge, half_edge)
+    }
+
+    #[pyo3(name = "nodes_of", signature = (subgraph))]
+    fn py_nodes_of(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: &PySubgraph,
+    ) -> PyResult<Vec<Py<PyNode>>> {
+        Self::nodes_of(slf, py, subgraph)
+    }
+
+    #[pyo3(name = "edges_of", signature = (subgraph))]
+    fn py_edges_of(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: &PySubgraph,
+    ) -> PyResult<Vec<Py<PyEdge>>> {
+        Self::edges_of(slf, py, subgraph)
+    }
+
+    #[pyo3(name = "half_edges_of", signature = (subgraph))]
+    fn py_half_edges_of(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: &PySubgraph,
+    ) -> PyResult<Vec<Py<PyHalfEdge>>> {
+        Self::half_edges_of(slf, py, subgraph)
+    }
+
+    /// Return selected half-edges that lie on the selection's internal boundary.
+    #[pyo3(name = "internal_boundary", signature = (subgraph))]
+    fn py_internal_boundary(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: &PySubgraph,
+    ) -> PyResult<PySubgraph> {
+        Self::internal_boundary(slf, py, subgraph)
+    }
+
+    /// Return all boundary half-edges incident to nodes touched by the selection.
+    #[pyo3(name = "boundary", signature = (subgraph))]
+    fn py_boundary(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: &PySubgraph,
+    ) -> PyResult<PySubgraph> {
+        Self::boundary(slf, py, subgraph)
+    }
+
+    /// Return dangling/external half-edges as a composable structural selection.
+    #[pyo3(name = "external_half_edges", signature = ())]
+    fn py_external_half_edges(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<PySubgraph> {
+        Self::external_half_edges(slf, py)
+    }
+
+    #[pyo3(name = "connected_components", signature = (subgraph=None))]
+    fn py_connected_components(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: Option<&PySubgraph>,
+    ) -> PyResult<Vec<PySubgraph>> {
+        Self::connected_components(slf, py, subgraph)
+    }
+
+    #[pyo3(name = "count_connected_components", signature = (subgraph=None))]
+    fn py_count_connected_components(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: Option<&PySubgraph>,
+    ) -> PyResult<usize> {
+        Self::count_connected_components(slf, py, subgraph)
+    }
+
+    #[pyo3(name = "is_connected", signature = (subgraph=None))]
+    fn py_is_connected(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: Option<&PySubgraph>,
+    ) -> PyResult<bool> {
+        Self::is_connected(slf, py, subgraph)
+    }
+
+    #[pyo3(name = "cyclomatic_number", signature = (subgraph=None))]
+    fn py_cyclomatic_number(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: Option<&PySubgraph>,
+    ) -> PyResult<usize> {
+        Self::cyclomatic_number(slf, py, subgraph)
+    }
+
+    /// Test directed reachability within an optional structural selection.
+    ///
+    /// Both endpoints must belong to the selected subgraph; otherwise this raises `ValueError`.
+    #[pyo3(
+        name = "is_reachable",
+        signature = (source, target, *, subgraph=None, direction=PyDirectionBasis::Underlying)
+    )]
+    fn py_is_reachable(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
+        source: &Bound<'_, PyAny>,
+        #[gen_stub(override_type(type_repr="Node | builtins.int | builtins.str", imports=("builtins")))]
+        target: &Bound<'_, PyAny>,
+        subgraph: Option<&PySubgraph>,
+        direction: PyDirectionBasis,
+    ) -> PyResult<bool> {
+        Self::is_reachable(slf, py, source, target, subgraph, direction)
+    }
+
+    /// Return a deterministic topological order for the selected directed graph.
+    ///
+    /// Explicitly selected zero-crown nodes appear first in ascending graph order.
+    #[pyo3(
+        name = "topological_order",
+        signature = (*, subgraph=None, direction=PyDirectionBasis::Underlying)
+    )]
+    fn py_topological_order(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: Option<&PySubgraph>,
+        direction: PyDirectionBasis,
+    ) -> PyResult<Vec<Py<PyNode>>> {
+        Self::topological_order(slf, py, subgraph, direction)
+    }
+
+    /// Return a new graph with directionally redundant DAG edges removed.
+    #[pyo3(
+        name = "transitive_reduction",
+        signature = (*, direction=PyDirectionBasis::Underlying)
+    )]
+    fn py_transitive_reduction(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        direction: PyDirectionBasis,
+    ) -> PyResult<PyGraph> {
+        Self::transitive_reduction(slf, py, direction)
+    }
+
+    #[pyo3(
+        name = "depth_first_traverse",
+        signature = (root, *, subgraph=None, include=None)
+    )]
+    fn py_depth_first_traverse(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="builtins.int | builtins.str", imports=("builtins")))]
+        root: &Bound<'_, PyAny>,
+        subgraph: Option<&PySubgraph>,
+        include: Option<usize>,
+    ) -> PyResult<PyTraversalTree> {
+        Self::depth_first_traverse(slf, py, root, subgraph, include)
+    }
+
+    #[pyo3(
+        name = "breadth_first_traverse",
+        signature = (root, *, subgraph=None, include=None)
+    )]
+    fn py_breadth_first_traverse(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="builtins.int | builtins.str", imports=("builtins")))]
+        root: &Bound<'_, PyAny>,
+        subgraph: Option<&PySubgraph>,
+        include: Option<usize>,
+    ) -> PyResult<PyTraversalTree> {
+        Self::breadth_first_traverse(slf, py, root, subgraph, include)
+    }
+
+    #[pyo3(name = "bridges", signature = (subgraph=None))]
+    fn py_bridges(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: Option<&PySubgraph>,
+    ) -> PyResult<PySubgraph> {
+        Self::bridges(slf, py, subgraph)
+    }
+
+    #[pyo3(name = "cycle_basis", signature = (subgraph=None))]
+    fn py_cycle_basis(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: Option<&PySubgraph>,
+    ) -> PyResult<(Vec<PyCycle>, PySubgraph)> {
+        Self::cycle_basis(slf, py, subgraph)
+    }
+
+    #[pyo3(name = "all_spanning_forests", signature = (subgraph=None))]
+    fn py_all_spanning_forests(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: Option<&PySubgraph>,
+    ) -> PyResult<Vec<PySubgraph>> {
+        Self::all_spanning_forests(slf, py, subgraph)
+    }
+
+    /// Enumerate inclusion-minimal cutsets with an inclusive boundary-size range.
+    ///
+    /// Bounds default to `[1, unbounded]`; `min_size=0` is rejected because a bond is non-empty.
+    #[pyo3(
+        name = "all_bonds",
+        signature = (*, subgraph=None, min_size=None, max_size=None)
+    )]
+    fn py_all_bonds(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: Option<&PySubgraph>,
+        min_size: Option<usize>,
+        max_size: Option<usize>,
+    ) -> PyResult<Vec<PySubgraph>> {
+        Self::all_bonds(slf, py, subgraph, min_size, max_size)
+    }
+
+    /// Find one native inclusion-minimal cutset within an inclusive size range.
+    #[pyo3(
+        name = "find_bond",
+        signature = (*, subgraph=None, min_size=None, max_size=None)
+    )]
+    fn py_find_bond(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: Option<&PySubgraph>,
+        min_size: Option<usize>,
+        max_size: Option<usize>,
+    ) -> PyResult<Option<PySubgraph>> {
+        Self::find_bond(slf, py, subgraph, min_size, max_size)
+    }
+
+    /// Enumerate circuits only when the complete cycle-space candidate count fits the bound.
+    ///
+    /// `max_results` bounds all non-empty combinations of a cycle basis, not only
+    /// the combinations that ultimately form circuits.
+    #[pyo3(
+        name = "all_cycles",
+        signature = (*, max_results, subgraph=None)
+    )]
+    fn py_all_cycles(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        max_results: usize,
+        subgraph: Option<&PySubgraph>,
+    ) -> PyResult<Vec<PyCycle>> {
+        Self::all_cycles(slf, py, max_results, subgraph)
+    }
+
+    /// Enumerate tadpole components after identifying a non-empty terminal node set.
+    #[pyo3(name = "tadpoles", signature = (externals))]
+    fn py_tadpoles(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="typing.Sequence[Node | builtins.int | builtins.str]", imports=("builtins", "typing")))]
+        externals: Vec<Py<PyAny>>,
+    ) -> PyResult<Vec<PySubgraph>> {
+        Self::tadpoles(slf, py, externals)
+    }
+
+    /// Enumerate all native separating partitions between two disjoint, non-empty node groups.
+    #[pyo3(name = "all_cuts", signature = (source, target))]
+    fn py_all_cuts(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="typing.Sequence[builtins.int | builtins.str]", imports=("builtins", "typing")))]
+        source: Vec<Py<PyAny>>,
+        #[gen_stub(override_type(type_repr="typing.Sequence[builtins.int | builtins.str]", imports=("builtins", "typing")))]
+        target: Vec<Py<PyAny>>,
+    ) -> PyResult<Vec<PyCutPartition>> {
+        Self::all_cuts(slf, py, source, target)
+    }
+
+    /// Append one declarative node and return its fresh live view.
+    #[pyo3(name = "add_node", signature = (spec))]
+    fn py_add_node(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        spec: PyRef<'_, PyNodeSpec>,
+    ) -> PyResult<Py<PyNode>> {
+        Self::add_node(slf, py, spec)
+    }
+
+    /// Append one declarative internal or dangling edge and return its fresh live view.
+    #[pyo3(name = "add_edge", signature = (spec))]
+    fn py_add_edge(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        spec: PyRef<'_, PyEdgeSpec>,
+    ) -> PyResult<Py<PyEdge>> {
+        Self::add_edge(slf, py, spec)
+    }
+
+    /// Split a paired edge at one half-edge, preserving the opposite edge value.
+    #[pyo3(
+        name = "split_edge",
+        signature = (at, replacement, *, name=None, orientation=PyOrientation::Default)
+    )]
+    fn py_split_edge(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "_HalfEdgeTarget"))] at: &Bound<'_, PyAny>,
+        replacement: PyRef<'_, PyEdgeValue>,
+        name: Option<String>,
+        orientation: PyOrientation,
+    ) -> PyResult<(Py<PyEdge>, Py<PyEdge>)> {
+        Self::split_edge(slf, py, at, replacement, name, orientation)
+    }
+
+    /// Connect two dangling half-edges; the first becomes the source endpoint.
+    #[pyo3(
+        name = "connect",
+        signature = (source, sink, replacement, *, name=None, orientation=PyOrientation::Default)
+    )]
+    fn py_connect(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "_HalfEdgeTarget"))] source: &Bound<'_, PyAny>,
+        #[gen_stub(override_type(type_repr = "_HalfEdgeTarget"))] sink: &Bound<'_, PyAny>,
+        replacement: PyRef<'_, PyEdgeValue>,
+        name: Option<String>,
+        orientation: PyOrientation,
+    ) -> PyResult<Py<PyEdge>> {
+        Self::connect(slf, py, source, sink, replacement, name, orientation)
+    }
+
+    /// Copy a structural subgraph into an independent graph.
+    #[pyo3(name = "concretize", signature = (subgraph))]
+    fn py_concretize(slf: Py<PyGraph>, py: Python<'_>, subgraph: &PySubgraph) -> PyResult<PyGraph> {
+        Self::concretize(slf, py, subgraph)
+    }
+
+    /// Remove a structural subgraph and return it as an independent graph.
+    #[pyo3(name = "extract", signature = (subgraph))]
+    fn py_extract(slf: Py<PyGraph>, py: Python<'_>, subgraph: &PySubgraph) -> PyResult<PyGraph> {
+        Self::extract(slf, py, subgraph)
+    }
+
+    /// Delete a structural subgraph.
+    #[pyo3(name = "delete", signature = (subgraph))]
+    fn py_delete(slf: Py<PyGraph>, py: Python<'_>, subgraph: &PySubgraph) -> PyResult<()> {
+        Self::delete(slf, py, subgraph)
+    }
+
+    /// Contract a non-empty subgraph into one replacement node.
+    #[pyo3(
+        name = "contract",
+        signature = (subgraph, replacement, *, name=None)
+    )]
+    fn py_contract(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: &PySubgraph,
+        replacement: PyRef<'_, PyNodeValue>,
+        name: Option<String>,
+    ) -> PyResult<()> {
+        Self::contract(slf, py, subgraph, replacement, name)
+    }
+
+    /// Append another graph without matching dangling half-edges.
+    #[pyo3(name = "append", signature = (other))]
+    fn py_append(slf: Py<PyGraph>, py: Python<'_>, other: Py<PyGraph>) -> PyResult<PyGraph> {
+        Self::append(slf, py, other)
+    }
+
+    /// Append another graph in place without matching dangling half-edges.
+    #[pyo3(name = "append_mut", signature = (other))]
+    fn py_append_mut(slf: Py<PyGraph>, py: Python<'_>, other: Py<PyGraph>) -> PyResult<()> {
+        Self::append_mut(slf, py, other)
+    }
+
+    /// Join dangling half-edges selected by Python callbacks.
+    #[pyo3(name = "join", signature = (other, *, matching, merge))]
+    fn py_join(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        other: Py<PyGraph>,
+        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge, HalfEdge], builtins.bool]", imports=("builtins", "typing")))]
+        matching: Py<PyAny>,
+        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge, HalfEdge], tuple[Flow, Orientation, builtins.str | None, EdgeValue]]", imports=("builtins", "typing")))]
+        merge: Py<PyAny>,
+    ) -> PyResult<PyGraph> {
+        Self::join(slf, py, other, matching, merge)
+    }
+
+    /// Join another graph in place while leaving the other graph unchanged.
+    #[pyo3(name = "join_mut", signature = (other, *, matching, merge))]
+    fn py_join_mut(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        other: Py<PyGraph>,
+        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge, HalfEdge], builtins.bool]", imports=("builtins", "typing")))]
+        matching: Py<PyAny>,
+        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge, HalfEdge], tuple[Flow, Orientation, builtins.str | None, EdgeValue]]", imports=("builtins", "typing")))]
+        merge: Py<PyAny>,
+    ) -> PyResult<()> {
+        Self::join_mut(slf, py, other, matching, merge)
+    }
+
     fn __repr__(&self) -> PyResult<String> {
         let state = self.state.borrow();
         let state = state
@@ -1773,13 +2234,16 @@ impl PyEdgeSpec {
 }
 
 /// Build a graph from declarative node and edge specs.
-#[gen_stub_pyfunction(python = r#"
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyfunction(python = r#"
     import typing
 
     def build(*items: _GraphItem, name: _OptionalString = None, global_data: _OptionalGlobalData = None, codec: _OptionalDotCodec = None, render_config: _OptionalRenderConfig = None, node_store: NodeStore = NodeStore.Vec) -> Graph:
         """Build a graph from declarative node and edge specs."""
         ...
-"#)]
+"#)
+)]
 #[pyfunction(signature = (*items, name=None, global_data=None, codec=None, render_config=None, node_store=PyNodeStore::Vec))]
 pub fn build(
     py: Python<'_>,

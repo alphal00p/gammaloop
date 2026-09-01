@@ -181,7 +181,7 @@ sync-drawing-assets-cargo:
       rustup target add "$wasm_target"
     fi
 
-    cargo build --release -p linnest -p kurvst --features linnest/custom --target "$wasm_target"
+    cargo build --release -p linnest -p kurvst --features linnest/typst-plugin,kurvst/typst-plugin --target "$wasm_target"
 
     install_asset "$wasm_dir/kurvst.wasm" crates/kurvst/typst/kurvst.wasm
     install_asset "$wasm_dir/linnest.wasm" crates/linnest/typst/linnest.wasm
@@ -375,7 +375,9 @@ docs-linnet-python-check:
     python_bin=${PYTHON_BIN_PATH:-python3}
     uv venv "$test_root/venv" --python "$python_bin"
     VIRTUAL_ENV="$test_root/venv" maturin develop --uv --locked --manifest-path crates/linnet-py/Cargo.toml --features extension-module,abi3-py310
-    "$test_root/venv/bin/python" -m unittest crates/linnet-py/tests/test_basic.py
+    "$test_root/venv/bin/python" -m unittest \
+      crates/linnet-py/tests/test_basic.py \
+      crates/linnet-py/tests/test_wasm.py
 
 # Regenerate source-backed CLI/settings and topology/dependency snapshots.
 docs-generated:

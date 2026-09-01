@@ -63,10 +63,10 @@ use std::ops::{Deref, IndexMut};
 use std::path::Path;
 use std::{f64, fs::File};
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
 use wasm_minimal_protocol::*;
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "typst-plugin"))]
 initiate_protocol!();
 
 // Custom getrandom implementation for WASM

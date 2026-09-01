@@ -224,6 +224,7 @@
               ./crates/linnet-py/linnet_py.pyi
               ./crates/linnet-py/examples/physics_render_settings.py
               ./crates/linnet-py/tests/test_basic.py
+              ./crates/linnet-py/tests/test_wasm.py
             ]
           );
         };
@@ -3163,7 +3164,9 @@
             --profile ${docsCargoProfile} \
             --manifest-path crates/linnet-py/Cargo.toml \
             --features extension-module,abi3-py310
-          "$linnet_python/bin/python" -m unittest crates/linnet-py/tests/test_basic.py
+          "$linnet_python/bin/python" -m unittest \
+            crates/linnet-py/tests/test_basic.py \
+            crates/linnet-py/tests/test_wasm.py
           cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- check
           svg_assets="$TMPDIR/alphal00p-svg-assets"
           bash scripts/render-docs-svg-assets.sh "$svg_assets"
@@ -3549,7 +3552,7 @@
           doCheck = false;
           buildType = "release";
           CARGO_BUILD_TARGET = wasmTarget;
-          cargoExtraArgs = "--locked -p linnest -p kurvst --features linnest/custom --target ${wasmTarget}";
+          cargoExtraArgs = "--locked -p linnest -p kurvst --features linnest/typst-plugin,kurvst/typst-plugin --target ${wasmTarget}";
         };
 
         linnestWasmCargoArtifacts = wasmCraneLib.buildDepsOnly (
