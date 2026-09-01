@@ -1454,6 +1454,53 @@ change the reusable Cargo artifact. Checks whose Rust source is
 generated from the manuals remain in the terminal Pages derivation so
 they still validate the content being published.
 
+== Follow-up: persistent Typst worlds in the live watcher
+<follow-up-persistent-typst-worlds>
+The release and Pages builders still use the pinned Typst 0.15 command-line
+renderer. That path remains the reproducible publishing reference and does not
+link the Typst compiler into the normal documentation Cargo artifact. The local
+`docs-watch` path enables a separate, optional `persistent-typst` feature and
+keeps the compiler in the watcher process.
+
+The watcher now owns one stable Typst entrypoint and `World` for each selected
+project, plus a developer-notes world for an all-project build. It no longer
+starts a fresh Cargo build worker or a fresh `typst compile` process for each
+generation. Product registries, portal data, talks, publications, developer
+metadata, and the generated API root are still loaded again for every
+generation, so retaining compiler state does not retain stale site
+configuration.
+
+Each world keeps its `FileStore`, font store, library inputs, package loader,
+and fixed build time. After a compilation, `FileStore::reset` marks loaded
+files stale. The next access reloads them and updates reusable Typst `Source`
+values in place; it does not literally reset only the files named by the file
+watcher. This source identity, together with the process-global `comemo` cache,
+is what makes the next compilation incremental. `comemo::evict(10)` runs once
+per complete site generation rather than once per product, so an all-project
+edit does not age six worlds' cache entries six times.
+
+Bundle output remains generation-local and publication remains atomic. Each
+world writes the same sorted, NUL-delimited dependency description used by the
+existing source watcher. A successful generation replaces the watched set; a
+failed partial all-project generation extends the last complete set and leaves
+the last successfully published site in place. Changes to the running builder
+or documentation-schema Rust code exit with an explicit restart request,
+because an in-process watcher cannot hot-recompile its own implementation.
+
+The watcher profile optimizes third-party dependencies at level 2, matching
+the reason Typst's own documentation watcher uses an optimized development
+profile. Nix exposes the package tree from `typst.withPackages` through
+`TYPST_PACKAGE_CACHE_PATH`; without this explicit environment variable, an
+embedded world would bypass the executable wrapper that normally injects the
+CeTZ, MiTeX, and Tidy packages.
+
+The dedicated `alphal00p-docs-persistent-typst` flake check builds only the
+feature-enabled documentation builder and its schema dependency. It checks all
+targets, runs the persistent reload and failure-recovery tests together with a
+representative CLI byte-parity test, and applies Clippy with warnings denied.
+Keeping this separate from the normal workspace and Pages artifacts tests the
+opt-in path without making the release builder link Typst's compiler crates.
+
 The final Pages derivation remains terminal. Its identity includes all
 rendered documentation sources, the publication channel and optional
 snapshot tag, and the documented commit and timestamp. An exact rerun

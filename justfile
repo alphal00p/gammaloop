@@ -403,7 +403,8 @@ docs-watch PRODUCT PORT="8000" OUTPUT="target/alphal00p-docs-watch":
     #!/usr/bin/env bash
     set -euo pipefail
 
-    exec cargo run --locked -p alphal00p-docs-builder -- \
+    exec cargo run --locked --profile docs-watch -p alphal00p-docs-builder \
+        --features persistent-typst -- \
         watch \
         --product {{ quote(PRODUCT) }} \
         --port {{ quote(PORT) }} \

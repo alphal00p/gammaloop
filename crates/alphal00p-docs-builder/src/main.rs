@@ -34,14 +34,17 @@ enum Command {
         /// Skip Typst invocation and emit only generated metadata.
         #[arg(long, hide = true)]
         skip_typst: bool,
-        /// Persistent Cargo target used by the live-watch build worker.
+        /// Persistent Cargo target used by a live-watch session.
         #[arg(long, hide = true)]
         rustdoc_target_root: Option<PathBuf>,
-        /// Directory receiving Typst dependency files from the build worker.
+        /// Directory receiving Typst dependency files from the renderer.
         #[arg(long, hide = true)]
         dependency_output: Option<PathBuf>,
     },
-    /// Continuously rebuild documentation and serve it with browser reloads.
+    /// Continuously rebuild with retained Typst state and browser reloads.
+    ///
+    /// Requires the `persistent-typst` Cargo feature; `just docs-watch` selects
+    /// the feature and optimized watcher profile.
     Watch {
         /// Product id or "all".
         #[arg(long, default_value = "all")]

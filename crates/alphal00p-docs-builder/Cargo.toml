@@ -4,10 +4,21 @@ version = "0.1.0"
 edition.workspace = true
 publish = false
 
+[features]
+default = []
+persistent-typst = [
+  "dep:comemo",
+  "dep:typst",
+  "dep:typst-bundle",
+  "dep:typst-kit",
+  "dep:typst-pdf",
+]
+
 [dependencies]
 alphal00p-docs-schema = { path = "../alphal00p-docs-schema" }
 clap = { workspace = true, features = ["derive", "env"] }
 chrono.workspace = true
+comemo = { version = "=0.5.1", optional = true }
 eyre.workspace = true
 notify.workspace = true
 percent-encoding.workspace = true
@@ -17,4 +28,17 @@ serde_json.workspace = true
 tempfile = "3.8"
 tiny_http.workspace = true
 toml.workspace = true
+# `Cargo.lock` deliberately holds Typst's internal component family at 0.15.0
+# as well, matching the Nix-provided CLI used for release output parity.
+typst = { version = "=0.15.0", optional = true }
+typst-bundle = { version = "=0.15.0", optional = true }
+typst-kit = { version = "=0.15.0", default-features = false, features = [
+  "datetime",
+  "embedded-fonts",
+  "emit-diagnostics",
+  "scan-fonts",
+  "system-downloader",
+  "system-files",
+], optional = true }
+typst-pdf = { version = "=0.15.0", optional = true }
 walkdir.workspace = true

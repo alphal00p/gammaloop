@@ -113,6 +113,16 @@ opt-level = 2
 inherits = "dev"
 debug = false
 
+# Typst's compiler crates are prohibitively slow without optimization. Keep the
+# long-lived watcher itself quick to compile while matching Typst's own
+# dependency optimization level for incremental rebuilds.
+[profile.docs-watch]
+inherits = "dev"
+debug = false
+
+[profile.docs-watch.package."*"]
+opt-level = 2
+
 # Keep CI archives small enough for cache upload while preserving dev-optim
 # debuginfo for local diagnostics.
 [profile.ci-optim]

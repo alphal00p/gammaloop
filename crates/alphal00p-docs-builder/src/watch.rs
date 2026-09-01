@@ -16,6 +16,7 @@ use notify::{
 };
 use tempfile::{Builder as TempDirBuilder, TempDir};
 
+use super::{BuildChannel, BuildRequest, typst_render::PersistentTypstRenderer};
 use super::{SiteBuilder, absolute_from, copy_tree, server::LiveServer};
 
 const QUIET_PERIOD: Duration = Duration::from_millis(100);
@@ -44,11 +45,19 @@ struct SourceWatcher {
 
 impl SourceWatcher {
     fn new(root: &Path, excluded: Vec<PathBuf>) -> Result<Self> {
+        let current_dir = env::current_dir().wrap_err("failed to resolve the current directory")?;
+        let root = lexical_absolute(&current_dir, root)
+            .canonicalize()
+            .wrap_err_with(|| format!("failed to resolve documentation root {}", root.display()))?;
+        let excluded = excluded
+            .into_iter()
+            .map(|path| canonicalize_existing_prefix(&root, &path))
+            .collect();
         let (sender, events) = mpsc::channel();
         let mut watcher =
             notify::recommended_watcher(sender).wrap_err("failed to create source watcher")?;
         watcher
-            .watch(root, RecursiveMode::NonRecursive)
+            .watch(&root, RecursiveMode::NonRecursive)
             .wrap_err_with(|| format!("failed to watch {}", root.display()))?;
         for directory in ["docs", "crates"] {
             let path = root.join(directory);
@@ -61,7 +70,7 @@ impl SourceWatcher {
         Ok(Self {
             watcher,
             events,
-            root: root.to_path_buf(),
+            root,
             excluded,
             typst_dependencies: BTreeSet::new(),
             dependency_watch_roots: BTreeSet::new(),
@@ -246,6 +255,21 @@ fn lexical_absolute(root: &Path, path: &Path) -> PathBuf {
     normalized
 }
 
+fn canonicalize_existing_prefix(root: &Path, path: &Path) -> PathBuf {
+    let absolute = lexical_absolute(root, path);
+    let mut prefix = absolute.as_path();
+    loop {
+        if let Ok(canonical) = prefix.canonicalize() {
+            let suffix = absolute.strip_prefix(prefix).unwrap_or(Path::new(""));
+            return lexical_absolute(&canonical, suffix);
+        }
+        let Some(parent) = prefix.parent() else {
+            return absolute;
+        };
+        prefix = parent;
+    }
+}
+
 fn ignored_workspace_path(root: &Path, path: &Path) -> bool {
     path.strip_prefix(root).is_ok_and(|relative| {
         relative.components().any(|component| {
@@ -309,6 +333,7 @@ impl SiteBuilder {
         let session = TempDirBuilder::new()
             .prefix("alphal00p-docs-watch-")
             .tempdir_in(&target)?;
+        let mut renderer = PersistentTypstRenderer::new(&self.root, &session.path().join("typst"))?;
         let output = absolute_from(&self.root, &request.output);
         let mut excluded = vec![session.path().to_path_buf()];
         if !request.serve {
@@ -342,8 +367,13 @@ impl SiteBuilder {
                 request.product,
                 changed_summary(&changed)
             );
-            let build =
-                self.build_generation(&request, session.path(), &dependency_output, &changed);
+            let build = self.build_generation(
+                &request,
+                session.path(),
+                &dependency_output,
+                &changed,
+                &mut renderer,
+            );
             let build_succeeded = build.is_ok();
             match read_typst_dependencies(&dependency_output) {
                 Ok(Some(dependencies)) => {
@@ -398,6 +428,12 @@ impl SiteBuilder {
             if changed.is_empty() {
                 bail!("documentation source watcher stopped");
             }
+            if let Some(path) = changed.iter().find(|path| watcher_restart_required(path)) {
+                bail!(
+                    "{} changes the running documentation builder; restart the watcher to load it",
+                    path.display()
+                );
+            }
         }
     }
 
@@ -429,6 +465,7 @@ impl SiteBuilder {
         session: &Path,
         dependency_output: &Path,
         changed: &[PathBuf],
+        renderer: &mut PersistentTypstRenderer,
     ) -> Result<(TempDir, PathBuf)> {
         if dependency_output.exists() {
             fs::remove_dir_all(dependency_output)?;
@@ -449,35 +486,21 @@ impl SiteBuilder {
             self.refresh_api(&request.product, &api_root, changed)?;
         }
         let rustdoc_target = session.join("rustdoc");
-        let mut command = Command::new(env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
-        command
-            .current_dir(&self.root)
-            .env("ALPHAL00P_DOCS_API_ROOT", &api_root)
-            .args([
-                "run",
-                "--locked",
-                "-p",
-                "alphal00p-docs-builder",
-                "--",
-                "build",
-                "--product",
-                &request.product,
-                "--channel",
-                "latest",
-                "--output",
-            ])
-            .arg(&root)
-            .arg("--rustdoc-target-root")
-            .arg(&rustdoc_target)
-            .arg("--dependency-output")
-            .arg(dependency_output);
-        if !request.include_rustdoc {
-            command.arg("--skip-rustdoc");
-        }
-        let status = command
-            .status()
-            .wrap_err("failed to launch the documentation build worker")?;
-        ensure!(status.success(), "documentation build worker failed");
+        let mut builder = SiteBuilder::load(self.root.clone())?;
+        builder.api_root = api_root;
+        builder.build_with_renderer(
+            BuildRequest {
+                product: request.product.clone(),
+                channel: BuildChannel::Latest,
+                output: root.clone(),
+                snapshot_tag: None,
+                include_rustdoc: request.include_rustdoc,
+                include_typst: true,
+                rustdoc_target_root: Some(rustdoc_target),
+                dependency_output: Some(dependency_output.to_path_buf()),
+            },
+            renderer,
+        )?;
         Ok((directory, root))
     }
 
@@ -628,6 +651,23 @@ fn rust_backed_change(path: &Path) -> bool {
         .and_then(|name| name.to_str())
         .is_some_and(|name| matches!(name, "Cargo.toml" | "Cargo.lock"))
         || path.extension().and_then(|extension| extension.to_str()) == Some("rs")
+}
+
+fn watcher_restart_required(path: &Path) -> bool {
+    if matches!(path.to_str(), Some("Cargo.toml" | "Cargo.lock")) {
+        return true;
+    }
+    let implementation_crate = [
+        Path::new("crates/alphal00p-docs-builder"),
+        Path::new("crates/alphal00p-docs-schema"),
+    ]
+    .into_iter()
+    .any(|crate_root| path.starts_with(crate_root));
+    implementation_crate
+        && (matches!(
+            path.file_name().and_then(|name| name.to_str()),
+            Some("Cargo.toml" | "build.rs")
+        ) || path.extension().and_then(|extension| extension.to_str()) == Some("rs"))
 }
 
 fn changed_in_crates(changed: &[PathBuf], crates: &[&str]) -> bool {
@@ -870,6 +910,26 @@ mod tests {
     }
 
     #[test]
+    fn watcher_requests_a_restart_only_for_its_own_compiled_inputs() {
+        for path in [
+            "Cargo.toml",
+            "Cargo.lock",
+            "crates/alphal00p-docs-builder/Cargo.toml",
+            "crates/alphal00p-docs-builder/src/typst_render.rs",
+            "crates/alphal00p-docs-schema/src/lib.rs",
+        ] {
+            assert!(watcher_restart_required(Path::new(path)), "{path}");
+        }
+        for path in [
+            "docs/products/gammaloop/content/tutorial.typ",
+            "crates/gammalooprs/src/lib.rs",
+            "crates/spenso/Cargo.toml",
+        ] {
+            assert!(!watcher_restart_required(Path::new(path)), "{path}");
+        }
+    }
+
+    #[test]
     fn initial_refresh_is_limited_to_python_free_source_references() {
         assert_eq!(initial_source_references("gammaloop"), (true, false));
         assert_eq!(initial_source_references("vakint"), (false, true));
@@ -1079,6 +1139,40 @@ mod tests {
         watcher.replace_typst_dependencies([wrapper]).unwrap();
         assert!(watcher.typst_dependencies.is_empty());
         assert!(watcher.dependency_watch_roots.is_empty());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_workspace_uses_canonical_watch_and_exclusion_paths() {
+        use std::os::unix::fs::symlink;
+
+        let container = tempfile::tempdir().unwrap();
+        let root = container.path().join("workspace");
+        fs::create_dir(&root).unwrap();
+        fs::create_dir(root.join("docs")).unwrap();
+        fs::create_dir(root.join("crates")).unwrap();
+        fs::create_dir(root.join("target")).unwrap();
+        fs::create_dir(root.join("target/session")).unwrap();
+        let alias = container.path().join("workspace-link");
+        symlink(&root, &alias).unwrap();
+
+        let existing_exclusion = alias.join("target/session");
+        let missing_exclusion = alias.join("generated/site");
+        let mut watcher = SourceWatcher::new(
+            &alias,
+            vec![existing_exclusion.clone(), missing_exclusion.clone()],
+        )
+        .unwrap();
+
+        assert_eq!(watcher.root, root.canonicalize().unwrap());
+        assert_eq!(
+            watcher.excluded,
+            vec![root.join("target/session"), root.join("generated/site")]
+        );
+
+        let wrapper = root.join("target/session/main.typ");
+        watcher.replace_typst_dependencies([wrapper]).unwrap();
+        assert!(watcher.typst_dependencies.is_empty());
     }
 
     #[test]

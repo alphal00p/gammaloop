@@ -1,6 +1,7 @@
 //! Build and validate the five independently rendered product manuals.
 
 mod server;
+mod typst_render;
 mod watch;
 
 pub use watch::WatchRequest;
@@ -29,6 +30,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tempfile::{Builder as TempDirBuilder, TempDir};
+use typst_render::{CliTypstRenderer, TypstRenderJob, TypstRenderer};
 use walkdir::WalkDir;
 
 const PRODUCT_IDS: [&str; 5] = ["gammaloop", "linnet", "spenso", "idenso", "vakint"];
@@ -96,7 +98,7 @@ pub struct BuildRequest {
     pub include_typst: bool,
     /// Persistent Cargo target used only by a long-running watch session.
     pub rustdoc_target_root: Option<PathBuf>,
-    /// Directory receiving one NUL-delimited Typst dependency file per product.
+    /// Directory receiving one NUL-delimited Typst dependency file per entrypoint.
     pub dependency_output: Option<PathBuf>,
 }
 
@@ -1646,6 +1648,21 @@ impl SiteBuilder {
     }
 
     pub fn build(&self, request: BuildRequest) -> Result<()> {
+        let mut renderer = CliTypstRenderer::new(&self.root);
+        self.build_with_renderer(request, &mut renderer)
+    }
+
+    pub(crate) fn build_with_renderer(
+        &self,
+        request: BuildRequest,
+        renderer: &mut dyn TypstRenderer,
+    ) -> Result<()> {
+        let result = self.build_inner(request, renderer);
+        renderer.finish_generation();
+        result
+    }
+
+    fn build_inner(&self, request: BuildRequest, renderer: &mut dyn TypstRenderer) -> Result<()> {
         self.check()?;
         let tag = match request.channel {
             BuildChannel::Latest => {
@@ -1714,7 +1731,7 @@ impl SiteBuilder {
             dependency_output: request.dependency_output.as_deref(),
         };
         for product in &selected {
-            self.build_product(product, &options)?;
+            self.build_product(product, &options, renderer)?;
         }
 
         match scope {
@@ -1723,6 +1740,7 @@ impl SiteBuilder {
                     &output,
                     request.include_typst,
                     request.dependency_output.as_deref(),
+                    renderer,
                 )?;
                 self.write_portal(&output, request.channel, tag)?;
                 self.write_federated_search_index(&output, request.channel, tag)?;
@@ -1743,6 +1761,7 @@ impl SiteBuilder {
         &self,
         product: &ProductConfig,
         options: &ProductBuildOptions<'_>,
+        renderer: &mut dyn TypstRenderer,
     ) -> Result<()> {
         let channel_path = match options.channel {
             BuildChannel::Latest => PathBuf::from("latest"),
@@ -1788,7 +1807,13 @@ impl SiteBuilder {
         let mut generated_pages = self.write_generated_reference(product, &site)?;
 
         if options.include_typst {
-            self.render_typst(product, &metadata, &site, options.dependency_output)?;
+            self.render_typst(
+                product,
+                &metadata,
+                &site,
+                options.dependency_output,
+                renderer,
+            )?;
         } else {
             self.write_fallback_page(product, &metadata, &site)?;
         }
@@ -2216,13 +2241,13 @@ impl SiteBuilder {
         metadata: &SnapshotMetadata<'_>,
         site: &Path,
         dependency_output: Option<&Path>,
+        renderer: &mut dyn TypstRenderer,
     ) -> Result<()> {
         let target = self.root.join("target");
         fs::create_dir_all(&target)?;
         let work = TempDirBuilder::new()
             .prefix("alphal00p-typst-")
             .tempdir_in(target)?;
-        let wrapper = work.path().join("site.typ");
         let source = product.source.to_string_lossy().replace('\\', "/");
         let title = typst_string(&product.title);
         let provenance = provenance_typst(metadata);
@@ -2247,55 +2272,43 @@ impl SiteBuilder {
         }
         document_sections.push("#provenance");
         let document_body = document_sections.join(" #pagebreak() ");
-        fs::write(
-            &wrapper,
-            format!(
-                "#import \"/{source}\": manual\n\
-                 {page_imports}\
-                 #let catalog-reference = [{catalog_reference}]\n\
-                 #let generated-reference = [{generated_reference}]\n\
-                 #let provenance = [{provenance}]\n\
-                 {page_documents}\
-                 #document(\"manual.pdf\", title: [{title}])[{document_body}]\n"
-            ),
-        )?;
+        let wrapper = format!(
+            "#import \"/{source}\": manual\n\
+             {page_imports}\
+             #let catalog-reference = [{catalog_reference}]\n\
+             #let generated-reference = [{generated_reference}]\n\
+             #let provenance = [{provenance}]\n\
+             {page_documents}\
+             #document(\"manual.pdf\", title: [{title}])[{document_body}]\n"
+        );
         let bundle = work.path().join("bundle");
         let metadata_json = serde_json::to_string(metadata)?;
-        let mut command = Command::new("typst");
-        command.current_dir(&self.root).args([
-            "compile",
-            "--root",
-            self.root.to_str().context("workspace root is not UTF-8")?,
-            "--features",
-            "html,bundle",
-            "--format",
-            "bundle",
-            "--creation-timestamp",
-            &metadata.git_timestamp.to_string(),
-            "--input",
-            &format!("metadata={metadata_json}"),
-            "--input",
-            &format!("git-commit={}", metadata.git_commit),
-            "--input",
-            match metadata.channel {
-                BuildChannel::Latest => "channel=latest",
-                BuildChannel::Snapshot => "channel=snapshot",
-            },
-            "--input",
-            &format!("snapshot-tag={}", metadata.snapshot_tag.unwrap_or_default()),
-        ]);
-        if let Some(directory) = dependency_output {
-            fs::create_dir_all(directory)?;
-            command
-                .args(["--deps-format", "zero", "--deps"])
-                .arg(directory.join(format!("{}.deps", product.id)));
-        }
-        let status = command
-            .arg(&wrapper)
-            .arg(&bundle)
-            .status()
-            .wrap_err("failed to launch Typst 0.15; enter the Nix development shell")?;
-        ensure!(status.success(), "Typst failed for {}", product.id);
+        renderer.render(TypstRenderJob {
+            key: product.id.clone(),
+            label: product.id.clone(),
+            wrapper,
+            inputs: vec![
+                ("metadata".to_owned(), metadata_json),
+                ("git-commit".to_owned(), metadata.git_commit.clone()),
+                (
+                    "channel".to_owned(),
+                    match metadata.channel {
+                        BuildChannel::Latest => "latest",
+                        BuildChannel::Snapshot => "snapshot",
+                    }
+                    .to_owned(),
+                ),
+                (
+                    "snapshot-tag".to_owned(),
+                    metadata.snapshot_tag.unwrap_or_default().to_owned(),
+                ),
+            ],
+            timestamp: i64::try_from(metadata.git_timestamp)
+                .context("documented commit timestamp exceeds Typst's supported range")?,
+            output: bundle.clone(),
+            dependency_file: dependency_output
+                .map(|directory| directory.join(format!("{}.deps", product.id))),
+        })?;
         ensure!(
             bundle.join("index.html").is_file(),
             "Typst emitted no index.html"
@@ -3763,6 +3776,7 @@ impl SiteBuilder {
         &self,
         notes: &[&DeveloperNote],
         dependency_output: Option<&Path>,
+        renderer: &mut dyn TypstRenderer,
     ) -> Result<Option<TempDir>> {
         if notes.is_empty() {
             return Ok(None);
@@ -3773,7 +3787,6 @@ impl SiteBuilder {
         let work = TempDirBuilder::new()
             .prefix("alphal00p-developer-typst-")
             .tempdir_in(target)?;
-        let wrapper = work.path().join("developers.typ");
         let mut documents = String::new();
         for (index, note) in notes.iter().enumerate() {
             documents.push_str(&format!(
@@ -3782,7 +3795,6 @@ impl SiteBuilder {
                 typst_string(&note.source.to_string_lossy().replace('\\', "/")),
             ));
         }
-        fs::write(&wrapper, documents)?;
 
         let bundle = work.path().join("bundle");
         let timestamp = self.git_timestamp();
@@ -3791,32 +3803,16 @@ impl SiteBuilder {
             "cannot determine the documented commit timestamp; set SOURCE_DATE_EPOCH"
         );
         let commit = self.git_commit();
-        let mut command = Command::new("typst");
-        command.current_dir(&self.root).args([
-            "compile",
-            "--root",
-            self.root.to_str().context("workspace root is not UTF-8")?,
-            "--features",
-            "html,bundle",
-            "--format",
-            "bundle",
-            "--creation-timestamp",
-            &timestamp.to_string(),
-            "--input",
-            &format!("git-commit={commit}"),
-        ]);
-        if let Some(directory) = dependency_output {
-            fs::create_dir_all(directory)?;
-            command
-                .args(["--deps-format", "zero", "--deps"])
-                .arg(directory.join("developers.deps"));
-        }
-        let status = command
-            .arg(&wrapper)
-            .arg(&bundle)
-            .status()
-            .wrap_err("failed to launch Typst 0.15; enter the Nix development shell")?;
-        ensure!(status.success(), "Typst failed for developer notes");
+        renderer.render(TypstRenderJob {
+            key: "developers".to_owned(),
+            label: "developer notes".to_owned(),
+            wrapper: documents,
+            inputs: vec![("git-commit".to_owned(), commit)],
+            timestamp: i64::try_from(timestamp)
+                .context("documented commit timestamp exceeds Typst's supported range")?,
+            output: bundle.clone(),
+            dependency_file: dependency_output.map(|directory| directory.join("developers.deps")),
+        })?;
         for (index, _) in notes.iter().enumerate() {
             ensure!(
                 bundle.join(format!("note-{index}.html")).is_file(),
@@ -3831,6 +3827,7 @@ impl SiteBuilder {
         output: &Path,
         include_typst: bool,
         dependency_output: Option<&Path>,
+        renderer: &mut dyn TypstRenderer,
     ) -> Result<()> {
         let staging_root = output.join(".staging");
         fs::create_dir_all(&staging_root)?;
@@ -3872,7 +3869,7 @@ impl SiteBuilder {
             .collect::<Vec<_>>();
         let mut search = Vec::new();
         let typst_work = if include_typst {
-            self.render_developer_typst(&notes, dependency_output)?
+            self.render_developer_typst(&notes, dependency_output, renderer)?
         } else {
             None
         };
@@ -12101,6 +12098,7 @@ mod tests {
     #[test]
     fn developer_architecture_is_classified_searchable_and_source_backed() {
         let builder = SiteBuilder::discover().unwrap();
+        let mut renderer = CliTypstRenderer::new(&builder.root);
         let output = tempfile::tempdir().unwrap();
         let stale = output
             .path()
@@ -12108,7 +12106,7 @@ mod tests {
         fs::create_dir_all(stale.parent().unwrap()).unwrap();
         fs::write(&stale, "stale route").unwrap();
         builder
-            .write_developer_docs(output.path(), false, None)
+            .write_developer_docs(output.path(), false, None, &mut renderer)
             .unwrap();
 
         let developer_root = output.path().join("developers");
@@ -12495,6 +12493,7 @@ mod tests {
     #[test]
     fn portal_and_developer_pages_use_federated_search_and_feedback() {
         let builder = SiteBuilder::discover().unwrap();
+        let mut renderer = CliTypstRenderer::new(&builder.root);
         let output = tempfile::tempdir().unwrap();
         builder
             .write_portal(output.path(), BuildChannel::Latest, None)
@@ -12505,7 +12504,7 @@ mod tests {
         assert!(portal.contains("Search all projects and developer notes"));
 
         builder
-            .write_developer_docs(output.path(), false, None)
+            .write_developer_docs(output.path(), false, None, &mut renderer)
             .unwrap();
         let hub = fs::read_to_string(output.path().join("developers/index.html")).unwrap();
         assert!(hub.contains("data-search-index=\"../search-index.json\""));

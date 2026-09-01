@@ -42,7 +42,9 @@ Python inventories, checked examples, source-format policy, links, and assets.
 `docs-site <product>` produces an honest product-scoped preview. `docs-site
 all` builds the complete portal and all five products. Output defaults to
 `target/alphal00p-docs`; `docs-watch` continuously rebuilds one product and
-keeps the last successful preview available after an error.
+keeps the last successful preview available after an error. Use the `just`
+recipe for watching: it selects the optional embedded-Typst feature and its
+optimized development profile.
 
 Ordinary pull requests retain a complete preview artifact and cannot update the
 mutable `latest` site. While pull request 96 is open, pushes to its in-repository

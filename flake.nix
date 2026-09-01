@@ -1822,6 +1822,9 @@
             RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
             GLIBC_TUNABLES = "glibc.rtld.optional_static_tls=10000";
             TYPST_FONT_PATHS = docsFontPath;
+            # `typst.withPackages` injects this only into its executable wrapper.
+            # The persistent Rust renderer needs the same package tree directly.
+            TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
 
             CC = nixCc;
             CXX = nixCxx;
@@ -3035,6 +3038,43 @@
           }
         );
 
+        # Exercise the embedded Typst watcher behind its opt-in feature without
+        # adding Typst's compiler crates to normal workspace or Pages artifacts.
+        persistentTypstArgs = commonArgs // {
+          pname = "alphal00p-docs-persistent-typst";
+          src = workspacePackageSrcFor "alphal00p-docs-builder";
+          buildType = "docs-watch";
+          CARGO_PROFILE = "docs-watch";
+          cargoExtraArgs = "--locked -p alphal00p-docs-builder --features persistent-typst";
+          nativeBuildInputs = (commonArgs.nativeBuildInputs or [ ]) ++ [
+            docsTypst
+            pkgs.roboto
+          ];
+          TYPST_FONT_PATHS = docsFontPath;
+          TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
+        };
+
+        persistentTypstCargoArtifacts = craneLib.buildDepsOnly persistentTypstArgs;
+
+        persistentTypstCheck = craneLib.mkCargoDerivation (
+          persistentTypstArgs
+          // {
+            cargoArtifacts = persistentTypstCargoArtifacts;
+            doNotLinkInheritedArtifacts = true;
+            doInstallCargoArtifacts = false;
+            postPatch = workspaceMissingCargoTargetsScript;
+            buildPhaseCargoCommand = ''
+              mkdir -p "$out"
+              cargoWithProfile check ${persistentTypstArgs.cargoExtraArgs} --all-targets
+              cargoWithProfile test ${persistentTypstArgs.cargoExtraArgs} typst_render::persistent::tests
+              cargoWithProfile clippy ${persistentTypstArgs.cargoExtraArgs} --all-targets --no-deps -- --deny warnings
+            '';
+            checkPhaseCargoCommand = "";
+            doCheck = false;
+            installPhaseCommand = "";
+          }
+        );
+
         alphal00pDocsDerivationArgs = alphal00pDocsRealCargoArgs // {
           cargoArtifacts = alphal00pDocsCargoArtifacts;
           src = documentationSrc;
@@ -3046,6 +3086,7 @@
             pkgs.uv
           ];
           TYPST_FONT_PATHS = docsFontPath;
+          TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
           ALPHAL00P_DOCS_CARGO_PROFILE = docsCargoProfile;
           doNotLinkInheritedArtifacts = true;
           doInstallCargoArtifacts = false;
@@ -3940,6 +3981,8 @@
           gammaloop-doc = workspaceDocCheck;
 
           alphal00p-docs = alphal00pDocsCheck;
+
+          alphal00p-docs-persistent-typst = persistentTypstCheck;
 
           gammaloop-doctest = workspaceDoctestCheck;
 

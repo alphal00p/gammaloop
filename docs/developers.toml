@@ -688,19 +688,32 @@ kind = "Build engineering"
 status = "Living engineering record"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-17"
-review_ref = "c9f4e32acd2c"
+reviewed_at = "2026-09-01"
+review_ref = "f8a0e490dd02bf2e71d7c8e59ff852384d143dfd"
 products = ["gammaloop"]
 topics = ["nix", "ci", "cache", "documentation"]
-review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/**", "crates/gammaloop-workspace-hack/**"]
+review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/**", "crates/gammaloop-workspace-hack/**", "crates/alphal00p-docs-builder/**", "justfile"]
 
 [[section.note.scope]]
 path = "flake.nix"
 symbol = "alphal00pDocsCargoArtifacts"
 anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
-# No cache-architecture impact: the documentation source filter now includes the
-# double-triangle test fixture consumed by the deterministic About-page SVG.
-digest = "692adae64fe7a7fd3aa0e51ac7ba8b0d10919d5d"
+# The embedded watch renderer needs direct access to the package tree normally
+# injected only by the wrapped Typst executable, and its opt-in path has a
+# dedicated check that does not enter normal Pages artifacts.
+digest = "847251809327df98fb18513dc1e2d8790d4aba2e"
+
+[[section.note.scope]]
+path = "crates/alphal00p-docs-builder/src/typst_render.rs"
+symbol = "alphal00p_docs_builder::typst_render::PersistentTypstRenderer"
+anchor = "pub(crate) struct PersistentTypstRenderer {"
+digest = "e901371a78210b31068a9ba102508bf7951b823e"
+
+[[section.note.scope]]
+path = "crates/alphal00p-docs-builder/src/watch.rs"
+symbol = "alphal00p_docs_builder::SiteBuilder::build_generation"
+anchor = "fn build_generation("
+digest = "793b89e65c1c45a1d2e45543018ee44c83651d75"
 
 [[section]]
 id = "documentation"
@@ -716,8 +729,8 @@ kind = "Contributor documentation policy"
 status = "Current guide"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-19"
-review_ref = "6feaba98e48a2cedb4688d3d0cc9a214716a8677"
+reviewed_at = "2026-09-01"
+review_ref = "f8a0e490dd02bf2e71d7c8e59ff852384d143dfd"
 products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
 topics = ["documentation", "architecture", "governance"]
 review_triggers = ["docs/developers.toml", "crates/alphal00p-docs-builder/src/lib.rs", "CONTRIBUTING.typ"]
@@ -726,9 +739,9 @@ review_triggers = ["docs/developers.toml", "crates/alphal00p-docs-builder/src/li
 path = "crates/alphal00p-docs-builder/src/lib.rs"
 symbol = "alphal00p_docs_builder::SiteBuilder::check"
 anchor = "pub fn check(&self) -> Result<()> {"
-# No documentation-system architecture impact: the getting-started guides use the
-# existing registry, Typst renderer, example harness, and generated navigation pipeline.
-digest = "04d98b6a8f2ef2b454abdec082d07c20409557f7"
+# Reviewed execution-only change: renderer injection retains compiler state but
+# leaves authoring policy, registry validation, and generated navigation unchanged.
+digest = "9692e8d5d61770a8f6cf22fcaa1e4828bedd627a"
 
 [[section.note]]
 id = "documentation-improvement-plan"
