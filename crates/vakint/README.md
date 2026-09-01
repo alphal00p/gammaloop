@@ -20,16 +20,16 @@ assembly, not as an independent Python distribution.
 
 `Vakint` is also part of the [`symbolica-community`](https://github.com/benruijl/symbolica-community) `Python` module where vaccuum graphs can be evaluated directly using the `Python` API exposed in that module.
 
-Numerator tensor reduction has two backends. `"alphaloop"` is the historical
-FORM implementation, has bundled projector tables through rank 10, and remains
-the default. `"feynkit"` uses the native FeynKit projector, supports ranks
-through 20, and does not need FORM for the tensor-reduction step:
+Numerator tensor reduction has two backends. `"feynkit"` is the default: it uses
+the native FeynKit projector, supports ranks through 20, and does not need FORM
+for the tensor-reduction step. `"alphaloop"` explicitly selects the historical
+FORM implementation, whose bundled projector tables cover ranks through 10:
 
 ```python
 from symbolica import E
 from symbolica.community.vakint import Vakint
 
-vakint = Vakint(tensor_reduction_method="feynkit")
+vakint = Vakint()
 integral = E(
     "k(1,mu)*k(1,nu)*p(1,mu)*p(1,nu)"
     "*topo(prop(1,edge(1,1),k(1),muvsq,1))",
@@ -38,13 +38,15 @@ integral = E(
 reduced = vakint.tensor_reduce(integral)
 ```
 
-The Rust API selects the same backend through `VakintSettings`:
+The Rust API uses the same default through `VakintSettings`. Set
+`TensorReductionMethod::AlphaLoop` explicitly to request the legacy FORM
+projector:
 
 ```rust
 use vakint::{TensorReductionMethod, VakintSettings};
 
 let settings = VakintSettings {
-    tensor_reduction_method: TensorReductionMethod::FeynKit,
+    tensor_reduction_method: TensorReductionMethod::AlphaLoop,
     ..VakintSettings::default()
 };
 ```

@@ -1,13 +1,15 @@
 mod test_utils;
 use test_utils::{compare_output, get_vakint};
-use vakint::VakintSettings;
 use vakint::vakint_parse;
+use vakint::{TensorReductionMethod, VakintSettings};
 
 #[test_log::test]
 fn test_reduction_1l_a() {
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
         use_dot_product_notation: true,
+        // Preserve these historical exact-output tests as coverage of the FORM backend.
+        tensor_reduction_method: TensorReductionMethod::AlphaLoop,
         ..VakintSettings::default()
     });
 
@@ -43,6 +45,7 @@ fn test_reduction_1l_b() {
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
         use_dot_product_notation: true,
+        tensor_reduction_method: TensorReductionMethod::AlphaLoop,
         ..VakintSettings::default()
     });
 
@@ -78,6 +81,7 @@ fn test_reduction_2l_a() {
     let vakint = get_vakint(VakintSettings {
         allow_unknown_integrals: false,
         use_dot_product_notation: true,
+        tensor_reduction_method: TensorReductionMethod::AlphaLoop,
         ..VakintSettings::default()
     });
 
