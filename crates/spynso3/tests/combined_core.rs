@@ -147,14 +147,19 @@ finally:
     if previous_typst is not None:
         sys.modules["typst"] = previous_typst
 
-# A fake compiler lets this test verify the trusted notation source and virtual
-# file routing without installing typst-py or pretending to test its compiler.
+# A fake compiler lets this test verify the trusted notation source and
+# temporary project routing without installing typst-py or pretending to test
+# its compiler.
+import pathlib
 import types
 
 typst = types.ModuleType("typst")
 typst.calls = []
 
-def compile_typst(files, *, format, pretty):
+def compile_typst(input, *, root, format, pretty):
+    root = pathlib.Path(root)
+    assert pathlib.Path(input) == root / "main.typ"
+    files = {path.name: path.read_bytes() for path in root.iterdir()}
     typst.calls.append((files, format, pretty))
     if format == "html":
         return b"<html><head><style>.math{}</style></head><body><math><mi>T</mi></math></body></html>"

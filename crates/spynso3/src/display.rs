@@ -3,7 +3,7 @@ use std::{cmp::Reverse, collections::BinaryHeap, fmt::Write};
 use pyo3::{
     exceptions::{PyImportError, PyRuntimeError, PyValueError},
     prelude::*,
-    types::{PyBytes, PyDict},
+    types::PyDict,
 };
 use spenso::{
     algebra::complex::RealOrComplexRef,
@@ -21,6 +21,7 @@ use spenso::{
         parametric::{AtomViewOrConcrete, ParamOrConcrete},
     },
 };
+use std::path::Path;
 use symbolica::{
     api::python::{PythonExpression, PythonFormattedOutput},
     atom::Atom,
@@ -429,23 +430,46 @@ fn compile_typst(
             "Typst rendering requires the optional dependency; install gammaloop[typst-display]",
         )
     })?;
-    let files = PyDict::new(py);
-    files.set_item("main.typ", PyBytes::new(py, main_source.as_bytes()))?;
-    files.set_item("render.typ", PyBytes::new(py, RENDER_TYP.as_bytes()))?;
-    files.set_item(
+    let compile = typst.getattr("compile")?;
+    // typst-py treats every value in its virtual-file mapping as UTF-8 source,
+    // so binary render trees must be routed through an actual temporary file.
+    let temporary_directory = PyModule::import(py, "tempfile")?
+        .getattr("TemporaryDirectory")?
+        .call0()?;
+    let root_string: String = temporary_directory.getattr("name")?.extract()?;
+    let root = Path::new(&root_string);
+    let write_file = |name: &str, contents: &[u8]| {
+        std::fs::write(root.join(name), contents).map_err(|error| {
+            PyRuntimeError::new_err(format!("could not prepare Typst input {name}: {error}"))
+        })
+    };
+    write_file("main.typ", main_source.as_bytes())?;
+    write_file("render.typ", RENDER_TYP.as_bytes())?;
+    write_file(
         "notation.typ",
-        PyBytes::new(py, notation_source.unwrap_or(NOTATION_TYP).as_bytes()),
+        notation_source.unwrap_or(NOTATION_TYP).as_bytes(),
     )?;
     if let Some(tree) = tree {
-        files.set_item("tree.cbor", PyBytes::new(py, tree))?;
+        write_file("tree.cbor", tree)?;
     }
     let kwargs = PyDict::new(py);
     kwargs.set_item("format", format)?;
     kwargs.set_item("pretty", true)?;
-    typst
-        .getattr("compile")?
-        .call((files,), Some(&kwargs))?
-        .extract::<Vec<u8>>()
+    kwargs.set_item("root", &root_string)?;
+    let result = compile
+        .call((root.join("main.typ"),), Some(&kwargs))
+        .and_then(|output| output.extract::<Vec<u8>>());
+    let cleanup = temporary_directory.call_method0("cleanup");
+    match result {
+        Ok(output) => {
+            cleanup?;
+            Ok(output)
+        }
+        Err(error) => {
+            let _ = cleanup;
+            Err(error)
+        }
+    }
 }
 
 fn extract_html_fragment(document: &str) -> Result<String, &'static str> {
@@ -1843,8 +1867,10 @@ mod tests {
         assert!(validate_plain_source_settings(&DisplaySettings::default()).is_ok());
         assert!(validate_typst_source_settings(&DisplaySettings::schoonschip()).is_err());
         assert!(validate_plain_source_settings(&DisplaySettings::call()).is_err());
-        let mut spaced = DisplaySettings::default();
-        spaced.index_gap = "0.2em".to_owned();
+        let spaced = DisplaySettings {
+            index_gap: "0.2em".to_owned(),
+            ..DisplaySettings::default()
+        };
         assert!(validate_typst_source_settings(&spaced).is_err());
     }
 
