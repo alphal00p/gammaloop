@@ -15,8 +15,8 @@ use symbolica::domains::float::{Complex, Float, RealLike};
 use crate::symbols::S;
 use crate::{
     AlphaLoopOptions, EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor,
-    MATADOptions, NumericalEvaluationResult, PySecDecOptions, Vakint, VakintError,
-    VakintExpression, VakintSettings, vakint_symbol,
+    MATADOptions, NumericalEvaluationResult, PySecDecOptions, TensorReductionMethod, Vakint,
+    VakintError, VakintExpression, VakintSettings, vakint_symbol,
 };
 
 #[cfg(feature = "python_stubgen")]
@@ -487,11 +487,12 @@ impl VakintEvaluationMethodWrapper {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl VakintWrapper {
-    #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None))]
+    #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, tensor_reduction_method = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None))]
     #[allow(clippy::too_many_arguments)]
     #[new]
     /// Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.
     /// Note that the creation of a Vakint instance involves the processing and creation of the library of all known topologies, which can be time consuming.
+    /// External executables are validated when an operation needs them, so the FeynKit tensor backend can be used on systems without FORM.
     ///
     /// ## Examples
     /// ```python
@@ -512,6 +513,7 @@ impl VakintWrapper {
     ///             numerical_external_momenta=external_momenta
     ///         ),
     ///     ],
+    ///     tensor_reduction_method="feynkit",
     ///     form_exe_path="form",
     ///     python_exe_path="python3",
     /// )
@@ -524,6 +526,8 @@ impl VakintWrapper {
     ///     The decimal precision to be used during the evaluation. Default is 17.
     /// evaluation_order : Optional[Sequence[VakintEvaluationMethod]]
     ///     A list of `VakintEvaluationMethod` instances specifying the order in which evaluation methods are to be applied. Default is all available methods in a sensible order.
+    /// tensor_reduction_method : Optional[str]
+    ///     Numerator tensor-reduction backend: "alphaloop" uses the historical FORM projector, while "feynkit" is native and does not require FORM. Default is "alphaloop".
     /// epsilon_symbol : Optional[Expression]
     ///     The symbol to be used for the dimensional regularisation parameter epsilon. Default is "ε".
     /// mu_r_sq_symbol : Optional[Expression]
@@ -549,6 +553,7 @@ impl VakintWrapper {
     pub fn new(
         run_time_decimal_precision: Option<u32>,
         evaluation_order: Option<Vec<PyRef<VakintEvaluationMethodWrapper>>>,
+        tensor_reduction_method: Option<String>,
         epsilon_symbol: Option<Symbol>,
         mu_r_sq_symbol: Option<Symbol>,
         form_exe_path: Option<String>,
@@ -613,6 +618,11 @@ impl VakintWrapper {
             clean_tmp_dir: clean_tmp_dir.unwrap_or(env::var("VAKINT_NO_CLEAN_TMP_DIR").is_err()),
             temporary_directory,
             evaluation_order: eval_order,
+            tensor_reduction_method: tensor_reduction_method
+                .as_deref()
+                .unwrap_or("alphaloop")
+                .parse::<TensorReductionMethod>()
+                .map_err(vakint_to_python_error)?,
             // This quantity is typically set equal to *one plus the maximum loop count* of the UV regularisation problem considered.
             // For example when considering a 2-loop problem, then:
             //   a) for the nested one-loop integrals appearing, the single pole, finite term *and* order-epsilon term will need to be considered.
@@ -622,9 +632,6 @@ impl VakintWrapper {
             ..VakintSettings::default()
         };
         let vakint = Vakint::new().map_err(vakint_to_python_error)?;
-        vakint
-            .validate_settings(&settings)
-            .map_err(vakint_to_python_error)?;
         let wrapper = VakintWrapper { vakint, settings };
         Ok(wrapper)
     }
@@ -785,6 +792,7 @@ impl VakintWrapper {
 
     #[pyo3(signature = (integral_expression))]
     /// Convert a vakint expression to a form where tensor integrals are reduced to scalar integrals.
+    /// The backend is selected by `tensor_reduction_method` when constructing `Vakint`.
     ///
     /// ## Examples
     /// ```python

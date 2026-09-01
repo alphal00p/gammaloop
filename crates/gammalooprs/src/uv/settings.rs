@@ -14,7 +14,10 @@ use crate::utils::{
 use bincode_trait_derive::{Decode, Encode};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use vakint::{AlphaLoopOptions, EvaluationMethod, FMFTOptions, MATADOptions, PySecDecOptions};
+use vakint::{
+    AlphaLoopOptions, EvaluationMethod, FMFTOptions, MATADOptions, PySecDecOptions,
+    TensorReductionMethod,
+};
 
 #[derive(
     Debug,
@@ -316,6 +319,38 @@ impl Default for PySecDecSettings {
     }
 }
 
+/// Numerator tensor-reduction backend used by Vakint.
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
+#[derive(
+    Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum VakintTensorReductionMethod {
+    /// Historical FORM implementation shipped with AlphaLoop.
+    #[default]
+    AlphaLoop,
+    /// Native, FORM-less FeynKit tensor projector.
+    FeynKit,
+}
+
+impl Display for VakintTensorReductionMethod {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::AlphaLoop => write!(f, "alphaloop"),
+            Self::FeynKit => write!(f, "feynkit"),
+        }
+    }
+}
+
+impl From<VakintTensorReductionMethod> for TensorReductionMethod {
+    fn from(value: VakintTensorReductionMethod) -> Self {
+        match value {
+            VakintTensorReductionMethod::AlphaLoop => Self::AlphaLoop,
+            VakintTensorReductionMethod::FeynKit => Self::FeynKit,
+        }
+    }
+}
+
 #[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
@@ -326,6 +361,8 @@ pub struct VakintSettings {
     pub python_exe_path: String,
     #[serde(skip_serializing_if = "is_default_vakint_evaluation_methods")]
     pub evaluation_methods: Vec<String>,
+    #[serde(skip_serializing_if = "IsDefault::is_default")]
+    pub tensor_reduction_method: VakintTensorReductionMethod,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub matad: MATADSettings,
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -386,6 +423,7 @@ impl VakintSettings {
                     })
                     .collect(),
             ),
+            tensor_reduction_method: self.tensor_reduction_method.into(),
             use_dot_product_notation: false,
             temporary_directory: self.temporary_directory.clone(),
             epsilon_symbol: GS.dim_epsilon.get_name().into(),
@@ -414,6 +452,7 @@ impl Default for VakintSettings {
                 "matad".to_string(),
                 "fmft".to_string(),
             ],
+            tensor_reduction_method: VakintTensorReductionMethod::AlphaLoop,
             matad: MATADSettings::default(),
             alphaloop: AlphaLoopSettings::default(),
             fmft: FMFTSettings::default(),
@@ -547,12 +586,59 @@ mod ct_renormalization_overrides_serde {
 mod tests {
     use super::{
         ApproximationType, CTIdentifier, CTRenormalizationRule,
-        RenormalizationPrescriptionSettings, UVOrchestrator, UVgenerationSettings,
+        RenormalizationPrescriptionSettings, UVOrchestrator, UVgenerationSettings, VakintSettings,
+        VakintTensorReductionMethod,
     };
+    use crate::utils::serde_utils::ShowDefaultsGuard;
     use std::collections::BTreeSet;
+    use vakint::TensorReductionMethod;
 
     fn pdg_set(values: impl IntoIterator<Item = isize>) -> BTreeSet<isize> {
         values.into_iter().collect()
+    }
+
+    #[test]
+    fn vakint_tensor_reduction_defaults_to_alphaloop() {
+        let settings = VakintSettings::default();
+
+        assert_eq!(
+            settings.tensor_reduction_method,
+            VakintTensorReductionMethod::AlphaLoop
+        );
+        assert_eq!(
+            TensorReductionMethod::from(settings.tensor_reduction_method),
+            TensorReductionMethod::AlphaLoop
+        );
+    }
+
+    #[test]
+    fn vakint_tensor_reduction_deserializes_feynkit_and_maps_to_core() {
+        let settings: VakintSettings =
+            toml::from_str(r#"tensor_reduction_method = "feynkit""#).unwrap();
+
+        assert_eq!(
+            settings.tensor_reduction_method,
+            VakintTensorReductionMethod::FeynKit
+        );
+        assert_eq!(
+            TensorReductionMethod::from(settings.tensor_reduction_method),
+            TensorReductionMethod::FeynKit
+        );
+
+        let serialized = toml::to_string(&settings).unwrap();
+        assert!(serialized.contains(r#"tensor_reduction_method = "feynkit""#));
+        assert_eq!(
+            toml::from_str::<VakintSettings>(&serialized).unwrap(),
+            settings
+        );
+    }
+
+    #[test]
+    fn vakint_tensor_reduction_default_is_omitted_from_toml() {
+        let _guard = ShowDefaultsGuard::new(false);
+        let serialized = toml::to_string(&VakintSettings::default()).unwrap();
+
+        assert!(!serialized.contains("tensor_reduction_method"));
     }
 
     #[test]

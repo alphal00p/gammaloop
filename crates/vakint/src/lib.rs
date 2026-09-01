@@ -13,12 +13,17 @@ use crate::utils::set_precision_in_polynomial_atom;
 use ahash::RandomState;
 use colored::Colorize;
 use eyre::Result;
+use feynkit_tensor::TensorReducer;
 use graph::Graph;
 #[allow(unused)]
 use log::{debug, info, warn};
 
 use regex::Regex;
 use rug::float::Constant;
+use spenso::{
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
+    structure::representation::{BaseRepName, Minkowski, initialize as initialize_spenso_reps},
+};
 use std::{
     collections::{BTreeMap, HashMap, HashSet, hash_map::Entry},
     env,
@@ -270,6 +275,10 @@ pub enum VakintError {
     FMFTError(String),
     #[error("Numerical evaluation error: {0}")]
     EvaluationError(String),
+    #[error(transparent)]
+    FeynKitTensorReduction(#[from] feynkit_tensor::TensorReductionError),
+    #[error("unknown numerator tensor reduction method '{0}'; expected 'alphaloop' or 'feynkit'")]
+    InvalidTensorReductionMethod(String),
     #[error("unknown vakint error")]
     Unknown,
 }
@@ -1924,6 +1933,39 @@ pub enum InputFloatRationalizationPrecision {
     TargetPrecision,
 }
 
+/// Strategy used to reduce tensor numerators before scalar-integral evaluation.
+///
+/// `AlphaLoop` invokes the historical FORM projector bundled with Vakint.
+/// `FeynKit` uses FeynKit's native symmetry-aware projector and therefore does
+/// not require FORM for numerator reduction.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TensorReductionMethod {
+    #[default]
+    AlphaLoop,
+    FeynKit,
+}
+
+impl fmt::Display for TensorReductionMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::AlphaLoop => write!(f, "alphaloop"),
+            Self::FeynKit => write!(f, "feynkit"),
+        }
+    }
+}
+
+impl std::str::FromStr for TensorReductionMethod {
+    type Err = VakintError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.to_ascii_lowercase().as_str() {
+            "alphaloop" => Ok(Self::AlphaLoop),
+            "feynkit" => Ok(Self::FeynKit),
+            _ => Err(VakintError::InvalidTensorReductionMethod(value.to_owned())),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct VakintSettings {
     #[allow(unused)]
@@ -1937,6 +1979,7 @@ pub struct VakintSettings {
     pub allow_unknown_integrals: bool,
     pub clean_tmp_dir: bool,
     pub evaluation_order: EvaluationOrder,
+    pub tensor_reduction_method: TensorReductionMethod,
     // This quantity is typically set equal to *one plus the maximum loop count* of the UV regularisation problem considered.
     // For example when considering a 2-loop problem, then:
     //   a) for the nested one-loop integrals appearing, the single pole, finite term *and* order-epsilon term will need to be considered.
@@ -2152,6 +2195,7 @@ impl Default for VakintSettings {
             allow_unknown_integrals: true,
             clean_tmp_dir: env::var("VAKINT_NO_CLEAN_TMP_DIR").is_err(),
             evaluation_order: EvaluationOrder::default(),
+            tensor_reduction_method: TensorReductionMethod::AlphaLoop,
             // Default to a three-loop UV subtraction problem, for which alphaLoop implementation can be used.
             number_of_terms_in_epsilon_expansion: 4,
             precision_for_input_float_rationalization:
@@ -2428,6 +2472,17 @@ impl VakintTerm {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
+        match settings.tensor_reduction_method {
+            TensorReductionMethod::AlphaLoop => self.tensor_reduce_alphaloop(vakint, settings),
+            TensorReductionMethod::FeynKit => self.tensor_reduce_feynkit(settings),
+        }
+    }
+
+    fn tensor_reduce_alphaloop(
+        &mut self,
+        vakint: &Vakint,
+        settings: &VakintSettings,
+    ) -> Result<(), VakintError> {
         let mut form_numerator = self.numerator.clone();
         // Make sure to undo the dot product notation.
         // If it was not used, the command below will do nothing.
@@ -2565,6 +2620,151 @@ impl VakintTerm {
 
         self.numerator = reduced_numerator;
         Ok(())
+    }
+
+    fn tensor_reduce_feynkit(&mut self, settings: &VakintSettings) -> Result<(), VakintError> {
+        initialize_spenso_reps();
+        let epsilon = vk_parse!(&settings.epsilon_symbol).map_err(VakintError::SymbolicaError)?;
+        let dimension = Atom::num(4) - Atom::num(2) * epsilon;
+        let numerator = Self::vakint_to_spenso_numerator(self.numerator.as_view(), &dimension);
+        let reduced = TensorReducer::new(dimension.clone())
+            .with_integrated_head(S.k)
+            .reduce(numerator.as_view())?
+            .into_expression();
+        let mut reduced = Self::spenso_to_vakint_numerator(reduced.as_view(), &dimension);
+        if !settings.use_dot_product_notation {
+            reduced = Vakint::convert_from_dot_notation(reduced.as_view());
+        }
+        self.numerator = reduced;
+        Ok(())
+    }
+
+    fn vakint_to_spenso_numerator(numerator: AtomView<'_>, dimension: &Atom) -> Atom {
+        numerator.replace_map(|term, _context, out| {
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            let arguments = function.iter().collect::<Vec<_>>();
+            if (function.get_symbol() == S.k || function.get_symbol() == S.p)
+                && arguments.len() == 2
+            {
+                let slot = FunctionBuilder::new(Minkowski::selfless_symbol())
+                    .add_arg(dimension)
+                    .add_arg(arguments[1])
+                    .finish();
+                **out = FunctionBuilder::new(function.get_symbol())
+                    .add_arg(arguments[0])
+                    .add_arg(slot)
+                    .finish();
+            } else if function.get_symbol() == S.g && arguments.len() == 2 {
+                let left = FunctionBuilder::new(Minkowski::selfless_symbol())
+                    .add_arg(dimension)
+                    .add_arg(arguments[0])
+                    .finish();
+                let right = FunctionBuilder::new(Minkowski::selfless_symbol())
+                    .add_arg(dimension)
+                    .add_arg(arguments[1])
+                    .finish();
+                **out = ETS.metric(left, right);
+            }
+        })
+    }
+
+    fn spenso_to_vakint_numerator(numerator: AtomView<'_>, dimension: &Atom) -> Atom {
+        let dots_mapped = numerator.replace_map(|term, _context, out| {
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            if function.get_symbol() != SPENSO_TAG.dot || function.get_nargs() != 2 {
+                return;
+            }
+            let arguments = function.iter().collect::<Vec<_>>();
+            let Some(left) = Self::compact_spenso_vector(arguments[0], dimension) else {
+                return;
+            };
+            let Some(right) = Self::compact_spenso_vector(arguments[1], dimension) else {
+                return;
+            };
+            **out = FunctionBuilder::new(S.dot)
+                .add_arg(left)
+                .add_arg(right)
+                .finish();
+        });
+
+        dots_mapped.replace_map(|term, _context, out| {
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            let arguments = function.iter().collect::<Vec<_>>();
+            if function.get_symbol() == ETS.metric && arguments.len() == 2 {
+                let (Some(left), Some(right)) = (
+                    Self::spenso_slot_index(arguments[0], dimension),
+                    Self::spenso_slot_index(arguments[1], dimension),
+                ) else {
+                    return;
+                };
+                **out = FunctionBuilder::new(S.g)
+                    .add_arg(left)
+                    .add_arg(right)
+                    .finish();
+            } else if function.get_symbol() == S.k || function.get_symbol() == S.p {
+                let Some(slot) = arguments.last() else {
+                    return;
+                };
+                let Some(index) = Self::spenso_slot_index(*slot, dimension) else {
+                    return;
+                };
+                **out = arguments[..arguments.len() - 1]
+                    .iter()
+                    .fold(
+                        FunctionBuilder::new(function.get_symbol()),
+                        |builder, argument| builder.add_arg(*argument),
+                    )
+                    .add_arg(index)
+                    .finish();
+            }
+        })
+    }
+
+    fn compact_spenso_vector(vector: AtomView<'_>, dimension: &Atom) -> Option<Atom> {
+        let AtomView::Fun(function) = vector else {
+            return None;
+        };
+        if function.get_symbol() != S.k && function.get_symbol() != S.p {
+            return None;
+        }
+        let arguments = function.iter().collect::<Vec<_>>();
+        let AtomView::Fun(representation) = *arguments.last()? else {
+            return None;
+        };
+        if representation.get_symbol() != Minkowski::selfless_symbol()
+            || representation.get_nargs() != 1
+            || representation.iter().next()? != dimension.as_view()
+        {
+            return None;
+        }
+        Some(
+            arguments[..arguments.len() - 1]
+                .iter()
+                .fold(
+                    FunctionBuilder::new(function.get_symbol()),
+                    |builder, argument| builder.add_arg(*argument),
+                )
+                .finish(),
+        )
+    }
+
+    fn spenso_slot_index(slot: AtomView<'_>, dimension: &Atom) -> Option<Atom> {
+        let AtomView::Fun(representation) = slot else {
+            return None;
+        };
+        if representation.get_symbol() != Minkowski::selfless_symbol()
+            || representation.get_nargs() != 2
+        {
+            return None;
+        }
+        let arguments = representation.iter().collect::<Vec<_>>();
+        (arguments[0] == dimension.as_view()).then(|| arguments[1].to_owned())
     }
 }
 
