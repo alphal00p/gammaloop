@@ -10,7 +10,7 @@ use symbolica::{
     symbol,
 };
 
-use crate::network::tags::SPENSO_TAG;
+use crate::network::tags::{SPENSO_TAG, tensor_print};
 use crate::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
 use crate::tensor_symbol;
 use crate::{
@@ -300,7 +300,13 @@ pub static ETS, ETS_INNER: ExplicitTensorSymbols = || ExplicitTensorSymbols {
         }
     }),
     // sharp: symbol!("♯";Symmetric),
-    metric: tensor_symbol!("g";Symmetric,Real,Linear;print = |a, opt, _state| {
+    metric: tensor_symbol!("g";Symmetric,Real,Linear;print = |a, opt, state| {
+
+        if opt.mode.is_typst()
+            && let Some(output) = tensor_print(a, opt, state)
+        {
+            return Some(output);
+        }
 
 
         if matches!(
