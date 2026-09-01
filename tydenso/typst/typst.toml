@@ -1,0 +1,12 @@
+[package]
+name = "tydenso"
+version = "0.1.0"
+entrypoint = "lib.typ"
+authors = ["lcnbr <https://github.com/lcnbr>"]
+license = "MIT"
+description = "Construct and transform symbolic tensors with Spenso and Idenso."
+repository = "https://github.com/alphal00p/gammaloop"
+keywords = ["tensor-algebra", "symbolic-computation", "symbolica"]
+categories = ["integration", "scripting"]
+disciplines = ["mathematics", "physics"]
+compiler = "0.15.0"

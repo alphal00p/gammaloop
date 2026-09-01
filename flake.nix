@@ -124,6 +124,7 @@
         ./crates/linnest/typst/linnest.wasm
         ./crates/linnest/typst/src
         ./crates/linnest/typst/typst.toml
+        ./crates/spynso3/typst
         ./crates/vakint/form_src
         ./crates/vakint/templates
       ];

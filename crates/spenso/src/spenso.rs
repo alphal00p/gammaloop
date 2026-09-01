@@ -30,6 +30,8 @@ pub mod algebra;
 pub mod contraction;
 pub mod iterators;
 pub mod network;
+#[cfg(feature = "portable-payload")]
+pub mod portable_payload;
 pub mod structure;
 pub mod tensors;
 

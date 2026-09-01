@@ -21,7 +21,7 @@ gammaloop-api = { path = "crates/gammaloop-api/" }
 gammaloop-tracing-filter = { path = "crates/gammaloop-tracing-filter/" }
 gammaloop-tracing-filter-macros = { path = "crates/gammaloop-tracing-filter-macros/" }
 gammalooprs = { path = "crates/gammalooprs/" }
-idenso = { path = "crates/idenso/" }
+idenso = { path = "crates/idenso/", default-features = false }
 include_dir = "0.7"
 indexmap = "2.14.0"
 indicatif = "0.18.4"
@@ -29,7 +29,7 @@ insta = "1.46.3"
 itertools = "0.14"
 json5 = "0.4.1"
 linnest = { path = "crates/linnest/" }
-linnet = { path = "crates/linnet/" }
+linnet = { path = "crates/linnet/", default-features = false }
 momtrop = "0.3.0"
 ndarray = "0.17.2"
 nu-ansi-term = "0.50.3"
@@ -48,11 +48,11 @@ serde_json = "1"
 serde_repr = "0.1.20"
 serde_yaml = "0.9.34"
 smartstring = "1.0.1"
-spenso = { path = "crates/spenso/" }
+spenso = { path = "crates/spenso/", default-features = false }
 spenso-hep-lib = { path = "crates/spenso-hep-lib/" }
-spenso-macros = { path = "crates/spenso-macros/" }
-symbolica-utils = { path = "crates/symbolica-utils/" }
-symbolica = { version = "2.2.0", default-features = false, features = ["gmp", "native_code_generation"] }
+spenso-macros = { path = "crates/spenso-macros/", default-features = false }
+symbolica-utils = { path = "crates/symbolica-utils/", default-features = false }
+symbolica = { version = "2.2.0", default-features = false }
 sysinfo = "0.33.1"
 tabled = "0.20.0"
 thiserror = "2.0"
@@ -61,6 +61,7 @@ tracing = "0.1.44"
 tracing-appender = "0.2.4"
 tracing-indicatif = "0.3.13"
 tracing-subscriber = "0.3.23"
+tymbolica-atom-payload = { git = "https://github.com/lcnbr/tymbolica", rev = "e85233dd3d99e5fb458913d0d49f99d83466025b", default-features = false }
 typed-index-collections = "3.5.0"
 vakint = { path = "crates/vakint/" }
 walkdir = "2.5.0"
@@ -68,15 +69,9 @@ walkdir = "2.5.0"
 which = "8.0.0"
 
 [patch.crates-io]
-# graphica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-# numerica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-# symbolica = { git = "https://github.com/benruijl/symbolica", branch = "dev" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "dev" }
-# graphica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
-# numerica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
-# symbolica = { git = "https://github.com/benruijl/symbolica", rev = "309a156264f1b535af653803497d91330fc5abfc" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "ec19eeb211685aa216dbd28a4df547cd4c6baca1" }
 
 [profile.bench]
 opt-level = 3

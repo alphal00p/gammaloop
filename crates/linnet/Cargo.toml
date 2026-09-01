@@ -40,7 +40,7 @@ default-features = false
 features = ["compile-time-rng", "std"]
 
 [target.x86_64-unknown-linux-gnu.dependencies]
-gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack" }
+gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack", optional = true }
 
 [dev-dependencies]
 criterion = "0.5"
@@ -62,7 +62,7 @@ serde = "1.0"
 similar-asserts = "1.7.0"
 
 [features]
-default = ["nodestore-vec", "serde"]
+default = ["native", "nodestore-vec", "serde"]
 bincode = ["dep:bincode", "serde"]
 drawing = ["dep:cgmath", "cgmath/serde"]
 energy_trace = []
@@ -72,4 +72,11 @@ nodestore-vec = []
 rkyv = ["dep:rkyv"]
 serde = ["bitvec/serde", "dep:serde"]
 symbolica = ["dep:symbolica", "dep:symbolica-utils"]
+native = [
+  "dep:gammaloop-workspace-hack",
+  "symbolica?/integer-gmp",
+  "symbolica?/float-mpfr",
+  "symbolica-utils?/native",
+]
+wasm = ["symbolica?/wasm", "symbolica-utils?/wasm"]
 # layout = ["dep:argmin"]

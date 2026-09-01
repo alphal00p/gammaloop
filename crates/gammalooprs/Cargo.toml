@@ -33,7 +33,7 @@ dot-parser = { workspace = true }
 enum_dispatch = "*"
 eyre = { workspace = true }
 gammaloop-tracing-filter = { workspace = true, features = ["symbolica"] }
-idenso = { workspace = true, features = ["bincode"] }
+idenso = { workspace = true, features = ["bincode", "native"] }
 include_dir = { workspace = true }
 indicatif = { workspace = true, features = ["improved_unicode", "rayon"] }
 itertools = { workspace = true }
@@ -67,7 +67,7 @@ smartstring = { workspace = true, features = ["serde"] }
 spenso = { workspace = true, features = ["native-code-generation", "shadowing"] }
 spenso-hep-lib = { workspace = true }
 statrs = "0.16.1"
-symbolica-utils = { workspace = true }
+symbolica-utils = { workspace = true, features = ["native"] }
 # compensated-summation = "0.3.0"
 # serde_with = "3.9.0"
 tabled = { workspace = true, features = ["ansi"] }
@@ -109,6 +109,9 @@ workspace = true
 default-features = false
 features = [
   "bincode",
+  "float-mpfr",
+  "integer-gmp",
+  "native_code_generation",
   "serde",
 ]
 

@@ -223,8 +223,8 @@ impl EdgeMass {
             }
         } else if let Ok(a) = SymComplex::<Float>::try_from(&atom) {
             return Ok(EdgeMass::Value(Complex {
-                re: F(a.re.into_inner().to_f64()),
-                im: F(a.im.into_inner().to_f64()),
+                re: F(a.re.to_f64()),
+                im: F(a.im.to_f64()),
             }));
         }
 

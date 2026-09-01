@@ -1,0 +1,126 @@
+# Tydenso's Rust crates are deliberately isolated from GammaLoop's native
+# workspace so Cargo cannot unify native Symbolica features into this Wasm graph.
+
+build:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{ justfile_directory() }}/tydenso"
+
+    target="wasm32-unknown-unknown"
+    output_dir="target/$target/release"
+    size_limit=10485760
+
+    cargo build --release --target "$target" --package tydenso-inflate-plugin --lib
+    wasm-opt -Oz --quiet \
+      --enable-bulk-memory \
+      --enable-bulk-memory-opt \
+      --enable-nontrapping-float-to-int \
+      --enable-simd \
+      --strip-debug \
+      --strip-producers \
+      -o typst/tydenso-inflate.wasm \
+      "$output_dir/tydenso_inflate_plugin.wasm"
+
+    cargo build --release --target "$target" --package tydenso-plugin
+    wasm-opt -Oz --quiet \
+      --enable-bulk-memory \
+      --enable-bulk-memory-opt \
+      --enable-nontrapping-float-to-int \
+      --enable-simd \
+      --strip-debug \
+      --strip-producers \
+      -o "$output_dir/tydenso.raw.wasm" \
+      "$output_dir/tydenso_plugin.wasm"
+    cargo run --release --package tydenso-inflate-plugin --bin tydenso-compress -- \
+      "$output_dir/tydenso.raw.wasm" typst/tydenso.wasm.zlib
+
+    for asset in typst/tydenso-inflate.wasm typst/tydenso.wasm.zlib; do
+      size="$(wc -c < "$asset")"
+      if [ "$size" -ge "$size_limit" ]; then
+        echo "$asset is $size bytes; every Typst plugin asset must remain below 10 MiB" >&2
+        exit 1
+      fi
+      ls -lh "$asset"
+    done
+
+# Verify that no native arithmetic backend leaked into the target-side graph.
+check-wasm-features:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{ justfile_directory() }}/tydenso"
+    tree="$(cargo tree --target wasm32-unknown-unknown --package tydenso-plugin --edges normal --prefix none -e features)"
+    if grep -Eq 'feature "(integer-gmp|float-mpfr|native_code_generation)"|(gmp-mpfr-sys|rug) v|gammaloop-workspace-hack' <<<"$tree"; then
+      echo "Tydenso's target graph contains native-only dependencies" >&2
+      printf '%s\n' "$tree" >&2
+      exit 1
+    fi
+
+# Rebuild the deterministic user manual after the plugin assets have changed.
+manual: build
+    cd "{{ justfile_directory() }}/tydenso" && typst compile --creation-timestamp 0 --root . typst/manual.typ typst/manual.pdf
+
+# Compile the full package surface. Interop checks use a sibling Tymbolica
+# checkout by default; override TYMBOLICA_CHECKOUT for a differently placed tree.
+check: build check-wasm-features
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd "{{ justfile_directory() }}/tydenso"
+    tymbolica_checkout="${TYMBOLICA_CHECKOUT:-../../tymbolica}"
+    tymbolica_revision="e85233dd3d99e5fb458913d0d49f99d83466025b"
+    if [ ! -f "$tymbolica_checkout/typst.toml" ]; then
+      echo "set TYMBOLICA_CHECKOUT to the pinned lcnbr/tymbolica checkout" >&2
+      exit 1
+    fi
+    checkout_revision="$(git -C "$tymbolica_checkout" rev-parse HEAD 2>/dev/null || true)"
+    if [ "$checkout_revision" != "$tymbolica_revision" ]; then
+      echo "TYMBOLICA_CHECKOUT must be at $tymbolica_revision; found ${checkout_revision:-no Git HEAD}" >&2
+      exit 1
+    fi
+    symbolica_revision="ec19eeb211685aa216dbd28a4df547cd4c6baca1"
+    expected_source="source = \"git+https://github.com/symbolica-dev/symbolica?rev=$symbolica_revision#$symbolica_revision\""
+    for lock in ../Cargo.lock Cargo.lock "$tymbolica_checkout/Cargo.lock"; do
+      for package in symbolica numerica graphica; do
+        resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep '^source = ' | sort -u)"
+        if [ "$resolved" != "$expected_source" ]; then
+          echo "$lock must resolve exactly one $package source at $symbolica_revision; found ${resolved:-none}" >&2
+          exit 1
+        fi
+      done
+    done
+    cmp typst/render.typ ../crates/spynso3/typst/render.typ
+    cmp typst/notation.typ ../crates/spynso3/typst/notation.typ
+
+    check_dir="$(mktemp -d)"
+    trap 'rm -rf "$check_dir"' EXIT
+    package_root="$check_dir/xdg/typst/packages/local"
+    mkdir -p \
+      "$package_root/tydenso/0.1.0" \
+      "$package_root/tymbolica/0.1.0" \
+      "$package_root/tymbolica-rubi/0.1.0"
+    cp -R typst/. "$package_root/tydenso/0.1.0/"
+    cp "$tymbolica_checkout/typst.toml" "$package_root/tymbolica/0.1.0/typst.toml"
+    cp -R "$tymbolica_checkout/typst" "$package_root/tymbolica/0.1.0/typst"
+    cp -R "$tymbolica_checkout/rubi/." "$package_root/tymbolica-rubi/0.1.0/"
+
+    for source in typst/examples/*.typ typst/tests/*.typ; do
+      output="$check_dir/$(basename "${source%.typ}").pdf"
+      XDG_DATA_HOME="$check_dir/xdg" typst compile --root . "$source" "$output"
+    done
+
+    # Keep the target-aware phantom helper exercised: HTML must retain
+    # semantic MathML and use mphantom, while SVG remains directly renderable.
+    XDG_DATA_HOME="$check_dir/xdg" typst compile --features html --format html \
+      --root . typst/examples/basic.typ "$check_dir/basic.html"
+    grep -q '<math' "$check_dir/basic.html"
+    phantom_count="$(grep -o '<mphantom' "$check_dir/basic.html" | wc -l)"
+    if [ "$phantom_count" -ne 7 ]; then
+      echo "expected 7 semantic mphantom alignment nodes, found $phantom_count" >&2
+      exit 1
+    fi
+    XDG_DATA_HOME="$check_dir/xdg" typst compile --format svg \
+      --root . typst/examples/basic.typ "$check_dir/basic.svg"
+    test -s "$check_dir/basic.svg"
+
+    XDG_DATA_HOME="$check_dir/xdg" typst compile \
+      --creation-timestamp 0 --root . typst/manual.typ "$check_dir/manual.pdf"
+    cmp typst/manual.pdf "$check_dir/manual.pdf"
