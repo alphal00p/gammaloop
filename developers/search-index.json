@@ -2232,6 +2232,12 @@
     "kind": "developer current living engineering record heading"
   },
   {
+    "title": "Follow-up: persistent Typst worlds in the live watcher",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#follow-up-persistent-typst-worlds-in-the-live-watcher",
+    "kind": "developer current living engineering record heading"
+  },
+  {
     "title": "Follow-up: cross-job producer barriers",
     "summary": "Nix and Crane artifact reuse",
     "href": "architecture/nix-crane-cache-reuse/#follow-up-cross-job-producer-barriers",
