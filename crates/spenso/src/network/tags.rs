@@ -206,6 +206,15 @@ fn typst_index_source(
 }
 
 fn typst_source(atom: AtomView<'_>, options: &PrintOptions) -> Option<String> {
+    if let AtomView::Var(variable) = atom {
+        let symbol = variable.get_symbol();
+        if symbol.has_tag(&SPENSO_TAG.index)
+            && let Some(display) = IndexDisplay::from_symbol(symbol)
+        {
+            return Some(display.to_typst_source());
+        }
+    }
+
     let mut output = String::new();
     atom.format(&mut output, options, PrintState::new()).ok()?;
     Some(output)

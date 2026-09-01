@@ -207,11 +207,21 @@ impl RepresentationDeclaration {
 /// records as well as their decoded meaning, so two differently encoded values
 /// for one attachment key fail closed instead of being accepted merely because
 /// they decode to equal declarations.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default)]
 pub struct RepresentationDeclarations {
     raw_attachments: AttachmentSet,
     entries: BTreeMap<String, RepresentationDeclaration>,
 }
+
+// Raw attachment bytes preserve conflict provenance during merges; they are
+// not part of the validated declaration set's semantic value.
+impl PartialEq for RepresentationDeclarations {
+    fn eq(&self, other: &Self) -> bool {
+        self.entries == other.entries
+    }
+}
+
+impl Eq for RepresentationDeclarations {}
 
 impl RepresentationDeclarations {
     pub fn new() -> Self {
@@ -464,11 +474,21 @@ impl MathDisplayDeclaration {
 /// As with [`RepresentationDeclarations`], attachment absorption is
 /// transactional and retains raw records so alternate encodings for one key
 /// fail closed.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default)]
 pub struct MathDisplayDeclarations {
     raw_attachments: AttachmentSet,
     entries: BTreeMap<String, MathDisplayDeclaration>,
 }
+
+// Keep equality independent of whether declarations came from local symbols
+// or an attachment envelope, while retaining raw bytes for merge validation.
+impl PartialEq for MathDisplayDeclarations {
+    fn eq(&self, other: &Self) -> bool {
+        self.entries == other.entries
+    }
+}
+
+impl Eq for MathDisplayDeclarations {}
 
 impl MathDisplayDeclarations {
     pub fn new() -> Self {
@@ -1205,7 +1225,7 @@ fn validate_math_display_registration(
             || IndexDisplay::from_symbol(existing) != Some(declaration.display.clone()))
     {
         return Err(RepresentationAttachmentError::new(format!(
-            "math-display symbol {name} already exists with conflicting metadata"
+            "math-display symbol {name} already exists with conflicting metadata: different manual-index metadata"
         )));
     }
     Ok(())
@@ -1271,9 +1291,34 @@ fn validate_representation_registration(
                         && !existing.has_tag(&SPENSO_TAG.self_dual)
                 }
             };
-        if !correct_tags || RepresentationMetadata::from_symbol(existing) != Some(expected) {
+        if !correct_tags {
             return Err(RepresentationAttachmentError::new(format!(
-                "representation symbol {name} already exists with conflicting metadata"
+                "representation symbol {name} already exists with different representation tags"
+            )));
+        }
+        let Some(actual) = RepresentationMetadata::from_symbol(existing) else {
+            return Err(RepresentationAttachmentError::new(format!(
+                "representation symbol {name} has no portable representation metadata"
+            )));
+        };
+        if actual.class != expected.class {
+            return Err(RepresentationAttachmentError::new(format!(
+                "representation symbol {name} already exists with a different representation class"
+            )));
+        }
+        if actual.label != expected.label {
+            return Err(RepresentationAttachmentError::new(format!(
+                "representation symbol {name} already exists with a different display label"
+            )));
+        }
+        if actual.index_palette != expected.index_palette {
+            return Err(RepresentationAttachmentError::new(format!(
+                "representation symbol {name} already exists with a different fixed index palette"
+            )));
+        }
+        if actual.index_row != expected.index_row {
+            return Err(RepresentationAttachmentError::new(format!(
+                "representation symbol {name} already exists with a different index row"
             )));
         }
         if existing.get_print_function().is_none() {
