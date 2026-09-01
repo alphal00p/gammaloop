@@ -738,9 +738,7 @@ macro_rules! define_idenso_python_surface {
                 .keys()
                 .iter()
                 .filter_map(|key| key.extract::<String>().ok())
-                .filter(|name| {
-                    name != "initialize" && name != "initialize_module" && !name.starts_with('_')
-                })
+                .filter(|name| name != "initialize" && !name.starts_with('_'))
                 .collect::<Vec<_>>();
             m.add("__all__", exports)?;
             Ok(())

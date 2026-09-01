@@ -29,6 +29,17 @@ Source embedders can build a custom
 the Symbolica assembly version with reproducible results; it is a more useful Python
 compatibility fact than the version of an unrelated local Rust checkout.
 
+Spenso, Idenso, and Symbolica core share one native library, one Symbolica kernel, and one
+Python `Expression` type. The community assembly registers `SpensoModule` as
+`symbolica.community.spenso_native`; its public wrapper imports the native exports and calls
+the host-provided `initialize_module`. That initializer must remain in the export list.
+Do not link Spynso into `gammaloop._gammaloop` or distribute it as a second native extension.
+
+GammaLoop owns the Spynso source and bundled Tydenso `render.typ` and `notation.typ` assets;
+Symbolica Community owns the wheel. Their native dependencies must resolve one Symbolica
+source revision. The `gammaloop[typst-display]` extra adds only the optional renderer, not
+another Spynso binary.
+
 == Choose the right object
 
 - `Representation` and `Slot` define dimensions, duality, and abstract indices.
@@ -170,6 +181,60 @@ and #link("reference/python/spynso3/ExecutionMode/")[`ExecutionMode`].
   A changed network structure invalidates assumptions about contraction order; replacing only
   values with the same registered structure does not.
 ])
+
+== Mathematical display
+
+`TensorExpression`, `Tensor`, and `TensorNetwork` share semantic display methods.
+`DisplaySettings` controls the ports, Schoonschip, and call layouts, dimensions, parentheses,
+commas, symbol scripts, and index/factor spacing. Positional calls such as `to_typst(True)`
+and `formatted(True)` still request dimensions.
+
+// docs-example: compile
+```python
+from symbolica.community.spenso import DisplaySettings, TensorExpression
+
+trace = TensorExpression.gamma5(4).trace()
+source = trace.to_typst(
+    settings=DisplaySettings(show_dimensions=True, parentheses=False)
+)
+```
+
+`to_typst` and `format_tensor` emit source using the ports layout. Schoonschip, call, and
+custom-spacing settings require Tydenso's Typst notation layer; use HTML, SVG, or notebook
+display for those settings. Source-only methods reject unsupported settings rather than
+silently ignoring them.
+
+Install the optional compiler to render HTML and SVG:
+
+// docs-example: syntax
+```sh
+pip install 'gammaloop[typst-display]'
+```
+
+// docs-example: compile
+```python
+from symbolica.community.spenso import DisplaySettings, TensorExpression
+
+trace = TensorExpression.gamma5(4).trace()
+compact = DisplaySettings.schoonschip()
+html = trace.to_html(settings=compact)
+svg = trace.to_svg(settings=compact)
+rich = trace.formatted(settings=compact)
+```
+
+Python uses the bundled Typst render/notation assets directly, without calling the Tydenso
+Wasm plugin. Explicit `to_html` and `to_svg` calls raise an install-guidance `ImportError`
+when the compiler is absent. Notebook `_repr_html_` and `formatted()` fall back to existing
+LaTeX or text. `TensorNetwork.__str__` remains Graphviz DOT; `to_dot()` makes that intention
+explicit. These display methods do not replace Symbolica's inherited `to_latex` API.
+
+Idenso transformations still return ordinary Symbolica expressions. Module-level
+`spenso.formatted(expression)` or `spenso.as_tensor(expression)` provides tensor-aware display.
+HTML, SVG, and rich-display functions accept `notation_source` as a trusted, complete
+replacement for the bundled `notation.typ`, not a style fragment. Typst executes that source;
+it must implement the expected notation interface and must not come from untrusted input.
+Display customization stays outside Atom payloads; portable representation and math-label
+declarations continue to travel with the expressions.
 
 == Repeated symbolic evaluation
 

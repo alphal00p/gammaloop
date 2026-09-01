@@ -3,6 +3,9 @@ linker = "cc"
 
 [target.wasm32-unknown-unknown]
 linker = "rust-lld"
+# `getrandom` 0.3 requires an explicit opt-in for JavaScript's Web Crypto
+# backend on the otherwise capability-free wasm32-unknown-unknown target.
+rustflags = ["--cfg", "getrandom_backend=\"wasm_js\""]
 
 [env]
 # Visible to every rustc and every build script in the workspace build.
