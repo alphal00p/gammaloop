@@ -160,8 +160,7 @@ pub(crate) fn initialize_spenso(m: &Bound<'_, PyModule>) -> PyResult<()> {
         .filter_map(|key| key.extract::<String>().ok())
         .filter(|name| {
             name != "initialize"
-                && name != "initialize_module"
-                && (name == "_" || !name.starts_with('_'))
+                && (name == "_" || name == "initialize_module" || !name.starts_with('_'))
         })
         .collect::<Vec<_>>();
     m.add("__all__", exports)?;
@@ -815,25 +814,70 @@ impl Spensor {
     }
 
     /// Format this concrete tensor using compact Spenso notation.
-    #[pyo3(signature = (show_dimensions = false))]
-    fn format_tensor(&self, show_dimensions: bool) -> String {
-        display::format_concrete_tensor(self, show_dimensions)
+    #[pyo3(signature = (show_dimensions = None, *, settings = None))]
+    fn format_tensor(
+        &self,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+    ) -> PyResult<String> {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::validate_plain_source_settings(&settings)?;
+        Ok(display::format_concrete_tensor_with_settings(
+            self, &settings,
+        ))
     }
 
     /// Format this concrete tensor as Typst math source.
-    #[pyo3(signature = (show_dimensions = false))]
-    fn to_typst(&self, show_dimensions: bool) -> String {
-        display::concrete_tensor_to_typst(self, show_dimensions)
+    #[pyo3(signature = (show_dimensions = None, *, settings = None))]
+    fn to_typst(
+        &self,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+    ) -> PyResult<String> {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::validate_typst_source_settings(&settings)?;
+        Ok(display::concrete_tensor_to_typst(self, &settings))
     }
 
     /// Build Symbolica's rich display wrapper for this concrete tensor.
-    #[pyo3(signature = (show_dimensions = false))]
-    fn formatted(&self, show_dimensions: bool) -> PythonFormattedOutput {
-        display::format_concrete_tensor_output(self, show_dimensions)
+    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
+    fn formatted(
+        &self,
+        py: Python<'_>,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        notation_source: Option<String>,
+    ) -> PythonFormattedOutput {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::format_concrete_tensor_output_rich(py, self, &settings, notation_source.as_deref())
     }
 
-    fn _repr_html_(&self) -> Option<String> {
-        display::format_concrete_tensor_output(self, false).html
+    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
+    fn to_html(
+        &self,
+        py: Python<'_>,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        notation_source: Option<String>,
+    ) -> PyResult<String> {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::concrete_tensor_to_html(py, self, &settings, notation_source.as_deref())
+    }
+
+    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
+    fn to_svg(
+        &self,
+        py: Python<'_>,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        notation_source: Option<String>,
+    ) -> PyResult<String> {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::concrete_tensor_to_svg(py, self, &settings, notation_source.as_deref())
+    }
+
+    fn _repr_html_(&self, py: Python<'_>) -> Option<String> {
+        display::concrete_tensor_to_html(py, self, &display::DisplaySettings::default(), None).ok()
     }
 
     fn _repr_latex_(&self) -> Option<String> {

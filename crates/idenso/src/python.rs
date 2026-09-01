@@ -662,9 +662,7 @@ pub(crate) fn initialize_alg_simp(m: &Bound<'_, PyModule>) -> PyResult<()> {
         .keys()
         .iter()
         .filter_map(|key| key.extract::<String>().ok())
-        .filter(|name| {
-            name != "initialize" && name != "initialize_module" && !name.starts_with('_')
-        })
+        .filter(|name| name != "initialize" && !name.starts_with('_'))
         .collect::<Vec<_>>();
     m.add("__all__", exports)?;
 

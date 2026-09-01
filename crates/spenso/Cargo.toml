@@ -53,7 +53,7 @@ features = "0.10.0"
 # flexi_logger = "0.28.5"
 gat-lending-iterator = "0.1.5"
 indexmap = { workspace = true, features = ["serde"] }
-linnet = { workspace = true, features = ["bincode", "serde"] }
+linnet = { workspace = true, default-features = false, features = ["bincode", "nodestore-vec", "serde"] }
 
 log = "0.4.22"
 num = { version = "0.4.3", features = ["serde"] }
@@ -64,11 +64,11 @@ rayon = "1.10.0"
 ref-ops = "0.2.5"
 serde = "1.0"
 serde_json = "1.0"
-spenso-macros = { workspace = true }
+spenso-macros = { workspace = true, default-features = false }
 # serde_toml = "0.0.1"
 # slotmap = { version = "1.0.7", features = ["serde"] }
 # smartstring = { version = "1.0.1", features = ["serde"] }
-symbolica-utils = { workspace = true }
+symbolica-utils = { workspace = true, default-features = false }
 tabled = "0.20.0"
 thiserror = { workspace = true }
 tracing = { workspace = true }
@@ -81,6 +81,9 @@ itertools = "0.14.0"
 nu-ansi-term = { workspace = true }
 pyo3-stub-gen = { workspace = true, optional = true }
 gammaloop-workspace-hack = { version = "0.1", path = "../gammaloop-workspace-hack", optional = true }
+ciborium = { version = "0.2.2", optional = true }
+blake3 = { version = "1.8.3", optional = true }
+tymbolica-atom-payload = { workspace = true, optional = true }
 
 [dependencies.symbolica]
 version = "2.2.0"
@@ -94,7 +97,34 @@ insta = { version = "1.38.0", features = ["json", "ron", "toml", "yaml"] }
 ron = "0.8"
 
 [features]
-native-code-generation = ["shadowing", "dep:gammaloop-workspace-hack"]
+default = ["native"]
+native = [
+  "linnet/native",
+  "spenso-macros/native",
+  "symbolica?/integer-gmp",
+  "symbolica?/float-mpfr",
+  "symbolica-utils/native",
+  "tymbolica-atom-payload?/native",
+]
+native-code-generation = [
+  "native",
+  "shadowing",
+  "symbolica/native_code_generation",
+  "dep:gammaloop-workspace-hack",
+]
+portable-payload = [
+  "shadowing",
+  "dep:blake3",
+  "dep:ciborium",
+  "dep:tymbolica-atom-payload",
+]
 python = ["dep:pyo3"]
 python_stubgen = ["dep:pyo3-stub-gen", "python"]
 shadowing = ["dep:symbolica", "linnet/symbolica", "spenso-macros/shadowing"]
+wasm = [
+  "linnet/wasm",
+  "spenso-macros/wasm",
+  "symbolica?/wasm",
+  "symbolica-utils/wasm",
+  "tymbolica-atom-payload?/wasm",
+]

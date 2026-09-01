@@ -10,3 +10,8 @@ bincode-trait-derive = { workspace = true }
 itertools = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 symbolica = { workspace = true, default-features = false, features = ["bincode", "serde"] }
+
+[features]
+default = ["native"]
+native = ["symbolica/integer-gmp", "symbolica/float-mpfr"]
+wasm = ["symbolica/wasm"]

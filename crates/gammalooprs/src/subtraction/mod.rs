@@ -7,7 +7,9 @@ use symbolica::{
     atom::{Atom, AtomCore, Symbol},
     domains::{dual::HyperDual, float::Real},
     evaluate::{FunctionMap, OptimizationSettings},
-    function, parse, symbol,
+    function, parse,
+    poly::PolyVariable,
+    symbol,
 };
 use tracing::debug;
 use typed_index_collections::TiVec;
@@ -326,10 +328,21 @@ pub(crate) fn generate_rstar_t_dependence_evaluator(
         .iter()
         .zip(&rstar_derivatives)
         .map(|(eq, variable)| {
-            Atom::solve_linear_system::<u8, _, _>(&[eq], &[variable])
-                .unwrap()
-                .pop()
-                .unwrap()
+            let solutions = Atom::solve(std::slice::from_ref(eq))
+                .wrt_with_exponent::<u8, _>(std::slice::from_ref(variable))
+                .unwrap();
+            let [solution] = solutions.as_slice() else {
+                panic!(
+                    "expected one implicit-function solution, got {} branches",
+                    solutions.len()
+                );
+            };
+            assert!(
+                !solution.is_underdetermined(),
+                "implicit-function solution is underdetermined"
+            );
+            let variable = PolyVariable::try_from(variable.clone()).unwrap();
+            solution.get(&variable).cloned().unwrap()
         })
         .collect_vec();
 

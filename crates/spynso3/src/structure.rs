@@ -30,7 +30,7 @@ use spenso::{
     },
 };
 use symbolica::{
-    api::python::{PythonTransformer, PythonUserData},
+    api::python::{PythonNormalization, PythonUserData},
     atom::{
         Atom, AtomView, DefaultNamespace, FunctionBuilder, NamespacedSymbol, Symbol, SymbolBuilder,
     },
@@ -266,7 +266,7 @@ impl SpensoName {
         is_positive: Option<bool>,
         tags: Option<Vec<String>>,
         aliases: Option<Vec<String>>,
-        normalization: Option<PythonTransformer>,
+        normalization: Option<PythonNormalization>,
         print: Option<Py<PyAny>>,
         derivative: Option<Py<PyAny>>,
         series: Option<Py<PyAny>>,
@@ -353,7 +353,7 @@ impl SpensoName {
         is_positive: Option<bool>,
         tags: Option<Vec<String>>,
         aliases: Option<Vec<String>>,
-        normalization: Option<PythonTransformer>,
+        normalization: Option<PythonNormalization>,
         print: Option<Py<PyAny>>,
         derivative: Option<Py<PyAny>>,
         series: Option<Py<PyAny>>,

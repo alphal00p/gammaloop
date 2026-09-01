@@ -6,6 +6,7 @@ use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionArgument, FunctionBuilder, SliceType},
     function,
     id::{Condition, Match},
+    poly::PolyVariable,
 };
 
 use crate::{
@@ -567,23 +568,44 @@ impl Topology {
         //     "variables: {:?}",
         //     variables.iter().map(|a| a.to_string()).collect::<Vec<_>>()
         // );
+        let solutions = match Atom::solve(&system).wrt_with_exponent::<u8, _>(variables.as_slice())
+        {
+            Ok(solutions) => solutions,
+            Err(e) => {
+                return Err(VakintError::InvalidIntegralFormat(format!(
+                    "Could not solve the linear system to force the loop momentum basis: {:?}",
+                    e
+                )));
+            }
+        };
+        let solution = match solutions.as_slice() {
+            [solution] if !solution.is_underdetermined() => solution,
+            _ => {
+                return Err(VakintError::InvalidIntegralFormat(format!(
+                    "Could not solve the linear system to force the loop momentum basis: expected one fully determined solution, got {} branch(es)",
+                    solutions.len()
+                )));
+            }
+        };
         let basis_change = Arc::new(
-            match Atom::solve_linear_system::<u8, _, _>(
-                system
-                    .iter()
-                    .map(|a| a.as_view())
-                    .collect::<Vec<_>>()
-                    .as_slice(),
-                variables.as_slice(),
-            ) {
-                Ok(b) => b,
-                Err(e) => {
-                    return Err(VakintError::InvalidIntegralFormat(format!(
-                        "Could not solve the linear system to force the loop momentum basis: {:?}",
-                        e
-                    )));
-                }
-            },
+            variables
+                .iter()
+                .map(|variable| {
+                    let polynomial_variable: PolyVariable = variable.clone().try_into().map_err(
+                        |e| {
+                            VakintError::InvalidIntegralFormat(format!(
+                                "Could not solve the linear system to force the loop momentum basis: {:?}",
+                                e
+                            ))
+                        },
+                    )?;
+                    solution.get(&polynomial_variable).cloned().ok_or_else(|| {
+                        VakintError::InvalidIntegralFormat(format!(
+                            "Could not solve the linear system to force the loop momentum basis: no value for {polynomial_variable}"
+                        ))
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()?,
         );
         // println!(
         //     "basis_change: {:?}",

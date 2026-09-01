@@ -1985,19 +1985,100 @@ impl TensorExpression {
             .and_then(|value| Self::from_structured(py, value))
     }
 
-    #[pyo3(signature = (show_dimensions = false))]
-    fn format_tensor(self_: PyRef<'_, Self>, show_dimensions: bool) -> String {
-        display::format_structured(&Self::structured(&self_), show_dimensions)
+    #[pyo3(signature = (show_dimensions = None, *, settings = None))]
+    fn format_tensor(
+        self_: PyRef<'_, Self>,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+    ) -> PyResult<String> {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::validate_plain_source_settings(&settings)?;
+        Ok(display::format_structured_settings(
+            &Self::structured(&self_),
+            &settings,
+        ))
     }
 
-    #[pyo3(signature = (show_dimensions = false))]
-    fn to_typst(self_: PyRef<'_, Self>, show_dimensions: bool) -> String {
-        display::structured_to_typst(&Self::structured(&self_), show_dimensions)
+    #[pyo3(signature = (show_dimensions = None, *, settings = None))]
+    fn to_typst(
+        self_: PyRef<'_, Self>,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+    ) -> PyResult<String> {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::validate_typst_source_settings(&settings)?;
+        Ok(display::structured_to_typst_with_settings(
+            &Self::structured(&self_),
+            &settings,
+        ))
     }
 
-    #[pyo3(signature = (show_dimensions = false))]
-    fn formatted(self_: PyRef<'_, Self>, show_dimensions: bool) -> PythonFormattedOutput {
-        display::format_structured_output(&Self::structured(&self_), show_dimensions)
+    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
+    /// Build Symbolica's rich display value, including semantic HTML when the
+    /// optional ``gammaloop[typst-display]`` renderer is installed.
+    ///
+    /// ``notation_source`` is a trusted complete replacement for the bundled
+    /// ``notation.typ`` module, not a style fragment. Typst executes it. When
+    /// HTML cannot be rendered, the result retains its LaTeX and text forms.
+    fn formatted(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        notation_source: Option<String>,
+    ) -> PythonFormattedOutput {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::format_structured_output_rich(
+            py,
+            &Self::structured(&self_),
+            &settings,
+            notation_source.as_deref(),
+        )
+    }
+
+    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
+    /// Compile this expression to semantic HTML with the optional Typst
+    /// renderer.
+    ///
+    /// Install ``gammaloop[typst-display]`` to enable this method.
+    /// ``notation_source``, when supplied, is trusted Typst code replacing the
+    /// complete bundled ``notation.typ`` module.
+    fn to_html(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        notation_source: Option<String>,
+    ) -> PyResult<String> {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::structured_to_html(
+            py,
+            &Self::structured(&self_),
+            &settings,
+            notation_source.as_deref(),
+        )
+    }
+
+    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
+    /// Compile this expression to SVG with the optional Typst renderer.
+    ///
+    /// Install ``gammaloop[typst-display]`` to enable this method.
+    /// ``notation_source``, when supplied, is trusted Typst code replacing the
+    /// complete bundled ``notation.typ`` module.
+    fn to_svg(
+        self_: PyRef<'_, Self>,
+        py: Python<'_>,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        notation_source: Option<String>,
+    ) -> PyResult<String> {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::structured_to_svg(
+            py,
+            &Self::structured(&self_),
+            &settings,
+            notation_source.as_deref(),
+        )
     }
 
     fn __repr__(self_: PyRef<'_, Self>) -> String {
@@ -2022,8 +2103,9 @@ impl TensorExpression {
         Ok(())
     }
 
-    fn _repr_html_(self_: PyRef<'_, Self>) -> Option<String> {
-        display::format_structured_output(&Self::structured(&self_), false).html
+    fn _repr_html_(self_: PyRef<'_, Self>, py: Python<'_>) -> Option<String> {
+        let settings = display::DisplaySettings::default();
+        display::structured_to_html(py, &Self::structured(&self_), &settings, None).ok()
     }
 
     fn _repr_latex_(self_: PyRef<'_, Self>) -> String {

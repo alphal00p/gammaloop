@@ -3,6 +3,7 @@
 ci_cargo_profile := "ci-optim"
 
 mod linnet 'crates/linnet/Justfile'
+mod tydenso 'tydenso/Justfile'
 
 alias sync-draw-assets := sync-drawing-assets
 
@@ -257,8 +258,36 @@ build-all:
 clean:
     cargo clean
 
+# Guard mutually exclusive Symbolica backends in Hakari's native-only graph.
+check-symbolica-feature-isolation:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="{{ justfile_directory() }}"
+    hack="$root/crates/gammaloop-workspace-hack/Cargo.toml"
+    if grep -Eq '"(wasm|integer-malachite|float-astro)"' "$hack"; then
+      echo "the native GammaLoop workspace hack contains a Wasm Symbolica backend" >&2
+      exit 1
+    fi
+    for feature in integer-gmp float-mpfr native_code_generation; do
+      if ! grep -q "\"$feature\"" "$hack"; then
+        echo "the native GammaLoop workspace hack is missing Symbolica feature $feature" >&2
+        exit 1
+      fi
+    done
+    revision="ec19eeb211685aa216dbd28a4df547cd4c6baca1"
+    expected="source = \"git+https://github.com/symbolica-dev/symbolica?rev=$revision#$revision\""
+    for lock in "$root/Cargo.lock" "$root/tydenso/Cargo.lock"; do
+      for package in symbolica numerica graphica; do
+        resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep '^source = ' | sort -u)"
+        if [ "$resolved" != "$expected" ]; then
+          echo "$lock must resolve exactly one $package source at $revision; found ${resolved:-none}" >&2
+          exit 1
+        fi
+      done
+    done
+
 # Check code without building
-check:
+check: check-symbolica-feature-isolation
     cargo check --workspace --all-targets --locked
 
 doc:

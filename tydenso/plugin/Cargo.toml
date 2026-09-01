@@ -1,0 +1,21 @@
+[package]
+name = "tydenso-plugin"
+version.workspace = true
+edition.workspace = true
+publish = false
+license.workspace = true
+
+[lib]
+name = "tydenso_plugin"
+crate-type = ["cdylib"]
+
+[dependencies]
+blake3 = "1.8.3"
+ciborium = "0.2.2"
+getrandom = "0.3"
+getrandom-02 = { package = "getrandom", version = "0.2", default-features = false, features = ["custom"] }
+idenso.workspace = true
+spenso.workspace = true
+symbolica.workspace = true
+tymbolica-atom-payload.workspace = true
+wasm-minimal-protocol = "0.1"

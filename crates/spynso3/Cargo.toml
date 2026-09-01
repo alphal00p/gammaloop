@@ -3,13 +3,15 @@ name = "spynso3"
 version = "0.1.2"
 edition = "2024"
 description = "Pyo3 bindings for spenso"
+license = "MIT"
+repository = "https://github.com/alphal00p/gammaloop"
 
 [dependencies]
 ahash = { workspace = true, features = ["serde"] }
-idenso = { workspace = true, features = ["python"] }
-spenso = { workspace = true, features = ["native-code-generation", "python", "shadowing"] }
+idenso = { workspace = true, features = ["native", "python"] }
+spenso = { workspace = true, features = ["native-code-generation", "portable-payload", "python", "shadowing"] }
 spenso-hep-lib = { workspace = true }
-spenso-macros = { workspace = true }
+spenso-macros = { workspace = true, features = ["native"] }
 xpct = "0.5.1"
 
 eyre = { workspace = true }
@@ -19,6 +21,7 @@ itertools = "0.14.0"
 pyo3-stub-gen = { workspace = true, default-features = false, optional = true }
 pyo3-stub-gen-derive = { workspace = true }
 thiserror = { workspace = true }
+tymbolica-atom-payload = { workspace = true, features = ["native"] }
 
 [dependencies.symbolica]
 workspace = true

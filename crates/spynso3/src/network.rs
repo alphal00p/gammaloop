@@ -1288,22 +1288,91 @@ impl SpensoNet {
         Ok(self.network.dot_pretty())
     }
 
+    /// Return the computational graph in Graphviz DOT format.
+    fn to_dot(&self) -> String {
+        self.network.dot_pretty()
+    }
+
     /// Format the exact semantic structure using compact Spenso notation.
-    #[pyo3(signature = (show_dimensions = false))]
-    fn format_tensor(&self, show_dimensions: bool) -> String {
-        display::format_structured(&self.structure, show_dimensions)
+    #[pyo3(signature = (show_dimensions = None, *, settings = None))]
+    fn format_tensor(
+        &self,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+    ) -> PyResult<String> {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::validate_plain_source_settings(&settings)?;
+        Ok(display::format_structured_settings(
+            &self.structure,
+            &settings,
+        ))
     }
 
     /// Format the exact semantic structure as Typst math source.
-    #[pyo3(signature = (show_dimensions = false))]
-    fn to_typst(&self, show_dimensions: bool) -> String {
-        display::structured_to_typst(&self.structure, show_dimensions)
+    #[pyo3(signature = (show_dimensions = None, *, settings = None))]
+    fn to_typst(
+        &self,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+    ) -> PyResult<String> {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::validate_typst_source_settings(&settings)?;
+        Ok(display::structured_to_typst_with_settings(
+            &self.structure,
+            &settings,
+        ))
     }
 
     /// Build Symbolica's rich display wrapper for the semantic structure.
-    #[pyo3(signature = (show_dimensions = false))]
-    fn formatted(&self, show_dimensions: bool) -> PythonFormattedOutput {
-        display::format_structured_output(&self.structure, show_dimensions)
+    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
+    fn formatted(
+        &self,
+        py: Python<'_>,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        notation_source: Option<String>,
+    ) -> PythonFormattedOutput {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::format_structured_output_rich(
+            py,
+            &self.structure,
+            &settings,
+            notation_source.as_deref(),
+        )
+    }
+
+    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
+    fn to_html(
+        &self,
+        py: Python<'_>,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        notation_source: Option<String>,
+    ) -> PyResult<String> {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::structured_to_html(py, &self.structure, &settings, notation_source.as_deref())
+    }
+
+    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
+    fn to_svg(
+        &self,
+        py: Python<'_>,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        notation_source: Option<String>,
+    ) -> PyResult<String> {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::structured_to_svg(py, &self.structure, &settings, notation_source.as_deref())
+    }
+
+    fn _repr_html_(&self, py: Python<'_>) -> Option<String> {
+        display::structured_to_html(
+            py,
+            &self.structure,
+            &display::DisplaySettings::default(),
+            None,
+        )
+        .ok()
     }
 
     /// Return the exact structured expression represented by this network.

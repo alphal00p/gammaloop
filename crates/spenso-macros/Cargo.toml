@@ -15,8 +15,11 @@ symbolica = { workspace = true, default-features = false, optional = true }
 syn = { version = "2.0", features = ["extra-traits", "full"] }
 
 [dev-dependencies]
-linnet = { workspace = true }
-spenso = { workspace = true }
+linnet = { workspace = true, features = ["native", "nodestore-vec", "serde"] }
+spenso = { workspace = true, features = ["native"] }
 
 [features]
+default = ["native"]
+native = ["symbolica?/integer-gmp", "symbolica?/float-mpfr"]
 shadowing = ["dep:symbolica"]
+wasm = ["symbolica?/wasm"]

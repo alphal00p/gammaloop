@@ -11,6 +11,37 @@ network type:
 - `TensorNetwork` represents operations in which concrete tensors or existing
   networks participate.
 
+## Packaging and kernel ownership
+
+`spynso3` is a component of the combined
+[Symbolica Community](https://github.com/symbolica-dev/symbolica-community) Python
+extension, not an independent native extension. The combined build creates
+`symbolica.core` and registers `SpensoModule` as
+`symbolica.community.spenso_native` in that same shared library. This is
+required: Symbolica expressions, interned symbols, and their PyO3 classes must
+all belong to one Symbolica kernel and one Python `Expression` type.
+
+GammaLoop owns the Spynso source and crate-local copies of Tydenso's bundled
+`render.typ` and `notation.typ` assets. Tydenso's check verifies that the two
+copies remain byte-identical. Symbolica Community owns the wheel that exposes them as
+`symbolica.community.spenso`. Its Cargo graph must resolve exactly one
+Symbolica source revision for the core, Spynso, Spenso, and Idenso. Do not link
+Spynso into `gammaloop._gammaloop` or publish it as a second native library;
+either would create a separate Symbolica kernel.
+
+The public Python package is a small wrapper around the registered native
+submodule. The host adds `initialize_module` before Spynso registers its public
+API, so that initializer must remain in the native export list used here:
+
+```python
+from ..spenso_native import *
+
+initialize_module()
+```
+
+The `gammaloop[typst-display]` extra only supplies the optional Typst compiler
+used by `to_html` and `to_svg`; it does not install a second Spynso binary.
+
 ## Symbolic expressions
 
 ```python
@@ -242,6 +273,56 @@ Module-level `format_tensor`, `to_typst`, and `formatted` functions also accept
 ordinary Symbolica expressions containing valid Spenso syntax. Dimensions are
 shown only when requested. Dots are infix, chain order is preserved, traces use
 `Tr`, and internal chain wiring labels are not exposed.
+
+`DisplaySettings` selects the ports, Schoonschip, or call tensor layout and
+controls dimensions, parentheses, commas, symbol scripts, and index/factor
+spacing. The original positional Boolean remains supported, so
+`to_typst(True)` is equivalent to requesting dimensions explicitly:
+
+```python
+from symbolica.community.spenso import DisplaySettings
+
+source = dirac_trace.to_typst(
+    settings=DisplaySettings(show_dimensions=True, parentheses=False)
+)
+```
+
+`to_typst` and `format_tensor` remain source-formatting APIs and emit the
+existing ports layout. They accept its native printing controls, but reject
+Schoonschip, call, and custom-spacing settings with guidance to use the Typst
+renderer. Those layouts depend on `notation.typ`, so use them through HTML,
+SVG, or rich notebook display:
+
+Install the optional renderer to compile the same semantic display to HTML or
+SVG:
+
+```bash
+pip install 'gammaloop[typst-display]'
+```
+
+```python
+compact = DisplaySettings.schoonschip()
+html = dirac_trace.to_html(settings=compact)
+svg = dirac_trace.to_svg(settings=compact)
+rich = dirac_trace.formatted(settings=compact)
+```
+
+Explicit `to_html` and `to_svg` calls raise an `ImportError` with that install
+hint when the renderer is absent. Notebook `_repr_html_` and `formatted()` do
+not make Typst mandatory: they omit HTML and let the existing LaTeX or text
+representation take over.
+
+`TensorNetwork.__str__` remains its Graphviz DOT representation; use
+`network.to_dot()` when that intent should be explicit. The rich-display
+methods are separate and do not replace Symbolica's inherited `to_latex` API.
+
+Expression and module-level HTML, SVG, and rich-display calls accept
+`notation_source=...` for advanced customization. This is a trusted, complete
+replacement for Tydenso's bundled `notation.typ`, not a style fragment; Typst
+executes it and it must expose the notation interface expected by the bundled
+renderer. Do not pass untrusted input. Display customization remains outside
+the Atom payload, while portable representation and math-label declarations
+continue to travel with the expression.
 
 ## Symbolic simplification
 

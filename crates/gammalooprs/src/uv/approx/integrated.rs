@@ -30,8 +30,7 @@ use symbolica::{
     function,
     id::Replacement,
     parse, parse_lit,
-    poly::series::Series,
-    solve::SolveError,
+    poly::{PolyVariable, series::Series},
 };
 use symbolica_utils::ReplaceBuilderExt;
 use vakint::{Vakint, VakintExpression, vakint_symbol};
@@ -1046,21 +1045,30 @@ impl VakintMomentumSolution {
             });
         }
 
-        match Atom::solve_linear_system::<u8, _, _>(system, variables) {
-            Ok(solution) => Ok(Self::from_solution(
-                &solution,
-                variables,
-                add_additional_args,
-            )),
-            Err(SolveError::Underdetermined {
-                partial_solution, ..
-            }) => Ok(Self::from_solution(
-                &partial_solution,
-                variables,
-                add_additional_args,
-            )),
-            Err(source) => Err(eyre!("{source}")),
-        }
+        let solutions = Atom::solve(system)
+            .wrt_with_exponent::<u8, _>(variables)
+            .map_err(|source| eyre!("{source}"))?;
+        let [solution] = solutions.as_slice() else {
+            return Err(eyre!(
+                "expected one Vakint momentum solution, got {} branches",
+                solutions.len()
+            ));
+        };
+        let solution = variables
+            .iter()
+            .map(|variable| {
+                let polynomial_variable =
+                    PolyVariable::try_from(variable.clone()).map_err(|source| eyre!("{source}"))?;
+                solution.get(&polynomial_variable).cloned().ok_or_else(|| {
+                    eyre!("Vakint momentum solution has no value for {polynomial_variable}")
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(Self::from_solution(
+            &solution,
+            variables,
+            add_additional_args,
+        ))
     }
 
     fn from_solution(

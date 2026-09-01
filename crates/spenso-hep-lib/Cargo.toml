@@ -5,9 +5,9 @@ edition = "2024"
 description = "A spenso tensor library for high energy physics"
 
 [dependencies]
-idenso = { workspace = true, features = ["reference-cases"] }
-spenso = { workspace = true, features = ["shadowing"] }
-spenso-macros = { workspace = true }
+idenso = { workspace = true, features = ["native", "reference-cases"] }
+spenso = { workspace = true, features = ["native", "shadowing"] }
+spenso-macros = { workspace = true, features = ["native"] }
 symbolica = { workspace = true }
 
 ahash = { workspace = true, features = ["serde"] }
