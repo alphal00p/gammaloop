@@ -1,0 +1,24 @@
+---
+source: src/half_edge/algorithms/transitive_ops.rs
+expression: reduction_graph.debug_dot()
+---
+digraph {
+  l3_b;
+  l1_b;
+  l2_b;
+  l2_a;
+  l3_a;
+  l1_a;
+  l4_a;
+
+  l1_a:0	-> l2_a:1	 [id=0 ];
+  l1_a:2	-> l2_b:3	 [id=1 ];
+  l3_b:5	-> l4_a:4	 [id=2 ];
+  l3_a:7	-> l4_a:6	 [id=3 ];
+  l1_b:8	-> l2_a:9	 [id=4 ];
+  l1_b:10	-> l2_b:11	 [id=5 ];
+  l2_a:12	-> l3_a:13	 [id=6 ];
+  l2_a:14	-> l3_b:15	 [id=7 ];
+  l2_b:17	-> l3_b:16	 [id=8 ];
+  l2_b:18	-> l3_a:19	 [id=9 ];
+}
