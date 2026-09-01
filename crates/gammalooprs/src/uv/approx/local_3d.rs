@@ -14,7 +14,7 @@ use symbolica::{
 };
 
 use crate::{
-    cff::{CutCFF, orientations::GraphOrientation},
+    cff::{CutCFF, cff_graph::CFFGenerationGraph, orientations::GraphOrientation},
     debug_tags,
     graph::{Graph, LMBext, LoopMomentumBasis, cuts::CutSet},
     integrands::process::param_builder::{ParamBuilderGraph, ThermalDistributionReplacement},
@@ -70,23 +70,43 @@ impl<'a> Localizer<'a> {
             medium_mode,
         }
     }
-    fn representative_orientations(
-        &self,
+    fn representative_orientations<'b>(
+        &'b self,
         reduced_orientation: &EdgeVec<Orientation>,
         internal_edges: &[EdgeIndex],
+        paired_edges: &[EdgeIndex],
+        supported_orientations: &[&'b EdgeVec<Orientation>],
         average: bool,
-    ) -> Result<Vec<&EdgeVec<Orientation>>> {
-        let iterator = self
-            .orientation
-            .valid_orientations
-            .iter()
-            .filter(|orientation| orientation.is_compatible_with(reduced_orientation));
-
+    ) -> Result<Vec<&'b EdgeVec<Orientation>>> {
         let out: Vec<&EdgeVec<_>> = if average {
-            iterator.collect()
+            let mut out = Vec::new();
+            for &orientation in supported_orientations {
+                let reversed =
+                    EdgeVec::from_iter(orientation.iter().map(|(edge, &edge_orientation)| {
+                        if paired_edges.contains(&edge) {
+                            edge_orientation.reverse()
+                        } else {
+                            edge_orientation
+                        }
+                    }));
+                let canonical =
+                    if reversed.score(internal_edges) > orientation.score(internal_edges) {
+                        &reversed
+                    } else {
+                        orientation
+                    };
+                if canonical.is_compatible_with(reduced_orientation) {
+                    out.push(orientation);
+                }
+            }
+            out
         } else {
-            let max: Option<&EdgeVec<Orientation>> =
-                iterator.max_by_key(|orientation| orientation.score(internal_edges));
+            let max = self
+                .orientation
+                .valid_orientations
+                .iter()
+                .filter(|orientation| orientation.is_compatible_with(reduced_orientation))
+                .max_by_key(|orientation| orientation.score(internal_edges));
             max.into_iter().collect()
         };
 
@@ -102,19 +122,25 @@ impl<'a> Localizer<'a> {
 
     /// Localize a reduced-graph orientation term onto compatible full orientations.
     ///
-    /// The reduced term already contains the external-edge selector structure through
-    /// `reduced_orientation.orientation_thetas()`. We only add selectors for the integrated
-    /// subgraph's internal edges.
+    /// For a deterministic representative, the reduced term already contains the external-edge
+    /// selector structure through `reduced_orientation.orientation_thetas()`, so we only add
+    /// selectors for the integrated subgraph's internal edges. Averaged representatives instead
+    /// use their complete selectors because matching is performed after global-reversal
+    /// canonicalization.
     fn localized_orientation_term(
         self,
         reduced_expression: &Atom,
         reduced_orientation: &EdgeVec<Orientation>,
         internal_edges: &[EdgeIndex],
+        paired_edges: &[EdgeIndex],
+        supported_orientations: &[&EdgeVec<Orientation>],
         average_compatible_orientations: bool,
     ) -> Result<Atom> {
         let representatives = self.representative_orientations(
             reduced_orientation,
             internal_edges,
+            paired_edges,
+            supported_orientations,
             average_compatible_orientations,
         )?;
         let reduced_selector = reduced_orientation.orientation_thetas();
@@ -122,8 +148,12 @@ impl<'a> Localizer<'a> {
 
         let n_reps = representatives.len();
         for representative in representatives {
-            let internal_selector = representative.internal_orientation_selector(internal_edges);
-            localized += reduced_expression.clone() * &reduced_selector * internal_selector;
+            let selector = if average_compatible_orientations {
+                representative.orientation_thetas()
+            } else {
+                &reduced_selector * representative.internal_orientation_selector(internal_edges)
+            };
+            localized += reduced_expression.clone() * selector;
         }
         if average_compatible_orientations {
             localized /= n_reps;
@@ -173,6 +203,18 @@ impl<'a> Localizer<'a> {
         );
 
         let internal_edges = graph.paired_edges(to_contract);
+        let mut supported_orientations = Vec::new();
+        for orientation in self.orientation.valid_orientations {
+            let internal_graph =
+                CFFGenerationGraph::new_from_subgraph(graph, orientation.clone(), to_contract)?;
+            if !internal_graph.has_directed_cycle_initial() {
+                supported_orientations.push(orientation);
+            }
+        }
+        let paired_edges = graph
+            .iter_edges()
+            .filter_map(|(pair, edge, _)| pair.is_paired().then_some(edge))
+            .collect::<Vec<_>>();
         let localizing_integrand = GS.localizing_integrand(integrated_node.lmb());
 
         let mut active_integrands = Vec::new();
@@ -184,6 +226,8 @@ impl<'a> Localizer<'a> {
                     &(cff_term * &fourddenoms),
                     &orientation,
                     &internal_edges,
+                    &paired_edges,
+                    &supported_orientations,
                     true,
                 )?;
             }
@@ -1003,6 +1047,8 @@ mod tests {
                 &reduced_expression,
                 &reduced_orientation,
                 &edges([1]),
+                &edges([0, 1, 2]),
+                &[],
                 false,
             )
             .unwrap();

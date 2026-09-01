@@ -353,6 +353,23 @@ impl Graph {
             seed_graph = seed_graph.contract_edge(*edge);
         }
 
+        // Contracting a vacuum UV subgraph can turn a surviving edge into a self-edge. It carries
+        // no thermal factor, so remove it before cyclic orientations are filtered and retain its
+        // canonical orientation only.
+        let vacuum_self_edges = match medium_mode {
+            MediumMode::Vacuum => {
+                let self_edges = seed_graph
+                    .get_self_edges()
+                    .into_iter()
+                    .collect::<HashSet<_>>();
+                seed_graph.remove_self_edges();
+                self_edges
+            }
+            MediumMode::ThermodynamicEquilibrium | MediumMode::ZeroTemperatureEquilibrium => {
+                HashSet::default()
+            }
+        };
+
         let edges_in_initial_state_cut = self
             .iter_edges_of(&self.initial_state_cut)
             .map(|x| x.1)
@@ -370,6 +387,8 @@ impl Graph {
             let global_orientation = self.new_edgevec(|_, edge_id, hedge_pair| {
                 if hedge_pair.is_unpaired() || contract_edges.contains(&edge_id) {
                     Orientation::Undirected
+                } else if vacuum_self_edges.contains(&edge_id) {
+                    Orientation::Default
                 } else if edges_in_initial_state_cut.contains(&edge_id) {
                     Orientation::Default
                 } else {

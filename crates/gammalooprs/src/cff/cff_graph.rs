@@ -1401,8 +1401,11 @@ impl CFFGenerationGraph {
 
     // this function is used to set the orientation. Note that if called twice the edges may also be flipped twice, so the caller needs to be careful to only call this function once per graph
     pub(crate) fn apply_orientation(&mut self, orientation: EdgeVec<Orientation>) -> Result<()> {
+        let self_edges = self.get_self_edges().into_iter().collect::<HashSet<_>>();
         for (edge_id, &edge_orientation) in orientation.iter() {
-            if edge_orientation == Orientation::Reversed {
+            // Reversing a self-edge changes only its thermal sign. Swapping its two copies in
+            // the same vertex would instead turn them into duplicate incoming edges.
+            if edge_orientation == Orientation::Reversed && !self_edges.contains(&edge_id) {
                 for vertex in self.vertices.iter_mut() {
                     if let Some(edge) = vertex
                         .outgoing_edges
@@ -1996,6 +1999,29 @@ mod test {
         assert_eq!(factors[0].derivative_order, 0);
         assert!(!cff_graph.has_edge(EdgeIndex::from(0)));
         assert!(cff_graph.has_edge(EdgeIndex::from(1)));
+    }
+
+    #[test]
+    fn reversed_self_edge_keeps_adjacency_and_negative_thermal_factor() {
+        let cff_graph = CFFGenerationGraph::from_vec(vec![(0, 1), (0, 1), (0, 1)], vec![], None);
+        let surviving_edge = EdgeIndex::from(1);
+        let mut cff_graph = cff_graph
+            .contract_edge(EdgeIndex::from(0))
+            .contract_edge(EdgeIndex::from(2));
+        let mut orientation = cff_graph.global_orientation.clone();
+        orientation[surviving_edge] = Orientation::Reversed;
+
+        cff_graph.apply_orientation(orientation).unwrap();
+
+        assert!(!cff_graph.has_impossible_edge());
+        assert_eq!(cff_graph.get_self_edges(), vec![surviving_edge]);
+
+        let factors = cff_graph.strip_thermal_distribution_factors();
+        assert_eq!(factors.len(), 1);
+        assert_eq!(factors[0].edge_id, surviving_edge);
+        assert_eq!(factors[0].sign, Sign::Negative);
+        assert_eq!(factors[0].derivative_order, 0);
+        assert!(!cff_graph.has_edge(surviving_edge));
     }
 
     #[test]
