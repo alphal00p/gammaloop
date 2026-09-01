@@ -1,0 +1,50 @@
+name: Linnet Python WebAssembly
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/linnet-py-wasm.yml'
+      - '.cargo/**'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'crates/kurvst/**'
+      - 'crates/linnest/**'
+      - 'crates/linnet/**'
+      - 'crates/linnet-py/**'
+  push:
+    branches:
+      - main
+    tags:
+      - 'linnet-py-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  wheel:
+    name: PyEmscripten wheel
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-emscripten
+
+      - uses: pypa/cibuildwheel@v4.2.0
+        with:
+          package-dir: crates/linnet-py
+        env:
+          CIBW_BUILD: cp314-pyodide_wasm32
+          CIBW_ENVIRONMENT_PYODIDE: CARGO_PROFILE_RELEASE_LTO=thin CARGO_BUILD_JOBS=2
+          CIBW_PLATFORM: pyodide
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linnet-py-pyemscripten-wheel
+          path: wheelhouse/*.whl
+          if-no-files-found: error

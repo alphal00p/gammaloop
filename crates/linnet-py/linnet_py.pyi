@@ -375,7 +375,7 @@ class DrawOptions:
     Full typed option surface for `linnest.draw`.
     """
     def __repr__(self) -> builtins.str: ...
-    def __new__(cls, *, scope: _Dictionary = ..., unit: _AutoLengthValue = ..., title: _AutoOptionalStaticContent = ..., subgraph: _DrawSubgraphs = ..., debug: _DebugValue = ..., node_radius: _AutoRadius = ..., node_min_radius: _Number = ..., node_label_padding: _Number = ..., node_fill: _Paint = ..., node_stroke: _StrokeValue = ..., node_outset: _AutoNumber = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., node_label: _AutoOptionalContent = ..., draw_node: _AutoFunction = ..., edge_stroke: _StrokeValue = ..., edge_offset: _Number = ..., edge_length: _OptionalNumber = ..., edge_ratio: _OptionalNumber = ..., edge_resolve_length: _EdgeLengthResolver = ..., edge_accuracy: _Number = ..., edge_optimize: _Boolean = ..., source_style: _OptionalStyleLayers = ..., sink_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _OptionalStyle = ..., edge_omega: _Number = ..., edge_trim_accuracy: _Number = ..., padding: _OptionalPadding = ..., debug_edge_radius: _Number = ..., debug_edge_fill: _Paint = ..., debug_edge_stroke: _StrokeValue = ..., debug_edge_label_fill: _Paint = ..., subgraph_edge_style: _Style = ..., subgraph_edge_underlay: _Boolean = ...) -> DrawOptions: ...
+    def __new__(cls, *, scope: _Dictionary = ..., unit: _AutoLengthValue = ..., title: _AutoOptionalStaticContent = ..., subgraph: _DrawSubgraphs = ..., debug: _DebugValue = ..., show_half_edge_ids: _Boolean = ..., node_radius: _AutoRadius = ..., node_min_radius: _Number = ..., node_label_padding: _Number = ..., node_fill: _Paint = ..., node_stroke: _StrokeValue = ..., node_outset: _AutoNumber = ..., node_label_style: _Style = ..., node_style: _OptionalStyle = ..., node_label: _AutoOptionalContent = ..., draw_node: _AutoFunction = ..., edge_stroke: _StrokeValue = ..., edge_offset: _Number = ..., edge_length: _OptionalNumber = ..., edge_ratio: _OptionalNumber = ..., edge_resolve_length: _EdgeLengthResolver = ..., edge_accuracy: _Number = ..., edge_optimize: _Boolean = ..., source_style: _OptionalStyleLayers = ..., sink_style: _OptionalStyleLayers = ..., edge_label: _OptionalContent = ..., edge_label_style: _OptionalStyle = ..., edge_omega: _Number = ..., edge_trim_accuracy: _Number = ..., padding: _OptionalPadding = ..., debug_edge_radius: _Number = ..., debug_edge_fill: _Paint = ..., debug_edge_stroke: _StrokeValue = ..., debug_edge_label_fill: _Paint = ..., subgraph_edge_style: _Style = ..., subgraph_edge_underlay: _Boolean = ...) -> DrawOptions: ...
 
 @typing.final
 class DrawingSelectors:
@@ -495,55 +495,6 @@ class Graph:
     def render(self, output: builtins.str | os.PathLike[builtins.str], *, config: RenderConfig | None = None) -> pathlib.Path: ...
     def to_svg(self, *, config: RenderConfig | None = None) -> builtins.str: ...
     def _repr_svg_(self) -> builtins.str: ...
-    def __repr__(self) -> builtins.str: ...
-    def add_node(self, spec: NodeSpec) -> Node:
-        r"""
-        Append one declarative node and return its fresh live view.
-        """
-    def add_edge(self, spec: EdgeSpec) -> Edge:
-        r"""
-        Append one declarative internal or dangling edge and return its fresh live view.
-        """
-    def split_edge(self, at: _HalfEdgeTarget, replacement: EdgeValue, *, name: typing.Optional[builtins.str] = None, orientation: Orientation = Orientation.Default) -> tuple[Edge, Edge]:
-        r"""
-        Split a paired edge at one half-edge, preserving the opposite edge value.
-        """
-    def connect(self, source: _HalfEdgeTarget, sink: _HalfEdgeTarget, replacement: EdgeValue, *, name: typing.Optional[builtins.str] = None, orientation: Orientation = Orientation.Default) -> Edge:
-        r"""
-        Connect two dangling half-edges; the first becomes the source endpoint.
-        """
-    def concretize(self, subgraph: Subgraph) -> Graph:
-        r"""
-        Copy a structural subgraph into an independent graph.
-        """
-    def extract(self, subgraph: Subgraph) -> Graph:
-        r"""
-        Remove a structural subgraph and return it as an independent graph.
-        """
-    def delete(self, subgraph: Subgraph) -> None:
-        r"""
-        Delete a structural subgraph.
-        """
-    def contract(self, subgraph: Subgraph, replacement: NodeValue, *, name: typing.Optional[builtins.str] = None) -> None:
-        r"""
-        Contract a non-empty subgraph into one replacement node.
-        """
-    def append(self, other: Graph) -> Graph:
-        r"""
-        Append another graph without matching dangling half-edges.
-        """
-    def append_mut(self, other: Graph) -> None:
-        r"""
-        Append another graph in place without matching dangling half-edges.
-        """
-    def join(self, other: Graph, *, matching: typing.Callable[[HalfEdge, HalfEdge], builtins.bool], merge: typing.Callable[[HalfEdge, HalfEdge], tuple[Flow, Orientation, builtins.str | None, EdgeValue]]) -> Graph:
-        r"""
-        Join dangling half-edges selected by Python callbacks.
-        """
-    def join_mut(self, other: Graph, *, matching: typing.Callable[[HalfEdge, HalfEdge], builtins.bool], merge: typing.Callable[[HalfEdge, HalfEdge], tuple[Flow, Orientation, builtins.str | None, EdgeValue]]) -> None:
-        r"""
-        Join another graph in place while leaving the other graph unchanged.
-        """
     def full_subgraph(self) -> Subgraph: ...
     def empty_subgraph(self) -> Subgraph: ...
     def subgraph(self, *, nodes: typing.Sequence[builtins.int | builtins.str] = ..., edges: typing.Sequence[builtins.int | builtins.str] = ..., half_edges: typing.Sequence[builtins.int] = ...) -> Subgraph: ...
@@ -613,6 +564,55 @@ class Graph:
         r"""
         Enumerate all native separating partitions between two disjoint, non-empty node groups.
         """
+    def add_node(self, spec: NodeSpec) -> Node:
+        r"""
+        Append one declarative node and return its fresh live view.
+        """
+    def add_edge(self, spec: EdgeSpec) -> Edge:
+        r"""
+        Append one declarative internal or dangling edge and return its fresh live view.
+        """
+    def split_edge(self, at: _HalfEdgeTarget, replacement: EdgeValue, *, name: typing.Optional[builtins.str] = None, orientation: Orientation = Orientation.Default) -> tuple[Edge, Edge]:
+        r"""
+        Split a paired edge at one half-edge, preserving the opposite edge value.
+        """
+    def connect(self, source: _HalfEdgeTarget, sink: _HalfEdgeTarget, replacement: EdgeValue, *, name: typing.Optional[builtins.str] = None, orientation: Orientation = Orientation.Default) -> Edge:
+        r"""
+        Connect two dangling half-edges; the first becomes the source endpoint.
+        """
+    def concretize(self, subgraph: Subgraph) -> Graph:
+        r"""
+        Copy a structural subgraph into an independent graph.
+        """
+    def extract(self, subgraph: Subgraph) -> Graph:
+        r"""
+        Remove a structural subgraph and return it as an independent graph.
+        """
+    def delete(self, subgraph: Subgraph) -> None:
+        r"""
+        Delete a structural subgraph.
+        """
+    def contract(self, subgraph: Subgraph, replacement: NodeValue, *, name: typing.Optional[builtins.str] = None) -> None:
+        r"""
+        Contract a non-empty subgraph into one replacement node.
+        """
+    def append(self, other: Graph) -> Graph:
+        r"""
+        Append another graph without matching dangling half-edges.
+        """
+    def append_mut(self, other: Graph) -> None:
+        r"""
+        Append another graph in place without matching dangling half-edges.
+        """
+    def join(self, other: Graph, *, matching: typing.Callable[[HalfEdge, HalfEdge], builtins.bool], merge: typing.Callable[[HalfEdge, HalfEdge], tuple[Flow, Orientation, builtins.str | None, EdgeValue]]) -> Graph:
+        r"""
+        Join dangling half-edges selected by Python callbacks.
+        """
+    def join_mut(self, other: Graph, *, matching: typing.Callable[[HalfEdge, HalfEdge], builtins.bool], merge: typing.Callable[[HalfEdge, HalfEdge], tuple[Flow, Orientation, builtins.str | None, EdgeValue]]) -> None:
+        r"""
+        Join another graph in place while leaving the other graph unchanged.
+        """
+    def __repr__(self) -> builtins.str: ...
 
 @typing.final
 class GraphStyleOptions:
@@ -751,7 +751,7 @@ class OrientedCut:
 @typing.final
 class PreparedRender:
     r"""
-    One Typst render whose generated entrypoint, topology, and source modules share a lifetime.
+    One Typst render whose virtual project and generated entrypoint share a lifetime.
     """
     @property
     def typst_source(self) -> builtins.str:

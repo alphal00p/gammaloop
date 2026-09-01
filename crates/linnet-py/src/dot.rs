@@ -9,7 +9,6 @@ use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyReferenceError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyDictMethods, PyType};
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 use serde::{Deserialize, Serialize};
 
 use crate::drawing::{
@@ -20,7 +19,7 @@ use crate::graph::{EdgeRecord, GraphState, HalfEdgeRecord, NodeRecord, PyGraph};
 use crate::native_graph::{PyHedgeGraph, PyNodeStore};
 
 /// DOT graph metadata kept separate from arbitrary Python element data.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "GlobalData")]
 #[derive(Clone, Debug)]
 pub struct PyGlobalData {
@@ -35,7 +34,8 @@ impl Default for PyGlobalData {
     }
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyGlobalData {
     #[new]
@@ -114,14 +114,15 @@ impl PyGlobalData {
 }
 
 /// The DOT-representable record exchanged for one node by a `DotCodec`.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "DotVertexData")]
 #[derive(Clone, Debug)]
 pub struct PyDotVertexData {
     pub(crate) inner: DotVertexData,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDotVertexData {
     #[new]
@@ -164,14 +165,15 @@ impl PyDotVertexData {
 }
 
 /// The DOT-representable record exchanged for one edge by a `DotCodec`.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "DotEdgeData")]
 #[derive(Clone, Debug)]
 pub struct PyDotEdgeData {
     pub(crate) inner: DotEdgeData,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDotEdgeData {
     #[new]
@@ -249,14 +251,15 @@ fn compass_name(value: CompassPt) -> &'static str {
 }
 
 /// The DOT-representable record exchanged for one half-edge by a `DotCodec`.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(from_py_object, name = "DotHalfEdgeData")]
 #[derive(Clone, Debug)]
 pub struct PyDotHalfEdgeData {
     pub(crate) inner: DotHedgeData,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDotHalfEdgeData {
     #[new]
@@ -308,7 +311,7 @@ impl PyDotHalfEdgeData {
 macro_rules! value_class {
     ($doc:literal, $rust:ident, $python:literal, $drawing:ident, $fields:ident) => {
         #[doc = $doc]
-        #[gen_stub_pyclass]
+        #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
         #[pyclass(unsendable, name = $python)]
         pub struct $rust {
             pub(crate) data: Option<Py<PyAny>>,
@@ -328,7 +331,8 @@ macro_rules! value_class {
             }
         }
 
-        #[gen_stub_pymethods]
+        #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+        #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
         #[pymethods]
         impl $rust {
             #[new]
@@ -421,13 +425,14 @@ enum CodecKind {
 }
 
 /// An explicit mapping between graph values and DOT-representable records.
-#[gen_stub_pyclass]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(unsendable, name = "DotCodec")]
 pub struct PyDotCodec {
     kind: Option<CodecKind>,
 }
 
-#[gen_stub_pymethods]
+#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl PyDotCodec {
     #[new]

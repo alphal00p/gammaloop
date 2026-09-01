@@ -9,7 +9,6 @@ use linnet::half_edge::NodeIndex;
 use pyo3::exceptions::{PyReferenceError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyTuple;
-use pyo3_stub_gen::derive::gen_stub_pymethods;
 
 use crate::dot::{PyEdgeValue, PyNodeValue};
 use crate::drawing::copy_drawing;
@@ -21,7 +20,7 @@ use crate::native_graph::PyHedgeGraph;
 use crate::topology::PySubgraph;
 
 impl PyGraph {
-    fn selected(
+    pub(crate) fn selected(
         graph: &Py<PyGraph>,
         py: Python<'_>,
         subgraph: &PySubgraph,
@@ -31,7 +30,7 @@ impl PyGraph {
         Ok((revision, filter.clone(), isolated_nodes.clone()))
     }
 
-    fn split_isolated_nodes(
+    pub(crate) fn split_isolated_nodes(
         graph: &mut PyHedgeGraph,
         isolated_nodes: &BTreeSet<usize>,
     ) -> PyHedgeGraph {
@@ -47,7 +46,7 @@ impl PyGraph {
         )
     }
 
-    fn split_off(
+    pub(crate) fn split_off(
         py: Python<'_>,
         graph: &mut PyHedgeGraph,
         subgraph: &SuBitGraph,
@@ -104,7 +103,7 @@ impl PyGraph {
         }
     }
 
-    fn validate_names(graph: &PyHedgeGraph) -> PyResult<()> {
+    pub(crate) fn validate_names(graph: &PyHedgeGraph) -> PyResult<()> {
         let mut names = std::collections::BTreeSet::new();
         for (_, _, node) in graph.iter_nodes() {
             if let Some(name) = &node.name {
@@ -128,7 +127,7 @@ impl PyGraph {
         Ok(())
     }
 
-    fn appended_state(
+    pub(crate) fn appended_state(
         left: &Py<PyGraph>,
         right: &Py<PyGraph>,
         py: Python<'_>,
@@ -157,7 +156,7 @@ impl PyGraph {
         Ok((revision, candidate))
     }
 
-    fn joined_state(
+    pub(crate) fn joined_state(
         left: &Py<PyGraph>,
         right: &Py<PyGraph>,
         py: Python<'_>,
@@ -282,7 +281,7 @@ impl PyGraph {
         ))
     }
 
-    fn snapshot_edge_value(
+    pub(crate) fn snapshot_edge_value(
         py: Python<'_>,
         value: &Bound<'_, PyAny>,
         name: Option<String>,
@@ -293,7 +292,7 @@ impl PyGraph {
         Self::snapshot_edge_record(py, &value, name)
     }
 
-    fn snapshot_edge_record(
+    pub(crate) fn snapshot_edge_record(
         py: Python<'_>,
         value: &PyEdgeValue,
         name: Option<String>,
@@ -315,7 +314,7 @@ impl PyGraph {
         })
     }
 
-    fn merge_result(
+    pub(crate) fn merge_result(
         py: Python<'_>,
         value: &Bound<'_, PyAny>,
     ) -> PyResult<(Flow, EdgeData<EdgeRecord>)> {
@@ -337,12 +336,9 @@ impl PyGraph {
     }
 }
 
-#[gen_stub_pymethods]
-#[pymethods]
 impl PyGraph {
     /// Append one declarative node and return its fresh live view.
-    #[pyo3(signature = (spec))]
-    fn add_node(
+    pub(crate) fn add_node(
         slf: Py<PyGraph>,
         py: Python<'_>,
         spec: PyRef<'_, PyNodeSpec>,
@@ -371,8 +367,7 @@ impl PyGraph {
     }
 
     /// Append one declarative internal or dangling edge and return its fresh live view.
-    #[pyo3(signature = (spec))]
-    fn add_edge(
+    pub(crate) fn add_edge(
         slf: Py<PyGraph>,
         py: Python<'_>,
         spec: PyRef<'_, PyEdgeSpec>,
@@ -417,11 +412,10 @@ impl PyGraph {
     }
 
     /// Split a paired edge at one half-edge, preserving the opposite edge value.
-    #[pyo3(signature = (at, replacement, *, name=None, orientation=PyOrientation::Default))]
-    fn split_edge(
+    pub(crate) fn split_edge(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr = "_HalfEdgeTarget"))] at: &Bound<'_, PyAny>,
+        at: &Bound<'_, PyAny>,
         replacement: PyRef<'_, PyEdgeValue>,
         name: Option<String>,
         orientation: PyOrientation,
@@ -462,12 +456,11 @@ impl PyGraph {
     }
 
     /// Connect two dangling half-edges; the first becomes the source endpoint.
-    #[pyo3(signature = (source, sink, replacement, *, name=None, orientation=PyOrientation::Default))]
-    fn connect(
+    pub(crate) fn connect(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        #[gen_stub(override_type(type_repr = "_HalfEdgeTarget"))] source: &Bound<'_, PyAny>,
-        #[gen_stub(override_type(type_repr = "_HalfEdgeTarget"))] sink: &Bound<'_, PyAny>,
+        source: &Bound<'_, PyAny>,
+        sink: &Bound<'_, PyAny>,
         replacement: PyRef<'_, PyEdgeValue>,
         name: Option<String>,
         orientation: PyOrientation,
@@ -514,8 +507,11 @@ impl PyGraph {
     }
 
     /// Copy a structural subgraph into an independent graph.
-    #[pyo3(signature = (subgraph))]
-    fn concretize(slf: Py<PyGraph>, py: Python<'_>, subgraph: &PySubgraph) -> PyResult<PyGraph> {
+    pub(crate) fn concretize(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: &PySubgraph,
+    ) -> PyResult<PyGraph> {
         let (_, filter, isolated_nodes) = Self::selected(&slf, py, subgraph)?;
         let state = slf.borrow(py);
         let state = state.state.borrow();
@@ -528,8 +524,11 @@ impl PyGraph {
     }
 
     /// Remove a structural subgraph and return it as an independent graph.
-    #[pyo3(signature = (subgraph))]
-    fn extract(slf: Py<PyGraph>, py: Python<'_>, subgraph: &PySubgraph) -> PyResult<PyGraph> {
+    pub(crate) fn extract(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        subgraph: &PySubgraph,
+    ) -> PyResult<PyGraph> {
         let (revision, filter, isolated_nodes) = Self::selected(&slf, py, subgraph)?;
         if filter.is_empty() && isolated_nodes.is_empty() {
             let graph = slf.borrow(py);
@@ -557,8 +556,7 @@ impl PyGraph {
     }
 
     /// Delete a structural subgraph.
-    #[pyo3(signature = (subgraph))]
-    fn delete(slf: Py<PyGraph>, py: Python<'_>, subgraph: &PySubgraph) -> PyResult<()> {
+    pub(crate) fn delete(slf: Py<PyGraph>, py: Python<'_>, subgraph: &PySubgraph) -> PyResult<()> {
         let (revision, filter, isolated_nodes) = Self::selected(&slf, py, subgraph)?;
         if filter.is_empty() && isolated_nodes.is_empty() {
             return Ok(());
@@ -579,8 +577,7 @@ impl PyGraph {
     }
 
     /// Contract a non-empty subgraph into one replacement node.
-    #[pyo3(signature = (subgraph, replacement, *, name=None))]
-    fn contract(
+    pub(crate) fn contract(
         slf: Py<PyGraph>,
         py: Python<'_>,
         subgraph: &PySubgraph,
@@ -670,15 +667,17 @@ impl PyGraph {
     }
 
     /// Append another graph without matching dangling half-edges.
-    #[pyo3(signature = (other))]
-    fn append(slf: Py<PyGraph>, py: Python<'_>, other: Py<PyGraph>) -> PyResult<PyGraph> {
+    pub(crate) fn append(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        other: Py<PyGraph>,
+    ) -> PyResult<PyGraph> {
         let (_, candidate) = Self::appended_state(&slf, &other, py)?;
         Ok(PyGraph::from_state(candidate))
     }
 
     /// Append another graph in place without matching dangling half-edges.
-    #[pyo3(signature = (other))]
-    fn append_mut(slf: Py<PyGraph>, py: Python<'_>, other: Py<PyGraph>) -> PyResult<()> {
+    pub(crate) fn append_mut(slf: Py<PyGraph>, py: Python<'_>, other: Py<PyGraph>) -> PyResult<()> {
         let (revision, mut candidate) = Self::appended_state(&slf, &other, py)?;
         slf.borrow(py).check_revision(revision)?;
         candidate.revision = revision + 1;
@@ -687,14 +686,11 @@ impl PyGraph {
     }
 
     /// Join dangling half-edges selected by Python callbacks.
-    #[pyo3(signature = (other, *, matching, merge))]
-    fn join(
+    pub(crate) fn join(
         slf: Py<PyGraph>,
         py: Python<'_>,
         other: Py<PyGraph>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge, HalfEdge], builtins.bool]", imports=("builtins", "typing")))]
         matching: Py<PyAny>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge, HalfEdge], tuple[Flow, Orientation, builtins.str | None, EdgeValue]]", imports=("builtins", "typing")))]
         merge: Py<PyAny>,
     ) -> PyResult<PyGraph> {
         let (_, candidate) = Self::joined_state(&slf, &other, py, &matching, &merge)?;
@@ -702,14 +698,11 @@ impl PyGraph {
     }
 
     /// Join another graph in place while leaving the other graph unchanged.
-    #[pyo3(signature = (other, *, matching, merge))]
-    fn join_mut(
+    pub(crate) fn join_mut(
         slf: Py<PyGraph>,
         py: Python<'_>,
         other: Py<PyGraph>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge, HalfEdge], builtins.bool]", imports=("builtins", "typing")))]
         matching: Py<PyAny>,
-        #[gen_stub(override_type(type_repr="typing.Callable[[HalfEdge, HalfEdge], tuple[Flow, Orientation, builtins.str | None, EdgeValue]]", imports=("builtins", "typing")))]
         merge: Py<PyAny>,
     ) -> PyResult<()> {
         let (revision, mut candidate) = Self::joined_state(&slf, &other, py, &matching, &merge)?;

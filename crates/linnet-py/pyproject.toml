@@ -17,6 +17,13 @@ dependencies = ["typst==0.15.0"]
 module-name = "linnet_py"
 features = ["extension-module", "abi3-py310"]
 
+[tool.cibuildwheel]
+build = "cp314-*"
+
+[tool.cibuildwheel.pyodide]
+repair-wheel-command = ""
+test-command = "python -m unittest {project}/tests/test_wasm.py"
+
 [build-system]
-requires = ["maturin>=1.7"]
+requires = ["maturin>=1.13.2,<2"]
 build-backend = "maturin"
