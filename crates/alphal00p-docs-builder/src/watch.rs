@@ -16,7 +16,7 @@ use notify::{
 };
 use tempfile::{Builder as TempDirBuilder, TempDir};
 
-use super::{BuildChannel, BuildRequest, typst_render::PersistentTypstRenderer};
+use super::{BuildChannel, BuildRequest, RustdocCacheMode, typst_render::PersistentTypstRenderer};
 use super::{SiteBuilder, absolute_from, copy_tree, server::LiveServer};
 
 const QUIET_PERIOD: Duration = Duration::from_millis(100);
@@ -32,6 +32,39 @@ pub struct WatchRequest {
     pub open: bool,
     pub serve: bool,
     pub include_rustdoc: bool,
+}
+
+#[derive(Debug)]
+struct RustdocWatchState {
+    enabled: bool,
+    dirty: bool,
+}
+
+impl RustdocWatchState {
+    fn new(enabled: bool) -> Self {
+        Self {
+            enabled,
+            dirty: enabled,
+        }
+    }
+
+    fn observe(&mut self, changed: &[PathBuf]) {
+        self.dirty |= changed.iter().any(|path| rustdoc_input_change(path));
+    }
+
+    fn mode(&self) -> RustdocCacheMode {
+        match (self.enabled, self.dirty) {
+            (false, _) => RustdocCacheMode::Disabled,
+            (true, true) => RustdocCacheMode::Refresh,
+            (true, false) => RustdocCacheMode::Reuse,
+        }
+    }
+
+    fn finish(&mut self, succeeded: bool) {
+        if self.enabled && succeeded {
+            self.dirty = false;
+        }
+    }
 }
 
 struct SourceWatcher {
@@ -59,7 +92,7 @@ impl SourceWatcher {
         watcher
             .watch(&root, RecursiveMode::NonRecursive)
             .wrap_err_with(|| format!("failed to watch {}", root.display()))?;
-        for directory in ["docs", "crates"] {
+        for directory in ["docs", "crates", ".cargo"] {
             let path = root.join(directory);
             if path.is_dir() {
                 watcher
@@ -209,8 +242,9 @@ impl SourceWatcher {
         let first = relative.components().next();
         match first {
             Some(Component::Normal(name)) if name == "docs" => !editor_artifact(relative),
-            Some(Component::Normal(name)) if name == "crates" => {
-                !editor_artifact(relative) && source_like(relative)
+            Some(Component::Normal(name)) if name == "crates" => !editor_artifact(relative),
+            Some(Component::Normal(name)) if name == ".cargo" => {
+                relative == Path::new(".cargo/config.toml")
             }
             Some(Component::Normal(name)) => matches!(
                 name.to_str(),
@@ -222,7 +256,7 @@ impl SourceWatcher {
 
     fn baseline_covers(&self, path: &Path) -> bool {
         path.parent() == Some(self.root.as_path())
-            || ["docs", "crates"]
+            || ["docs", "crates", ".cargo"]
                 .into_iter()
                 .any(|directory| path.starts_with(self.root.join(directory)))
     }
@@ -288,26 +322,6 @@ fn rebuild_event(kind: &EventKind) -> bool {
     }
 }
 
-fn source_like(path: &Path) -> bool {
-    matches!(
-        path.extension().and_then(|extension| extension.to_str()),
-        Some(
-            "rs" | "toml"
-                | "lock"
-                | "md"
-                | "typ"
-                | "py"
-                | "pyi"
-                | "json"
-                | "html"
-                | "css"
-                | "js"
-                | "yaml"
-                | "yml"
-        )
-    )
-}
-
 fn editor_artifact(path: &Path) -> bool {
     let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
         return false;
@@ -356,8 +370,10 @@ impl SiteBuilder {
         }
 
         let mut changed: Vec<PathBuf> = Vec::new();
+        let mut rustdoc_cache = RustdocWatchState::new(request.include_rustdoc);
         let mut open = request.open;
         loop {
+            rustdoc_cache.observe(&changed);
             let dependency_output = session.path().join("dependencies");
             if let Some(server) = &server {
                 server.set_status("Building documentation…");
@@ -372,9 +388,11 @@ impl SiteBuilder {
                 session.path(),
                 &dependency_output,
                 &changed,
+                rustdoc_cache.mode(),
                 &mut renderer,
             );
             let build_succeeded = build.is_ok();
+            rustdoc_cache.finish(build_succeeded);
             match read_typst_dependencies(&dependency_output) {
                 Ok(Some(dependencies)) => {
                     if build_succeeded {
@@ -465,6 +483,7 @@ impl SiteBuilder {
         session: &Path,
         dependency_output: &Path,
         changed: &[PathBuf],
+        rustdoc_cache: RustdocCacheMode,
         renderer: &mut PersistentTypstRenderer,
     ) -> Result<(TempDir, PathBuf)> {
         if dependency_output.exists() {
@@ -497,6 +516,7 @@ impl SiteBuilder {
                 include_rustdoc: request.include_rustdoc,
                 include_typst: true,
                 rustdoc_target_root: Some(rustdoc_target),
+                rustdoc_cache,
                 dependency_output: Some(dependency_output.to_path_buf()),
             },
             renderer,
@@ -653,8 +673,24 @@ fn rust_backed_change(path: &Path) -> bool {
         || path.extension().and_then(|extension| extension.to_str()) == Some("rs")
 }
 
+fn rustdoc_input_change(path: &Path) -> bool {
+    if path.extension().and_then(|extension| extension.to_str()) == Some("typ") {
+        return false;
+    }
+    path.starts_with("crates")
+        || matches!(path.to_str(), Some("Cargo.toml" | "Cargo.lock"))
+        || path == Path::new(".cargo/config.toml")
+        || matches!(
+            path.to_str(),
+            Some("docs/assets/rustdoc.css" | "docs/products/registry.toml")
+        )
+}
+
 fn watcher_restart_required(path: &Path) -> bool {
-    if matches!(path.to_str(), Some("Cargo.toml" | "Cargo.lock")) {
+    if matches!(
+        path.to_str(),
+        Some("Cargo.toml" | "Cargo.lock" | ".cargo/config.toml")
+    ) {
         return true;
     }
     let implementation_crate = [
@@ -827,6 +863,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         fs::create_dir(directory.path().join("docs")).unwrap();
         fs::create_dir(directory.path().join("crates")).unwrap();
+        fs::create_dir(directory.path().join(".cargo")).unwrap();
         directory
     }
 
@@ -910,10 +947,60 @@ mod tests {
     }
 
     #[test]
+    fn rustdoc_cache_ignores_typst_but_not_rustdoc_inputs() {
+        for path in [
+            "docs/products/gammaloop/content/tutorial.typ",
+            "crates/linnest/typst/src/lib.typ",
+            "docs/architecture/nix-crane-cache-reuse.typ",
+        ] {
+            assert!(!rustdoc_input_change(Path::new(path)), "{path}");
+        }
+        for path in [
+            "Cargo.toml",
+            "Cargo.lock",
+            "crates/spenso/src/lib.rs",
+            "crates/spenso/Cargo.toml",
+            "crates/gammalooprs/templates/model.yaml",
+            "crates/vakint/templates/run_fmft.txt",
+            "crates/vakint/form_src/evaluate.frm",
+            "docs/assets/rustdoc.css",
+            "docs/products/registry.toml",
+            ".cargo/config.toml",
+        ] {
+            assert!(rustdoc_input_change(Path::new(path)), "{path}");
+        }
+        assert!(!rustdoc_input_change(Path::new("docs/assets/site.css")));
+    }
+
+    #[test]
+    fn rustdoc_cache_stays_dirty_until_a_generation_succeeds() {
+        let mut state = RustdocWatchState::new(true);
+        assert_eq!(state.mode(), RustdocCacheMode::Refresh);
+
+        state.finish(true);
+        state.observe(&[PathBuf::from("docs/products/linnet/content/overview.typ")]);
+        assert_eq!(state.mode(), RustdocCacheMode::Reuse);
+
+        state.observe(&[PathBuf::from("crates/linnet/src/lib.rs")]);
+        assert_eq!(state.mode(), RustdocCacheMode::Refresh);
+        state.finish(false);
+        state.observe(&[PathBuf::from("docs/products/linnet/content/overview.typ")]);
+        assert_eq!(state.mode(), RustdocCacheMode::Refresh);
+
+        state.finish(true);
+        assert_eq!(state.mode(), RustdocCacheMode::Reuse);
+        assert_eq!(
+            RustdocWatchState::new(false).mode(),
+            RustdocCacheMode::Disabled
+        );
+    }
+
+    #[test]
     fn watcher_requests_a_restart_only_for_its_own_compiled_inputs() {
         for path in [
             "Cargo.toml",
             "Cargo.lock",
+            ".cargo/config.toml",
             "crates/alphal00p-docs-builder/Cargo.toml",
             "crates/alphal00p-docs-builder/src/typst_render.rs",
             "crates/alphal00p-docs-schema/src/lib.rs",
@@ -959,6 +1046,10 @@ mod tests {
             assert!(!watcher.relevant(&root.path().join(path)), "{path}");
         }
         assert!(watcher.relevant(&root.path().join("crates/spenso/src/lib.rs")));
+        assert!(watcher.relevant(&root.path().join("crates/vakint/templates/run_fmft.txt")));
+        assert!(watcher.relevant(&root.path().join("crates/vakint/form_src/evaluate.frm")));
+        assert!(watcher.relevant(&root.path().join(".cargo/config.toml")));
+        assert!(!watcher.relevant(&root.path().join(".cargo/credentials.toml")));
     }
 
     #[test]

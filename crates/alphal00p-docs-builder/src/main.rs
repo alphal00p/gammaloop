@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use alphal00p_docs_builder::{BuildChannel, BuildRequest, SiteBuilder, WatchRequest};
+use alphal00p_docs_builder::{
+    BuildChannel, BuildRequest, RustdocCacheMode, SiteBuilder, WatchRequest,
+};
 use clap::{Parser, Subcommand};
 
 #[derive(Debug, Parser)]
@@ -90,6 +92,7 @@ fn main() -> eyre::Result<()> {
             include_rustdoc: !skip_rustdoc,
             include_typst: !skip_typst,
             rustdoc_target_root,
+            rustdoc_cache: RustdocCacheMode::Disabled,
             dependency_output,
         }),
         Command::Watch {

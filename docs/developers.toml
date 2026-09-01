@@ -713,7 +713,7 @@ digest = "e901371a78210b31068a9ba102508bf7951b823e"
 path = "crates/alphal00p-docs-builder/src/watch.rs"
 symbol = "alphal00p_docs_builder::SiteBuilder::build_generation"
 anchor = "fn build_generation("
-digest = "793b89e65c1c45a1d2e45543018ee44c83651d75"
+digest = "c15d13e20091230b2ef8cc5397fa84edaa100c37"
 
 [[section]]
 id = "documentation"
@@ -739,9 +739,9 @@ review_triggers = ["docs/developers.toml", "crates/alphal00p-docs-builder/src/li
 path = "crates/alphal00p-docs-builder/src/lib.rs"
 symbol = "alphal00p_docs_builder::SiteBuilder::check"
 anchor = "pub fn check(&self) -> Result<()> {"
-# Reviewed execution-only change: renderer injection retains compiler state but
-# leaves authoring policy, registry validation, and generated navigation unchanged.
-digest = "9692e8d5d61770a8f6cf22fcaa1e4828bedd627a"
+# Reviewed execution-only change: renderer injection and watch-only Rustdoc
+# sidecars leave authoring policy, registry validation, and navigation unchanged.
+digest = "51aa7aa8473018107f554cff175775383502bfb4"
 
 [[section.note]]
 id = "documentation-improvement-plan"

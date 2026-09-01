@@ -1487,6 +1487,25 @@ the last successfully published site in place. Changes to the running builder
 or documentation-schema Rust code exit with an explicit restart request,
 because an in-process watcher cannot hot-recompile its own implementation.
 
+The watch session also retains one complete Rustdoc sidecar per project. The
+first successful generation creates those sidecars; a Typst-only edit copies
+them into the new generation without deleting `target/doc` or launching
+`cargo doc`. Rust source, crate inputs, Rustdoc styling, and the registered
+project/component configuration mark the sidecars dirty. Cargo configuration
+changes restart the watcher so its process environment cannot become stale.
+The sidecars remain dirty
+until a complete generation succeeds, so a failed Rustdoc refresh cannot make
+an older sidecar appear current. New sidecars replace their prior cache
+atomically only after all registered root-crate indexes and Rustdoc's shared
+source, search, and static resources exist.
+
+This boundary is deliberately different from “prose never recompiles.” Typst
+still runs `typst::compile` after an edit and uses retained source identities
+and memoized queries to redo only affected work. Rust documentation comments
+change item pages, and ordinary Rust comments change Rustdoc's rendered source
+pages, so either kind of Rust-source prose correctly invalidates the Rustdoc
+sidecar. Only prose owned by Typst bypasses Rustdoc completely.
+
 The watcher profile optimizes third-party dependencies at level 2, matching
 the reason Typst's own documentation watcher uses an optimized development
 profile. Nix exposes the package tree from `typst.withPackages` through

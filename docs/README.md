@@ -44,7 +44,9 @@ all` builds the complete portal and all five products. Output defaults to
 `target/alphal00p-docs`; `docs-watch` continuously rebuilds one product and
 keeps the last successful preview available after an error. Use the `just`
 recipe for watching: it selects the optional embedded-Typst feature and its
-optimized development profile.
+optimized development profile. After the first successful build, Typst-only
+edits reuse the complete per-project Rustdoc sidecar; Rust crate inputs,
+Rustdoc CSS, and project-component configuration changes regenerate it.
 
 Ordinary pull requests retain a complete preview artifact and cannot update the
 mutable `latest` site. While pull request 96 is open, pushes to its in-repository

@@ -98,8 +98,20 @@ pub struct BuildRequest {
     pub include_typst: bool,
     /// Persistent Cargo target used only by a long-running watch session.
     pub rustdoc_target_root: Option<PathBuf>,
+    /// Watch-only policy for per-product Rustdoc sidecars.
+    pub rustdoc_cache: RustdocCacheMode,
     /// Directory receiving one NUL-delimited Typst dependency file per entrypoint.
     pub dependency_output: Option<PathBuf>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RustdocCacheMode {
+    /// Build directly into the requested site without maintaining a sidecar.
+    Disabled,
+    /// Regenerate Rustdoc and atomically refresh the per-product sidecar.
+    Refresh,
+    /// Reuse a complete sidecar, regenerating it when none is available.
+    Reuse,
 }
 
 struct ProductBuildOptions<'a> {
@@ -110,6 +122,7 @@ struct ProductBuildOptions<'a> {
     include_typst: bool,
     include_rustdoc: bool,
     rustdoc_target_root: Option<&'a Path>,
+    rustdoc_cache: RustdocCacheMode,
     dependency_output: Option<&'a Path>,
 }
 
@@ -1728,6 +1741,7 @@ impl SiteBuilder {
             include_typst: request.include_typst,
             include_rustdoc: request.include_rustdoc,
             rustdoc_target_root: request.rustdoc_target_root.as_deref(),
+            rustdoc_cache: request.rustdoc_cache,
             dependency_output: request.dependency_output.as_deref(),
         };
         for product in &selected {
@@ -1819,7 +1833,12 @@ impl SiteBuilder {
         }
         generated_pages.extend(self.write_python_reference(product, &metadata, &site)?);
         if options.include_rustdoc {
-            self.build_rustdoc(product, &site, options.rustdoc_target_root)?;
+            self.build_rustdoc(
+                product,
+                &site,
+                options.rustdoc_target_root,
+                options.rustdoc_cache,
+            )?;
         } else {
             self.write_rustdoc_placeholder(product, &site)?;
         }
@@ -2333,7 +2352,12 @@ impl SiteBuilder {
         product: &ProductConfig,
         site: &Path,
         persistent_target_root: Option<&Path>,
+        cache_mode: RustdocCacheMode,
     ) -> Result<()> {
+        ensure!(
+            cache_mode == RustdocCacheMode::Disabled || persistent_target_root.is_some(),
+            "Rustdoc caching requires a persistent target"
+        );
         let target_root = self.root.join("target");
         fs::create_dir_all(&target_root)?;
         let temporary_target;
@@ -2349,73 +2373,103 @@ impl SiteBuilder {
             temporary_target.path().to_path_buf()
         };
         let rustdoc = target.join("doc");
-        if persistent_target_root.is_some() {
-            clear_persistent_rustdoc_output(&target)?;
-        }
-        let rustdoc_css = self.root.join("docs/assets/rustdoc.css");
-        let rustdoc_before_content = target.join("alphal00p-rustdoc-before-content.html");
-        fs::write(
-            &rustdoc_before_content,
-            format!(
-                "<nav class=\"alphal00p-rustdoc-bar\" aria-label=\"αLoop documentation\"><a href=\"{PUBLISHED_DOCS_ROOT}/\">αLoop docs</a><span aria-hidden=\"true\">/</span><span>{} · Rust API</span></nav>",
-                escape_html(&product.title),
-            ),
-        )?;
-        let mut rustdoc_flags = env::var("CARGO_ENCODED_RUSTDOCFLAGS")
-            .ok()
-            .filter(|flags| !flags.is_empty())
-            .map(|flags| flags.split('\x1f').map(str::to_owned).collect::<Vec<_>>())
-            .or_else(|| {
-                env::var("RUSTDOCFLAGS").ok().map(|flags| {
-                    flags
-                        .split_whitespace()
-                        .map(str::to_owned)
-                        .collect::<Vec<_>>()
+        let cache = prepare_persistent_rustdoc_cache(cache_mode, &target)?
+            .map(|cache| cache.join(&product.id));
+        let cached = cache.as_ref().filter(|cache| {
+            cache_mode == RustdocCacheMode::Reuse && rustdoc_tree_complete(product, cache)
+        });
+        let rustdoc_source = if let Some(cache) = cached {
+            eprintln!("reusing cached Rustdoc for {}", product.id);
+            cache.clone()
+        } else {
+            if cache_mode == RustdocCacheMode::Reuse {
+                eprintln!(
+                    "cached Rustdoc for {} is unavailable; regenerating it",
+                    product.id
+                );
+            }
+            if persistent_target_root.is_some() {
+                clear_persistent_rustdoc_output(&target)?;
+            }
+            let rustdoc_css = self.root.join("docs/assets/rustdoc.css");
+            let rustdoc_before_content = target.join("alphal00p-rustdoc-before-content.html");
+            fs::write(
+                &rustdoc_before_content,
+                format!(
+                    "<nav class=\"alphal00p-rustdoc-bar\" aria-label=\"αLoop documentation\"><a href=\"{PUBLISHED_DOCS_ROOT}/\">αLoop docs</a><span aria-hidden=\"true\">/</span><span>{} · Rust API</span></nav>",
+                    escape_html(&product.title),
+                ),
+            )?;
+            let mut rustdoc_flags = env::var("CARGO_ENCODED_RUSTDOCFLAGS")
+                .ok()
+                .filter(|flags| !flags.is_empty())
+                .map(|flags| flags.split('\x1f').map(str::to_owned).collect::<Vec<_>>())
+                .or_else(|| {
+                    env::var("RUSTDOCFLAGS").ok().map(|flags| {
+                        flags
+                            .split_whitespace()
+                            .map(str::to_owned)
+                            .collect::<Vec<_>>()
+                    })
                 })
-            })
-            .unwrap_or_default();
-        ensure!(
-            !rustdoc_flags.iter().any(|flag| {
-                flag == "--extend-css"
-                    || flag.starts_with("--extend-css=")
-                    || flag.starts_with("-e") && !flag.starts_with("--")
-            }),
-            "the documentation builder supplies --extend-css; remove it from inherited Rustdoc flags"
-        );
-        rustdoc_flags.extend(STRICT_RUSTDOC_FLAGS.split_whitespace().map(str::to_owned));
-        rustdoc_flags.extend([
-            "--extend-css".to_owned(),
-            rustdoc_css.to_string_lossy().into_owned(),
-            "--html-before-content".to_owned(),
-            rustdoc_before_content.to_string_lossy().into_owned(),
-        ]);
-        let rustdoc_flags = rustdoc_flags.join("\x1f");
-        for component in &product.rust_components {
-            let mut command = Command::new("cargo");
-            command
-                .current_dir(&self.root)
-                .env("CARGO_TARGET_DIR", &target)
-                .env_remove("RUSTDOCFLAGS")
-                .env("CARGO_ENCODED_RUSTDOCFLAGS", &rustdoc_flags)
-                .args(["doc", "--locked", "--no-deps", "--no-default-features"]);
-            if let Some(profile) = env::var_os("ALPHAL00P_DOCS_CARGO_PROFILE") {
-                command.arg("--profile").arg(profile);
+                .unwrap_or_default();
+            ensure!(
+                !rustdoc_flags.iter().any(|flag| {
+                    flag == "--extend-css"
+                        || flag.starts_with("--extend-css=")
+                        || flag.starts_with("-e") && !flag.starts_with("--")
+                }),
+                "the documentation builder supplies --extend-css; remove it from inherited Rustdoc flags"
+            );
+            rustdoc_flags.extend(STRICT_RUSTDOC_FLAGS.split_whitespace().map(str::to_owned));
+            rustdoc_flags.extend([
+                "--extend-css".to_owned(),
+                rustdoc_css.to_string_lossy().into_owned(),
+                "--html-before-content".to_owned(),
+                rustdoc_before_content.to_string_lossy().into_owned(),
+            ]);
+            let rustdoc_flags = rustdoc_flags.join("\x1f");
+            for component in &product.rust_components {
+                let mut command = Command::new("cargo");
+                command
+                    .current_dir(&self.root)
+                    .env("CARGO_TARGET_DIR", &target)
+                    .env_remove("RUSTDOCFLAGS")
+                    .env("CARGO_ENCODED_RUSTDOCFLAGS", &rustdoc_flags)
+                    .args(["doc", "--locked", "--no-deps", "--no-default-features"]);
+                if let Some(profile) = env::var_os("ALPHAL00P_DOCS_CARGO_PROFILE") {
+                    command.arg("--profile").arg(profile);
+                }
+                command.args(["-p", &component.package]);
+                if !component.features.is_empty() {
+                    command.args(["--features", &component.features.join(",")]);
+                }
+                let status = command.status().wrap_err_with(|| {
+                    format!("failed to launch rustdoc for {}", component.package)
+                })?;
+                ensure!(status.success(), "rustdoc failed for {}", component.package);
             }
-            command.args(["-p", &component.package]);
-            if !component.features.is_empty() {
-                command.args(["--features", &component.features.join(",")]);
+            ensure!(
+                rustdoc_tree_complete(product, &rustdoc),
+                "Rustdoc emitted an incomplete sidecar for {}",
+                product.id
+            );
+            if let Some(cache) = &cache {
+                replace_cached_tree(&rustdoc, cache)?;
+                cache.clone()
+            } else {
+                rustdoc.clone()
             }
-            let status = command
-                .status()
-                .wrap_err_with(|| format!("failed to launch rustdoc for {}", component.package))?;
-            ensure!(status.success(), "rustdoc failed for {}", component.package);
-        }
+        };
 
         let mut packages = String::new();
         for component in &product.rust_components {
             let crate_name = component.package.replace('-', "_");
             ensure!(
-                rustdoc.join(&crate_name).join("index.html").is_file(),
+                rustdoc_source
+                    .join(&crate_name)
+                    .join("index.html")
+                    .is_file(),
                 "rustdoc emitted no crate index for {}",
                 component.package
             );
@@ -2426,7 +2480,7 @@ impl SiteBuilder {
         }
 
         let destination = site.join("reference/rust");
-        copy_tree(&rustdoc, &destination)?;
+        copy_tree(&rustdoc_source, &destination)?;
         fs::write(
             destination.join("index.html"),
             reference_page(
@@ -7805,6 +7859,50 @@ fn absolute_from(root: &Path, path: &Path) -> PathBuf {
     }
 }
 
+fn rustdoc_tree_complete(product: &ProductConfig, root: &Path) -> bool {
+    fs::symlink_metadata(root)
+        .is_ok_and(|metadata| metadata.is_dir() && !metadata.file_type().is_symlink())
+        && root.join("crates.js").is_file()
+        && root.join("search.index").is_dir()
+        && root.join("src").is_dir()
+        && root.join("static.files").is_dir()
+        && product.rust_components.iter().all(|component| {
+            root.join(component.package.replace('-', "_"))
+                .join("index.html")
+                .is_file()
+        })
+}
+
+fn prepare_persistent_rustdoc_cache(
+    mode: RustdocCacheMode,
+    target: &Path,
+) -> Result<Option<PathBuf>> {
+    if mode == RustdocCacheMode::Disabled {
+        return Ok(None);
+    }
+    let cache = target.join("alphal00p-product-rustdoc-v1");
+    match fs::symlink_metadata(&cache) {
+        Ok(metadata) => ensure!(
+            metadata.is_dir() && !metadata.file_type().is_symlink(),
+            "persistent Rustdoc cache root must be a directory, not a symlink: {}",
+            cache.display()
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => fs::create_dir(&cache)
+            .wrap_err_with(|| format!("failed to create Rustdoc cache {}", cache.display()))?,
+        Err(error) => return Err(error.into()),
+    }
+    let canonical_target = fs::canonicalize(target)
+        .wrap_err_with(|| format!("failed to resolve Rustdoc target {}", target.display()))?;
+    let canonical_cache = fs::canonicalize(&cache)
+        .wrap_err_with(|| format!("failed to resolve Rustdoc cache {}", cache.display()))?;
+    ensure!(
+        canonical_cache.starts_with(&canonical_target) && canonical_cache != canonical_target,
+        "persistent Rustdoc cache escapes {}",
+        target.display()
+    );
+    Ok(Some(cache))
+}
+
 fn prepare_persistent_rustdoc_target(root: &Path, requested_root: &Path) -> Result<PathBuf> {
     ensure!(
         !requested_root
@@ -9107,22 +9205,61 @@ fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-fn replace_generated_tree(source: &Path, destination: &Path) -> Result<()> {
-    let metadata = match fs::symlink_metadata(destination) {
-        Ok(metadata) => Some(metadata),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+fn replace_cached_tree(source: &Path, destination: &Path) -> Result<()> {
+    let parent = destination.parent().context("cached tree has no parent")?;
+    fs::create_dir_all(parent)?;
+    let staging = TempDirBuilder::new()
+        .prefix(".alphal00p-cache-stage-")
+        .tempdir_in(parent)?;
+    let staged = staging.path().join("tree");
+    copy_tree(source, &staged)?;
+
+    let backup = TempDirBuilder::new()
+        .prefix(".alphal00p-cache-backup-")
+        .tempdir_in(parent)?;
+    let backup_path = backup.path().to_path_buf();
+    backup.close()?;
+    let had_destination = generated_path_exists(destination);
+    if had_destination {
+        fs::rename(destination, &backup_path)
+            .wrap_err_with(|| format!("failed to move cached tree {}", destination.display()))?;
+    }
+    if let Err(error) = fs::rename(&staged, destination) {
+        if had_destination {
+            let _ = fs::rename(&backup_path, destination);
+        }
+        return Err(error)
+            .wrap_err_with(|| format!("failed to publish cache {}", destination.display()));
+    }
+    if had_destination {
+        remove_generated_path(&backup_path)?;
+    }
+    Ok(())
+}
+
+fn generated_path_exists(path: &Path) -> bool {
+    fs::symlink_metadata(path).is_ok()
+}
+
+fn remove_generated_path(path: &Path) -> Result<()> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
         Err(error) => return Err(error.into()),
     };
-    if let Some(metadata) = metadata {
-        if metadata.is_dir() && !metadata.file_type().is_symlink() {
-            fs::remove_dir_all(destination)
-        } else if metadata.file_type().is_symlink() {
-            remove_symlink(destination)
-        } else {
-            fs::remove_file(destination)
-        }
-        .wrap_err_with(|| format!("failed to replace {}", destination.display()))?;
+    if metadata.is_dir() && !metadata.file_type().is_symlink() {
+        fs::remove_dir_all(path)
+    } else if metadata.file_type().is_symlink() {
+        remove_symlink(path)
+    } else {
+        fs::remove_file(path)
     }
+    .wrap_err_with(|| format!("failed to remove generated path {}", path.display()))
+}
+
+fn replace_generated_tree(source: &Path, destination: &Path) -> Result<()> {
+    remove_generated_path(destination)
+        .wrap_err_with(|| format!("failed to replace {}", destination.display()))?;
     copy_tree(source, destination)
 }
 
@@ -10223,6 +10360,107 @@ mod tests {
         ] {
             assert!(STRICT_RUSTDOC_FLAGS.contains(&format!("-D {lint}")));
         }
+    }
+
+    #[test]
+    fn rustdoc_cache_requires_every_product_root_crate() {
+        let builder = SiteBuilder::discover().unwrap();
+        let product = builder
+            .registry
+            .product
+            .iter()
+            .find(|product| product.id == "spenso")
+            .unwrap();
+        let cache = tempfile::tempdir().unwrap();
+        fs::write(cache.path().join("crates.js"), "crate data").unwrap();
+        for directory in ["search.index", "src", "static.files"] {
+            fs::create_dir(cache.path().join(directory)).unwrap();
+        }
+        for component in &product.rust_components {
+            let root = cache.path().join(component.package.replace('-', "_"));
+            fs::create_dir_all(&root).unwrap();
+            fs::write(root.join("index.html"), component.id.as_bytes()).unwrap();
+        }
+        assert!(rustdoc_tree_complete(product, cache.path()));
+
+        fs::remove_file(cache.path().join("spenso_macros/index.html")).unwrap();
+        assert!(!rustdoc_tree_complete(product, cache.path()));
+    }
+
+    #[test]
+    fn disabled_rustdoc_caching_creates_no_sidecar_root() {
+        let temporary = tempfile::tempdir().unwrap();
+        let target = temporary.path().join("cargo-target-v1");
+        fs::create_dir(&target).unwrap();
+
+        assert_eq!(
+            prepare_persistent_rustdoc_cache(RustdocCacheMode::Disabled, &target).unwrap(),
+            None
+        );
+        assert!(!target.join("alphal00p-product-rustdoc-v1").exists());
+
+        let cache = prepare_persistent_rustdoc_cache(RustdocCacheMode::Refresh, &target)
+            .unwrap()
+            .unwrap();
+        assert_eq!(cache, target.join("alphal00p-product-rustdoc-v1"));
+        assert!(cache.is_dir());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn persistent_rustdoc_cache_rejects_a_symlinked_root() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = tempfile::tempdir().unwrap();
+        let target = temporary.path().join("cargo-target-v1");
+        let external = temporary.path().join("external");
+        fs::create_dir(&target).unwrap();
+        fs::create_dir(&external).unwrap();
+        symlink(&external, target.join("alphal00p-product-rustdoc-v1")).unwrap();
+
+        let error =
+            prepare_persistent_rustdoc_cache(RustdocCacheMode::Refresh, &target).unwrap_err();
+        assert!(format!("{error:#}").contains("not a symlink"));
+        assert!(external.read_dir().unwrap().next().is_none());
+    }
+
+    #[test]
+    fn replacing_a_rustdoc_cache_removes_stale_files() {
+        let temporary = tempfile::tempdir().unwrap();
+        let source = temporary.path().join("source");
+        let cache = temporary.path().join("cache/product");
+        fs::create_dir_all(&source).unwrap();
+        fs::create_dir_all(&cache).unwrap();
+        fs::write(source.join("current.html"), "current").unwrap();
+        fs::write(cache.join("stale.html"), "stale").unwrap();
+
+        replace_cached_tree(&source, &cache).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(cache.join("current.html")).unwrap(),
+            "current"
+        );
+        assert!(!cache.join("stale.html").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_rustdoc_cache_staging_preserves_the_previous_tree() {
+        use std::os::unix::fs::symlink;
+
+        let temporary = tempfile::tempdir().unwrap();
+        let source = temporary.path().join("source");
+        let cache = temporary.path().join("cache/product");
+        fs::create_dir_all(&source).unwrap();
+        fs::create_dir_all(&cache).unwrap();
+        fs::write(cache.join("previous.html"), "previous").unwrap();
+        symlink(cache.join("previous.html"), source.join("unsupported-link")).unwrap();
+
+        assert!(replace_cached_tree(&source, &cache).is_err());
+        assert_eq!(
+            fs::read_to_string(cache.join("previous.html")).unwrap(),
+            "previous"
+        );
     }
 
     #[test]
