@@ -76,6 +76,10 @@ pub struct UltraVioletProfile {
     #[arg(long = "per-orientation")]
     pub per_orientation: bool,
 
+    /// Accept missing power-law fits when the sampled limit vanishes
+    #[arg(long = "allow-vanishing-missing-fits")]
+    pub allow_vanishing_missing_fits: bool,
+
     /// Random seed for momentum sampling
     #[arg(long = "seed")]
     pub seed: Option<u64>,
@@ -184,6 +188,7 @@ impl Default for UltraVioletProfile {
             use_f128: false,
             analyse_analytically: false,
             per_orientation: false,
+            allow_vanishing_missing_fits: false,
             seed: None,
             uv_ray_directions: Vec::new(),
             uv_ray_norms: Vec::new(),
@@ -234,6 +239,7 @@ impl Profile {
                 uv_ray_norms,
                 analyse_analytically,
                 per_orientation,
+                allow_vanishing_missing_fits,
                 output_file,
             }) => {
                 let (process_id, integrand_name) =
@@ -298,6 +304,7 @@ impl Profile {
                     seed: (*seed).unwrap_or(42),
                     use_f128: *use_f128,
                     analyse_analytically: *analyse_analytically,
+                    allow_vanishing_missing_fits: *allow_vanishing_missing_fits,
                     orientation_mode: if *per_orientation {
                         OrientationProfileMode::PerOrientation
                     } else {

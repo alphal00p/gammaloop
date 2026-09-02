@@ -746,6 +746,8 @@ fn integrated_uv_profile_passes(
     process: &str,
     integrand_name: &str,
 ) -> Result<bool> {
+    let medium = &cli.cli_settings.global.generation.medium;
+    let allow_vanishing_missing_fits = medium.vacuum_subtraction;
     let res = Profile::UltraViolet(UltraVioletProfile {
         process: Some(ProcessRef::Unqualified(process.to_string())),
         integrand_name: Some(integrand_name.to_string()),
@@ -753,6 +755,7 @@ fn integrated_uv_profile_passes(
         max_scale_exponent: UV_PROFILE_MAX_SCALE_EXPONENT,
         n_points: UV_PROFILE_N_POINTS,
         per_orientation: true,
+        allow_vanishing_missing_fits,
         ..Default::default()
     })
     .run(&mut cli.state, &cli.cli_settings)?;
