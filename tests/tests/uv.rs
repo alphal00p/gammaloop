@@ -65,6 +65,15 @@ const SUNRISE_INTEGRATED_UV_INTEGRATOR: IntegratedUvIntegratorSettings =
         n_cores: 1,
     };
 
+const THERMAL_SUNRISE_INTEGRATED_UV_INTEGRATOR: IntegratedUvIntegratorSettings =
+    IntegratedUvIntegratorSettings {
+        target_relative_accuracy: INTEGRATED_CT_RELATIVE_ERROR_LIMIT,
+        n_start: 50_000,
+        n_increase: 0,
+        n_max: 400_000,
+        n_cores: 1,
+    };
+
 const EPEM_A_BBX_INTEGRATED_UV_INTEGRATOR: IntegratedUvIntegratorSettings =
     IntegratedUvIntegratorSettings {
         target_relative_accuracy: 0.01,
@@ -1407,6 +1416,29 @@ fn epem_a_bbx_amp_uv() {
         targets: IntegratedUvTargets::default(),
         integrated_ct_relative_error_limit: None,
         check_mu_r_dependence: true,
+    });
+}
+
+#[test]
+fn thermal_sunrise_uv() {
+    run_single_integrated_uv_case(&IntegratedUvCase {
+        run_card: "uv/thermal_sunrise",
+        test_name: "thermal_sunrise",
+        process: "thermal_sunrise",
+        integrand_name: "2L",
+        integrator: THERMAL_SUNRISE_INTEGRATED_UV_INTEGRATOR,
+        original_m_uv: 1.0,
+        shifted_m_uv: 6.0,
+        original_renormalization_localization_scale: 2.0,
+        shifted_renormalization_localization_scale: 5.0,
+        original_mu_r: 2.0,
+        shifted_mu_r: 2.0,
+        skip_uv_profile: false,
+        targets: IntegratedUvTargets {
+            integrated: Some(Complex::new(F(0.0), F(-1.207100279397555))),
+        },
+        integrated_ct_relative_error_limit: Some(INTEGRATED_CT_RELATIVE_ERROR_LIMIT),
+        check_mu_r_dependence: false,
     });
 }
 

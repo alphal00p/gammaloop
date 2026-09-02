@@ -1,0 +1,97 @@
+[[command_blocks]]
+name = "generate"
+commands = [
+  "import model sm-default.json",
+  "remove processes",
+  """generate amp {} > {} [{2}] | g u
+      --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+      --max-n-bridges 0
+      --number-of-factorized-loop-subtopologies 1 1
+      --number-of-fermion-loops 1 1
+      --only-diagrams
+      -p thermal_sunrise
+      -i 2L
+  """,
+  "generate",
+]
+
+[cli_settings.global.generation.medium]
+mode = "thermodynamic_equilibrium"
+vacuum_subtraction = true
+
+[cli_settings.global.generation.uv]
+subtract_uv = true
+softct = false
+generate_integrated = true
+
+[cli_settings.global.generation.threshold_subtraction]
+enable_thresholds = false
+
+[cli_settings.global.generation.tropical_subgraph_table]
+disable_tropical_generation = true
+
+[default_runtime_settings.general]
+inverse_temperature = 1.0
+mu_r = 2.0
+
+[default_runtime_settings.model]
+aS = [1.0, 0.0]
+muB = [3.0, 0.0]
+
+[default_runtime_settings.integrator]
+integrated_phase = "imag"
+
+[default_runtime_settings.subtraction]
+disable_threshold_subtraction = true
+
+[default_runtime_settings.sampling]
+graphs = "monte_carlo"
+orientations = "monte_carlo"
+lmb_multichanneling = true
+lmb_channels = "monte_carlo"
+coordinate_system = "spherical"
+mapping = "linear"
+b = 1.0
+
+[default_runtime_settings.kinematics]
+e_cm = 1.0
+
+[cli_settings.global.generation]
+override_lmb_heuristics = true
+
+[cli_settings.global.generation.compile]
+compilation_mode = "assembly"
+optimization_level = "O3"
+fast_math = true
+unsafe_math = true
+custom = []
+
+[cli_settings.global.generation.evaluator]
+iterative_orientation_optimization = true
+store_atom = false
+compile = true
+summed = false
+summed_function_map = false
+do_algebra = true
+do_fn_map_replacements = false
+
+[default_runtime_settings.stability]
+check_on_norm = true
+escalate_if_exact_zero = true
+loop_momenta_norm_escalation_factor = 100.0
+rotation_axis = [
+  { type = "x" },
+  { type = "z" },
+]
+
+[[default_runtime_settings.stability.levels]]
+precision = "Double"
+required_precision_for_re = 1.0e-10
+required_precision_for_im = 1.0e-10
+escalate_for_large_weight_threshold = 0.9
+
+[[default_runtime_settings.stability.levels]]
+precision = "Arb"
+required_precision_for_re = 1.0e-5
+required_precision_for_im = 1.0e-5
+escalate_for_large_weight_threshold = -1.0
