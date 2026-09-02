@@ -47,9 +47,8 @@
         inherit (pkgs) lib;
 
         typst015 =
-          assert lib.assertMsg (
-            docsPkgs.typst.version == "0.15.0"
-          ) "the documentation build requires Typst 0.15.0, but the documentation package set provides ${docsPkgs.typst.version}";
+          assert lib.assertMsg (docsPkgs.typst.version == "0.15.0")
+            "the documentation build requires Typst 0.15.0, but the documentation package set provides ${docsPkgs.typst.version}";
           docsPkgs.typst;
 
         docsTypst = typst015.withPackages (
@@ -533,33 +532,20 @@
             )
           );
 
+        documentationCatalogAnnotatedItemSourcePaths =
+          let
+            sourceLines = lib.filter (line: lib.hasInfix "source =" line) (
+              lib.splitString "\n" (builtins.readFile ./crates/alphal00p-docs-catalogs/src/annotated_items.rs)
+            );
+            sourceMatches = map (
+              line: builtins.match ''[[:space:]]*source = "([^"]+)",[[:space:]]*'' line
+            ) sourceLines;
+          in
+          assert builtins.all (match: match != null) sourceMatches;
+          sortedUnique (map builtins.head sourceMatches);
+
         workspacePackageProductionExtraSourceRoots = {
-          "alphal00p-docs-catalogs" = [
-            "crates/gammaloop-api/src/lib.rs"
-            "crates/gammalooprs/src/lib.rs"
-            "crates/idenso/src/color/macros.rs"
-            "crates/idenso/src/cook.rs"
-            "crates/idenso/src/dirac/macros.rs"
-            "crates/idenso/src/epsilon.rs"
-            "crates/idenso/src/lib.rs"
-            "crates/idenso/src/representations.rs"
-            "crates/idenso/src/selective_expand.rs"
-            "crates/linnet/src/half_edge.rs"
-            "crates/linnet/src/half_edge/builder.rs"
-            "crates/linnet/src/half_edge/subgraph/subset.rs"
-            "crates/linnet/src/half_edge/tree.rs"
-            "crates/linnet/src/parser/mod.rs"
-            "crates/spenso-hep-lib/src/lib.rs"
-            "crates/spenso-macros/src/lib.rs"
-            "crates/spenso/src/contraction.rs"
-            "crates/spenso/src/network/mod.rs"
-            "crates/spenso/src/structure.rs"
-            "crates/spenso/src/tensors/data/dense.rs"
-            "crates/spenso/src/tensors/data/sparse.rs"
-            "crates/spenso/src/tensors/parametric.rs"
-            "crates/vakint/src/lib.rs"
-            "crates/vakint/src/utils.rs"
-          ];
+          "alphal00p-docs-catalogs" = documentationCatalogAnnotatedItemSourcePaths;
           "alphal00p-docs-examples" = [
             "crates/linnet-py/pyproject.toml"
             "docs/api/python"
@@ -1547,6 +1533,10 @@
             [
               "--locked"
               "--no-default-features"
+              # The extension artifact only needs library targets. Building the
+              # CLI with pyo3/extension-module would intentionally omit libpython
+              # linkage from an executable target.
+              "--lib"
             ]
             ++ map (package: "-p ${lib.escapeShellArg package}") selectedPackages
             ++ lib.optional (featureArgs != "") featureArgs

@@ -4906,7 +4906,7 @@ where
         + Contract<LCM = Store::Tensor>
         + ScalarMul<Store::Scalar, Output = Store::Tensor>
         + for<'a> AddAssign<<Store::Tensor as Ref>::Ref<'a>>
-        + for<'a> AddAssign<LT::WithIndices>
+        + AddAssign<LT::WithIndices>
         + From<LT::WithIndices>
         + AtomSumShapeDiagnostics,
     L: Library<<Store::Tensor as HasStructure>::Structure, Key = K, Value = PermutedStructure<LT>>,

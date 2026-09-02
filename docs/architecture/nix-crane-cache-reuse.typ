@@ -1,8 +1,8 @@
 = Nix and Crane artifact reuse
 <nixcrane-cargo-artifact-reuse>
 #quote(block: true)[
-#strong[Status:] Living engineering record reviewed 2026-08-17 against
-`c9f4e32acd2c`
+#strong[Status:] Living engineering record reviewed 2026-09-02 against
+`mzlsmqsz`
 
 This is a chronological investigation, not a uniformly current
 specification. Sections explicitly labelled “Historical” are superseded;
@@ -1654,6 +1654,29 @@ nix derivation show \
 A fresh NixCI run is still required to measure cross-worker execution
 counts and cache upload time; one local Nix daemon serializes identical
 derivations and therefore cannot reproduce the original stampede.
+
+== Follow-up: toolchain refresh source and target boundaries
+<follow-up-toolchain-refresh-boundaries>
+The primary Nixpkgs and Rust inputs can advance without changing the
+documentation renderer: `nixpkgs-docs` retains the reviewed Typst 0.15
+toolchain and fonts, while the main package set supplies the development
+shell and Rust CI toolchain. This split lets `nix develop` follow the
+current package set without silently changing rendered Pages output.
+
+The documentation catalog's production source slice is derived from the
+workspace-relative `source = "..."` annotations in `annotated_items.rs`.
+Those paths are compile-time inputs to the catalog proc macros, not normal
+Rust dependencies. Deriving the exact list preserves narrow invalidation
+while preventing a newly annotated API item from compiling in the full
+workspace but disappearing from the isolated `crate-deps-*` build.
+
+The Python ABI artifact family now selects Cargo library targets explicitly.
+Its `pyo3-extension-module` feature intentionally leaves Python symbols for
+the interpreter to resolve when the shared object is loaded. Building the
+`gammaloop` executable in that same feature context is therefore invalid;
+`--lib` excludes the CLI without changing the extension's dependency or
+feature identity. The ordinary CLI remains in the separate Rust package
+artifact family, where it is linked with its normal feature context.
 
 == Remaining caveats
 <remaining-caveats-1>

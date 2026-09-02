@@ -70,9 +70,9 @@ digest = "afea0cf9f45b3ce7526c91b708dbd3e360aad060"
 path = "crates/gammaloop-api/src/python.rs"
 symbol = "gammaloop_api::python::GammaLoopAPI"
 anchor = "struct GammaLoopAPI {"
-# No architecture impact: the 2026-08-21 APIDOC-001/APIDOC-202 reviews only
-# corrected sample-evaluation and histogram docstrings; binding behavior is unchanged.
-digest = "c7c0de40907c1c13df3d6589663222d89ea0d78a"
+# No architecture impact: the 2026-09-02 doctest correction only marks Python
+# examples as Python in rendered/exported documentation; binding behavior is unchanged.
+digest = "38b30d296961e12dbf507d8530847afa1e8032a8"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/lib.rs"
@@ -287,9 +287,9 @@ digest = "1a6c276ef07e2ee5b1270f4b0302ba6540295894"
 path = "crates/spenso/src/network/mod.rs"
 symbol = "spenso::network::Network"
 anchor = "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {"
-# No architecture impact: the 2026-08-21 APIDOC-105 review documented the
-# existing in-place execution lifecycle and added a checked Rustdoc example.
-digest = "32fcc116c7b6ca1c803b160b682673fa4a2fbf3c"
+# No architecture impact: the 2026-09-02 Rust 1.98 compatibility fix removes
+# an unused higher-ranked lifetime without changing the trait bound or behavior.
+digest = "06f15fd382091d02052c40532c48d873aafee977"
 
 [[section.note.scope]]
 path = "crates/spenso/src/network/parsing/mod.rs"
@@ -688,8 +688,8 @@ kind = "Build engineering"
 status = "Living engineering record"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-09-01"
-review_ref = "f8a0e490dd02bf2e71d7c8e59ff852384d143dfd"
+reviewed_at = "2026-09-02"
+review_ref = "mzlsmqsz"
 products = ["gammaloop"]
 topics = ["nix", "ci", "cache", "documentation"]
 review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/**", "crates/gammaloop-workspace-hack/**", "crates/alphal00p-docs-builder/**", "justfile"]
@@ -698,10 +698,10 @@ review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/*
 path = "flake.nix"
 symbol = "alphal00pDocsCargoArtifacts"
 anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
-# The embedded watch renderer needs direct access to the package tree normally
-# injected only by the wrapped Typst executable, and its opt-in path has a
-# dedicated check that does not enter normal Pages artifacts.
-digest = "847251809327df98fb18513dc1e2d8790d4aba2e"
+# Reviewed after the main toolchain refresh: the docs renderer stays pinned,
+# catalog annotations declare their exact source slice, and the Python ABI
+# family builds only library targets. These remain isolated artifact families.
+digest = "98cf68bd6788ae1a231f2e194cef7a9867b7b662"
 
 [[section.note.scope]]
 path = "crates/alphal00p-docs-builder/src/typst_render.rs"

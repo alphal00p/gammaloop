@@ -442,9 +442,11 @@ class GammaLoopAPI:
 
         Examples
         --------
-        Open an existing generated state without permitting writes to it::
+        Open an existing generated state without permitting writes to it:
 
-            api = GammaLoopAPI(state_folder="./state", read_only_state=True)
+        ```python
+        api = GammaLoopAPI(state_folder="./state", read_only_state=True)
+        ```
         """
     def evaluate_sample(self, point: typing.Sequence[builtins.float], process_id: typing.Optional[builtins.int] = None, integrand_name: typing.Optional[builtins.str] = None, use_arb_prec: builtins.bool = False, minimal_output: builtins.bool = False, return_events: typing.Optional[builtins.bool] = None, momentum_space: builtins.bool = False, integrator_weight: typing.Optional[builtins.float] = None, discrete_dim: typing.Optional[typing.Sequence[builtins.int]] = None, graph_name: typing.Optional[builtins.str] = None, orientation: typing.Optional[builtins.int] = None) -> EvaluationResult:
         r"""
@@ -509,23 +511,25 @@ class GammaLoopAPI:
 
         Examples
         --------
-        Evaluate one point from the repository's differential API regression fixture::
+        Evaluate one point from the repository's differential API regression fixture:
 
-            from pathlib import Path
+        ```python
+        from pathlib import Path
 
-            from gammaloop import GammaLoopAPI
+        from gammaloop import GammaLoopAPI
 
-            example = Path("examples/api/python/epem_a_ddxg_xs_LO")
-            api = GammaLoopAPI(
-                state_folder=example / "state",
-                boot_commands_path=example / "run.toml",
-                clean_state=True,
-            )
-            point = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67]
-            result = api.evaluate_sample(point, return_events=True)
-            assert result.parameterization_jacobian is not None
-            assert result.stability_results
-            assert result.event_groups
+        example = Path("examples/api/python/epem_a_ddxg_xs_LO")
+        api = GammaLoopAPI(
+            state_folder=example / "state",
+            boot_commands_path=example / "run.toml",
+            clean_state=True,
+        )
+        point = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67]
+        result = api.evaluate_sample(point, return_events=True)
+        assert result.parameterization_jacobian is not None
+        assert result.stability_results
+        assert result.event_groups
+        ```
 
         This card verifies API and event plumbing. Its powered coupling selector is not an
         independently reviewed perturbative-order definition or normalization benchmark.
@@ -592,28 +596,30 @@ class GammaLoopAPI:
 
         Examples
         --------
-        Evaluate two rows and inspect their per-sample events and batch-level histograms::
+        Evaluate two rows and inspect their per-sample events and batch-level histograms:
 
-            from pathlib import Path
+        ```python
+        from pathlib import Path
 
-            import numpy as np
-            from gammaloop import GammaLoopAPI
+        import numpy as np
+        from gammaloop import GammaLoopAPI
 
-            example = Path("examples/api/python/epem_a_ddxg_xs_LO")
-            api = GammaLoopAPI(
-                state_folder=example / "state",
-                boot_commands_path=example / "run.toml",
-                clean_state=True,
-            )
-            points = np.array([
-                [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],
-                [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],
-            ], dtype=float)
-            result = api.evaluate_samples(points, return_events=True)
-            assert len(result.samples) == 2
-            assert all(sample.event_groups for sample in result.samples)
-            assert result.observables["leading_jet_pt_hist"].sample_count == 2
-            assert len(result.observables["leading_jet_pt_hist"].bins) == 8
+        example = Path("examples/api/python/epem_a_ddxg_xs_LO")
+        api = GammaLoopAPI(
+            state_folder=example / "state",
+            boot_commands_path=example / "run.toml",
+            clean_state=True,
+        )
+        points = np.array([
+            [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],
+            [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],
+        ], dtype=float)
+        result = api.evaluate_samples(points, return_events=True)
+        assert len(result.samples) == 2
+        assert all(sample.event_groups for sample in result.samples)
+        assert result.observables["leading_jet_pt_hist"].sample_count == 2
+        assert len(result.observables["leading_jet_pt_hist"].bins) == 8
+        ```
 
         The fixture exercises the API surface; its powered coupling selector is not a validated
         perturbative-order or normalization benchmark.
@@ -758,26 +764,28 @@ class GammaLoopAPI:
 
         Examples
         --------
-        Inspect the generated graph groups in the repository's differential API fixture::
+        Inspect the generated graph groups in the repository's differential API fixture:
 
-            from pathlib import Path
+        ```python
+        from pathlib import Path
 
-            from gammaloop import GammaLoopAPI
+        from gammaloop import GammaLoopAPI
 
-            example = Path("examples/api/python/epem_a_ddxg_xs_LO")
-            api = GammaLoopAPI(
-                state_folder=example / "state",
-                boot_commands_path=example / "run.toml",
-                clean_state=True,
-            )
-            info = api.get_integrand_info()
-            assert info.kind == "cross section"
-            assert info.graph_count == 2
-            assert info.graph_group_count == len(info.graph_groups)
-            assert all(
-                sum(graph.is_master for graph in group.graphs) == 1
-                for group in info.graph_groups
-            )
+        example = Path("examples/api/python/epem_a_ddxg_xs_LO")
+        api = GammaLoopAPI(
+            state_folder=example / "state",
+            boot_commands_path=example / "run.toml",
+            clean_state=True,
+        )
+        info = api.get_integrand_info()
+        assert info.kind == "cross section"
+        assert info.graph_count == 2
+        assert info.graph_group_count == len(info.graph_groups)
+        assert all(
+            sum(graph.is_master for graph in group.graphs) == 1
+            for group in info.graph_groups
+        )
+        ```
 
         This fixture's powered coupling selector is a regression input, not a reviewed physical
         perturbative-order definition.
@@ -807,10 +815,12 @@ class GammaLoopAPI:
 
         Examples
         --------
-        Read a nested setting without changing the live integrand::
+        Read a nested setting without changing the live integrand:
 
-            settings = api.get_integrand_settings(process_id=0)
-            print(settings.get("general.generate_events"))
+        ```python
+        settings = api.get_integrand_settings(process_id=0)
+        print(settings.get("general.generate_events"))
+        ```
         """
     def get_run_history(self) -> builtins.str:
         r"""
@@ -833,9 +843,11 @@ class GammaLoopAPI:
 
         Examples
         --------
-        Capture a reproducible run card from the current session::
+        Capture a reproducible run card from the current session:
 
-            run_card_toml = api.get_run_history()
+        ```python
+        run_card_toml = api.get_run_history()
+        ```
         """
     def get_global_settings(self) -> builtins.str:
         r"""
@@ -853,9 +865,11 @@ class GammaLoopAPI:
 
         Examples
         --------
-        Record the effective settings after applying startup overrides::
+        Record the effective settings after applying startup overrides:
 
-            settings_toml = api.get_global_settings()
+        ```python
+        settings_toml = api.get_global_settings()
+        ```
         """
     def get_active_command_blocks(self) -> builtins.dict[builtins.str, builtins.list[builtins.str]]:
         r"""
@@ -868,10 +882,12 @@ class GammaLoopAPI:
 
         Examples
         --------
-        Inspect the commands currently grouped under each block::
+        Inspect the commands currently grouped under each block:
 
-            for name, commands in api.get_active_command_blocks().items():
-                print(name, commands)
+        ```python
+        for name, commands in api.get_active_command_blocks().items():
+            print(name, commands)
+        ```
         """
     def get_default_runtime_settings(self) -> SettingsValue:
         r"""
@@ -890,10 +906,12 @@ class GammaLoopAPI:
 
         Examples
         --------
-        Inspect a runtime default by its documented settings path::
+        Inspect a runtime default by its documented settings path:
 
-            runtime = api.get_default_runtime_settings()
-            print(runtime.get("integrator.n_start"))
+        ```python
+        runtime = api.get_default_runtime_settings()
+        print(runtime.get("integrator.n_start"))
+        ```
         """
     def get_dot_files(self, process: typing.Optional[builtins.int | builtins.str] = None, integrand_name: typing.Optional[builtins.str] = None, settings: DotExportSettings = ...) -> builtins.str:
         r"""
@@ -942,9 +960,11 @@ class GammaLoopAPI:
 
         Examples
         --------
-        Display the processes loaded in the current state::
+        Display the processes loaded in the current state:
 
-            api.run("display processes")
+        ```python
+        api.run("display processes")
+        ```
         """
     def generate_cff(self, dot_string: builtins.str, subgraph_nodes: typing.Sequence[builtins.str], reverse_dangling: typing.Sequence[builtins.int], orientation_pattern: typing.Optional[builtins.str] = None) -> builtins.list[tuple[builtins.dict[builtins.int, builtins.int], builtins.str]]:
         r"""
@@ -1005,26 +1025,28 @@ class HistogramAccumulator:
 
     Examples
     --------
-    Merge two pending, statistically independent samples before committing them::
+    Merge two pending, statistically independent samples before committing them:
 
-        from gammaloop import HistogramAccumulator
+    ```python
+    from gammaloop import HistogramAccumulator
 
-        left = HistogramAccumulator.continuous("energy", 0.0, 4.0, 4)
-        right = HistogramAccumulator.continuous("energy", 0.0, 4.0, 4)
-        left.fill_continuous_sample([(0.5, 2.0)])
-        right.fill_continuous_sample([(2.5, 3.0)])
-        left.merge_in_place(right)
-        left.update_results()
+    left = HistogramAccumulator.continuous("energy", 0.0, 4.0, 4)
+    right = HistogramAccumulator.continuous("energy", 0.0, 4.0, 4)
+    left.fill_continuous_sample([(0.5, 2.0)])
+    right.fill_continuous_sample([(2.5, 3.0)])
+    left.merge_in_place(right)
+    left.update_results()
 
-        snapshot = left.snapshot()
-        assert snapshot.sample_count == 2
-        assert snapshot.bins[0].sum_weights == 2.0
-        assert snapshot.bins[0].sum_weights_squared == 4.0
-        assert snapshot.bins[0].sum_weights / snapshot.sample_count == 1.0
-        assert snapshot.bins[2].sum_weights == 3.0
-        assert snapshot.bins[2].sum_weights_squared == 9.0
-        assert right.snapshot().sample_count == 0
-        assert len(left.rebin(2).snapshot().bins) == 2
+    snapshot = left.snapshot()
+    assert snapshot.sample_count == 2
+    assert snapshot.bins[0].sum_weights == 2.0
+    assert snapshot.bins[0].sum_weights_squared == 4.0
+    assert snapshot.bins[0].sum_weights / snapshot.sample_count == 1.0
+    assert snapshot.bins[2].sum_weights == 3.0
+    assert snapshot.bins[2].sum_weights_squared == 9.0
+    assert right.snapshot().sample_count == 0
+    assert len(left.rebin(2).snapshot().bins) == 2
+    ```
     """
     @staticmethod
     def continuous(title: builtins.str, x_min: builtins.float, x_max: builtins.float, n_bins: builtins.int, type_description: builtins.str = 'AL', phase: builtins.str = 'real', value_transform: builtins.str = 'identity', log_x_axis: builtins.bool = False, log_y_axis: builtins.bool = True) -> HistogramAccumulator:
@@ -2000,9 +2022,11 @@ def atom_to_canonical_string(atom_str: builtins.str) -> builtins.str:
 
     Examples
     --------
-    Normalize a symbolic expression before comparing or storing it::
+    Normalize a symbolic expression before comparing or storing it:
 
-        atom_to_canonical_string("x + x")
+    ```python
+    atom_to_canonical_string("x + x")
+    ```
     """
 
 def evaluate_graph_overall_factor(overall_factor: builtins.str) -> builtins.str:
@@ -2026,11 +2050,13 @@ def evaluate_graph_overall_factor(overall_factor: builtins.str) -> builtins.str:
 
     Examples
     --------
-    Evaluate the symmetry and fermion-loop factors attached to a graph::
+    Evaluate the symmetry and fermion-loop factors attached to a graph:
 
-        evaluate_graph_overall_factor(
-            "AutG(2)^-1*InternalFermionLoopSign(-1)"
-        )
+    ```python
+    evaluate_graph_overall_factor(
+        "AutG(2)^-1*InternalFermionLoopSign(-1)"
+    )
+    ```
     """
 
 def to_dots(atom_str: builtins.str) -> builtins.str:
@@ -2054,8 +2080,10 @@ def to_dots(atom_str: builtins.str) -> builtins.str:
 
     Examples
     --------
-    Rewrite a contraction before passing it to an Idenso workflow::
+    Rewrite a contraction before passing it to an Idenso workflow:
 
-        to_dots("p(mu) * q(mu)")
+    ```python
+    to_dots("p(mu) * q(mu)")
+    ```
     """
 

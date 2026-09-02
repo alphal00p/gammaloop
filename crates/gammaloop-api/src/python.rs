@@ -90,11 +90,13 @@ use pyo3::{
 ///
 /// Examples
 /// --------
-/// Evaluate the symmetry and fermion-loop factors attached to a graph::
+/// Evaluate the symmetry and fermion-loop factors attached to a graph:
 ///
-///     evaluate_graph_overall_factor(
-///         "AutG(2)^-1*InternalFermionLoopSign(-1)"
-///     )
+/// ```python
+/// evaluate_graph_overall_factor(
+///     "AutG(2)^-1*InternalFermionLoopSign(-1)"
+/// )
+/// ```
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "evaluate_graph_overall_factor")]
@@ -123,9 +125,11 @@ pub(crate) fn evaluate_graph_overall_factor(overall_factor: &str) -> Result<Stri
 ///
 /// Examples
 /// --------
-/// Normalize a symbolic expression before comparing or storing it::
+/// Normalize a symbolic expression before comparing or storing it:
 ///
-///     atom_to_canonical_string("x + x")
+/// ```python
+/// atom_to_canonical_string("x + x")
+/// ```
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "atom_to_canonical_string")]
@@ -152,9 +156,11 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
 ///
 /// Examples
 /// --------
-/// Rewrite a contraction before passing it to an Idenso workflow::
+/// Rewrite a contraction before passing it to an Idenso workflow:
 ///
-///     to_dots("p(mu) * q(mu)")
+/// ```python
+/// to_dots("p(mu) * q(mu)")
+/// ```
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "to_dots")]
@@ -866,26 +872,28 @@ pub struct PyEventGroup {
 ///
 /// Examples
 /// --------
-/// Merge two pending, statistically independent samples before committing them::
+/// Merge two pending, statistically independent samples before committing them:
 ///
-///     from gammaloop import HistogramAccumulator
+/// ```python
+/// from gammaloop import HistogramAccumulator
 ///
-///     left = HistogramAccumulator.continuous("energy", 0.0, 4.0, 4)
-///     right = HistogramAccumulator.continuous("energy", 0.0, 4.0, 4)
-///     left.fill_continuous_sample([(0.5, 2.0)])
-///     right.fill_continuous_sample([(2.5, 3.0)])
-///     left.merge_in_place(right)
-///     left.update_results()
+/// left = HistogramAccumulator.continuous("energy", 0.0, 4.0, 4)
+/// right = HistogramAccumulator.continuous("energy", 0.0, 4.0, 4)
+/// left.fill_continuous_sample([(0.5, 2.0)])
+/// right.fill_continuous_sample([(2.5, 3.0)])
+/// left.merge_in_place(right)
+/// left.update_results()
 ///
-///     snapshot = left.snapshot()
-///     assert snapshot.sample_count == 2
-///     assert snapshot.bins[0].sum_weights == 2.0
-///     assert snapshot.bins[0].sum_weights_squared == 4.0
-///     assert snapshot.bins[0].sum_weights / snapshot.sample_count == 1.0
-///     assert snapshot.bins[2].sum_weights == 3.0
-///     assert snapshot.bins[2].sum_weights_squared == 9.0
-///     assert right.snapshot().sample_count == 0
-///     assert len(left.rebin(2).snapshot().bins) == 2
+/// snapshot = left.snapshot()
+/// assert snapshot.sample_count == 2
+/// assert snapshot.bins[0].sum_weights == 2.0
+/// assert snapshot.bins[0].sum_weights_squared == 4.0
+/// assert snapshot.bins[0].sum_weights / snapshot.sample_count == 1.0
+/// assert snapshot.bins[2].sum_weights == 3.0
+/// assert snapshot.bins[2].sum_weights_squared == 9.0
+/// assert right.snapshot().sample_count == 0
+/// assert len(left.rebin(2).snapshot().bins) == 2
+/// ```
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(name = "HistogramAccumulator", skip_from_py_object)]
 #[derive(Clone)]
@@ -2829,9 +2837,11 @@ impl GammaLoopAPI {
     ///
     /// Examples
     /// --------
-    /// Open an existing generated state without permitting writes to it::
+    /// Open an existing generated state without permitting writes to it:
     ///
-    ///     api = GammaLoopAPI(state_folder="./state", read_only_state=True)
+    /// ```python
+    /// api = GammaLoopAPI(state_folder="./state", read_only_state=True)
+    /// ```
     #[new]
     #[allow(clippy::too_many_arguments)]
     #[pyo3(signature = (
@@ -2961,23 +2971,25 @@ impl GammaLoopAPI {
     ///
     /// Examples
     /// --------
-    /// Evaluate one point from the repository's differential API regression fixture::
+    /// Evaluate one point from the repository's differential API regression fixture:
     ///
-    ///     from pathlib import Path
+    /// ```python
+    /// from pathlib import Path
     ///
-    ///     from gammaloop import GammaLoopAPI
+    /// from gammaloop import GammaLoopAPI
     ///
-    ///     example = Path("examples/api/python/epem_a_ddxg_xs_LO")
-    ///     api = GammaLoopAPI(
-    ///         state_folder=example / "state",
-    ///         boot_commands_path=example / "run.toml",
-    ///         clean_state=True,
-    ///     )
-    ///     point = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67]
-    ///     result = api.evaluate_sample(point, return_events=True)
-    ///     assert result.parameterization_jacobian is not None
-    ///     assert result.stability_results
-    ///     assert result.event_groups
+    /// example = Path("examples/api/python/epem_a_ddxg_xs_LO")
+    /// api = GammaLoopAPI(
+    ///     state_folder=example / "state",
+    ///     boot_commands_path=example / "run.toml",
+    ///     clean_state=True,
+    /// )
+    /// point = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67]
+    /// result = api.evaluate_sample(point, return_events=True)
+    /// assert result.parameterization_jacobian is not None
+    /// assert result.stability_results
+    /// assert result.event_groups
+    /// ```
     ///
     /// This card verifies API and event plumbing. Its powered coupling selector is not an
     /// independently reviewed perturbative-order definition or normalization benchmark.
@@ -3101,28 +3113,30 @@ impl GammaLoopAPI {
     ///
     /// Examples
     /// --------
-    /// Evaluate two rows and inspect their per-sample events and batch-level histograms::
+    /// Evaluate two rows and inspect their per-sample events and batch-level histograms:
     ///
-    ///     from pathlib import Path
+    /// ```python
+    /// from pathlib import Path
     ///
-    ///     import numpy as np
-    ///     from gammaloop import GammaLoopAPI
+    /// import numpy as np
+    /// from gammaloop import GammaLoopAPI
     ///
-    ///     example = Path("examples/api/python/epem_a_ddxg_xs_LO")
-    ///     api = GammaLoopAPI(
-    ///         state_folder=example / "state",
-    ///         boot_commands_path=example / "run.toml",
-    ///         clean_state=True,
-    ///     )
-    ///     points = np.array([
-    ///         [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],
-    ///         [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],
-    ///     ], dtype=float)
-    ///     result = api.evaluate_samples(points, return_events=True)
-    ///     assert len(result.samples) == 2
-    ///     assert all(sample.event_groups for sample in result.samples)
-    ///     assert result.observables["leading_jet_pt_hist"].sample_count == 2
-    ///     assert len(result.observables["leading_jet_pt_hist"].bins) == 8
+    /// example = Path("examples/api/python/epem_a_ddxg_xs_LO")
+    /// api = GammaLoopAPI(
+    ///     state_folder=example / "state",
+    ///     boot_commands_path=example / "run.toml",
+    ///     clean_state=True,
+    /// )
+    /// points = np.array([
+    ///     [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],
+    ///     [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],
+    /// ], dtype=float)
+    /// result = api.evaluate_samples(points, return_events=True)
+    /// assert len(result.samples) == 2
+    /// assert all(sample.event_groups for sample in result.samples)
+    /// assert result.observables["leading_jet_pt_hist"].sample_count == 2
+    /// assert len(result.observables["leading_jet_pt_hist"].bins) == 8
+    /// ```
     ///
     /// The fixture exercises the API surface; its powered coupling selector is not a validated
     /// perturbative-order or normalization benchmark.
@@ -3578,26 +3592,28 @@ impl GammaLoopAPI {
     ///
     /// Examples
     /// --------
-    /// Inspect the generated graph groups in the repository's differential API fixture::
+    /// Inspect the generated graph groups in the repository's differential API fixture:
     ///
-    ///     from pathlib import Path
+    /// ```python
+    /// from pathlib import Path
     ///
-    ///     from gammaloop import GammaLoopAPI
+    /// from gammaloop import GammaLoopAPI
     ///
-    ///     example = Path("examples/api/python/epem_a_ddxg_xs_LO")
-    ///     api = GammaLoopAPI(
-    ///         state_folder=example / "state",
-    ///         boot_commands_path=example / "run.toml",
-    ///         clean_state=True,
-    ///     )
-    ///     info = api.get_integrand_info()
-    ///     assert info.kind == "cross section"
-    ///     assert info.graph_count == 2
-    ///     assert info.graph_group_count == len(info.graph_groups)
-    ///     assert all(
-    ///         sum(graph.is_master for graph in group.graphs) == 1
-    ///         for group in info.graph_groups
-    ///     )
+    /// example = Path("examples/api/python/epem_a_ddxg_xs_LO")
+    /// api = GammaLoopAPI(
+    ///     state_folder=example / "state",
+    ///     boot_commands_path=example / "run.toml",
+    ///     clean_state=True,
+    /// )
+    /// info = api.get_integrand_info()
+    /// assert info.kind == "cross section"
+    /// assert info.graph_count == 2
+    /// assert info.graph_group_count == len(info.graph_groups)
+    /// assert all(
+    ///     sum(graph.is_master for graph in group.graphs) == 1
+    ///     for group in info.graph_groups
+    /// )
+    /// ```
     ///
     /// This fixture's powered coupling selector is a regression input, not a reviewed physical
     /// perturbative-order definition.
@@ -3640,10 +3656,12 @@ impl GammaLoopAPI {
     ///
     /// Examples
     /// --------
-    /// Read a nested setting without changing the live integrand::
+    /// Read a nested setting without changing the live integrand:
     ///
-    ///     settings = api.get_integrand_settings(process_id=0)
-    ///     print(settings.get("general.generate_events"))
+    /// ```python
+    /// settings = api.get_integrand_settings(process_id=0)
+    /// print(settings.get("general.generate_events"))
+    /// ```
     #[pyo3(name="get_integrand_settings", signature = (process_id=None, integrand_name=None))]
     pub(crate) fn get_integrand_settings(
         &mut self,
@@ -3704,9 +3722,11 @@ impl GammaLoopAPI {
     ///
     /// Examples
     /// --------
-    /// Capture a reproducible run card from the current session::
+    /// Capture a reproducible run card from the current session:
     ///
-    ///     run_card_toml = api.get_run_history()
+    /// ```python
+    /// run_card_toml = api.get_run_history()
+    /// ```
     #[pyo3(name = "get_run_history", signature = ())]
     pub(crate) fn get_run_history(&self) -> PyResult<String> {
         self.run_history
@@ -3732,9 +3752,11 @@ impl GammaLoopAPI {
     ///
     /// Examples
     /// --------
-    /// Record the effective settings after applying startup overrides::
+    /// Record the effective settings after applying startup overrides:
     ///
-    ///     settings_toml = api.get_global_settings()
+    /// ```python
+    /// settings_toml = api.get_global_settings()
+    /// ```
     #[pyo3(name = "get_global_settings", signature = ())]
     pub(crate) fn get_global_settings(&self) -> PyResult<String> {
         render_smart_toml(&self.cli_settings).map_err(|e| {
@@ -3753,10 +3775,12 @@ impl GammaLoopAPI {
     ///
     /// Examples
     /// --------
-    /// Inspect the commands currently grouped under each block::
+    /// Inspect the commands currently grouped under each block:
     ///
-    ///     for name, commands in api.get_active_command_blocks().items():
-    ///         print(name, commands)
+    /// ```python
+    /// for name, commands in api.get_active_command_blocks().items():
+    ///     print(name, commands)
+    /// ```
     #[pyo3(name = "get_active_command_blocks", signature = ())]
     pub(crate) fn get_active_command_blocks(
         &self,
@@ -3789,10 +3813,12 @@ impl GammaLoopAPI {
     ///
     /// Examples
     /// --------
-    /// Inspect a runtime default by its documented settings path::
+    /// Inspect a runtime default by its documented settings path:
     ///
-    ///     runtime = api.get_default_runtime_settings()
-    ///     print(runtime.get("integrator.n_start"))
+    /// ```python
+    /// runtime = api.get_default_runtime_settings()
+    /// print(runtime.get("integrator.n_start"))
+    /// ```
     #[pyo3(name = "get_default_runtime_settings", signature = ())]
     pub(crate) fn get_default_runtime_settings(&self) -> PyResult<PySettingsValue> {
         PySettingsValue::from_settings(
@@ -3894,9 +3920,11 @@ impl GammaLoopAPI {
     ///
     /// Examples
     /// --------
-    /// Display the processes loaded in the current state::
+    /// Display the processes loaded in the current state:
     ///
-    ///     api.run("display processes")
+    /// ```python
+    /// api.run("display processes")
+    /// ```
     #[pyo3(name="run", signature = (command,))]
     pub(crate) fn run_command(&mut self, command: String) -> PyResult<()> {
         let command_history =
