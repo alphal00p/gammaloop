@@ -2128,8 +2128,7 @@ mod tests {
         // sector. Selecting a default-oriented key must discard that complete
         // entry before resolving the physical selector; otherwise the inactive
         // inverse becomes `0^-1` and contaminates the selected expression.
-        let reversed_selector_inverse =
-            GS.sign_theta(-GS.sign(EdgeIndex(0))).pow(-1);
+        let reversed_selector_inverse = GS.sign_theta(-GS.sign(EdgeIndex(0))).pow(-1);
         let atom = production_ids[0].atom() * Atom::num(2) * reversed_selector_inverse
             + production_ids[1].atom() * Atom::num(3)
             + production_ids[2].atom() * Atom::num(5)

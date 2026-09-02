@@ -21,8 +21,8 @@ use symbolica::atom::{Atom, AtomCore};
 use three_dimensional_reps::normalize_energy_degree_bounds;
 use three_dimensional_reps::{
     CffEnergyFactorOwnership, CffGenerationContext, EnergyEdgeIndexMap,
-    Generate3DExpressionOptions, GeneratedThreeDExpression, NumeratorSamplingScaleMode, ParsedGraph,
-    RepresentationMode, ThreeDGraphSource,
+    Generate3DExpressionOptions, GeneratedThreeDExpression, NumeratorSamplingScaleMode,
+    ParsedGraph, RepresentationMode, ThreeDGraphSource,
     tree::{NodeId, Tree},
 };
 

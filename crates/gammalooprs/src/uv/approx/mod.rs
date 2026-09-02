@@ -17,11 +17,12 @@ use crate::{
     uv::{
         ApproximationType, Spinney, UVgenerationSettings,
         approx::{
-            direct_3d::Direct3dApproximation,
+            direct_3d::{Direct3dApproximation, Direct3dCts},
             final_integrand::{FinalIntegrandBuilder, FinalIntegrands},
             integrated::{Integrated, IntegratedCts},
-            local_3d::{Local3DApproximation, Local3DCts, Localizer},
+            local_3d::{Local3DCts, Localizer},
             local_4d::{Full4dCts, Local4dCts},
+            projected_4d::Projected4dApproximation,
         },
         marker::UvMarker,
         settings::FinalIntegrandDimension,
@@ -56,7 +57,7 @@ pub mod final_integrand;
 pub mod integrated;
 pub mod local_3d;
 pub mod local_4d;
-mod projected_4d;
+pub(crate) mod projected_4d;
 
 pub trait Rooted {
     fn root() -> Self;
@@ -473,14 +474,16 @@ impl Approximation {
             // The root is the original factorized 3D integrand, not a local UV
             // approximation. Expanded-4D projection applies only to proper UV
             // nodes and therefore must not change this identity element.
-            let local_3d = Local3DCts::root(graph, localizer)?;
-            self.final_integrand = Some(FinalIntegrandBuilder::new(localizer, settings).build_3d(
-                graph,
-                self,
-                &local_3d,
-                &integrated,
-            )?);
-            self.local_3d = Some(local_3d);
+            let direct = Direct3dCts::root(graph, localizer)?;
+            self.final_integrand = Some(
+                FinalIntegrandBuilder::new(localizer, settings).build_direct(
+                    graph,
+                    self,
+                    &direct,
+                    &integrated,
+                )?,
+            );
+            self.local_3d = Some(Local3DCts::Direct(direct));
         }
         self.integrated = Some(integrated);
 
@@ -547,29 +550,31 @@ impl Approximation {
         localizer: Localizer<'_>,
         settings: &UVgenerationSettings,
     ) -> Result<()> {
-        let local_3d = if settings.local_uv_cts_from_expanded_4d_integrands {
-            let local_4d = self.local(graph)?;
-            Local3DApproximation::new(localizer, graph, settings)
-                .project_local_4d(local_4d, self)?
-        } else {
-            let parent_local = dependent.local_3d(graph)?;
-            let parent_integrated = dependent.integrated(graph)?;
-            Local3DCts::Direct(Direct3dApproximation::new(localizer, graph, settings).run(
-                parent_local.direct()?,
-                parent_integrated,
-                self,
-                dependent,
-                self,
-                dependent,
-            )?)
-        };
+        let (local_3d, final_integrand) =
+            if settings.local_uv_cts_from_expanded_4d_integrands {
+                let local_4d = self.local(graph)?;
+                let projected = Projected4dApproximation::new(localizer, graph, settings)
+                    .project_local_4d(local_4d, self)?;
+                let final_integrand = FinalIntegrandBuilder::new(localizer, settings)
+                    .build_projected(graph, self, &projected, self.integrated(graph)?)?;
+                (Local3DCts::Projected4d(projected), final_integrand)
+            } else {
+                let parent_local = dependent.local_3d(graph)?;
+                let parent_integrated = dependent.integrated(graph)?;
+                let direct = Direct3dApproximation::new(localizer, graph, settings).run(
+                    parent_local.direct()?,
+                    parent_integrated,
+                    self,
+                    dependent,
+                    self,
+                    dependent,
+                )?;
+                let final_integrand = FinalIntegrandBuilder::new(localizer, settings)
+                    .build_direct(graph, self, &direct, self.integrated(graph)?)?;
+                (Local3DCts::Direct(direct), final_integrand)
+            };
 
-        let integrated = self.integrated(graph)?;
-
-        self.final_integrand = Some(
-            FinalIntegrandBuilder::new(localizer, settings)
-                .build_3d(graph, self, &local_3d, integrated)?,
-        );
+        self.final_integrand = Some(final_integrand);
         self.local_3d = Some(local_3d);
         Ok(())
     }
@@ -1277,18 +1282,16 @@ mod tests {
             root.root(&mut route_graph, localizer, &settings)?;
             let child = Approximation::new(child_spinney.clone());
             let root_local = root.local_3d(&route_graph)?.direct()?.clone();
-            let local = Local3DCts::Direct(
-                Direct3dApproximation::new(localizer, &mut route_graph, &settings).run(
-                    &root_local,
-                    &IntegratedCts::root(),
-                    &child,
-                    &root,
-                    &child,
-                    &root,
-                )?,
-            );
+            let local = Direct3dApproximation::new(localizer, &mut route_graph, &settings).run(
+                &root_local,
+                &IntegratedCts::root(),
+                &child,
+                &root,
+                &child,
+                &root,
+            )?;
             Ok(FinalIntegrandBuilder::new(localizer, &settings)
-                .build_3d(&mut route_graph, &child, &local, &IntegratedCts::root())?
+                .build_direct(&mut route_graph, &child, &local, &IntegratedCts::root())?
                 .iter()
                 .find(|(index, _)| *index == CutCFFIndex::new_all_none())
                 .ok_or_else(|| eyre!("the full-CFF selector oracle has no root residue"))?
@@ -1804,6 +1807,15 @@ mod tests {
 
         let (direct_inner, direct_outer) = build(graph.clone(), false)?;
         let (projected_inner, projected_outer) = build(graph.clone(), true)?;
+        for (label, expression) in [
+            ("inner bubble", &projected_inner),
+            ("nested banana", &projected_outer),
+        ] {
+            assert!(
+                !expression.contains_symbol(OrientationID::symbol()),
+                "the projected {label} must be selector-free after final assembly"
+            );
+        }
         // Test-only component expansion makes the independently constructed
         // expressions evaluable by one Arb stack. Production keeps all
         // numerator factors intact throughout CFF and UV construction.

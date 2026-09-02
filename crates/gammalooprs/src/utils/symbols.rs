@@ -265,15 +265,8 @@ impl GammaloopSymbols {
             // IF(current_id-key, 0, 1). Move the selected branch body inside
             // that conditional so an inactive key is discarded before any of
             // its selector-local inverses are evaluated.
-            .replace(
-                Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::one()])
-                    * W_.b___,
-            )
-            .with(Symbol::IF.call_args([
-                Atom::var(W_.a_),
-                Atom::Zero,
-                Atom::var(W_.b___),
-            ]))
+            .replace(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::one()]) * W_.b___)
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b___)]))
             .replace(Symbol::IF.call(W_.a_) * Symbol::IF.call(W_.b_))
             .repeat()
             .with(Symbol::IF.call(W_.a_ * W_.b_))

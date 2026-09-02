@@ -49,8 +49,9 @@ use crate::{
             direct_3d::{Direct3dApproximation, Direct3dCts},
             final_integrand::{FinalIntegrandBuilder, FinalIntegrands},
             integrated::{Integrated, IntegratedCts},
-            local_3d::{Local3DApproximation, Local3DCts, Localizer},
+            local_3d::{Local3DCts, Localizer},
             local_4d::{self, Full4dCts, Local4dCts},
+            projected_4d::Projected4dApproximation,
         },
         export::UVForestNodeExpression,
         forest::ParametricIntegrands,
@@ -604,7 +605,7 @@ impl OperationNode {
 
     // Four-dimensional and per-cut local terms are composed by `Forests` from typed
     // dependency-frontier values. Empty frontiers start from the typed roots, and
-    // `Local3DApproximation::run` applies the direct-3D subtraction signs.
+    // `Direct3dApproximation::run` applies the direct-3D subtraction signs.
 }
 
 #[derive(Default)]
@@ -1044,15 +1045,17 @@ impl Forests {
             topo_order: operation.key.op_count(),
         };
         let local_3d = if operation.key.is_empty() {
-            Local3DCts::root(graph, localizer)?
+            Local3DCts::Direct(Direct3dCts::root(graph, localizer)?)
         } else if settings.local_uv_cts_from_expanded_4d_integrands {
             // This is the only route that may produce `Projected4d`: the 4D
             // Taylor coefficient is kept factorized and final assembly later
-            // attaches its untouched outer CFF. It never enters `run`,
-            // `run_local`, or `run_integrated` below.
+            // attaches its untouched outer CFF. It never enters any of the
+            // `Direct3dApproximation` replay operations below.
             let local_4d = self.compute_store.require(operation)?.local_4d(operation)?;
-            Local3DApproximation::new(localizer, graph, settings)
-                .project_local_4d(local_4d, &forest_node)?
+            Local3DCts::Projected4d(
+                Projected4dApproximation::new(localizer, graph, settings)
+                    .project_local_4d(local_4d, &forest_node)?,
+            )
         } else if self.graph.is_disjoint_union(node) {
             // Both direct variants replay the Taylor operators on the complete
             // post-energy-integration CFF. `explicit_orientation_sum_only`
@@ -1125,7 +1128,7 @@ impl Forests {
             // An empty dependency frontier starts from the per-cut root integrand;
             // otherwise its typed local result remains the sequential accumulator.
             let parent_local = if parent_operation.key.is_empty() {
-                Local3DCts::root(graph, localizer)?
+                Local3DCts::Direct(Direct3dCts::root(graph, localizer)?)
             } else {
                 self.compute_store
                     .require(parent_operation)?
@@ -1159,12 +1162,21 @@ impl Forests {
             .compute_store
             .require(operation)?
             .integrated(operation)?;
-        let final_integrands = FinalIntegrandBuilder::new(localizer, settings).build_3d(
-            graph,
-            &forest_node,
-            &local_3d,
-            integrated,
-        )?;
+        let final_builder = FinalIntegrandBuilder::new(localizer, settings);
+        let final_integrands = match &local_3d {
+            Local3DCts::Direct(direct) => {
+                final_builder.build_direct(graph, &forest_node, direct, integrated)?
+            }
+            Local3DCts::Projected4d(projected) => {
+                final_builder.build_projected(graph, &forest_node, projected, integrated)?
+            }
+            #[cfg(test)]
+            Local3DCts::Projected(_) => {
+                return Err(eyre!(
+                    "diagnostic whole-expression projections cannot enter production final assembly"
+                ));
+            }
+        };
 
         Ok(CutComputation {
             local_3d,

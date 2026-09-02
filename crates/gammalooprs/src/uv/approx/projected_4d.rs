@@ -1,3 +1,5 @@
+use std::ops::Neg;
+
 use color_eyre::Result;
 use eyre::eyre;
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike};
@@ -9,17 +11,88 @@ use crate::{
     graph::{ExactUvSubLmbFrame, Graph, GraphThreeDSource, cuts::CutSet},
     utils::GS,
     uv::{
-        Integrands,
+        Integrands, UVgenerationSettings,
         approx::{
             ForestNodeLike,
             local_3d::{
-                FrozenActiveCt, Local3DApproximation, Local3DCts, Localizer,
-                OrientationIntegrandBranch, OrientationIntegrands,
+                FrozenActiveCt, Localizer, OrientationIntegrandBranch, OrientationIntegrands,
             },
             local_4d::{FourDSector, Full4dCts, Local4dCts},
         },
     },
 };
+
+/// Projected local-4D Taylor coefficients. They omit the untouched outer CFF,
+/// which is attached only during final assembly.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct Projected4dCts(Vec<(SuBitGraph, FrozenActiveCt)>);
+
+impl Projected4dCts {
+    fn new(sectors: Vec<(SuBitGraph, FrozenActiveCt)>) -> Self {
+        Self(sectors)
+    }
+
+    pub(crate) fn sectors(&self) -> &[(SuBitGraph, FrozenActiveCt)] {
+        &self.0
+    }
+
+    #[cfg(test)]
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn map<F: FnMut(&Atom) -> Result<Atom>>(&self, mut f: F) -> Result<Self> {
+        Ok(Self(
+            self.0
+                .iter()
+                .map(|(active, integrands)| {
+                    Ok((
+                        active.clone(),
+                        FrozenActiveCt {
+                            active: integrands.active.fallible_map(|_, _, atom| f(atom))?,
+                            frozen_integrands: integrands.frozen_integrands.clone(),
+                            active_lmb: integrands.active_lmb.clone(),
+                        },
+                    ))
+                })
+                .collect::<Result<_>>()?,
+        ))
+    }
+}
+
+impl Neg for Projected4dCts {
+    type Output = Self;
+
+    fn neg(self) -> Self::Output {
+        Self(
+            self.0
+                .into_iter()
+                .map(|(active, integrands)| (active, -integrands))
+                .collect(),
+        )
+    }
+}
+
+pub(crate) struct Projected4dApproximation<'a> {
+    localizer: Localizer<'a>,
+    graph: &'a mut Graph,
+    settings: &'a UVgenerationSettings,
+}
+
+impl<'a> Projected4dApproximation<'a> {
+    pub(crate) fn new(
+        localizer: Localizer<'a>,
+        graph: &'a mut Graph,
+        settings: &'a UVgenerationSettings,
+    ) -> Self {
+        Self {
+            localizer,
+            graph,
+            settings,
+        }
+    }
+}
 
 impl Localizer<'_> {
     /// Project one typed Taylor sector in the independent sub-LMB retained by
@@ -204,7 +277,7 @@ impl Localizer<'_> {
     }
 }
 
-impl Local3DApproximation<'_> {
+impl Projected4dApproximation<'_> {
     /// Project an already Taylor-expanded local 4D counterterm in the UV
     /// child's own energy frame. The contracted cograph is deliberately absent
     /// here: final assembly attaches it after the independent 4D Taylor
@@ -213,7 +286,7 @@ impl Local3DApproximation<'_> {
         &mut self,
         local: &Local4dCts,
         current: &S,
-    ) -> Result<Local3DCts> {
+    ) -> Result<Projected4dCts> {
         if !self.settings.local_uv_cts_from_expanded_4d_integrands {
             return Err(eyre!(
                 "the typed local-4D child projection is reserved for local counterterms requested from expanded 4D integrands"
@@ -282,7 +355,7 @@ impl Local3DApproximation<'_> {
             ));
         }
 
-        Ok(Local3DCts::Projected4d(active_sectors))
+        Ok(Projected4dCts::new(active_sectors))
     }
 }
 
