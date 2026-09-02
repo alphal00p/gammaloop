@@ -5,9 +5,10 @@ use std::{
     time::{Duration, Instant},
 };
 
-use symbolica::atom::{Atom, AtomCore};
+use spenso::vector_symbol;
+use symbolica::atom::{Atom, AtomCore, AtomView};
 use test_utils::{TestVakint, get_vakint};
-use vakint::{TensorReductionMethod, Vakint, VakintSettings, vakint_parse};
+use vakint::{TensorReductionMethod, Vakint, VakintError, VakintSettings, vakint_parse};
 
 #[derive(Clone, Copy)]
 struct ProjectedFixture {
@@ -102,6 +103,20 @@ fn feynkit_expanded_without_form() -> TestVakint {
         use_dot_product_notation: false,
         ..VakintSettings::default()
     })
+}
+
+fn collect_dot_dummy_labels(expression: AtomView<'_>, labels: &mut Vec<usize>) {
+    if let AtomView::Fun(function) = expression
+        && function.get_symbol().get_stripped_name() == "dot_dummy_ind"
+        && function.get_nargs() == 1
+        && let Some(argument) = function.iter().next()
+        && let Ok(label) = usize::try_from(argument)
+    {
+        labels.push(label);
+    }
+    for child in expression.children() {
+        collect_dot_dummy_labels(child, labels);
+    }
 }
 
 #[test]
@@ -209,6 +224,14 @@ fn focused_tensor_structures_match_alphaloop() {
             "sum_of_tensor_monomials",
             "(2*a*k(1,1)*k(1,2)*p(1,1)*p(2,2)-3*b*k(2,3)*k(2,4)*p(1,3)*p(1,4))*topo(tensor_sum)",
         ),
+        (
+            "compact_mixed_dot_odd_rank",
+            "dot(p(1),k(1))*topo(compact_mixed_dot_odd_rank)",
+        ),
+        (
+            "compact_mixed_dots_rank_two",
+            "dot(p(1),k(1))*dot(p(2),k(1))*topo(compact_mixed_dots_rank_two)",
+        ),
     ];
 
     for (name, input) in cases {
@@ -229,6 +252,370 @@ fn feynkit_mode_contracts_explicit_metrics_without_form() {
     assert!(
         difference.is_zero(),
         "explicit metric contraction differs from its expected value: {difference}"
+    );
+}
+
+#[test]
+fn feynkit_mode_retargets_full_spenso_slots_without_nesting() {
+    let feynkit = feynkit_without_form();
+    let input = vakint_parse!(
+        "k(1,spenso::mink(dim,mu))*k(1,spenso::mink(4,nu))
+         *p(7,spenso::mink(dim,mu))*p(8,spenso::mink(4,nu))
+         *topo(mixed_full_spenso_slots)"
+    )
+    .unwrap();
+    let expected =
+        vakint_parse!("dot(k(1),k(1))*dot(p(7),p(8))/(4-2*ε)*topo(mixed_full_spenso_slots)")
+            .unwrap();
+
+    let output = feynkit.tensor_reduce(input.as_view()).unwrap();
+    let difference = (output.clone() - expected).expand().together();
+    assert!(
+        difference.is_zero(),
+        "mixed full Spenso slots differ by {difference}: {output}"
+    );
+    let canonical = output.to_canonical_string();
+    assert!(
+        !canonical.contains("mink(4+-2*vakint::ε,spenso::")
+            && !canonical.contains("mink(vakint::dim,spenso::"),
+        "a full Spenso slot was nested inside another slot: {canonical}"
+    );
+}
+
+#[test]
+fn feynkit_mode_retargets_full_metric_slots_without_nesting() {
+    let feynkit = feynkit_without_form();
+    let input = vakint_parse!(
+        "g(spenso::mink(dim,mu),spenso::mink(4,nu))
+         *k(1,spenso::mink(dim,mu))*k(2,spenso::mink(4,nu))
+         *topo(full_spenso_metric)"
+    )
+    .unwrap();
+    let expected = vakint_parse!("dot(k(1),k(2))*topo(full_spenso_metric)").unwrap();
+
+    let output = feynkit.tensor_reduce(input.as_view()).unwrap();
+    let difference = (output.clone() - expected).expand().together();
+    assert!(
+        difference.is_zero(),
+        "full Spenso metric slots differ by {difference}: {output}"
+    );
+}
+
+#[test]
+fn tagged_spatial_components_are_not_minkowski_slots() {
+    let _q = vector_symbol!("vakint_tensor_bridge_test::Q_spatial");
+    let feynkit = feynkit_without_form();
+    let input = vakint_parse!(
+        "vakint_tensor_bridge_test::Q_spatial(1,spenso::cind(1))
+         *topo(tagged_spatial_component)"
+    )
+    .unwrap();
+
+    let output = feynkit.tensor_reduce(input.as_view()).unwrap();
+    let difference = (output.clone() - &input).expand().together();
+    assert!(
+        difference.is_zero(),
+        "a tagged spatial component was changed by {difference}: {output}"
+    );
+    let canonical = output.to_canonical_string();
+    assert!(
+        !canonical.contains("mink("),
+        "a Minkowski representation was injected around cind: {canonical}"
+    );
+}
+
+#[test]
+fn compact_tagged_vectors_project_back_to_a_compact_vakint_dot() {
+    let _q = vector_symbol!("vakint_tensor_bridge_test::Q_compact");
+    let _p = vector_symbol!("vakint_tensor_bridge_test::P_compact");
+    let feynkit = feynkit_without_form();
+    let input = vakint_parse!(
+        "dot(k(1,spenso::mink(4)),vakint_tensor_bridge_test::Q_compact(7,spenso::mink(4)))
+         *dot(k(1,spenso::mink(4)),vakint_tensor_bridge_test::P_compact(3,spenso::mink(4)))
+         *topo(compact_tagged_vectors)"
+    )
+    .unwrap();
+    let expected = vakint_parse!(
+        "dot(k(1),k(1))
+         *dot(vakint_tensor_bridge_test::Q_compact(7,spenso::mink(4)),
+              vakint_tensor_bridge_test::P_compact(3,spenso::mink(4)))
+         /(4-2*ε)*topo(compact_tagged_vectors)"
+    )
+    .unwrap();
+
+    let output = feynkit.tensor_reduce(input.as_view()).unwrap();
+    let difference = (output.clone() - expected).expand().together();
+    assert!(
+        difference.is_zero(),
+        "compact tagged-vector projection differs by {difference}: {output}"
+    );
+    let canonical = output.to_canonical_string();
+    assert!(
+        !canonical.contains("feynkit_external_vector")
+            && !canonical.contains("feynkit_opaque_index")
+            && !canonical.contains("dot_dummy_ind"),
+        "temporary FeynKit bridge syntax leaked into the result: {canonical}"
+    );
+}
+
+#[test]
+fn native_spenso_dots_with_loop_momenta_are_tensor_reduced() {
+    let feynkit = feynkit_without_form();
+    let input = vakint_parse!(
+        "spenso::dot(k(1,spenso::mink(4-2*ε)),p(7,spenso::mink(4-2*ε)))
+         *spenso::dot(k(1,spenso::mink(4-2*ε)),p(8,spenso::mink(4-2*ε)))
+         *topo(native_spenso_dots)"
+    )
+    .unwrap();
+    let expected =
+        vakint_parse!("dot(k(1),k(1))*dot(p(7),p(8))/(4-2*ε)*topo(native_spenso_dots)").unwrap();
+
+    let output = feynkit.tensor_reduce(input.as_view()).unwrap();
+    let difference = (output.clone() - expected).expand().together();
+    assert!(
+        difference.is_zero(),
+        "native Spenso dots bypassed tensor reduction by {difference}: {output}"
+    );
+}
+
+#[test]
+fn non_minkowski_spenso_dots_are_preserved() {
+    let feynkit = feynkit_without_form();
+    let input = vakint_parse!(
+        "spenso::dot(bridge_test::C(spenso::coad(8)),bridge_test::D(spenso::coad(8)))
+         *topo(non_minkowski_spenso_dot)"
+    )
+    .unwrap();
+
+    let output = feynkit.tensor_reduce(input.as_view()).unwrap();
+    let difference = (output.clone() - &input).expand().together();
+    assert!(
+        difference.is_zero(),
+        "a non-Minkowski Spenso dot was changed by {difference}: {output}"
+    );
+    let canonical = output.to_canonical_string();
+    assert!(
+        !canonical.contains("dot_dummy_ind"),
+        "a non-Minkowski Spenso dot was rewritten as a Lorentz contraction: {canonical}"
+    );
+}
+
+#[test]
+fn malformed_spenso_loop_dots_are_rejected() {
+    let feynkit = feynkit_without_form();
+    let input = vakint_parse!(
+        "spenso::dot(k(1,spenso::mink(4)),bridge_test::C(spenso::coad(8)))
+         *topo(malformed_spenso_loop_dot)"
+    )
+    .unwrap();
+
+    let error = feynkit.tensor_reduce(input.as_view()).unwrap_err();
+    assert!(
+        matches!(error, VakintError::FeynKitLoopDot(_)),
+        "unexpected malformed-loop-dot error: {error}"
+    );
+}
+
+#[test]
+fn gamma_like_opaque_projectors_use_a_paired_boundary_dummy() {
+    let feynkit = feynkit_without_form();
+    let input = vakint_parse!(
+        "k(1,spenso::mink(4,mu))*k(1,spenso::mink(4,nu))
+         *spenso::gamma(spenso::bis(4,a),spenso::bis(4,b),spenso::mink(4,mu))
+         *p(7,spenso::mink(4,nu))*topo(gamma_like_opaque_projector)"
+    )
+    .unwrap();
+    let expected = vakint_parse!(
+        "dot(k(1),k(1))/(4-2*ε)
+         *spenso::gamma(spenso::bis(4,a),spenso::bis(4,b),spenso::mink(4,mu))
+         *g(spenso::mink(4,mu),dot_dummy_ind(1))*p(7,dot_dummy_ind(1))
+         *topo(gamma_like_opaque_projector)"
+    )
+    .unwrap();
+
+    let feynkit_output = feynkit.tensor_reduce(input.as_view()).unwrap();
+    let difference = (feynkit_output.clone() - expected).expand().together();
+    assert!(
+        difference.is_zero(),
+        "gamma-like projector did not use a paired boundary dummy: {difference}; FeynKit: {feynkit_output}"
+    );
+    let canonical = feynkit_output.to_canonical_string();
+    assert!(
+        !canonical.contains("feynkit_external_vector")
+            && !canonical.contains("feynkit_opaque_index"),
+        "temporary FeynKit bridge syntax leaked into gamma-like output: {canonical}"
+    );
+}
+
+#[test]
+fn gamma_like_projector_with_a_tagged_vector_stays_native_spenso() {
+    let _q = vector_symbol!("vakint_tensor_bridge_test::Q_gamma_projector");
+    let feynkit = feynkit_without_form();
+    let input = vakint_parse!(
+        "k(1,spenso::mink(4,mu))*k(1,spenso::mink(4,nu))
+         *spenso::gamma(spenso::bis(4,a),spenso::bis(4,b),spenso::mink(4,mu))
+         *vakint_tensor_bridge_test::Q_gamma_projector(7,spenso::mink(4,nu))
+         *topo(gamma_tagged_vector_projector)"
+    )
+    .unwrap();
+    let expected = vakint_parse!(
+        "dot(k(1),k(1))/(4-2*ε)
+         *spenso::gamma(spenso::bis(4,a),spenso::bis(4,b),spenso::mink(4,mu))
+         *spenso::g(spenso::mink(4,mu),spenso::mink(4,dot_dummy_ind(1)))
+         *vakint_tensor_bridge_test::Q_gamma_projector(
+             7,spenso::mink(4,dot_dummy_ind(1)))
+         *topo(gamma_tagged_vector_projector)"
+    )
+    .unwrap();
+
+    let output = feynkit.tensor_reduce(input.as_view()).unwrap();
+    let difference = (output.clone() - expected).expand().together();
+    assert!(
+        difference.is_zero(),
+        "gamma/tagged-vector projector left native Spenso form by {difference}: {output}"
+    );
+    let canonical = output.to_canonical_string();
+    assert!(
+        !canonical.contains("feynkit_external_vector")
+            && !canonical.contains("feynkit_opaque_index"),
+        "temporary FeynKit bridge syntax leaked into tagged-vector output: {canonical}"
+    );
+}
+
+#[test]
+fn opaque_and_free_projector_legs_keep_full_spenso_slots() {
+    let feynkit = feynkit_without_form();
+    let input = vakint_parse!(
+        "k(1,spenso::mink(4,mu))*k(1,nu)
+         *spenso::gamma(spenso::bis(4,a),spenso::bis(4,b),spenso::mink(4,mu))
+         *topo(opaque_and_free_projector)"
+    )
+    .unwrap();
+    let expected = vakint_parse!(
+        "dot(k(1),k(1))/(4-2*ε)
+         *spenso::gamma(spenso::bis(4,a),spenso::bis(4,b),spenso::mink(4,mu))
+         *g(spenso::mink(4,mu),spenso::mink(4-2*ε,nu))
+         *topo(opaque_and_free_projector)"
+    )
+    .unwrap();
+
+    let output = feynkit.tensor_reduce(input.as_view()).unwrap();
+    let difference = (output.clone() - expected).expand().together();
+    assert!(
+        difference.is_zero(),
+        "opaque/free projector lost a full Spenso slot by {difference}: {output}"
+    );
+}
+
+#[test]
+fn opaque_projector_dummies_are_unique_and_noncolliding() {
+    let feynkit = feynkit_without_form();
+    let input = vakint_parse!(
+        "bridge_test::marker(dot_dummy_ind(7))*(
+           k(1,spenso::mink(4,mu))*k(1,spenso::mink(4,nu))
+            *spenso::gamma(spenso::bis(4,a),spenso::bis(4,b),spenso::mink(4,mu))
+            *p(7,spenso::mink(4,nu))
+          +k(1,spenso::mink(4,rho))*k(1,spenso::mink(4,sigma))
+            *spenso::gamma(spenso::bis(4,c),spenso::bis(4,d),spenso::mink(4,rho))
+            *p(8,spenso::mink(4,sigma)))
+         *topo(unique_opaque_projector_dummies)"
+    )
+    .unwrap();
+
+    let output = feynkit.tensor_reduce(input.as_view()).unwrap();
+    let mut labels = Vec::new();
+    collect_dot_dummy_labels(output.as_view(), &mut labels);
+    labels.sort_unstable();
+    assert_eq!(labels, vec![7, 7, 8, 8, 9, 9]);
+    let canonical = output.to_canonical_string();
+    assert!(
+        !canonical.contains("feynkit_external_vector")
+            && !canonical.contains("feynkit_opaque_index"),
+        "temporary FeynKit bridge syntax leaked across additive terms: {canonical}"
+    );
+}
+
+#[test]
+fn expanded_mode_indexes_the_existing_tagged_vector_representation() {
+    let _q = vector_symbol!("vakint_tensor_bridge_test::Q_expanded");
+    let _p = vector_symbol!("vakint_tensor_bridge_test::P_expanded");
+    let feynkit = feynkit_expanded_without_form();
+    let input = vakint_parse!(
+        "dot(k(1),vakint_tensor_bridge_test::Q_expanded(7,spenso::mink(4)))
+         *dot(k(1),vakint_tensor_bridge_test::P_expanded(3,spenso::mink(4)))
+         *topo(expanded_tagged_vectors)"
+    )
+    .unwrap();
+
+    let output = feynkit.tensor_reduce(input.as_view()).unwrap();
+    let canonical = output.to_canonical_string();
+    assert!(
+        canonical.contains("mink(4,vakint::{}::dot_dummy_ind"),
+        "expanded tagged vectors did not receive an index in their existing representation: {canonical}"
+    );
+    assert!(
+        !canonical.contains("mink(4),vakint::{}::dot_dummy_ind")
+            && !canonical.contains("feynkit_external_vector")
+            && !canonical.contains("feynkit_opaque_index"),
+        "expanded tagged vectors contain malformed or temporary bridge syntax: {canonical}"
+    );
+}
+
+#[test]
+fn opaque_slot_provenance_is_local_to_each_additive_term() {
+    let feynkit = feynkit_without_form();
+    let input = vakint_parse!(
+        "(k(1,spenso::mink(4,mu))*k(1,spenso::mink(4,nu))
+            *bridge_test::A(spenso::mink(4,mu))*bridge_test::B(spenso::mink(4,nu))
+          +k(1,spenso::mink(dim,mu))*k(1,spenso::mink(dim,nu))
+            *bridge_test::C(spenso::mink(dim,mu))*bridge_test::E(spenso::mink(dim,nu)))
+         *topo(opaque_slot_provenance)"
+    )
+    .unwrap();
+    let expected = vakint_parse!(
+        "dot(k(1),k(1))/(4-2*ε)
+         *(dot(bridge_test::A(spenso::mink(4)),bridge_test::B(spenso::mink(4)))
+          +dot(bridge_test::C(spenso::mink(dim)),bridge_test::E(spenso::mink(dim))))
+         *topo(opaque_slot_provenance)"
+    )
+    .unwrap();
+
+    let output = feynkit.tensor_reduce(input.as_view()).unwrap();
+    let difference = (output.clone() - expected).expand().together();
+    assert!(
+        difference.is_zero(),
+        "opaque-slot provenance crossed additive terms by {difference}: {output}"
+    );
+    let canonical = output.to_canonical_string();
+    assert!(
+        !canonical.contains("g(spenso::mink")
+            && !canonical.contains("feynkit_opaque_index")
+            && !canonical.contains("dot_dummy_ind"),
+        "invalid bridge metric syntax leaked into the result: {canonical}"
+    );
+}
+
+#[test]
+fn untagged_vector_provenance_distinguishes_dimensions_within_one_term() {
+    let feynkit = feynkit_without_form();
+    let input = vakint_parse!(
+        "k(1,spenso::mink(4,mu))*k(1,spenso::mink(dim,nu))
+         *bridge_test::V(spenso::mink(4,mu))*bridge_test::V(spenso::mink(dim,nu))
+         *topo(untagged_vector_dimensions)"
+    )
+    .unwrap();
+    let expected = vakint_parse!(
+        "dot(k(1),k(1))/(4-2*ε)
+         *dot(bridge_test::V(spenso::mink(4)),bridge_test::V(spenso::mink(dim)))
+         *topo(untagged_vector_dimensions)"
+    )
+    .unwrap();
+
+    let output = feynkit.tensor_reduce(input.as_view()).unwrap();
+    let difference = (output.clone() - expected).expand().together();
+    assert!(
+        difference.is_zero(),
+        "untagged vector dimensions collided by {difference}: {output}"
     );
 }
 
