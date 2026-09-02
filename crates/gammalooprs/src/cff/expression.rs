@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub use three_dimensional_reps::expression::{
     AllOrientations, CFFVariant, OrientationData, OrientationExpression, OrientationID,
@@ -98,7 +98,6 @@ impl GammaLoopCFFVariant for CFFVariant {
             .map(|edge_id| Atom::num(1) / (Atom::num(2) * ose_atom_from_index(*edge_id)))
             .reduce(|acc, factor| acc * factor)
             .unwrap_or_else(|| Atom::num(1));
-
         let scale_factor = if self.uniform_scale_power == 0 {
             Atom::num(1)
         } else {
@@ -146,9 +145,21 @@ pub(crate) fn energy_map_replacements_gs(
 ) -> Vec<Replacement> {
     let mut replacements = Vec::new();
     let mink_index = LibraryRep::from(Minkowski {}).to_symbolic([Atom::var(W_.a__)]);
+    let external_edges = graph
+        .underlying
+        .iter_edges()
+        .filter_map(|(pair, edge_id, _)| (!pair.is_paired()).then_some(edge_id))
+        .collect::<BTreeSet<_>>();
 
     for (edge_id, energy_expr) in edge_energy_map.iter().enumerate() {
         let edge_id = EdgeIndex(edge_id);
+        // Remapping a generated internal-edge map into GammaLoop's physical
+        // namespace pads unpaired external-edge slots with zero. Those slots
+        // are not residue samples: their EMR momenta must remain the original
+        // external momenta carried by the factorized numerator.
+        if external_edges.contains(&edge_id) {
+            continue;
+        }
         let energy = energy_expr.to_atom_gs(&[]);
         replacements.push(Replacement::new(
             GS.emr_mom(edge_id, AIND_SYMBOLS.cind.call(Atom::Zero))
@@ -270,6 +281,47 @@ mod tests {
 
         let mixed = (mapped_energy.clone() + factor_a) * (mapped_energy + Atom::num(1) + factor_b);
         assert_ne!(mapped, mixed);
+        Ok(())
+    }
+
+    #[test]
+    fn padded_external_energy_slots_do_not_erase_factorized_external_momenta()
+    -> color_eyre::Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph padded_external_energy_slots {
+            edge [num=1 mass=0]
+            node [num=1]
+            ext [style=invis]
+            v0;
+            v1;
+            v2;
+            ext -> v0 [id=0]
+            ext -> v1 [id=1]
+            v2 -> ext [id=2]
+            v0 -> v2 [id=3 lmb_id=0]
+            v1 -> v0 [id=4]
+            v2 -> v1 [id=5]
+        })?;
+        let mapped_internal_energy = LinearEnergyExpr {
+            internal_terms: vec![(EdgeIndex(3), Atom::num(2))],
+            external_terms: vec![(EdgeIndex(0), Atom::num(-1))],
+            uniform_scale_coeff: Atom::Zero,
+            constant: Atom::Zero,
+        }
+        .canonical();
+        let mut edge_energy_map = vec![LinearEnergyExpr::zero(); graph.underlying.n_edges()];
+        edge_energy_map[3] = mapped_internal_energy.clone();
+        let external_energy = GS.emr_mom(EdgeIndex(0), AIND_SYMBOLS.cind.call(Atom::Zero));
+        let internal_energy = GS.emr_mom(EdgeIndex(3), AIND_SYMBOLS.cind.call(Atom::Zero));
+        let spectator = Atom::var(symbolica::symbol!("spectator"));
+        let numerator = external_energy.clone() * (internal_energy + spectator.clone());
+
+        let mapped =
+            numerator.replace_multiple(energy_map_replacements_gs(&edge_energy_map, &graph));
+        assert_eq!(
+            mapped,
+            external_energy * (mapped_internal_energy.to_atom_gs(&[]) + spectator)
+        );
         Ok(())
     }
 

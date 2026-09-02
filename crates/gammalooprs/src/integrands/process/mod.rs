@@ -1172,19 +1172,16 @@ pub(crate) fn orientation_labels_for_graph<I: ProcessIntegrandImpl>(
     integrand: &I,
     graph_id: usize,
 ) -> Result<Vec<String>> {
-    let group_id = integrand
-        .graph_group_id_for_graph(graph_id)
-        .map(GroupId)
-        .ok_or_else(|| {
-            eyre!(
-                "Unknown graph '{}' while resolving orientation labels.",
-                graph_id
-            )
-        })?;
-    let master = integrand.get_master_graph(group_id);
-    Ok((0..master.get_num_orientations())
+    if graph_id >= integrand.graph_count() {
+        return Err(eyre!(
+            "Unknown graph '{}' while resolving orientation labels.",
+            graph_id
+        ));
+    }
+    let graph = integrand.get_graph(graph_id);
+    Ok((0..graph.get_num_orientations())
         .map(|orientation_id| {
-            master
+            graph
                 .orientation_label(orientation_id)
                 .unwrap_or_else(|| format!("#{}", orientation_id))
         })
@@ -2582,6 +2579,65 @@ pub(crate) fn validate_process_runtime_settings(
     Ok(())
 }
 
+fn validate_orientation_catalog_group<'a>(
+    group_id: GroupId,
+    catalogs: impl IntoIterator<Item = (String, Vec<&'a str>)>,
+) -> Result<()> {
+    let mut catalogs = catalogs.into_iter();
+    let Some((master_name, master_catalog)) = catalogs.next() else {
+        return Ok(());
+    };
+    for (graph_name, catalog) in catalogs {
+        if catalog != master_catalog {
+            let first_difference = master_catalog
+                .iter()
+                .zip_longest(&catalog)
+                .position(|entry| match entry {
+                    itertools::EitherOrBoth::Both(left, right) => left != right,
+                    itertools::EitherOrBoth::Left(_) | itertools::EitherOrBoth::Right(_) => true,
+                })
+                .unwrap_or_default();
+            return Err(eyre!(
+                "Runtime orientation Monte Carlo cannot use graph group {} because graph '{}' and master '{}' have different exact residue-map catalogs ({} versus {} selected maps; first difference at channel {}). Disable `sampling.sample_orientations` so each graph explicitly sums its own complete map catalog.",
+                group_id.0,
+                graph_name,
+                master_name,
+                catalog.len(),
+                master_catalog.len(),
+                first_difference,
+            ));
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_group_orientation_catalogs<G: GraphTerm>(
+    settings: &RuntimeSettings,
+    graph_terms: &[G],
+    groups: &TiVec<GroupId, GraphGroup>,
+) -> Result<()> {
+    let SamplingSettings::DiscreteGraphs(discrete_settings) = &settings.sampling else {
+        return Ok(());
+    };
+    if !discrete_settings.sample_orientations {
+        return Ok(());
+    }
+
+    for (group_id, group) in groups.iter_enumerated() {
+        let master_id = group.master();
+        validate_orientation_catalog_group(
+            group_id,
+            std::iter::once(master_id)
+                .chain(group.into_iter().filter(|graph_id| *graph_id != master_id))
+                .map(|graph_id| {
+                    let graph = &graph_terms[graph_id];
+                    (graph.name(), graph.selected_production_orientation_keys())
+                }),
+        )?;
+    }
+    Ok(())
+}
+
 fn get_global_dimension_if_exists<I: ProcessIntegrandImpl>(integrand: &I) -> Option<usize> {
     if integrand
         .get_settings()
@@ -2620,6 +2676,8 @@ pub trait GraphTerm {
     fn get_graph(&self) -> &Graph;
     fn get_num_channels(&self, parameterization_settings: &ParameterizationSettings) -> usize;
     fn get_num_orientations(&self) -> usize;
+    fn production_orientation_keys(&self) -> &[String];
+    fn selected_production_orientation_keys(&self) -> Vec<&str>;
     fn selected_lmb_basis_id(
         &self,
         parameterization_settings: &ParameterizationSettings,
@@ -4132,12 +4190,12 @@ mod tests {
     use super::{
         ChannelIndex, LmbChannelWeightingSettings, LmbMultiChannelingSetup, RuntimeCache,
         filtered_orientation_count, resolve_visible_orientation_id,
-        validate_process_runtime_settings,
+        validate_orientation_catalog_group, validate_process_runtime_settings,
     };
     use crate::cff::expression::OrientationID;
     use crate::{
         dot,
-        graph::{Graph, LMBext, LmbIndex, LoopMomentumBasis, parse::from_dot::IntoGraph},
+        graph::{Graph, GroupId, LMBext, LmbIndex, LoopMomentumBasis, parse::from_dot::IntoGraph},
         initialisation::test_initialise,
         momentum::{
             ThreeMomentum,
@@ -4184,6 +4242,34 @@ mod tests {
 
         settings.general.numerator_sampling_scale = -2.0;
         validate_process_runtime_settings(&settings, false, true).unwrap();
+    }
+
+    #[test]
+    fn grouped_orientation_sampling_requires_identical_exact_map_catalogs() {
+        let master = ["O[+0]|M[0]", "O[+0]|M[1]"];
+        validate_orientation_catalog_group(
+            GroupId(3),
+            [
+                ("master".to_string(), master.to_vec()),
+                ("matching".to_string(), master.to_vec()),
+            ],
+        )
+        .unwrap();
+
+        let error = validate_orientation_catalog_group(
+            GroupId(3),
+            [
+                ("master".to_string(), master.to_vec()),
+                ("different".to_string(), vec!["O[+0]|M[0]", "O[+0]|M[2]"]),
+            ],
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("different exact residue-map catalogs")
+        );
+        assert!(error.to_string().contains("first difference at channel 1"));
     }
 
     #[test]

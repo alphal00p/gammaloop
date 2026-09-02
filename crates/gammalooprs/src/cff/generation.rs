@@ -18,10 +18,11 @@ use itertools::Itertools;
 use linnet::half_edge::involution::EdgeIndex;
 use linnet::num_traits::SignOrZero;
 use symbolica::atom::{Atom, AtomCore};
+use three_dimensional_reps::normalize_energy_degree_bounds;
 use three_dimensional_reps::{
-    CffEnergyFactorOwnership, EnergyEdgeIndexMap, Generate3DExpressionOptions,
-    GeneratedThreeDExpression, NumeratorSamplingScaleMode, ParsedGraph, RepresentationMode,
-    ThreeDGraphSource, normalize_energy_degree_bounds, repeated_groups,
+    CffEnergyFactorOwnership, CffGenerationContext, EnergyEdgeIndexMap,
+    Generate3DExpressionOptions, GeneratedThreeDExpression, NumeratorSamplingScaleMode, ParsedGraph,
+    RepresentationMode, ThreeDGraphSource,
     tree::{NodeId, Tree},
 };
 
@@ -46,15 +47,22 @@ struct SurfaceMapEntry {
 }
 
 struct RemappedDenominatorTree {
-    prefactor_sign: i64,
+    prefactor: i64,
     surface_signs: BTreeMap<HybridSurfaceID, i64>,
     denominator: Tree<HybridSurfaceID>,
 }
 
+type ExactCffGenerationKey = (ParsedGraph, EnergyEdgeIndexMap, Generate3DExpressionOptions);
+
+struct ExactCffCapacityEnvelope {
+    repeated_channels: Vec<Vec<usize>>,
+    bounds: Vec<(usize, usize)>,
+}
+
 #[derive(Default)]
 pub(crate) struct ExactCffGenerationCache {
-    required_bounds: BTreeMap<(ParsedGraph, Generate3DExpressionOptions), Vec<(usize, usize)>>,
-    entries: BTreeMap<(ParsedGraph, Generate3DExpressionOptions), GeneratedThreeDExpression>,
+    required_bounds: BTreeMap<ExactCffGenerationKey, ExactCffCapacityEnvelope>,
+    entries: BTreeMap<ExactCffGenerationKey, GeneratedThreeDExpression>,
 }
 
 impl ExactCffGenerationCache {
@@ -62,52 +70,109 @@ impl ExactCffGenerationCache {
         self.entries.len()
     }
 
-    fn canonical_input(parsed: &ParsedGraph) -> ParsedGraph {
-        let mut canonical = parsed.clone();
-        for edge in &mut canonical.internal_edges {
-            edge.label.clear();
-        }
-        for edge in &mut canonical.external_edges {
-            edge.label.clear();
-        }
-        canonical.node_name_to_internal.clear();
-        canonical
-    }
-
     fn topology_key(
         parsed: &ParsedGraph,
+        energy_edges: &EnergyEdgeIndexMap,
         options: &Generate3DExpressionOptions,
-    ) -> (ParsedGraph, Generate3DExpressionOptions) {
+    ) -> ExactCffGenerationKey {
+        let mut topology = parsed.clone();
+        topology.node_name_to_internal = topology
+            .internal_edges
+            .iter()
+            .flat_map(|edge| [edge.tail, edge.head])
+            .chain(
+                topology
+                    .external_edges
+                    .iter()
+                    .flat_map(|edge| edge.source.into_iter().chain(edge.destination)),
+            )
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .map(|node| (format!("__gammaloop_exact_node_{node}"), node))
+            .collect();
         let mut topology_options = options.clone();
         topology_options.energy_degree_bounds = None;
-        (Self::canonical_input(parsed), topology_options)
+        (topology, energy_edges.clone(), topology_options)
+    }
+
+    fn source_repeated_channels(
+        source: &GraphThreeDSource<'_>,
+        energy_edges: &EnergyEdgeIndexMap,
+    ) -> Result<Vec<Vec<usize>>> {
+        let physical_support = source
+            .physical_cut_support_edge_index_map()
+            .ok_or_else(|| eyre::eyre!("exact CFF source has no physical channel provenance"))?;
+        let mut local_edges_by_support = BTreeMap::<Vec<EdgeIndex>, Vec<usize>>::new();
+        for (local_edge, energy_edge) in &energy_edges.internal {
+            let support = physical_support.get(energy_edge).ok_or_else(|| {
+                eyre::eyre!(
+                    "exact CFF energy edge {energy_edge} has no physical channel provenance"
+                )
+            })?;
+            if support.is_empty() {
+                return Err(eyre::eyre!(
+                    "exact CFF energy edge {energy_edge} has empty physical channel provenance"
+                ));
+            }
+            local_edges_by_support
+                .entry(support.clone())
+                .or_default()
+                .push(*local_edge);
+        }
+        let mut repeated_channels = local_edges_by_support
+            .into_values()
+            .filter(|channel| channel.len() > 1)
+            .collect::<Vec<_>>();
+        for channel in &mut repeated_channels {
+            channel.sort_unstable();
+        }
+        repeated_channels.sort();
+        Ok(repeated_channels)
     }
 
     fn join_local_bounds(
         parsed: &ParsedGraph,
+        repeated_channels: &[Vec<usize>],
         current: &[(usize, usize)],
         requested: &[(usize, usize)],
     ) -> Result<Vec<(usize, usize)>> {
         let mut joined = normalize_energy_degree_bounds(current, parsed.internal_edges.len())?;
         let requested = normalize_energy_degree_bounds(requested, parsed.internal_edges.len())?;
         let mut repeated = vec![false; parsed.internal_edges.len()];
+        let mut repeated_channels = repeated_channels.to_vec();
+        for channel in &mut repeated_channels {
+            channel.sort_unstable();
+        }
+        repeated_channels.sort();
 
-        // A dotted/repeated denominator group is one algebraic energy
-        // channel. Join the total channel capacity and then redistribute it
-        // minimax over canonical occurrences. A componentwise occurrence
-        // union alone could spuriously add the same rank twice when two terms
-        // select different equivalent representatives.
-        for group in repeated_groups(parsed) {
-            let degree = group
-                .edge_ids
-                .iter()
-                .map(|edge| joined[*edge])
-                .sum::<usize>()
-                .max(group.edge_ids.iter().map(|edge| requested[*edge]).sum());
-            let quotient = degree / group.edge_ids.len();
-            let remainder = degree % group.edge_ids.len();
-            for (position, edge) in group.edge_ids.into_iter().enumerate() {
-                repeated[edge] = true;
+        // Source provenance certifies which occurrence-local edges are one
+        // algebraic on-shell-energy channel. Join only the largest requested
+        // total on that channel, then redistribute it deterministically over
+        // canonical local-edge order. Per-term assignments remain untouched.
+        for channel in repeated_channels {
+            if channel.len() <= 1 {
+                continue;
+            }
+            let mut current_total = 0usize;
+            let mut requested_total = 0usize;
+            for edge in &channel {
+                let Some(was_repeated) = repeated.get_mut(*edge) else {
+                    return Err(eyre::eyre!(
+                        "exact CFF repeated channel contains unknown local edge {edge}"
+                    ));
+                };
+                if std::mem::replace(was_repeated, true) {
+                    return Err(eyre::eyre!(
+                        "exact CFF local edge {edge} belongs to overlapping repeated channels"
+                    ));
+                }
+                current_total += joined[*edge];
+                requested_total += requested[*edge];
+            }
+            let total = current_total.max(requested_total);
+            let quotient = total / channel.len();
+            let remainder = total % channel.len();
+            for (position, edge) in channel.into_iter().enumerate() {
                 joined[edge] = quotient + usize::from(position < remainder);
             }
         }
@@ -127,6 +192,7 @@ impl ExactCffGenerationCache {
         &mut self,
         parsed: &ParsedGraph,
         energy_edges: &EnergyEdgeIndexMap,
+        repeated_channels: Vec<Vec<usize>>,
         options: &Generate3DExpressionOptions,
     ) -> Result<()> {
         if !self.entries.is_empty() {
@@ -137,16 +203,32 @@ impl ExactCffGenerationCache {
         let requested = energy_edges
             .remap_bounds_to_local(options.energy_degree_bounds.as_deref().unwrap_or(&[]))
             .map_err(|edge| eyre::eyre!("unknown exact CFF energy-bound edge {edge}"))?;
-        let key = Self::topology_key(parsed, options);
-        let joined = Self::join_local_bounds(
-            parsed,
-            self.required_bounds
-                .get(&key)
-                .map(Vec::as_slice)
-                .unwrap_or(&[]),
-            &requested,
-        )?;
-        self.required_bounds.insert(key, joined);
+        let key = Self::topology_key(parsed, energy_edges, options);
+        match self.required_bounds.entry(key) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                let bounds = Self::join_local_bounds(parsed, &repeated_channels, &[], &requested)?;
+                entry.insert(ExactCffCapacityEnvelope {
+                    repeated_channels,
+                    bounds,
+                });
+            }
+            std::collections::btree_map::Entry::Occupied(mut entry) => {
+                if entry.get().repeated_channels != repeated_channels {
+                    return Err(eyre::eyre!(
+                        "canonically equal exact CFF topologies have incompatible source-certified repeated channels: registered {:?}, requested {:?}",
+                        entry.get().repeated_channels,
+                        repeated_channels,
+                    ));
+                }
+                let bounds = Self::join_local_bounds(
+                    parsed,
+                    &repeated_channels,
+                    &entry.get().bounds,
+                    &requested,
+                )?;
+                entry.get_mut().bounds = bounds;
+            }
+        }
         Ok(())
     }
 
@@ -159,12 +241,13 @@ impl ExactCffGenerationCache {
         let mut options = requested.clone();
         let bounds = self
             .required_bounds
-            .get(&Self::topology_key(parsed, requested))
+            .get(&Self::topology_key(parsed, energy_edges, requested))
             .ok_or_else(|| {
                 eyre::eyre!("exact CFF topology was not registered before batched generation")
             })?;
         options.energy_degree_bounds = Some(
             bounds
+                .bounds
                 .iter()
                 .map(|(local, degree)| (energy_edges.internal[local], *degree))
                 .collect(),
@@ -199,6 +282,12 @@ impl Graph {
             .map(|(_, edge_id, _)| edge_id)
             .filter(|edge_id| !initial_state_cut_edges.contains(edge_id))
             .collect::<HashSet<_>>();
+        let excluded_numerator_edges = initial_state_cut_edges
+            .iter()
+            .chain(&bridge_edges)
+            .copied()
+            .chain(source.factorized_external_emr_edges())
+            .collect::<HashSet<_>>();
         let contracted_source = source.contract_subgraph();
         for (_, edge_id, _) in self.iter_edges_of(&contracted_source) {
             if !bridge_edges.contains(&edge_id) {
@@ -221,7 +310,7 @@ impl Graph {
         let physical_energy_degree_bounds = self
             .automatic_numerator_energy_degree_bounds_in_atom_excluding_with_min_degree(
                 analysis_numerator,
-                initial_state_cut_edges.iter().chain(&bridge_edges).copied(),
+                excluded_numerator_edges.iter().copied(),
                 1,
             )
             .map_err(|error| {
@@ -261,7 +350,7 @@ impl Graph {
         let energy_assignment_plan = self
             .plan_numerator_energy_assignment_in_atom_excluding(
                 analysis_numerator,
-                initial_state_cut_edges.iter().chain(&bridge_edges).copied(),
+                excluded_numerator_edges.iter().copied(),
                 &candidates,
             )
             .map_err(|error| {
@@ -298,9 +387,12 @@ impl Graph {
     ) -> Result<()> {
         let prepared =
             self.prepare_3d_expression_for_4d_term(source, options, analysis_numerator)?;
+        let repeated_channels =
+            ExactCffGenerationCache::source_repeated_channels(source, &prepared.energy_edges)?;
         cache.register(
             &prepared.parsed,
             &prepared.energy_edges,
+            repeated_channels,
             &prepared.source_options,
         )
     }
@@ -345,10 +437,10 @@ impl Graph {
             )
         };
         let generated = if let Some(cache) = cache {
-            let key = (
-                ExactCffGenerationCache::canonical_input(&parsed),
-                generation_options.clone(),
-            );
+            // Registration has already joined every term's requested degree
+            // into one capacity for this canonical topology.
+            let key =
+                ExactCffGenerationCache::topology_key(&parsed, &energy_edges, &generation_options);
             if let Some(generated) = cache.entries.get(&key) {
                 generated.clone()
             } else {
@@ -577,6 +669,7 @@ impl Graph {
         );
         Ok(Generate3DExpressionOptions {
             representation: RepresentationMode::Cff,
+            cff_generation_context: CffGenerationContext::Standalone,
             energy_degree_bounds: Some(energy_degree_bounds),
             numerator_sampling_scale,
             preserve_internal_edges_as_four_d_denominators: Vec::new(),
@@ -586,6 +679,7 @@ impl Graph {
     pub(crate) fn denominator_only_cff_3d_expression_options(&self) -> Generate3DExpressionOptions {
         Generate3DExpressionOptions {
             representation: RepresentationMode::Cff,
+            cff_generation_context: CffGenerationContext::Standalone,
             energy_degree_bounds: Some(Vec::new()),
             numerator_sampling_scale: NumeratorSamplingScaleMode::None,
             preserve_internal_edges_as_four_d_denominators: Vec::new(),
@@ -644,6 +738,7 @@ impl Graph {
             energy_factor_ownership,
             energy_factor_components,
             source_energy_degree_bounds,
+            denominator_only_global_prefactor_sign,
             core_global_prefactor_sign,
         } = generated;
         if !expression.residual_denominators.is_empty() {
@@ -735,7 +830,6 @@ impl Graph {
                 )
             })
             .collect();
-
         for orientation in expression.orientations.iter_mut() {
             let mut remapped_variants = Vec::with_capacity(orientation.variants.len());
             for mut variant in std::mem::take(&mut orientation.variants) {
@@ -748,21 +842,23 @@ impl Graph {
                         variant.prefactor *= Atom::num(-1);
                     }
                 }
-                if energy_factor_ownership == CffEnergyFactorOwnership::GlobalSourceProduct {
-                    // GammaLoop's CFF evaluator convention keeps the
-                    // on-shell-energy factors as one global product
-                    // 1/prod(-2E_i) for the ordinary CFF denominator sector. The
-                    // generalized numerator and causal powered-pole algorithms
-                    // instead attach those factors to individual variants.
-                    variant.half_edges.clear();
+                match energy_factor_ownership {
+                    CffEnergyFactorOwnership::GlobalSourceProduct => {
+                        // GammaLoop's CFF evaluator convention keeps the
+                        // on-shell-energy factors as one global product
+                        // 1/prod(-2E_i) for the ordinary CFF denominator sector.
+                        variant.half_edges.clear();
+                    }
+                    // Generalized variants retain their local positive-energy
+                    // factors. Their branch-relative denominator convention is
+                    // already consumed while each powered channel is lowered.
+                    CffEnergyFactorOwnership::VariantLocal => {}
                 }
                 for remapped_denominator in signed_denominators {
                     let mut signed_variant = variant.clone();
                     signed_variant.denominator = remapped_denominator.denominator;
                     signed_variant.denominator_surface_signs = remapped_denominator.surface_signs;
-                    if remapped_denominator.prefactor_sign < 0 {
-                        signed_variant.prefactor *= Atom::num(-1);
-                    }
+                    signed_variant.prefactor *= Atom::num(remapped_denominator.prefactor);
                     remapped_variants.push(signed_variant);
                 }
             }
@@ -779,6 +875,7 @@ impl Graph {
                 energy_factor_ownership,
                 energy_factor_components,
                 source_energy_degree_bounds,
+                denominator_only_global_prefactor_sign,
                 core_global_prefactor_sign,
             },
             mapped_surface_ownership,
@@ -967,7 +1064,8 @@ fn remap_denominator_tree_surface_ids(
         .collect::<BTreeMap<_, _>>();
 
     let mut chains_by_signature =
-        BTreeMap::<(i64, Vec<(HybridSurfaceID, i64)>), Vec<Vec<HybridSurfaceID>>>::new();
+        BTreeMap::<(i64, Vec<(HybridSurfaceID, i64)>), BTreeMap<Vec<HybridSurfaceID>, usize>>::new(
+        );
     for leaf in denominator.get_bottom_layer() {
         let mut sign = 1;
         let mut surface_signs = BTreeMap::<HybridSurfaceID, i64>::new();
@@ -994,12 +1092,14 @@ fn remap_denominator_tree_surface_ids(
         chains_by_signature
             .entry((sign, surface_signs.into_iter().collect()))
             .or_default()
-            .push(chain);
+            .entry(chain)
+            .and_modify(|multiplicity| *multiplicity += 1)
+            .or_insert(1);
     }
 
     if chains_by_signature.is_empty() {
         return vec![RemappedDenominatorTree {
-            prefactor_sign: 1,
+            prefactor: 1,
             surface_signs: BTreeMap::new(),
             denominator: Tree::from_root(HybridSurfaceID::Unit),
         }];
@@ -1007,13 +1107,28 @@ fn remap_denominator_tree_surface_ids(
 
     chains_by_signature
         .into_iter()
-        .map(
-            |((prefactor_sign, surface_signs), chains)| RemappedDenominatorTree {
-                prefactor_sign,
-                surface_signs: surface_signs.into_iter().collect(),
-                denominator: denominator_tree_from_chains(&chains),
-            },
-        )
+        .flat_map(|((prefactor_sign, surface_signs), chains)| {
+            // Surface projection is not injective: distinct occurrence-local
+            // chains can become the same physical chain. The tree shares
+            // equal branches structurally, so retain their additive count in
+            // the variant prefactor and still factor chains with equal counts.
+            let mut chains_by_multiplicity = BTreeMap::<usize, Vec<Vec<HybridSurfaceID>>>::new();
+            for (chain, multiplicity) in chains {
+                chains_by_multiplicity
+                    .entry(multiplicity)
+                    .or_default()
+                    .push(chain);
+            }
+            chains_by_multiplicity
+                .into_iter()
+                .map(move |(multiplicity, chains)| RemappedDenominatorTree {
+                    prefactor: prefactor_sign
+                        * i64::try_from(multiplicity)
+                            .expect("denominator-chain multiplicity should fit in i64"),
+                    surface_signs: surface_signs.iter().copied().collect(),
+                    denominator: denominator_tree_from_chains(&chains),
+                })
+        })
         .collect()
 }
 
@@ -1116,7 +1231,7 @@ mod tests {
     use crate::{
         dot,
         graph::{
-            FeynmanGraph, FourDDenominator,
+            ExactUvSubLmbFrame, FeynmanGraph, FourDDenominator,
             cuts::{CutSet, LuCutSelection},
             parse::from_dot::IntoGraph,
         },
@@ -1130,9 +1245,108 @@ mod tests {
     use three_dimensional_reps::{MomentumSignature, graph_io::ParsedGraphInternalEdge};
 
     #[test]
-    fn exact_cff_batch_joins_repeated_energy_channel_capacity_without_inflation() -> Result<()> {
+    fn projected_denominator_chains_preserve_occurrence_multiplicity() {
+        let local_surfaces = [0, 1, 2, 3].map(LinearSurfaceID);
+        let physical_surfaces = [
+            HybridSurfaceID::Esurface(EsurfaceID(0)),
+            HybridSurfaceID::Esurface(EsurfaceID(1)),
+            HybridSurfaceID::Esurface(EsurfaceID(2)),
+        ];
+        let denominator = denominator_tree_from_chains(&[
+            vec![HybridSurfaceID::Linear(local_surfaces[0])],
+            vec![HybridSurfaceID::Linear(local_surfaces[1])],
+            vec![HybridSurfaceID::Linear(local_surfaces[2])],
+            vec![HybridSurfaceID::Linear(local_surfaces[3])],
+        ]);
+        let surface_map = BTreeMap::from([
+            (
+                local_surfaces[0],
+                SurfaceMapEntry {
+                    surface_id: physical_surfaces[0],
+                    sign: 1,
+                },
+            ),
+            (
+                local_surfaces[1],
+                SurfaceMapEntry {
+                    surface_id: physical_surfaces[0],
+                    sign: 1,
+                },
+            ),
+            (
+                local_surfaces[2],
+                SurfaceMapEntry {
+                    surface_id: physical_surfaces[1],
+                    sign: 1,
+                },
+            ),
+            (
+                local_surfaces[3],
+                SurfaceMapEntry {
+                    surface_id: physical_surfaces[2],
+                    sign: 1,
+                },
+            ),
+        ]);
+
+        let remapped = remap_denominator_tree_surface_ids(&denominator, &surface_map);
+        let actual = remapped.iter().fold(Atom::new(), |sum, term| {
+            sum + Atom::num(term.prefactor) * term.denominator.to_atom_inv()
+        });
+        let expected = Atom::num(2) / Atom::from(physical_surfaces[0])
+            + Atom::num(1) / Atom::from(physical_surfaces[1])
+            + Atom::num(1) / Atom::from(physical_surfaces[2]);
+
+        assert!(
+            (actual.clone() - expected).expand().is_zero(),
+            "projecting distinct local chains onto one physical chain lost multiplicity: {actual}"
+        );
+        assert_eq!(remapped.len(), 2);
+        assert_eq!(
+            remapped
+                .iter()
+                .find(|term| term.prefactor == 1)
+                .expect("unit-multiplicity chains should stay factorized")
+                .denominator
+                .get_bottom_layer()
+                .len(),
+            2,
+        );
+        assert!(remapped.iter().all(|term| term.surface_signs.is_empty()));
+
+        let negative_map = BTreeMap::from([
+            (
+                local_surfaces[0],
+                SurfaceMapEntry {
+                    surface_id: physical_surfaces[0],
+                    sign: -1,
+                },
+            ),
+            (
+                local_surfaces[1],
+                SurfaceMapEntry {
+                    surface_id: physical_surfaces[0],
+                    sign: -1,
+                },
+            ),
+        ]);
+        let negative_denominator = denominator_tree_from_chains(&[
+            vec![HybridSurfaceID::Linear(local_surfaces[0])],
+            vec![HybridSurfaceID::Linear(local_surfaces[1])],
+        ]);
+        let negative = remap_denominator_tree_surface_ids(&negative_denominator, &negative_map);
+        assert_eq!(negative.len(), 1);
+        assert_eq!(negative[0].prefactor, -2);
+        assert_eq!(
+            negative[0].surface_signs,
+            BTreeMap::from([(physical_surfaces[0], -1)])
+        );
+    }
+
+    #[test]
+    fn exact_cff_batch_joins_channel_totals_and_singleton_maxima() -> Result<()> {
         let parsed = ParsedGraph {
-            internal_edges: (0..2)
+            internal_edges: (0..3)
                 .map(|edge_id| ParsedGraphInternalEdge {
                     edge_id,
                     tail: edge_id,
@@ -1154,10 +1368,114 @@ mod tests {
         };
 
         assert_eq!(
-            ExactCffGenerationCache::join_local_bounds(&parsed, &[(0, 2)], &[(1, 2)])?,
-            vec![(0, 1), (1, 1)],
-            "equivalent dotted occurrences share one total energy-channel capacity"
+            ExactCffGenerationCache::join_local_bounds(
+                &parsed,
+                &[vec![1, 0]],
+                &[(0, 2), (2, 1)],
+                &[(1, 2), (2, 3)],
+            )?,
+            vec![(0, 1), (1, 1), (2, 3)],
+            "a repeated channel keeps only its maximum total degree, while a singleton keeps its componentwise maximum",
         );
+        assert_eq!(
+            ExactCffGenerationCache::join_local_bounds(&parsed, &[vec![1, 0]], &[(1, 3)], &[],)?,
+            vec![(0, 2), (1, 1)],
+            "odd channel capacity is minimax-redistributed in canonical local-edge order",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn exact_cff_batch_reuses_owner_relabelled_sub_lmb_topology() -> Result<()> {
+        test_initialise()?;
+        let graph: Graph = dot!(digraph exact_owner_relabelled_cache {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+        })?;
+        let denominators = [EdgeIndex(0), EdgeIndex(1)].map(|source_edge| FourDDenominator {
+            source_edge,
+            momentum: FunctionBuilder::new(GS.emr_mom)
+                .add_arg(usize::from(source_edge))
+                .finish(),
+            mass_squared: graph.underlying[source_edge].mass_atom().pow(2),
+            full_expr: Atom::one(),
+        });
+        let mut relabelled = denominators.clone();
+        relabelled[1].source_edge = EdgeIndex(0);
+        let source = GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+            &graph,
+            &denominators,
+            [EdgeIndex(0), EdgeIndex(1)],
+            [],
+            &graph.loop_momentum_basis,
+            ExactUvSubLmbFrame::TaylorVacuum,
+        )?;
+        let relabelled_source = GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
+            &graph,
+            &relabelled,
+            [EdgeIndex(0), EdgeIndex(1)],
+            [],
+            &graph.loop_momentum_basis,
+            ExactUvSubLmbFrame::TaylorVacuum,
+        )?;
+        let parsed = source.to_three_d_parsed_graph()?;
+        let relabelled_parsed = relabelled_source.to_three_d_parsed_graph()?;
+        let energy_edges = source
+            .energy_edge_index_map(&parsed)
+            .expect("exact source has an occurrence-local energy map");
+        let relabelled_energy_edges = relabelled_source
+            .energy_edge_index_map(&relabelled_parsed)
+            .expect("relabelled exact source has an occurrence-local energy map");
+        let options = graph.denominator_only_cff_3d_expression_options();
+
+        assert_eq!(energy_edges, relabelled_energy_edges);
+        assert_eq!(
+            ExactCffGenerationCache::source_repeated_channels(&source, &energy_edges)?,
+            vec![vec![0, 1]],
+            "algebraically equal occurrences with distinct physical owners share one source-certified channel",
+        );
+        assert_eq!(
+            ExactCffGenerationCache::source_repeated_channels(
+                &relabelled_source,
+                &relabelled_energy_edges,
+            )?,
+            vec![vec![0, 1]],
+            "compatible owner relabelling must preserve the canonical channel partition",
+        );
+        assert_eq!(
+            ExactCffGenerationCache::topology_key(&parsed, &energy_edges, &options),
+            ExactCffGenerationCache::topology_key(
+                &relabelled_parsed,
+                &relabelled_energy_edges,
+                &options,
+            ),
+            "physical owner provenance must not enter the canonical exact-CFF cache key",
+        );
+
+        let mut cache = ExactCffGenerationCache::default();
+        graph.register_3d_expression_for_4d_term(&source, &options, &Atom::one(), &mut cache)?;
+        graph.register_3d_expression_for_4d_term(
+            &relabelled_source,
+            &options,
+            &Atom::one(),
+            &mut cache,
+        )?;
+        graph.generate_3d_expression_for_4d_term(
+            &source,
+            &options,
+            &Atom::one(),
+            Some(&mut cache),
+        )?;
+        graph.generate_3d_expression_for_4d_term(
+            &relabelled_source,
+            &options,
+            &Atom::one(),
+            Some(&mut cache),
+        )?;
+        assert_eq!(cache.len(), 1);
         Ok(())
     }
 
@@ -1266,8 +1584,8 @@ mod tests {
                 ext_out [style=invis]
                 ext_in -> A [id=4]
                 C -> ext_out [id=5]
-                A -> B [id=0 num="(Q(0,spenso::cind(0))+1)*(Q(1,spenso::cind(0))+2)"]
-                B -> C [id=1 num=1]
+                A -> B [id=0 num="Q(0,spenso::cind(0))+1"]
+                B -> C [id=1 num="Q(1,spenso::cind(0))+2"]
                 C -> D [id=2]
                 D -> A [id=3]
             },
@@ -1470,9 +1788,17 @@ mod tests {
             std::iter::empty(),
             &candidates,
         )?;
+        let assigned_occurrence = source
+            .physical_energy_edge_index_map()
+            .expect("exact source has a physical occurrence map")
+            .internal
+            .into_iter()
+            .find_map(|(occurrence, owner)| (owner == 1).then_some(occurrence))
+            .expect("the physical numerator carrier has one exact occurrence");
         assert_eq!(
             plan.energy_degree_bounds(),
-            &[(graph.underlying.n_edges(), 2)]
+            &[(assigned_occurrence, 2)],
+            "canonical exact-edge IDs may change, but the quadratic bound must remain on the occurrence owned by physical edge 1",
         );
 
         let (exact, _) =

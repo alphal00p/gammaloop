@@ -80,7 +80,8 @@ use super::{
     GraphTerm, GraphTermEvaluationContext, LmbMultiChannelingSetup, ProcessIntegrandImpl,
     RuntimeCache, create_grid, evaluate_sample, filtered_orientation_count,
     format_lmb_channel_label, format_orientation_label, histogram_process_info_for_integrand,
-    prepare_buffered_event, resolve_visible_orientation_id, validate_process_runtime_settings,
+    prepare_buffered_event, resolve_visible_orientation_id, validate_group_orientation_catalogs,
+    validate_process_runtime_settings,
 };
 
 #[derive(Clone, Encode, Decode)]
@@ -88,6 +89,7 @@ use super::{
 pub struct AmplitudeGraphTerm {
     pub original_integrand: EvaluatorStack,
     pub orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
+    production_orientation_keys: Vec<String>,
     pub orientation_filter: SubSet<OrientationID>,
     pub explicit_orientation_sum_only: bool,
     pub esurfaces: EsurfaceCollection,
@@ -137,42 +139,52 @@ impl AmplitudeGraphTerm {
             return Err(eyre!("Generation interrupted by user"));
         }
         let mut stats = GraphGenerationStats::default();
-        let selected_generation_orientations = graph
+        let production_orientation_ids = graph
             .derived_data
             .cff_expression
             .as_ref()
             .unwrap()
             .expression
             .orientations
-            .iter()
-            .filter(|orientation| {
-                settings.generation.explicit_orientation_sum_only
-                    || settings.generation.orientation_pattern.filter(*orientation)
+            .iter_enumerated()
+            .filter_map(|(orientation_id, orientation)| {
+                settings
+                    .generation
+                    .explicit_orientation_sum_only
+                    .then_some(orientation_id)
+                    .or_else(|| {
+                        settings
+                            .generation
+                            .orientation_pattern
+                            .filter(orientation)
+                            .then_some(orientation_id)
+                    })
             })
             .collect_vec();
-        // Generalized numerator sampling adds contact maps with under-resolved
-        // directions and can repeat a physical orientation with distinct
-        // numerator maps. Those maps remain in the expression, while runtime
-        // orientation sampling must expose each maximally resolved physical
-        // direction exactly once.
-        let resolved_edges = selected_generation_orientations
+        let selected_generation_orientations = production_orientation_ids
             .iter()
-            .flat_map(|orientation| orientation.data.orientation.iter())
-            .filter_map(|(edge_id, orientation)| {
-                (*orientation != Orientation::Undirected).then_some(edge_id)
+            .map(|orientation_id| {
+                &graph
+                    .derived_data
+                    .cff_expression
+                    .as_ref()
+                    .unwrap()
+                    .expression
+                    .orientations[*orientation_id]
             })
-            .collect::<HashSet<_>>();
+            .collect_vec();
+        // Every generalized residue map is a separate runtime channel. Its
+        // physical directions are metadata and therefore must not deduplicate
+        // maps that differ only by numerator/M sampling data.
         let orientations: TiVec<OrientationID, EdgeVec<Orientation>> =
             selected_generation_orientations
                 .iter()
-                .filter(|orientation| {
-                    resolved_edges.iter().all(|edge_id| {
-                        orientation.data.orientation[*edge_id] != Orientation::Undirected
-                    })
-                })
                 .map(|orientation| orientation.data.orientation.clone())
-                .unique()
                 .collect();
+        let production_orientation_keys = selected_generation_orientations
+            .iter()
+            .map(|orientation| orientation.residue_map_key())
+            .collect_vec();
         crate::debug_tags!(#generation, #profile, #compile, #graph, #orientation, #summary;
             stage = "amplitude_graph_term_orientations_done",
             graph = %graph.graph.name,
@@ -273,6 +285,7 @@ impl AmplitudeGraphTerm {
                     &[&graph.derived_data.all_mighty_integrand],
                     &graph.graph.param_builder,
                     orientations.as_slice().as_ref(),
+                    &production_orientation_ids,
                     None,
                     &settings.generation.evaluator,
                 )?
@@ -342,6 +355,7 @@ impl AmplitudeGraphTerm {
             let (evaluator, evaluator_timings) = masked_counterterm.to_evaluator_with_timings(
                 &graph.graph.param_builder,
                 &orientations,
+                &production_orientation_ids,
                 settings,
             );
             crate::debug_tags!(#generation, #profile, #compile, #graph, #summary;
@@ -399,6 +413,7 @@ impl AmplitudeGraphTerm {
             AmplitudeGraphTerm {
                 orientation_filter: SubSet::full(orientations.len()),
                 orientations,
+                production_orientation_keys,
                 explicit_orientation_sum_only: settings.generation.explicit_orientation_sum_only,
                 original_integrand,
                 tropical_sampler: graph.derived_data.tropical_sampler.clone(),
@@ -977,6 +992,24 @@ impl GraphTerm for AmplitudeGraphTerm {
         }
 
         filtered_orientation_count(&self.orientation_filter, &self.orientations)
+    }
+
+    fn production_orientation_keys(&self) -> &[String] {
+        &self.production_orientation_keys
+    }
+
+    fn selected_production_orientation_keys(&self) -> Vec<&str> {
+        if self.orientation_filter.is_full() {
+            self.production_orientation_keys
+                .iter()
+                .map(String::as_str)
+                .collect()
+        } else {
+            self.orientation_filter
+                .included_iter()
+                .map(|id| self.production_orientation_keys[id.0].as_str())
+                .collect()
+        }
     }
 
     fn get_tropical_sampler(&self) -> &SampleGenerator<3> {
@@ -1819,6 +1852,11 @@ impl ProcessIntegrandImpl for AmplitudeIntegrand {
         for a in self.data.graph_terms.iter_mut() {
             a.warm_up(&self.settings, model)?;
         }
+        validate_group_orientation_catalogs(
+            &self.settings,
+            &self.data.graph_terms,
+            &self.data.graph_group_structure,
+        )?;
         let e_cm = F(self.settings.kinematics.e_cm);
         let constructor = DependentMomentaConstructor::Amplitude(&self.data.external_signature);
         let masses = self.data.graph_terms[0].graph.get_external_masses(model);

@@ -40,6 +40,7 @@ use typed_index_collections::TiVec;
 
 use crate::{
     GammaLoopContext,
+    cff::expression::OrientationID,
     cff::orientations::GraphOrientation,
     graph::Graph,
     integrands::{
@@ -57,7 +58,7 @@ use crate::{
         global::{CompilationOptimizationLevel, FrozenCompilationMode},
     },
     utils::{
-        ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, f128,
+        ArbPrec, F, FUN_LIB, FloatLike, GS, Length, TENSORLIB, W_, f128,
         hyperdual_utils::{DualOrNot, new_from_values},
     },
 };
@@ -275,6 +276,10 @@ impl Default for EvaluatorMethod {
 #[trait_decode(trait = GammaLoopContext)]
 pub struct EvaluatorStack {
     pub(crate) explicit_orientation_sum_only: bool,
+    /// Original generalized-3D-representation map key for each dense runtime
+    /// orientation channel. Physical edge directions alone do not identify a
+    /// raised-energy/contact residue map.
+    production_orientation_ids: Vec<OrientationID>,
     pub single_parametric: GenericEvaluator,
     pub iterative: Option<(GenericEvaluator, usize)>,
     // pub iterative_function_map: Option<GenericEvaluator>,
@@ -283,6 +288,18 @@ pub struct EvaluatorStack {
 }
 
 impl EvaluatorStack {
+    fn parametrize_residue_map_selectors<A: AtomCore>(atom: &A, selected_id: Atom) -> Atom {
+        atom.as_atom_view()
+            .replace(function!(OrientationID::symbol(), W_.a_))
+            .with(Symbol::IF.call_args([selected_id - Atom::var(W_.a_), Atom::Zero, Atom::one()]))
+    }
+
+    fn sum_residue_map_selectors<A: AtomCore>(atom: &A) -> Atom {
+        atom.as_atom_view()
+            .replace(function!(OrientationID::symbol(), W_.a_))
+            .with(Atom::one())
+    }
+
     pub(crate) fn generic_evaluator_count(&self) -> usize {
         let mut count = 1;
         if self.iterative.is_some() {
@@ -295,6 +312,10 @@ impl EvaluatorStack {
             count += 1;
         }
         count
+    }
+
+    pub(crate) fn production_orientation_ids(&self) -> &[OrientationID] {
+        &self.production_orientation_ids
     }
 
     #[instrument(skip_all)]
@@ -310,9 +331,12 @@ impl EvaluatorStack {
         let opt_settings = settings.optimization_settings();
 
         GenericEvaluator::new_from_builder(
-            parametric_atom
-                .iter()
-                .map(|atom| GS.collect_orientation_if(atom.as_atom_view())),
+            parametric_atom.iter().map(|atom| {
+                GS.collect_orientation_if(Self::parametrize_residue_map_selectors(
+                    atom,
+                    Atom::var(GS.residue_map_id),
+                ))
+            }),
             param_builder,
             dual_shape.clone(),
             opt_settings.clone(),
@@ -324,6 +348,7 @@ impl EvaluatorStack {
         parametric_atom: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
+        production_orientation_ids: &[OrientationID],
         dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(GenericEvaluator, usize)> {
@@ -334,11 +359,26 @@ impl EvaluatorStack {
         Ok((
             GenericEvaluator::new_from_builder(
                 parametric_atom.iter().flat_map(|atom| {
-                    orientations.iter().map(|a| {
-                        let selected = GS.collect_orientation_if(a.select(atom.as_atom_view()));
-                        debug!(selected_expr = %selected.log_print(None), "Iterative");
-                        selected
-                    })
+                    orientations.iter().zip(production_orientation_ids).map(
+                        |(orientation, production_id)| {
+                            // Select the complete residue-map entry before
+                            // resolving its physical-direction metadata. An
+                            // inactive entry may contain a selector-local
+                            // inverse which becomes `0^-1` in another entry's
+                            // physical sector; eliminating it afterwards is too
+                            // late because Symbolica has already formed
+                            // infinity.
+                            let selected = GS.collect_orientation_if(
+                                orientation.select(production_id.select(atom.as_atom_view())),
+                            );
+                            debug!(
+                                "Selected iterative residue-map branch {}: {}",
+                                production_id.0,
+                                selected.log_print(Some(240))
+                            );
+                            selected
+                        },
+                    )
                 }),
                 param_builder,
                 dual_shape.clone(),
@@ -354,19 +394,25 @@ impl EvaluatorStack {
         atoms: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
+        production_orientation_ids: &[OrientationID],
         dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
         let _progress_guard = crate::processes::enter_detailed_progress_span(
             "Generating Summed Function Map Evaluator",
         );
+        let first_orientation = orientations.first().ok_or_else(|| {
+            eyre!("summed function-map evaluator requires at least one residue-map orientation")
+        })?;
         let params: Vec<Atom> = (&param_builder.pairs)
             .into_iter()
             .flat_map(|p| p.params.clone())
             .collect();
         let mut fn_map = param_builder.fn_map.clone();
 
-        //I(sign(1), sign(2), sign(3),...) -> I(σ1, σ2, σ3,...)
+        // The exact residue-map key is an argument independent of physical
+        // edge signs: I(map_id, sign(1), sign(2), ...).
+        let residue_map_id_arg = symbol!("residue_map_id_arg");
 
         let entries: Vec<FnMapEntry> = atoms
             .iter()
@@ -375,11 +421,15 @@ impl EvaluatorStack {
                 let mut args = vec![];
                 let mut lhs = FunctionBuilder::new(GS.integrand);
                 lhs = lhs.add_arg(i);
-                for (e, _) in &orientations[0] {
+                lhs = lhs.add_arg(residue_map_id_arg);
+                args.push(residue_map_id_arg.into());
+                for (e, _) in first_orientation {
                     lhs = lhs.add_arg(GS.sign(e));
                     args.push(Indeterminate::try_from(GS.sign(e)).unwrap());
                 }
-                let param_integrand = GS.collect_orientation_if(a.as_atom_view());
+                let param_integrand = GS.collect_orientation_if(
+                    Self::parametrize_residue_map_selectors(a, Atom::var(residue_map_id_arg)),
+                );
                 fn_map
                     .add_tagged_function(
                         GS.integrand,
@@ -403,7 +453,10 @@ impl EvaluatorStack {
             .map(|i| {
                 orientations
                     .iter()
-                    .map(|orientation| GS.integrand(i, orientation))
+                    .zip(production_orientation_ids)
+                    .map(|(orientation, production_id)| {
+                        GS.integrand(i, *production_id, orientation)
+                    })
                     .fold(Atom::Zero, |acc, n| acc + n)
             })
             .collect::<Vec<_>>();
@@ -433,6 +486,7 @@ impl EvaluatorStack {
         atoms: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
+        production_orientation_ids: &[OrientationID],
         dual_shape: &Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<GenericEvaluator> {
@@ -441,8 +495,9 @@ impl EvaluatorStack {
         let sum = atoms.iter().map(|atom| {
             orientations
                 .iter()
-                .map(|orientation| {
-                    let selected = orientation.select(atom.as_atom_view());
+                .zip(production_orientation_ids)
+                .map(|(orientation, production_id)| {
+                    let selected = orientation.select(production_id.select(atom.as_atom_view()));
                     debug!(selected_expr = %selected.log_print(None), "Summed");
                     selected
                 })
@@ -464,7 +519,18 @@ impl EvaluatorStack {
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<Self> {
-        Ok(Self::new_with_timings(atoms, param_builder, orientations, dual_shape, settings)?.0)
+        let production_orientation_ids = (0..orientations.len())
+            .map(OrientationID)
+            .collect::<Vec<_>>();
+        Ok(Self::new_with_timings(
+            atoms,
+            param_builder,
+            orientations,
+            &production_orientation_ids,
+            dual_shape,
+            settings,
+        )?
+        .0)
     }
 
     pub(crate) fn new_explicit_sum_with_timings<A: AtomCore>(
@@ -478,8 +544,18 @@ impl EvaluatorStack {
         direct_settings.summed_function_map = false;
         direct_settings.summed = false;
 
-        let (mut stack, timings) =
-            Self::new_with_timings(atoms, param_builder, &[], dual_shape, &direct_settings)?;
+        let atoms = atoms
+            .iter()
+            .map(Self::sum_residue_map_selectors)
+            .collect::<Vec<_>>();
+        let (mut stack, timings) = Self::new_with_timings(
+            &atoms,
+            param_builder,
+            &[],
+            &[],
+            dual_shape,
+            &direct_settings,
+        )?;
         stack.explicit_orientation_sum_only = true;
         Ok((stack, timings))
     }
@@ -509,7 +585,9 @@ impl EvaluatorStack {
         let bodies = bodies
             .iter()
             .enumerate()
-            .map(|(body_index, body)| Self::preprocess_atom(body, body_index, settings))
+            .map(|(body_index, body)| {
+                Self::preprocess_atom(&Self::sum_residue_map_selectors(body), body_index, settings)
+            })
             .collect::<Result<Vec<_>>>()?;
         let spenso_time = spenso_started.elapsed();
 
@@ -757,9 +835,17 @@ impl EvaluatorStack {
         atoms: &[A],
         param_builder: &ParamBuilder,
         orientations: &[EdgeVec<Orientation>],
+        production_orientation_ids: &[OrientationID],
         dual_shape: Option<Vec<Vec<usize>>>,
         settings: &EvaluatorSettings,
     ) -> Result<(Self, EvaluatorBuildTimings)> {
+        if orientations.len() != production_orientation_ids.len() {
+            return Err(eyre!(
+                "runtime orientation catalog has {} physical entries but {} exact residue-map IDs",
+                orientations.len(),
+                production_orientation_ids.len()
+            ));
+        }
         let _progress_guard =
             crate::processes::enter_detailed_progress_span("Building Evaluator Stack");
         let started = std::time::Instant::now();
@@ -804,6 +890,7 @@ impl EvaluatorStack {
                     &parsed_atoms,
                     param_builder,
                     orientations,
+                    production_orientation_ids,
                     &dual_shape,
                     settings,
                 )
@@ -829,6 +916,7 @@ impl EvaluatorStack {
                     &parsed_atoms,
                     param_builder,
                     orientations,
+                    production_orientation_ids,
                     &dual_shape,
                     settings,
                 )
@@ -854,6 +942,7 @@ impl EvaluatorStack {
                     &parsed_atoms,
                     param_builder,
                     orientations,
+                    production_orientation_ids,
                     &dual_shape,
                     settings,
                 )
@@ -897,6 +986,7 @@ impl EvaluatorStack {
         Ok((
             EvaluatorStack {
                 explicit_orientation_sum_only: false,
+                production_orientation_ids: production_orientation_ids.to_vec(),
                 single_parametric,
                 iterative,
                 summed_function_map,
@@ -918,6 +1008,7 @@ impl EvaluatorStack {
     {
         let mut result: Option<Vec<DualOrNot<Complex<F<T>>>>> = None;
         for (orientation_id, e) in orientations.iter() {
+            input.set_residue_map_id(self.production_orientation_ids[usize::from(orientation_id)]);
             input.set_orientation_values(e);
             let output = evaluate_evaluator(
                 &mut self.single_parametric,
@@ -1635,11 +1726,19 @@ pub enum SliceMut<'a, T: FloatLike> {
 
 pub struct InputParams<'a, T: FloatLike> {
     pub values: SliceMut<'a, T>,
+    pub residue_map_id_start: usize,
     pub orientations_start: usize,
     pub multiplicative_offset: usize,
 }
 
 impl<'a, T: FloatLike> InputParams<'a, T> {
+    pub(crate) fn set_residue_map_id(&mut self, id: OrientationID) {
+        let zero = F(T::from_f64(0.));
+        let value = Complex::new_re(zero.from_usize(id.0));
+        let index = self.residue_map_id_start * self.multiplicative_offset;
+        self.as_mut_slice()[index] = value;
+    }
+
     pub(crate) fn set_orientation_values_impl<A: Clone + Neg<Output = A>, O: GraphOrientation>(
         values: &mut [A],
         one: A,
@@ -1984,14 +2083,117 @@ impl GenericEvaluatorFloat for ArbPrec {
 mod tests {
     use std::io::Cursor;
 
-    use idenso::{color::CS, dirac::AGS, representations::Bispinor};
+    use idenso::{dirac::AGS, representations::Bispinor};
     use linnet::half_edge::involution::EdgeIndex;
     use spenso::{network::tags::SPENSO_TAG, structure::representation::RepName};
     use symbolica::{atom::Symbol, parse_lit, state::State};
 
-    use crate::{GammaLoopContextContainer, initialisation::test_initialise, model::Model};
+    use crate::{
+        GammaLoopContextContainer, initialisation::test_initialise,
+        integrands::process::param_builder::ParamValuePairs, model::Model,
+    };
 
     use super::*;
+
+    fn scalar_value(result: Vec<DualOrNot<Complex<F<f64>>>>) -> Complex<F<f64>> {
+        let [DualOrNot::NonDual(value)] = result.as_slice() else {
+            panic!("expected one scalar evaluator output")
+        };
+        value.clone()
+    }
+
+    #[test]
+    fn exact_residue_map_keys_distinguish_duplicate_and_undirected_orientations() {
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.residue_map_id = ParamValuePairs::default_from_symbol(GS.residue_map_id);
+        builder.pairs.orientations = [GS.sign(EdgeIndex(0)), GS.sign(EdgeIndex(1))]
+            .into_iter()
+            .collect();
+        let parameter_count = builder.pairs.update_ranges();
+        builder.values = vec![vec![Complex::new_re(F(0.0)); parameter_count]];
+
+        let orientations = TiVec::<OrientationID, _>::from_iter([
+            EdgeVec::from_iter([Orientation::Reversed, Orientation::Undirected]),
+            EdgeVec::from_iter([Orientation::Default, Orientation::Undirected]),
+            EdgeVec::from_iter([Orientation::Default, Orientation::Undirected]),
+            EdgeVec::from_iter([Orientation::Undirected, Orientation::Undirected]),
+        ]);
+        let production_ids = [
+            OrientationID(4),
+            OrientationID(9),
+            OrientationID(12),
+            OrientationID(15),
+        ];
+        // The first entry owns the inverse selector in its reversed physical
+        // sector. Selecting a default-oriented key must discard that complete
+        // entry before resolving the physical selector; otherwise the inactive
+        // inverse becomes `0^-1` and contaminates the selected expression.
+        let reversed_selector_inverse =
+            GS.sign_theta(-GS.sign(EdgeIndex(0))).pow(-1);
+        let atom = production_ids[0].atom() * Atom::num(2) * reversed_selector_inverse
+            + production_ids[1].atom() * Atom::num(3)
+            + production_ids[2].atom() * Atom::num(5)
+            + production_ids[3].atom() * Atom::num(7);
+        let mut evaluator_settings = EvaluatorSettings::default();
+        evaluator_settings.summed = true;
+        evaluator_settings.summed_function_map = true;
+        let (mut stack, _) = EvaluatorStack::new_with_timings(
+            &[atom],
+            &builder,
+            &orientations.raw,
+            &production_ids,
+            None,
+            &evaluator_settings,
+        )
+        .unwrap();
+
+        let make_input = || InputParams {
+            values: SliceMut::Owned(vec![Complex::new_re(F(0.0)); parameter_count]),
+            residue_map_id_start: builder.pairs.residue_map_id.value_range.start,
+            orientations_start: builder.pairs.orientations.value_range.start,
+            multiplicative_offset: 1,
+        };
+        let mut metadata = EvaluationMetaData::new_empty();
+        for (runtime_id, expected) in [2.0, 3.0, 5.0, 7.0].into_iter().enumerate() {
+            let actual = stack.evaluate_parametric(
+                make_input(),
+                SingleOrAllOrientations::Single {
+                    orientation: &orientations[OrientationID(runtime_id)],
+                    id: OrientationID(runtime_id),
+                },
+                &mut metadata,
+                false,
+            );
+            assert_eq!(scalar_value(actual), Complex::new_re(F(expected)));
+        }
+
+        let filter = SubSet::full(orientations.len());
+        let all = SingleOrAllOrientations::All {
+            all: &orientations,
+            filter: &filter,
+        };
+        assert_eq!(
+            scalar_value(stack.evaluate_parametric(make_input(), all, &mut metadata, false)),
+            Complex::new_re(F(17.0))
+        );
+
+        for method in [
+            EvaluatorMethod::Iterative,
+            EvaluatorMethod::SummedFunctionMap,
+            EvaluatorMethod::Summed,
+        ] {
+            let mut runtime_settings = RuntimeSettings::default();
+            runtime_settings.general.evaluator_method = method;
+            assert_eq!(
+                scalar_value(
+                    stack
+                        .evaluate(make_input(), all, &runtime_settings, &mut metadata, false,)
+                        .unwrap()
+                ),
+                Complex::new_re(F(17.0))
+            );
+        }
+    }
 
     #[test]
     fn deferred_explicit_sum_lowering_is_local_and_matches_materialized_value() {
@@ -2020,6 +2222,69 @@ mod tests {
         )(&[]);
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn parameterless_deferred_body_preserves_multiparameter_hyperdual_derivatives() {
+        let x = Atom::var(symbol!("evaluator_test::deferred_dual_x"));
+        let y = Atom::var(symbol!("evaluator_test::deferred_dual_y"));
+        let body = &x * &x + &x * &y + Atom::num(3) * &y;
+        let call = function!(GS.projected_cff_sum, 0);
+        let entry = FnMapEntry {
+            lhs: call.clone(),
+            rhs: body.clone(),
+            args: Vec::new(),
+            tags: vec![Atom::num(0)],
+        };
+        let mut function_map = FunctionMap::default();
+        function_map
+            .add_tagged_function(
+                GS.projected_cff_sum,
+                vec![Atom::num(0)],
+                Vec::<Indeterminate>::new(),
+                body.clone(),
+            )
+            .unwrap();
+        let dual_shape = Some(crate::utils::hyperdual_utils::simple_n_deriv_shape(1));
+        let settings = EvaluatorSettings::default();
+        let mut deferred = GenericEvaluator::new_from_raw_params(
+            [call],
+            &[x.clone(), y.clone()],
+            &function_map,
+            vec![entry],
+            OptimizationSettings::default(),
+            dual_shape.clone(),
+            &settings,
+        )
+        .unwrap();
+        let mut materialized = GenericEvaluator::new_from_raw_params(
+            [body],
+            &[x, y],
+            &FunctionMap::default(),
+            vec![],
+            OptimizationSettings::default(),
+            dual_shape,
+            &settings,
+        )
+        .unwrap();
+        let input = [
+            Complex::new_re(F(2.0)),
+            Complex::new_re(F(7.0)),
+            Complex::new_re(F(5.0)),
+            Complex::new_re(F(11.0)),
+        ];
+        let actual = <f64 as GenericEvaluatorFloat>::get_evaluator(&mut deferred)(&input);
+        let expected = <f64 as GenericEvaluatorFloat>::get_evaluator(&mut materialized)(&input);
+
+        let [DualOrNot::Dual(actual)] = actual.as_slice() else {
+            panic!("deferred evaluator did not return the requested dual output")
+        };
+        let [DualOrNot::Dual(expected)] = expected.as_slice() else {
+            panic!("materialized evaluator did not return the requested dual output")
+        };
+        assert_eq!(actual.values, expected.values);
+        assert_eq!(actual.values[0], Complex::new_re(F(29.0)));
+        assert_eq!(actual.values[1], Complex::new_re(F(118.0)));
     }
 
     #[test]
@@ -2239,11 +2504,21 @@ mod tests {
 
     #[test]
     fn pi_eval() {
-        let params = vec![parse!("x"), parse!("y")];
-        let _evaluator = (parse!("x + y") + Symbol::PI / CS.cf)
-            .evaluator(&params)
-            .build()
-            .unwrap();
-        // assert_eq!(evaluator.evaluate_single(&[1.0, 2.0]), 3.0);
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            [Atom::var(Symbol::PI)],
+            &[],
+            &FunctionMap::default(),
+            vec![],
+            OptimizationSettings::default(),
+            None,
+            &EvaluatorSettings::default(),
+        )
+        .unwrap();
+        // The built-in constant must be created in the active numeric domain;
+        // otherwise precision escalation merely pads an f64 approximation.
+        let actual = <ArbPrec as GenericEvaluatorFloat>::get_evaluator_single(&mut evaluator)(&[]);
+        let zero = F(ArbPrec::default());
+        let expected = Complex::new_re(zero.PI());
+        assert!((actual - expected).norm().re <= zero.epsilon());
     }
 }

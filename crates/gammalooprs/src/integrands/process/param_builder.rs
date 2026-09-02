@@ -158,7 +158,8 @@ define_gamma_loop_pairs! {
     renormalization_localization_scale,
     mu_r_sq,
     numerator_sampling_scale,
-    orientations,
+    pub(crate) residue_map_id,
+    pub(crate) orientations,
     pub model_parameters,
     pub external_energies,
     external_spatial,
@@ -198,6 +199,8 @@ impl GammaLoopPairs {
         self.mu_r_sq.validate();
         debug!("Validating numerator_sampling_scale");
         self.numerator_sampling_scale.validate();
+        debug!("Validating residue_map_id");
+        self.residue_map_id.validate();
         debug!("Validating model_parameters");
         self.model_parameters.validate();
         debug!("Validating external_energies");
@@ -256,6 +259,7 @@ impl GammaLoopPairs {
             numerator_sampling_scale: ParamValuePairs::default_from_symbol(
                 GS.numerator_sampling_scale,
             ),
+            residue_map_id: ParamValuePairs::default_from_symbol(GS.residue_map_id),
             tstar: ParamValuePairs::default_from_symbol(GS.rescale_star),
             radius_left: ParamValuePairs::default_from_symbol(GS.radius_left),
             radius_right: ParamValuePairs::default_from_symbol(GS.radius_right),
@@ -817,6 +821,7 @@ impl UpdateAndGetParams<f64> for ParamBuilder<f64> {
         InputParams {
             values: SliceMut::Borrowed(&mut self.values[value_index]),
             multiplicative_offset,
+            residue_map_id_start: self.pairs.residue_map_id.value_range.start,
             orientations_start: self.pairs.orientations.value_range.start,
         }
     }
@@ -911,6 +916,7 @@ impl UpdateAndGetParams<f128> for ParamBuilder<f64> {
         InputParams {
             values: SliceMut::Owned(values),
             multiplicative_offset,
+            residue_map_id_start: self.pairs.residue_map_id.value_range.start,
             orientations_start: self.pairs.orientations.value_range.start,
         }
     }
@@ -1008,6 +1014,7 @@ impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
         InputParams {
             values: SliceMut::Owned(values),
             multiplicative_offset,
+            residue_map_id_start: self.pairs.residue_map_id.value_range.start,
             orientations_start: self.pairs.orientations.value_range.start,
         }
     }
@@ -1252,10 +1259,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             symbol!("x").to_atom(),
         )
         .unwrap();
-        let pi_rational = Rational::try_from(std::f64::consts::PI).unwrap();
-
         // new.fn_map.add_conditional(GS.orientation_if);
-        new.add_constant(GS.pi.into(), pi_rational.into());
         new.add_constant(CS.cf.into(), Rational::new(4, 3).into());
         new.add_constant(CS.ca.into(), Rational::new(3, 1).into());
         new.add_constant(CS.nc.into(), Rational::new(3, 1).into());

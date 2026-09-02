@@ -46,7 +46,7 @@ use crate::{
     utils::load_generic_model,
 };
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView},
     function, parse,
 };
 
@@ -1603,6 +1603,159 @@ subtraction:
     force_global_center: null
     try_origin: false
     try_origin_all_lmbs: false";
+
+#[test]
+fn loop_energy_dod_replaces_four_dimensional_measure_by_one_power_per_loop() {
+    test_initialise().unwrap();
+
+    let model = load_generic_model("scalars");
+    let source = include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot");
+    let graph: Graph = source.into_graph(&model).unwrap();
+    let cycle = graph
+        .spinneys(&graph.no_dummy())
+        .into_iter()
+        .find(|cycle| !cycle.is_empty())
+        .expect("the scalar bubble has one loop-active cycle union")
+        .filter;
+
+    assert_eq!(graph.n_loops(&cycle), 1);
+    assert_eq!(graph.compute_dod(&cycle), 2);
+    assert_eq!(graph.compute_energy_dod(&cycle), -1);
+    graph
+        .ensure_energy_convergent_cycles(&graph.no_dummy())
+        .unwrap();
+
+    let marginal_source = source.replacen(
+        "Q(2,spenso::mink(4,edge(2,1)))",
+        "Q(2,spenso::cind(0))*Q(2,spenso::mink(4,edge(2,1)))",
+        1,
+    );
+    let marginal: Graph = marginal_source.into_graph(&model).unwrap();
+    let marginal_cycle = marginal
+        .spinneys(&marginal.no_dummy())
+        .into_iter()
+        .find(|cycle| !cycle.is_empty())
+        .expect("the marginal scalar bubble has one loop-active cycle union")
+        .filter;
+
+    assert_eq!(marginal.compute_dod(&marginal_cycle), 3);
+    assert_eq!(marginal.compute_energy_dod(&marginal_cycle), 0);
+    let error = marginal
+        .ensure_energy_convergent_cycles(&marginal.no_dummy())
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("DOD_4D=3"), "{error}");
+    assert!(error.contains("DOD_E=0"), "{error}");
+
+    let mut amplitude = AmplitudeGraph::new(marginal);
+    let generation_error = amplitude
+        .generate_cff(&GenerationSettings::default())
+        .unwrap_err()
+        .to_string();
+    assert!(generation_error.contains("DOD_E=0"), "{generation_error}");
+}
+
+#[test]
+fn production_energy_gate_includes_factorized_global_numerator() {
+    test_initialise().unwrap();
+
+    let model = load_generic_model("scalars");
+    let source = include_str!("../../../../tests/resources/graphs/scalar/dod2_bubble.dot");
+    let graph: Graph = source.into_graph(&model).unwrap();
+    let q0 = function!(GS.emr_mom, 2, GS.cind(0));
+    let convergent_numerator = (&q0 + Atom::one()) * (&q0 + Atom::num(2));
+    let convergent = graph.with_global_numerator_only(
+        "factorized_global_quadratic".to_string(),
+        convergent_numerator.clone(),
+    );
+    let cycle = convergent
+        .all_cycle_unions(&convergent.no_dummy())
+        .into_iter()
+        .find(|cycle| !cycle.is_empty())
+        .expect("the scalar bubble has one loop-active cycle union")
+        .filter;
+
+    // The existing UV DOD remains local to edge and vertex rules.  Only the
+    // production gate sees the separately stored factors multiplied at
+    // runtime: the quadratic global numerator leaves DOD_E=-1.
+    assert_eq!(convergent.compute_dod(&cycle), 0);
+    assert_eq!(convergent.compute_energy_dod(&cycle), -3);
+    convergent
+        .ensure_energy_convergent_cycles(&convergent.no_dummy())
+        .unwrap();
+    assert_eq!(convergent.global_prefactor.num, convergent_numerator);
+    assert_eq!(
+        convergent.production_numerator_atom_for_full_3d_expression(),
+        convergent_numerator,
+    );
+
+    let divergent_numerator = convergent_numerator * (&q0 + Atom::num(3));
+    let divergent = graph.with_global_numerator_only(
+        "factorized_global_cubic".to_string(),
+        divergent_numerator.clone(),
+    );
+    let error = divergent
+        .ensure_energy_convergent_cycles(&divergent.no_dummy())
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("DOD_4D=3"), "{error}");
+    assert!(error.contains("DOD_E=0"), "{error}");
+    assert_eq!(divergent.global_prefactor.num, divergent_numerator);
+    let production_numerator = divergent.production_numerator_atom_for_full_3d_expression();
+    assert_eq!(production_numerator, divergent_numerator);
+    assert!(matches!(production_numerator.as_view(), AtomView::Mul(_)));
+
+    let mut amplitude = AmplitudeGraph::new(divergent);
+    let generation_error = amplitude
+        .generate_cff(&GenerationSettings::default())
+        .unwrap_err()
+        .to_string();
+    assert!(generation_error.contains("DOD_E=0"), "{generation_error}");
+}
+
+#[test]
+fn production_energy_gate_rejects_denominator_cancelling_r_contact() {
+    test_initialise().unwrap();
+
+    // Diagnostic-only version of the former lower-sector derivative fixture:
+    // one r denominator and three q denominators carry the factor q0^2-r0^2.
+    // Along the r-only cycle (q fixed), r0^2/Dr leaves a constant and therefore
+    // has DOD_E=1. It is not a valid finite-pole oracle.
+    let graph: Graph = dot!(
+        digraph energy_divergent_r_contact {
+            edge [particle=scalar_1]
+            node [num=1]
+            e [style=invis]
+            e -> A:0 [id=4]
+            A:1 -> e [id=5]
+            A -> A [id=0]
+            A -> B [id=1]
+            B -> C [id=2]
+            C -> A [id=3]
+        },
+        "scalars"
+    )
+    .unwrap();
+    let r0 = function!(GS.emr_mom, 0, GS.cind(0));
+    let q0 = function!(GS.emr_mom, 1, GS.cind(0));
+    let divergent = graph.with_global_numerator_only(
+        "diagnostic_denominator_cancelling_r_contact".to_string(),
+        q0.pow(2) - r0.pow(2),
+    );
+
+    let error = divergent
+        .ensure_energy_convergent_cycles(&divergent.no_dummy())
+        .unwrap_err()
+        .to_string();
+    assert!(error.contains("DOD_E=1"), "{error}");
+
+    let mut amplitude = AmplitudeGraph::new(divergent);
+    let generation_error = amplitude
+        .generate_cff(&GenerationSettings::default())
+        .unwrap_err()
+        .to_string();
+    assert!(generation_error.contains("DOD_E=1"), "{generation_error}");
+}
 
 mod failing {
     use super::*;

@@ -672,6 +672,7 @@ impl LUCounterTermEvaluators {
         param_builder: &ParamBuilder,
         settings: &GlobalSettings,
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+        production_orientation_ids: &[OrientationID],
     ) -> (BTreeMap<CutCFFIndex, EvaluatorStack>, EvaluatorBuildTimings) {
         let mut timings = EvaluatorBuildTimings::default();
         let evaluators = parametric_integrands
@@ -704,6 +705,7 @@ impl LUCounterTermEvaluators {
                             std::slice::from_ref(atom),
                             param_builder,
                             &orientations.raw,
+                            production_orientation_ids,
                             dual_shape,
                             &settings.generation.evaluator,
                         )
@@ -748,6 +750,7 @@ impl LUCounterTermEvaluators {
         param_builder: &ParamBuilder,
         settings: &GlobalSettings,
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+        production_orientation_ids: &[OrientationID],
     ) -> (Self, EvaluatorBuildTimings) {
         let mut timings = EvaluatorBuildTimings::default();
         let left_thresholds_evaluator = counterterm_data
@@ -759,6 +762,7 @@ impl LUCounterTermEvaluators {
                     param_builder,
                     settings,
                     orientations,
+                    production_orientation_ids,
                 );
                 timings += evaluator_timings;
                 evaluators
@@ -774,6 +778,7 @@ impl LUCounterTermEvaluators {
                     param_builder,
                     settings,
                     orientations,
+                    production_orientation_ids,
                 );
                 timings += evaluator_timings;
                 evaluators
@@ -787,6 +792,7 @@ impl LUCounterTermEvaluators {
                 param_builder,
                 settings,
                 orientations,
+                production_orientation_ids,
             );
             let mut timings = iterated_timings.get();
             timings += evaluator_timings;

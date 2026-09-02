@@ -46,6 +46,45 @@ These rules are intentionally broad and should shape most code changes.
   scratch docs, local example edits, profiling outputs, etc.) unless the task
   clearly requires them.
 
+### Discrepancy Triage
+
+Before investigating an implementation mismatch at a low level, first perform a
+bird's-eye comparison of the two complete pipelines. This step is mandatory: it
+prevents a difference in a shallow representation boundary from being debugged
+as a problem in shared algebra or physics.
+
+1. Write down the inputs, requested modes, and ordered processing stages for
+   both routes. Mark every stage as shared or different, and identify the last
+   shared boundary and the first boundary that can produce different state.
+2. Record the smallest result matrix that distinguishes the routes. Toggle one
+   independent feature at a time, such as empty versus nonempty UV forest,
+   local versus integrated counterterms, threshold subtraction, cut, residue
+   order, LMB channel, orientation, evaluator mode, and numeric precision.
+3. Apply logical exclusions before proposing causes. A mechanism shared by two
+   routes cannot explain a difference between them unless the inputs reaching
+   that mechanism have already diverged. An independently validated downstream
+   engine is not a candidate until its two actual inputs are shown to differ or
+   an identical-input A/B test fails.
+4. Inspect the representation at the first differing boundary before tracing
+   deeper code. Prefer durable artifacts such as `save standalone --json`, UV
+   forest exports, generation reports, and structured debug logs. Compare
+   branch counts, keys, maps, selectors, and factorized coefficients before
+   comparing only final floating-point totals.
+5. Reduce the mismatch hierarchically: total, graph, forest, cut, residue order,
+   LMB, orientation, then individual term. Stop as soon as the first unequal
+   pair is found and make that pair the reproducer.
+6. For selector-local versus explicit-sum representations, compare
+   `sum(selector * body)` with `sum(body)` directly. Evaluate the complete
+   selector truth table and prove that each explicit branch is selected exactly
+   once. Do not investigate contour, residue, reconstruction, or numerator
+   machinery until this shallow partition-of-unity comparison passes.
+
+Diagnostic normalization or expansion may be used in a test harness to compare
+two artifacts, but it must not migrate into a production path that is required
+to preserve a factorized numerator. Each progress report for a discrepancy
+should state: what is shared, what first differs, what has been excluded, the
+smallest current reproducer, and the single next comparison that will reduce it.
+
 ## Debug Logging Pattern
 
 - Prefer `debug_tags!` plus the log filter environment variables over ad hoc
@@ -128,6 +167,11 @@ These rules are intentionally broad and should shape most code changes.
 - Use broader integration tests only for cross-module behavior.
 - Add tests for edge cases that motivated the change, especially when collapsing
   duplicated logic.
+- Numerators used as Feynman-rule or BPHZ-locality oracles must retain physical
+  locality: an edge factor may depend only on that edge's momentum, and a vertex
+  factor only on momenta incident on that vertex. A deliberately non-local
+  algebraic input must be labelled diagnostic-only and must not support claims
+  about UV subtraction, graph reconstruction, or factor localization.
 
 ### Docs
 

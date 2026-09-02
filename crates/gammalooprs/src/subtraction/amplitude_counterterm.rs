@@ -116,6 +116,7 @@ impl AmplitudeCountertermAtom {
         &self,
         param_builder: &ParamBuilder,
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
+        production_orientation_ids: &[OrientationID],
         global_settings: &GlobalSettings,
     ) -> (AmplitudeCountertermEvaluator, EvaluatorBuildTimings) {
         let _progress_guard =
@@ -153,6 +154,7 @@ impl AmplitudeCountertermAtom {
                         slice::from_ref(integrand),
                         param_builder,
                         orientations.as_slice().as_ref(),
+                        production_orientation_ids,
                         dual_shape,
                         &global_settings.generation.evaluator,
                     )

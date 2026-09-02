@@ -67,6 +67,7 @@ pub struct UltraVioletProfile {
     /// Restrict a cross section to the Cutkosky cut with these edge IDs
     #[arg(
         long = "cutkosky-cut",
+        visible_alias = "cut-edges",
         value_name = "EDGE",
         num_args = 1..,
         value_delimiter = ',',
@@ -84,11 +85,11 @@ pub struct UltraVioletProfile {
     #[arg(long = "n-points", default_value_t = 20)]
     pub n_points: usize,
 
-    /// Minimum scaling factor
+    /// Minimum base-10 scaling exponent
     #[arg(long = "min-scaling", default_value_t = 3.0)]
     pub min_scale_exponent: f64,
 
-    /// Maximum scaling factor
+    /// Maximum base-10 scaling exponent
     #[arg(long = "max-scaling", default_value_t = 6.0)]
     pub max_scale_exponent: f64,
 
@@ -96,6 +97,7 @@ pub struct UltraVioletProfile {
     #[arg(long = "use_f128")]
     pub use_f128: bool,
 
+    /// Also derive analytic UV series (amplitudes only)
     #[arg(long = "analyse_analytically")]
     pub analyse_analytically: bool,
 
@@ -126,8 +128,8 @@ pub struct UltraVioletProfile {
     )]
     pub uv_ray_norms: Vec<f64>,
 
-    /// Output file for results (optional)
-    #[arg(short = 'o', long = "output", value_hint = clap::ValueHint::FilePath)]
+    /// Output directory for uv_profile.json (optional)
+    #[arg(short = 'o', long = "output", value_hint = clap::ValueHint::DirPath)]
     pub output_file: Option<PathBuf>,
 }
 
@@ -526,6 +528,21 @@ mod tests {
         assert_eq!(profile.selected_limits, UVLimitSelection::All);
         assert_eq!(profile.graph.as_deref(), Some("GL2"));
         assert_eq!(profile.cutkosky_cut, [5, 2]);
+
+        let alias = Repl::try_parse_from([
+            "gammaloop",
+            "profile",
+            "ultra-violet",
+            "--graph",
+            "GL2",
+            "--cut-edges",
+            "5,2",
+        ])
+        .unwrap();
+        let Commands::Profile(Profile::UltraViolet(alias)) = alias.command else {
+            panic!("expected an ultraviolet profile command");
+        };
+        assert_eq!(alias.cutkosky_cut, [5, 2]);
     }
 
     #[test]

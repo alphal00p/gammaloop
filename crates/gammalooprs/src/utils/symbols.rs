@@ -26,6 +26,33 @@ use symbolica_utils::{PrintSettingsExt, TypstMode};
 
 use crate::{cff::orientations::GraphOrientation, graph::LoopMomentumBasis, numerator::aind::Aind};
 
+/// Persistent ownership carried by an EMR momentum through a local 4D UV
+/// Taylor expansion. Wire value two is deliberately reserved for the
+/// transient denominator marker used while the Taylor operator is acting.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(i64)]
+pub(crate) enum UvMomentumProvenanceRole {
+    /// A pre-existing numerator factor fixed to its owner's canonical exact
+    /// denominator occurrence. It is never minimax-dispatched.
+    TaylorFixed = 0,
+    /// A numerator factor created by differentiating a denominator. It may be
+    /// minimax-dispatched only over degenerate copies of the same owner.
+    DenominatorDerived = 1,
+    /// A physical source momentum reconstructed from its stored hard lift,
+    /// independently of occurrence-local contact samples.
+    PhysicalSourceFixed = 3,
+}
+
+impl From<bool> for UvMomentumProvenanceRole {
+    fn from(denominator_derived: bool) -> Self {
+        if denominator_derived {
+            Self::DenominatorDerived
+        } else {
+            Self::TaylorFixed
+        }
+    }
+}
+
 pub struct WildCards {
     pub edgeid_: Symbol,
     pub mom_: Symbol,
@@ -115,6 +142,9 @@ pub struct GammaloopSymbols {
     pub integrand: Symbol,
     /// Evaluator-local function bodies for an explicit projected-CFF sum.
     pub projected_cff_sum: Symbol,
+    /// Exact generalized-3D-representation residue-map identifier selected by
+    /// the runtime evaluator. This is independent of physical edge signs.
+    pub residue_map_id: Symbol,
     /// wrapper function for the 4d bridge denominators
     pub tree_denom_wrapper: Symbol,
 
@@ -190,6 +220,11 @@ pub struct GammaloopSymbols {
     pub delta_vec: Symbol,
     ///Q(<edgeid>,index___)
     pub emr_mom: Symbol,
+    /// UV-local provenance stored in the tag slot of `Q(...)` while applying a
+    /// Taylor operator. Its arguments are the immutable source edge, whether
+    /// the momentum came from a differentiated denominator, and its complete
+    /// hard projection in the frozen child LMB.
+    pub uv_momentum_provenance: Symbol,
     pub emr_vec: Symbol,
     pub dot: Symbol,
     pub external_mom: Symbol,
@@ -226,6 +261,19 @@ impl GammaloopSymbols {
         arg.into()
             .replace(self.sign_theta(W_.a_))
             .with(Symbol::IF.call(Atom::var(W_.a_) + 1))
+            // A generalized residue-map delta is represented as
+            // IF(current_id-key, 0, 1). Move the selected branch body inside
+            // that conditional so an inactive key is discarded before any of
+            // its selector-local inverses are evaluated.
+            .replace(
+                Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::one()])
+                    * W_.b___,
+            )
+            .with(Symbol::IF.call_args([
+                Atom::var(W_.a_),
+                Atom::Zero,
+                Atom::var(W_.b___),
+            ]))
             .replace(Symbol::IF.call(W_.a_) * Symbol::IF.call(W_.b_))
             .repeat()
             .with(Symbol::IF.call(W_.a_ * W_.b_))
@@ -517,6 +565,7 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     renormalization_localization_scale: symbol!("rls"),
     integrand: symbol!("integrand"),
     projected_cff_sum: symbol!("projected_cff_sum"),
+    residue_map_id: symbol!("residue_map_id"),
     tree_denom_wrapper: symbol!("tree_denoms"),
     dim_epsilon: symbol!("ε"),
     killing_func: symbol!(
@@ -927,6 +976,7 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "q") },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
+    uv_momentum_provenance: symbol!("gammalooprs::uv::momentum_provenance"),
     orientation_delta: symbol!("orientation_delta"),
     emr_vec: symbol!(
         "Q3",
@@ -1006,7 +1056,12 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
 }
 
 impl GammaloopSymbols {
-    pub fn integrand<O: GraphOrientation>(&self, i: usize, orientation: &O) -> Atom {
+    pub fn integrand<O: GraphOrientation>(
+        &self,
+        i: usize,
+        residue_map_id: three_dimensional_reps::expression::OrientationID,
+        orientation: &O,
+    ) -> Atom {
         let args = orientation
             .orientation()
             .iter()
@@ -1019,6 +1074,7 @@ impl GammaloopSymbols {
 
         FunctionBuilder::new(self.integrand)
             .add_arg(i)
+            .add_arg(residue_map_id.0)
             .add_args(&args)
             .finish()
     }
@@ -1130,6 +1186,84 @@ impl GammaloopSymbols {
         function!(self.emr_mom, usize::from(e) as i64, a.as_view())
     }
 
+    pub(crate) fn uv_momentum_provenance_tag<'a>(
+        &self,
+        edge: impl Into<AtomOrView<'a>>,
+        role: impl Into<UvMomentumProvenanceRole>,
+        hard_momentum: impl Into<AtomOrView<'a>>,
+    ) -> Atom {
+        let role = role.into();
+        self.uv_momentum_provenance.call_args([
+            edge.into().as_view(),
+            Atom::num(role as i64).as_view(),
+            hard_momentum.into().as_view(),
+        ])
+    }
+
+    pub(crate) fn uv_momentum_provenance_data(
+        &self,
+        argument: AtomView<'_>,
+    ) -> Option<(EdgeIndex, UvMomentumProvenanceRole, Atom)> {
+        let AtomView::Fun(provenance) = argument else {
+            return None;
+        };
+        if provenance.get_symbol() != self.uv_momentum_provenance || provenance.get_nargs() != 3 {
+            return None;
+        }
+        let edge = EdgeIndex(usize::try_from(provenance.get(0)).ok()?);
+        let role = match i64::try_from(provenance.get(1)).ok()? {
+            0 => UvMomentumProvenanceRole::TaylorFixed,
+            1 => UvMomentumProvenanceRole::DenominatorDerived,
+            3 => UvMomentumProvenanceRole::PhysicalSourceFixed,
+            _ => return None,
+        };
+        Some((edge, role, provenance.get(2).to_owned()))
+    }
+
+    /// Remove only the UV Taylor provenance from EMR tags. This is used at
+    /// algebraic boundaries such as Vakint and by exact test oracles; the local
+    /// 4D-to-CFF route deliberately retains the tag until energy ownership has
+    /// been planned.
+    pub(crate) fn erase_uv_momentum_provenance(&self, atom: &Atom) -> Atom {
+        atom.replace_map(|view, _, output| {
+            let AtomView::Fun(momentum) = view else {
+                return;
+            };
+            if momentum.get_symbol() != self.emr_mom || momentum.get_nargs() < 1 {
+                return;
+            }
+            let AtomView::Fun(provenance) = momentum.get(0) else {
+                return;
+            };
+            if provenance.get_symbol() != self.uv_momentum_provenance || provenance.get_nargs() != 3
+            {
+                return;
+            }
+            let indices = momentum
+                .iter()
+                .skip(1)
+                .map(|index| index.to_owned())
+                .collect::<Vec<_>>();
+            **output = provenance
+                .get(2)
+                .to_owned()
+                .replace_map(|hard_view, _, hard_output| {
+                    let AtomView::Fun(hard_momentum) = hard_view else {
+                        return;
+                    };
+                    if hard_momentum.get_symbol() == self.emr_mom && hard_momentum.get_nargs() == 1
+                    {
+                        let mut component =
+                            FunctionBuilder::new(self.emr_mom).add_arg(hard_momentum.get(0));
+                        for index in &indices {
+                            component = component.add_arg(index.as_view());
+                        }
+                        **hard_output = component.finish();
+                    }
+                });
+        })
+    }
+
     pub(crate) fn localizing_integrand(&self, lmb: &LoopMomentumBasis) -> Atom {
         // Normalize each factor with int d^3k / (|k|^2 + rls^2)^2 = pi^2 / rls,
         // so the localizing integrand itself integrates to one.
@@ -1139,7 +1273,10 @@ impl GammaloopSymbols {
         let mut res = Atom::one();
 
         for l in lmb.loop_edges.iter() {
-            //TODO: Add orientation localisation prefactor (Sum of valid orientation thetas)/(number of valid orientations)
+            // Orientation ownership is applied by `Localizer`: orientation-local 3D uses one
+            // deterministic valid host, while selector-free 3D and local 4D explicitly sum their
+            // source orientations. It is therefore not an extra factor in this normalized radial
+            // kernel.
             res /= normalization_term_integral.as_view();
 
             let spatial_norm_sq = function!(self.emr_mom, l.0, GS.cind(1)).pow(2)

@@ -38,7 +38,8 @@ commands = [
 [default_runtime_settings.sampling]
 graphs = "summed"
 orientations = "summed"
-lmb_multichanneling = false
+lmb_multichanneling = true
+lmb_channel_weight = "ose"
 lmb_channels = "summed"
 coordinate_system = "spherical"
 mapping = "linear"

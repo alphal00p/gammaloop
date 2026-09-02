@@ -88,7 +88,7 @@ use super::{
     GraphTerm, LmbMultiChannelingSetup, ProcessIntegrandImpl, RuntimeCache, create_grid,
     evaluate_sample, filtered_orientation_count, format_lmb_channel_label,
     format_orientation_label, histogram_process_info_for_integrand, resolve_visible_orientation_id,
-    validate_process_runtime_settings,
+    validate_group_orientation_catalogs, validate_process_runtime_settings,
 };
 
 pub mod export;
@@ -482,6 +482,11 @@ impl ProcessIntegrandImpl for CrossSectionIntegrand {
         for a in self.data.graph_terms.iter_mut() {
             a.warm_up(&self.settings, model)?;
         }
+        validate_group_orientation_catalogs(
+            &self.settings,
+            &self.data.graph_terms,
+            &self.data.graph_group_structure,
+        )?;
         self.event_processing_runtime.set(
             EventProcessingRuntime::from_settings_with_model_and_process_info(
                 &self.settings,
@@ -579,6 +584,7 @@ pub struct CrossSectionGraphTerm {
     pub estimated_scale: Option<F<f64>>,
     pub param_builder: ParamBuilder<f64>,
     pub orientations: TiVec<OrientationID, EdgeVec<Orientation>>,
+    production_orientation_keys: Vec<String>,
     pub orientation_filter: SubSet<OrientationID>,
     pub explicit_orientation_sum_only: bool,
     #[allow(private_interfaces)]
@@ -601,47 +607,44 @@ impl CrossSectionGraphTerm {
             return Err(eyre!("Generation interrupted by user"));
         }
         let mut stats = GraphGenerationStats::default();
-        let selected_generation_orientations = graph
+        let production_orientation_ids = graph
             .derived_data
             .global_cff_expression
             .as_ref()
             .unwrap()
             .expression
             .orientations
-            .iter()
-            .filter(|orientation| {
+            .iter_enumerated()
+            .filter_map(|(orientation_id, orientation)| {
                 (settings.generation.explicit_orientation_sum_only
-                    || settings.generation.orientation_pattern.filter(*orientation))
-                    && orientation.iter_denominator_nodes().any(|tree_node| {
-                        graph.cut_esurface_id_map.iter().any(|cut_esurface_id| {
-                            tree_node.data == HybridSurfaceID::Esurface(*cut_esurface_id)
-                        })
-                    })
+                    || settings.generation.orientation_pattern.filter(orientation))
+                .then_some(orientation_id)
             })
             .collect_vec();
-        // Generalized numerator sampling adds contact maps with under-resolved
-        // directions and can repeat a physical orientation with distinct
-        // numerator maps. Those maps remain in the expression, while runtime
-        // orientation sampling must expose each maximally resolved physical
-        // direction exactly once.
-        let resolved_edges = selected_generation_orientations
+        let selected_generation_orientations = production_orientation_ids
             .iter()
-            .flat_map(|orientation| orientation.orientation())
-            .filter_map(|(edge_id, orientation)| {
-                (*orientation != Orientation::Undirected).then_some(edge_id)
+            .map(|orientation_id| {
+                &graph
+                    .derived_data
+                    .global_cff_expression
+                    .as_ref()
+                    .unwrap()
+                    .expression
+                    .orientations[*orientation_id]
             })
-            .collect::<HashSet<_>>();
+            .collect_vec();
+        // Every generalized residue map is a separate runtime channel. Its
+        // physical directions are metadata and therefore must not deduplicate
+        // maps that differ only by numerator/M sampling data.
         let orientations: TiVec<OrientationID, EdgeVec<Orientation>> =
             selected_generation_orientations
                 .iter()
-                .filter(|orientation| {
-                    resolved_edges.iter().all(|edge_id| {
-                        orientation.orientation()[*edge_id] != Orientation::Undirected
-                    })
-                })
                 .map(|orientation| orientation.orientation().clone())
-                .unique()
                 .collect();
+        let production_orientation_keys = selected_generation_orientations
+            .iter()
+            .map(|orientation| orientation.residue_map_key())
+            .collect_vec();
         if orientations.is_empty() {
             let pattern = settings
                 .generation
@@ -805,6 +808,7 @@ impl CrossSectionGraphTerm {
                         slice::from_ref(integrand_for_subset),
                         &graph.graph.param_builder,
                         &orientations.raw,
+                        &production_orientation_ids,
                         dual_shape,
                         &settings.generation.evaluator,
                     )
@@ -981,6 +985,7 @@ impl CrossSectionGraphTerm {
                 &graph.graph.param_builder,
                 settings,
                 &orientations,
+                &production_orientation_ids,
             );
             if crate::is_interrupted() {
                 return Err(eyre!("Generation interrupted by user"));
@@ -1092,6 +1097,7 @@ impl CrossSectionGraphTerm {
                 param_builder: graph.graph.param_builder.clone(),
                 orientation_filter: SubSet::full(orientations.len()),
                 orientations,
+                production_orientation_keys,
                 explicit_orientation_sum_only: settings.generation.explicit_orientation_sum_only,
                 counterterm,
                 reversed_edges,
@@ -1777,7 +1783,6 @@ impl GraphTerm for CrossSectionGraphTerm {
                     None,
                     Some(&lu_params),
                 );
-
                 let cut_index = CutCFFIndex {
                     lu_cut_order: Some(num_esurfaces),
                     left_threshold_order: None,
@@ -2016,6 +2021,24 @@ impl GraphTerm for CrossSectionGraphTerm {
         }
 
         filtered_orientation_count(&self.orientation_filter, &self.orientations)
+    }
+
+    fn production_orientation_keys(&self) -> &[String] {
+        &self.production_orientation_keys
+    }
+
+    fn selected_production_orientation_keys(&self) -> Vec<&str> {
+        if self.orientation_filter.is_full() {
+            self.production_orientation_keys
+                .iter()
+                .map(String::as_str)
+                .collect()
+        } else {
+            self.orientation_filter
+                .included_iter()
+                .map(|id| self.production_orientation_keys[id.0].as_str())
+                .collect()
+        }
     }
 
     fn get_tropical_sampler(&self) -> &momtrop::SampleGenerator<3> {

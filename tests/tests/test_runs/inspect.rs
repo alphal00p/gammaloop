@@ -3,19 +3,24 @@ use super::*;
 use std::fs;
 
 use gammalooprs::integrands::process::ProcessIntegrand;
+use gammalooprs::processes::CutId;
 use gammalooprs::settings::runtime::{
     RotationSetting, StabilityLevelSetting, StabilityRecordingSettings,
 };
+use gammalooprs::uv::profile::UVLimitSelection;
 
 #[test]
 #[serial]
 fn raised_cut_numerator_cancels_one_propagator_in_both_orientation_modes() -> Result<()> {
-    for explicit_orientation_sum_only in [false, true] {
-        let mode = if explicit_orientation_sum_only {
-            "explicit"
-        } else {
-            "localized"
-        };
+    let routes = [
+        ("localized_local_3d", false, false),
+        ("explicit_local_3d", true, false),
+        ("projected_local_4d", true, true),
+    ];
+    let points = [[0.11, 0.23, 0.37], [0.71, 0.43, 0.19]];
+    let mut route_results = Vec::new();
+
+    for (mode, explicit_orientation_sum_only, project_local_4d) in routes {
         let test_root =
             get_tests_workspace_path().join(format!("raised_cut_numerator_cancellation_{mode}"));
         let mut cli = get_test_cli(None, &test_root, Some(mode.to_string()), true)?;
@@ -25,7 +30,7 @@ fn raised_cut_numerator_cancels_one_propagator_in_both_orientation_modes() -> Re
                 "import model ./assets/models/json/scalars/scalars_2p_3p.json",
                 "import graphs ./tests/resources/graphs/raised_cut_numerator_cancellation.dot -p raised_cut_cancellation -i compare",
                 &format!(
-                    "set global kv global.generation.explicit_orientation_sum_only={explicit_orientation_sum_only} global.generation.tropical_subgraph_table.disable_tropical_generation=true global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.compile=false global.generation.evaluator.store_atom=true global.generation.threshold_subtraction.enable_thresholds=false"
+                    "set global kv global.generation.explicit_orientation_sum_only={explicit_orientation_sum_only} global.generation.tropical_subgraph_table.disable_tropical_generation=true global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.compile=false global.generation.evaluator.store_atom=true global.generation.uv.softct=false global.generation.uv.generate_integrated=false global.generation.uv.local_uv_cts_from_expanded_4d_integrands={project_local_4d} global.generation.threshold_subtraction.enable_thresholds=false"
                 ),
                 r#"set default-runtime string '
                     [general]
@@ -57,7 +62,8 @@ fn raised_cut_numerator_cancels_one_propagator_in_both_orientation_modes() -> Re
             ],
         )?;
 
-        for point in [[0.11, 0.23, 0.37], [0.71, 0.43, 0.19]] {
+        let mut results = Vec::new();
+        for point in points {
             let powered =
                 inspect_xspace_process(&mut cli, "raised_cut_powered", "compare", &point)?;
             let lower = inspect_xspace_process(&mut cli, "raised_cut_lower", "compare", &point)?;
@@ -78,10 +84,282 @@ fn raised_cut_numerator_cancels_one_propagator_in_both_orientation_modes() -> Re
                 combined.re.hypot(combined.im) <= 1.0e-12 * scale,
                 "the summed LU graph did not preserve the raised-propagator cancellation at {point:?} in {mode} mode: combined={combined:e}, scale={scale:e}"
             );
+            results.push([powered, lower, combined]);
         }
 
+        route_results.push((mode, results));
         clean_test(test_root);
     }
+
+    let explicit_reference = &route_results[1].1;
+    for (mode, results) in [&route_results[0], &route_results[2]] {
+        for (point, (actual, expected)) in points
+            .iter()
+            .zip(results.iter().zip(explicit_reference.iter()))
+        {
+            for (term_index, term) in ["powered", "lower", "combined"].iter().enumerate() {
+                let actual_term = actual[term_index];
+                let expected_term = expected[term_index];
+                // The combined value is an algebraic cancellation. Scale its
+                // roundoff by the powered/lower terms being cancelled rather
+                // than comparing two near-zero residuals relatively.
+                let scale = if term_index == 2 {
+                    actual[..2]
+                        .iter()
+                        .chain(&expected[..2])
+                        .map(|value| value.re.hypot(value.im))
+                        .fold(f64::MIN_POSITIVE, f64::max)
+                } else {
+                    actual_term
+                        .re
+                        .hypot(actual_term.im)
+                        .max(expected_term.re.hypot(expected_term.im))
+                        .max(f64::MIN_POSITIVE)
+                };
+                assert!(
+                    complex_distance(actual_term, expected_term) <= 1.0e-10 * scale,
+                    "raised-cut {term} term differs between {mode} and explicit local-3D at {point:?}: actual={actual_term:e}, expected={expected_term:e}"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn raised_scalar_self_energy_uv_matches_across_local_uv_routes() -> Result<()> {
+    let routes = [
+        ("localized_local_3d", false, false),
+        ("explicit_local_3d", true, false),
+        ("projected_local_4d", true, true),
+    ];
+    let points = [
+        [0.11, 0.23, 0.37, 0.41, -0.29, 0.53],
+        [0.71, 0.43, 0.19, -0.31, 0.47, -0.59],
+    ];
+    let mut route_results = Vec::new();
+
+    for (mode, explicit_orientation_sum_only, project_local_4d) in routes {
+        let test_root =
+            get_tests_workspace_path().join(format!("raised_scalar_self_energy_uv_{mode}"));
+        let mut cli = get_test_cli(None, &test_root, Some(mode.to_string()), true)?;
+        run_commands(
+            &mut cli,
+            &[
+                "import model ./assets/models/json/scalars/scalars_2p_3p.json",
+                "import graphs ./tests/resources/graphs/uv_tests/scalar_raised_self_energy.dot -p raised_scalar_self_energy -i compare",
+                &format!(
+                    "set global kv global.generation.explicit_orientation_sum_only={explicit_orientation_sum_only} global.generation.tropical_subgraph_table.disable_tropical_generation=true global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.compile=false global.generation.evaluator.store_atom=true global.generation.uv.softct=false global.generation.uv.generate_integrated=false global.generation.uv.local_uv_cts_from_expanded_4d_integrands={project_local_4d} global.generation.threshold_subtraction.enable_thresholds=false"
+                ),
+                r#"set default-runtime string '
+                    [general]
+                    integral_unit = "none"
+                    disable_flux_factor = true
+                    m_uv = 20.0
+                    mu_r = 3.0
+
+                    [kinematics.externals]
+                    type = "constant"
+
+                    [kinematics.externals.data]
+                    momenta = [[4.0, 0.0, 0.0, 0.0]]
+                    helicities = [1]
+
+                    [sampling]
+                    graphs = "summed"
+                    orientations = "summed"
+                    lmb_multichanneling = true
+                    lmb_channel_weight = "ose"
+                    lmb_channels = "summed"
+
+                    [subtraction]
+                    disable_threshold_subtraction = true
+                '"#,
+                "generate existing -p raised_scalar_self_energy -i compare",
+            ],
+        )?;
+
+        let results = points
+            .iter()
+            .map(|point| {
+                inspect_xspace_process(&mut cli, "raised_scalar_self_energy", "compare", point)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        assert!(
+            results
+                .iter()
+                .all(|value| value.re.is_finite() && value.im.is_finite()),
+            "the raised scalar self-energy route {mode} produced a non-finite result: {results:?}",
+        );
+        let profile = Profile::UltraViolet(UltraVioletProfile {
+            process: Some(ProcessRef::Unqualified(
+                "raised_scalar_self_energy".to_string(),
+            )),
+            integrand_name: Some("compare".to_string()),
+            graph: Some("scalar_raised_self_energy".to_string()),
+            n_points: 6,
+            seed: Some(9300),
+            uv_ray_directions: vec![1.0, 0.3, -0.2],
+            uv_ray_norms: vec![3.0],
+            ..Default::default()
+        })
+        .run(&mut cli.state, &cli.cli_settings)?
+        .unwrap_uv();
+        route_results.push((mode, results, profile));
+        clean_test(test_root);
+    }
+
+    let explicit_reference = &route_results[1].1;
+    for (mode, results, _) in [&route_results[0], &route_results[2]] {
+        for (point, (actual, expected)) in points.iter().zip(results.iter().zip(explicit_reference))
+        {
+            let scale = actual
+                .re
+                .hypot(actual.im)
+                .max(expected.re.hypot(expected.im))
+                .max(f64::MIN_POSITIVE);
+            assert!(
+                complex_distance(*actual, *expected) <= 1.0e-10 * scale,
+                "raised scalar self-energy differs between {mode} and explicit local-3D at {point:?}: actual={actual:e}, expected={expected:e}, relative delta={:e}",
+                complex_distance(*actual, *expected) / scale,
+            );
+        }
+    }
+    let mut profile_failures = Vec::new();
+    for (mode, _, analysis) in &route_results {
+        let profile = analysis.pass_fail(-0.9);
+        if profile.failed != 0 {
+            profile_failures.push(format!("{mode}:\n{profile}"));
+        }
+    }
+    assert!(
+        profile_failures.is_empty(),
+        "raised scalar self-energy UV-profile failures:\n{}",
+        profile_failures.join("\n\n"),
+    );
+    Ok(())
+}
+
+#[test]
+#[serial]
+fn bare_raised_scalar_self_energy_has_the_reported_uv_degree() -> Result<()> {
+    let test_root = get_tests_workspace_path().join("bare_raised_scalar_self_energy_uv_degree");
+    let mut cli = get_test_cli(None, &test_root, Some("bare_uv_degree".to_string()), true)?;
+    run_commands(
+        &mut cli,
+        &[
+            "import model ./assets/models/json/scalars/scalars_2p_3p.json",
+            "import graphs ./tests/resources/graphs/uv_tests/scalar_raised_self_energy_profile_variants.dot -p bare_raised_scalar_self_energy -i compare",
+            "set global kv global.generation.explicit_orientation_sum_only=true global.generation.tropical_subgraph_table.disable_tropical_generation=true global.generation.evaluator.iterative_orientation_optimization=false global.generation.evaluator.compile=false global.generation.evaluator.store_atom=true global.generation.uv.subtract_uv=false global.generation.threshold_subtraction.enable_thresholds=false",
+            r#"set default-runtime string '
+                [general]
+                integral_unit = "none"
+                disable_flux_factor = true
+
+                [kinematics.externals]
+                type = "constant"
+
+                [kinematics.externals.data]
+                momenta = [[4.0, 0.0, 0.0, 0.0]]
+                helicities = [1]
+
+                [sampling]
+                graphs = "summed"
+                orientations = "summed"
+                lmb_multichanneling = true
+                lmb_channel_weight = "ose"
+                lmb_channels = "summed"
+
+                [subtraction]
+                disable_threshold_subtraction = true
+            '"#,
+            "generate existing -p bare_raised_scalar_self_energy -i compare",
+        ],
+    )?;
+    let mut failures = Vec::new();
+    for (graph_name, expected_dod) in [
+        ("raised_se_unit", 0),
+        ("raised_se_q3_temporal", 0),
+        ("raised_se_q4_temporal", 0),
+        ("raised_se_q5_temporal", 0),
+        ("raised_se_q1_temporal", 1),
+        ("raised_se_q1_dot_q3", 1),
+        ("raised_se_q1_dot_q3_q4e", 1),
+        ("raised_se_q1_dot_q3_q3e", 1),
+        ("raised_se_q1_dot_q3_q3e_q4e", 1),
+        ("raised_se_q1_dot_q3_q3e_q4e_q5e", 1),
+    ] {
+        let analysis = Profile::UltraViolet(UltraVioletProfile {
+            process: Some(ProcessRef::Unqualified(
+                "bare_raised_scalar_self_energy".to_string(),
+            )),
+            integrand_name: Some("compare".to_string()),
+            graph: Some(graph_name.to_string()),
+            n_points: 6,
+            seed: Some(9300),
+            uv_ray_directions: vec![1.0, 0.3, -0.2],
+            uv_ray_norms: vec![3.0],
+            ..Default::default()
+        })
+        .run(&mut cli.state, &cli.cli_settings)?
+        .unwrap_uv();
+        let subsets = analysis
+            .graphs
+            .iter()
+            .flat_map(|graph| &graph.lmbs)
+            .flat_map(|lmb| &lmb.subsets)
+            .collect_vec();
+        assert_eq!(subsets.len(), 1);
+        assert_eq!(subsets[0].initial_dod, expected_dod);
+        if subsets[0].estimated_dod() != Some(i64::from(expected_dod)) {
+            failures.push(format!(
+                "{graph_name}: graph DOD {expected_dod}, observed {:?}",
+                subsets[0].estimated_dod()
+            ));
+        }
+    }
+    assert!(
+        failures.is_empty(),
+        "bare raised-self-energy UV-degree mismatches:\n{}",
+        failures.join("\n"),
+    );
+    clean_test(test_root);
+    Ok(())
+}
+
+#[test]
+fn uv_profile_all_limits_profiles_finite_amplitude_cycles() -> Result<()> {
+    let test_name = "uv_profile_all_limits_profiles_finite_amplitude_cycles";
+    let mut cli = setup_scalar_topologies_cli(test_name)?;
+
+    let analysis = Profile::UltraViolet(UltraVioletProfile {
+        process: Some(ProcessRef::Unqualified("triangle".to_string())),
+        integrand_name: Some("scalar_tri".to_string()),
+        selected_limits: UVLimitSelection::All,
+        n_points: 5,
+        uv_ray_directions: vec![1.0, 0.3, -0.2],
+        uv_ray_norms: vec![3.0],
+        ..Default::default()
+    })
+    .run(&mut cli.state, &cli.cli_settings)?
+    .unwrap_uv();
+
+    let subsets = analysis
+        .graphs
+        .iter()
+        .flat_map(|graph| &graph.lmbs)
+        .flat_map(|lmb| &lmb.subsets)
+        .collect_vec();
+    assert!(
+        subsets.iter().any(|subset| subset.initial_dod < 0),
+        "the opt-in all-limits mode must retain the finite scalar-triangle UV cycle"
+    );
+    let report = analysis.pass_fail(-0.9);
+    assert_eq!(report.total, subsets.len());
+    assert_eq!(report.failed, 0, "{report}");
+
+    clean_test(&cli.cli_settings.state.folder);
     Ok(())
 }
 
@@ -122,7 +400,7 @@ fn uv_profile_selects_lu_graph_and_cut() -> Result<()> {
         ],
     )?;
 
-    let cut_edges = {
+    let (representative_cut_edges, non_representative_cut_edges, cut_group_count) = {
         let process = ProcessRef::Unqualified("scalar_self_energy".to_string());
         let integrand_name = "compare".to_string();
         let (process_id, integrand_name) = cli
@@ -142,33 +420,52 @@ fn uv_profile_selects_lu_graph_and_cut() -> Result<()> {
             .iter()
             .find(|term| term.graph.name == "dotted_bubble")
             .expect("scalar self-energy fixture must contain dotted_bubble");
-        let cut = graph
-            .cuts
-            .first()
-            .expect("dotted_bubble must contain a physical Cutkosky cut");
-        graph
-            .graph
-            .underlying
-            .iter_edges_of(&cut.cut)
-            .map(|(_, edge_id, _)| usize::from(edge_id))
-            .sorted()
-            .collect_vec()
+        let cut_group = graph
+            .cut_group_data
+            .cut_groups
+            .iter()
+            .find(|group| group.cuts.len() > 1)
+            .expect(
+                "dotted_bubble must contain a raised residue group with multiple physical cuts",
+            );
+        let cut_edges = |cut_id: CutId| {
+            graph
+                .graph
+                .underlying
+                .iter_edges_of(&graph.cuts[cut_id].cut)
+                .map(|(_, edge_id, _)| usize::from(edge_id))
+                .sorted()
+                .collect_vec()
+        };
+        (
+            cut_edges(cut_group.cuts[0]),
+            cut_edges(cut_group.cuts[1]),
+            graph.cut_group_data.cut_groups.len(),
+        )
     };
-    assert!(!cut_edges.is_empty());
+    assert!(!representative_cut_edges.is_empty());
+    assert!(!non_representative_cut_edges.is_empty());
+    assert_ne!(representative_cut_edges, non_representative_cut_edges);
+    assert!(
+        cut_group_count > 1,
+        "the all-cut UV-profile regression needs more than one LU cut group"
+    );
 
-    let analysis = Profile::UltraViolet(UltraVioletProfile {
+    let non_representative_analysis = Profile::UltraViolet(UltraVioletProfile {
         process: Some(ProcessRef::Unqualified("scalar_self_energy".to_string())),
         integrand_name: Some("compare".to_string()),
         graph: Some("dotted_bubble".to_string()),
-        cutkosky_cut: cut_edges.clone(),
+        cutkosky_cut: non_representative_cut_edges.clone(),
         n_points: 6,
+        uv_ray_directions: vec![1.0, 0.3, -0.2],
+        uv_ray_norms: vec![3.0],
         ..Default::default()
     })
     .run(&mut cli.state, &cli.cli_settings)?
     .unwrap_uv();
 
-    assert_eq!(analysis.graphs.len(), 1);
-    let graph = &analysis.graphs[0];
+    assert_eq!(non_representative_analysis.graphs.len(), 1);
+    let graph = &non_representative_analysis.graphs[0];
     assert_eq!(graph.graph_name, "dotted_bubble");
     assert_eq!(
         graph
@@ -179,16 +476,76 @@ fn uv_profile_selects_lu_graph_and_cut() -> Result<()> {
             .copied()
             .map(usize::from)
             .collect_vec(),
-        cut_edges
+        non_representative_cut_edges
     );
-    let fitted_limits = analysis
+
+    let representative_projection = Profile::UltraViolet(UltraVioletProfile {
+        process: Some(ProcessRef::Unqualified("scalar_self_energy".to_string())),
+        integrand_name: Some("compare".to_string()),
+        graph: Some("dotted_bubble".to_string()),
+        cutkosky_cut: representative_cut_edges.clone(),
+        n_points: 6,
+        uv_ray_directions: vec![1.0, 0.3, -0.2],
+        uv_ray_norms: vec![3.0],
+        ..Default::default()
+    })
+    .run(&mut cli.state, &cli.cli_settings)?
+    .unwrap_uv();
+    assert_eq!(
+        representative_projection.graphs[0]
+            .cutkosky_cut
+            .as_ref()
+            .expect("representative cut identity must be preserved")
+            .iter()
+            .copied()
+            .map(usize::from)
+            .collect_vec(),
+        representative_cut_edges
+    );
+
+    let all_physical_cuts = Profile::UltraViolet(UltraVioletProfile {
+        process: Some(ProcessRef::Unqualified("scalar_self_energy".to_string())),
+        integrand_name: Some("compare".to_string()),
+        graph: Some("dotted_bubble".to_string()),
+        n_points: 6,
+        uv_ray_directions: vec![1.0, 0.3, -0.2],
+        uv_ray_norms: vec![3.0],
+        ..Default::default()
+    })
+    .run(&mut cli.state, &cli.cli_settings)?
+    .unwrap_uv();
+    let all_physical_cuts_report = all_physical_cuts.pass_fail(-0.9);
+    assert!(
+        all_physical_cuts_report.total > 0,
+        "the default all-cut LU profile must test at least one UV limit"
+    );
+    assert_eq!(
+        all_physical_cuts_report.failed, 0,
+        "the default LU profile must sum only the cut groups compatible with each UV limit:\n{all_physical_cuts_report}"
+    );
+
+    let exhaustive_projection = Profile::UltraViolet(UltraVioletProfile {
+        process: Some(ProcessRef::Unqualified("scalar_self_energy".to_string())),
+        integrand_name: Some("compare".to_string()),
+        graph: Some("dotted_bubble".to_string()),
+        cutkosky_cut: non_representative_cut_edges.clone(),
+        selected_limits: UVLimitSelection::All,
+        n_points: 6,
+        uv_ray_directions: vec![1.0, 0.3, -0.2],
+        uv_ray_norms: vec![3.0],
+        ..Default::default()
+    })
+    .run(&mut cli.state, &cli.cli_settings)?
+    .unwrap_uv();
+
+    let fitted_limits = non_representative_analysis
         .graphs
         .iter()
         .flat_map(|graph| &graph.lmbs)
         .flat_map(|lmb| &lmb.subsets)
         .filter(|subset| subset.estimated_dod().is_some())
         .count();
-    let report = analysis.pass_fail(-0.9);
+    let report = non_representative_analysis.pass_fail(-0.9);
     assert!(
         report.total > 0,
         "the selected UV profile must be nonvacuous"
@@ -198,6 +555,84 @@ fn uv_profile_selects_lu_graph_and_cut() -> Result<()> {
         "the selected UV profile must fit at least one nonvanishing limit"
     );
     assert_eq!(report.failed, 0, "{report}");
+
+    let exhaustive_limit_count = exhaustive_projection.graphs[0]
+        .lmbs
+        .iter()
+        .map(|lmb| lmb.subsets.len())
+        .sum::<usize>();
+    assert!(
+        exhaustive_limit_count > fitted_limits,
+        "the opt-in all-limits mode must evaluate strictly more limits than the divergent-only default: all={exhaustive_limit_count}, default={fitted_limits}",
+    );
+
+    let mut non_representative_rows = std::collections::BTreeMap::new();
+    for lmb in &non_representative_analysis.graphs[0].lmbs {
+        for subset in &lmb.subsets {
+            let key = (
+                lmb.lmb_label.clone(),
+                subset.fixed.iter().copied().map(usize::from).collect_vec(),
+                subset.free.iter().copied().map(usize::from).collect_vec(),
+            );
+            let mut numerical_analysis = serde_json::to_value(&subset.analysis)?;
+            if let Some(result) = numerical_analysis
+                .pointer_mut("/inspect_level/result")
+                .and_then(serde_json::Value::as_object_mut)
+            {
+                result.remove("points_detail");
+            }
+            non_representative_rows.insert(key, numerical_analysis);
+        }
+    }
+    let mut representative_rows = std::collections::BTreeMap::new();
+    for lmb in &representative_projection.graphs[0].lmbs {
+        for subset in &lmb.subsets {
+            let key = (
+                lmb.lmb_label.clone(),
+                subset.fixed.iter().copied().map(usize::from).collect_vec(),
+                subset.free.iter().copied().map(usize::from).collect_vec(),
+            );
+            let mut numerical_analysis = serde_json::to_value(&subset.analysis)?;
+            if let Some(result) = numerical_analysis
+                .pointer_mut("/inspect_level/result")
+                .and_then(serde_json::Value::as_object_mut)
+            {
+                result.remove("points_detail");
+            }
+            representative_rows.insert(key, numerical_analysis);
+        }
+    }
+    let mut all_cut_rows = std::collections::BTreeSet::new();
+    for lmb in &all_physical_cuts.graphs[0].lmbs {
+        for subset in &lmb.subsets {
+            all_cut_rows.insert((
+                lmb.lmb_label.clone(),
+                subset.fixed.iter().copied().map(usize::from).collect_vec(),
+                subset.free.iter().copied().map(usize::from).collect_vec(),
+            ));
+        }
+    }
+
+    assert!(
+        non_representative_rows
+            .keys()
+            .all(|key| all_cut_rows.contains(key)),
+        "all-cut profiling must contain every limit compatible with the selected physical cut"
+    );
+    let shared_rows = non_representative_rows
+        .iter()
+        .filter_map(|(key, value)| representative_rows.get(key).map(|other| (value, other)))
+        .collect_vec();
+    assert!(
+        !shared_rows.is_empty(),
+        "the two physical cuts in one residue group must share a profiled UV limit"
+    );
+    assert!(
+        shared_rows
+            .iter()
+            .all(|(actual, expected)| actual == expected),
+        "a non-representative physical cut must project exactly the same LU residue-group event as its representative on every common UV limit"
+    );
 
     clean_test(test_root);
     Ok(())

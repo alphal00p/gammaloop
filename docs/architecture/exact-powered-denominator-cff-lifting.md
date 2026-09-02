@@ -7,10 +7,18 @@ term is projected to a causal-flow representation (CFF) after UV Taylor
 operations have raised one or more propagators. It expands two tightly coupled
 requirements:
 
-1. lift every denominator power onto the incidence of its physical `source_edge`,
-   with one occurrence-local edge for every denominator copy; and
+1. carry each original `source_edge` through the UV Taylor operator so the
+   source minors provide the exact term's skeleton and provenance, then lift
+   every rewritten denominator power into an owner-independent rational
+   occurrence graph; and
 2. rewrite the still-factorized numerator over those exact occurrences while
    minimizing the largest energy-degree bound supplied to generalized CFF.
+
+This exact-source reconstruction and minimax-dispatch machinery is exclusive to
+the projected local-4D route. Both direct local-3D representations instead
+complete the loop-energy integration first and apply every UV Taylor operator
+to the complete/global CFF expression. Their bodies are identical; the
+explicit-sum form only omits the localized form's orientation selectors.
 
 The two requirements cannot be solved independently. A denominator power first
 creates the occurrence-local energy namespace in which the generalized residue
@@ -37,18 +45,25 @@ the production projection performs the following operations:
 
 1. A negative integer power `den(...)^-r` becomes `r` denominator
    occurrences. The numerator is not expanded.
-2. Every occurrence inherits the incidence of its `source_edge` in either the
-   contracted cograph source minor or the separately contracted UV source minor.
-   Matching momentum signatures never choose endpoints or merge owners.
-3. The `r` occurrences of one source edge are represented by a minimal serial
-   subdivision of that edge, with `r-1` auxiliary two-valent vertices. A powered
-   self-loop becomes an `r`-edge cycle. Equal denominators on distinct source
-   edges retain their distinct incidences.
-4. The exact signature and mass of repeated occurrences of one owner are
-   canonicalized and validated. This is the safe `D(Q)=D(-Q)` equivalence used
-   by repeated-channel algebra, not a graph-reconstruction rule.
-5. Physical owner IDs survive separately for cut support, physical-surface
-   projection, diagnostics, and mapping back to the parent graph.
+2. Every occurrence retains its `source_edge`. Contracted cograph and UV source
+   minors use those IDs to provide the already known skeleton, topology domain,
+   and external attachment. Matching momentum signatures never solve an
+   inverse incidence or Kirchhoff problem.
+3. The `r` occurrences of a rewritten denominator are represented by a minimal
+   occurrence graph. A raised source wrapper is realized by serial subdivision,
+   with `r-1` auxiliary two-valent vertices; a powered self-loop becomes an
+   `r`-edge cycle. The final rational incidence and loop rank are canonical in
+   the denominator algebra, rather than in the arbitrary physical owner labels.
+4. Exact signatures and masses are canonicalized into algebraic channels. This
+   is the safe `D(Q)=D(-Q)` equivalence used by repeated-channel algebra. Source
+   minors seed the construction, but relabeling algebraically identical
+   occurrences with another compatible physical owner cannot change the CFF
+   residue or loop rank.
+5. Physical owner IDs survive separately for occurrence-energy provenance,
+   physical-surface projection, diagnostics, and mapping back to the parent
+   graph. Cut support is the union of all physical owners which instantiate an
+   algebraic channel, with raised-line representatives added without discarding
+   that union.
 6. The numerator is analyzed in physical EMR variables without expansion.
    Addition takes a maximum degree, multiplication and multilinear slots add
    degrees, and a nonnegative integer power repeats a factorized base.
@@ -59,22 +74,29 @@ the production projection performs the following operations:
    occurrence order.
 9. One immutable assignment plan owns both the bounds passed to generalized CFF
    and the substitutions used later to evaluate the numerator.
-10. If an occurrence has momentum `-Q` rather than `Q`, that raw algebraic sign
-    is retained by the numerator mapper and explicitly inverted when the
-    occurrence is used to evaluate a physical numerator `Q`. Parsed-graph
-    routing comes from the source edge instead; denominator evenness never
-    causes the numerator to be treated as even.
+10. If an occurrence has momentum `-Q` rather than `Q`, that literal algebraic
+    sign is retained by the numerator mapper. It is composed with any later
+    coherent reversal of the complete rational-routing component by comparing
+    the original exact signature with the final parsed occurrence signature.
+    The resulting sign converts the occurrence energy back to the physical
+    numerator convention; denominator evenness never causes the numerator to
+    be treated as even.
 11. Once incidence, power subdivisions, and non-vacuum source-crown hedges are
-    complete, Graphica canonically relabels nodes and exact edges. This supplies
-    deterministic equality and cache keys without inferring topology.
+    complete, Graphica canonically relabels the skeleton with internal
+    propagators treated as undirected and external crown incidences left
+    directed. Connected rational-routing components then receive one
+    deterministic coherent direction. This supplies deterministic equality and
+    cache keys without inferring topology.
 12. All additive Taylor terms are planned before CFF generation. Terms with the
     same canonical topology share one channel-wise maximal capacity envelope,
     while each term retains its own immutable minimax numerator assignment.
 
 The resulting graph is therefore a source-backed occurrence representation of
-the rewritten rational function. Provenance is not merely descriptive metadata:
-it selects the source incidence before the owner-free graph is passed to the
-shared CFF implementation.
+the rewritten rational function. Provenance is not discarded: it supplies the
+source-minor scaffold and all maps back to the physical graph. It is also not an
+extra argument of the rational function. Once algebraically identical
+occurrences have been lifted, changing only their compatible owner labels must
+not change their residue, loop rank, or owner-free CFF cache identity.
 
 ## Terminology and identity layers
 
@@ -84,9 +106,9 @@ incorrect topology or numerator sampling.
 
 | Concept | Meaning | May determine rational topology? | May own a numerator bound? |
 | --- | --- | --- | --- |
-| Physical graph edge | An edge of the original amplitude or forward-scattering graph | Yes, through its source-minor graph attachment | Yes, during the first physical-EMR analysis |
-| Provenance or source owner | The original edge recorded in a `den(edge, momentum, mass, value)` wrapper | Yes; it selects the inherited incidence and the local power group | No, by itself |
-| Denominator occurrence | One copy produced by a negative denominator power | It subdivides its owner's already selected incidence | Yes, after certified physical-to-exact lifting |
+| Physical graph edge | An edge of the original amplitude or forward-scattering graph | It supplies a known source-minor attachment; its label is not part of the owner-free rational identity | Yes, during the first physical-EMR analysis |
+| Provenance or source owner | The original edge recorded in a `den(edge, momentum, mass, value)` wrapper | It selects the source-minor scaffold/domain and physical projections, but cannot distinguish algebraically identical rational functions | No, by itself |
+| Denominator occurrence | One copy produced by a negative denominator power | Its algebraic channel and multiplicity determine the canonical rational occurrence graph on the source scaffold | Yes, after certified physical-to-exact lifting |
 | Exact CFF energy ID | The occurrence-local OSE/EMR label used by the temporary exact source | It labels an already source-constructed occurrence | Yes |
 | Physical EMR energy | The temporal component of `Q(edge, ...)` in the parent graph | No; this is numerator vocabulary | Yes |
 | LMB coordinate | A coordinate used to route loop momenta | No; it only expresses exact momentum signatures and active coordinates | Never |
@@ -116,11 +138,14 @@ den(owner_b, -P, m2, D(P))^-2.
 
 At that point, using the original graph unchanged is insufficient: the energy
 integral has a double or triple pole, whereas an ordinary graph edge encodes
-only one denominator occurrence. The required operation is local: repeated
-wrappers with the same source edge subdivide that edge's incidence. It is also
-wrong to discard the source edge and try to reconstruct incidence from the
-rewritten signatures. Two different physical edges can carry algebraically
-equal denominators while still occupying different places in the source graph.
+only one denominator occurrence. It is wrong to discard the source edge and
+try to reconstruct a graph from the rewritten signatures: the UV/cograph
+minors and their attachment to the unshrunk graph are already known from the
+original graph. It is equally wrong to promote that retained label into
+algebra. Two occurrences with the same domain, mass, and denominator
+`D(Q)=D(-Q)` represent the same rational channel even when they came from
+different physical edges. A compatible owner relabeling may change physical
+provenance, but cannot change the contour residue or the number of active loops.
 
 The numerator poses a second problem. UV differentiation can simultaneously
 produce higher powers of temporal momenta. For example, the rational term may
@@ -149,12 +174,12 @@ completed local 4D UV term
   v
 numerator Atom + Vec<FourDDenominator>
   |
-  | source-owner grouping and algebra validation
+  | source-minor lookup plus algebraic-channel validation
   v
-occurrence groups keyed by source_edge
-  validated by (UV/cograph domain, signature up to sign, mass^2)
+known UV/cograph skeleton and occurrence channels keyed by
+  (topology domain, signature up to sign, mass^2)
   |
-  | source-minor incidence + owner-local serial subdivision
+  | source-backed attachment + owner-independent occurrence lift
   v
 source-backed occurrence graph
   |
@@ -209,20 +234,23 @@ other arguments while carrying that owner unchanged. Consequently, the
 completed Taylor coefficient still has a direct lookup into the original graph
 and never has to recover an edge from the rewritten momentum.
 
-Taylor collection can also expose a positive typed `GS.den` factor multiplying
-a negative occurrence of the same wrapper. Projection distributes only an
-addition which contains such typed denominator provenance, then cancels the
-matching positive and negative occurrences. It does not distribute an ordinary
-numerator sum. For example,
+Taylor collection can also expose a positive typed `GS.den` factor inside a
+numerator multiplying a negative occurrence of the same wrapper. Projection
+does not cancel those factors or distribute that nested numerator sum. It
+splits only an outer additive Taylor result whose addends need separate
+denominator topologies. For example,
 
 ```text
 ((A+B)*den_0 + den_1) / (den_0*den_1)
 ```
 
-is projected as the two factorized terms `(A+B)/den_1` and `1/den_0`; it is not
-expanded into `A/den_1 + B/den_1 + 1/den_0`. The focused regression
-`term_projection_cancels_provenance_without_expanding_ordinary_sums` protects
-that distinction.
+is projected with numerator `(A+B)*den_0 + den_1` and denominator occurrences
+`[den_0,den_1]`. The numerator remains one factorized atom, and generalized CFF
+performs any resulting pinches internally. By contrast, a completed outer sum
+`T_0/den_0 + T_1/den_1` is parsed as two terms because its addends genuinely
+carry different denominator topologies. The focused regression
+`term_projection_keeps_typed_numerator_factors_uncancelled` protects that
+distinction.
 
 For example,
 
@@ -254,32 +282,45 @@ survives term projection exactly as a factorized atom.
 This step supports arbitrary negative integer powers. It does not contain a
 special case for a double pole or for a self-energy graph.
 
-## Stage 2: form owner-local power groups and validate their algebra
+## Stage 2: recover the source skeleton and classify algebraic channels
 
-The structural group key is the physical `source_edge`. For each occurrence,
-GammaLoop also computes an exact momentum signature in the temporary source
-coordinates and canonicalizes it up to an overall sign. Repeated occurrences of
-one source edge are accepted only if the following validation tuple agrees:
+Two keys are retained here for different purposes. The physical `source_edge`
+locates an occurrence in the already known cograph or UV source minor. It tells
+GammaLoop which original component, attachment, and topology domain produced
+the factor, so no graph has to be inferred from a matrix of rewritten momentum
+signatures. Separately, GammaLoop computes an exact momentum signature in the
+temporary source coordinates and canonicalizes it up to an overall sign. The
+algebraic-channel key is
 
 ```text
 (
-    uses_uv_loop_basis,
+    topology_domain,
     canonical_momentum_signature_up_to_sign,
     canonical_mass_squared,
 )
 ```
 
-The retained `full_expr` payload and the input order of denominator factors do
-not affect this validation. The source owner deliberately does affect the
-structural group: it is the only authoritative link back to graph incidence.
+The retained `full_expr` payload, input order, and physical owner label do not
+change this channel. The owner remains the authoritative link back to the
+source skeleton and physical graph, but it is not a variable of the rewritten
+rational function.
 
-This gives two separate invariants:
+This gives three separate invariants:
 
-- repeated copies of one source edge form one powered line only when they
+- every exact occurrence can be attached to the appropriate original source
+  minor without an algebraic graph-reconstruction search;
+- repeated copies of one source wrapper form a powered line only when they
   represent the same rewritten denominator up to `D(Q)=D(-Q)`; and
-- equal rewritten denominators on different source edges remain different graph
-  edges, even though the shared CFF layer may later classify them as one
-  repeated algebraic channel.
+- after that source-backed construction, the rational residue and loop rank of
+  an algebraic channel are invariant under a compatible relabeling of its
+  physical owners.
+
+A compatible relabeling changes only the `source_edge` provenance among
+occurrences which instantiate the same normalized denominator in the same
+topology domain and for which the source-backed lift remains valid. It does not
+move a factor between UV and cograph domains, alter a mass or affine external
+shift, or change a non-vacuum boundary. Those changes describe a different
+rational problem rather than a provenance relabeling.
 
 If one source edge appears with incompatible normalized signatures or masses in
 one additive 4D term, generation fails instead of choosing an incidence by
@@ -288,42 +329,47 @@ minor domains even when their algebraic data happen to look alike.
 
 ### Provenance is retained, not discarded
 
-Owner provenance remains on every `FourDDenominator`. Before the owner-free
-`ParsedGraph` is produced, it is used to:
+Owner provenance remains on every `FourDDenominator`. Across construction and
+the later projection back from the owner-free `ParsedGraph`, it is used to:
 
-- select the inherited source-minor incidence;
-- decide which repeated occurrences subdivide one physical line;
+- select the source-minor component and attachment which seed the exact
+  skeleton;
+- recognize repeated copies produced by raising one physical wrapper;
 - project occurrence-local energy IDs back to physical edge IDs;
-- retain Cutkosky and LU cut support;
+- retain distinct occurrence-energy provenance;
+- build Cutkosky and LU cut support as the union of physical owners in each
+  algebraic channel;
 - recognize which exact surfaces are original physical surfaces;
 - report and diagnose the source of a UV-expanded factor;
 - recover parent-graph spatial momenta and affine external shifts.
 
 The rule is therefore:
 
-> Use source provenance to construct the occurrence topology, and use normalized
-> signatures to validate and process the algebra on that fixed topology.
+> Use source provenance to recover the known skeleton and all physical maps;
+> use normalized denominator algebra to define the owner-independent rational
+> occurrence graph on that skeleton.
 
-## Stage 3: inherit source-minor incidence and subdivide powers locally
+## Stage 3: instantiate the source-minor scaffold and lift powers
 
-Each owner-local group receives the incidence `(tail, head)` of its physical
-source edge.
+The original graph is never reconstructed. Instead, each occurrence first
+receives a deterministic attachment in the appropriate source minor.
 
 For cograph denominators, a disjoint-set union over the original graph nodes
 contracts source edges absent from the additive exact term. Each surviving
-owner then uses the endpoints of its original `EdgeIndex` in that quotient.
+owner identifies the endpoints of its original `EdgeIndex` in that quotient.
 UV denominators use a separate disjoint-set union for the UV source minor:
 absent UV edges are contracted there, and every active UV owner inherits its
 endpoints from that minor. The two node domains remain distinct.
 
 There is no Kirchhoff solver, signature-matroid reconstruction, or
 signature-to-endpoint fallback. A rewritten momentum such as `k1+k2` still has
-a `source_edge`; its source-minor attachment determines where it lives. Exact
-signatures are subsequently checked against that choice. If source-backed
-incidence and the supplied momenta violate loop-momentum conservation,
-generation fails explicitly.
+a `source_edge`; its source-minor attachment identifies where that factor came
+from. Exact signatures are subsequently checked against the scaffold. If the
+source-backed construction and supplied momenta cannot realize a valid exact
+occurrence graph, generation fails explicitly.
 
-Once the base incidence is known, a group of multiplicity `r` is subdivided as
+For a raised source wrapper, once its base attachment is known, multiplicity
+`r` is subdivided as
 
 ```text
 tail --occ_0-- x_1 --occ_1-- ... --occ_(r-2)-- x_(r-1) --occ_(r-1)-- head
@@ -332,29 +378,46 @@ tail --occ_0-- x_1 --occ_1-- ... --occ_(r-2)-- x_(r-1) --occ_(r-1)-- head
 This introduces precisely `r-1` auxiliary vertices. If `tail == head`, the
 result is an `r`-edge cycle. Every occurrence keeps its own exact energy ID. Its
 `ParsedGraph` signature is normalized up to sign, and every segment is directed
-consistently with the physical source-edge routing.
+coherently.
+
+That source-backed subdivision is a construction device, not an
+owner-sensitive definition of the integral. Equal algebraic occurrence
+multisets are subsequently canonicalized without owner labels. Thus two copies
+of `D(Q)` must yield the same one-loop, double-pole CFF whether their provenance
+is `(edge 0, edge 1)` or `(edge 0, edge 0)`, provided both owner assignments are
+compatible with the same source skeleton and topology domain. The source IDs
+avoid a combinatorial endpoint search; they do not grant two spellings of the
+same rational function different residues.
+
+Here, “owner-independent” does **not** mean that GammaLoop throws away the
+source graph and reconstructs another graph from canonical signatures. The only
+topological operations are contraction of known source-minor edges, local
+subdivision for denominator multiplicity, and canonical relabeling of the
+result. Owner invariance is a contract on that deterministic lift. There is no
+enumeration of candidate incidences, Kirchhoff-matrix inversion, or
+signature-matroid search anywhere in this path.
 
 The UV Taylor operator can remove a soft/cograph shift from a denominator. For
 example, an original source edge may carry `Q_hard+Q_soft`, while its rewritten
-UV denominator carries only `Q_hard`. Its endpoints still come directly from
-the original edge. To determine only whether that inherited incidence is used
-forward or backward, GammaLoop tests both signs modulo the span of the known
-opposite topology domain:
+UV denominator carries only `Q_hard`. Its scaffold attachment still comes
+directly from the original edge. To determine only whether that attachment is
+used forward or backward, GammaLoop tests both signs modulo the span of the
+known opposite topology domain:
 
 ```text
 exact_row - sign * source_row in span(opposite_domain_rows), sign in {+1,-1}.
 ```
 
 Exactly one sign must pass. This rank calculation is a routing-coordinate
-validation after both graph minors are already fixed; it never chooses nodes or
-repairs momentum balance. The focused hard-plus-soft triangle regression checks
-that the correct sign leaves only a soft residual and that the opposite sign
-raises the quotient-space rank.
+validation after both graph minors are already fixed; it never chooses nodes,
+constructs a graph, or repairs momentum balance. The focused hard-plus-soft
+triangle regression checks that the correct sign leaves only a soft residual
+and that the opposite sign raises the quotient-space rank.
 
 Serial subdivision is the graph-theoretic representation of a dotted line: the
 new two-valent vertices do not introduce independent momentum constraints. Raw
-occurrence signs are retained separately by the exact numerator mapper rather
-than encoded as alternating segment directions.
+occurrence signs and physical owners are retained separately by the exact
+numerator/provenance maps rather than encoded as alternating segment directions.
 
 ### Non-vacuum boundaries use explicit source-crown hedges
 
@@ -378,16 +441,62 @@ or Kirchhoff reconstruction.
 
 ### Determinism
 
-Occurrence input is first put in a stable order so owner-local chains are
-reproducible. After all source incidences, auxiliary power vertices, cut
-carriers, and crown hedges exist, Graphica canonically relabels the directed,
-edge-coloured graph. Exact edges are then sorted in that canonical node
-namespace and the occurrence-to-original-factor map is reordered with them.
-Source-node and power-node names survive as aliases of the canonical nodes;
-cache keys deliberately clear those names and edge labels. Reversing the order
-of Symbolica factors therefore does not change the parsed exact graph or its CFF
-cache entry. Crucially, this pass only relabels an already constructed graph: it
-never derives an endpoint from a momentum signature.
+Occurrence input is first put in a stable order so raised-wrapper subdivisions
+are reproducible. After all source attachments, auxiliary power vertices, cut
+carriers, and crown hedges exist, Graphica canonically relabels the edge-coloured
+graph. Internal propagator incidences are undirected during this relabeling
+because `D(Q)=D(-Q)`; external crown incidences remain directed. In the
+canonical node namespace, exact occurrences are grouped only for routing by
+connected component and the key
+
+```text
+(UV/cograph domain, canonical signature up to sign, mass, power marker).
+```
+
+For each such component, GammaLoop compares the sorted multiset of directed
+`(tail,head,signature,...)` edge keys with the multiset obtained by reversing
+every incidence and negating every complete momentum signature. It retains the
+lexicographically smaller whole-component spelling. Reversing the component as
+one unit is essential: a same-owner dotted chain, or equal rational
+denominators carried by successive distinct source edges, must not acquire
+alternating segment directions. Disconnected equal denominators remain
+separate routing components, and owner IDs remain provenance rather than an
+algebraic routing key.
+
+Exact edges are then sorted in the canonical node namespace and the
+occurrence-to-original-factor map is reordered with them. Source-node and
+power-node names survive as aliases of the canonical nodes; cache keys
+deliberately clear those names and edge labels. Reversing the order of Symbolica
+factors therefore does not change the parsed exact graph or its CFF cache entry.
+Crucially, this pass only relabels and orients an already source-constructed
+graph: it never derives an endpoint from a momentum signature.
+
+### Rational incidence and physical support cross the boundary separately
+
+The owner-free exact CFF and the maps back to the physical graph deliberately
+cross separate interfaces:
+
+- **Energy provenance is occurrence-local.** Each canonical exact energy maps
+  back to the physical owner carried by its original denominator occurrence.
+  Distinct owners therefore remain distinguishable to numerator evaluation and
+  diagnostics even when their denominators are algebraically identical.
+- **Cut support is channel-wide.** For each algebraic denominator channel,
+  GammaLoop collects the sorted, deduplicated union of every physical
+  `source_edge` which instantiated it. Any exact occurrence used as residue
+  support is projected to that full union. This prevents an arbitrary canonical
+  occurrence representative from erasing a valid physical Cutkosky carrier.
+- **Raised-line compatibility is additive.** Downstream LU selection may name a
+  canonical representative of a physical raised-edge group. GammaLoop adds
+  those representative aliases to the already unioned physical support and
+  merges equal support-sign entries. It does not replace the original owner
+  set. Thus existing raised-cut matching continues to work without losing
+  provenance.
+
+The channel used for this neutral cut-support union includes the topology
+domain, mass, and exact signature canonicalized up to sign. Consequently
+`D(Q)` and `D(-Q)` share support, but equal-looking UV and cograph factors, or
+factors of different mass, do not. None of these support operations modifies
+the rational incidence, exact energy map, or numerator routing sign.
 
 ## Stage 4: analyze the factorized numerator in physical EMR variables
 
@@ -561,63 +670,74 @@ the ordinary componentwise maximum. The shared envelope is generator capacity
 only: it never replaces a term's factor-to-occurrence assignment.
 
 The production-shaped regression
-`dod_one_triangle_taylor_terms_keep_source_owners_and_reuse_two_cffs` applies
-the real degree-one UV Taylor operator to the three-edge UV triangle in the
-double-triangle skeleton. Its four additive terms retain owner multiplicities
+`dod_one_triangle_keeps_one_uncancelled_exact_source_and_matches_lower_sectors`
+applies the real degree-one UV Taylor operator to the three-edge UV triangle in
+the double-triangle skeleton. The collected coefficient remains one
+common-denominator exact source with owner multiplicities
 
 ```text
-(1,1,1), (1,1,1), (1,1,2), (2,1,1).
+(2,1,2).
 ```
 
-The two undotted terms share the base three-denominator UV vacuum component;
-the two owner-local derivatives share its four-denominator dotted subdivision.
-Although their sparse numerator plans place capacity on different canonical
-occurrences, the batch generates exactly those two CFF topologies. The fixed
-cograph component is part of the canonical key, so this reuse does not conflate
-different surrounding graphs or future non-vacuum boundaries.
+The positive typed denominator factors which would algebraically expose the
+base and singly dotted lower sectors remain in the additive factorized
+numerator. No parser-side distribution or cancellation occurs. The source uses
+one canonical generator-cache entry, and the regression verifies that its
+exact CFF orientation sum equals a test-only oracle in which those lower sectors
+are reduced explicitly. The fixed cograph component is part of the canonical
+key, so this reuse does not conflate different surrounding graphs or future
+non-vacuum boundaries.
 
 ## Why `D(Q)=D(-Q)` cannot introduce numerator sign mistakes
 
 This deserves a separate proof because the denominator and numerator have
 different parity properties.
 
-Let an exact occurrence carry momentum
+Let the literal exact denominator carry momentum
 
 \[
-  P_r=s_r Q,
-  \qquad s_r\in\{+1,-1\}.
+  P_{\mathrm{lit}}=s_{\mathrm{lit}}Q,
+  \qquad s_{\mathrm{lit}}\in\{+1,-1\}.
 \]
 
 For a scalar propagator,
 
 \[
-  D(P_r)=P_r^2-m^2=(s_r Q)^2-m^2=D(Q).
+  D(P_{\mathrm{lit}})=P_{\mathrm{lit}}^2-m^2
+  =(s_{\mathrm{lit}}Q)^2-m^2=D(Q).
 \]
 
 It is therefore correct to give `+Q` and `-Q` the same normalized denominator
-signature. If they are repeated occurrences of one source edge, they validate
-as copies of that owner's powered line. If they belong to distinct source edges,
-they keep those distinct incidences while remaining algebraically equivalent to
-the repeated-channel machinery. Neither case derives topology from the sign.
+signature and algebraic channel. If they are repeated occurrences of one source
+wrapper, they validate as copies of that powered line. If they belong to
+distinct source edges, those owners remain in physical provenance and unioned
+cut support, while the rational occurrence graph remains owner-invariant.
+Neither case reconstructs topology from the sign.
 
-It does **not** replace `Q` by `-Q` in the numerator. The relative sign `s_r`
-is stored next to the occurrence when literal exact candidates are certified.
-The occurrence-local CFF energy map represents the temporal component of
-`P_r`,
-
-\[
-  p_r^0=s_r q^0.
-\]
-
-When that occurrence is assigned to a physical numerator factor written in
-terms of `Q`, the mapper reconstructs
+It does **not** replace `Q` by `-Q` in the numerator. After owner-free graph
+canonicalization, a complete rational-routing component may also have been
+reversed coherently. Write its final parsed occurrence momentum as
 
 \[
-  q^0=s_r p_r^0,
+  P_{\mathrm{parsed}}=s_{\mathrm{route}}P_{\mathrm{lit}},
+  \qquad s_{\mathrm{route}}\in\{+1,-1\}.
 \]
 
-because `s_r^{-1}=s_r`. In the implementation this is the explicit negation
-performed when the certified occurrence sign is `-1`.
+The mapper determines `s_route` by comparing the final parsed signature with
+the original exact signature; it must not reuse only the earlier
+`canonical_up_to_sign` result because the later component canonicalization may
+have reversed that direction again. The occurrence-local CFF energy map is the
+temporal component `p_parsed^0`, so a physical numerator written in terms of
+`Q` is reconstructed as
+
+\[
+  q^0=s_{\mathrm{lit}}s_{\mathrm{route}}p_{\mathrm{parsed}}^0,
+\]
+
+because both signs are their own inverses. The certified occurrence sign stored
+by the mapper is therefore the product
+`s_literal * s_route`; an explicit negation is performed exactly when that
+product is `-1`.
 
 Consequently,
 
@@ -625,8 +745,10 @@ Consequently,
   Q^0+c
   \longmapsto
   \begin{cases}
-    p_r^0+c, & P_r=+Q,\\
-    -p_r^0+c, & P_r=-Q.
+    p_{\mathrm{parsed}}^0+c,
+      & s_{\mathrm{lit}}s_{\mathrm{route}}=+1,\\
+    -p_{\mathrm{parsed}}^0+c,
+      & s_{\mathrm{lit}}s_{\mathrm{route}}=-1.
   \end{cases}
 \]
 
@@ -638,15 +760,18 @@ physical numerator.
 
 There are thus two separate routing layers:
 
-1. The parsed graph uses one direction derived from the physical source-edge
-   routing. All segments of an owner-local power chain use that direction after
-   their signatures have been normalized.
-2. The numerator mapper retains each occurrence's raw sign and composes it with
-   the occurrence-local temporal map to recover the physical `Q` convention.
+1. The parsed graph uses one coherent canonical direction for each completed
+   rational-routing component. Its initial attachment came from the source
+   minor, but owner labels are absent from the owner-free rational identity.
+2. The numerator mapper retains the literal sign, derives the final component
+   routing sign from the parsed occurrence, and composes both with the
+   occurrence-local temporal map to recover the physical `Q` convention.
 
-The first layer is graph provenance; the second is algebraic numerator mapping.
-Denominator evenness affects only signature equivalence and never silently turns
-an odd numerator into an even one.
+The first layer is even denominator algebra on a source-backed skeleton; the
+second is signed physical-numerator mapping. Denominator evenness affects only
+signature equivalence and never silently turns an odd numerator into an even
+one. Likewise, unioning `+Q` and `-Q` cut support is a neutral provenance
+operation and never rewrites a numerator factor.
 
 ### A focused sign oracle
 
@@ -715,10 +840,10 @@ This is the simplest complete realization of
 
 as a graph accepted by the shared CFF recursion.
 
-## Complete example 2: coincident denominators retain distinct-owner incidence
+## Complete example 2: owner relabeling preserves the rational CFF
 
-The fixture
-`exact_source_keeps_coincident_distinct_owner_incidences`
+The regression
+`exact_source_owner_relabeling_preserves_residue_rank_and_cut_provenance`
 uses a physical graph with two parallel edges:
 
 ```text
@@ -728,19 +853,31 @@ uses a physical graph with two parallel edges:
     a ----------> b
 ```
 
-It creates one denominator record from each owner. In the production basis their
-signatures normalize to the same momentum and their masses agree, so the shared
-repeated-channel detector correctly recognizes one algebraic double channel.
+It constructs two spellings of the same rewritten denominator multiset:
 
-The source-backed exact graph nevertheless contains the two original parallel
-incidences and no auxiliary power node: neither owner is individually raised.
-The repeated-group detector returns `[0,1]` only after those incidences are
-fixed. The physical projection separately records which canonical exact
-occurrence came from owner 0 and which came from owner 1.
+```text
+distinct provenance: (owner 0, owner 1) -> D(Q)^-2
+relabeled provenance: (owner 0, owner 0) -> D(Q)^-2
+```
 
-This fixture separates two concepts which must not be conflated: source
-provenance determines graph incidence, while normalized signatures determine
-denominator equivalence for generalized repeated-channel algebra.
+The source graph and retained IDs make both constructions immediate: no
+algorithm searches momentum signatures for a two-node bubble or solves a
+Kirchhoff incidence problem. Their normalized signatures and masses identify
+the same algebraic double channel. The owner-free exact graphs are both valid,
+have one topological loop, and give the same CFF residue at exact rational
+on-shell points after the neutral physical-energy aliases are identified.
+
+What changes is only the physical projection. The distinct spelling retains
+energy provenance `{0,1}` and cut support `{0,1}`. The relabeled spelling
+retains energy provenance `{0}` and cut support `{0}`. In the first case, each
+exact occurrence projects to the union `{0,1}` for cut eligibility, even though
+its occurrence-local energy still maps to the one owner which produced it.
+
+This fixture protects the precise boundary: source IDs recover the known
+skeleton and survive as provenance, but owner identity cannot control the exact
+rational incidence, loop rank, or contour residue. It also demonstrates why
+cut support must be unioned after canonicalization: choosing one canonical
+occurrence must not hide the other physical owner.
 
 ## Complete example 3: opposite routing within one powered line
 
@@ -750,17 +887,19 @@ uses two occurrences of one rational denominator with momenta `+Q(0)` and
 
 The `+Q` and `-Q` occurrences enter the same owner-local power group because
 their canonical signatures and masses agree. Their parsed signatures are both
-normalized, and both serial segments follow the routing of source edge 0. The
-raw opposite signs remain in the exact numerator mapper. The separate physical
-edge supplies the reverse source incidence needed to close the graph, so the
-whole exact graph is momentum-balanced without a signature-derived sign bridge.
+normalized, and both serial segments are attached to the source-edge-0 scaffold
+before receiving one coherent canonical direction. The raw opposite signs
+remain in the exact numerator mapper. The separate physical edge completes the
+known source scaffold, so the whole exact graph is momentum-balanced without a
+signature-derived sign bridge or an owner-sensitive rational residue.
 
 A separate end-to-end test,
 `exact_cff_handles_opposite_repeated_routing_without_a_sign_bridge`, uses two
 distinct physical source edges whose exact signatures normalize to one
-double-pole channel. Their source incidences remain separate. The test finds two
-explicit orientations, keeps the original physical edges undirected, and
-verifies the complete orientation sum
+double-pole channel. Their physical provenance remains separate while the
+owner-free occurrence graph represents the common rational channel. The test
+finds two explicit orientations, keeps the original physical edges undirected,
+and verifies the complete orientation sum
 
 \[
   \frac{i}{32\pi^3 E^3}
@@ -801,9 +940,10 @@ become
 Their owner edges have genuinely different physical parent-graph momentum
 signatures. After the local 4D UV expansion, all three UV denominators are the
 same massive UV propagator up to routing sign. Each owner nevertheless retains
-its edge in the UV source-minor triangle. The shared CFF layer recognizes the
-three normalized signatures as one cubic repeated channel on that fixed
-triangle; it is not reconstructed as a source-independent serial line.
+its edge as physical provenance, and the UV source minor supplies the known
+triangle scaffold without reconstruction. The shared CFF layer recognizes the
+three normalized signatures as one cubic repeated channel and canonicalizes its
+rational occurrence graph without using those owners as algebraic labels.
 
 The integration fixture's numerator probe is deliberately factorized:
 
@@ -858,6 +998,11 @@ Both fixtures are exercised through three production routes:
 3. local 4D UV followed by exact CFF projection and an explicit orientation
    sum.
 
+The first two routes are parity comparators and do not use the lifting described
+in this document: they apply Taylor operators after complete/global CFF energy
+integration and differ only by selector omission. Only route 3 reconstructs
+exact source occurrences and performs minimax EMR dispatch.
+
 They are compared at several small and large momentum points. The strongest
 comparison evaluates the explicit-local-3D and projected-local-4D routes
 directly as 1000-bit Arb values and compares the Arb numbers without conversion
@@ -891,9 +1036,9 @@ the combined LU residue equals the cograph LU factor times the independent UV
 factor, including the production prefactor bridge.
 
 This is important for nested and disconnected UV structures: source-minor
-incidence keeps the domains structurally separate. Any later signature
+attachment keeps the domains structurally separate. Any later signature
 equivalence is repeated-channel algebra on the completed graph and cannot merge
-their nodes or power chains.
+UV with cograph topology merely because their momenta look alike.
 
 ## Complete example 6: numerator/denominator cancellation, including LU
 
@@ -1067,25 +1212,30 @@ Within that production class, genericity follows from the following properties.
 ### 1. Denominator multiplicity is arbitrary
 
 Any representable negative integer power becomes the corresponding number of
-occurrences of that source edge. The serial-chain constructor accepts an
-arbitrary owner-local group length and adds exactly one fewer auxiliary
-vertices. No power-two or GL0 branch exists in the implementation.
+occurrences of its rewritten denominator. The serial-chain constructor accepts
+an arbitrary raised-wrapper multiplicity and adds exactly one fewer auxiliary
+vertices. Algebraically coincident occurrences are handled by the same channel
+machinery regardless of how many distinct owners supplied them. No power-two or
+GL0 branch exists in the implementation.
 
-### 2. Incidence is source-backed and algebra is validated separately
+### 2. Skeleton recovery is source-backed and rational identity is owner-free
 
-The source edge and its cograph/UV minor determine endpoints for every process
-and UV-spinney shape. Within one owner-local power group, domain, exact momentum
-signature up to sign, and mass must agree. Across owners, the same normalized
-signature and mass may identify a repeated algebraic channel without changing
-either incidence.
+The source edge and its cograph/UV minor provide the original skeleton,
+component domain, and attachment for every process and UV-spinney shape. This
+sidesteps the generic inverse problem of deriving graph incidence from momentum
+signatures. Within one raised source wrapper, domain, exact momentum signature
+up to sign, and mass must agree. Across owners, the same normalized signature
+and mass identify the same rational channel. Relabeling compatible owners can
+change physical provenance, but not the channel's residue or loop rank.
 
 ### 3. Canonicalization is topology-preserving
 
 Cograph and UV graph minors are constructed directly from the physical source,
 including contraction of absent edges. Explicit crown hedges retain non-vacuum
-external boundaries. Only after this graph exists does Graphica relabel it for
-deterministic equality and caching. No signature matroid, Kirchhoff system, or
-incidence search is part of exact-source topology construction.
+external boundaries. Only after this scaffold exists does the owner-blind
+occurrence lift and Graphica relabeling establish deterministic rational
+equality and caching. No signature matroid, Kirchhoff system, or incidence
+search is part of exact-source topology construction.
 
 The only rank solve near this boundary is the two-candidate quotient-space test
 for the routing sign of an already attached owner: `exact_row -/+ source_row`
@@ -1120,12 +1270,23 @@ disconnected and non-vacuum exact sources as well as vacuum UV factors.
 ### 7. Routing signs are first-class data
 
 Canonicalization up to sign normalizes the denominator signature stored in the
-parsed graph. Chain incidence follows the source-edge routing. The separate raw
-occurrence sign remains in the numerator mapper and restores the physical
-numerator convention. This works for odd, even, scalar, and tensor numerator
-factors.
+parsed graph. A rational-routing component then receives one coherent canonical
+direction, which can reverse that intermediate spelling. The numerator mapper
+composes the separate literal occurrence sign with the final parsed-routing
+sign and restores the physical numerator convention. This works for odd, even,
+scalar, and tensor numerator factors.
 
-### 8. Unsupported cases fail closed
+### 8. Provenance projection is channel-complete
+
+Owner relabeling does not erase physical information. Occurrence-energy maps
+retain the particular source owner, while neutral cut support is the set union
+of all distinct owners in the algebraic channel. The union automatically
+deduplicates repeated copies of one owner and extends to any channel
+multiplicity. Adding raised-group representatives preserves compatibility with
+physical cut selection without replacing that owner set. None of these rules
+depends on a bubble, triangle, GL0, or a particular number of raised edges.
+
+### 9. Unsupported cases fail closed
 
 The implementation returns contextual errors for:
 
@@ -1146,10 +1307,10 @@ silently fall through to a test-specific approximation.
 
 The design minimizes work at three levels.
 
-First, the graph lift is minimal: a power `r` of one source edge requires exactly
-`r` occurrences and `r-1` auxiliary vertices on that incidence. It does not
-clone the surrounding graph or algebraically cancel numerator/denominator pairs
-upstream.
+First, the graph lift is minimal: a power `r` requires exactly `r` occurrences,
+and raising one source wrapper requires `r-1` auxiliary subdivision vertices.
+It does not clone the surrounding graph or algebraically cancel
+numerator/denominator pairs upstream.
 
 Second, the numerator lift minimizes the maximum exact energy rank. Generalized
 CFF cost grows with the required reconstruction/contact sectors, so replacing a
@@ -1157,19 +1318,19 @@ degree-four bound `(4,0)` by `(2,2)` can materially reduce generation and
 evaluation work. The factorized planner obtains that reduction without
 expanding the numerator.
 
-Third, canonical topology batching avoids repeating the CFF recursion for
-Taylor terms which differ only in which equivalent owner was dotted or where a
-factor-local bound was assigned. Channel-total joining avoids the rank inflation
-of a pointwise maximum. The real degree-one triangle coefficient therefore
-performs two CFF generations for four additive terms: one base three-denominator
-source and one four-denominator dotted source.
+Third, retaining a collected common denominator avoids repeating the CFF
+recursion for algebraic lower sectors that generalized CFF can generate by
+pinching. Canonical batching still joins genuinely outer additive terms without
+the rank inflation of a pointwise maximum. The real degree-one triangle
+coefficient therefore performs one CFF generation for its uncancelled source;
+its base and singly dotted lower sectors are internal CFF sectors rather than
+separate upstream graph topologies.
 
-Upstream algebraic cancellation such as `D(Q)/D(Q)^2 -> 1/D(Q)` can still be an
-optional optimization, but correctness does not depend on it. Supplying the
-proper occurrence bounds lets generalized CFF perform the required pinches and
-lower-sector reconstruction internally. This keeps UV orchestration simple and
-avoids making the production graph topology depend on process-specific
-numerator simplification.
+Upstream algebraic cancellation such as `D(Q)/D(Q)^2 -> 1/D(Q)` is deliberately
+not performed. Supplying the proper occurrence bounds lets generalized CFF
+perform the required pinches and lower-sector reconstruction internally. This
+keeps UV orchestration simple and avoids making the production graph topology
+depend on process-specific numerator simplification.
 
 ## Maintained invariants
 
@@ -1178,37 +1339,49 @@ Future changes to this path should preserve all of the following:
 1. A denominator occurrence is never dropped merely because another occurrence
    has the same owner.
 2. The original `EdgeIndex` survives the Taylor operator as `source_edge`.
-3. Every occurrence inherits the cograph- or UV-minor incidence of that
-   `source_edge`; signatures never choose endpoints.
-4. Only repeated occurrences of one owner subdivide one incidence into a power
-   chain. Distinct owners never form a cross-owner chain.
-5. UV and cograph denominator node domains never merge.
-6. Repeated occurrences of one owner must have the same normalized signature
+3. Source owners and the original graph determine the contracted cograph/UV
+   scaffold and physical attachments; signatures never reconstruct that
+   skeleton or choose original endpoints.
+4. The owner-free rational occurrence graph, loop rank, and CFF residue are
+   invariant under compatible owner relabeling of denominators with the same
+   topology domain, mass, and `D(Q)=D(-Q)` channel.
+5. Raising one source wrapper produces the requested occurrence multiplicity
+   through minimal serial subdivision; the owner's label is not subsequently
+   part of rational CFF identity.
+6. UV and cograph denominator node domains never merge.
+7. Repeated occurrences of one owner must have the same normalized signature
    and mass, or generation fails.
-7. `+Q` and `-Q` share a normalized denominator signature, while the raw sign is
-   retained separately for physical-numerator mapping.
-8. The quotient-space rank calculation can choose only the unique routing sign
+8. `+Q` and `-Q` share a normalized denominator signature, while the literal
+   sign and any later coherent component reversal are composed separately for
+   physical-numerator mapping.
+9. The quotient-space rank calculation can choose only the unique routing sign
    on fixed source endpoints; it cannot reconstruct or repair incidence.
-9. A physical numerator `Q` is reconstructed with the physical sign even when
+10. Occurrence-energy projection retains the particular physical owner which
+    supplied each occurrence, independently of owner-free rational incidence.
+11. Cut support for an exact algebraic channel is the sorted, deduplicated union
+    of all distinct physical owners which instantiate that channel.
+12. Raised-edge representative aliases are added to unioned cut support for LU
+    compatibility; they never replace or erase the original physical owners.
+13. A physical numerator `Q` is reconstructed with the physical sign even when
    assigned to a `-Q` occurrence.
-10. Numerator energy degrees are computed solely in physical EMR variables.
-11. LMB coordinates never own an energy bound or serve as an identity fallback.
-12. The numerator remains factorized through analysis and mapping.
-13. The same immutable per-term plan owns bounds and substitutions.
-14. A shared CFF batch envelope uses the maximum total degree of each repeated
+14. Numerator energy degrees are computed solely in physical EMR variables.
+15. LMB coordinates never own an energy bound or serve as an identity fallback.
+16. The numerator remains factorized through analysis and mapping.
+17. The same immutable per-term plan owns bounds and substitutions.
+18. A shared CFF batch envelope uses the maximum total degree of each repeated
     algebraic energy channel and componentwise maxima only for non-repeated
     occurrences; it never replaces a term's plan.
-15. Additive branches reuse capacity; multiplicative and multilinear slots
+19. Additive branches reuse capacity; multiplicative and multilinear slots
     consume capacity.
-16. Lower-sector pinching does not reassign a factor away from its certified
+20. Lower-sector pinching does not reassign a factor away from its certified
     occurrence.
-17. Input factor order does not alter the canonically relabeled exact source.
-    Reassigning a factor to a different physical owner may intentionally change
-    topology because the owner supplies incidence.
-18. Non-vacuum external boundaries remain explicit source-crown hedges.
-19. No internal edge or external-balance edge is synthesized from momentum
+21. Input factor order does not alter the canonically relabeled exact source;
+    changing only a compatible physical owner changes provenance, not the
+    rational graph or residue.
+22. Non-vacuum external boundaries remain explicit source-crown hedges.
+23. No internal edge or external-balance edge is synthesized from momentum
     signatures; an inconsistent source-backed graph fails validation.
-20. Unsupported mappings fail explicitly rather than choosing a convenient
+24. Unsupported mappings fail explicitly rather than choosing a convenient
     edge.
 
 ## Code map
@@ -1218,19 +1391,21 @@ The principal implementation sites are:
 - `crates/gammalooprs/src/uv/approx/local_4d.rs`
   - factorized term projection;
   - negative-power extraction into repeated `FourDDenominator` records;
-  - typed positive/negative `GS.den` cancellation without expanding ordinary
-    numerator sums.
+  - outer Taylor-sum splitting without canceling positive typed `GS.den`
+    numerator factors against negative denominator occurrences.
 - `crates/gammalooprs/src/graph/three_d_source.rs`
   - exact source coordinates and occurrence ordering;
   - disjoint-set cograph/UV source-minor contraction from original
-    `source_edge` incidence;
-  - owner-local serial power-chain construction;
+    `source_edge` attachments;
+  - minimal raised-wrapper subdivision and owner-independent rational
+    canonicalization;
   - normalized denominator validation and repeated-channel signatures;
   - explicit source-crown boundary completion;
   - unique `+/-` routing validation on already fixed endpoints;
   - post-construction Graphica node/edge canonicalization;
   - literal `+/-Q` candidate certification;
-  - occurrence-to-physical energy mapping and routing-sign restoration.
+  - occurrence-to-physical energy mapping and routing-sign restoration;
+  - channel-wide physical cut-support projection.
 - `crates/gammalooprs/src/numerator/energy_degree.rs`
   - factorized physical-EMR degree analysis;
   - equivalent-candidate validation;
@@ -1243,15 +1418,47 @@ The principal implementation sites are:
   - channel-total batch-envelope joining and exact occurrence bounds passed to
     the shared CFF generator.
 - `crates/gammalooprs/src/uv/approx/local_3d.rs`
-  - two-pass registration then generation of completed local-4D Taylor terms;
-  - retention of each term's original exact numerator plan.
+  - in the projected-local4D branch only, two-pass registration then generation
+    of completed local-4D Taylor terms;
+  - in that branch, retention of each term's original exact numerator plan.
 - `crates/gammalooprs/src/cff/mod.rs`
   - exact-source CFF assembly;
   - retention and use of the planned exact-source numerator;
-  - physical cut and surface projection.
+  - physical cut and surface projection;
+  - unioned physical-owner support with additive raised-edge representatives.
 - `crates/three-dimensional-reps/src/generation.rs`
   - generalized residue, finite-pole, and lower-sector CFF generation from the
     supplied exact occurrence bounds.
+
+## Production acceptance checkpoint
+
+The retained 2026-08-31 10x campaign passes all four physical DD/TT
+acceptances (`4/4`) after exercising orientation-local 3D, explicit-sum 3D, and
+projected local 4D where the acceptance compares routes. Pulls are signed
+differences from the published target in units of the Monte Carlo error; ratio
+pulls include the LO uncertainty.
+
+| Acceptance | 10x LO result | 10x NLO result | Graph and ratio evidence |
+| --- | --- | --- | --- |
+| direct `gamma* -> d d~` | `0.5068703962 +/- 0.0025987972` (`+1.449 sigma`) | `0.01966009810 +/- 0.00053595339` (`+1.424 sigma`) | `GL0=-0.03132123586 +/- 0.00023922726` (`+0.729 sigma`), `GL2=+0.05112479005 +/- 0.00046213299` (`+1.584 sigma`); `alpha_s/pi` pull `+1.141 sigma` |
+| converted `e+e- -> gamma* -> d d~` | `0.1950499744 +/- 0.0010326753 pb` (`+1.479 sigma`) | `0.007824189766 +/- 0.000340601513 pb` (`+1.630 sigma`) | signed MC components `GL0=-0.01996339254 +/- 0.00015479207`, `GL2=+0.02786745983 +/- 0.00028425324`; no separate published component targets; `alpha_s/pi` pull `+1.453 sigma` |
+| direct `gamma* -> t t~` | `2.901968994 +/- 0.015639978` (`+1.641 sigma`) | `0.2079169992 +/- 0.0042953541` (`+1.489 sigma`) | `GL0=-0.1443600613 +/- 0.0035809931` (`+0.669 sigma`), `GL2=+0.3522770605 +/- 0.0023720361` (`+1.687 sigma`); paper-ratio pull `+1.037 sigma` |
+| converted `e+e- -> gamma* -> t t~` | `0.3307052414 +/- 0.0018004843 pb` (`+1.603 sigma`) | `0.02356890542 +/- 0.00056839205 pb` (`+1.058 sigma`) | summed-graph integration has no persisted GL0/GL2 rows; paper-ratio pull `+0.685 sigma` |
+
+The converted DD graph components are closure diagnostics, not separately
+published observables, so this design does not assign them artificial targets.
+All LO integrations used 100,000 samples; the direct DD NLO used 400,000, the
+direct TT graph rows used 400,000 each, and each converted NLO central slot used
+200,000.
+
+The scalar LU 15-case matrix covers the same three production routes with local
+UV, integrated UV, and threshold counterterms all enabled. As retained
+pre-reversal evidence, its 2026-08-31 `dev-optim` / `test_gammaloop` rerun passed
+`15/15`, with `235` skipped, in `70.438 s`. The restored post-CFF direct route
+requires a current matrix rerun before merge readiness. Four near-zero cases use
+the authorized f64-input `1e-14` unit-scale
+fallback; the Arb-to-Arb comparison remains run and reports non-scaling. This
+is test-oracle handling only and required no production change.
 
 ## Validation map
 
@@ -1261,10 +1468,10 @@ The most relevant focused tests are:
 | --- | --- | --- |
 | Local-4D term parsing | `term_projection_keeps_factorized_numerator_atoms` | Numerator remains factorized |
 | Local-4D term parsing | `term_projection_preserves_dots_and_distinct_same_edge_expressions` | Arbitrary denominator multiplicity survives |
-| Local-4D term parsing | `term_projection_cancels_provenance_without_expanding_ordinary_sums` | Typed denominator cancellation does not expand an ordinary numerator sum |
-| Real Taylor projection | `dod_one_triangle_taylor_terms_keep_source_owners_and_reuse_two_cffs` | Four DOD1 terms retain source owners but generate only base and dotted CFF topologies |
+| Local-4D term parsing | `term_projection_keeps_typed_numerator_factors_uncancelled` | Only the outer Taylor sum is split; nested numerator sums and positive typed denominators remain factorized |
+| Real Taylor projection | `dod_one_triangle_keeps_one_uncancelled_exact_source_and_matches_lower_sectors` | One common-denominator DOD1 source retains `(2,1,2)` owner multiplicities and factorized typed numerator factors, uses one cache topology, and matches the explicitly reduced lower-sector oracle |
 | Exact graph | `exact_source_serializes_dotted_same_edge_occurrences` | Same-owner cubic serial chain |
-| Exact graph | `exact_source_keeps_coincident_distinct_owner_incidences` | Distinct source incidence plus repeated-signature equivalence |
+| Exact graph | `exact_source_owner_relabeling_preserves_residue_rank_and_cut_provenance` | Owner-invariant exact residue and loop rank, distinct energy provenance, and unioned physical cut support |
 | Exact graph | `exact_source_keeps_source_instantiated_domains_and_masses_separate` | Source-component and UV/cograph separation |
 | Exact graph | `exact_source_normalizes_opposite_spelling_inside_one_power_chain` | Normalized `Q/-Q` signatures on one source-routed chain |
 | Exact graph | `exact_uv_component_inherits_source_minor_and_rejects_wrong_provenance` | Multi-loop UV source-minor incidence and validation |
@@ -1295,17 +1502,22 @@ process test is being used as a substitute for the structural invariants.
 
 The essential distinction is:
 
-> Denominator powers subdivide the incidence supplied by their physical source
-> edge; normalized denominator algebra validates that lift, while numerator
-> factors are assigned according to certified physical EMR provenance.
+> Original source edges recover the known UV/cograph skeleton and retain
+> physical provenance; normalized denominator algebra defines the
+> owner-independent rational occurrence graph, while numerator factors are
+> assigned according to certified physical EMR provenance.
 
-Canonical `D(Q)=D(-Q)` normalization is safe because it cannot change
-source-backed incidence, while the raw sign remains separate data used to
-reconstruct the physical numerator. Owner-local serial subdivision supplies the
-correct number of residue variables. Explicit crown hedges preserve non-vacuum
-boundaries, and post-construction Graphica relabeling supplies deterministic
-cache identity without topology inference. The minimax plan keeps the numerator
-factorized and supplies the smallest possible maximal occurrence rank. Because
-the same plan controls both CFF generation and evaluation, the construction
-extends to higher powers, nested self-energies, disconnected UV components, LU
-residues, and multi-loop sources without a process-specific patch.
+Canonical `D(Q)=D(-Q)` normalization is safe because owner labels remain in
+energy provenance and cut-support metadata rather than contaminating the
+rational residue, while the raw routing sign remains separate data used to
+reconstruct the physical numerator. Raised-wrapper subdivision supplies the
+correct number of residue variables. The physical cut projection unions all
+owners of an algebraic channel and then adds raised-line representatives, so LU
+compatibility does not cost provenance. Explicit crown hedges preserve
+non-vacuum boundaries, and post-construction Graphica relabeling supplies
+deterministic cache identity without any topology inference from Kirchhoff or
+incidence matrices. The minimax plan keeps the numerator factorized and supplies
+the smallest possible maximal occurrence rank. Because the same plan controls
+both CFF generation and evaluation, the construction extends to higher powers,
+nested self-energies, disconnected UV components, LU residues, and multi-loop
+sources without a process-specific patch.

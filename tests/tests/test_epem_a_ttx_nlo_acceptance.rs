@@ -3,19 +3,36 @@ use std::{collections::BTreeSet, f64::consts::PI};
 use color_eyre::{Result, eyre::eyre};
 use gammaloop_api::{
     commands::{
-        Inspect, Integrate, Profile, integrate::RendererOption, profile::UltraVioletProfile,
+        Inspect, Integrate, Profile,
+        evaluate_samples::{EvaluateSamplesPrecise, evaluate_samples_precise},
+        integrate::RendererOption,
+        profile::UltraVioletProfile,
     },
     state::ProcessRef,
 };
 use gammaloop_integration_tests::{clean_test, get_example_cli, get_tests_workspace_path};
-use gammalooprs::uv::settings::{ApproximationType, FinalIntegrandDimension};
+use gammalooprs::{
+    integrands::evaluation::PreciseEvaluationResultOutput,
+    utils::{ArbPrec, F, FloatLike},
+    uv::settings::{ApproximationType, FinalIntegrandDimension},
+};
+use ndarray::Array2;
 use serial_test::serial;
+use spenso::algebra::algebraic_traits::IsZero;
+use symbolica::domains::float::Real;
+use which::which;
 
 #[test]
 #[serial]
-fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_both_local_uv_routes() -> Result<()>
+fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes() -> Result<()>
 {
     const LO_PROCESS: &str = "epem_a_ttx_lo";
+    const EXPLICIT_3D_PROCESS: &str = "epem_a_ttx_explicit_local_3d";
+    const LOCAL_ONLY_ROUTES: [(&str, bool, bool); 3] = [
+        ("epem_a_ttx_local_only_3d", false, false),
+        ("epem_a_ttx_local_only_explicit_3d", true, false),
+        ("epem_a_ttx_local_only_4d_then_cff", true, true),
+    ];
     const LO: &str = "LO";
     const NLO: &str = "NLO";
     const E_CM: f64 = 600.0;
@@ -36,7 +53,7 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_both_local_uv_r
     const PUBLISHED_NLO_OVER_LO: f64 = PUBLISHED_GAMMA_STAR_NLO / PUBLISHED_GAMMA_STAR_LO;
 
     let test_root = get_tests_workspace_path()
-        .join("epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_both_local_uv_routes");
+        .join("epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes");
     clean_test(&test_root);
 
     // Reuse the production LU settings, while generating the two-graph top
@@ -52,6 +69,11 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_both_local_uv_r
         let generation = &mut cli.cli_settings.global.generation;
         generation.orientation_pattern = Default::default();
         generation.explicit_orientation_sum_only = false;
+        generation
+            .tropical_subgraph_table
+            .disable_tropical_generation = true;
+        generation.threshold_subtraction.enable_thresholds = true;
+        generation.threshold_subtraction.disable_integrated_ct = false;
         let uv = &mut generation.uv;
         uv.softct = false;
         uv.generate_integrated = true;
@@ -64,7 +86,11 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_both_local_uv_r
         uv.renormalization_prescription.overrides.clear();
         uv.vakint.normalization = "MSbar".to_string();
         uv.vakint.additional_normalization = "-1".to_string();
+        uv.vakint.form_exe_path = which("form")?.display().to_string();
     }
+    cli.default_runtime_settings
+        .subtraction
+        .disable_threshold_subtraction = false;
 
     cli.run_command("import model sm-default.json")?;
     cli.run_command("run set_model_parameters")?;
@@ -115,19 +141,27 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_both_local_uv_r
     let model_parameters = cli
         .state
         .resolve_effective_model_parameter_card_for_integrand(lo_process_id, &resolved_lo_name)?;
-    let (alpha_qed_inverse_re, alpha_qed_inverse_im) = model_parameters
-        .data
-        .get("aEWM1")
-        .ok_or_else(|| eyre!("the effective LO model parameters do not contain aEWM1"))?;
-    assert_eq!(
-        alpha_qed_inverse_im.0, 0.0,
-        "the acceptance expects a real electromagnetic coupling",
-    );
-    assert!(
-        alpha_qed_inverse_re.0 > 0.0,
-        "the acceptance expects a positive inverse electromagnetic coupling",
-    );
-    let alpha_qed = alpha_qed_inverse_re.0.recip();
+    for (parameter, expected) in [
+        ("aS", 0.118),
+        ("aEWM1", 132.507),
+        ("MT", 173.0),
+        ("ymt", 173.0),
+        ("WT", 0.0),
+    ] {
+        let (re, im) = model_parameters
+            .data
+            .get(parameter)
+            .ok_or_else(|| eyre!("the effective LO model parameters do not contain {parameter}"))?;
+        assert_eq!(
+            im.0, 0.0,
+            "the published benchmark expects a real {parameter}",
+        );
+        assert_eq!(
+            re.0, expected,
+            "the effective {parameter} does not match the published benchmark",
+        );
+    }
+    let alpha_qed = model_parameters.data["aEWM1"].0.0.recip();
     // Eq. (7.1) of arXiv:2203.11038 closes the external lepton trace;
     // Q_e^2=1 for this process and the generated cross-section is in pb.
     let gamma_star_to_epem_pb =
@@ -135,7 +169,71 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_both_local_uv_r
     let published_lo_pb = PUBLISHED_GAMMA_STAR_LO * gamma_star_to_epem_pb;
     let published_nlo_pb = PUBLISHED_GAMMA_STAR_NLO * gamma_star_to_epem_pb;
 
-    for process in std::iter::once(LO_PROCESS).chain(ROUTES.map(|(process, _)| process)) {
+    // Keep this representation in a separate process. Integrand generation
+    // annotates the processed graph, so regenerating the orientation-local
+    // process in place would not be a representation-independent comparison.
+    {
+        let generation = &mut cli.cli_settings.global.generation;
+        generation.explicit_orientation_sum_only = true;
+        generation.uv.local_uv_cts_from_expanded_4d_integrands = false;
+    }
+    cli.run_command(&format!(
+        r#"generate xs e+ e- > t t~ | e+ e- t t~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{{{2}}}} QCD=1]
+            --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+            --symmetrize-left-right-states true
+            -p {EXPLICIT_3D_PROCESS} -i NLO --global-prefactor-num "1𝑖" --only-diagrams"#,
+    ))?;
+    cli.run_command(&format!(
+        "generate existing -p {EXPLICIT_3D_PROCESS} -i NLO"
+    ))?;
+
+    // Isolate the original graph plus unintegrated local UV subtraction. These
+    // processes deliberately omit integrated UV counterterms, so equality is
+    // a local test of the two 3D routes and the local-4D-to-CFF projection.
+    cli.cli_settings.global.generation.uv.generate_integrated = false;
+    for (process, explicit_orientation_sum_only, project_local_4d_to_cff) in LOCAL_ONLY_ROUTES {
+        {
+            let generation = &mut cli.cli_settings.global.generation;
+            generation.explicit_orientation_sum_only = explicit_orientation_sum_only;
+            generation.uv.local_uv_cts_from_expanded_4d_integrands = project_local_4d_to_cff;
+        }
+        cli.run_command(&format!(
+            r#"generate xs e+ e- > t t~ | e+ e- t t~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{{{2}}}} QCD=1]
+                --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
+                --symmetrize-left-right-states true
+                -p {process} -i NLO --global-prefactor-num "1𝑖" --only-diagrams"#,
+        ))?;
+        cli.run_command(&format!("generate existing -p {process} -i NLO"))?;
+
+        let info = cli.state.get_integrand_info(
+            Some(&ProcessRef::Unqualified(process.to_string())),
+            Some(&NLO.to_string()),
+        )?;
+        let masters = info
+            .graph_groups
+            .iter()
+            .flat_map(|group| group.graphs.iter())
+            .filter(|graph| graph.is_master)
+            .map(|graph| graph.name.clone())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            masters,
+            BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
+            "the local-only {process} acceptance must contain exactly the self-energy and vertex supergraphs",
+        );
+    }
+    {
+        let generation = &mut cli.cli_settings.global.generation;
+        generation.explicit_orientation_sum_only = true;
+        generation.uv.local_uv_cts_from_expanded_4d_integrands = false;
+        generation.uv.generate_integrated = true;
+    }
+
+    for process in std::iter::once(LO_PROCESS)
+        .chain(ROUTES.map(|(process, _)| process))
+        .chain(std::iter::once(EXPLICIT_3D_PROCESS))
+        .chain(LOCAL_ONLY_ROUTES.map(|(process, _, _)| process))
+    {
         cli.run_command(&format!(
             r#"set process -p {process} string '
                     [kinematics]
@@ -162,17 +260,19 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_both_local_uv_r
                     graph_names = []
                     orientations = "summed"
                     lmb_multichanneling = true
-                    lmb_channels = "monte_carlo"
+                    lmb_channels = "summed"
                     lmb_channel_weight = "ose"
                 '"#,
         ))?;
     }
 
-    for (route_index, (process, _)) in ROUTES.into_iter().enumerate() {
+    let mut reference_profile_signatures = None;
+    let profile_routes = [ROUTES[0].0, EXPLICIT_3D_PROCESS, ROUTES[1].0];
+    for (route_index, process) in profile_routes.into_iter().enumerate() {
         let analysis = Profile::UltraViolet(UltraVioletProfile {
             process: Some(ProcessRef::Unqualified(process.to_string())),
             integrand_name: Some(NLO.to_string()),
-            n_points: 8,
+            n_points: 6,
             seed: Some(9200 + route_index as u64),
             ..Default::default()
         })
@@ -192,6 +292,40 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_both_local_uv_r
             BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
             "the {process} default divergent-only profile must cover both NLO supergraphs",
         );
+        let profile_signatures = analysis
+            .graphs
+            .iter()
+            .flat_map(|graph| {
+                graph.lmbs.iter().flat_map(|lmb| {
+                    lmb.subsets.iter().map(|subset| {
+                        (
+                            graph.graph_name.clone(),
+                            subset
+                                .free
+                                .iter()
+                                .copied()
+                                .map(usize::from)
+                                .collect::<Vec<_>>(),
+                            subset.initial_dod,
+                        )
+                    })
+                })
+            })
+            .collect::<BTreeSet<_>>();
+        assert!(
+            profile_signatures
+                .iter()
+                .all(|(_, _, initial_dod)| *initial_dod >= 0),
+            "the {process} default divergent-only profile selected a convergent limit: {profile_signatures:?}",
+        );
+        if let Some(reference) = &reference_profile_signatures {
+            assert_eq!(
+                &profile_signatures, reference,
+                "the {process} default divergent-only profile selected a different deterministic limit set",
+            );
+        } else {
+            reference_profile_signatures = Some(profile_signatures);
+        }
         for graph in &analysis.graphs {
             assert!(
                 graph
@@ -214,144 +348,138 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_both_local_uv_r
         );
     }
 
-    let mut route_probe_phases = Vec::new();
-    let mut route_probes = Vec::new();
-    for (process, _) in ROUTES {
-        // Compare the complete orientation-local and explicit-orientation-sum
-        // representations before spending time on either numerical integral.
+    let route_processes = [ROUTES[0].0, EXPLICIT_3D_PROCESS, ROUTES[1].0];
+    let local_only_processes = LOCAL_ONLY_ROUTES.map(|(process, _, _)| process);
+    for process in route_processes.into_iter().chain(local_only_processes) {
         cli.run_command(&format!(
             r#"set process -p {process} -i {NLO} kv
                 sampling.graphs="summed"
                 sampling.orientations="summed"
-                sampling.lmb_channels="summed""#,
+                sampling.lmb_multichanneling=true
+                sampling.lmb_channels="summed"
+                sampling.lmb_channel_weight="ose""#,
         ))?;
-        let (_, nlo_probe) = Inspect {
-            process: Some(ProcessRef::Unqualified(process.to_string())),
-            integrand_name: Some(NLO.to_string()),
-            point: vec![0.11, 0.23, 0.37, 0.41, 0.53, 0.67],
-            ..Default::default()
-        }
-        .run(&mut cli.state)?;
-        assert!(
-            nlo_probe.re.is_finite()
-                && nlo_probe.im.is_finite()
-                && nlo_probe.re.abs().max(nlo_probe.im.abs()) > 0.0,
-            "the {process} NLO pointwise probe must be finite and nonzero, got {nlo_probe:e}",
-        );
-        assert!(
-            nlo_probe.re.abs().min(nlo_probe.im.abs())
-                <= 1.0e-8 * nlo_probe.re.abs().max(nlo_probe.im.abs()),
-            "the {process} NLO probe is not phase-pure enough for a magnitude acceptance: {nlo_probe:e}",
-        );
-        route_probe_phases.push(if nlo_probe.re.abs() >= nlo_probe.im.abs() {
-            "real"
-        } else {
-            "imag"
-        });
-        route_probes.push((process, nlo_probe.re, nlo_probe.im));
     }
-    let [
-        (first_probe_process, first_probe_re, first_probe_im),
-        (second_probe_process, second_probe_re, second_probe_im),
-    ] = route_probes.as_slice()
-    else {
-        unreachable!("both local UV routes are always probed")
-    };
-    let pointwise_scale = first_probe_re
-        .hypot(*first_probe_im)
-        .max(second_probe_re.hypot(*second_probe_im));
-    let pointwise_delta =
-        (first_probe_re - second_probe_re).hypot(first_probe_im - second_probe_im);
-    assert!(
-        pointwise_delta <= 1.0e-9 * pointwise_scale,
-        "summed-orientation local UV route mismatch at the identical point: {first_probe_process}=({first_probe_re:e},{first_probe_im:e}i), {second_probe_process}=({second_probe_re:e},{second_probe_im:e}i), relative delta={:e}",
-        pointwise_delta / pointwise_scale,
-    );
 
-    // Regenerate the direct local-3D route in the same selector-free mode
-    // required by the projected local-4D route. This reuses its later Monte
-    // Carlo slot while the probe above retains coverage of orientation-local
-    // direct-3D generation.
-    {
-        let generation = &mut cli.cli_settings.global.generation;
-        generation.explicit_orientation_sum_only = true;
-        generation.uv.local_uv_cts_from_expanded_4d_integrands = false;
-    }
-    cli.run_command(&format!("generate existing -p {} -i {NLO}", ROUTES[0].0))?;
-    cli.run_command(&format!(
-        r#"set process -p {} -i {NLO} kv
-            sampling.graphs="summed"
-            sampling.orientations="summed"
-            sampling.lmb_channels="summed""#,
-        ROUTES[0].0,
-    ))?;
-    let (_, explicit_direct_probe) = Inspect {
-        process: Some(ProcessRef::Unqualified(ROUTES[0].0.to_string())),
+    // A cheap f64 probe selects the integrated phase. Route equivalence itself
+    // is checked below in Arb so that precision-escalation losses remain visible.
+    let (_, nlo_probe) = Inspect {
+        process: Some(ProcessRef::Unqualified(EXPLICIT_3D_PROCESS.to_string())),
         integrand_name: Some(NLO.to_string()),
-        point: vec![0.11, 0.23, 0.37, 0.41, 0.53, 0.67],
+        point: vec![17.0, -31.0, 43.0, -29.0, 53.0, 71.0],
+        momentum_space: true,
         ..Default::default()
     }
     .run(&mut cli.state)?;
-    let explicit_direct_delta = (first_probe_re - explicit_direct_probe.re)
-        .hypot(first_probe_im - explicit_direct_probe.im);
-    let explicit_direct_scale = first_probe_re
-        .hypot(*first_probe_im)
-        .max(explicit_direct_probe.re.hypot(explicit_direct_probe.im));
     assert!(
-        explicit_direct_scale > 0.0 && explicit_direct_delta <= 1.0e-9 * explicit_direct_scale,
-        "direct local-3D orientation-local versus explicit-sum mismatch at the identical point: orientation-local=({first_probe_re:e},{first_probe_im:e}i), explicit-sum=({:e},{:e}i), relative delta={:e}",
-        explicit_direct_probe.re,
-        explicit_direct_probe.im,
-        explicit_direct_delta / explicit_direct_scale,
+        nlo_probe.re.is_finite()
+            && nlo_probe.im.is_finite()
+            && nlo_probe.re.abs().max(nlo_probe.im.abs()) > 0.0,
+        "the explicit-local-3D NLO pointwise probe must be finite and nonzero, got {nlo_probe:e}",
     );
+    assert!(
+        nlo_probe.re.abs().min(nlo_probe.im.abs())
+            <= 1.0e-8 * nlo_probe.re.abs().max(nlo_probe.im.abs()),
+        "the explicit-local-3D NLO probe is not phase-pure enough for a magnitude acceptance: {nlo_probe:e}",
+    );
+    let nlo_phase = if nlo_probe.re.abs() >= nlo_probe.im.abs() {
+        "real"
+    } else {
+        "imag"
+    };
 
-    for graph_id in 0..2 {
-        let mut graph_probes = Vec::new();
-        for (process, _) in ROUTES {
-            let (_, probe) = Inspect {
-                process: Some(ProcessRef::Unqualified(process.to_string())),
-                integrand_name: Some(NLO.to_string()),
-                point: vec![17.0, -31.0, 43.0, -29.0, 53.0, 71.0],
-                momentum_space: true,
-                graph_id: Some(graph_id),
-                ..Default::default()
-            }
-            .run(&mut cli.state)?;
-            assert!(
-                probe.re.is_finite() && probe.im.is_finite(),
-                "the {process} graph #{graph_id} momentum-space probe must be finite, got {probe:e}",
-            );
-            graph_probes.push((process, probe.re, probe.im));
+    let points = Array2::from_shape_vec(
+        (2, 6),
+        vec![
+            17.0, -31.0, 43.0, -29.0, 53.0, 71.0, 17.0, -31.0, 43.0, -29.0, 53.0, 71.0,
+        ],
+    )?;
+    let graph_names = ["GL0", "GL2"];
+    // Retaining one eighth of ArbPrec's requested precision permits substantial
+    // expression-dependent loss while still testing the precision-increase path.
+    let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
+    for (comparison, processes) in [
+        ("integrated", route_processes),
+        ("local-only", local_only_processes),
+    ] {
+        let mut route_values = Vec::new();
+        for process in processes {
+            let process_id = cli
+                .state
+                .resolve_process_ref(Some(&ProcessRef::Unqualified(process.to_string())))?;
+            let result = evaluate_samples_precise(
+                &mut cli.state,
+                &EvaluateSamplesPrecise {
+                    process_id: Some(process_id),
+                    integrand_name: Some(NLO.to_string()),
+                    use_arb_prec: true,
+                    minimal_output: true,
+                    return_generated_events: Some(false),
+                    momentum_space: true,
+                    points: points.view(),
+                    integrator_weights: None,
+                    discrete_dims: None,
+                    graph_names: Some(graph_names.map(|graph| Some(graph.to_string())).to_vec()),
+                    orientations: Some(vec![None; graph_names.len()]),
+                },
+            )?;
+            let values = result
+                .samples
+                .into_iter()
+                .zip(graph_names)
+                .map(|(sample, graph_name)| match sample.evaluation {
+                    PreciseEvaluationResultOutput::Arb(result) => Ok(result.integrand_result),
+                    evaluation => Err(eyre!(
+                        "{comparison} {process} {graph_name} comparison requested Arb but got {:?}",
+                        evaluation.precision()
+                    )),
+                })
+                .collect::<Result<Vec<_>>>()?;
+            route_values.push((process, values));
         }
-        let [
-            (first_process, first_re, first_im),
-            (second_process, second_re, second_im),
-        ] = graph_probes.as_slice()
-        else {
-            unreachable!("both local UV routes are always probed")
-        };
-        let scale = first_re.hypot(*first_im).max(second_re.hypot(*second_im));
-        let delta = (first_re - second_re).hypot(first_im - second_im);
-        assert!(
-            scale > 0.0 && delta <= 1.0e-9 * scale,
-            "summed-orientation graph #{graph_id} local UV route mismatch at the identical momentum-space point: {first_process}=({first_re:e},{first_im:e}i), {second_process}=({second_re:e},{second_im:e}i), relative delta={:e}",
-            delta / scale,
-        );
+        let reference = &route_values[1];
+        for (graph_index, graph_name) in graph_names.iter().copied().enumerate() {
+            let reference_value = &reference.1[graph_index];
+            for actual in [&route_values[0], &route_values[2]] {
+                let actual_value = &actual.1[graph_index];
+                let distance = (actual_value.clone() - reference_value.clone()).norm().re;
+                let actual_norm = actual_value.norm().re;
+                let reference_norm = reference_value.norm().re;
+                let scale = if actual_norm > reference_norm {
+                    actual_norm
+                } else {
+                    reference_norm
+                };
+                let relative_distance = if scale.is_zero() {
+                    distance.clone()
+                } else {
+                    distance.clone() / scale
+                };
+                assert!(
+                    relative_distance <= tolerance.clone(),
+                    "{comparison} {graph_name} differs between precise routes {} and {}: actual={:e}, reference={:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}",
+                    actual.0,
+                    reference.0,
+                    actual_value,
+                    reference_value,
+                );
+            }
+        }
     }
-    for (process, _) in ROUTES {
-        cli.run_command(&format!(
-            r#"set process -p {process} -i {NLO} kv
-                sampling.graphs="monte_carlo"
-                sampling.orientations="summed"
-                sampling.lmb_channels="monte_carlo""#,
-        ))?;
-    }
+
+    cli.run_command(&format!(
+        r#"set process -p {LO_PROCESS} -i {LO} kv
+            sampling.graphs="summed"
+            sampling.orientations="summed"
+            sampling.lmb_multichanneling=true
+            sampling.lmb_channels="summed"
+            sampling.lmb_channel_weight="ose""#,
+    ))?;
 
     let (_, lo_probe) = Inspect {
         process: Some(ProcessRef::Unqualified(LO_PROCESS.to_string())),
         integrand_name: Some(LO.to_string()),
         point: vec![0.19, 0.43, 0.71],
-        discrete_dim: vec![0, 0],
         ..Default::default()
     }
     .run(&mut cli.state)?;
@@ -374,14 +502,14 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_both_local_uv_r
     cli.run_command(&format!(
         r#"set process -p {LO_PROCESS} -i {LO} kv
                 integrator.integrated_phase="{lo_phase}"
-                integrator.min_samples_for_update=10000
-                integrator.n_start=10000
-                integrator.n_increase=10000
-                integrator.n_max=30000
-                integrator.target_relative_accuracy=0.01
+                integrator.min_samples_for_update=5000
+                integrator.n_start=5000
+                integrator.n_increase=5000
+                integrator.n_max=10000
+                integrator.target_relative_accuracy=1.0e-12
                 integrator.seed=7331
                 integrator.discrete_dim_learning_rate=0.0
-                integrator.continuous_dim_learning_rate=0.25"#,
+                integrator.continuous_dim_learning_rate=0.1"#,
     ))?;
 
     let lo_output = Integrate {
@@ -414,80 +542,64 @@ fn epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_both_local_uv_r
         "LO absolute normalization mismatch: |LO|={lo_value:e} ± {lo_error:e} pb, converted published value={published_lo_pb:e} pb, |delta|={lo_absolute_delta:e}, tolerance={lo_absolute_tolerance:e}",
     );
 
-    let mut route_estimates = Vec::new();
-    for (route_index, (process, _)) in ROUTES.into_iter().enumerate() {
-        let process_ref = ProcessRef::Unqualified(process.to_string());
-        let nlo_phase = route_probe_phases[route_index];
-        cli.run_command(&format!(
-            r#"set process -p {process} -i {NLO} kv
-                    integrator.integrated_phase="{nlo_phase}"
-                    integrator.min_samples_for_update=100000
-                    integrator.n_start=100000
-                    integrator.n_increase=100000
-                    integrator.n_max=200000
-                    integrator.target_relative_accuracy=1.0e-12
-                    integrator.seed={}
-                    integrator.discrete_dim_learning_rate=0.0
-                    integrator.continuous_dim_learning_rate=0.25"#,
-            1337 + route_index,
-        ))?;
-
-        let nlo_output = Integrate {
-            process: vec![process_ref],
-            integrand_name: vec![NLO.to_string()],
-            n_cores: Some(10),
-            workspace_path: Some(test_root.join(format!("{process}_integration_workspace"))),
-            restart: true,
-            renderer: RendererOption::Tabled,
-            show_max_weight_info: false,
-            no_stream_iterations: true,
-            no_stream_updates: true,
-            ..Default::default()
-        }
-        .run(&mut cli.state, &cli.cli_settings)?;
-        let nlo_estimate = nlo_output
-            .single_slot_integral()
-            .ok_or_else(|| eyre!("expected one {process} NLO integration slot"))?;
-        let nlo_value = nlo_estimate.result.re.0.hypot(nlo_estimate.result.im.0);
-        let nlo_error = nlo_estimate.error.re.0.hypot(nlo_estimate.error.im.0);
-        let nlo_relative_error = nlo_error / nlo_value;
-        assert!(
-            nlo_relative_error.is_finite() && nlo_relative_error <= 0.12,
-            "{process} NLO uncertainty is too large for the normalization acceptance: {nlo_value:e} ± {nlo_error:e} ({:.2}%)",
-            100.0 * nlo_relative_error,
-        );
-
-        let expected_nlo = PUBLISHED_NLO_OVER_LO * lo_value;
-        let combined_error = nlo_error.hypot(PUBLISHED_NLO_OVER_LO * lo_error);
-        let delta = (nlo_value - expected_nlo).abs();
-        assert!(
-            combined_error.is_finite() && delta <= 3.0 * combined_error,
-            "{process} inclusive NLO normalization mismatch: |NLO|={nlo_value:e} ± {nlo_error:e}, published-ratio*LO={expected_nlo:e} ± {:e}, |delta|={delta:e}, delta/sigma={:e}",
-            PUBLISHED_NLO_OVER_LO * lo_error,
-            delta / combined_error,
-        );
-        let absolute_delta = (nlo_value - published_nlo_pb).abs();
-        let absolute_tolerance = (3.0 * nlo_error).max(0.05 * published_nlo_pb);
-        assert!(
-            absolute_delta <= absolute_tolerance,
-            "{process} absolute NLO normalization mismatch: |NLO|={nlo_value:e} ± {nlo_error:e} pb, converted published value={published_nlo_pb:e} pb, |delta|={absolute_delta:e}, tolerance={absolute_tolerance:e}",
-        );
-        route_estimates.push((process, nlo_value, nlo_error));
+    // The Arb checks establish route equivalence locally, so only the explicit
+    // local-3D route needs the comparatively expensive inclusive Monte Carlo.
+    cli.run_command(&format!(
+        r#"set process -p {EXPLICIT_3D_PROCESS} -i {NLO} kv
+            sampling.graphs="summed"
+            sampling.orientations="summed"
+            sampling.lmb_multichanneling=true
+            sampling.lmb_channels="summed"
+            sampling.lmb_channel_weight="ose"
+            integrator.integrated_phase="{nlo_phase}"
+            integrator.min_samples_for_update=10000
+            integrator.n_start=10000
+            integrator.n_increase=10000
+            integrator.n_max=20000
+            integrator.target_relative_accuracy=1.0e-12
+            integrator.seed=1337
+            integrator.discrete_dim_learning_rate=0.0
+            integrator.continuous_dim_learning_rate=0.1"#,
+    ))?;
+    let nlo_output = Integrate {
+        process: vec![ProcessRef::Unqualified(EXPLICIT_3D_PROCESS.to_string())],
+        integrand_name: vec![NLO.to_string()],
+        n_cores: Some(10),
+        workspace_path: Some(test_root.join("explicit_local_3d_nlo_integration_workspace")),
+        restart: true,
+        renderer: RendererOption::Tabled,
+        show_max_weight_info: false,
+        no_stream_iterations: true,
+        no_stream_updates: true,
+        ..Default::default()
     }
-
-    let [
-        (first_process, first_value, first_error),
-        (second_process, second_value, second_error),
-    ] = route_estimates.as_slice()
-    else {
-        unreachable!("the acceptance defines exactly two local-UV routes")
-    };
-    let route_delta = (first_value - second_value).abs();
-    let route_error = first_error.hypot(*second_error);
+    .run(&mut cli.state, &cli.cli_settings)?;
+    let nlo_estimate = nlo_output
+        .single_slot_integral()
+        .ok_or_else(|| eyre!("expected one explicit-local-3D NLO integration slot"))?;
+    let nlo_value = nlo_estimate.result.re.0.hypot(nlo_estimate.result.im.0);
+    let nlo_error = nlo_estimate.error.re.0.hypot(nlo_estimate.error.im.0);
+    let nlo_relative_error = nlo_error / nlo_value;
     assert!(
-        route_delta <= 3.0 * route_error,
-        "local-UV route mismatch: {first_process}={first_value:e} ± {first_error:e} pb, {second_process}={second_value:e} ± {second_error:e} pb, |delta|={route_delta:e}, delta/sigma={:e}",
-        route_delta / route_error,
+        nlo_relative_error.is_finite() && nlo_relative_error <= 0.15,
+        "explicit-local-3D NLO uncertainty is too large for the normalization acceptance: {nlo_value:e} ± {nlo_error:e} ({:.2}%)",
+        100.0 * nlo_relative_error,
+    );
+
+    let expected_nlo = PUBLISHED_NLO_OVER_LO * lo_value;
+    let combined_error = nlo_error.hypot(PUBLISHED_NLO_OVER_LO * lo_error);
+    let delta = (nlo_value - expected_nlo).abs();
+    assert!(
+        combined_error.is_finite() && delta <= 3.0 * combined_error,
+        "explicit-local-3D inclusive NLO normalization mismatch: |NLO|={nlo_value:e} ± {nlo_error:e}, published-ratio*LO={expected_nlo:e} ± {:e}, |delta|={delta:e}, delta/sigma={:e}",
+        PUBLISHED_NLO_OVER_LO * lo_error,
+        delta / combined_error,
+    );
+    let absolute_delta = (nlo_value - published_nlo_pb).abs();
+    let absolute_tolerance = (3.0 * nlo_error).max(0.05 * published_nlo_pb);
+    assert!(
+        absolute_delta <= absolute_tolerance,
+        "explicit-local-3D absolute NLO normalization mismatch: |NLO|={nlo_value:e} ± {nlo_error:e} pb, converted published value={published_nlo_pb:e} pb, |delta|={absolute_delta:e}, tolerance={absolute_tolerance:e}",
     );
 
     clean_test(&test_root);

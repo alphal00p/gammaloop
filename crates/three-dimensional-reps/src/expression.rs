@@ -783,6 +783,18 @@ fn base_orientation_label(orientation: &OrientationExpression) -> String {
 }
 
 impl OrientationExpression {
+    /// Canonical identity of one generalized residue map, independent of its
+    /// expression-local [`OrientationID`]. This includes the complete physical
+    /// direction vector and every loop/edge energy map, including uniform-M
+    /// sampling terms.
+    pub fn residue_map_key(&self) -> String {
+        format!(
+            "O[{}]|{}",
+            format_graph_orientation_label(&self.data.orientation),
+            self.energy_map_key()
+        )
+    }
+
     fn energy_map_key(&self) -> String {
         let loop_map = self
             .loop_energy_map
@@ -1327,5 +1339,22 @@ mod tests {
             .variants
             .is_empty()
         );
+    }
+
+    #[test]
+    fn residue_map_key_distinguishes_physical_directions_and_uniform_scale_maps() {
+        let mut base =
+            OrientationExpression::lower_sector_unit(OrientationData::new(EdgeVec::from_iter([
+                Orientation::Undirected,
+            ])));
+        base.edge_energy_map = vec![LinearEnergyExpr::zero()];
+
+        let mut scaled = base.clone();
+        scaled.edge_energy_map[0] = LinearEnergyExpr::uniform_scale(1);
+        assert_ne!(base.residue_map_key(), scaled.residue_map_key());
+
+        let mut directed = base.clone();
+        directed.data.orientation[EdgeIndex(0)] = Orientation::Default;
+        assert_ne!(base.residue_map_key(), directed.residue_map_key());
     }
 }

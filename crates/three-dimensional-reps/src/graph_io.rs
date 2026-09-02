@@ -114,7 +114,7 @@ pub struct GraphInfo {
     pub repeated_groups: Vec<Vec<usize>>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct EnergyEdgeIndexMap {
     pub internal: BTreeMap<usize, usize>,
     pub external: BTreeMap<usize, usize>,

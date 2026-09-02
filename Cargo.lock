@@ -1601,6 +1601,7 @@ dependencies = [
 name = "gammaloop-integration-tests"
 version = "0.1.0"
 dependencies = [
+ "bincode 2.0.1",
  "cc",
  "color-eyre",
  "colored 3.1.1",
@@ -1620,6 +1621,7 @@ dependencies = [
  "symbolica",
  "symbolica-utils",
  "tabled",
+ "three-dimensional-reps",
  "toml 0.9.12+spec-1.1.0",
  "tracing",
  "vakint",

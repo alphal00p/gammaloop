@@ -209,6 +209,7 @@ impl Rooted for Integrands {
 pub(crate) struct DeferredIntegrands(BTreeMap<CutCFFIndex, Vec<Atom>>);
 
 impl DeferredIntegrands {
+    #[cfg(test)]
     pub(crate) fn from_indices(indices: impl IntoIterator<Item = CutCFFIndex>) -> Self {
         Self(
             indices
@@ -227,6 +228,7 @@ impl DeferredIntegrands {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn push(&mut self, index: CutCFFIndex, atom: Atom) -> Result<()> {
         self.0
             .get_mut(&index)

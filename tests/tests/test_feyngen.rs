@@ -5,6 +5,7 @@ use gammaloop_api::state::SyncSettings;
 use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
 use gammalooprs::feyngen::diagram_generator::evaluate_sign_origin;
 use gammalooprs::integrands::process::amplitude::load::StandaloneEvaluatorArchive;
+use gammalooprs::integrands::process::cross_section::load::StandaloneCrossSectionArchive;
 use gammalooprs::processes::{
     CycleSignature, GraphGroupSelectionSpec, GraphSelectionSignatureInventory, ProcessCollection,
     RaisedCutSignatureInventory, RaisedPropagatorScope, RaisedPropagatorSignature,
@@ -721,29 +722,34 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
     cli.run_command("generate xs z > d d~")?;
     cli.run_command("generate")?;
 
-    cli.state.process_list.export_standalone(
-        &output_dir,
-        &StandaloneExportSettings {
-            mode: StandaloneExportMode::Rust,
-            format: StandaloneDataFormat::Json,
-            ..Default::default()
-        },
-    )?;
+    for format in [StandaloneDataFormat::Json, StandaloneDataFormat::Binary] {
+        cli.state.process_list.export_standalone(
+            &output_dir,
+            &StandaloneExportSettings {
+                mode: StandaloneExportMode::Rust,
+                format,
+                ..Default::default()
+            },
+        )?;
+    }
 
     let exported_base = output_dir
         .join("processes")
         .join("cross_sections")
         .join("z_ddx")
         .join("default");
-    let archive_path = exported_base.join("standalone_cross_section.json");
-    assert!(archive_path.exists());
+    let json_archive_path = exported_base.join("standalone_cross_section.json");
+    let binary_archive_path = exported_base.join("standalone_cross_section.bin");
+    assert!(json_archive_path.exists());
+    assert!(binary_archive_path.exists());
     assert!(
         exported_base
             .join("standalone_cross_section_rust.rs")
             .exists()
     );
 
-    let archive: serde_json::Value = serde_json::from_slice(&fs::read(archive_path)?)?;
+    let json_archive_bytes = fs::read(json_archive_path)?;
+    let archive: serde_json::Value = serde_json::from_slice(&json_archive_bytes)?;
     let graph_term = archive["graph_terms"]
         .as_array()
         .and_then(|graph_terms| graph_terms.first())
@@ -754,6 +760,42 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
         .ok_or_else(|| eyre!("standalone graph term has no cut-group integrands"))?;
     assert!(!cut_group_integrands.is_empty());
     assert!(graph_term.get("raised_cut_integrands").is_none());
+
+    let json_archive: StandaloneCrossSectionArchive<(), String> =
+        serde_json::from_slice(&json_archive_bytes)?;
+    let binary_archive_bytes = fs::read(binary_archive_path)?;
+    let (binary_archive, consumed): (StandaloneCrossSectionArchive, usize) =
+        bincode::decode_from_slice(&binary_archive_bytes, bincode::config::standard())?;
+    assert_eq!(consumed, binary_archive_bytes.len());
+
+    for (format, mut loaded) in [
+        ("JSON", json_archive.load()?),
+        ("binary", binary_archive.load()?),
+    ] {
+        let graph_term = loaded
+            .graph_terms
+            .first_mut()
+            .ok_or_else(|| eyre!("{format} standalone cross-section archive has no graph terms"))?;
+        let input = (0..graph_term.param_builder_params.len())
+            .map(|index| Complex::new(0.625 + index as f64 * 0.173, 0.031 + index as f64 * 0.007))
+            .collect::<Vec<_>>();
+        let stack = graph_term
+            .cut_group_integrands
+            .first_mut()
+            .and_then(|integrands| integrands.values_mut().next())
+            .ok_or_else(|| {
+                eyre!("{format} standalone graph term has no indexed cut-group evaluator")
+            })?;
+        let (_, _, evaluator, result) = &mut stack.single_parametric;
+        evaluator.evaluate(&input, result);
+        assert!(!result.is_empty(), "{format} evaluator result is empty");
+        assert!(
+            result
+                .iter()
+                .all(|value| value.re.is_finite() && value.im.is_finite()),
+            "{format} evaluator result is not finite",
+        );
+    }
 
     fs::remove_dir_all(workspace)?;
     Ok(())

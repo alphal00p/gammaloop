@@ -495,7 +495,8 @@ pub(crate) fn to_vakint_integrand<
 ) -> Result<VakintExpression> {
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
-    let mut integrand_vakint = integrand
+    let mut integrand_vakint = GS
+        .erase_uv_momentum_provenance(integrand)
         .undo_schoonschip::<Aind>()
         .undo_chain::<Aind>()
         .undo_trace::<Aind>();

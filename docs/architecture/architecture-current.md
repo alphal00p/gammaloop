@@ -116,10 +116,22 @@ identify, cap, or substitute an energy power. Production capacity analysis
 accepts physical `Q(edge, index)` atoms and rejects `K(loop, index)` until its
 producer normalizes it with physical edge provenance.
 
-Completed local-4D terms with raised propagators are represented by source-backed
-occurrence graphs. The original `EdgeIndex` survives the Taylor operator in the
-typed denominator wrapper. Disjoint-set contraction of absent edges in the
-original graph then constructs the cograph and UV source minors, and every
+Both direct local-3D modes first perform the complete loop-energy integration
+and build the complete/global CFF expression; the UV Taylor operators then act
+on that CFF expression. They use the same Taylor-transformed CFF bodies.
+Writing the generalized residue map as `{ k -> C_k }`,
+`explicit_orientation_sum_only=false` is `sum_k sigma(k) C_k`, with `sigma(k)`
+the one-hot selector for the complete residue-map key. The Taylor operator is
+applied independently to every keyed body and leaves that selector opaque.
+`explicit_orientation_sum_only=true` only replaces each selector by one and
+explicitly sums the same bodies. Neither direct mode reconstructs
+or projects completed local-4D Taylor structures.
+
+Only the projected local-4D route represents completed terms with raised
+propagators by source-backed occurrence graphs. The original `EdgeIndex`
+survives the Taylor operator in the typed denominator wrapper. Disjoint-set
+contraction of absent edges in the original graph then constructs the cograph
+and UV source minors, and every
 occurrence inherits the endpoints of its `source_edge` in the appropriate
 minor. Only repeated occurrences of that same source edge subdivide its
 incidence into a serial dotted chain. Exact momentum signatures are normalized
@@ -131,16 +143,21 @@ external-balance synthesis. The raw `+/-Q` sign remains available to the
 numerator mapper, while a post-construction Graphica pass canonically relabels
 nodes and exact edges for deterministic cache keys.
 
-Projection first plans all additive Taylor terms, then generates once per
-canonical topology. Every term keeps its own factorized minimax assignment. A
-shared generator envelope takes the maximum **total** degree within each
-repeated algebraic energy channel and redistributes that total by the same
-minimax rule; non-repeated bounds use componentwise maxima. The real degree-one
-triangle regression has four Taylor terms but exactly two generator calls: the
-base three-denominator UV source and its four-denominator dotted source.
+Projection first plans every genuinely outer additive Taylor term, then
+generates once per canonical topology. Every term keeps its own factorized
+minimax assignment. A shared generator envelope takes the maximum **total**
+degree within each repeated algebraic energy channel and redistributes that
+total by the same minimax rule; non-repeated bounds use componentwise maxima.
+The real degree-one triangle regression retains its collected coefficient as
+one common-denominator source with UV-owner multiplicities `(2,1,2)`. Positive
+typed denominator factors stay in its factorized numerator, and generalized
+CFF produces the lower sectors internally. It therefore uses one canonical
+generator entry and agrees with an explicitly reduced test-only oracle.
 Non-vacuum exact sources retain pure-external boundaries as explicit
 source-crown hedges. Future on-shell two-point insertions such as `(m,0,0,0)`
 require an explicit fixed-boundary payload, not topology reconstruction.
+This exact-source reconstruction and minimax-dispatch machinery is exclusive to
+the projected local-4D route.
 The full design, sign argument for `D(Q)=D(-Q)`, and concrete production fixtures
 are documented in
 [`exact-powered-denominator-cff-lifting.md`](exact-powered-denominator-cff-lifting.md).
@@ -148,17 +165,40 @@ are documented in
 The production numerator remains factorized. Degree analysis traverses its
 factors without expanding them, each UV step attaches only newly owned factors,
 and final assembly attaches outside and global factors exactly once. For higher
-power projection, the term parser distributes only sums containing typed
-`GS.den` provenance so it can cancel matching positive and negative denominator
-occurrences; ordinary numerator sums remain unexpanded. For higher powers,
+power projection, the term parser splits only the completed expression's outer
+Taylor sum when its addends carry separate denominator topologies. Nested
+numerator sums and positive typed `GS.den` factors remain factorized and are
+never cancelled against denominator occurrences upstream; generalized CFF owns
+the resulting pinches and lower sectors. For higher powers,
 interpolation may replace an EMR energy by `a*M`, where `a` is a signed
 integer and `M` is the common auxiliary CFF numerator-sampling scale. This is an
 EMR substitution, never an LMB rewrite. Only finalized evaluators that use `M`
 require `M != 0`, and the physical result is invariant under changing its
 nonzero value.
 
+The signed sampling coefficient is neither a physical edge-direction sign nor
+the runtime residue-map-key selector `sigma(map_id)`. Pole signs enter the generation-time affine map, after which an
+orientation entry stores `a` in `LinearEnergyExpr::uniform_scale_coeff` and its
+interpolation weight stores the compensating inverse power in
+`CFFVariant::uniform_scale_power`. Multiple numerator maps may therefore share
+the same coarse orientation. Their complete loop/edge energy maps and distinct
+`numerator_map_index` values remain attached to the factorized numerator. Each
+such entry has its own complete map key and therefore its own `sigma(map_id)`;
+entries must never be merged merely because their physical edge directions
+agree.
+
 Integrated finite UV terms retain their exact source-local EMR maps. Production
-orientation selectors partition theta sectors but do not replace those maps.
+map-key selectors partition complete generalized residue-map entries but do not
+replace those maps.
+In orientation-local direct-3D generation, shrinking a UV subgraph preserves
+the orientation selected on every surviving outer edge. Among the cut-valid
+full orientations which extend that outer assignment, one deterministic inner
+orientation is selected to host the complete integrated finite counterterm; the
+other inner extensions receive none, so summing orientations counts the addback
+exactly once. In explicit-sum direct-3D generation the same reduced residue is
+kept once without a selector. Projected local-4D counterterms are likewise
+selector-free: each completed exact source owns its full source-local
+orientation sum, independently of production-orientation IDs.
 The empty UV forest is the ordinary factorized production root in both local-UV
 routes; the expanded-4D setting changes only proper, nonempty UV nodes.
 The shared CFF core also returns its connected-loop and pure
@@ -166,9 +206,58 @@ duplicate-denominator global sign as typed metadata. GammaLoop consumes that
 bridge exactly once for root, reduced, and exact production CFF sources,
 cancelling the shared-core-local uniform convention and retaining GammaLoop's
 established complete-integrand convention.
-The standalone inclusive `epem_a_ddx` GL0+GL2 normalization acceptance for
-these production boundaries remains open; successful generation and focused
-coverage are not a numerical acceptance pass.
+The NLO acceptance layer exercises these production boundaries in
+orientation-local direct 3D, explicit-sum direct 3D, and projected local 4D.
+The retained 2026-08-31 10x campaign completes all four physical DD/TT
+acceptances (`4/4`). Pulls below are signed differences from the published
+target in units of the reported Monte Carlo error; ratio pulls include the LO
+uncertainty.
+
+| Acceptance | 10x LO result | 10x NLO result | Graph and ratio evidence |
+| --- | --- | --- | --- |
+| direct `gamma* -> d d~` | `0.5068703962 +/- 0.0025987972` (`+1.449 sigma`) | `0.01966009810 +/- 0.00053595339` (`+1.424 sigma`) | `GL0=-0.03132123586 +/- 0.00023922726` (`+0.729 sigma`), `GL2=+0.05112479005 +/- 0.00046213299` (`+1.584 sigma`); `alpha_s/pi` pull `+1.141 sigma` |
+| converted `e+e- -> gamma* -> d d~` | `0.1950499744 +/- 0.0010326753 pb` (`+1.479 sigma`) | `0.007824189766 +/- 0.000340601513 pb` (`+1.630 sigma`) | signed MC components `GL0=-0.01996339254 +/- 0.00015479207`, `GL2=+0.02786745983 +/- 0.00028425324`; they have no separate published targets; `alpha_s/pi` pull `+1.453 sigma` |
+| direct `gamma* -> t t~` | `2.901968994 +/- 0.015639978` (`+1.641 sigma`) | `0.2079169992 +/- 0.0042953541` (`+1.489 sigma`) | `GL0=-0.1443600613 +/- 0.0035809931` (`+0.669 sigma`), `GL2=+0.3522770605 +/- 0.0023720361` (`+1.687 sigma`); paper-ratio pull `+1.037 sigma` |
+| converted `e+e- -> gamma* -> t t~` | `0.3307052414 +/- 0.0018004843 pb` (`+1.603 sigma`) | `0.02356890542 +/- 0.00056839205 pb` (`+1.058 sigma`) | summed-graph integration has no persisted GL0/GL2 rows; paper-ratio pull `+0.685 sigma` |
+
+All LO integrations used 100,000 samples. The direct DD NLO used 400,000
+samples, the direct TT graph rows used 400,000 each, and each converted NLO
+central slot used 200,000. The converted DD acceptance also retains its
+pointwise route, scale-law, and EMR-bound checks; its physical graph components
+are closure diagnostics rather than separately published observables.
+
+The scalar local-equivalence matrix is generated from the scalar model rather
+than from hand-built graph data. Its unit-numerator lanes remain unchanged after
+generation, companion probes use only Feynman-rule-local edge factors, and
+there is no graph-specific production branch. The scalar LU 15-case matrix
+enables local UV, integrated UV, and threshold counterterms while comparing
+orientation-local 3D, explicit-sum 3D, and projected local 4D, including native
+Arb checks. As retained pre-reversal evidence, its 2026-08-31 `dev-optim` /
+`test_gammaloop` rerun passed `15/15`, with `235` skipped, in `70.438 s`. The
+matrix must be rerun after restoring the post-CFF direct-local3D construction
+before it is a current merge-readiness gate. For four near-zero cases, the
+authorized f64-input comparison uses the `1e-14` unit-scale fallback; the
+Arb-to-Arb comparison still runs and reports non-scaling. This is test-oracle
+handling only and required no production change. The curated suite selects a
+focused DOD0/1/2
+orientation-local bubble regression and all six base scalar-matrix graphs
+(GL00, GL02, GL04, GL08, GL09, and GL24); each base graph now also invokes
+per-orientation profiling for the localized direct-local3D route. Their current
+post-restoration rerun is pending.
+
+UV profiling defaults to `only-divergent`: every expected cycle union with
+DOD >= 0 is tested using the generation LMB when suitable, otherwise the first
+suitable basis in the deterministically sorted complete LMB list. The
+exhaustive `all` mode is opt-in. Amplitude and LU inputs share this behavior,
+with graph and Cutkosky-cut selectors for LU profiling and a colored final
+failure summary. Current end-to-end CLI coverage is `2/2` and lower-level
+API/unit coverage is `15/15`. Per-orientation profiling is defined only for the
+orientation-parametric, localized direct-local3D mode. Selector-free explicit-
+sum direct local3D and projected local4D are summed representations and reject
+that request. The shared CFF crate is currently `98/100`; its
+only failures are the powered-pole fixture contract and the inherited
+mixed-theta origin expectation. Both await test-only cleanup and are not a
+demonstrated production-value mismatch.
 
 ## Lifecycle and Data Flow
 
@@ -424,7 +513,10 @@ For local experimentation, prefer an isolated path such as `.local/scratch/<run>
 The persistence model is file-system based and intentionally human-editable for settings/run cards, mixed with binary artifacts for performance-heavy data.
 
 ### Persistence Compatibility Contract
-- State format is versioned with `state_manifest.toml` (`version = 3` currently).
+- State format is versioned with `state_manifest.toml` (`version = 4` currently).
+- Version 4 persists the typed CFF core global-prefactor sign. Because this
+  changes the positional bincode layout of generated three-dimensional
+  expressions, version-3 states must be regenerated rather than relabeled.
 - State loading and direct overwrite both require exactly the current manifest version; older states must be regenerated, and states from newer binaries require a newer GammaLoop binary.
 - A missing manifest denotes an unmanifested folder rather than a legacy state and is never loaded as saved state.
 - Process settings history now uses `settings_history.toml` consistently; loader still accepts legacy `settings_history.yaml` for backward compatibility and migration.

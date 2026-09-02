@@ -8,20 +8,20 @@ folder = "./examples/cli/epem_a_ddx/NLO/state"
 
 [[command_blocks]]
 name = "generate_diagrams"
-# Mapping of the 11 NLO diagrams w.r.t our notation in https://arxiv.org/pdf/2203.11038
-# Targets from the real part of the cross-section in the OS+MSbar scheme
-# (table 7 of https://arxiv.org/pdf/2203.11038 and model parameters defined therein)
-# TODO
+# Inclusive e+ e- -> gamma -> d d~ at NLO in massless QCD. The direct-current
+# gamma -> d d~ graph values in table 3 of https://arxiv.org/pdf/2203.11038
+# provide the validation reference after applying the common e+e- conversion;
+# the inclusive correction remains (alpha_s/pi)*Born.
 commands = [
   "import model sm-default.json",
-  "set global kv global.n_cores.feyngen=10",
+  "set global kv global.n_cores.feyngen=5",
 
   "remove processes",
   """generate xs e+ e- > d d~ | e+ e- d d~ g ghG ghG~ a QCD^2==2 QED^2==4 [{{2}} QCD=1]
       --numerator-grouping group_identical_graphs_up_to_scalar_rescaling
       --symmetrize-left-right-states true
       -p epem_a_ddx -i NLO
-      --global-prefactor-num "1𝑖"
+      --global-prefactor-num "-1𝑖"
       --only-diagrams""",
   "save dot",
 ]
@@ -68,14 +68,20 @@ debug_cache = false
 generate_events = false
 store_additional_weights_in_event = false
 integral_unit = "picobarn"
-mu_r = 91.188
-m_uv = 91.188
+mu_r = 2500.0
+m_uv = 2500.0
+renormalization_localization_scale = 1000.0
 
 #[default_runtime_settings.general.orientation_pat]
 #pat = "(+,+,-,-,-,-,+,0,+,0,-,+)"
 
 [default_runtime_settings.integrator.observables_output]
 format = ["hwu","json"]
+
+[cli_settings.global.generation]
+# Keep the production example deterministic and reduce the variance of short runs by
+# summing every physical orientation explicitly.
+explicit_orientation_sum_only = true
 
 [cli_settings.global.generation.evaluator]
 do_algebra = false
@@ -97,7 +103,7 @@ enable_thresholds = true
 check_esurface_at_generation = false
 
 [default_runtime_settings.subtraction]
-# Threshold subtraction for LU not yet implemented
+# Exercise local and integrated threshold counterterms in the production LU example.
 disable_threshold_subtraction = false
 
 [cli_settings.global.generation.compile]
@@ -114,14 +120,14 @@ generate_integrated=true
 subtract_uv=true
 
 [cli_settings.global.n_cores]
-feyngen = 10
-generate = 10
-compile = 10
-integrate = 10
+feyngen = 5
+generate = 5
+compile = 5
+integrate = 5
 
 [cli_settings.global.generation.tropical_subgraph_table]
 panic_on_fail = true
-disable_tropical_generation = false
+disable_tropical_generation = true
 
 [[default_runtime_settings.stability.rotation_axis]]
 type = "z"
@@ -148,18 +154,15 @@ escalate_for_large_weight_threshold = -1.0
 name = "integrate"
 commands = [
   "run set_model_parameters",
-  "run set_differential_quantities",
-  "run set_differential_observables",
-  "run set_differential_selectors",
 
   """set process -p epem_a_ddx string '
     [sampling]
     graphs = "monte_carlo"
     orientations = "summed"
-    lmb_multichanneling = false
-    # For importance-sampling over channels, use the quantity below
-    # lmb_channels = "monte_carlo"
+    lmb_multichanneling = true
+    # Sum all LMB channels explicitly and use OSE multichannel weights.
     lmb_channels = "summed"
+    lmb_channel_weight = "ose"
     '""",
 
   """set process -p epem_a_ddx string '
@@ -181,12 +184,17 @@ commands = [
   escalate_for_large_weight_threshold = -1.0
       '""",
 
+  # Two iterations at this size take about three minutes end-to-end on five cores.
   """set process -p epem_a_ddx -i NLO kv
         integrator.n_increase=0
-        integrator.n_start=10000
-        integrator.n_max=10000000000
-        integrator.seed=1337
-        general.m_uv=9.1188
+        integrator.n_start=650000
+        integrator.n_max=1300000
+        integrator.min_samples_for_update=10000
+        integrator.integrated_phase="real"
+        integrator.discrete_dim_learning_rate=0.0
+        integrator.continuous_dim_learning_rate=0.1
+        integrator.target_relative_accuracy=1.0e-12
+        integrator.seed=220311038
 
     """,
   # --show-max-weight-info-for-discrete-bins
@@ -201,7 +209,7 @@ commands = [
   # 		 --show-max-weight-info
   # 		 --renderer tabled
   # """integrate -p epem_a_ddx -i NLO -p epem_a_ddx -i NLO_semi_inclusive --n-cores 1
-  #                --target epem_a_ddx@NLO=-3.2336e-06,0.0
+	# 		 --target epem_a_ddx@NLO=1.163040158345989e-3,0.0
 		# 		 --renderer ratatui
 		# 		 --batch-size 1000
 		# 		 --show-phase imag
@@ -211,11 +219,14 @@ commands = [
 		# 		 --write-results-for-each-iteration
   #                --restart
   #   """
-  """integrate -p epem_a_ddx -i NLO -p epem_a_ddx -i NLO_semi_inclusive --n-cores 10
-                 --target epem_a_ddx@NLO=0.0,1.163e-3 epem_a_ddx@NLO_semi_inclusive=0.0,1.003e-3
+  # Inclusive target: (alpha_s/pi)*Born
+  # = (0.118/pi)*(3.09643933668616e-2 pb)
+  # = 1.163040158345989e-3 pb for this card's model parameters.
+  """integrate -p epem_a_ddx -i NLO --n-cores 5
+				 --target epem_a_ddx@NLO=1.163040158345989e-3,0.0
 				 --renderer ratatui
 				 --batch-size 1000
-				 --show-phase both
+				 --show-phase real
 				 --show-max-weight-info
 				 --show-top-discrete-grid
 				 --show-discrete-contributions-sum

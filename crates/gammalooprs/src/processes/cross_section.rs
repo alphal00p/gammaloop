@@ -1481,6 +1481,12 @@ impl CrossSectionGraph {
 
     fn generate_cff(&mut self, settings: &GenerationSettings) -> Result<GraphGenerationStats> {
         settings.validate_explicit_orientation_sum_options()?;
+        self.graph.ensure_energy_convergent_cycles(
+            &self
+                .graph
+                .no_dummy()
+                .subtract(&self.graph.initial_state_cut),
+        )?;
         let canonize_esurface = self
             .graph
             .get_esurface_canonization(&self.graph.loop_momentum_basis);
@@ -1955,11 +1961,7 @@ impl CrossSectionGraph {
         product
     }
 
-    fn single_th_prefactor_helper_params(
-        order: u8,
-        _subspace_loop_count: usize,
-        is_on_right: bool,
-    ) -> Vec<Atom> {
+    pub(crate) fn single_th_prefactor_helper_params(order: u8, is_on_right: bool) -> Vec<Atom> {
         let radius_star = if is_on_right {
             Atom::var(GS.radius_star_right)
         } else {
@@ -2001,7 +2003,10 @@ impl CrossSectionGraph {
         params
     }
 
-    fn iterated_th_prefactor_helper_params(left_order: u8, right_order: u8) -> Vec<Atom> {
+    pub(crate) fn iterated_th_prefactor_helper_params(
+        left_order: u8,
+        right_order: u8,
+    ) -> Vec<Atom> {
         let mut iterated_params = params_for_iterated_threshold_ct(left_order, right_order);
         let left_radius_star = Atom::var(GS.radius_star_left);
         let right_radius_star = Atom::var(GS.radius_star_right);
@@ -2044,16 +2049,9 @@ impl CrossSectionGraph {
             is_on_right,
             include_integrated,
         );
-        let params =
-            Self::single_th_prefactor_helper_params(order, subspace_loop_count, is_on_right);
+        let params = Self::single_th_prefactor_helper_params(order, is_on_right);
 
-        let mut fn_map = FunctionMap::new();
-        fn_map
-            .add_aliases([(
-                GS.pi.into(),
-                Atom::num(Rational::try_from(std::f64::consts::PI).unwrap()),
-            )])
-            .unwrap();
+        let fn_map = FunctionMap::new();
 
         let evaluator = GenericEvaluator::new_from_raw_params(
             [atom],
@@ -2091,13 +2089,7 @@ impl CrossSectionGraph {
 
         let params = Self::iterated_th_prefactor_helper_params(left_order, right_order);
 
-        let mut fn_map = FunctionMap::new();
-        fn_map
-            .add_aliases([(
-                GS.pi.into(),
-                Atom::num(Rational::try_from(std::f64::consts::PI).unwrap()),
-            )])
-            .unwrap();
+        let fn_map = FunctionMap::new();
 
         let evaluator = GenericEvaluator::new_from_raw_params(
             [atom],
@@ -4132,13 +4124,7 @@ mod tests {
     fn iterated_threshold_helper_atom_matches_its_left_right_parameter_families() {
         test_initialise().unwrap();
 
-        let mut fn_map = super::FunctionMap::new();
-        fn_map
-            .add_aliases([(
-                GS.pi.into(),
-                super::Atom::num(super::Rational::try_from(std::f64::consts::PI).unwrap()),
-            )])
-            .unwrap();
+        let fn_map = super::FunctionMap::new();
 
         for left_order in 1..=3 {
             for right_order in 1..=3 {

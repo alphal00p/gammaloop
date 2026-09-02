@@ -6,6 +6,11 @@ use std::{
 #[cfg(test)]
 use crate::uv::Integrands;
 #[cfg(test)]
+use crate::{
+    cff::expression::OrientationID,
+    uv::approx::direct_3d::{DirectResidueBranches, DirectSector},
+};
+#[cfg(test)]
 use std::cmp::Reverse;
 
 use ahash::AHashMap;
@@ -41,6 +46,7 @@ use crate::{
         ApproximationType, RenormalizationPart, Spinney, UVgenerationSettings, UltravioletGraph,
         approx::{
             CutStructure, ForestNodeLike, OrientationProjection, Rooted, UVCtx,
+            direct_3d::{Direct3dApproximation, Direct3dCts},
             final_integrand::{FinalIntegrandBuilder, FinalIntegrands},
             integrated::{Integrated, IntegratedCts},
             local_3d::{Local3DApproximation, Local3DCts, Localizer},
@@ -639,6 +645,11 @@ impl Forests {
     }
 
     fn recursion_input_4d(&self, node: NodeIndex) -> Result<Full4dCts> {
+        // The typed 4D value is the sequential accumulator. It already encodes that an empty
+        // dependency frontier starts at the typed root, that other prefixes enter through their
+        // reduced branch, and that both local subtraction signs are applied without a raw
+        // Foata-level product. Disconnected values likewise retain their factorized local and
+        // integrated-prefix cross terms, so no separate active/frozen root-path replay is needed.
         let operation = &self.graph[node];
         let computed = self.compute_store.require(operation)?;
         if self.graph.is_disjoint_union(node) {
@@ -1028,9 +1039,24 @@ impl Forests {
         settings: &UVgenerationSettings,
     ) -> Result<CutComputation> {
         let operation = &self.graph[node];
+        let forest_node = ForestNode {
+            spinney: self.source_spinney(node),
+            topo_order: operation.key.op_count(),
+        };
         let local_3d = if operation.key.is_empty() {
             Local3DCts::root(graph, localizer)?
+        } else if settings.local_uv_cts_from_expanded_4d_integrands {
+            // This is the only route that may produce `Projected4d`: the 4D
+            // Taylor coefficient is kept factorized and final assembly later
+            // attaches its untouched outer CFF. It never enters `run`,
+            // `run_local`, or `run_integrated` below.
+            let local_4d = self.compute_store.require(operation)?.local_4d(operation)?;
+            Local3DApproximation::new(localizer, graph, settings)
+                .project_local_4d(local_4d, &forest_node)?
         } else if self.graph.is_disjoint_union(node) {
+            // Both direct variants replay the Taylor operators on the complete
+            // post-energy-integration CFF. `explicit_orientation_sum_only`
+            // changes selector materialization only, not this construction.
             let mut active_sectors = Vec::new();
             for state in self
                 .union_replay_states(node)?
@@ -1048,19 +1074,23 @@ impl Forests {
                 // An empty integrated prefix starts from the per-cut root integrand. Every
                 // other prefix enters through the reduced branch of its first local operation.
                 let mut sector = if integrated_operation.key.is_empty() {
-                    let root = Local3DCts::root(graph, localizer)?;
-                    Local3DApproximation::new(localizer, graph, settings)
+                    let root = Direct3dCts::root(graph, localizer)?;
+                    Direct3dApproximation::new(localizer, graph, settings)
                         .run_local(&root, &current, &given, &current, &given)?
                 } else {
                     let integrated = self
                         .compute_store
                         .require(integrated_operation)?
                         .integrated(integrated_operation)?;
+                    // A disabled (or algebraically vanishing) integrated prefix
+                    // still owns its typed component-path frame. Replay that
+                    // zero coefficient through the local suffix; it remains
+                    // algebraically zero without deleting the union sector.
                     let prefix_node = ForestNode {
                         spinney: self.source_spinney(state.integrated),
                         topo_order: integrated_operation.key.op_count(),
                     };
-                    Local3DApproximation::new(localizer, graph, settings).run_integrated(
+                    Direct3dApproximation::new(localizer, graph, settings).run_integrated(
                         integrated,
                         &prefix_node,
                         &current,
@@ -1073,23 +1103,19 @@ impl Forests {
                 for (offset, edge) in edges {
                     let step_order = integrated_operation.key.op_count() + offset;
                     let (current, given) = self.wood.current_given_pair(edge, step_order);
-                    sector = Local3DApproximation::new(localizer, graph, settings)
+                    sector = Direct3dApproximation::new(localizer, graph, settings)
                         .run_local(&sector, &current, &given, &current, &given)?;
                 }
 
                 // Keep each active/frozen split after its root-path replay so any connected
                 // descendants rescale only the loop variables still active in that sector.
-                active_sectors.extend(
-                    sector
-                        .active_sectors()
-                        .expect("a replayed union sector retains its active subgraph")
-                        .iter()
-                        .cloned(),
-                );
+                active_sectors.extend(sector.sectors()?.iter().cloned());
             }
 
-            Local3DCts::from_active_sectors(active_sectors)
-                .wrap_err_with(|| format!("{operation} has no proper integrated prefixes"))?
+            Local3DCts::Direct(
+                Direct3dCts::from_sectors(active_sectors)
+                    .wrap_err_with(|| format!("{operation} has no proper integrated prefixes"))?,
+            )
         } else {
             let (parent, edge) = self
                 .graph
@@ -1116,71 +1142,23 @@ impl Forests {
                 })?;
             let step_order = parent_operation.key.op_count();
             let (current, given) = self.wood.current_given_pair(edge, step_order);
-            // `run` applies both subtraction signs; no external sign or raw
-            // Foata-level product is introduced for an ordinary single-parent node.
-            Local3DApproximation::new(localizer, graph, settings).run(
-                &parent_local,
+            // `run` applies the next Taylor operator to the complete CFF and
+            // applies both subtraction signs; no projected 4D coefficient,
+            // external sign, or raw Foata-level product enters this route.
+            Local3DCts::Direct(Direct3dApproximation::new(localizer, graph, settings).run(
+                parent_local.direct()?,
                 parent_integrated,
                 &current,
                 &given,
                 &current,
                 &given,
-            )?
+            )?)
         };
 
         let integrated = self
             .compute_store
             .require(operation)?
             .integrated(operation)?;
-        let forest_node = ForestNode {
-            spinney: self.source_spinney(node),
-            topo_order: operation.key.op_count(),
-        };
-        let final_integrands = FinalIntegrandBuilder::new(localizer, settings).build_3d(
-            graph,
-            &forest_node,
-            &local_3d,
-            integrated,
-        )?;
-
-        Ok(CutComputation {
-            local_3d,
-            final_integrands,
-        })
-    }
-
-    fn local_3d_from_4d_for_node(
-        &self,
-        node: NodeIndex,
-        graph: &mut Graph,
-        localizer: Localizer<'_>,
-        settings: &UVgenerationSettings,
-    ) -> Result<CutComputation> {
-        let operation = &self.graph[node];
-        // The typed 4D value is now the sequential accumulator. It already encodes that an
-        // empty dependency frontier starts at the typed root, that other prefixes enter through
-        // their reduced branch, and that both local subtraction signs are applied without a raw
-        // Foata-level product. Disconnected values likewise retain their factorized local and
-        // integrated-prefix cross terms, so no separate active/frozen root-path replay is needed.
-        let cograph = graph
-            .full_filter()
-            .subtract(self.source_spinney(node).filter())
-            .subtract(&graph.initial_state_cut);
-        let source = Full4dCts::with_cograph(
-            self.compute_store.require(operation)?.local_4d(operation)?,
-            graph,
-            &cograph,
-        );
-        let local_3d = localizer.project_4d(&source, graph, self.source_spinney(node).filter())?;
-
-        let integrated = self
-            .compute_store
-            .require(operation)?
-            .integrated(operation)?;
-        let forest_node = ForestNode {
-            spinney: self.source_spinney(node),
-            topo_order: operation.key.op_count(),
-        };
         let final_integrands = FinalIntegrandBuilder::new(localizer, settings).build_3d(
             graph,
             &forest_node,
@@ -1248,15 +1226,11 @@ impl Forests {
             {
                 debug!(order, nidx=%nidx, key=%self.graph[nidx], "Computing hedge-poset per-cut term");
                 let operation = self.graph[nidx].clone();
-                // The empty forest is the original factorized 3D integrand.
-                // Expanded-4D projection is a choice only for proper UV nodes.
-                let cut_computation = if settings.local_uv_cts_from_expanded_4d_integrands
-                    && !operation.key.is_empty()
-                {
-                    self.local_3d_from_4d_for_node(nidx, graph, localizer, settings)?
-                } else {
-                    self.local_3d_for_node(nidx, graph, &cutset, localizer, settings)?
-                };
+                // Direct local-3D nodes Taylor-expand the complete post-energy-integration CFF.
+                // Expanded-4D nodes instead project their typed local coefficients and attach
+                // the outer CFF only during final assembly.
+                let cut_computation =
+                    self.local_3d_for_node(nidx, graph, &cutset, localizer, settings)?;
                 self.compute_store
                     .entry(operation)
                     .or_default()
@@ -1827,20 +1801,16 @@ mod tests {
             localizer,
             &settings,
         )?;
-        assert_eq!(
-            root_result
-                .local_3d
-                .active_sectors()
-                .expect("a root union keeps its active sectors")
-                .len(),
-            3
-        );
+        assert_eq!(root_result.local_3d.direct()?.sectors()?.len(), 3);
         assert!(
             root_result
                 .local_3d
-                .integrands()
-                .iter()
-                .all(|(_, term)| !term.contains_symbol(root_store_marker)),
+                .direct()?
+                .branches()?
+                .iter_keys()
+                .all(|(_, integrands)| integrands
+                    .iter()
+                    .all(|(_, term)| !term.contains_symbol(root_store_marker))),
             "an empty dependency frontier must start from the typed root"
         );
 
@@ -1851,24 +1821,12 @@ mod tests {
             localizer,
             &settings,
         )?;
-        assert_eq!(
-            frontier_result
-                .local_3d
-                .active_sectors()
-                .expect("a dependent union keeps its active sectors")
-                .len(),
-            5
-        );
+        assert_eq!(frontier_result.local_3d.direct()?.sectors()?.len(), 5);
         let replay_states = forests.union_replay_states(dependent_disconnected)?;
-        let (state, (active_subgraph, _)) = replay_states
+        let (state, sector) = replay_states
             .iter()
             .filter(|state| !state.local_edges.is_empty())
-            .zip(
-                frontier_result
-                    .local_3d
-                    .active_sectors()
-                    .expect("a dependent union keeps its active sectors"),
-            )
+            .zip(frontier_result.local_3d.direct()?.sectors()?)
             .find(|(state, _)| {
                 state.local_edges.len() == 2
                     && forests
@@ -1887,17 +1845,22 @@ mod tests {
             })
             .reduce(|active, reduced| active.union(&reduced))
             .expect("the selected replay state has a local suffix");
-        assert_eq!(active_subgraph, &expected_active);
+        assert_eq!(&sector.active_subgraph, &expected_active);
         assert!(
-            active_subgraph.empty_intersection(forests.source_spinney(state.integrated).filter())
+            sector
+                .active_subgraph
+                .empty_intersection(forests.source_spinney(state.integrated).filter())
         );
         assert!(
             frontier_result
                 .local_3d
-                .integrands()
-                .iter()
-                .all(|(_, term)| !term.contains_symbol(root_store_marker)
-                    && !term.contains_symbol(frontier_store_marker)),
+                .direct()?
+                .branches()?
+                .iter_keys()
+                .all(|(_, integrands)| integrands.iter().all(|(_, term)| {
+                    !term.contains_symbol(root_store_marker)
+                        && !term.contains_symbol(frontier_store_marker)
+                })),
             "a union must replay every component path from its typed root"
         );
         Ok(())
@@ -2461,12 +2424,21 @@ mod tests {
             })
             .collect::<Vec<_>>();
         assert_eq!(union_active.len(), 3);
-        let union_local = Local3DCts::from_active_sectors(
+        let union_local = Direct3dCts::from_sectors(
             union_active
                 .iter()
                 .cloned()
-                .map(|active| (active, Integrands::root()))
-                .collect(),
+                .map(|active_subgraph| {
+                    Ok(DirectSector {
+                        active_subgraph,
+                        active: DirectResidueBranches::production(
+                            OrientationID(0),
+                            Integrands::root(),
+                        )?,
+                        frozen_integrands: Integrands::root(),
+                    })
+                })
+                .collect::<Result<_>>()?,
         )?;
 
         let step_order = f.graph[union].key.op_count();
@@ -2477,7 +2449,7 @@ mod tests {
             .map(|active| active.union(&reduced))
             .chain(std::iter::once(reduced.clone()))
             .collect::<Vec<_>>();
-        let child_local = Local3DApproximation::new(localizer, &mut spectacles, &settings).run(
+        let child_local = Direct3dApproximation::new(localizer, &mut spectacles, &settings).run(
             &union_local,
             &IntegratedCts::root(),
             &current,
@@ -2486,10 +2458,9 @@ mod tests {
             &given,
         )?;
         let child_active = child_local
-            .active_sectors()
-            .expect("a connected child keeps its parent's active sectors")
+            .sectors()?
             .iter()
-            .map(|(active, _)| active.clone())
+            .map(|sector| sector.active_subgraph.clone())
             .collect::<Vec<_>>();
         assert_eq!(child_active.len(), 4);
         assert_eq!(child_active, expected_active);

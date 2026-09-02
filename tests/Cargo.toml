@@ -13,6 +13,7 @@ path = "tests/test_python_api.rs"
 required-features = ["python-api-tests"]
 
 [dependencies]
+bincode = { workspace = true }
 color-eyre = { workspace = true }
 colored = { workspace = true }
 eyre = { workspace = true }
@@ -29,6 +30,7 @@ serial_test = "3.2.0"
 spenso = { workspace = true, features = ["shadowing"] }
 symbolica-utils = { workspace = true }
 tabled = { workspace = true, features = ["ansi"] }
+three-dimensional-reps = { workspace = true, features = ["eval"] }
 toml = { workspace = true }
 tracing = { workspace = true, features = ["release_max_level_info"] }
 vakint = { workspace = true }

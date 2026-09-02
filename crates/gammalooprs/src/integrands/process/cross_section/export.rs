@@ -21,6 +21,7 @@ use crate::{
     processes::{
         IteratedCtCollection, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
         StandaloneNumericTarget,
+        cross_section::{CrossSectionGraph, params_for_derivative_order},
     },
     subtraction::lu_counterterm::LUCounterTermEvaluators,
 };
@@ -45,6 +46,7 @@ fn make_script_executable(_: &Path) -> Result<()> {
 
 fn export_generic_evaluator<T: ExportAtomTo>(
     evaluator: &GenericEvaluator,
+    parameter_override: Option<&[symbolica::atom::Atom]>,
 ) -> Result<StandaloneGenericEvaluatorArchive<T>> {
     let exprs = evaluator
         .exprs
@@ -64,6 +66,14 @@ fn export_generic_evaluator<T: ExportAtomTo>(
 
     Ok(StandaloneGenericEvaluatorArchive {
         exprs,
+        parameter_override: parameter_override
+            .map(|params| {
+                params
+                    .iter()
+                    .map(T::export_atom_to)
+                    .collect::<Result<Vec<_>>>()
+            })
+            .transpose()?,
         additional_fn_map_entries,
         dual_shape: evaluator.dual_shape.clone(),
     })
@@ -71,28 +81,37 @@ fn export_generic_evaluator<T: ExportAtomTo>(
 
 fn export_evaluator_stack<T: ExportAtomTo>(
     stack: &crate::integrands::process::evaluators::EvaluatorStack,
+    orientation_start: usize,
+    residue_map_id_start: usize,
+    mult_offset: usize,
 ) -> Result<StandaloneEvaluatorStackArchive<T>> {
     Ok(StandaloneEvaluatorStackArchive {
         explicit_orientation_sum_only: stack.explicit_orientation_sum_only,
-        single_parametric: export_generic_evaluator(&stack.single_parametric)?,
+        production_orientation_ids: stack
+            .production_orientation_ids()
+            .iter()
+            .map(|id| id.0)
+            .collect(),
+        single_parametric: export_generic_evaluator(&stack.single_parametric, None)?,
         iterative: stack
             .iterative
             .as_ref()
-            .map(|(eval, _)| export_generic_evaluator(eval))
+            .map(|(eval, _)| export_generic_evaluator(eval, None))
             .transpose()?,
         summed_function_map: stack
             .summed_function_map
             .as_ref()
-            .map(export_generic_evaluator)
+            .map(|eval| export_generic_evaluator(eval, None))
             .transpose()?,
         summed: stack
             .summed
             .as_ref()
-            .map(export_generic_evaluator)
+            .map(|eval| export_generic_evaluator(eval, None))
             .transpose()?,
         representative_input: Vec::new(),
-        start: 0,
-        mult_offset: 0,
+        start: orientation_start,
+        residue_map_id_start,
+        mult_offset,
     })
 }
 
@@ -106,13 +125,21 @@ fn export_cut_cff_index(index: &CutCFFIndex) -> StandaloneCutCFFIndex {
 
 fn export_evaluator_map<T: ExportAtomTo>(
     stacks: &BTreeMap<CutCFFIndex, crate::integrands::process::evaluators::EvaluatorStack>,
+    orientation_start: usize,
+    residue_map_id_start: usize,
+    mult_offset: usize,
 ) -> Result<Vec<StandaloneIndexedEvaluatorStackArchive<T>>> {
     stacks
         .iter()
         .map(|(cut_cff_index, stack)| {
             Ok(StandaloneIndexedEvaluatorStackArchive {
                 cut_cff_index: export_cut_cff_index(cut_cff_index),
-                evaluator_stack: export_evaluator_stack(stack)?,
+                evaluator_stack: export_evaluator_stack(
+                    stack,
+                    orientation_start,
+                    residue_map_id_start,
+                    mult_offset,
+                )?,
             })
         })
         .collect()
@@ -120,13 +147,15 @@ fn export_evaluator_map<T: ExportAtomTo>(
 
 fn export_generic_evaluator_map<T: ExportAtomTo>(
     evaluators: &BTreeMap<CutCFFIndex, GenericEvaluator>,
+    parameter_override: impl Fn(&CutCFFIndex) -> Result<Vec<symbolica::atom::Atom>>,
 ) -> Result<Vec<StandaloneIndexedGenericEvaluatorArchive<T>>> {
     evaluators
         .iter()
         .map(|(cut_cff_index, evaluator)| {
+            let params = parameter_override(cut_cff_index)?;
             Ok(StandaloneIndexedGenericEvaluatorArchive {
                 cut_cff_index: export_cut_cff_index(cut_cff_index),
-                evaluator: export_generic_evaluator(evaluator)?,
+                evaluator: export_generic_evaluator(evaluator, Some(&params))?,
             })
         })
         .collect()
@@ -150,42 +179,85 @@ where
 
 fn export_counterterm<T: ExportAtomTo>(
     evaluators: &LUCounterTermEvaluators,
+    orientation_start: usize,
+    residue_map_id_start: usize,
+    mult_offset: usize,
 ) -> Result<StandaloneCountertermArchive<T>> {
     Ok(StandaloneCountertermArchive {
         left_thresholds_evaluator: evaluators
             .left_thresholds_evaluator
             .iter()
-            .map(export_evaluator_map)
+            .map(|stacks| {
+                export_evaluator_map(stacks, orientation_start, residue_map_id_start, mult_offset)
+            })
             .collect::<Result<Vec<_>>>()?,
         right_thresholds_evaluator: evaluators
             .right_thresholds_evaluator
             .iter()
-            .map(export_evaluator_map)
+            .map(|stacks| {
+                export_evaluator_map(stacks, orientation_start, residue_map_id_start, mult_offset)
+            })
             .collect::<Result<Vec<_>>>()?,
-        iterated_evaluator: export_iterated_collection(
-            &evaluators.iterated_evaluator,
-            export_evaluator_map,
-        )?,
+        iterated_evaluator: export_iterated_collection(&evaluators.iterated_evaluator, |stacks| {
+            export_evaluator_map(stacks, orientation_start, residue_map_id_start, mult_offset)
+        })?,
         left_threshold_helpers: evaluators
             .threshold_helpers
             .left_thresholds
             .iter()
-            .map(export_generic_evaluator_map)
+            .map(|helpers| {
+                export_generic_evaluator_map(helpers, |index| {
+                    let order = index.left_threshold_order.ok_or_else(|| {
+                        eyre!("Left threshold helper is missing its threshold order")
+                    })?;
+                    Ok(CrossSectionGraph::single_th_prefactor_helper_params(
+                        order as u8,
+                        false,
+                    ))
+                })
+            })
             .collect::<Result<Vec<_>>>()?,
         right_threshold_helpers: evaluators
             .threshold_helpers
             .right_thresholds
             .iter()
-            .map(export_generic_evaluator_map)
+            .map(|helpers| {
+                export_generic_evaluator_map(helpers, |index| {
+                    let order = index.right_threshold_order.ok_or_else(|| {
+                        eyre!("Right threshold helper is missing its threshold order")
+                    })?;
+                    Ok(CrossSectionGraph::single_th_prefactor_helper_params(
+                        order as u8,
+                        true,
+                    ))
+                })
+            })
             .collect::<Result<Vec<_>>>()?,
         iterated_helpers: export_iterated_collection(
             &evaluators.threshold_helpers.iterated,
-            export_generic_evaluator_map,
+            |helpers| {
+                export_generic_evaluator_map(helpers, |index| {
+                    let left_order = index.left_threshold_order.ok_or_else(|| {
+                        eyre!("Iterated threshold helper is missing its left threshold order")
+                    })?;
+                    let right_order = index.right_threshold_order.ok_or_else(|| {
+                        eyre!("Iterated threshold helper is missing its right threshold order")
+                    })?;
+                    Ok(CrossSectionGraph::iterated_th_prefactor_helper_params(
+                        left_order as u8,
+                        right_order as u8,
+                    ))
+                })
+            },
         )?,
         pass_two_evaluator: evaluators
             .residue_from_e_surface_evaluators
             .iter()
-            .map(export_generic_evaluator)
+            .enumerate()
+            .map(|(order, evaluator)| {
+                let params = params_for_derivative_order((order + 1) as u8);
+                export_generic_evaluator(evaluator, Some(&params))
+            })
             .collect::<Result<Vec<_>>>()?,
     })
 }
@@ -271,6 +343,10 @@ impl CrossSectionIntegrand {
             .graph_terms
             .iter()
             .map(|term| {
+                let orientation_start = term.param_builder.pairs.orientations.value_range.start;
+                let residue_map_id_start =
+                    term.param_builder.pairs.residue_map_id.value_range.start;
+                let multiplicative_offset = 1;
                 let param_builder_params = (&term.param_builder.pairs)
                     .into_iter()
                     .flat_map(|pair| pair.params.iter())
@@ -302,14 +378,28 @@ impl CrossSectionIntegrand {
                 let cut_group_integrands = term
                     .integrand
                     .iter()
-                    .map(export_evaluator_map)
+                    .map(|stacks| {
+                        export_evaluator_map(
+                            stacks,
+                            orientation_start,
+                            residue_map_id_start,
+                            multiplicative_offset,
+                        )
+                    })
                     .collect::<Result<Vec<_>>>()?;
 
                 let counterterms = term
                     .counterterm
                     .evaluators
                     .iter()
-                    .map(export_counterterm)
+                    .map(|evaluators| {
+                        export_counterterm(
+                            evaluators,
+                            orientation_start,
+                            residue_map_id_start,
+                            multiplicative_offset,
+                        )
+                    })
                     .collect::<Result<Vec<_>>>()?;
 
                 Ok(StandaloneCrossSectionGraphTermArchive {

@@ -1,0 +1,13 @@
+digraph diagnostic_shifted_double_pole_factorized {
+    num = 1
+    edge [particle="scalar_1" num=1]
+    node [num=1]
+
+    incoming [style=invis]
+    outgoing [style=invis]
+    incoming -> v0 [id=0 label="p1"]
+    v0 -> v1 [id=2 lmb_id=0 label="k1" num="Q(2,spenso::cind(0))"]
+    v1 -> v2 [id=3 label="k1" num="Q(3,spenso::cind(0))"]
+    v2 -> v0 [id=4 label="k1-p1"]
+    v2 -> outgoing [id=1 label="p1"]
+}

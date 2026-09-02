@@ -33,7 +33,7 @@ use symbolica::{
 
 use crate::processes::StandaloneNumericTarget;
 
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 6;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 7;
 pub const STANDALONE_MODE_RUST: u8 = 0;
 
 #[derive(
@@ -164,8 +164,10 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                 explicit_orientation_sum_only: graph
                     .original_integrand
                     .explicit_orientation_sum_only,
+                production_orientation_ids: graph.original_integrand.production_orientation_ids,
                 parametric: (exprs, all_reps, single, result),
                 orientation_start: graph.original_integrand.start,
+                residue_map_id_start: graph.original_integrand.residue_map_id_start,
                 mult_offset: graph.original_integrand.mult_offset,
                 representative_input: graph
                     .original_integrand
@@ -222,7 +224,9 @@ impl<S, A: ImportWithMap> StandaloneEvaluatorArchive<S, A> {
                                 cut_cff_index,
                                 LoadedStandaloneEvaluatorStack {
                                     explicit_orientation_sum_only: ct.explicit_orientation_sum_only,
+                                    production_orientation_ids: ct.production_orientation_ids,
                                     orientation_start: ct.start,
+                                    residue_map_id_start: ct.residue_map_id_start,
                                     mult_offset: ct.mult_offset,
                                     representative_input: ct
                                         .representative_input
@@ -290,12 +294,14 @@ pub struct StandaloneIndexedEvaluatorStackArchive<A = Vec<u8>> {
 #[derive(Clone, Encode, Decode, Serialize, Deserialize)]
 pub struct StandaloneEvaluatorStackArchive<A = Vec<u8>> {
     pub(crate) explicit_orientation_sum_only: bool,
+    pub(crate) production_orientation_ids: Vec<usize>,
     pub(crate) single_parametric: StandaloneGenericEvaluatorArchive<A>,
     pub(crate) iterative: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) summed_function_map: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) summed: Option<StandaloneGenericEvaluatorArchive<A>>,
     pub(crate) representative_input: Vec<StandaloneComplexInput>,
     pub(crate) start: usize,
+    pub(crate) residue_map_id_start: usize,
     pub(crate) mult_offset: usize,
 }
 
@@ -733,8 +739,10 @@ pub struct LoadedStandaloneGraphTerm {
 #[allow(clippy::type_complexity)]
 pub struct LoadedStandaloneEvaluatorStack {
     pub(crate) explicit_orientation_sum_only: bool,
+    pub(crate) production_orientation_ids: Vec<usize>,
     pub(crate) representative_input: Vec<Complex<f64>>,
     pub(crate) orientation_start: usize,
+    pub(crate) residue_map_id_start: usize,
     pub(crate) mult_offset: usize,
     pub parametric: LoadedGenericEvaluator,
     pub iterative: Option<LoadedGenericEvaluator>,
@@ -1031,6 +1039,13 @@ impl LoadedStandaloneEvaluatorStack {
                     vec![self.representative_input.clone()]
                 }
                 StandaloneMethod::SingleParametric => {
+                    if self.production_orientation_ids.len() != request.orientations.len() {
+                        return Err(eyre!(
+                            "Standalone evaluator has {} production residue-map IDs for {} physical orientations",
+                            self.production_orientation_ids.len(),
+                            request.orientations.len()
+                        ));
+                    }
                     if let Some(index) = request.orientation_index {
                         let orientation = request.orientations.get(index).ok_or_else(|| {
                             eyre!(
@@ -1039,13 +1054,14 @@ impl LoadedStandaloneEvaluatorStack {
                                 request.orientations.len()
                             )
                         })?;
-                        vec![self.set_orientation(orientation)]
+                        vec![self.set_orientation(index, orientation)?]
                     } else {
                         request
                             .orientations
                             .iter()
-                            .map(|orientation| self.set_orientation(orientation))
-                            .collect()
+                            .enumerate()
+                            .map(|(index, orientation)| self.set_orientation(index, orientation))
+                            .collect::<Result<Vec<_>>>()?
                     }
                 }
                 StandaloneMethod::Iterative
@@ -1218,8 +1234,8 @@ impl LoadedStandaloneEvaluatorStack {
         let samples: Vec<_> = (0..n_samples)
             .map(|_| {
                 let mut samples = vec![];
-                for o in orientations {
-                    samples.push(self.scramble_input_with_orientation(o, rng))
+                for (index, o) in orientations.iter().enumerate() {
+                    samples.push(self.scramble_input_with_orientation(index, o, rng))
                 }
                 samples
             })
@@ -1294,6 +1310,7 @@ impl LoadedStandaloneEvaluatorStack {
 
     fn scramble_input_with_orientation<R: Rng + ?Sized>(
         &self,
+        orientation_index: usize,
         orientation: &[i8],
         _rng: &mut R,
     ) -> Vec<Complex<f64>> {
@@ -1301,6 +1318,10 @@ impl LoadedStandaloneEvaluatorStack {
         // for n in &mut new_input {
         //     *n = *n * rng.random_range(0.8..1.2);
         // }
+        new_input[self.residue_map_id_start * self.mult_offset] = Complex::new(
+            self.production_orientation_ids[orientation_index] as f64,
+            0.0,
+        );
         set_orientation_values_impl(
             &mut new_input,
             Complex::new(1., 0.),
@@ -1316,8 +1337,23 @@ impl LoadedStandaloneEvaluatorStack {
         self.representative_input.clone()
     }
 
-    fn set_orientation(&self, orientation: &[i8]) -> Vec<Complex<f64>> {
+    fn set_orientation(
+        &self,
+        orientation_index: usize,
+        orientation: &[i8],
+    ) -> Result<Vec<Complex<f64>>> {
         let mut sample = self.representative_input.clone();
+        let production_orientation_id = self
+            .production_orientation_ids
+            .get(orientation_index)
+            .ok_or_else(|| {
+                eyre!(
+                    "Missing production residue-map ID for runtime orientation {}",
+                    orientation_index
+                )
+            })?;
+        sample[self.residue_map_id_start * self.mult_offset] =
+            Complex::new(*production_orientation_id as f64, 0.0);
         set_orientation_values_impl(
             &mut sample,
             Complex::new(1., 0.),
@@ -1326,7 +1362,7 @@ impl LoadedStandaloneEvaluatorStack {
             self.orientation_start,
             orientation,
         );
-        sample
+        Ok(sample)
     }
 }
 
@@ -1449,11 +1485,14 @@ fn main() -> Result<()> {
                             orientations.len()
                         )
                     })?;
-                    println!("input={:?}", stack.set_orientation(orientation));
+                    println!("input={:?}", stack.set_orientation(index, orientation)?);
                 } else {
                     for (index, orientation) in orientations.iter().enumerate() {
                         println!("orientation[{index}]={orientation:?}");
-                        println!("input[{index}]={:?}", stack.set_orientation(orientation));
+                        println!(
+                            "input[{index}]={:?}",
+                            stack.set_orientation(index, orientation)?
+                        );
                     }
                 }
             }
@@ -1504,4 +1543,88 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use linnet::half_edge::involution::EdgeIndex;
+    use symbolica::printer::PrintOptions;
+
+    use crate::utils::GS;
+
+    use super::*;
+
+    #[test]
+    fn standalone_roundtrip_restores_non_dense_residue_map_keys() -> Result<()> {
+        let residue_map_id = Atom::var(GS.residue_map_id);
+        let selector = |id: i64, coefficient: i64| {
+            Symbol::IF.call_args([
+                residue_map_id.clone() - Atom::num(id),
+                Atom::Zero,
+                Atom::num(coefficient),
+            ])
+        };
+        let expression = selector(4, 2) + selector(9, 3);
+        let print = |atom: &Atom| atom.printer(PrintOptions::file()).to_string();
+        let generic = StandaloneGenericEvaluatorArchive {
+            exprs: vec![print(&expression)],
+            additional_fn_map_entries: Vec::new(),
+            dual_shape: None,
+        };
+        let archive = StandaloneEvaluatorArchive {
+            version: STANDALONE_EVALUATORS_VERSION,
+            numeric_target: StandaloneNumericTarget::Double,
+            symbolica_state: (),
+            graph_terms: vec![StandaloneGraphTermArchive {
+                graph_name: "duplicate_orientations".to_string(),
+                orientations: vec![vec![1], vec![1]],
+                param_builder_params: vec![print(&residue_map_id), print(&GS.sign(EdgeIndex(0)))],
+                fn_map_entries: Vec::new(),
+                original_integrand: StandaloneEvaluatorStackArchive {
+                    explicit_orientation_sum_only: false,
+                    production_orientation_ids: vec![4, 9],
+                    single_parametric: generic,
+                    iterative: None,
+                    summed_function_map: None,
+                    summed: None,
+                    representative_input: vec![
+                        StandaloneComplexInput {
+                            re: "0".to_string(),
+                            im: "0".to_string(),
+                        },
+                        StandaloneComplexInput {
+                            re: "0".to_string(),
+                            im: "0".to_string(),
+                        },
+                    ],
+                    start: 1,
+                    residue_map_id_start: 0,
+                    mult_offset: 1,
+                },
+                threshold_counterterms: Vec::new(),
+            }],
+        };
+
+        let serialized = serde_json::to_vec(&archive)?;
+        let roundtripped: StandaloneEvaluatorArchive<(), String> =
+            serde_json::from_slice(&serialized)?;
+        let mut loaded = roundtripped.load()?;
+        let orientations = loaded.graph_terms[0].orientations.clone();
+        let stack = &mut loaded.graph_terms[0].original_integrand;
+
+        for (orientation_index, expected) in [(Some(0), 2.0), (Some(1), 3.0), (None, 5.0)] {
+            let result = stack.evaluate_with_backend(StandaloneEvaluationRequest {
+                backend: StandaloneBackend::Eager,
+                method: StandaloneMethod::SingleParametric,
+                orientations: &orientations,
+                orientation_index,
+                custom_input: None,
+                artifact_root: Path::new("."),
+                label: "standalone_residue_map_roundtrip",
+            })?;
+            assert_eq!(result, vec![Complex::new(expected, 0.0)]);
+        }
+
+        Ok(())
+    }
 }

@@ -1,6 +1,8 @@
 use std::{cell::RefCell, collections::BTreeSet, ops::Deref};
 
 use ahash::{AHashMap, AHashSet};
+use color_eyre::Result;
+use eyre::eyre;
 use idenso::shorthands::schoonschip::Schoonschip;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
@@ -275,6 +277,20 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     }
 
     fn compute_dod<S: SubGraphLike<Base = SuBitGraph> + SubSetOps>(&self, subgraph: &S) -> i32;
+
+    /// Degree of divergence of the simultaneous loop-energy integrations.
+    ///
+    /// The existing UV DOD already contains the numerator and denominator
+    /// scaling. Replacing the four-dimensional measure by one energy measure
+    /// per loop therefore amounts to subtracting three powers per loop.
+    fn compute_energy_dod<E, V, H, S>(&self, subgraph: &S) -> i32
+    where
+        Self: AsRef<HedgeGraph<E, V, H>>,
+        S: SubGraphLike<Base = SuBitGraph> + SubSetOps,
+    {
+        self.compute_dod(subgraph) - 3 * self.n_loops(subgraph) as i32
+    }
+
     fn local_dod<S: SubGraphLike>(&self, subgraph: &S) -> i32;
 
     fn spinneys<E, V, H, S: SubGraphLike<Base = SuBitGraph>>(
@@ -330,6 +346,62 @@ pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
 impl AsRef<HedgeGraph<Edge, Vertex, HedgeData>> for Graph {
     fn as_ref(&self) -> &HedgeGraph<Edge, Vertex, HedgeData> {
         &self.underlying
+    }
+}
+
+impl Graph {
+    /// Reject source integrals whose loop-energy contours do not vanish at
+    /// infinity. Check the existing unpruned cycle-union inventory so this
+    /// source-level contract does not depend on UV-spinney pruning.
+    pub(crate) fn ensure_energy_convergent_cycles<S>(&self, domain: &S) -> Result<()>
+    where
+        S: SubGraphLike<Base = SuBitGraph>,
+    {
+        let global_atom = self.global_atom();
+        if global_atom.is_zero() {
+            return Ok(());
+        }
+        let mut failures = self
+            .all_cycle_unions(domain)
+            .into_iter()
+            .filter(|cycle| !cycle.is_empty())
+            .filter_map(|cycle| {
+                let loop_count = self.n_loops(&cycle.filter);
+                // `compute_dod` deliberately covers only the edge and vertex
+                // rules used by UV classification.  Production evaluation
+                // additionally multiplies the still-factorized graph-global
+                // atom, whose cycle-local energy degree must therefore enter
+                // this source-convergence check without changing UV DOD
+                // semantics or expanding the numerator.
+                let lmb = self.lmb_of(&cycle.filter);
+                let global_dod = self
+                    // The local DOD already contains the loop measure, so this
+                    // pass scales only the separately stored numerator factor.
+                    .uv_rescaled(cycle.filter.included(), 0, &lmb, &global_atom)
+                    .trailing_exponent();
+                let energy_dod = self.compute_energy_dod(&cycle.filter) + global_dod;
+                let four_d_dod = energy_dod + 3 * loop_count as i32;
+                (energy_dod >= 0)
+                    .then(|| (cycle.string_label(), loop_count, four_d_dod, energy_dod))
+            })
+            .collect::<Vec<_>>();
+        failures.sort();
+
+        if failures.is_empty() {
+            return Ok(());
+        }
+
+        let details = failures
+            .into_iter()
+            .map(|(cycle, loop_count, four_d_dod, energy_dod)| {
+                format!("cycle {cycle}: L={loop_count}, DOD_4D={four_d_dod}, DOD_E={energy_dod}")
+            })
+            .collect::<Vec<_>>()
+            .join("; ");
+        Err(eyre!(
+            "graph `{}` contains a loop-energy nonconvergent integral ({details}); expected DOD_E < 0 for every cycle union",
+            self.name,
+        ))
     }
 }
 

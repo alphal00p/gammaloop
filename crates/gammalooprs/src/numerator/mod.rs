@@ -224,13 +224,6 @@ impl<S: NumeratorState> Numerator<S> {
         fn_map
             .add_aliases([(parse!("TR"), Atom::num(Rational::from((1, 2))))])
             .unwrap();
-
-        fn_map
-            .add_aliases([(
-                parse!("pi"),
-                Atom::num(Rational::try_from(std::f64::consts::PI).unwrap()),
-            )])
-            .unwrap();
     }
 }
 

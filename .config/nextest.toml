@@ -26,6 +26,14 @@ filter = "test(integration)"
 test-group = "integration"
 
 [[profile.default.overrides]]
+# Each NLO acceptance internally launches ten integration workers. Account for
+# those workers in nextest's scheduler and cap these acceptances with the
+# existing integration-test group.
+filter = "test(/^epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/^epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/^gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/^gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/)"
+test-group = "integration"
+threads-required = 10
+
+[[profile.default.overrides]]
 # Mark tests with "heavy" in the name as memory-intensive
 filter = "test(heavy) or test(memory) or test(large)"
 test-group = "memory-intensive"
@@ -92,6 +100,15 @@ slow-timeout = { period = "5m", terminate-after = 2 }
 [[profile.ci.overrides]]
 # In CI, be extra conservative with timeouts
 filter = "test(integration) or test(heavy) or test(memory) or test(large)"
+
+[[profile.ci.overrides]]
+# The NLO acceptances launch ten internal integration workers. The CI profile
+# does not inherit profile.default overrides, so reserve the same resources
+# explicitly and allow the two-iteration numerical integrations to complete.
+filter = "test(/^epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes$/) or test(/^epem_a_ttx_msbar_nlo_matches_the_published_inclusive_ratio_in_all_local_uv_routes$/) or test(/^gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections$/) or test(/^gamma_star_ttx_msbar_nlo_matches_the_published_absolute_cross_sections$/)"
+test-group = "integration"
+threads-required = 10
+slow-timeout = { period = "15m", terminate-after = 2 }
 
 [[profile.ci.overrides]]
 # Benchmark tests get even more time in CI
