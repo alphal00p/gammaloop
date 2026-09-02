@@ -185,7 +185,7 @@ fn unresolved_factory_ports_survive_composition() {
         let generator = tensor_expression.call_method1("t", (8, 3))?;
         let gamma = tensor_expression.call_method1("gamma", (4,))?;
         let outer = generator.call_method1("outer", (&gamma,))?;
-        let indexed = outer.call1(("a", "i", "j", "mu", "r", "s"))?;
+        let indexed = outer.call1(("a", "i", "j", "r", "s", "mu"))?;
         assert_eq!(indexed.getattr("rank")?.extract::<usize>()?, 6);
 
         let minkowski = module
@@ -202,7 +202,7 @@ fn unresolved_factory_ports_survive_composition() {
             .expect("the Python snippet must define factory_vector")
             .call1((&minkowski,))?;
         let kwargs = PyDict::new(py);
-        kwargs.set_item("left", 0)?;
+        kwargs.set_item("left", 2)?;
         kwargs.set_item("right", 0)?;
         let contracted = gamma.call_method("contract", (vector,), Some(&kwargs))?;
         let indexed = contracted.call1(("r", "s"))?;

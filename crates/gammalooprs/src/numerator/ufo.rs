@@ -313,7 +313,7 @@ impl UFOSymbols {
                 self.gamma
                     .call_args([mink.pattern(W_.i_), bis.pattern(W_.a_), bis.pattern(W_.b_)]),
                 AGS.gamma
-                    .call_args([mink.pattern(W_.i_), bis.pattern(W_.a_), bis.pattern(W_.b_)]),
+                    .call_args([bis.pattern(W_.a_), bis.pattern(W_.b_), mink.pattern(W_.i_)]),
             ),
             (
                 self.gamma5
@@ -359,35 +359,35 @@ impl UFOSymbols {
             if let AtomView::Fun(f) = term
                 && f.get_symbol() == self.pslash
             {
-                let args = f.iter().collect::<Vec<_>>();
-                let [spinor_in, spinor_out, rest @ ..] = args.as_slice() else {
-                    return;
-                };
-                let (minki, momentum) = if let Some(i) = rest
-                    .iter()
-                    .find_map(|argument| i64::try_from(*argument).ok())
-                {
+                let mut gamma = FunctionBuilder::new(AGS.gamma);
+
+                let mut count = 0;
+
+                for a in f.iter() {
+                    count += 1;
+                    if count <= 2 {
+                        gamma = gamma.add_arg(a);
+                    } else if let Ok(i) = i64::try_from(a) {
+                        max_dummy += 1;
+
+                        let minki: Slot<Minkowski, Aind> = mink.slot(dummy(max_dummy));
+
+                        gamma = gamma.add_arg(minki.to_atom());
+
+                        **out = gamma.finish() * GS.emr_mom(momenta[i as usize].1, minki.to_atom());
+                        return;
+                    }
+                }
+
+                if count == 2 {
                     max_dummy += 1;
 
                     let minki: Slot<Minkowski, Aind> = mink.slot(dummy(max_dummy));
 
-                    (minki, momenta[i as usize].1)
-                } else if rest.is_empty() {
-                    max_dummy += 1;
+                    gamma = gamma.add_arg(minki.to_atom());
 
-                    let minki: Slot<Minkowski, Aind> = mink.slot(dummy(max_dummy));
-
-                    (minki, momenta[0].1)
-                } else {
-                    return;
-                };
-
-                **out = FunctionBuilder::new(AGS.gamma)
-                    .add_arg(minki.to_atom())
-                    .add_arg(*spinor_in)
-                    .add_arg(*spinor_out)
-                    .finish()
-                    * GS.emr_mom(momentum, minki.to_atom());
+                    **out = gamma.finish() * GS.emr_mom(momenta[0].1, minki.to_atom());
+                }
             }
         });
 

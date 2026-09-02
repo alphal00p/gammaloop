@@ -417,7 +417,7 @@ mod tests {
         let expr = function!(GS.ubar, 1i64, bis0.clone())
             * function!(GS.u, 1i64, bis1.clone())
             * function!(GS.emr_mom, 2i64, mink.clone())
-            * function!(AGS.gamma, mink, bis0, bis1);
+            * function!(AGS.gamma, bis0, bis1, mink);
 
         let net = expr
             .parse_to_symbolic_net::<Aind>(&ParseSettings::default())

@@ -368,12 +368,17 @@ $ #to-typst(open) $
 $ #to-typst(closed) $
 ```
 
-Use `gamma(mu, a, b)` when the bispinor slots are explicit. `chain` keeps an
+Use `gamma(a, b, mu)` when the bispinor slots are explicit: its arguments are
+the same bispinor, bispinor, Lorentz order used by the stored Atom. `chain` keeps an
 ordered open sequence; `cyclic` marks the factor list of a closed sequence;
 and `trace` combines that cycle with its representation. The
 #link(repository + "/blob/main/tydenso/typst/examples/spenso-notation.typ")[standalone
 notation example] also inspects the constructed trees and checks their exact
 Spenso shapes.
+
+`math($gamma(...)$)` is raw Atom syntax, so it preserves the arguments exactly
+as written and does not infer a tensor signature. Write that form in the same
+`(bispinor, bispinor, Lorentz)` order, or interpolate `#gamma(a, b, mu)`.
 
 Explicit slots are also valid chain endpoints; they render as endpoint scripts
 on the chain body, while compact vectors produce the named bra and ket ends.

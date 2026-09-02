@@ -63,9 +63,9 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                         return None;
                     }
                     let mut argitem = f.iter();
-                    let mu = argitem.next().unwrap();
                     let i = argitem.next().unwrap();
                     let j = argitem.next().unwrap();
+                    let mu = argitem.next().unwrap();
 
                     let mut out = match resolved.backend {
                         SpensoPrintBackend::Latex => r"\gamma",
@@ -351,6 +351,39 @@ impl GammaLibrary {
     }
 }
 
+fn require_gamma_port(argument: &Atom, representation: LibraryRep, position: &str, label: &str) {
+    let expected = representation.symbol();
+    let matches_representation = matches!(
+        argument.as_view(),
+        AtomView::Fun(function) if function.get_symbol() == expected
+    );
+    assert!(
+        matches_representation,
+        "gamma {position} argument must be a {label} slot"
+    );
+}
+
+/// Build an explicit gamma tensor after checking its public port order.
+///
+/// The port order is the storage order used by Idenso and Spenso:
+/// `(bispinor-in, bispinor-out, Minkowski)`.
+pub fn gamma_tensor(first: Atom, second: Atom, lorentz: Atom) -> Atom {
+    require_gamma_port(&first, LibraryRep::from(Bispinor {}), "first", "bispinor");
+    require_gamma_port(&second, LibraryRep::from(Bispinor {}), "second", "bispinor");
+    require_gamma_port(
+        &lorentz,
+        LibraryRep::from(Minkowski {}),
+        "third",
+        "Minkowski",
+    );
+
+    symbolica::atom::FunctionBuilder::new(AGS.gamma)
+        .add_arg(first)
+        .add_arg(second)
+        .add_arg(lorentz)
+        .finish()
+}
+
 fn spinor_matrix_structure<Aind: AbsInd>(
     symbol: Symbol,
     dim: impl Into<Dimension>,
@@ -369,9 +402,9 @@ fn gamma_matrix_structure<Aind: AbsInd>(
 ) -> Canonicalized<ExplicitKey<Aind>> {
     ExplicitKey::from_iter(
         [
+            Bispinor {}.new_rep(4).cast(),
+            Bispinor {}.new_rep(4).cast(),
             LibraryRep::from(Minkowski {}).new_rep(dim),
-            Bispinor {}.new_rep(4).cast(),
-            Bispinor {}.new_rep(4).cast(),
         ],
         symbol,
         None,
@@ -535,7 +568,7 @@ impl GammaSimplifier for AtomView<'_> {
         let repeated_gamma0 = gamma0!(RS.a__, RS.b__) * gamma0!(RS.b__, RS.c__);
 
         let gamma0_ia = gamma0!([RS.d_, RS.i_], [RS.d_, RS.a_]);
-        let gamma_ab = gamma!(RS.a__, [RS.d_, RS.a_], [RS.d_, RS.b_]);
+        let gamma_ab = gamma!([RS.d_, RS.a_], [RS.d_, RS.b_], RS.a__);
         let gamma0_bj = gamma0!([RS.d_, RS.b_], [RS.d_, RS.j_]);
 
         let gmg = (Atom::var(RS.f_) * gamma0_ia.clone() * gamma_ab.clone() * gamma0_bj.clone()
@@ -572,13 +605,13 @@ impl GammaSimplifier for AtomView<'_> {
         let dummypati = function!(dummy, RS.i_).to_pattern();
         let dummypatj = function!(dummy, RS.j_).to_pattern();
 
-        let conj_gamma = gamma!(RS.a__, [RS.d_, RS.i_], [RS.d_, RS.j_]).spenso_conj();
+        let conj_gamma = gamma!([RS.d_, RS.i_], [RS.d_, RS.j_], RS.a__).spenso_conj();
 
         let conj_gamma_rhs = (gamma0!([RS.d_, RS.j_], [Atom::var(RS.d_), function!(dummy, RS.j_)])
             * gamma!(
-                RS.a__,
                 [Atom::var(RS.d_), function!(dummy, RS.j_)],
-                [Atom::var(RS.d_), function!(dummy, RS.i_)]
+                [Atom::var(RS.d_), function!(dummy, RS.i_)],
+                RS.a__
             )
             * gamma0!([Atom::var(RS.d_), function!(dummy, RS.i_)], [RS.d_, RS.i_]))
         .to_pattern();

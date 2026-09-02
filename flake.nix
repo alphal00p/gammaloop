@@ -1492,8 +1492,8 @@
           valgrind
         ];
 
-      mkDevShell = extraPackages:
-        craneLib.devShell {
+      mkDevShell = craneLibForShell: extraPackages: rustFlags:
+        craneLibForShell.devShell ({
           # checks = self.checks.${system};
 
           RUST_SRC_PATH = "${pkgs.rustPlatform.rustLibSrc}";
@@ -1502,7 +1502,6 @@
           CC = nixCc;
           CXX = nixCxx;
           "${cargoLinkerVar}" = nixCc;
-          RUSTFLAGS = "-C linker=${nixCc}";
 
           LD_LIBRARY_PATH = runtimeLibPath;
           DYLD_LIBRARY_PATH = runtimeLibPath;
@@ -1514,7 +1513,10 @@
           # '';
 
           packages = devShellPackages ++ extraPackages;
-        };
+        }
+        // lib.optionalAttrs (rustFlags != null) {
+          RUSTFLAGS = rustFlags;
+        });
 
       nextestProfile = "ci_gammaloop";
       nextestJunitPath = "target/nextest/${nextestProfile}/junit.xml";
@@ -3154,9 +3156,12 @@
       };
 
       devShells = {
-        default = mkDevShell [clinnet-cli];
-        full = mkDevShell [clinnet-cli rscls];
-        clinnet = mkDevShell [clinnet-cli];
+        default = mkDevShell craneLib [clinnet-cli] "-C linker=${nixCc}";
+        full = mkDevShell craneLib [clinnet-cli rscls] "-C linker=${nixCc}";
+        clinnet = mkDevShell craneLib [clinnet-cli] "-C linker=${nixCc}";
+        # The native development shell deliberately does not pull every target
+        # standard library. Use this shell for Tydenso and other Wasm builds.
+        wasm = mkDevShell wasmCraneLib [clinnet-cli pkgs.binaryen] null;
       };
     });
 }

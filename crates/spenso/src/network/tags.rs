@@ -625,7 +625,7 @@ fn gamma_typst_print(
         return None;
     }
     let arguments = function.iter().collect::<Vec<_>>();
-    let [lorentz, first, second] = arguments.as_slice() else {
+    let [first, second, lorentz] = arguments.as_slice() else {
         return None;
     };
 
@@ -1983,9 +1983,9 @@ mod tests {
         let gamma = gamma_symbol();
         let explicit = function!(
             gamma,
-            mink!(4, symbol!("mu")),
             bottom_representation(Some(symbol!("a"))),
-            bottom_representation(Some(symbol!("b")))
+            bottom_representation(Some(symbol!("b"))),
+            mink!(4, symbol!("mu"))
         );
         assert_eq!(
             prepare_tensor_print(&explicit)
@@ -1997,9 +1997,9 @@ mod tests {
         let p = crate::vector_symbol!("spenso_typst_tests::p");
         let factor = function!(
             gamma,
-            compact_vector_atom_rep_first(p, 1, mink!(4)),
             Atom::var(SPENSO_TAG.chain_in),
-            Atom::var(SPENSO_TAG.chain_out)
+            Atom::var(SPENSO_TAG.chain_out),
+            compact_vector_atom_rep_first(p, 1, mink!(4))
         );
         assert_eq!(
             prepare_tensor_print(&factor)
@@ -2029,9 +2029,9 @@ mod tests {
         let gamma = gamma_symbol();
         let factor = function!(
             gamma,
-            mink!(4, symbol!("mu")),
             Atom::var(SPENSO_TAG.chain_in),
-            Atom::var(SPENSO_TAG.chain_out)
+            Atom::var(SPENSO_TAG.chain_out),
+            mink!(4, symbol!("mu"))
         );
         let chain = SPENSO_TAG.chain(
             compact_vector_atom(u, 1, bottom_representation(None)),
@@ -2107,15 +2107,15 @@ mod tests {
         let gamma = gamma_symbol();
         let gamma_mu = function!(
             gamma,
-            mink!(4, symbol!("mu")),
             Atom::var(SPENSO_TAG.chain_in),
-            Atom::var(SPENSO_TAG.chain_out)
+            Atom::var(SPENSO_TAG.chain_out),
+            mink!(4, symbol!("mu"))
         );
         let gamma_nu = function!(
             gamma,
-            mink!(4, symbol!("nu")),
             Atom::var(SPENSO_TAG.chain_in),
-            Atom::var(SPENSO_TAG.chain_out)
+            Atom::var(SPENSO_TAG.chain_out),
+            mink!(4, symbol!("nu"))
         );
         let trace = SPENSO_TAG.trace(mink!(4), [cyclic!(gamma_mu, gamma_nu)]);
 

@@ -55,7 +55,7 @@ p = TensorName.vector("p", is_linear=True, tags=["kinematics"])
 gamma = TensorExpression.gamma(4)
 
 square = p(1, mink) * p(1, mink)
-line = gamma("mu", _, _) * gamma("nu", _, _)
+line = gamma(_, _, "mu") * gamma(_, _, "nu")
 dirac_trace = line.trace()
 
 print(square.format_tensor())
@@ -66,7 +66,10 @@ display(dirac_trace.formatted())
 Calling a user-defined `TensorName` returns a `TensorExpression`. Scalar key
 arguments come first and structural `Slot` or `Representation` arguments come
 after them. A `Slot` is an explicit port; a `Representation` is an unresolved
-port. They may be mixed in one call:
+port. They may be mixed in one call.
+
+The built-in gamma head follows its stored interface everywhere:
+`(bispinor-in, bispinor-out, Minkowski)`.
 
 ```python
 mu = mink("mu")
@@ -83,7 +86,7 @@ indexed = mixed(bis("i"))
 construction syntax, not a shared Einstein index:
 
 ```python
-partly_indexed = gamma(mu, _, _)
+partly_indexed = gamma(_, _, mu)
 fully_indexed = partly_indexed(bis("i"), bis("j"))
 ```
 
@@ -107,7 +110,7 @@ structure_constant = TensorExpression.f(8)
 
 T_aij = generator("a", "i", "j")
 f_abc = structure_constant("a", "b", "c")
-gamma_muij = TensorExpression.gamma(4)("mu", "i", "j")
+gamma_ijmu = TensorExpression.gamma(4)("i", "j", "mu")
 ```
 
 The available factories and their logical interfaces are:
@@ -116,7 +119,7 @@ The available factories and their logical interfaces are:
 | --- | --- |
 | `TensorExpression.g(rep)` | `rep, rep` |
 | `TensorExpression.flat(rep)` | `rep, rep` |
-| `TensorExpression.gamma(D)` | `mink(D), bis(4), bis(4)` |
+| `TensorExpression.gamma(D)` | `bis(4), bis(4), mink(D)` |
 | `TensorExpression.gamma5(D)` | `bis(D), bis(D)` |
 | `TensorExpression.projm(D)` | `bis(D), bis(D)` |
 | `TensorExpression.projp(D)` | `bis(D), bis(D)` |
@@ -144,7 +147,7 @@ from symbolica.community.spenso import PortPattern, TensorName, TensorPattern
 
 D_, mu_, i_, j_, args___ = S("D_", "mu_", "i_", "j_", "args___")
 
-gamma_pattern = TensorPattern.gamma(D_, mu_, i_, j_)
+gamma_pattern = TensorPattern.gamma(D_, i_, j_, mu_)
 fixed_head = TensorPattern(
     TensorName("A"),
     args=[args___],
@@ -177,7 +180,7 @@ same logical ordering as its concrete factory:
 ```python
 TensorPattern.g(rep_pattern, i_, j_)
 TensorPattern.flat(rep_pattern, i_, j_)
-TensorPattern.gamma(D_, mu_, i_, j_)
+TensorPattern.gamma(D_, i_, j_, mu_)
 TensorPattern.gamma5(D_, i_, j_)
 TensorPattern.projm(D_, i_, j_)
 TensorPattern.projp(D_, i_, j_)
@@ -186,9 +189,8 @@ TensorPattern.f(DA_, a_, b_, c_)
 TensorPattern.t(DA_, DF_, a_, i_, j_)
 ```
 
-The builders translate logical ordering to Spenso's canonical atom ordering.
-Callers therefore do not need to encode internal storage permutations in a
-replacement rule.
+The builders handle Spenso's canonical atom ordering. Gamma's public interface
+is deliberately its storage order: bispinor-in, bispinor-out, then Minkowski.
 
 ## Tensor-aware algebra
 
@@ -219,8 +221,8 @@ matrix_product = a.compose(b, left=(1, 2), right=(1, 2))
 closed = matrix_product.trace(channel=(0, 1))
 
 scalar = dot(p(1, mink), p(2, mink))
-open_line = chain(bis("i"), bis("j"), gamma(mu, _, _), gamma(mu, _, _))
-closed_line = trace(bis, gamma(mu, _, _), gamma(mu, _, _))
+open_line = chain(bis("i"), bis("j"), gamma(_, _, mu), gamma(_, _, mu))
+closed_line = trace(bis, gamma(_, _, mu), gamma(_, _, mu))
 ```
 
 Tensor-derived scalars remain `TensorExpression` instances with an empty

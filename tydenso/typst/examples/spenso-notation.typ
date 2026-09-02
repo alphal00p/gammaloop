@@ -29,7 +29,7 @@
 #let ordinary-x = symbol("x", namespace: "example")
 
 #let product = dot(p(1, M), q(2, M))
-#let gamma-tensor = gamma(mu, a, b)
+#let gamma-tensor = gamma(a, b, mu)
 #let open-chain = chain(
   v(p(2)),
   u(p(1)),

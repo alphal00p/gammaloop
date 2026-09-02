@@ -286,11 +286,11 @@ fn parse_val() {
                 * ebar(4, mink(4, hedge_4))
                 * g(cof(3, hedge_1), dind(cof(3, hedge_2)))
                 * g(cof(3, hedge_2), dind(cof(3, hedge_1)))
-                * gamma(mink(4, hedge_0), bis(4, hedge_2), bis(4, hedge_8))
-                * gamma(mink(4, hedge_3), bis(4, hedge_5), bis(4, hedge_1))
-                * gamma(mink(4, edge_5_1), bis(4, hedge_6), bis(4, hedge_5))
-                * gamma(mink(4, hedge_4), bis(4, hedge_7), bis(4, hedge_6))
-                * gamma(mink(4, edge_6_1), bis(4, hedge_8), bis(4, hedge_7)),
+                * gamma(bis(4, hedge_2), bis(4, hedge_8), mink(4, hedge_0))
+                * gamma(bis(4, hedge_5), bis(4, hedge_1), mink(4, hedge_3))
+                * gamma(bis(4, hedge_6), bis(4, hedge_5), mink(4, edge_5_1))
+                * gamma(bis(4, hedge_7), bis(4, hedge_6), mink(4, hedge_4))
+                * gamma(bis(4, hedge_8), bis(4, hedge_7), mink(4, edge_6_1)),
         default_namespace = "spenso"
     );
     let net = expr
@@ -306,11 +306,11 @@ fn parse_val() {
       1	 [label = "S:((Q(5,cind(0)))^2+(Q(5,cind(1)))^2*-1+(Q(5,cind(2)))^2*-1+(Q(5,cind(3)))^2*-1)^(-1)*((Q(6,cind(0)))^2+(Q(6,cind(1)))^2*-1+(Q(6,cind(2)))^2*-1+(Q(6,cind(3)))^2*-1)^(-1)*1𝑖/27"];
       2	 [label = "T:g(cof(3,hedge_1),dind(cof(3,hedge_2)))"];
       3	 [label = "T:g(cof(3,hedge_2),dind(cof(3,hedge_1)))"];
-      4	 [label = "T:gamma(mink(4,hedge_0),bis(4,hedge_2),bis(4,hedge_8))"];
-      5	 [label = "T:gamma(mink(4,hedge_3),bis(4,hedge_5),bis(4,hedge_1))"];
-      6	 [label = "T:gamma(mink(4,edge_5_1),bis(4,hedge_6),bis(4,hedge_5))"];
-      7	 [label = "T:gamma(mink(4,hedge_4),bis(4,hedge_7),bis(4,hedge_6))"];
-      8	 [label = "T:gamma(mink(4,edge_6_1),bis(4,hedge_8),bis(4,hedge_7))"];
+      4	 [label = "T:gamma(bis(4,hedge_2),bis(4,hedge_8),mink(4,hedge_0))"];
+      5	 [label = "T:gamma(bis(4,hedge_5),bis(4,hedge_1),mink(4,hedge_3))"];
+      6	 [label = "T:gamma(bis(4,hedge_6),bis(4,hedge_5),mink(4,edge_5_1))"];
+      7	 [label = "T:gamma(bis(4,hedge_7),bis(4,hedge_6),mink(4,hedge_4))"];
+      8	 [label = "T:gamma(bis(4,hedge_8),bis(4,hedge_7),mink(4,edge_6_1))"];
       9	 [label = "T:Q(5,mink(4,edge_5_1))"];
       10	 [label = "T:Q(6,mink(4,edge_6_1))"];
       11	 [label = "T:u(1,bis(4,hedge_1))"];
@@ -676,14 +676,14 @@ fn equal_duals() {
                 * ebar(4, mink(4, hedge_4))
                 * g(dind(cof(3, hedge_1)), cof(3, hedge_2))
                 * g(mink(4, hedge_13), mink(4, hedge_14))
-                * gamma(mink(4, edge_8_1), bis(4, hedge_10), bis(4, hedge_9))
-                * gamma(mink(4, edge_7_1), bis(4, hedge_12), bis(4, hedge_11))
-                * gamma(mink(4, hedge_14), bis(4, hedge_2), bis(4, hedge_10))
-                * gamma(mink(4, hedge_3), bis(4, hedge_5), bis(4, hedge_12))
-                * gamma(mink(4, edge_5_1), bis(4, hedge_6), bis(4, hedge_5))
-                * gamma(mink(4, hedge_4), bis(4, hedge_7), bis(4, hedge_6))
-                * gamma(mink(4, edge_6_1), bis(4, hedge_8), bis(4, hedge_7))
-                * gamma(mink(4, hedge_0), bis(4, hedge_9), bis(4, hedge_8))
+                * gamma(bis(4, hedge_10), bis(4, hedge_9), mink(4, edge_8_1))
+                * gamma(bis(4, hedge_12), bis(4, hedge_11), mink(4, edge_7_1))
+                * gamma(bis(4, hedge_2), bis(4, hedge_10), mink(4, hedge_14))
+                * gamma(bis(4, hedge_5), bis(4, hedge_12), mink(4, hedge_3))
+                * gamma(bis(4, hedge_6), bis(4, hedge_5), mink(4, edge_5_1))
+                * gamma(bis(4, hedge_7), bis(4, hedge_6), mink(4, hedge_4))
+                * gamma(bis(4, hedge_8), bis(4, hedge_7), mink(4, edge_6_1))
+                * gamma(bis(4, hedge_9), bis(4, hedge_8), mink(4, hedge_0))
                 * t(coad(8, hedge_13), cof(2), dind(cof(3, hedge_11)))
                 * t(coad(8, hedge_13), cof(3, hedge_11), dind(cof(3, hedge_2))),
         default_namespace = "spenso"
@@ -834,11 +834,11 @@ fn parse_problem() {
                         + OSE(5, -Q3(3), mUV ^ 2, mUV ^ 2 - dot(Q3(3), Q3(3))))
             ^ (-1 / 2)
                 * g(mink(4, hedge_3), mink(4, hedge_4))
-                * gamma(mink(4, hedge_4), bis(4, hedge(1)), bis(4, hedge(8)))
-            ^ 2 * gamma(mink(4, hedge_3), bis(4, hedge(5)), bis(4, hedge(0)))
-            ^ 2 * gamma(mink(4, edge_4_1), bis(4, hedge(6)), bis(4, hedge(5)))
-                * gamma(mink(4, hedge_2), bis(4, hedge(7)), bis(4, hedge(6)))
-            ^ 2 * gamma(mink(4, edge_5_1), bis(4, hedge(8)), bis(4, hedge(7))),
+                * gamma(bis(4, hedge(1)), bis(4, hedge(8)), mink(4, hedge_4))
+            ^ 2 * gamma(bis(4, hedge(5)), bis(4, hedge(0)), mink(4, hedge_3))
+            ^ 2 * gamma(bis(4, hedge(6)), bis(4, hedge(5)), mink(4, edge_4_1))
+                * gamma(bis(4, hedge(7)), bis(4, hedge(6)), mink(4, hedge_2))
+            ^ 2 * gamma(bis(4, hedge(8)), bis(4, hedge(7)), mink(4, edge_5_1)),
         default_namespace = "spenso"
     );
 
@@ -878,7 +878,7 @@ fn infinite_execution() {
                 * g(mink(4, l_5), mink(4, l_9))
                 * g(bis(4, l_2), bis(4, l_5))
                 * g(bis(4, l_3), bis(4, l_6))
-                * gamma(mink(4, l_5), bis(4, l_6), bis(4, l_5)),
+                * gamma(bis(4, l_6), bis(4, l_5), mink(4, l_5)),
         default_namespace = "spenso"
     );
 
@@ -909,7 +909,7 @@ fn infinite_execution() {
       overlap = "scale";
       layout = "neato";
 
-      0	 [label = "TT:(-1*g(mink(4,l_6),mink(4,l_9))*g(mink(4,l_7),mink(4,l_8))+g(mink(4,l_6),mink(4,l_8))*g(mink(4,l_7),mink(4,l_9)))*g(bis(4,l_2),bis(4,l_5))*g(bis(4,l_3),bis(4,l_6))*g(mink(4,l_0),mink(4,l_6))*g(mink(4,l_1),mink(4,l_7))*g(mink(4,l_4),mink(4,l_8))*g(mink(4,l_5),mink(4,l_9))*gamma(mink(4,l_5),bis(4,l_6),bis(4,l_5))*-1𝑖*G^3"];
+      0	 [label = "TT:(-1*g(mink(4,l_6),mink(4,l_9))*g(mink(4,l_7),mink(4,l_8))+g(mink(4,l_6),mink(4,l_8))*g(mink(4,l_7),mink(4,l_9)))*g(bis(4,l_2),bis(4,l_5))*g(bis(4,l_3),bis(4,l_6))*g(mink(4,l_0),mink(4,l_6))*g(mink(4,l_1),mink(4,l_7))*g(mink(4,l_4),mink(4,l_8))*g(mink(4,l_5),mink(4,l_9))*gamma(bis(4,l_6),bis(4,l_5),mink(4,l_5))*-1𝑖*G^3"];
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
       ext1	 [style=invis];

@@ -317,7 +317,7 @@ pub fn cook_indices(
 /// **Function Cooking Transform:**
 /// - Simple function: `f(a, b)` → `f_a_b`
 /// - Nested arguments: `tensor(rep(mu))` → `tensor_rep_mu`
-/// - Multiple arguments: `gamma(mu, alpha, beta)` → `gamma_mu_alpha_beta`
+/// - Multiple arguments: `gamma(alpha, beta, mu)` → `gamma_alpha_beta_mu`
 /// - Complex names: `my_function(x, y)` → `my_function_x_y`
 ///
 ///
@@ -477,8 +477,8 @@ pub fn list_dangling(expression: &PythonExpression) -> PyResult<Vec<PythonExpres
 /// - **Chain simplifications**: Reduces products of gamma matrices
 /// - **Contraction rules**: Simplifies contracted gamma matrix products
 ///
-/// The function recognizes gamma matrices represented as `spenso::gamma(spenso::mink(dim,mu), spenso::bis(dim,alpha), spenso::bis(dim,beta))`
-/// where `mu` is the Lorentz index and `alpha`, `beta` are spinor indices.
+/// The function recognizes gamma matrices represented as `spenso::gamma(spenso::bis(dim,alpha), spenso::bis(dim,beta), spenso::mink(dim,mu))`
+/// where `alpha`, `beta` are spinor indices and `mu` is the Lorentz index.
 /// These can be easily created using the hep_lib.
 ///
 /// # Arguments
@@ -497,7 +497,7 @@ pub fn list_dangling(expression: &PythonExpression) -> PyResult<Vec<PythonExpres
 /// # Access standard tensors like gamma matrices
 /// gamma_structure = hep_lib[S("spenso::gamma")]
 /// print(gamma_structure)
-/// print(simplify_gamma(gamma_structure(7, 3, 4) * gamma_structure(3, 7, 4)))
+/// print(simplify_gamma(gamma_structure(3, 4, 7) * gamma_structure(7, 4, 3)))
 /// ```
 pub fn simplify_gamma(
     expression: &PythonExpression,

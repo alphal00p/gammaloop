@@ -31,8 +31,8 @@ This specification records source-backed replacement rules for FORM gamma-algebr
 The Symbolica + spenso section uses the approved `chain` and `trace` tensor-pattern notation:
 ```rs
 chain(bis(4,a),bis(4,c),
-  gamma(p(2,mink(4)),in,out),
-  gamma(mink(4,mu),in,out))
+  gamma(in,out,p(2,mink(4))),
+  gamma(in,out,mink(4,mu)))
 ```
 and
 ```rs
@@ -116,11 +116,11 @@ Source: #source(dirac-rs + "#L604-L613").
 
 Symbolica + spenso pattern:
 ```rs
-gamma(p(2,mink(4)),bis(4,a),bis(4,b))
-* gamma(mink(4,mu),bis(4,b),bis(4,c))
+gamma(bis(4,a),bis(4,b),p(2,mink(4)))
+* gamma(bis(4,b),bis(4,c),mink(4,mu))
   -> chain(bis(4,a),bis(4,c),
-       gamma(p(2,mink(4)),in,out),
-       gamma(mink(4,mu),in,out))
+       gamma(in,out,p(2,mink(4))),
+       gamma(in,out,mink(4,mu)))
 ```
 Assumptions: `in` and `out` are local slots of each factor in the chain. Dummy bispinor labels consumed during collection are not retained as free indices.
 
@@ -150,8 +150,8 @@ $ γ^μ_α^β γ_(μ,β)^χ = D δ_α^χ $ <eq-gamma-metric-contract>
 In the approved chain notation:
 ```rs
 chain(bis(D,a),bis(D,c),
-  gamma(mink(D,mu),in,out),
-  gamma(mink(D,mu),in,out))
+  gamma(in,out,mink(D,mu)),
+  gamma(in,out,mink(D,mu)))
   -> D * g(bis(D,a),bis(D,c))
 ```
 
@@ -183,13 +183,13 @@ $ (Γ^(v_1 ... v_n))_α^α = γ(v_1)_α^β ... γ(v_n)_χ^α $ <eq-gamma-trace-c
 Pattern:
 ```rs
 chain(bis(4,a),bis(4,a),
-  gamma(p(2,mink(4)),in,out),
-  gamma(mink(4,mu),in,out),
-  gamma(p(3,mink(4)),in,out))
+  gamma(in,out,p(2,mink(4))),
+  gamma(in,out,mink(4,mu)),
+  gamma(in,out,p(3,mink(4))))
   -> trace(bis(4),
-       gamma(p(2,mink(4)),in,out),
-       gamma(mink(4,mu),in,out),
-       gamma(p(3,mink(4)),in,out))
+       gamma(in,out,p(2,mink(4))),
+       gamma(in,out,mink(4,mu)),
+       gamma(in,out,p(3,mink(4))))
 ```
 
 FORM source context: FORM `trace4` and `tracen` operate on a spin line, represented internally as a string of gamma matrices. `Trace4` copies that string into `t->inlist` and then dispatches to `Trace4Gen`.
@@ -236,8 +236,8 @@ Source: #source(opera + "#L424-L432"). The recursive trace generator comments de
 Symbolica + spenso pattern:
 ```rs
 trace(bis(4),
-  gamma(mink(4,mu),in,out),
-  gamma(mink(4,nu),in,out))
+  gamma(in,out,mink(4,mu)),
+  gamma(in,out,mink(4,nu)))
   -> 4 * g(mink(4,mu),mink(4,nu))
 ```
 Dummy-index freshness: recursive trace replacement removes the paired Lorentz argument and must not reuse bound labels introduced by metric contractions.
@@ -276,15 +276,15 @@ Source: #source(opera + "#L670-L680"). Implementation odd contraction: #source(o
 Pattern:
 ```rs
 chain(bis(4,a),bis(4,d),
-  gamma(mink(4,mu),in,out),
-  gamma(mink(4,nu1),in,out),
-  gamma(mink(4,nu2),in,out),
-  gamma(mink(4,nu3),in,out),
-  gamma(mink(4,mu),in,out))
+  gamma(in,out,mink(4,mu)),
+  gamma(in,out,mink(4,nu1)),
+  gamma(in,out,mink(4,nu2)),
+  gamma(in,out,mink(4,nu3)),
+  gamma(in,out,mink(4,mu)))
   -> -2 * chain(bis(4,a),bis(4,d),
-       gamma(mink(4,nu3),in,out),
-       gamma(mink(4,nu2),in,out),
-       gamma(mink(4,nu1),in,out))
+       gamma(in,out,mink(4,nu3)),
+       gamma(in,out,mink(4,nu2)),
+       gamma(in,out,mink(4,nu1)))
 ```
 Assumptions: The contracted Lorentz label must belong to a four-dimensional Lorentz representation. The source code checks dimension equality with `4` before applying the Chisholm branches.
 
@@ -308,13 +308,13 @@ Source: #source(opera + "#L320-L329"). The gamma-five branch logic in trace gene
 Pattern:
 ```rs
 chain(bis(4,a),bis(4,b),
-  gamma(mink(4,mu),in,out),
-  gamma(mink(4,nu),in,out),
-  gamma(mink(4,rho),in,out))
+  gamma(in,out,mink(4,mu)),
+  gamma(in,out,mink(4,nu)),
+  gamma(in,out,mink(4,rho)))
   -> epsilon(mink(4,mu),mink(4,nu),mink(4,rho),mink(4,sigma))
      * chain(bis(4,a),bis(4,b),
          gamma5(in,out),
-         gamma(mink(4,sigma),in,out))
+         gamma(in,out,mink(4,sigma)))
      + g(mink(4,mu),mink(4,nu)) * chain(... gamma(rho) ...)
      - g(mink(4,mu),mink(4,rho)) * chain(... gamma(nu) ...)
      + g(mink(4,nu),mink(4,rho)) * chain(... gamma(mu) ...)
@@ -561,8 +561,8 @@ Symbolica wildcard convention: `x_` is one atom, `x__` is one-or-more atoms, and
 The public target syntax for this specification is `chain(...)` and `trace(...)`. If implemented inside GammaLoop/idenso, the current internal Rust symbols are `spenso::gamma_chain` and `spenso::gamma_trace`; those should be adapter names only, not the public pattern vocabulary. The approved surface form remains:
 ```rs
 chain(bis(4,a),bis(4,c),
-  gamma(p(2,mink(4)),in,out),
-  gamma(mink(4,mu),in,out))
+  gamma(in,out,p(2,mink(4))),
+  gamma(in,out,mink(4,mu)))
 ```
 
 == Rust Pattern Construction Guidelines
@@ -591,22 +591,22 @@ Mathematical identity: @eq-gamma-chain-product. Source: #source(dirac-rs + "#L60
 
 Raw gamma pair:
 ```rs
-gamma(x_,bis(d_,a_),bis(d_,b_))
-* gamma(y_,bis(d_,b_),bis(d_,c_))
+gamma(bis(d_,a_),bis(d_,b_),x_)
+* gamma(bis(d_,b_),bis(d_,c_),y_)
   -> chain(bis(d_,a_),bis(d_,c_),
-       gamma(x_,in,out),
-       gamma(y_,in,out))
+       gamma(in,out,x_),
+       gamma(in,out,y_))
 ```
 
 Append and prepend raw gamma factors:
 ```rs
 chain(bis(d_,a_),bis(d_,b_),xs___)
-* gamma(y_,bis(d_,b_),bis(d_,c_))
-  -> chain(bis(d_,a_),bis(d_,c_),xs___,gamma(y_,in,out))
+* gamma(bis(d_,b_),bis(d_,c_),y_)
+  -> chain(bis(d_,a_),bis(d_,c_),xs___,gamma(in,out,y_))
 
-gamma(x_,bis(d_,a_),bis(d_,b_))
+gamma(bis(d_,a_),bis(d_,b_),x_)
 * chain(bis(d_,b_),bis(d_,c_),ys___)
-  -> chain(bis(d_,a_),bis(d_,c_),gamma(x_,in,out),ys___)
+  -> chain(bis(d_,a_),bis(d_,c_),gamma(in,out,x_),ys___)
 ```
 
 Join two chains:
@@ -633,12 +633,12 @@ Mathematical identity: @eq-gamma-trace-closure.
 chain(bis(d_,a_),bis(d_,a_),xs___)
   -> trace(bis(d_),xs___)
 
-trace(bis(d_),gamma(x_,in,out))
+trace(bis(d_),gamma(in,out,x_))
   -> 0
 
 trace(bis(4),
-  gamma(mink(4,mu_),in,out),
-  gamma(mink(4,nu_),in,out))
+  gamma(in,out,mink(4,mu_)),
+  gamma(in,out,mink(4,nu_)))
   -> 4 * g(mink(4,mu_),mink(4,nu_))
 ```
 
@@ -646,8 +646,8 @@ Adjacent repeated Lorentz object:
 ```rs
 chain(bis(d_,a_),bis(d_,b_),
   xs___,
-  gamma(mink(d_,mu_),in,out),
-  gamma(mink(d_,mu_),in,out),
+  gamma(in,out,mink(d_,mu_)),
+  gamma(in,out,mink(d_,mu_)),
   ys___)
   -> d_ * chain(bis(d_,a_),bis(d_,b_),xs___,ys___)
 ```
@@ -661,9 +661,9 @@ Mathematical identities: @eq-gamma-chisholm-odd, @eq-gamma-chisholm-even, and @e
 Match contracted endpoints in four dimensions:
 ```rs
 chain(bis(4,a_),bis(4,b_),
-  gamma(mink(4,mu_),in,out),
+  gamma(in,out,mink(4,mu_)),
   middle___,
-  gamma(mink(4,mu_),in,out))
+  gamma(in,out,mink(4,mu_)))
 ```
 
 Rust-side builder:
@@ -838,23 +838,23 @@ Source basis: FORM manual gamma algebra and `trace4` implementation; see #source
 ```rs
 // FORM: g_(1,mu,nu); trace4,1;
 trace(bis(4),
-  gamma(mink(4,mu),in,out),
-  gamma(mink(4,nu),in,out))
+  gamma(in,out,mink(4,mu)),
+  gamma(in,out,mink(4,nu)))
   -> 4 * g(mink(4,mu),mink(4,nu))
 
 // FORM: g_(1,mu,nu,rho); trace4,1;
 trace(bis(4),
-  gamma(mink(4,mu),in,out),
-  gamma(mink(4,nu),in,out),
-  gamma(mink(4,rho),in,out))
+  gamma(in,out,mink(4,mu)),
+  gamma(in,out,mink(4,nu)),
+  gamma(in,out,mink(4,rho)))
   -> 0
 
 // FORM: g_(1,mu,nu,rho,sigma); trace4,1;
 trace(bis(4),
-  gamma(mink(4,mu),in,out),
-  gamma(mink(4,nu),in,out),
-  gamma(mink(4,rho),in,out),
-  gamma(mink(4,sigma),in,out))
+  gamma(in,out,mink(4,mu)),
+  gamma(in,out,mink(4,nu)),
+  gamma(in,out,mink(4,rho)),
+  gamma(in,out,mink(4,sigma)))
   -> 4 * g(mink(4,mu),mink(4,nu)) * g(mink(4,rho),mink(4,sigma))
    - 4 * g(mink(4,mu),mink(4,rho)) * g(mink(4,nu),mink(4,sigma))
    + 4 * g(mink(4,mu),mink(4,sigma)) * g(mink(4,nu),mink(4,rho))
@@ -864,28 +864,28 @@ Chisholm and adjacent-contraction chain tests:
 ```rs
 // FORM manual: g_(1,mu,mu) = gi_(1)*d_(mu,mu).
 chain(bis(d,a),bis(d,b),
-  gamma(mink(d,mu),in,out),
-  gamma(mink(d,mu),in,out))
+  gamma(in,out,mink(d,mu)),
+  gamma(in,out,mink(d,mu)))
   -> d * g(bis(d,a),bis(d,b))
 
 // FORM manual, four-dimensional odd interior.
 chain(bis(4,a),bis(4,b),
-  gamma(mink(4,mu),in,out),
-  gamma(mink(4,nu1),in,out),
-  gamma(mink(4,nu2),in,out),
-  gamma(mink(4,nu3),in,out),
-  gamma(mink(4,mu),in,out))
+  gamma(in,out,mink(4,mu)),
+  gamma(in,out,mink(4,nu1)),
+  gamma(in,out,mink(4,nu2)),
+  gamma(in,out,mink(4,nu3)),
+  gamma(in,out,mink(4,mu)))
   -> -2 * chain(bis(4,a),bis(4,b),
-       gamma(mink(4,nu3),in,out),
-       gamma(mink(4,nu2),in,out),
-       gamma(mink(4,nu1),in,out))
+       gamma(in,out,mink(4,nu3)),
+       gamma(in,out,mink(4,nu2)),
+       gamma(in,out,mink(4,nu1)))
 
 // FORM manual, four-dimensional two-interior special case.
 chain(bis(4,a),bis(4,b),
-  gamma(mink(4,mu),in,out),
-  gamma(mink(4,nu),in,out),
-  gamma(mink(4,rho),in,out),
-  gamma(mink(4,mu),in,out))
+  gamma(in,out,mink(4,mu)),
+  gamma(in,out,mink(4,nu)),
+  gamma(in,out,mink(4,rho)),
+  gamma(in,out,mink(4,mu)))
   -> 4 * g(mink(4,nu),mink(4,rho)) * g(bis(4,a),bis(4,b))
 ```
 
@@ -893,19 +893,19 @@ Gamma-five epsilon test:
 ```rs
 // FORM Trick identity in opera.c.
 chain(bis(4,a),bis(4,b),
-  gamma(mink(4,mu),in,out),
-  gamma(mink(4,nu),in,out),
-  gamma(mink(4,rho),in,out))
+  gamma(in,out,mink(4,mu)),
+  gamma(in,out,mink(4,nu)),
+  gamma(in,out,mink(4,rho)))
   -> epsilon(mink(4,mu),mink(4,nu),mink(4,rho),mink(4,sigma))
      * chain(bis(4,a),bis(4,b),
          gamma5(in,out),
-         gamma(mink(4,sigma),in,out))
+         gamma(in,out,mink(4,sigma)))
      + g(mink(4,mu),mink(4,nu))
-       * chain(bis(4,a),bis(4,b),gamma(mink(4,rho),in,out))
+       * chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,rho)))
      - g(mink(4,mu),mink(4,rho))
-       * chain(bis(4,a),bis(4,b),gamma(mink(4,nu),in,out))
+       * chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)))
      + g(mink(4,nu),mink(4,rho))
-       * chain(bis(4,a),bis(4,b),gamma(mink(4,mu),in,out))
+       * chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))
 ```
 
 FORM manual gamma-five stress examples:
@@ -915,7 +915,7 @@ g5_trace_symmetric_12(m1,...,m12)
   -> 51975 terms
 
 // FORM: regular trace g_(1,5_,m1,...,m12); trace4,1.
-trace(bis(4),gamma5(in,out),gamma(mink(4,m1),in,out),...,gamma(mink(4,m12),in,out))
+trace(bis(4),gamma5(in,out),gamma(in,out,mink(4,m1)),...,gamma(in,out,mink(4,m12)))
   -> 1029 output terms after FORM trace4
 ```
 These are term-count regression tests from the manual, not compact algebraic values.

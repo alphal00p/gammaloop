@@ -19,9 +19,9 @@ use crate::{gamma, gamma0, gamma5, u, v};
 static GG: LazyLock<Canonicalized<IndexlessNamedStructure<Symbol, ()>>> = LazyLock::new(|| {
     IndexlessNamedStructure::from_iter(
         [
-            Minkowski {}.new_rep(4).to_lib(),
+            Bispinor {}.new_rep(4).to_lib(),
             Bispinor {}.new_rep(4).cast(),
-            Bispinor {}.new_rep(4).cast(),
+            Minkowski {}.new_rep(4).cast(),
         ],
         AGS.gamma,
         None,
@@ -39,7 +39,7 @@ use spenso::structure::{
 };
 use symbolica::{
     atom::{Atom, AtomCore},
-    parse, parse_lit,
+    parse_lit,
     printer::PrintOptions,
 };
 
@@ -50,7 +50,7 @@ use crate::{CookMode, CookSettings, Cookable};
 fn gamma_construct() {
     test_initialize();
 
-    println!("{}", gamma!(RS.a_, RS.b_, RS.c_));
+    println!("{}", gamma!(RS.b_, RS.c_, RS.a_));
 
     let f = GG.clone();
     let logical_indices: [AbstractIndex; 3] = [4.into(), 3.into(), 2.into()];
@@ -99,9 +99,9 @@ fn chain_test() {
                 * g(bis(4, l(3)), bis(4, l(7)))
                 * g(mink(dim, l(0)), mink(dim, l(5)))
                 * g(mink(dim, l(1)), mink(dim, l(4)))
-                * gamma(mink(dim, l(4)), bis(4, l(5)), bis(4, l(4)))
-                * gamma(mink(dim, l(20)), bis(4, l(6)), bis(4, l(5)))
-                * gamma(mink(dim, l(5)), bis(4, l(7)), bis(4, l(6))),
+                * gamma(bis(4, l(5)), bis(4, l(4)), mink(dim, l(4)))
+                * gamma(bis(4, l(6)), bis(4, l(5)), mink(dim, l(20)))
+                * gamma(bis(4, l(7)), bis(4, l(6)), mink(dim, l(5))),
         default_namespace = "spenso"
     );
 
@@ -127,19 +127,34 @@ fn normalise_g() {
 }
 
 #[test]
+fn gamma_macro_uses_storage_order() {
+    test_initialize();
+    let expr = gamma!(a, b, mu);
+
+    assert_snapshot!(expr.to_bare_ordered_string(), @"gamma(bis(4,a),bis(4,b),mink(4,mu))");
+}
+
+#[test]
+#[should_panic(expected = "gamma first argument must be a bispinor slot")]
+fn gamma_macro_rejects_lorentz_first_ports() {
+    let r = test_initialize();
+    let _ = gamma!(slot!(r.mink4, mu), slot!(r.bis4, a), slot!(r.bis4, b));
+}
+
+#[test]
 fn gamma_macro_accepts_integer_indices() {
     test_initialize();
-    let expr = gamma!(1, 2, 3);
+    let expr = gamma!(2, 3, 1);
 
-    assert_snapshot!(expr.to_bare_ordered_string(), @"gamma(mink(4,1),bis(4,2),bis(4,3))");
+    assert_snapshot!(expr.to_bare_ordered_string(), @"gamma(bis(4,2),bis(4,3),mink(4,1))");
 }
 
 #[test]
 fn gamma_macro_accepts_mixed_default_and_explicit_indices() {
     let r = test_initialize();
-    let expr = gamma!(mu, slot!(r.bis_d, a), 1);
+    let expr = gamma!(slot!(r.bis_d, a), 1, mu);
 
-    assert_snapshot!(expr.to_bare_ordered_string(), @"gamma(mink(4,mu),bis(d,a),bis(4,1))");
+    assert_snapshot!(expr.to_bare_ordered_string(), @"gamma(bis(d,a),bis(4,1),mink(4,mu))");
 }
 
 #[test]
@@ -171,31 +186,17 @@ fn gamma0_macro_builds_chain_factor() {
 fn gamma_macros_accept_pattern_indices() {
     test_initialize();
 
-    let gamma = gamma!(RS.a__, RS.b__, RS.c__);
+    let gamma = gamma!(RS.b__, RS.c__, RS.a__);
     let gamma5 = gamma5!(RS.b__, RS.c__);
     let gamma0 = gamma0!(RS.b__, RS.c__);
-    let dimensioned_gamma = gamma!(RS.a__, [RS.d_, RS.b_], [RS.d_, RS.c_]);
+    let dimensioned_gamma = gamma!([RS.d_, RS.b_], [RS.d_, RS.c_], RS.a__);
     let dimensioned_gamma0 = gamma0!([RS.d_, RS.b_], [RS.d_, RS.c_]);
 
-    assert_snapshot!(gamma.to_bare_ordered_string(), @"gamma(mink(a__),bis(b__),bis(c__))");
+    assert_snapshot!(gamma.to_bare_ordered_string(), @"gamma(bis(b__),bis(c__),mink(a__))");
     assert_snapshot!(gamma5.to_bare_ordered_string(), @"gamma5(bis(b__),bis(c__))");
     assert_snapshot!(gamma0.to_bare_ordered_string(), @"gamma0(bis(b__),bis(c__))");
-    assert_snapshot!(dimensioned_gamma.to_bare_ordered_string(), @"gamma(mink(a__),bis(d_,b_),bis(d_,c_))");
+    assert_snapshot!(dimensioned_gamma.to_bare_ordered_string(), @"gamma(bis(d_,b_),bis(d_,c_),mink(a__))");
     assert_snapshot!(dimensioned_gamma0.to_bare_ordered_string(), @"gamma0(bis(d_,b_),bis(d_,c_))");
-}
-
-#[test]
-fn legacy_endpoint_first_gamma_is_not_a_dirac_factor() {
-    test_initialize();
-    let expression = parse!(
-        "chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))",
-        default_namespace = "spenso"
-    );
-
-    assert_snapshot!(
-        expression.simplify_gamma().to_bare_ordered_string(),
-        @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))"
-    );
 }
 
 #[test]
@@ -208,9 +209,9 @@ fn gamma_chain_canonical_ordering_is_opt_in() {
         gamma!(slot!(r.mink4, nu)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(mink(4,mu),in,out),gamma(mink(4,nu),in,out))");
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)))");
 
-    assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::canonical()).to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma(mink(4,nu),in,out),gamma(mink(4,mu),in,out))+2*g(bis(4,a),bis(4,b))*g(mink(4,mu),mink(4,nu))");
+    assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::canonical()).to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu)))+2*g(bis(4,a),bis(4,b))*g(mink(4,mu),mink(4,nu))");
 }
 
 #[test]
@@ -237,7 +238,7 @@ fn gamma5_does_not_move_in_dimension_generic_chain() {
         gamma!(slot!(r.mink_d, mu)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma5(in,out),gamma(mink(d,mu),in,out))");
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(d,a),bis(d,b),gamma5(in,out),gamma(in,out,mink(d,mu)))");
 }
 
 #[test]
@@ -319,15 +320,15 @@ fn four_dimensional_chisholm_requires_four_dimensional_interior() {
         gamma!(slot!(r.mink4, mu)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(mink(4,mu),in,out),gamma(mink(d,nu),in,out),gamma(mink(4,mu),in,out))");
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)),gamma(in,out,mink(d,nu)),gamma(in,out,mink(4,mu)))");
 }
 
 #[test]
 fn gamma_trace_evaluation_can_be_disabled() {
     test_initialize();
-    let expr = gamma!(mu, a, b) * gamma!(nu, b, a);
+    let expr = gamma!(a, b, mu) * gamma!(b, a, nu);
 
-    assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()).to_bare_ordered_string(), @"trace(bis(4),cyclic(gamma(mink(4,nu),in,out),gamma(mink(4,mu),in,out)))");
+    assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()).to_bare_ordered_string(), @"trace(bis(4),cyclic(gamma(in,out,mink(4,nu)),gamma(in,out,mink(4,mu))))");
 }
 
 mod form_reference;
@@ -367,16 +368,16 @@ fn gl23() {
                 * g(mink(4, hedge(11)), mink(4, hedge(12)))
                 * g(mink(4, hedge(3)), mink(4, hedge(4)))
                 * g(mink(4, hedge(7)), mink(4, hedge(8)))
-                * gamma(mink(4, hedge(3)), bis(4, hedge(1)), bis(4, hedge(5)))
-                * gamma(mink(4, edge(5, 1)), bis(4, hedge(10)), bis(4, hedge(9)))
-                * gamma(mink(4, edge(7, 1)), bis(4, hedge(13)), bis(4, hedge(14)))
-                * gamma(mink(4, hedge(17)), bis(4, hedge(14)), bis(4, hedge(10)))
-                * gamma(mink(4, hedge(11)), bis(4, hedge(15)), bis(4, hedge(13)))
-                * gamma(mink(4, edge(8, 1)), bis(4, hedge(16)), bis(4, hedge(15)))
-                * gamma(mink(4, edge(1, 1)), bis(4, hedge(2)), bis(4, hedge(1)))
-                * gamma(mink(4, edge(3, 1)), bis(4, hedge(5)), bis(4, hedge(6)))
-                * gamma(mink(4, hedge(0)), bis(4, hedge(6)), bis(4, hedge(16)))
-                * gamma(mink(4, hedge(7)), bis(4, hedge(9)), bis(4, hedge(2)))
+                * gamma(bis(4, hedge(1)), bis(4, hedge(5)), mink(4, hedge(3)))
+                * gamma(bis(4, hedge(10)), bis(4, hedge(9)), mink(4, edge(5, 1)))
+                * gamma(bis(4, hedge(13)), bis(4, hedge(14)), mink(4, edge(7, 1)))
+                * gamma(bis(4, hedge(14)), bis(4, hedge(10)), mink(4, hedge(17)))
+                * gamma(bis(4, hedge(15)), bis(4, hedge(13)), mink(4, hedge(11)))
+                * gamma(bis(4, hedge(16)), bis(4, hedge(15)), mink(4, edge(8, 1)))
+                * gamma(bis(4, hedge(2)), bis(4, hedge(1)), mink(4, edge(1, 1)))
+                * gamma(bis(4, hedge(5)), bis(4, hedge(6)), mink(4, edge(3, 1)))
+                * gamma(bis(4, hedge(6)), bis(4, hedge(16)), mink(4, hedge(0)))
+                * gamma(bis(4, hedge(9)), bis(4, hedge(2)), mink(4, hedge(7)))
                 * t(
                     coad(8, hedge(11)),
                     cof(3, hedge(13)),
@@ -438,16 +439,16 @@ fn gl24() {
                 * g(mink(4, hedge(11)), mink(4, hedge(12)))
                 * g(mink(4, hedge(3)), mink(4, hedge(4)))
                 * g(mink(4, hedge(7)), mink(4, hedge(8)))
-                * gamma(mink(4, edge(1, 1)), bis(4, hedge(1)), bis(4, hedge(2)))
-                * gamma(mink(4, hedge(17)), bis(4, hedge(10)), bis(4, hedge(14)))
-                * gamma(mink(4, hedge(11)), bis(4, hedge(13)), bis(4, hedge(15)))
-                * gamma(mink(4, edge(7, 1)), bis(4, hedge(14)), bis(4, hedge(13)))
-                * gamma(mink(4, edge(8, 1)), bis(4, hedge(15)), bis(4, hedge(16)))
-                * gamma(mink(4, hedge(0)), bis(4, hedge(16)), bis(4, hedge(6)))
-                * gamma(mink(4, hedge(7)), bis(4, hedge(2)), bis(4, hedge(9)))
-                * gamma(mink(4, hedge(3)), bis(4, hedge(5)), bis(4, hedge(1)))
-                * gamma(mink(4, edge(3, 1)), bis(4, hedge(6)), bis(4, hedge(5)))
-                * gamma(mink(4, edge(5, 1)), bis(4, hedge(9)), bis(4, hedge(10)))
+                * gamma(bis(4, hedge(1)), bis(4, hedge(2)), mink(4, edge(1, 1)))
+                * gamma(bis(4, hedge(10)), bis(4, hedge(14)), mink(4, hedge(17)))
+                * gamma(bis(4, hedge(13)), bis(4, hedge(15)), mink(4, hedge(11)))
+                * gamma(bis(4, hedge(14)), bis(4, hedge(13)), mink(4, edge(7, 1)))
+                * gamma(bis(4, hedge(15)), bis(4, hedge(16)), mink(4, edge(8, 1)))
+                * gamma(bis(4, hedge(16)), bis(4, hedge(6)), mink(4, hedge(0)))
+                * gamma(bis(4, hedge(2)), bis(4, hedge(9)), mink(4, hedge(7)))
+                * gamma(bis(4, hedge(5)), bis(4, hedge(1)), mink(4, hedge(3)))
+                * gamma(bis(4, hedge(6)), bis(4, hedge(5)), mink(4, edge(3, 1)))
+                * gamma(bis(4, hedge(9)), bis(4, hedge(10)), mink(4, edge(5, 1)))
                 * t(
                     coad(8, hedge(11)),
                     cof(3, hedge(15)),
@@ -488,7 +489,7 @@ fn gl_06() {
                 * I3x21
                 * (MC * g(bis(4, hedge(1)), bis(4, hedge(2)))
                     - K(0, mink(4, edge(1, 1)))
-                        * gamma(mink(4, edge(1, 1)), bis(4, hedge(1)), bis(4, hedge(2))))
+                        * gamma(bis(4, hedge(1)), bis(4, hedge(2)), mink(4, edge(1, 1))))
                 * (-K(0, mink(4, edge(3, 1))) - K(1, mink(4, edge(3, 1))))
                 * (-g(mink(4, hedge(7)), mink(4, hedge(8))) + MW
                     ^ -2 * (-P(0, mink(4, hedge(7))) - K(1, mink(4, hedge(7))))
@@ -500,10 +501,10 @@ fn gl_06() {
                 * ϵ(0, mink(4, hedge(0)))
                 * ϵbar(0, mink(4, hedge(11)))
                 * g(mink(4, hedge(0)), mink(4, hedge(8)))
-                * gamma(mink(4, hedge(11)), bis(4, hedge(10)), bis(4, hedge(6)))
-                * gamma(mink(4, hedge(7)), bis(4, hedge(2)), bis(4, vertex(1, 1)))
-                * gamma(mink(4, edge(3, 1)), bis(4, hedge(6)), bis(4, hedge(5)))
-                * gamma(mink(4, edge(5, 1)), bis(4, hedge(9)), bis(4, hedge(10)))
+                * gamma(bis(4, hedge(10)), bis(4, hedge(6)), mink(4, hedge(11)))
+                * gamma(bis(4, hedge(2)), bis(4, vertex(1, 1)), mink(4, hedge(7)))
+                * gamma(bis(4, hedge(6)), bis(4, hedge(5)), mink(4, edge(3, 1)))
+                * gamma(bis(4, hedge(9)), bis(4, hedge(10)), mink(4, edge(5, 1)))
                 * projm(bis(4, hedge(5)), bis(4, hedge(1)))
                 * projm(bis(4, vertex(1, 1)), bis(4, hedge(9)))
                 * (1 / 2)
@@ -568,7 +569,7 @@ fn gammaloop_uv_factored_vertex_chain_reduces_in_d_dimensions() {
         .expand_num();
 
     // 4 (d - 4) q_rho slash(p) + 8 p_rho slash(q) + 8 (p.q) gamma_rho.
-    assert_snapshot!(simplified.to_bare_ordered_string(), @"(-16*chain(bis(d,i),bis(d,j),gamma(p(mink(d)),in,out))+4*chain(bis(d,i),bis(d,j),gamma(p(mink(d)),in,out))*d)*q(mink(d,rho))+8*chain(bis(d,i),bis(d,j),gamma(mink(d,rho),in,out))*g(p(mink(d)),q(mink(d)))+8*chain(bis(d,i),bis(d,j),gamma(q(mink(d)),in,out))*p(mink(d,rho))");
+    assert_snapshot!(simplified.to_bare_ordered_string(), @"(-16*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))+4*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))*d)*q(mink(d,rho))+8*chain(bis(d,i),bis(d,j),gamma(in,out,mink(d,rho)))*g(p(mink(d)),q(mink(d)))+8*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))*p(mink(d,rho))");
 }
 
 #[test]
@@ -578,16 +579,16 @@ fn gamma_alg() {
     let mink_dim = r.mink_d;
     let bis4 = r.bis4;
 
-    let expr = (gamma!(0, 1, 3) * gamma!(0, 3, 2)).simplify_gamma();
+    let expr = (gamma!(1, 3, 0) * gamma!(3, 2, 0)).simplify_gamma();
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"4*g(bis(4,1),bis(4,2))");
 
     let expr = (p!(slot!(mink4, nu1))
         * (p!(slot!(mink4, nu3)) + q!(slot!(mink4, nu3)))
-        * gamma!(nu1, 1, 3)
-        * gamma!(mu, 3, 4)
-        * gamma!(nu3, 4, 5)
-        * gamma!(nu, 5, 1))
+        * gamma!(1, 3, nu1)
+        * gamma!(3, 4, mu)
+        * gamma!(4, 5, nu3)
+        * gamma!(5, 1, nu))
     .simplify_gamma()
     .schoonschip_with_net_full::<AbstractIndex>()
     .unwrap();
@@ -606,10 +607,10 @@ fn gamma_alg() {
 
     let expr = (p!(slot!(mink4, nu1))
         * (p!(slot!(mink4, nu3)) + q!(slot!(mink4, nu3)))
-        * gamma!(nu1, 1, 3)
-        * gamma!(mu, 3, 4)
-        * gamma!(nu, 4, 5)
-        * gamma!(nu3, 5, 1))
+        * gamma!(1, 3, nu1)
+        * gamma!(3, 4, mu)
+        * gamma!(4, 5, nu)
+        * gamma!(5, 1, nu3))
     .simplify_gamma()
     .schoonschip_with_net_full::<AbstractIndex>()
     .unwrap();
@@ -618,20 +619,20 @@ fn gamma_alg() {
 
     let expr = (p!(slot!(mink_dim, nu1))
         * (p!(slot!(mink_dim, nu3)) + q!(slot!(mink_dim, nu3)))
-        * gamma!(slot!(mink_dim, nu1), slot!(bis4, 1), slot!(bis4, 3))
-        * gamma!(slot!(mink_dim, nu), slot!(bis4, 3), slot!(bis4, 4))
-        * gamma!(slot!(mink_dim, nu), slot!(bis4, 4), slot!(bis4, 5))
-        * gamma!(slot!(mink_dim, nu3), slot!(bis4, 5), slot!(bis4, 1)))
+        * gamma!(slot!(bis4, 1), slot!(bis4, 3), slot!(mink_dim, nu1))
+        * gamma!(slot!(bis4, 3), slot!(bis4, 4), slot!(mink_dim, nu))
+        * gamma!(slot!(bis4, 4), slot!(bis4, 5), slot!(mink_dim, nu))
+        * gamma!(slot!(bis4, 5), slot!(bis4, 1), slot!(mink_dim, nu3)))
     .simplify_gamma();
 
     assert_snapshot!(expr.expand().canonize(AbstractIndex::Dummy).expect("test expression should canonicalize").to_bare_ordered_string(), @"(p(mink(d,d_0)))^2*4*d+4*d*p(mink(d,d_0))*q(mink(d,d_0))");
 
     let expr = (p!(slot!(mink_dim, nu1))
         * (p!(slot!(mink_dim, nu3)) + q!(slot!(mink_dim, nu3)))
-        * gamma!(slot!(mink_dim, nu1), slot!(bis4, 1), slot!(bis4, 3))
-        * gamma!(slot!(mink_dim, nu), slot!(bis4, 3), slot!(bis4, 4))
-        * gamma!(slot!(mink_dim, nu3), slot!(bis4, 4), slot!(bis4, 5))
-        * gamma!(slot!(mink_dim, nu), slot!(bis4, 5), slot!(bis4, 1)))
+        * gamma!(slot!(bis4, 1), slot!(bis4, 3), slot!(mink_dim, nu1))
+        * gamma!(slot!(bis4, 3), slot!(bis4, 4), slot!(mink_dim, nu))
+        * gamma!(slot!(bis4, 4), slot!(bis4, 5), slot!(mink_dim, nu3))
+        * gamma!(slot!(bis4, 5), slot!(bis4, 1), slot!(mink_dim, nu)))
     .collect_reps([
         LibraryRep::from(Minkowski {}),
         LibraryRep::from(Bispinor {}),
@@ -645,10 +646,10 @@ fn gamma_alg() {
         * q!(slot!(mink_dim, nu2))
         * (p!(slot!(mink_dim, nu3)) + q!(slot!(mink_dim, nu3)))
         * q!(slot!(mink_dim, nu4))
-        * gamma!(slot!(mink_dim, nu1), slot!(bis4, 1), slot!(bis4, 3))
-        * gamma!(slot!(mink_dim, nu4), slot!(bis4, 3), slot!(bis4, 4))
-        * gamma!(slot!(mink_dim, nu3), slot!(bis4, 4), slot!(bis4, 5))
-        * gamma!(slot!(mink_dim, nu2), slot!(bis4, 5), slot!(bis4, 1)))
+        * gamma!(slot!(bis4, 1), slot!(bis4, 3), slot!(mink_dim, nu1))
+        * gamma!(slot!(bis4, 3), slot!(bis4, 4), slot!(mink_dim, nu4))
+        * gamma!(slot!(bis4, 4), slot!(bis4, 5), slot!(mink_dim, nu3))
+        * gamma!(slot!(bis4, 5), slot!(bis4, 1), slot!(mink_dim, nu2)))
     .simplify_gamma()
     .schoonschip_with_net_full::<AbstractIndex>()
     .unwrap()
@@ -656,10 +657,10 @@ fn gamma_alg() {
 
     assert_snapshot!(expr.to_bare_ordered_string(), @"(dot(p(mink(d)),q(mink(d))))^2*8+-4*dot(p(mink(d)),p(mink(d)))*dot(q(mink(d)),q(mink(d)))+4*dot(p(mink(d)),q(mink(d)))*dot(q(mink(d)),q(mink(d)))");
 
-    let expr = (gamma!(slot!(mink_dim, mu), slot!(bis4, 1), slot!(bis4, 3))
-        * gamma!(slot!(mink_dim, nu), slot!(bis4, 3), slot!(bis4, 4))
-        * gamma!(slot!(mink_dim, mu), slot!(bis4, 4), slot!(bis4, 5))
-        * gamma!(slot!(mink_dim, nu), slot!(bis4, 5), slot!(bis4, 2)))
+    let expr = (gamma!(slot!(bis4, 1), slot!(bis4, 3), slot!(mink_dim, mu))
+        * gamma!(slot!(bis4, 3), slot!(bis4, 4), slot!(mink_dim, nu))
+        * gamma!(slot!(bis4, 4), slot!(bis4, 5), slot!(mink_dim, mu))
+        * gamma!(slot!(bis4, 5), slot!(bis4, 2), slot!(mink_dim, nu)))
     .simplify_gamma()
     .collect_metrics()
     .simplify_metrics();
@@ -717,46 +718,46 @@ fn val_test() {
     let _expr = parse_lit!(
         (MB * g(bis(4, hedge(0, 0)), bis(4, hedge(1, 0)))
             + gamma(
-                mink(4, edge(0, 1)),
                 bis(4, hedge(0, 0)),
-                bis(4, hedge(1, 0))
+                bis(4, hedge(1, 0)),
+                mink(4, edge(0, 1))
             ) * Q(0, mink(4, edge(0, 1))))
             * (MB * g(bis(4, hedge(2, 0)), bis(4, hedge(3, 0)))
                 + gamma(
-                    mink(4, edge(1, 1)),
                     bis(4, hedge(2, 0)),
-                    bis(4, hedge(3, 0))
+                    bis(4, hedge(3, 0)),
+                    mink(4, edge(1, 1))
                 ) * Q(1, mink(4, edge(1, 1))))
             * (MB * g(bis(4, hedge(5, 0)), bis(4, hedge(6, 0)))
                 + gamma(
-                    mink(4, edge(3, 1)),
                     bis(4, hedge(5, 0)),
-                    bis(4, hedge(6, 0))
+                    bis(4, hedge(6, 0)),
+                    mink(4, edge(3, 1))
                 ) * Q(3, mink(4, edge(3, 1))))
             * (gamma(
-                mink(4, edge(5, 1)),
                 bis(4, hedge(9, 0)),
-                bis(4, hedge(10, 0))
+                bis(4, hedge(10, 0)),
+                mink(4, edge(5, 1))
             ) * Q(5, mink(4, edge(5, 1))))
             * gamma(
-                mink(4, hedge(7, 0)),
                 bis(4, hedge(1, 0)),
-                bis(4, hedge(9, 0))
+                bis(4, hedge(9, 0)),
+                mink(4, hedge(7, 0))
             )
             * gamma(
-                mink(4, hedge(7, 0)),
                 bis(4, hedge(3, 0)),
-                bis(4, hedge(5, 0))
+                bis(4, hedge(5, 0)),
+                mink(4, hedge(7, 0))
             )
             * gamma(
-                mink(4, hedge(11, 0)),
                 bis(4, hedge(6, 0)),
-                bis(4, hedge(0, 0))
+                bis(4, hedge(0, 0)),
+                mink(4, hedge(11, 0))
             )
             * gamma(
-                mink(4, hedge(4, 0)),
                 bis(4, hedge(10, 0)),
-                bis(4, hedge(2, 0))
+                bis(4, hedge(2, 0)),
+                mink(4, hedge(4, 0))
             )
             * p(1, mink(4, hedge(4, 0)))
             * p(7, mink(4, hedge(11, 0))),
@@ -778,10 +779,10 @@ fn val_test() {
     //         * g(bis(D, left(1)), bis(D, left(4)))
     //         * g(bis(D, right(0)), bis(D, right(5)))
     //         * g(bis(D, right(1)), bis(D, right(4)))
-    //         * gamma( mink(D, 1337),bis(D, left(1)), bis(D, right(1)))
-    //         * gamma( mink(D, 1338),bis(D, right(0)), bis(D, left(0)))
-    //         * gamma( mink(D, left(4)),bis(D, left(5)), bis(D, left(4)))
-    //         * gamma( mink(D, right(4)),bis(D, right(4)), bis(D, right(5)))
+    //         * gamma(bis(D, left(1)), bis(D, right(1)), mink(D, 1337))
+    //         * gamma(bis(D, right(0)), bis(D, left(0)), mink(D, 1338))
+    //         * gamma(bis(D, left(5)), bis(D, left(4)), mink(D, left(4)))
+    //         * gamma(bis(D, right(4)), bis(D, right(5)), mink(D, right(4)))
     //         * Q(0, mink(D, 1338))
     //         * Q(1, mink(D, 1337))
     //         * Q(3, mink(D, left(7)))
@@ -790,21 +791,21 @@ fn val_test() {
     // );
     //
     let gamma_product = gamma!(
-        parse_lit!(mink(4, dummy(2, 2)), default_namespace = "spenso"),
         parse_lit!(bis(4, l(2)), default_namespace = "spenso"),
-        parse_lit!(bis(4, r(2)), default_namespace = "spenso")
+        parse_lit!(bis(4, r(2)), default_namespace = "spenso"),
+        parse_lit!(mink(4, dummy(2, 2)), default_namespace = "spenso")
     ) * gamma!(
-        parse_lit!(mink(4, l(5)), default_namespace = "spenso"),
         parse_lit!(bis(4, l(6)), default_namespace = "spenso"),
-        parse_lit!(bis(4, l(5)), default_namespace = "spenso")
+        parse_lit!(bis(4, l(5)), default_namespace = "spenso"),
+        parse_lit!(mink(4, l(5)), default_namespace = "spenso")
     ) * gamma!(
-        parse_lit!(mink(4, dummy(3, 3)), default_namespace = "spenso"),
         parse_lit!(bis(4, r(3)), default_namespace = "spenso"),
-        parse_lit!(bis(4, l(3)), default_namespace = "spenso")
+        parse_lit!(bis(4, l(3)), default_namespace = "spenso"),
+        parse_lit!(mink(4, dummy(3, 3)), default_namespace = "spenso")
     ) * gamma!(
-        parse_lit!(mink(4, r(5)), default_namespace = "spenso"),
         parse_lit!(bis(4, r(5)), default_namespace = "spenso"),
-        parse_lit!(bis(4, r(6)), default_namespace = "spenso")
+        parse_lit!(bis(4, r(6)), default_namespace = "spenso"),
+        parse_lit!(mink(4, r(5)), default_namespace = "spenso")
     );
 
     let expr = parse_lit!(

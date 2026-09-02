@@ -18,19 +18,19 @@ fn algebra() {
                     spenso::cof(3, hedge(12))
                 )
                 * spenso::gamma(
-                    spenso::mink(dim, hedge(15)),
                     spenso::bis(4, hedge(4)),
-                    spenso::bis(4, hedge(13))
-                )
-                * spenso::gamma(
-                    spenso::mink(dim, hedge(14)),
-                    spenso::bis(4, hedge(12)),
-                    spenso::bis(4, hedge(9))
-                )
-                * spenso::gamma(
-                    spenso::mink(dim, edge(7, 1)),
                     spenso::bis(4, hedge(13)),
-                    spenso::bis(4, hedge(12))
+                    spenso::mink(dim, hedge(15))
+                )
+                * spenso::gamma(
+                    spenso::bis(4, hedge(12)),
+                    spenso::bis(4, hedge(9)),
+                    spenso::mink(dim, hedge(14))
+                )
+                * spenso::gamma(
+                    spenso::bis(4, hedge(13)),
+                    spenso::bis(4, hedge(12)),
+                    spenso::mink(dim, edge(7, 1))
                 )
                 * spenso::t(
                     spenso::coad(8, hedge(14)),

@@ -874,7 +874,7 @@ impl Particle {
         let mu: Slot<Minkowski, Aind> = Minkowski {}.new_rep(4).slot(Aind::new_dummy());
         let mass_sign = if self.is_antiparticle() { -1 } else { 1 };
 
-        GS.emr_mom(eid, mu.to_atom()) * function!(AGS.gamma, mu.to_atom(), W_.a_, W_.b_)
+        GS.emr_mom(eid, mu.to_atom()) * function!(AGS.gamma, W_.a_, W_.b_, mu.to_atom())
             + Atom::num(mass_sign) * Atom::from(self.mass.0) * function!(ETS.metric, W_.a_, W_.b_)
     }
 

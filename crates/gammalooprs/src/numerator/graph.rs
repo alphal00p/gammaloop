@@ -515,29 +515,29 @@ mod test {
                         cof(3, gammalooprs::hedge(7))
                     )
                     * gamma(
-                        mink(dim, gammalooprs::hedge(8)),
                         bis(4, gammalooprs::hedge(4)),
-                        bis(4, gammalooprs::hedge(6))
-                    )
-                    * gamma(
-                        mink(dim, gammalooprs::hedge(17)),
-                        bis(4, gammalooprs::hedge(7)),
-                        bis(4, gammalooprs::hedge(13))
-                    )
-                    * gamma(
-                        mink(dim, gammalooprs::hedge(16)),
-                        bis(4, gammalooprs::hedge(11)),
-                        bis(4, gammalooprs::hedge(5))
-                    )
-                    * gamma(
-                        mink(dim, gammalooprs::edge(4, 1)),
-                        bis(4, gammalooprs::hedge(5)),
-                        bis(4, gammalooprs::hedge(4))
-                    )
-                    * gamma(
-                        mink(dim, gammalooprs::edge(5, 1)),
                         bis(4, gammalooprs::hedge(6)),
-                        bis(4, gammalooprs::hedge(7))
+                        mink(dim, gammalooprs::hedge(8))
+                    )
+                    * gamma(
+                        bis(4, gammalooprs::hedge(7)),
+                        bis(4, gammalooprs::hedge(13)),
+                        mink(dim, gammalooprs::hedge(17))
+                    )
+                    * gamma(
+                        bis(4, gammalooprs::hedge(11)),
+                        bis(4, gammalooprs::hedge(5)),
+                        mink(dim, gammalooprs::hedge(16))
+                    )
+                    * gamma(
+                        bis(4, gammalooprs::hedge(5)),
+                        bis(4, gammalooprs::hedge(4)),
+                        mink(dim, gammalooprs::edge(4, 1))
+                    )
+                    * gamma(
+                        bis(4, gammalooprs::hedge(6)),
+                        bis(4, gammalooprs::hedge(7)),
+                        mink(dim, gammalooprs::edge(5, 1))
                     )
                     * t(
                         coad(8, gammalooprs::hedge(16)),
@@ -762,22 +762,22 @@ mod test {
                 v2 -> v3 [particle="d", id=6];
                 num=" UFO::GC_1^3
                     *spenso::g(spenso::cof(3,hedge(1)),spenso::dind(spenso::cof(3,hedge(5))))
-                    *spenso::gamma(spenso::mink(4,hedge(3)),spenso::bis(4,hedge(5)),spenso::bis(4,hedge(1)))
+                    *spenso::gamma(spenso::bis(4,hedge(5)),spenso::bis(4,hedge(1)),spenso::mink(4,hedge(3)))
 
                     *spenso::g(spenso::cof(3,hedge(5)),spenso::dind(spenso::cof(3,hedge(6))))
                     *Q(5,spenso::mink(4,edge(5,1)))
-                    *spenso::gamma(spenso::mink(4,edge(5,1)),spenso::bis(4,hedge(6)),spenso::bis(4,hedge(5)))
+                    *spenso::gamma(spenso::bis(4,hedge(6)),spenso::bis(4,hedge(5)),spenso::mink(4,edge(5,1)))
 
 
                     *spenso::g(spenso::cof(3,hedge(6)),spenso::dind(spenso::cof(3,hedge(7))))
-                    *spenso::gamma(spenso::mink(4,hedge(4)),spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6)))
+                    *spenso::gamma(spenso::bis(4,hedge(7)),spenso::bis(4,hedge(6)),spenso::mink(4,hedge(4)))
 
                     *spenso::g(spenso::cof(3,hedge(7)),spenso::dind(spenso::cof(3,hedge(8))))
-                    *spenso::gamma(spenso::mink(4,edge(6,1)),spenso::bis(4,hedge(8)),spenso::bis(4,hedge(7)))
+                    *spenso::gamma(spenso::bis(4,hedge(8)),spenso::bis(4,hedge(7)),spenso::mink(4,edge(6,1)))
                     *Q(6,spenso::mink(4,edge(6,1)))
 
                     *spenso::g(spenso::cof(3,hedge(8)),spenso::dind(spenso::cof(3,hedge(2))))
-                    *spenso::gamma(spenso::mink(4,hedge(0)),spenso::bis(4,hedge(2)),spenso::bis(4,hedge(8)))
+                    *spenso::gamma(spenso::bis(4,hedge(2)),spenso::bis(4,hedge(8)),spenso::mink(4,hedge(0)))
 
                        "
                  overall_factor="1"
@@ -849,9 +849,9 @@ mod test {
                 b->c[dod="-100"]
             }
             digraph triangle_ct {
-            num="(-1*_gammaloop::P(1,spenso::cind(1))*_gammaloop::P(2,spenso::cind(1))+-1*_gammaloop::P(1,spenso::cind(2))*_gammaloop::P(2,spenso::cind(2))+-1*_gammaloop::P(1,spenso::cind(3))*_gammaloop::P(2,spenso::cind(3))+_gammaloop::P(1,spenso::cind(0))*_gammaloop::P(2,spenso::cind(0)))^-2*(-1*_gammaloop::P(2,spenso::mink(4,python::mu2))+-1*_gammaloop::Q(6,spenso::mink(4,python::mu2))+_gammaloop::P(1,spenso::mink(4,python::mu7)))*(-1*_gammaloop::Q(7,spenso::mink(4,python::mu2))+_gammaloop::P(2,spenso::mink(4,python::mu2)))*-1/4*_gammaloop::G^2*_gammaloop::P(1,spenso::mink(4,python::mu3))*_gammaloop::P(1,spenso::mink(4,python::mu5))*_gammaloop::P(2,spenso::mink(4,python::mu4))*_gammaloop::P(2,spenso::mink(4,python::mu6))*spenso::gamma(spenso::mink(4,python::mu1),spenso::bis(4,_gammaloop::hedge(2)),spenso::bis(4,python::s1))*spenso::gamma(spenso::mink(4,python::mu2),spenso::bis(4,python::s1),spenso::bis(4,python::s2))*spenso::gamma(spenso::mink(4,python::mu3),spenso::bis(4,python::s2),spenso::bis(4,python::s3))*spenso::gamma(spenso::mink(4,python::mu4),spenso::bis(4,python::s3),spenso::bis(4,python::tree_form_factor_spinor_2))*spenso::gamma(spenso::mink(4,python::mu7),spenso::bis(4,python::s4),spenso::bis(4,python::s6))*spenso::gamma(spenso::mink(4,python::mu6),spenso::bis(4,python::s5),spenso::bis(4,python::s4))*spenso::gamma(spenso::mink(4,python::mu1),spenso::bis(4,python::s6),spenso::bis(4,_gammaloop::hedge(1)))*spenso::gamma(spenso::mink(4,python::mu5),spenso::bis(4,python::tree_form_factor_spinor_1),spenso::bis(4,python::s5))";
+            num="(-1*_gammaloop::P(1,spenso::cind(1))*_gammaloop::P(2,spenso::cind(1))+-1*_gammaloop::P(1,spenso::cind(2))*_gammaloop::P(2,spenso::cind(2))+-1*_gammaloop::P(1,spenso::cind(3))*_gammaloop::P(2,spenso::cind(3))+_gammaloop::P(1,spenso::cind(0))*_gammaloop::P(2,spenso::cind(0)))^-2*(-1*_gammaloop::P(2,spenso::mink(4,python::mu2))+-1*_gammaloop::Q(6,spenso::mink(4,python::mu2))+_gammaloop::P(1,spenso::mink(4,python::mu7)))*(-1*_gammaloop::Q(7,spenso::mink(4,python::mu2))+_gammaloop::P(2,spenso::mink(4,python::mu2)))*-1/4*_gammaloop::G^2*_gammaloop::P(1,spenso::mink(4,python::mu3))*_gammaloop::P(1,spenso::mink(4,python::mu5))*_gammaloop::P(2,spenso::mink(4,python::mu4))*_gammaloop::P(2,spenso::mink(4,python::mu6))*spenso::gamma(spenso::bis(4,_gammaloop::hedge(2)),spenso::bis(4,python::s1),spenso::mink(4,python::mu1))*spenso::gamma(spenso::bis(4,python::s1),spenso::bis(4,python::s2),spenso::mink(4,python::mu2))*spenso::gamma(spenso::bis(4,python::s2),spenso::bis(4,python::s3),spenso::mink(4,python::mu3))*spenso::gamma(spenso::bis(4,python::s3),spenso::bis(4,python::tree_form_factor_spinor_2),spenso::mink(4,python::mu4))*spenso::gamma(spenso::bis(4,python::s4),spenso::bis(4,python::s6),spenso::mink(4,python::mu7))*spenso::gamma(spenso::bis(4,python::s5),spenso::bis(4,python::s4),spenso::mink(4,python::mu6))*spenso::gamma(spenso::bis(4,python::s6),spenso::bis(4,_gammaloop::hedge(1)),spenso::mink(4,python::mu1))*spenso::gamma(spenso::bis(4,python::tree_form_factor_spinor_1),spenso::bis(4,python::s5),spenso::mink(4,python::mu5))";
             overall_factor="1";
-            projector="((-1*_gammaloop::P(3,spenso::cind(0))+-1*_gammaloop::P(4,spenso::cind(0))+_gammaloop::P(1,spenso::cind(0)))^2+(-1*_gammaloop::P(3,spenso::cind(1))+-1*_gammaloop::P(4,spenso::cind(1))+_gammaloop::P(1,spenso::cind(1)))^2*-1+(-1*_gammaloop::P(3,spenso::cind(2))+-1*_gammaloop::P(4,spenso::cind(2))+_gammaloop::P(1,spenso::cind(2)))^2*-1+(-1*_gammaloop::P(3,spenso::cind(3))+-1*_gammaloop::P(4,spenso::cind(3))+_gammaloop::P(1,spenso::cind(3)))^2*-1)^-1*((-1*_gammaloop::P(3,spenso::cind(0))+_gammaloop::P(1,spenso::cind(0)))^2+(-1*_gammaloop::P(3,spenso::cind(1))+_gammaloop::P(1,spenso::cind(1)))^2*-1+(-1*_gammaloop::P(3,spenso::cind(2))+_gammaloop::P(1,spenso::cind(2)))^2*-1+(-1*_gammaloop::P(3,spenso::cind(3))+_gammaloop::P(1,spenso::cind(3)))^2*-1)^-1*(-1*_gammaloop::P(3,spenso::mink(4,_gammaloop::edge(5,1)))+_gammaloop::P(1,spenso::mink(4,_gammaloop::edge(5,1))))*(-1*_gammaloop::P(3,spenso::mink(4,_gammaloop::edge(6,1)))+-1*_gammaloop::P(4,spenso::mink(4,_gammaloop::edge(6,1)))+_gammaloop::P(1,spenso::mink(4,_gammaloop::edge(6,1))))*-1/27*_gammaloop::ee^3*_gammaloop::u(1,spenso::bis(4,_gammaloop::hedge(1)))*_gammaloop::vbar(2,spenso::bis(4,_gammaloop::hedge(2)))*_gammaloop::ϵbar(0,spenso::mink(4,_gammaloop::hedge(0)))*_gammaloop::ϵbar(3,spenso::mink(4,_gammaloop::hedge(3)))*_gammaloop::ϵbar(4,spenso::mink(4,_gammaloop::hedge(4)))*spenso::gamma(spenso::mink(4,_gammaloop::hedge(3)),spenso::bis(4,_gammaloop::hedge(5)),spenso::bis(4,python::tree_form_factor_spinor_1))*spenso::gamma(spenso::mink(4,_gammaloop::edge(5,1)),spenso::bis(4,_gammaloop::hedge(6)),spenso::bis(4,_gammaloop::hedge(5)))*spenso::gamma(spenso::mink(4,_gammaloop::hedge(4)),spenso::bis(4,_gammaloop::hedge(7)),spenso::bis(4,_gammaloop::hedge(6)))*spenso::gamma(spenso::mink(4,_gammaloop::edge(6,1)),spenso::bis(4,_gammaloop::hedge(8)),spenso::bis(4,_gammaloop::hedge(7)))*spenso::gamma(spenso::mink(4,_gammaloop::hedge(0)),spenso::bis(4,python::tree_form_factor_spinor_2),spenso::bis(4,_gammaloop::hedge(8)))";
+            projector="((-1*_gammaloop::P(3,spenso::cind(0))+-1*_gammaloop::P(4,spenso::cind(0))+_gammaloop::P(1,spenso::cind(0)))^2+(-1*_gammaloop::P(3,spenso::cind(1))+-1*_gammaloop::P(4,spenso::cind(1))+_gammaloop::P(1,spenso::cind(1)))^2*-1+(-1*_gammaloop::P(3,spenso::cind(2))+-1*_gammaloop::P(4,spenso::cind(2))+_gammaloop::P(1,spenso::cind(2)))^2*-1+(-1*_gammaloop::P(3,spenso::cind(3))+-1*_gammaloop::P(4,spenso::cind(3))+_gammaloop::P(1,spenso::cind(3)))^2*-1)^-1*((-1*_gammaloop::P(3,spenso::cind(0))+_gammaloop::P(1,spenso::cind(0)))^2+(-1*_gammaloop::P(3,spenso::cind(1))+_gammaloop::P(1,spenso::cind(1)))^2*-1+(-1*_gammaloop::P(3,spenso::cind(2))+_gammaloop::P(1,spenso::cind(2)))^2*-1+(-1*_gammaloop::P(3,spenso::cind(3))+_gammaloop::P(1,spenso::cind(3)))^2*-1)^-1*(-1*_gammaloop::P(3,spenso::mink(4,_gammaloop::edge(5,1)))+_gammaloop::P(1,spenso::mink(4,_gammaloop::edge(5,1))))*(-1*_gammaloop::P(3,spenso::mink(4,_gammaloop::edge(6,1)))+-1*_gammaloop::P(4,spenso::mink(4,_gammaloop::edge(6,1)))+_gammaloop::P(1,spenso::mink(4,_gammaloop::edge(6,1))))*-1/27*_gammaloop::ee^3*_gammaloop::u(1,spenso::bis(4,_gammaloop::hedge(1)))*_gammaloop::vbar(2,spenso::bis(4,_gammaloop::hedge(2)))*_gammaloop::ϵbar(0,spenso::mink(4,_gammaloop::hedge(0)))*_gammaloop::ϵbar(3,spenso::mink(4,_gammaloop::hedge(3)))*_gammaloop::ϵbar(4,spenso::mink(4,_gammaloop::hedge(4)))*spenso::gamma(spenso::bis(4,_gammaloop::hedge(5)),spenso::bis(4,python::tree_form_factor_spinor_1),spenso::mink(4,_gammaloop::hedge(3)))*spenso::gamma(spenso::bis(4,_gammaloop::hedge(6)),spenso::bis(4,_gammaloop::hedge(5)),spenso::mink(4,_gammaloop::edge(5,1)))*spenso::gamma(spenso::bis(4,_gammaloop::hedge(7)),spenso::bis(4,_gammaloop::hedge(6)),spenso::mink(4,_gammaloop::hedge(4)))*spenso::gamma(spenso::bis(4,_gammaloop::hedge(8)),spenso::bis(4,_gammaloop::hedge(7)),spenso::mink(4,_gammaloop::edge(6,1)))*spenso::gamma(spenso::bis(4,python::tree_form_factor_spinor_2),spenso::bis(4,_gammaloop::hedge(8)),spenso::mink(4,_gammaloop::hedge(0)))";
             edge [num="1", dod="-100"];
             node [num="1", dod="-100"];
             ext [style=invis];

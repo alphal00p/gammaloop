@@ -82,29 +82,30 @@ where
     let ci = Complex::<T>::new(zero.clone(), one.clone());
     let cni = Complex::<T>::new(zero.clone(), -one.clone());
     sparse_from_logical(structure, z, |gamma| {
-        // ! No check on actual structure, should expext mink,bis,bis
+        // Coordinates follow the public logical order: bispinor row, bispinor
+        // column, Minkowski. The layout maps them into canonical storage.
 
         // dirac gamma matrices
 
         gamma.set(&[0, 0, 0], c1.clone()).unwrap();
-        gamma.set(&[0, 1, 1], c1.clone()).unwrap();
-        gamma.set(&[0, 2, 2], cn1.clone()).unwrap();
-        gamma.set(&[0, 3, 3], cn1.clone()).unwrap();
+        gamma.set(&[1, 1, 0], c1.clone()).unwrap();
+        gamma.set(&[2, 2, 0], cn1.clone()).unwrap();
+        gamma.set(&[3, 3, 0], cn1.clone()).unwrap();
 
-        gamma.set(&[1, 0, 3], c1.clone()).unwrap();
-        gamma.set(&[1, 1, 2], c1.clone()).unwrap();
-        gamma.set(&[1, 2, 1], cn1.clone()).unwrap();
-        gamma.set(&[1, 3, 0], cn1.clone()).unwrap();
+        gamma.set(&[0, 3, 1], c1.clone()).unwrap();
+        gamma.set(&[1, 2, 1], c1.clone()).unwrap();
+        gamma.set(&[2, 1, 1], cn1.clone()).unwrap();
+        gamma.set(&[3, 0, 1], cn1.clone()).unwrap();
 
-        gamma.set(&[2, 0, 3], cni.clone()).unwrap();
+        gamma.set(&[0, 3, 2], cni.clone()).unwrap();
+        gamma.set(&[1, 2, 2], ci.clone()).unwrap();
         gamma.set(&[2, 1, 2], ci.clone()).unwrap();
-        gamma.set(&[2, 2, 1], ci.clone()).unwrap();
-        gamma.set(&[2, 3, 0], cni.clone()).unwrap();
+        gamma.set(&[3, 0, 2], cni.clone()).unwrap();
 
-        gamma.set(&[3, 0, 2], c1.clone()).unwrap();
-        gamma.set(&[3, 1, 3], cn1.clone()).unwrap();
-        gamma.set(&[3, 2, 0], cn1.clone()).unwrap();
-        gamma.set(&[3, 3, 1], c1.clone()).unwrap();
+        gamma.set(&[0, 2, 3], c1.clone()).unwrap();
+        gamma.set(&[1, 3, 3], cn1.clone()).unwrap();
+        gamma.set(&[2, 0, 3], cn1.clone()).unwrap();
+        gamma.set(&[3, 1, 3], c1.clone()).unwrap();
 
         // gamma.to_dense()
     })
@@ -126,29 +127,30 @@ where
     let ci = Complex::<T>::new(zero.clone(), one.clone());
     let cni = Complex::<T>::new(zero.clone(), -one.clone());
     sparse_from_logical(structure, z, |gamma| {
-        // ! No check on actual structure, should expext mink,bis,bis
+        // Coordinates follow the public logical order: bispinor row, bispinor
+        // column, Minkowski. The layout maps them into canonical storage.
 
         // dirac gamma matrices
 
-        gamma.set(&[0, 0, 2], c1.clone()).unwrap();
-        gamma.set(&[0, 1, 3], c1.clone()).unwrap();
         gamma.set(&[0, 2, 0], c1.clone()).unwrap();
+        gamma.set(&[1, 3, 0], c1.clone()).unwrap();
+        gamma.set(&[2, 0, 0], c1.clone()).unwrap();
+        gamma.set(&[3, 1, 0], c1.clone()).unwrap();
+
         gamma.set(&[0, 3, 1], c1.clone()).unwrap();
+        gamma.set(&[1, 2, 1], c1.clone()).unwrap();
+        gamma.set(&[2, 1, 1], cn1.clone()).unwrap();
+        gamma.set(&[3, 0, 1], cn1.clone()).unwrap();
 
-        gamma.set(&[1, 0, 3], c1.clone()).unwrap();
-        gamma.set(&[1, 1, 2], c1.clone()).unwrap();
-        gamma.set(&[1, 2, 1], cn1.clone()).unwrap();
-        gamma.set(&[1, 3, 0], cn1.clone()).unwrap();
-
-        gamma.set(&[2, 0, 3], cni.clone()).unwrap();
+        gamma.set(&[0, 3, 2], cni.clone()).unwrap();
+        gamma.set(&[1, 2, 2], ci.clone()).unwrap();
         gamma.set(&[2, 1, 2], ci.clone()).unwrap();
-        gamma.set(&[2, 2, 1], ci.clone()).unwrap();
-        gamma.set(&[2, 3, 0], cni.clone()).unwrap();
+        gamma.set(&[3, 0, 2], cni.clone()).unwrap();
 
-        gamma.set(&[3, 0, 2], c1.clone()).unwrap();
-        gamma.set(&[3, 1, 3], cn1.clone()).unwrap();
-        gamma.set(&[3, 2, 0], cn1.clone()).unwrap();
-        gamma.set(&[3, 3, 1], c1.clone()).unwrap();
+        gamma.set(&[0, 2, 3], c1.clone()).unwrap();
+        gamma.set(&[1, 3, 3], cn1.clone()).unwrap();
+        gamma.set(&[2, 0, 3], cn1.clone()).unwrap();
+        gamma.set(&[3, 1, 3], c1.clone()).unwrap();
 
         // gamma.to_dense()
     })
@@ -170,29 +172,30 @@ where
     let ci = Complex::<T>::new(zero.clone(), one.clone());
     let cni = Complex::<T>::new(zero.clone(), -one.clone());
     sparse_from_logical(structure, z, |gamma| {
-        // ! No check on actual structure, should expext mink,bis,bis
+        // Coordinates follow the public logical order: bispinor row, bispinor
+        // column, Minkowski. The layout maps them into canonical storage.
 
         // dirac gamma matrices
 
+        gamma.set(&[2, 0, 0], c1.clone()).unwrap();
+        gamma.set(&[3, 1, 0], c1.clone()).unwrap();
         gamma.set(&[0, 2, 0], c1.clone()).unwrap();
-        gamma.set(&[0, 3, 1], c1.clone()).unwrap();
-        gamma.set(&[0, 0, 2], c1.clone()).unwrap();
-        gamma.set(&[0, 1, 3], c1.clone()).unwrap();
-
         gamma.set(&[1, 3, 0], c1.clone()).unwrap();
-        gamma.set(&[1, 2, 1], c1.clone()).unwrap();
-        gamma.set(&[1, 1, 2], cn1.clone()).unwrap();
-        gamma.set(&[1, 0, 3], cn1.clone()).unwrap();
 
-        gamma.set(&[2, 3, 0], cni.clone()).unwrap();
-        gamma.set(&[2, 2, 1], ci.clone()).unwrap();
+        gamma.set(&[3, 0, 1], c1.clone()).unwrap();
+        gamma.set(&[2, 1, 1], c1.clone()).unwrap();
+        gamma.set(&[1, 2, 1], cn1.clone()).unwrap();
+        gamma.set(&[0, 3, 1], cn1.clone()).unwrap();
+
+        gamma.set(&[3, 0, 2], cni.clone()).unwrap();
         gamma.set(&[2, 1, 2], ci.clone()).unwrap();
-        gamma.set(&[2, 0, 3], cni.clone()).unwrap();
+        gamma.set(&[1, 2, 2], ci.clone()).unwrap();
+        gamma.set(&[0, 3, 2], cni.clone()).unwrap();
 
-        gamma.set(&[3, 2, 0], c1.clone()).unwrap();
-        gamma.set(&[3, 3, 1], cn1.clone()).unwrap();
-        gamma.set(&[3, 0, 2], cn1.clone()).unwrap();
-        gamma.set(&[3, 1, 3], c1.clone()).unwrap();
+        gamma.set(&[2, 0, 3], c1.clone()).unwrap();
+        gamma.set(&[3, 1, 3], cn1.clone()).unwrap();
+        gamma.set(&[0, 2, 3], cn1.clone()).unwrap();
+        gamma.set(&[1, 3, 3], c1.clone()).unwrap();
 
         // gamma.to_dense()
     })
@@ -788,6 +791,7 @@ mod tests {
             store::NetworkStore,
         },
         structure::{HasStructure, abstract_index::AbstractIndex},
+        tensors::data::GetTensorData,
     };
     use symbolica::{
         atom::{Atom, Symbol},
@@ -812,15 +816,29 @@ mod tests {
     }
 
     #[test]
+    fn dirac_gamma_data_uses_storage_order() {
+        initialize();
+        let gamma =
+            gamma_data_dirac(AGS.gamma_strct::<AbstractIndex>(4), 1_i32, 0_i32).into_canonical();
+
+        // The final coordinate is the Minkowski component. These are the
+        // diagonal entries of gamma^0 in the Dirac basis.
+        assert_eq!(*gamma.get_ref([0, 0, 0]).unwrap(), Complex::new(1, 0));
+        assert_eq!(*gamma.get_ref([1, 1, 0]).unwrap(), Complex::new(1, 0));
+        assert_eq!(*gamma.get_ref([2, 2, 0]).unwrap(), Complex::new(-1, 0));
+        assert_eq!(*gamma.get_ref([3, 3, 0]).unwrap(), Complex::new(-1, 0));
+    }
+
+    #[test]
     fn simple_scalar() {
         initialize();
         let gamma = AGS.gamma_strct(4);
         let _a = HEP_LIB.get(gamma.canonical()).unwrap();
 
-        let expr = parse!("gamma(mink(4,l_4),bis(4,l_5),bis(4,l_4))*gamma(mink(4,l_4),bis(4,l_6),bis(4,l_5))*gamma(mink(4,l_5),bis(4,l_4),bis(4,l_6))*p(mink(4,l_5))
+        let expr = parse!("gamma(bis(4,l_5),bis(4,l_4),mink(4,l_4))*gamma(bis(4,l_6),bis(4,l_5),mink(4,l_4))*gamma(bis(4,l_4),bis(4,l_6),mink(4,l_5))*p(mink(4,l_5))
             ",default_namespace="spenso");
         // let expr = parse!(
-        // "gamma(mink(4,l_5),bis(4,l_4),bis(4,l_6))*p(mink(4,l_5))
+        // "gamma(bis(4,l_4),bis(4,l_6),mink(4,l_5))*p(mink(4,l_5))
         // ",
         // "spenso"
         // );
@@ -908,121 +926,121 @@ mod tests {
             (-1 * G
                 ^ 3 * P(0, mink(4, 0))
                     * P(2, mink(4, 26))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
-                    * gamma(mink(4, 1), bis(4, 7), bis(4, 6))
-                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
+                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
+                    * gamma(bis(4, 7), bis(4, 6), mink(4, 1))
+                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
                     + -1 * G
                 ^ 3 * P(0, mink(4, 26))
                     * P(1, mink(4, 1))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
-                    * gamma(mink(4, 0), bis(4, 7), bis(4, 6))
-                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
+                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
+                    * gamma(bis(4, 7), bis(4, 6), mink(4, 0))
+                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
                     + -1 * G
                 ^ 3 * P(0, mink(4, 26))
                     * P(1, mink(4, 5))
                     * g(mink(4, 0), mink(4, 1))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
-                    * gamma(mink(4, 5), bis(4, 7), bis(4, 6))
-                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
+                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
+                    * gamma(bis(4, 7), bis(4, 6), mink(4, 5))
+                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
                     + -1 * G
                 ^ 3 * P(0, mink(4, 5))
                     * P(2, mink(4, 26))
                     * g(mink(4, 0), mink(4, 1))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
-                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
-                    * gamma(mink(4, 5), bis(4, 7), bis(4, 6))
+                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
+                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
+                    * gamma(bis(4, 7), bis(4, 6), mink(4, 5))
                     + -1 * G
                 ^ 3 * P(1, mink(4, 1))
                     * P(1, mink(4, 26))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
-                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
-                    * gamma(mink(4, 0), bis(4, 7), bis(4, 6))
+                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
+                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
+                    * gamma(bis(4, 7), bis(4, 6), mink(4, 0))
                     + -1 * G
                 ^ 3 * P(1, mink(4, 26))
                     * P(1, mink(4, 5))
                     * g(mink(4, 0), mink(4, 1))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
-                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
-                    * gamma(mink(4, 5), bis(4, 7), bis(4, 6))
+                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
+                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
+                    * gamma(bis(4, 7), bis(4, 6), mink(4, 5))
                     + -2 * G
                 ^ 3 * P(0, mink(4, 1))
                     * P(0, mink(4, 26))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
-                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
-                    * gamma(mink(4, 0), bis(4, 7), bis(4, 6))
+                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
+                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
+                    * gamma(bis(4, 7), bis(4, 6), mink(4, 0))
                     + -2 * G
                 ^ 3 * P(0, mink(4, 1))
                     * P(1, mink(4, 26))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
-                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
-                    * gamma(mink(4, 0), bis(4, 7), bis(4, 6))
+                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
+                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
+                    * gamma(bis(4, 7), bis(4, 6), mink(4, 0))
                     + -2 * G
                 ^ 3 * P(0, mink(4, 5))
                     * Q(0, mink(4, 5))
                     * g(mink(4, 0), mink(4, 1))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 2))
+                    * gamma(bis(4, 3), bis(4, 2), mink(4, 4))
                     + -2 * G
                 ^ 3 * P(1, mink(4, 0))
                     * P(1, mink(4, 1))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 2))
+                    * gamma(bis(4, 3), bis(4, 2), mink(4, 4))
                     + -2 * G
                 ^ 3 * P(1, mink(4, 0))
                     * P(2, mink(4, 26))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
-                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
-                    * gamma(mink(4, 1), bis(4, 7), bis(4, 6))
+                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
+                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
+                    * gamma(bis(4, 7), bis(4, 6), mink(4, 1))
                     + -2 * G
                 ^ 3 * P(1, mink(4, 1))
                     * P(2, mink(4, 0))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 2))
+                    * gamma(bis(4, 3), bis(4, 2), mink(4, 4))
                     + -2 * G
                 ^ 3 * P(1, mink(4, 5))
                     * P(2, mink(4, 5))
                     * g(mink(4, 0), mink(4, 1))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 2))
+                    * gamma(bis(4, 3), bis(4, 2), mink(4, 4))
                     + -4 * G
                 ^ 3 * P(0, mink(4, 1))
                     * P(2, mink(4, 0))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 2))
+                    * gamma(bis(4, 3), bis(4, 2), mink(4, 4))
                     + 2 * G
                 ^ 3 * P(0, mink(4, 0))
                     * P(0, mink(4, 1))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 2))
+                    * gamma(bis(4, 3), bis(4, 2), mink(4, 4))
                     + 2 * G
                 ^ 3 * P(0, mink(4, 0))
                     * P(2, mink(4, 1))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 2))
+                    * gamma(bis(4, 3), bis(4, 2), mink(4, 4))
                     + 2 * G
                 ^ 3 * P(0, mink(4, 1))
                     * P(2, mink(4, 26))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
-                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
-                    * gamma(mink(4, 0), bis(4, 7), bis(4, 6))
+                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
+                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
+                    * gamma(bis(4, 7), bis(4, 6), mink(4, 0))
                     + 2 * G
                 ^ 3 * P(0, mink(4, 26))
                     * P(1, mink(4, 0))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
-                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
-                    * gamma(mink(4, 1), bis(4, 7), bis(4, 6))
+                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
+                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
+                    * gamma(bis(4, 7), bis(4, 6), mink(4, 1))
                     + 2 * G
                 ^ 3 * P(0, mink(4, 5))
                     * P(2, mink(4, 5))
                     * g(mink(4, 0), mink(4, 1))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 2))
+                    * gamma(bis(4, 3), bis(4, 2), mink(4, 4))
                     + 2 * G
                 ^ 3 * P(1, mink(4, 0))
                     * P(1, mink(4, 26))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
-                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
-                    * gamma(mink(4, 1), bis(4, 7), bis(4, 6))
+                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
+                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
+                    * gamma(bis(4, 7), bis(4, 6), mink(4, 1))
                     + 2 * G
                 ^ 3 * P(1, mink(4, i))
-                ^ 2 * g(mink(4, 0), mink(4, 1)) * gamma(mink(4, 4), bis(4, 3), bis(4, 2)) + G
+                ^ 2 * g(mink(4, 0), mink(4, 1)) * gamma(bis(4, 3), bis(4, 2), mink(4, 4)) + G
                 ^ 3 * P(1, mink(4, 1))
                     * P(2, mink(4, 26))
-                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
-                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
-                    * gamma(mink(4, 0), bis(4, 7), bis(4, 6))),
+                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
+                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
+                    * gamma(bis(4, 7), bis(4, 6), mink(4, 0))),
             default_namespace = "spenso"
         );
         // println!("{}", expr);

@@ -639,7 +639,7 @@ pub mod test {
         let p1 = p!(1, slot!(mink4, 3));
 
         let ubgu = u!(2, slot!(bis4, 2))
-            * (gamma!(3, 1, 2) * p1 + bis4.g(1, 2))
+            * (gamma!(1, 2, 3) * p1 + bis4.g(1, 2))
             * (u!(1, slot!(bis4, 1))
                 .dirac_adjoint::<AbstractIndex>()
                 .unwrap());
@@ -653,7 +653,7 @@ pub mod test {
                     CanonicalOrderingSettings::new()
                         .include_attributes(false)
                         .include_namespace(false)
-                ),@"(conj(p(1,mink(4,d_0)))*gamma(mink(4,d_0),bis(4,d_1),bis(4,d_2))+g(bis(4,d_1),bis(4,d_2)))*conj(u(2,bis(4,d_3)))*gamma0(bis(4,d_1),bis(4,d_3))*u(1,bis(4,d_2))"
+                ),@"(conj(p(1,mink(4,d_0)))*gamma(bis(4,d_1),bis(4,d_2),mink(4,d_0))+g(bis(4,d_1),bis(4,d_2)))*conj(u(2,bis(4,d_3)))*gamma0(bis(4,d_1),bis(4,d_3))*u(1,bis(4,d_2))"
         );
     }
 

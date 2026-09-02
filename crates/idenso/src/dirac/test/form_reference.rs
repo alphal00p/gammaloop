@@ -4,7 +4,7 @@ use insta::assert_snapshot;
 #[test]
 fn two_gamma_trace() {
     test_initialize();
-    let expr = gamma!(mu, a, b) * gamma!(nu, b, a);
+    let expr = gamma!(a, b, mu) * gamma!(b, a, nu);
 
     assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"4*g(mink(4,mu),mink(4,nu))");
 }
@@ -12,14 +12,14 @@ fn two_gamma_trace() {
 #[test]
 fn odd_gamma_trace_vanishes() {
     test_initialize();
-    let expr = gamma!(mu, a, b) * gamma!(nu, b, c) * gamma!(rho, c, a);
+    let expr = gamma!(a, b, mu) * gamma!(b, c, nu) * gamma!(c, a, rho);
     assert!(expr.simplify_gamma().is_zero());
 }
 
 #[test]
 fn four_gamma_trace_recurses() {
     test_initialize();
-    let expr = gamma!(mu, a, b) * gamma!(nu, b, c) * gamma!(rho, c, d) * gamma!(sigma, d, a);
+    let expr = gamma!(a, b, mu) * gamma!(b, c, nu) * gamma!(c, d, rho) * gamma!(d, a, sigma);
 
     assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"-4*g(mink(4,mu),mink(4,rho))*g(mink(4,nu),mink(4,sigma))+4*g(mink(4,mu),mink(4,nu))*g(mink(4,rho),mink(4,sigma))+4*g(mink(4,mu),mink(4,sigma))*g(mink(4,nu),mink(4,rho))");
 }
@@ -27,7 +27,7 @@ fn four_gamma_trace_recurses() {
 #[test]
 fn repeated_lorentz_gamma_chain_contracts_to_dimension() {
     test_initialize();
-    let expr = gamma!(mu, a, b) * gamma!(mu, b, c);
+    let expr = gamma!(a, b, mu) * gamma!(b, c, mu);
 
     assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"4*g(bis(4,a),bis(4,c))");
 }
@@ -58,7 +58,7 @@ fn trace4gen_chisholm_odd_interior_chain() {
         gamma!(slot!(r.mink4, mu)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"-2*chain(bis(4,a),bis(4,b),gamma(mink(4,nu3),in,out),gamma(mink(4,nu2),in,out),gamma(mink(4,nu1),in,out))");
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"-2*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu3)),gamma(in,out,mink(4,nu2)),gamma(in,out,mink(4,nu1)))");
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn gamma_five_epsilon_trick() {
 
     assert_snapshot!(expr
         .simplify_gamma_with(GammaSimplifySettings::repeated_pairs().with_gamma5_epsilon_expansion())
-        .to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma(mink(4,nu),in,out))*g(mink(4,mu),mink(4,rho))+-1*chain(bis(4,a),bis(4,b),gamma(mink(4,sigma),in,out),gamma5(in,out))*epsilon(mink(4,mu),mink(4,nu),mink(4,rho),mink(4,sigma))+chain(bis(4,a),bis(4,b),gamma(mink(4,mu),in,out))*g(mink(4,nu),mink(4,rho))+chain(bis(4,a),bis(4,b),gamma(mink(4,rho),in,out))*g(mink(4,mu),mink(4,nu))");
+        .to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)))*g(mink(4,mu),mink(4,rho))+-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,sigma)),gamma5(in,out))*epsilon(mink(4,mu),mink(4,nu),mink(4,rho),mink(4,sigma))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))*g(mink(4,nu),mink(4,rho))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,rho)))*g(mink(4,mu),mink(4,nu))");
 }
 
 #[test]

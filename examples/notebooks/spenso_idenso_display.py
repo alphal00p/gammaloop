@@ -37,6 +37,7 @@ def _():
         DisplaySettings,
         Representation,
         Tensor,
+        TensorExpression,
         TensorName,
         as_tensor,
         dot,
@@ -48,6 +49,7 @@ def _():
         DisplaySettings,
         Representation,
         Tensor,
+        TensorExpression,
         TensorName,
         as_tensor,
         dot,
@@ -145,7 +147,7 @@ def _(
 
 
 @app.cell
-def _(AUTO, Representation, TensorName, dot, trace):
+def _(AUTO, Representation, TensorExpression, TensorName, dot, trace):
     mink = Representation.mink(4)
     bis = Representation.bis(4)
     mu = mink("mu")
@@ -153,14 +155,14 @@ def _(AUTO, Representation, TensorName, dot, trace):
 
     p = TensorName.vector("p", is_linear=True, tags=["kinematics"])
     q = TensorName.vector("q", is_linear=True, tags=["kinematics"])
-    gamma = TensorName.gamma()(mink, bis, bis)
+    gamma = TensorExpression.gamma(4)
     mass = TensorName("m")()
 
     kinematic_factor = dot(p(1, mink), q(2, mink)) + mass * mass
     dirac_trace = trace(
         bis,
-        gamma(mu, AUTO, AUTO),
-        gamma(nu, AUTO, AUTO),
+        gamma(AUTO, AUTO, mu),
+        gamma(AUTO, AUTO, nu),
     )
     amplitude = kinematic_factor * dirac_trace
     return amplitude, mu, nu, p, q
@@ -175,7 +177,7 @@ def _(mo):
 
 
 @app.cell
-def _(Representation, TensorName, sy):
+def _(Representation, TensorExpression, TensorName, sy):
     # `raw` keeps compact rank-one vectors in their contextual form. That is
     # what lets a vector appear inside a tensor port or a gamma factor, just as
     # it does in the Typst notation examples.
@@ -249,9 +251,9 @@ def _(Representation, TensorName, sy):
     )
 
     atlas_chain_factors = (
-        raw(atlas_gamma, atlas_mu, atlas_in, atlas_out),
-        raw(atlas_gamma, atlas_p1, atlas_in, atlas_out),
-        raw(atlas_gamma, atlas_nu, atlas_in, atlas_out),
+        raw(atlas_gamma, atlas_in, atlas_out, atlas_mu),
+        raw(atlas_gamma, atlas_in, atlas_out, atlas_p1),
+        raw(atlas_gamma, atlas_in, atlas_out, atlas_nu),
     )
     atlas_open_chain = raw(
         sy.S("spenso::chain"),
@@ -271,7 +273,7 @@ def _(Representation, TensorName, sy):
         raw(sy.S("spenso::cyclic"), *atlas_chain_factors),
     )
 
-    atlas_colour = TensorName.t()(
+    atlas_colour = TensorExpression.t(8, 3)(
         atlas_coad("A"),
         atlas_cof("i"),
         atlas_cof("j").dual(),
@@ -297,7 +299,7 @@ def _(Representation, TensorName, sy):
             ("Mixed base and dual rows", atlas_mixed_polarity),
         ),
         "Chains and traces": (
-            ("Explicit gamma tensor", raw(atlas_gamma, atlas_mu, atlas_a, atlas_b)),
+            ("Explicit gamma tensor", raw(atlas_gamma, atlas_a, atlas_b, atlas_mu)),
             ("Open gamma chain", atlas_open_chain),
             ("End-labelled gamma chain", atlas_explicit_chain),
             ("Closed gamma trace", atlas_trace),
@@ -411,9 +413,8 @@ def _(amplitude, display_settings, mo, show_dimensions, source_block):
                 "The scalar product, rank-zero mass, and closed gamma chain remain "
                 "one `TensorExpression`. Only the presentation changes.\n\n"
                 "The exact atom intentionally exposes `in` and `out`: `AUTO` "
-                "materializes the two chain endpoints. They follow the Lorentz "
-                "argument, so gamma has one order only: `(Lorentz, spinor-in, "
-                "spinor-out)`."
+                "materializes the two chain endpoints. Gamma follows its storage "
+                "order everywhere: `(spinor-in, spinor-out, Lorentz)`."
             ),
             mo.ui.tabs(
                 {

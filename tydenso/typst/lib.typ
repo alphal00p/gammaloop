@@ -481,21 +481,45 @@
   semantic-kind: "dot-product",
 )
 
-#let _gamma(engine, lorentz, endpoints) = {
-  if endpoints.len() not in (0, 2) {
-    panic("gamma needs either one Lorentz argument or two spinor endpoints")
+#let _gamma-slot(value, representation, position) = {
+  let expected = if representation == "bis" { "bispinor slot" } else { "Minkowski slot" }
+  if type(value) != dictionary or value.at("kind", default: none) != "slot" {
+    panic("gamma " + position + " argument must be a " + expected)
   }
-  let arguments = if endpoints.len() == 0 {
-    // The representation-derived gamma signature is Lorentz, then spinor in/out.
-    (lorentz, "in", "out")
+
+  let actual = value.at("representation", default: none)
+  if (
+    type(actual) != dictionary
+    or actual.at("namespace", default: none) != "spenso"
+    or actual.at("name", default: none) != representation
+    or (representation == "bis" and actual.at("dimension", default: none) != 4)
+  ) {
+    panic("gamma " + position + " argument must be a " + expected)
+  }
+  value
+}
+
+#let _gamma(engine, arguments) = {
+  let atom-arguments = if arguments.len() == 1 {
+    // A chain factor abbreviates its two storage-order bispinor ports with
+    // Spenso's literal `in` and `out` marker symbols.
+    ("in", "out", arguments.at(0))
+  } else if arguments.len() == 3 {
+    // Explicit calls use the Atom and representation storage order directly:
+    // `(spinor-in, spinor-out, lorentz)`.
+    (
+      _gamma-slot(arguments.at(0), "bis", "first"),
+      _gamma-slot(arguments.at(1), "bis", "second"),
+      _gamma-slot(arguments.at(2), "mink", "third"),
+    )
   } else {
-    (lorentz, endpoints.at(0), endpoints.at(1))
+    panic("gamma needs one Lorentz chain argument or two spinor endpoints followed by one Lorentz argument")
   }
   // Idenso has already registered this head with its tensor tag, linearity,
   // and custom printer. Parsing the existing symbol preserves that definition.
   // `gamma` is also a Symbolica builtin. Qualifying the Idenso head avoids
   // Symbolica's parser resolving this constructor to `symbolica::gamma`.
-  _call(engine, "spenso::gamma", arguments, semantic-kind: "gamma")
+  _call(engine, "spenso::gamma", atom-arguments, semantic-kind: "gamma")
 }
 
 #let _spinor-factor(engine, name, endpoints) = {
@@ -762,9 +786,7 @@
       tags: tags,
     ),
     dot: (left, right) => _dot(engine, left, right),
-    gamma: (lorentz, ..endpoints) => _gamma(
-      engine, lorentz, endpoints.pos(),
-    ),
+    gamma: (..arguments) => _gamma(engine, arguments.pos()),
     gamma0: (..endpoints) => _spinor-factor(engine, "gamma0", endpoints.pos()),
     gamma5: (..endpoints) => _spinor-factor(engine, "gamma5", endpoints.pos()),
     projp: (..endpoints) => _spinor-factor(engine, "projp", endpoints.pos()),
@@ -867,6 +889,11 @@
 /// Annotated values created by `symbol`, `function`, `tensor`, `vector`, and
 /// the named tensor constructors are imported from their exact Atom metadata.
 /// Use interpolation for callable bindings, for example `#F(mu, nu)`.
+///
+/// Unannotated calls are literal Atom syntax: `math($gamma(...)$)` neither
+/// infers a tensor signature nor rearranges its arguments. Write raw gamma
+/// atoms in canonical storage order, `gamma(bispinor, bispinor, lorentz)`, or
+/// use `#gamma(a, b, mu)` for the typed constructor.
 ///
 /// -> bytes
 #let math(
@@ -980,9 +1007,11 @@
 
 /// Construct an Idenso gamma tensor or a gamma chain factor.
 ///
-/// With one argument this emits `gamma(lorentz,in,out)`. With all three
-/// arguments it emits `gamma(lorentz,first,second)`: the same order inferred
-/// from Spenso's representation declaration and used by the Python API.
+/// With one argument this emits the chain-factor shorthand
+/// `gamma(in,out,lorentz)`. With all three arguments, the public call and Atom
+/// use the same storage order: `gamma(first,second,lorentz)`. Those explicit
+/// arguments must be slots of `bis(4)`, `bis(4)`, and `mink(d)` respectively;
+/// a Lorentz-first tuple is rejected.
 ///
 /// ```example
 /// #let M = mink(4)
@@ -991,14 +1020,14 @@
 /// #let a = slot(B, 1)
 /// #let b = slot(B, 2)
 /// #let factor = gamma(mu)
-/// #let explicit = gamma(mu, a, b)
+/// #let explicit = gamma(a, b, mu)
 /// #to-typst(chain(a, b, factor))
 /// ```
 ///
 /// -> content
-#let gamma(lorentz, ..endpoints) = (
+#let gamma(..arguments) = (
   _default-engine().gamma
-)(lorentz, ..endpoints)
+)(..arguments)
 
 /// Construct the built-in $gamma_0$ spinor factor.
 ///

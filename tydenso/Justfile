@@ -103,9 +103,24 @@ check: build check-wasm-features
     cp -R "$tymbolica_checkout/rubi/." "$package_root/tymbolica-rubi/0.1.0/"
 
     for source in typst/examples/*.typ typst/tests/*.typ; do
+      case "$source" in
+        typst/tests/gamma-storage-order-invalid.typ) continue ;;
+      esac
       output="$check_dir/$(basename "${source%.typ}").pdf"
       XDG_DATA_HOME="$check_dir/xdg" typst compile --root . "$source" "$output"
     done
+
+    gamma_order_error="$check_dir/gamma-storage-order-invalid.error"
+    if XDG_DATA_HOME="$check_dir/xdg" typst compile --root . \
+      typst/tests/gamma-storage-order-invalid.typ \
+      "$check_dir/gamma-storage-order-invalid.pdf" >"$gamma_order_error" 2>&1; then
+      echo "Lorentz-first explicit gamma ports unexpectedly compiled" >&2
+      exit 1
+    fi
+    if ! grep -q "gamma first argument must be a bispinor slot" "$gamma_order_error"; then
+      echo "Lorentz-first explicit gamma ports failed for an unexpected reason" >&2
+      exit 1
+    fi
 
     # Keep the target-aware phantom helper exercised: HTML must retain
     # semantic MathML and use mphantom, while SVG remains directly renderable.

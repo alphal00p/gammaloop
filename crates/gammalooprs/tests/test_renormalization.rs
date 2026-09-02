@@ -125,7 +125,7 @@ fn finite_part_quark_lo() {
     test_initialise().unwrap();
     let g: Vec<Graph> = dot!(digraph d1 {
           overall_factor= "+1"
-          projector = "spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(1))))/4/3*(Q(0,spenso::mink(4,1))*spenso::gamma(spenso::mink(4,1),spenso::bis(4,hedge(1)),spenso::bis(4,hedge(2))))"
+          projector = "spenso::g(spenso::cof(3,hedge(2)),spenso::dind(spenso::cof(3,hedge(1))))/4/3*(Q(0,spenso::mink(4,1))*spenso::gamma(spenso::bis(4,hedge(1)),spenso::bis(4,hedge(2)),spenso::mink(4,1)))"
 
           in1 [style=invis];
           in1 -> v1:1

@@ -90,7 +90,7 @@ impl AutoIndex {
 /// >>> mink = Representation.mink(4)
 /// >>> metric = TensorExpression.g(mink)("mu", "nu")
 /// >>> flat = TensorExpression.flat(mink)("mu", "nu")
-/// >>> gamma = TensorExpression.gamma(4)("mu", "i", "j")
+/// >>> gamma = TensorExpression.gamma(4)("i", "j", "mu")
 /// >>> gamma5 = TensorExpression.gamma5(4)("i", "j")
 /// >>> projm = TensorExpression.projm(4)("i", "j")
 /// >>> projp = TensorExpression.projp(4)("i", "j")
@@ -1533,8 +1533,9 @@ impl TensorExpression {
     /// Create an unresolved gamma matrix with Minkowski dimension
     /// `minkowski_dimension`.
     ///
-    /// Its logical ports are Minkowski, bispinor, and bispinor. The bispinor
-    /// dimension is four. Call the result with `(mu, i, j)` to index it.
+    /// Its public ports use storage order: bispinor, bispinor, then Minkowski.
+    /// The bispinor dimension is four. Call the result with `(i, j, mu)` to
+    /// index it.
     #[staticmethod]
     fn gamma(
         py: Python<'_>,
@@ -3228,7 +3229,7 @@ mod tests {
                 ),
                 (
                     expression_type.call_method1("gamma", (4,))?,
-                    vec![minkowski, bispinor, bispinor],
+                    vec![bispinor, bispinor, minkowski],
                 ),
                 (
                     expression_type.call_method1("gamma5", (4,))?,
@@ -3368,7 +3369,7 @@ mod tests {
                 (TensorExpression::flat(py, &euc_object)?, vec![dimension; 2]),
                 (
                     TensorExpression::gamma(py, ConvertibleToDimension(dimension))?,
-                    vec![dimension, concrete_four, concrete_four],
+                    vec![concrete_four, concrete_four, dimension],
                 ),
                 (
                     TensorExpression::gamma5(py, ConvertibleToDimension(dimension))?,

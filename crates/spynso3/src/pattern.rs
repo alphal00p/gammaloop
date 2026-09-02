@@ -416,8 +416,8 @@ impl ModuleInit for PortPattern {}
 /// ...     ports=[PortPattern.any("R_", D_, i_), rest___],
 /// ... )
 /// >>> generic = TensorPattern.any("T_", ports=[rest___])
-/// >>> target = TensorExpression.gamma(4)("mu", "i", "j").to_expression()
-/// >>> rule = TensorPattern.gamma(D_, mu_, i_, j_)
+/// >>> target = TensorExpression.gamma(4)("i", "j", "mu").to_expression()
+/// >>> rule = TensorPattern.gamma(D_, i_, j_, mu_)
 /// >>> target.replace(rule, 0)
 /// 0
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -542,20 +542,20 @@ impl TensorPattern {
         Self::from_atom(py, fixed_tensor(ETS.flat, Vec::new(), vec![i, j]))
     }
 
-    /// Match a gamma matrix. Arguments use logical `(mu, i, j)` order.
+    /// Match a gamma matrix in storage `(i, j, mu)` order.
     #[staticmethod]
     fn gamma(
         py: Python<'_>,
         minkowski_dimension: ConvertibleToExpression,
-        mu: ConvertibleToExpression,
         i: ConvertibleToExpression,
         j: ConvertibleToExpression,
+        mu: ConvertibleToExpression,
     ) -> PyResult<Py<Self>> {
         let dimension = minkowski_dimension.to_expression().expr;
         let logical_ports = vec![
-            minkowski_port(&dimension, &mu.to_expression().expr),
             bispinor_port(&Atom::num(4), &i.to_expression().expr),
             bispinor_port(&Atom::num(4), &j.to_expression().expr),
+            minkowski_port(&dimension, &mu.to_expression().expr),
         ];
         Self::built_in(py, &AGS.gamma_strct::<AbstractIndex>(4), logical_ports)
     }
@@ -706,9 +706,9 @@ mod tests {
         let i = Atom::var(symbol!("i_"));
         let j = Atom::var(symbol!("j_"));
         let logical = vec![
-            minkowski_port(&dimension, &mu),
             bispinor_port(&Atom::num(4), &i),
             bispinor_port(&Atom::num(4), &j),
+            minkowski_port(&dimension, &mu),
         ];
         let pattern = built_in_pattern(&AGS.gamma_strct::<AbstractIndex>(4), logical);
         let AtomView::Fun(function) = pattern.as_view() else {
@@ -1074,12 +1074,12 @@ mod tests {
             assert_builtin!(
                 "gamma",
                 (7,),
-                ("pattern_gamma_mu", "pattern_gamma_i", "pattern_gamma_j"),
+                ("pattern_gamma_i", "pattern_gamma_j", "pattern_gamma_mu"),
                 (
                     wildcard("pattern_gamma_dimension_"),
-                    wildcard("pattern_gamma_mu_"),
                     wildcard("pattern_gamma_i_"),
-                    wildcard("pattern_gamma_j_")
+                    wildcard("pattern_gamma_j_"),
+                    wildcard("pattern_gamma_mu_")
                 ),
                 71
             );
@@ -1235,7 +1235,7 @@ mod tests {
         for (method, expected) in [
             ("g", &["rep_pattern", "i", "j"][..]),
             ("flat", &["rep_pattern", "i", "j"]),
-            ("gamma", &["minkowski_dimension", "mu", "i", "j"]),
+            ("gamma", &["minkowski_dimension", "i", "j", "mu"]),
             ("gamma5", &["spinor_dimension", "i", "j"]),
             ("projm", &["spinor_dimension", "i", "j"]),
             ("projp", &["spinor_dimension", "i", "j"]),

@@ -404,7 +404,7 @@ fn replacement_rhs_atom(replacement: symbolica::id::Replacement) -> Atom {
 
 fn simplify_fermion_rhs_for_symbolic_checks(rhs: Atom, eid: EdgeIndex) -> Atom {
     rhs.replace(
-        function!(GS.emr_mom, eid.0 as i64, W_.m_) * function!(AGS.gamma, W_.m_, W_.a_, W_.b_),
+        function!(GS.emr_mom, eid.0 as i64, W_.m_) * function!(AGS.gamma, W_.a_, W_.b_, W_.m_),
     )
     .with(symbol!("PSLASH"))
     .replace(Atom::from(UFOSymbol::from("MTEST")) * function!(ETS.metric, W_.a_, W_.b_))

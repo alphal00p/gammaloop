@@ -2625,4 +2625,60 @@ mod tests {
         .unwrap();
         assert!(parsed.attachment(&rep_key).is_some());
     }
+
+    #[test]
+    fn from_ast_preserves_canonical_gamma_argument_order() {
+        initialize_tydenso();
+        let call = |head, args| ast_node(head, args, vec![]);
+        let bispinor_a = call(
+            "bis",
+            vec![Value::Integer(4.into()), Value::Text("a".to_owned())],
+        );
+        let bispinor_b = call(
+            "bis",
+            vec![Value::Integer(4.into()), Value::Text("b".to_owned())],
+        );
+        let lorentz_mu = call(
+            "mink",
+            vec![Value::Integer(4.into()), Value::Text("mu".to_owned())],
+        );
+        let ast = ast_node(
+            "call",
+            vec![],
+            vec![
+                ("fn", Value::Text("gamma".to_owned())),
+                (
+                    "body",
+                    ast_node("arg", vec![bispinor_a, bispinor_b, lorentz_mu], vec![]),
+                ),
+            ],
+        );
+
+        let payload = from_ast(
+            &value_bytes(&ast),
+            &value_bytes(&Value::Text("spenso".to_owned())),
+        )
+        .unwrap();
+        let parsed = decode_atom(&payload, "canonical gamma AST").unwrap();
+        let gamma = parse_symbol("gamma", "spenso", None).unwrap();
+        let bis = parse_symbol("bis", "spenso", None).unwrap();
+        let mink = parse_symbol("mink", "spenso", None).unwrap();
+        assert_eq!(
+            parsed,
+            gamma.call_args([
+                bis.call_args([
+                    Atom::num(4),
+                    Atom::var(parse_symbol("a", "spenso", None).unwrap()),
+                ]),
+                bis.call_args([
+                    Atom::num(4),
+                    Atom::var(parse_symbol("b", "spenso", None).unwrap()),
+                ]),
+                mink.call_args([
+                    Atom::num(4),
+                    Atom::var(parse_symbol("mu", "spenso", None).unwrap()),
+                ]),
+            ])
+        );
+    }
 }

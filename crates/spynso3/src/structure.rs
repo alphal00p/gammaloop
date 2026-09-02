@@ -242,7 +242,6 @@ impl SpensoName {
         }
     }
 }
-
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
@@ -565,7 +564,10 @@ impl SpensoName {
         SpensoName { name: ETS.flat }
     }
 
-    /// Predefined gamma matrix name.
+    /// Predefined gamma matrix name for introspection and pattern construction.
+    ///
+    /// The matching typed factories use storage order: bispinor-in,
+    /// bispinor-out, then Minkowski.
     #[staticmethod]
     fn gamma() -> SpensoName {
         SpensoName { name: AGS.gamma }
