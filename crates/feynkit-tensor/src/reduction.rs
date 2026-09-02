@@ -380,6 +380,30 @@ impl TensorReducer {
         &self.dimension
     }
 
+    /// Distribute additive factors into independently reducible summands.
+    ///
+    /// The same output-term limit configured on this reducer is enforced
+    /// while distributing, so callers can attach term-local tensor metadata
+    /// without first performing an unbounded symbolic expansion.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use feynkit_tensor::TensorReducer;
+    /// use symbolica::parse;
+    ///
+    /// let reducer = TensorReducer::new(parse!("D"));
+    /// let terms = reducer.distribute_summands(parse!("(a+b)*(c+d)").as_view())?;
+    /// assert_eq!(terms.len(), 4);
+    /// # Ok::<(), feynkit_tensor::TensorReductionError>(())
+    /// ```
+    pub fn distribute_summands(
+        &self,
+        expression: AtomView<'_>,
+    ) -> Result<Vec<Atom>, TensorReductionError> {
+        bounded_expand_summands(expression, self.output_term_limit)
+    }
+
     /// Reduce a tensor expression to compact invariant terms.
     ///
     /// Explicit Spenso metric contractions are normalized first with Idenso.
@@ -387,8 +411,10 @@ impl TensorReducer {
     /// any residual free index in its full `spenso::mink(D,index)` slot.  Each
     /// summand is then treated independently.  Odd-rank vacuum tensors vanish;
     /// already-contracted integrated pairs become Spenso dots before the
-    /// projector is built.  An unsupported tensor sharing an otherwise free
-    /// index is reported as an error rather than silently dropping the index.
+    /// projector is built. A single index occurrence inside an otherwise
+    /// opaque tensor is retained as an external projector leg; expressions
+    /// with more than two occurrences of one Minkowski index are rejected as
+    /// ambiguous rather than silently dropping a contraction.
     ///
     /// # Examples
     ///
@@ -549,12 +575,24 @@ impl TensorReducer {
         let mut integrated = Vec::new();
         let mut outside = Vec::new();
         for (index, occupants) in by_index {
-            if (!occupants.integrated.is_empty() || !occupants.outside.is_empty())
-                && opaque_factors.iter().any(|factor| {
-                    contains_minkowski_index(factor.as_view(), &self.dimension, &index)
-                })
-            {
-                return Err(TensorReductionError::UnsupportedIndexConsumer(index));
+            let opaque_occurrences =
+                opaque_factors
+                    .iter()
+                    .try_fold(0_usize, |occurrences, factor| {
+                        Ok::<usize, TensorReductionError>(occurrences.saturating_add(
+                            count_minkowski_index(factor.as_view(), &self.dimension, &index, 1)?,
+                        ))
+                    })?;
+            let total_occurrences = occupants
+                .integrated
+                .len()
+                .saturating_add(occupants.outside.len())
+                .saturating_add(opaque_occurrences);
+            if opaque_occurrences > 0 && total_occurrences > 2 {
+                return Err(TensorReductionError::AmbiguousMinkowskiIndex {
+                    index,
+                    occurrences: total_occurrences,
+                });
             }
             match (
                 occupants.integrated.as_slice(),
@@ -995,8 +1033,9 @@ pub enum TensorReductionError {
     /// A selected vector used a Lorentz dimension different from the reducer.
     #[error("Minkowski slot has dimension {found}, expected {expected}")]
     DimensionMismatch { expected: Atom, found: Atom },
-    /// Tensor powers must have a non-negative integer exponent.
-    #[error("indexed vector has unsupported exponent {0}")]
+    /// Tensor factors carrying Minkowski indices must have a non-negative
+    /// integer exponent.
+    #[error("tensor factor has unsupported exponent {0}")]
     InvalidVectorPower(Atom),
     /// More than one Einstein contraction was attached to an index.
     #[error("index {index} has {integrated} integrated and {outside} outside vector occurrences")]
@@ -1005,10 +1044,6 @@ pub enum TensorReductionError {
         integrated: usize,
         outside: usize,
     },
-    /// A non-vector tensor consumes an index that the current vacuum API would
-    /// otherwise treat as free.
-    #[error("index {0} is attached to an unsupported non-vector tensor")]
-    UnsupportedIndexConsumer(Atom),
     /// Generic/free-index expansion exceeded its labeled-pairing budget.
     #[error("rank-{rank} reduction needs {pairings} pairings, above limit {limit}")]
     PairingLimit {
@@ -1216,19 +1251,43 @@ fn contains_representation(argument: &AtomView<'_>) -> bool {
     matches!(argument, AtomView::Fun(function) if function.get_symbol().has_tag(&SPENSO_TAG.representation))
 }
 
-fn contains_minkowski_index(expression: AtomView<'_>, dimension: &Atom, index: &Atom) -> bool {
+fn count_minkowski_index(
+    expression: AtomView<'_>,
+    dimension: &Atom,
+    index: &Atom,
+    multiplicity: usize,
+) -> Result<usize, TensorReductionError> {
     if let AtomView::Fun(function) = expression
         && function.get_symbol().get_namespace() == "spenso"
         && function.get_symbol().get_stripped_name() == "mink"
     {
         let arguments = function.iter().collect::<Vec<_>>();
         if arguments.as_slice() == [dimension.as_view(), index.as_view()] {
-            return true;
+            return Ok(multiplicity);
         }
+    }
+    if let AtomView::Pow(power) = expression {
+        let base_occurrences =
+            count_minkowski_index(power.get_base(), dimension, index, multiplicity)?;
+        if base_occurrences == 0 {
+            return Ok(0);
+        }
+        let exponent = i64::try_from(power.get_exp())
+            .map_err(|_| TensorReductionError::InvalidVectorPower(power.get_exp().to_owned()))?;
+        let exponent = usize::try_from(exponent)
+            .map_err(|_| TensorReductionError::InvalidVectorPower(power.get_exp().to_owned()))?;
+        return Ok(base_occurrences.saturating_mul(exponent));
     }
     expression
         .children()
-        .any(|child| contains_minkowski_index(child, dimension, index))
+        .try_fold(0_usize, |occurrences, child| {
+            Ok(occurrences.saturating_add(count_minkowski_index(
+                child,
+                dimension,
+                index,
+                multiplicity,
+            )?))
+        })
 }
 
 fn has_dangling_minkowski_indices(
@@ -2308,7 +2367,7 @@ mod tests {
     }
 
     #[test]
-    fn opaque_consumers_cannot_share_a_recognized_vector_index() {
+    fn ambiguous_opaque_consumers_cannot_share_a_recognized_vector_index() {
         let (k, _, p, _) = vectors();
         let dimension = Atom::var(symbol!("feynkit_tensor_test::D_opaque_consumer"));
         let mu = Atom::var(symbol!("feynkit_tensor_test::opaque_consumer_mu"));
@@ -2316,11 +2375,101 @@ mod tests {
             .add_arg(indexed(p, 1, &dimension, &mu))
             .finish();
         let input = indexed(k, 1, &dimension, &mu) * indexed(k, 2, &dimension, &mu) * opaque;
+        let result = TensorReducer::new(dimension)
+            .with_integrated_head(k)
+            .reduce(input.as_view());
+        assert!(
+            matches!(
+                result,
+                Err(TensorReductionError::AmbiguousMinkowskiIndex { occurrences: 3, .. })
+            ),
+            "unexpected ambiguous opaque-consumer result: {result:?}"
+        );
+    }
+
+    #[test]
+    fn opaque_external_tensor_legs_are_preserved_by_the_projector() {
+        let (k, _, p, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_opaque_projector"));
+        let mu = Atom::var(symbol!("feynkit_tensor_test::opaque_projector_mu"));
+        let nu = Atom::var(symbol!("feynkit_tensor_test::opaque_projector_nu"));
+        let tensor = symbol!("feynkit_tensor_test::opaque_projector_tensor");
+        let tensor_mu = FunctionBuilder::new(tensor)
+            .add_arg(minkowski_slot(&dimension, &mu))
+            .finish();
+        let loop_squared = dot(&compact(k, 1, &dimension), &compact(k, 1, &dimension));
+        let input = indexed(k, 1, &dimension, &mu)
+            * indexed(k, 1, &dimension, &nu)
+            * &tensor_mu
+            * indexed(p, 1, &dimension, &nu);
+        let expected = loop_squared
+            * dot(
+                &FunctionBuilder::new(tensor)
+                    .add_arg(
+                        FunctionBuilder::new(symbol!("spenso::mink"))
+                            .add_arg(&dimension)
+                            .finish(),
+                    )
+                    .finish(),
+                &compact(p, 1, &dimension),
+            )
+            / &dimension;
+
+        let result = TensorReducer::new(dimension)
+            .with_integrated_head(k)
+            .reduce(input.as_view())
+            .unwrap();
+        let difference = (result.expression() - expected).together();
+        assert!(
+            difference.is_zero(),
+            "opaque external tensor projector differs by {difference}"
+        );
+        assert!(result.is_fully_contracted());
+    }
+
+    #[test]
+    fn repeated_opaque_tensor_slot_is_reported_as_ambiguous() {
+        let (k, _, _, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_opaque_power"));
+        let mu = Atom::var(symbol!("feynkit_tensor_test::opaque_power_mu"));
+        let spin = Atom::var(symbol!("feynkit_tensor_test::opaque_power_spin"));
+        let tensor = FunctionBuilder::new(symbol!("feynkit_tensor_test::opaque_power_tensor"))
+            .add_arg(minkowski_slot(&dimension, &spin))
+            .add_arg(minkowski_slot(&dimension, &mu))
+            .finish();
+        let input = indexed(k, 1, &dimension, &mu) * tensor.pow(Atom::num(2));
+
+        let result = TensorReducer::new(dimension)
+            .with_integrated_head(k)
+            .reduce(input.as_view());
+        assert!(
+            matches!(
+                result,
+                Err(TensorReductionError::AmbiguousMinkowskiIndex { occurrences: 3, .. })
+            ),
+            "unexpected repeated opaque-slot result: {result:?}"
+        );
+    }
+
+    #[test]
+    fn symbolic_opaque_tensor_powers_are_rejected() {
+        let (k, _, _, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_opaque_symbolic_power"));
+        let mu = Atom::var(symbol!("feynkit_tensor_test::opaque_symbolic_power_mu"));
+        let spin = Atom::var(symbol!("feynkit_tensor_test::opaque_symbolic_power_spin"));
+        let exponent = Atom::var(symbol!("feynkit_tensor_test::opaque_symbolic_power_n"));
+        let tensor =
+            FunctionBuilder::new(symbol!("feynkit_tensor_test::opaque_symbolic_power_tensor"))
+                .add_arg(minkowski_slot(&dimension, &spin))
+                .add_arg(minkowski_slot(&dimension, &mu))
+                .finish();
+        let input = indexed(k, 1, &dimension, &mu) * tensor.pow(exponent);
+
         assert!(matches!(
             TensorReducer::new(dimension)
                 .with_integrated_head(k)
                 .reduce(input.as_view()),
-            Err(TensorReductionError::UnsupportedIndexConsumer(_))
+            Err(TensorReductionError::InvalidVectorPower(_))
         ));
     }
 
@@ -2433,16 +2582,12 @@ mod tests {
             / dimension.clone();
         let expression = result.expression().expand();
         assert_eq!(expression, expected.expand());
-        assert!(contains_minkowski_index(
-            expression.as_view(),
-            &dimension,
-            &left_free
-        ));
-        assert!(contains_minkowski_index(
-            expression.as_view(),
-            &dimension,
-            &right_free
-        ));
+        assert!(
+            count_minkowski_index(expression.as_view(), &dimension, &left_free, 1).unwrap() > 0
+        );
+        assert!(
+            count_minkowski_index(expression.as_view(), &dimension, &right_free, 1).unwrap() > 0
+        );
         assert!(!result.is_fully_contracted());
     }
 
