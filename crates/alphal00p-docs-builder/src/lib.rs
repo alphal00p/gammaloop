@@ -114,6 +114,32 @@ pub enum RustdocCacheMode {
     Reuse,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ComponentCatalogCache<'a> {
+    /// Generate catalogs into a build-scoped temporary directory.
+    Temporary,
+    /// Regenerate every catalog and atomically replace the watch-session cache.
+    Refresh(&'a Path),
+    /// Validate and publish catalogs from the existing watch-session cache.
+    Reuse(&'a Path),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ReferencePageCache<'a> {
+    /// Generate reference pages only for this build.
+    Temporary,
+    /// Regenerate and atomically replace the watch-session reference pages.
+    Refresh(&'a Path),
+    /// Reuse fully decorated reference pages from the watch session.
+    Reuse(&'a Path),
+}
+
+#[derive(Clone, Copy)]
+enum ComponentCatalogSource<'a> {
+    Generate(&'a Path),
+    Reuse(&'a Path),
+}
+
 struct ProductBuildOptions<'a> {
     channel: BuildChannel,
     tag: Option<&'a str>,
@@ -124,6 +150,8 @@ struct ProductBuildOptions<'a> {
     rustdoc_target_root: Option<&'a Path>,
     rustdoc_cache: RustdocCacheMode,
     dependency_output: Option<&'a Path>,
+    component_catalogs: &'a Path,
+    reference_pages: ReferencePageCache<'a>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -508,7 +536,7 @@ struct SearchEntry {
     text: String,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct SitePage {
     route: String,
     title: String,
@@ -676,6 +704,15 @@ impl SiteBuilder {
     }
 
     pub fn check(&self) -> Result<()> {
+        let target = self.root.join("target");
+        fs::create_dir_all(&target)?;
+        let catalogs = TempDirBuilder::new()
+            .prefix("alphal00p-catalog-check-")
+            .tempdir_in(target)?;
+        self.check_with_catalogs(ComponentCatalogSource::Generate(catalogs.path()))
+    }
+
+    fn check_with_catalogs(&self, catalogs: ComponentCatalogSource<'_>) -> Result<()> {
         ensure!(
             self.registry.schema == SCHEMA_VERSION,
             "registry schema {} does not match catalog schema {}",
@@ -1515,10 +1552,10 @@ impl SiteBuilder {
                         component.package
                     );
                 }
-                self.component_catalog(product, ApiLanguage::Rust, component)?;
+                self.component_catalog_from(product, ApiLanguage::Rust, component, catalogs)?;
             }
             for component in &product.python_components {
-                self.component_catalog(product, ApiLanguage::Python, component)?;
+                self.component_catalog_from(product, ApiLanguage::Python, component, catalogs)?;
             }
         }
         self.generated_references()?;
@@ -1662,21 +1699,57 @@ impl SiteBuilder {
 
     pub fn build(&self, request: BuildRequest) -> Result<()> {
         let mut renderer = CliTypstRenderer::new(&self.root);
-        self.build_with_renderer(request, &mut renderer)
+        self.build_with_renderer(
+            request,
+            ComponentCatalogCache::Temporary,
+            ReferencePageCache::Temporary,
+            &mut renderer,
+        )
     }
 
     pub(crate) fn build_with_renderer(
         &self,
         request: BuildRequest,
+        catalog_cache: ComponentCatalogCache<'_>,
+        reference_cache: ReferencePageCache<'_>,
         renderer: &mut dyn TypstRenderer,
     ) -> Result<()> {
-        let result = self.build_inner(request, renderer);
+        let result = self.build_inner(request, catalog_cache, reference_cache, renderer);
         renderer.finish_generation();
         result
     }
 
-    fn build_inner(&self, request: BuildRequest, renderer: &mut dyn TypstRenderer) -> Result<()> {
-        self.check()?;
+    fn build_inner(
+        &self,
+        request: BuildRequest,
+        catalog_cache: ComponentCatalogCache<'_>,
+        reference_cache: ReferencePageCache<'_>,
+        renderer: &mut dyn TypstRenderer,
+    ) -> Result<()> {
+        let target = self.root.join("target");
+        fs::create_dir_all(&target)?;
+        let generated_catalogs = TempDirBuilder::new()
+            .prefix("alphal00p-catalog-build-")
+            .tempdir_in(target)?;
+        let component_catalogs = match catalog_cache {
+            ComponentCatalogCache::Temporary => {
+                self.check_with_catalogs(ComponentCatalogSource::Generate(
+                    generated_catalogs.path(),
+                ))?;
+                generated_catalogs.path()
+            }
+            ComponentCatalogCache::Refresh(cache) => {
+                self.check_with_catalogs(ComponentCatalogSource::Generate(
+                    generated_catalogs.path(),
+                ))?;
+                replace_cached_tree(generated_catalogs.path(), cache)?;
+                cache
+            }
+            ComponentCatalogCache::Reuse(cache) => {
+                self.check_with_catalogs(ComponentCatalogSource::Reuse(cache))?;
+                cache
+            }
+        };
         let tag = match request.channel {
             BuildChannel::Latest => {
                 ensure!(
@@ -1743,6 +1816,8 @@ impl SiteBuilder {
             rustdoc_target_root: request.rustdoc_target_root.as_deref(),
             rustdoc_cache: request.rustdoc_cache,
             dependency_output: request.dependency_output.as_deref(),
+            component_catalogs,
+            reference_pages: reference_cache,
         };
         for product in &selected {
             self.build_product(product, &options, renderer)?;
@@ -1817,8 +1892,33 @@ impl SiteBuilder {
                 metadata.route,
             ),
         )?;
-        self.write_component_catalogs(product, &site)?;
-        let mut generated_pages = self.write_generated_reference(product, &site)?;
+        let reference_cache_key = serde_json::to_vec(&(
+            &metadata,
+            options.include_rustdoc,
+            options.scope == BuildScope::FullSite,
+        ))?;
+        self.write_component_catalogs(product, &site, options.component_catalogs)?;
+        let (mut generated_pages, reused_reference_pages, refresh_reference_pages) =
+            match options.reference_pages {
+                ReferencePageCache::Temporary => (Vec::new(), false, None),
+                ReferencePageCache::Refresh(cache) => (Vec::new(), false, Some(cache)),
+                ReferencePageCache::Reuse(cache) => {
+                    if let Some(pages) =
+                        self.restore_reference_pages(product, &site, cache, &reference_cache_key)?
+                    {
+                        (pages, true, None)
+                    } else {
+                        eprintln!(
+                            "cached reference pages for {} are unavailable; regenerating them",
+                            product.id
+                        );
+                        (Vec::new(), false, Some(cache))
+                    }
+                }
+            };
+        if !reused_reference_pages {
+            generated_pages = self.write_generated_reference(product, &site)?;
+        }
 
         if options.include_typst {
             self.render_typst(
@@ -1831,26 +1931,38 @@ impl SiteBuilder {
         } else {
             self.write_fallback_page(product, &metadata, &site)?;
         }
-        generated_pages.extend(self.write_python_reference(product, &metadata, &site)?);
-        if options.include_rustdoc {
-            self.build_rustdoc(
-                product,
-                &site,
-                options.rustdoc_target_root,
-                options.rustdoc_cache,
-            )?;
-        } else {
-            self.write_rustdoc_placeholder(product, &site)?;
+        if !reused_reference_pages {
+            generated_pages.extend(self.write_python_reference(product, &metadata, &site)?);
+            if options.include_rustdoc {
+                self.build_rustdoc(
+                    product,
+                    &site,
+                    options.rustdoc_target_root,
+                    options.rustdoc_cache,
+                )?;
+            } else {
+                self.write_rustdoc_placeholder(product, &site)?;
+            }
+            self.write_rust_reference_with_availability(product, &site, options.include_rustdoc)?;
+            self.write_reference_hub(product, &site)?;
         }
-        self.write_rust_reference_with_availability(product, &site, options.include_rustdoc)?;
-        self.write_reference_hub(product, &site)?;
         self.decorate_site_pages_with_generated(
             product,
             &metadata,
             &site,
             options.scope,
             &generated_pages,
+            reused_reference_pages,
         )?;
+        if let Some(cache) = refresh_reference_pages {
+            self.store_reference_pages(
+                product,
+                &site,
+                &generated_pages,
+                cache,
+                &reference_cache_key,
+            )?;
+        }
         self.write_search_index(product, &site, options.include_rustdoc)?;
 
         if options.channel == BuildChannel::Snapshot && destination.exists() {
@@ -2000,28 +2112,78 @@ impl SiteBuilder {
         Ok(())
     }
 
-    fn write_component_catalogs(&self, product: &ProductConfig, site: &Path) -> Result<()> {
+    fn write_component_catalogs(
+        &self,
+        product: &ProductConfig,
+        site: &Path,
+        catalogs: &Path,
+    ) -> Result<()> {
         let destination = site.join("catalogs");
         fs::create_dir_all(&destination)?;
-        for (language, component) in product
+        for component in product
             .rust_components
             .iter()
-            .map(|component| (ApiLanguage::Rust, component))
-            .chain(
-                product
-                    .python_components
-                    .iter()
-                    .map(|component| (ApiLanguage::Python, component)),
-            )
+            .chain(&product.python_components)
         {
-            self.export_component_catalog(
-                product,
-                language,
-                component,
-                &destination.join(format!("{}.json", component.id)),
-            )?;
+            let source = catalogs
+                .join(&product.id)
+                .join(format!("{}.json", component.id));
+            fs::copy(&source, destination.join(format!("{}.json", component.id)))
+                .wrap_err_with(|| format!("failed to reuse catalog {}", source.display()))?;
         }
         Ok(())
+    }
+
+    fn restore_reference_pages(
+        &self,
+        product: &ProductConfig,
+        site: &Path,
+        cache_root: &Path,
+        cache_key: &[u8],
+    ) -> Result<Option<Vec<SitePage>>> {
+        let cache = cache_root.join(&product.id);
+        if !fs::read(cache.join("cache-key.json")).is_ok_and(|cached| cached == cache_key) {
+            return Ok(None);
+        }
+        let pages = match fs::read(cache.join("generated-pages.json"))
+            .ok()
+            .and_then(|source| serde_json::from_slice::<Vec<SitePage>>(&source).ok())
+        {
+            Some(pages) => pages,
+            None => return Ok(None),
+        };
+        if !reference_page_tree_complete(product, &cache, &pages) {
+            return Ok(None);
+        }
+        copy_tree(&cache.join("reference"), &site.join("reference"))?;
+        Ok(Some(pages))
+    }
+
+    fn store_reference_pages(
+        &self,
+        product: &ProductConfig,
+        site: &Path,
+        pages: &[SitePage],
+        cache_root: &Path,
+        cache_key: &[u8],
+    ) -> Result<()> {
+        let target = self.root.join("target");
+        fs::create_dir_all(&target)?;
+        let staged = TempDirBuilder::new()
+            .prefix("alphal00p-reference-pages-")
+            .tempdir_in(target)?;
+        copy_tree(&site.join("reference"), &staged.path().join("reference"))?;
+        fs::write(
+            staged.path().join("generated-pages.json"),
+            serde_json::to_vec(pages)?,
+        )?;
+        fs::write(staged.path().join("cache-key.json"), cache_key)?;
+        ensure!(
+            reference_page_tree_complete(product, staged.path(), pages),
+            "generated an incomplete reference-page cache for {}",
+            product.id
+        );
+        replace_cached_tree(staged.path(), &cache_root.join(&product.id))
     }
 
     fn generated_references(&self) -> Result<(GammaLoopReference, VakintReference)> {
@@ -2133,6 +2295,7 @@ impl SiteBuilder {
         Ok(pages)
     }
 
+    #[cfg(test)]
     fn component_catalog(
         &self,
         product: &ProductConfig,
@@ -2144,8 +2307,31 @@ impl SiteBuilder {
         let temporary = TempDirBuilder::new()
             .prefix("alphal00p-catalog-check-")
             .tempdir_in(target)?;
-        let output = temporary.path().join(format!("{}.json", component.id));
-        self.export_component_catalog(product, language, component, &output)?;
+        self.component_catalog_from(
+            product,
+            language,
+            component,
+            ComponentCatalogSource::Generate(temporary.path()),
+        )
+    }
+
+    fn component_catalog_from(
+        &self,
+        product: &ProductConfig,
+        language: ApiLanguage,
+        component: &ComponentConfig,
+        catalogs: ComponentCatalogSource<'_>,
+    ) -> Result<DocCatalog> {
+        let root = match catalogs {
+            ComponentCatalogSource::Generate(root) | ComponentCatalogSource::Reuse(root) => root,
+        };
+        let output = root
+            .join(&product.id)
+            .join(format!("{}.json", component.id));
+        if matches!(catalogs, ComponentCatalogSource::Generate(_)) {
+            fs::create_dir_all(output.parent().context("catalog has no parent")?)?;
+            self.export_component_catalog(product, language, component, &output)?;
+        }
         serde_json::from_slice(&fs::read(&output)?)
             .wrap_err_with(|| format!("failed to merge isolated catalog {}", component.id))
     }
@@ -2816,11 +3002,19 @@ impl SiteBuilder {
         site: &Path,
         scope: BuildScope,
         generated_pages: &[SitePage],
+        reused_reference_pages: bool,
     ) -> Result<()> {
         let mut pages = product_site_pages(product);
         pages.retain(|page| site.join(&page.route).join("index.html").is_file());
 
         for (index, page) in pages.iter().enumerate() {
+            let authored = product
+                .pages
+                .iter()
+                .any(|authored| authored.route == page.route);
+            if reused_reference_pages && page.route.starts_with("reference/") && !authored {
+                continue;
+            }
             self.decorate_html_page(
                 product,
                 metadata,
@@ -2850,8 +3044,11 @@ impl SiteBuilder {
                 }
             }
         }
-        for page in generated_pages {
-            if site.join(&page.route).join("index.html").is_file() {
+        if !reused_reference_pages {
+            for page in generated_pages {
+                if !site.join(&page.route).join("index.html").is_file() {
+                    continue;
+                }
                 self.decorate_html_page(
                     product,
                     metadata,
@@ -7859,6 +8056,33 @@ fn absolute_from(root: &Path, path: &Path) -> PathBuf {
     }
 }
 
+fn reference_page_tree_complete(product: &ProductConfig, root: &Path, pages: &[SitePage]) -> bool {
+    fs::symlink_metadata(root)
+        .is_ok_and(|metadata| metadata.is_dir() && !metadata.file_type().is_symlink())
+        && [
+            "reference/index.html",
+            "reference/python/index.html",
+            "reference/rust/index.html",
+        ]
+        .into_iter()
+        .all(|path| root.join(path).is_file())
+        && product.python_components.iter().all(|component| {
+            root.join("reference/python")
+                .join(&component.id)
+                .join("index.html")
+                .is_file()
+        })
+        && supplemental_reference(&product.id)
+            .is_none_or(|(route, _)| root.join(route).join("index.html").is_file())
+        && pages.iter().all(|page| {
+            !Path::new(&page.route)
+                .components()
+                .any(|component| component == Component::ParentDir)
+                && page.route.starts_with("reference/")
+                && root.join(&page.route).join("index.html").is_file()
+        })
+}
+
 fn rustdoc_tree_complete(product: &ProductConfig, root: &Path) -> bool {
     fs::symlink_metadata(root)
         .is_ok_and(|metadata| metadata.is_dir() && !metadata.file_type().is_symlink())
@@ -9533,6 +9757,31 @@ fn resolve_local_link(
 mod tests {
     use super::*;
 
+    fn generated_component_catalogs(builder: &SiteBuilder, product: &ProductConfig) -> TempDir {
+        let catalogs = tempfile::tempdir().unwrap();
+        for (language, component) in product
+            .rust_components
+            .iter()
+            .map(|component| (ApiLanguage::Rust, component))
+            .chain(
+                product
+                    .python_components
+                    .iter()
+                    .map(|component| (ApiLanguage::Python, component)),
+            )
+        {
+            builder
+                .component_catalog_from(
+                    product,
+                    language,
+                    component,
+                    ComponentCatalogSource::Generate(catalogs.path()),
+                )
+                .unwrap();
+        }
+        catalogs
+    }
+
     #[test]
     fn snapshot_tags_are_safe_semver_routes() {
         assert!(looks_like_version("0.17.0"));
@@ -10441,6 +10690,139 @@ mod tests {
             "current"
         );
         assert!(!cache.join("stale.html").exists());
+    }
+
+    #[test]
+    fn component_catalogs_are_loaded_from_the_watch_cache() {
+        let builder = SiteBuilder::discover().unwrap();
+        let product = builder
+            .registry
+            .product
+            .iter()
+            .find(|product| product.id == "gammaloop")
+            .unwrap();
+        let component = product.rust_components.first().unwrap();
+        let catalog = DocCatalog::new(
+            alphal00p_docs_schema::DocProduct::new(&product.id, &product.title),
+            alphal00p_docs_schema::DocComponent::new(
+                &component.id,
+                &component.package,
+                "cached component",
+                "1.0.0",
+                ApiLanguage::Rust,
+            ),
+            DocScope::new("root", "Cached API"),
+        );
+        let cache = tempfile::tempdir().unwrap();
+        let path = cache
+            .path()
+            .join(&product.id)
+            .join(format!("{}.json", component.id));
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, serde_json::to_vec(&catalog).unwrap()).unwrap();
+
+        let loaded = builder
+            .component_catalog_from(
+                product,
+                ApiLanguage::Rust,
+                component,
+                ComponentCatalogSource::Reuse(cache.path()),
+            )
+            .unwrap();
+        assert_eq!(loaded, catalog);
+
+        fs::remove_file(path).unwrap();
+        assert!(
+            builder
+                .component_catalog_from(
+                    product,
+                    ApiLanguage::Rust,
+                    component,
+                    ComponentCatalogSource::Reuse(cache.path()),
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn complete_reference_page_caches_are_reused() {
+        let builder = SiteBuilder::discover().unwrap();
+        let product = builder
+            .registry
+            .product
+            .iter()
+            .find(|product| product.id == "gammaloop")
+            .unwrap();
+        let cache_root = tempfile::tempdir().unwrap();
+        let cache = cache_root.path().join(&product.id);
+        let generated = SitePage::new(
+            "reference/cli/generate/",
+            "gammaloop generate",
+            "CLI reference",
+        );
+        for route in [
+            "reference/",
+            "reference/python/",
+            "reference/rust/",
+            "reference/cli/",
+            "reference/cli/generate/",
+        ] {
+            let directory = cache.join(route);
+            fs::create_dir_all(&directory).unwrap();
+            fs::write(directory.join("index.html"), format!("cached {route}")).unwrap();
+        }
+        for component in &product.python_components {
+            let directory = cache.join("reference/python").join(&component.id);
+            fs::create_dir_all(&directory).unwrap();
+            fs::write(directory.join("index.html"), &component.id).unwrap();
+        }
+        fs::write(
+            cache.join("generated-pages.json"),
+            serde_json::to_vec(std::slice::from_ref(&generated)).unwrap(),
+        )
+        .unwrap();
+        fs::write(cache.join("cache-key.json"), b"current metadata").unwrap();
+        assert!(reference_page_tree_complete(
+            product,
+            &cache,
+            std::slice::from_ref(&generated)
+        ));
+
+        let site = tempfile::tempdir().unwrap();
+        let restored = builder
+            .restore_reference_pages(product, site.path(), cache_root.path(), b"current metadata")
+            .unwrap()
+            .unwrap();
+        assert_eq!(restored.len(), 1);
+        assert_eq!(restored[0].route, generated.route);
+        assert_eq!(
+            fs::read_to_string(site.path().join("reference/cli/generate/index.html")).unwrap(),
+            "cached reference/cli/generate/"
+        );
+        assert!(
+            builder
+                .restore_reference_pages(
+                    product,
+                    site.path(),
+                    cache_root.path(),
+                    b"different metadata",
+                )
+                .unwrap()
+                .is_none()
+        );
+
+        fs::remove_file(cache.join("reference/cli/generate/index.html")).unwrap();
+        assert!(
+            builder
+                .restore_reference_pages(
+                    product,
+                    site.path(),
+                    cache_root.path(),
+                    b"current metadata",
+                )
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[cfg(unix)]
@@ -12161,7 +12543,10 @@ mod tests {
             let site = output.path().join(&product.id);
             fs::create_dir_all(&site).unwrap();
             builder.write_site_assets(&site).unwrap();
-            builder.write_component_catalogs(product, &site).unwrap();
+            let catalogs = generated_component_catalogs(&builder, product);
+            builder
+                .write_component_catalogs(product, &site, catalogs.path())
+                .unwrap();
             let mut generated_pages = builder.write_generated_reference(product, &site).unwrap();
             let metadata = builder
                 .metadata(product, BuildChannel::Latest, None, Path::new("latest"))
@@ -12298,8 +12683,9 @@ mod tests {
             .find(|product| product.id == "gammaloop")
             .unwrap();
         let site = tempfile::tempdir().unwrap();
+        let catalogs = generated_component_catalogs(&builder, product);
         builder
-            .write_component_catalogs(product, site.path())
+            .write_component_catalogs(product, site.path(), catalogs.path())
             .unwrap();
         builder
             .write_search_index(product, site.path(), false)
@@ -12701,6 +13087,7 @@ mod tests {
                     &product_site,
                     BuildScope::FullSite,
                     &[],
+                    false,
                 )
                 .unwrap();
 

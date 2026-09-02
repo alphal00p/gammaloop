@@ -16,7 +16,10 @@ use notify::{
 };
 use tempfile::{Builder as TempDirBuilder, TempDir};
 
-use super::{BuildChannel, BuildRequest, RustdocCacheMode, typst_render::PersistentTypstRenderer};
+use super::{
+    BuildChannel, BuildRequest, ComponentCatalogCache, ReferencePageCache, RustdocCacheMode,
+    typst_render::PersistentTypstRenderer,
+};
 use super::{SiteBuilder, absolute_from, copy_tree, server::LiveServer};
 
 const QUIET_PERIOD: Duration = Duration::from_millis(100);
@@ -65,6 +68,37 @@ impl RustdocWatchState {
             self.dirty = false;
         }
     }
+}
+
+#[derive(Debug)]
+struct WatchCacheState {
+    dirty: bool,
+}
+
+impl WatchCacheState {
+    fn new() -> Self {
+        Self { dirty: true }
+    }
+
+    fn observe(&mut self, changed: &[PathBuf], input_change: fn(&Path) -> bool) {
+        self.dirty |= changed.iter().any(|path| input_change(path));
+    }
+
+    fn refresh(&self) -> bool {
+        self.dirty
+    }
+
+    fn finish(&mut self, succeeded: bool) {
+        if succeeded {
+            self.dirty = false;
+        }
+    }
+}
+
+struct GenerationCaches<'a> {
+    rustdoc: RustdocCacheMode,
+    component_catalogs: ComponentCatalogCache<'a>,
+    reference_pages: ReferencePageCache<'a>,
 }
 
 struct SourceWatcher {
@@ -371,10 +405,16 @@ impl SiteBuilder {
 
         let mut changed: Vec<PathBuf> = Vec::new();
         let mut rustdoc_cache = RustdocWatchState::new(request.include_rustdoc);
+        let mut component_catalogs = WatchCacheState::new();
+        let mut reference_pages = WatchCacheState::new();
         let mut open = request.open;
         loop {
             rustdoc_cache.observe(&changed);
+            component_catalogs.observe(&changed, component_catalog_input_change);
+            reference_pages.observe(&changed, reference_page_input_change);
             let dependency_output = session.path().join("dependencies");
+            let component_catalog_cache = session.path().join("component-catalogs");
+            let reference_page_cache = session.path().join("reference-pages");
             if let Some(server) = &server {
                 server.set_status("Building documentation…");
             }
@@ -388,11 +428,25 @@ impl SiteBuilder {
                 session.path(),
                 &dependency_output,
                 &changed,
-                rustdoc_cache.mode(),
+                GenerationCaches {
+                    rustdoc: rustdoc_cache.mode(),
+                    component_catalogs: if component_catalogs.refresh() {
+                        ComponentCatalogCache::Refresh(&component_catalog_cache)
+                    } else {
+                        ComponentCatalogCache::Reuse(&component_catalog_cache)
+                    },
+                    reference_pages: if reference_pages.refresh() {
+                        ReferencePageCache::Refresh(&reference_page_cache)
+                    } else {
+                        ReferencePageCache::Reuse(&reference_page_cache)
+                    },
+                },
                 &mut renderer,
             );
             let build_succeeded = build.is_ok();
             rustdoc_cache.finish(build_succeeded);
+            component_catalogs.finish(build_succeeded);
+            reference_pages.finish(build_succeeded);
             match read_typst_dependencies(&dependency_output) {
                 Ok(Some(dependencies)) => {
                     if build_succeeded {
@@ -483,7 +537,7 @@ impl SiteBuilder {
         session: &Path,
         dependency_output: &Path,
         changed: &[PathBuf],
-        rustdoc_cache: RustdocCacheMode,
+        caches: GenerationCaches<'_>,
         renderer: &mut PersistentTypstRenderer,
     ) -> Result<(TempDir, PathBuf)> {
         if dependency_output.exists() {
@@ -516,9 +570,11 @@ impl SiteBuilder {
                 include_rustdoc: request.include_rustdoc,
                 include_typst: true,
                 rustdoc_target_root: Some(rustdoc_target),
-                rustdoc_cache,
+                rustdoc_cache: caches.rustdoc,
                 dependency_output: Some(dependency_output.to_path_buf()),
             },
+            caches.component_catalogs,
+            caches.reference_pages,
             renderer,
         )?;
         Ok((directory, root))
@@ -684,6 +740,21 @@ fn rustdoc_input_change(path: &Path) -> bool {
             path.to_str(),
             Some("docs/assets/rustdoc.css" | "docs/products/registry.toml")
         )
+}
+
+fn component_catalog_input_change(path: &Path) -> bool {
+    if path.extension().and_then(|extension| extension.to_str()) == Some("typ") {
+        return false;
+    }
+    path.starts_with("crates")
+        || path.starts_with("docs/api")
+        || matches!(path.to_str(), Some("Cargo.toml" | "Cargo.lock"))
+        || path == Path::new(".cargo/config.toml")
+        || path == Path::new("docs/products/registry.toml")
+}
+
+fn reference_page_input_change(path: &Path) -> bool {
+    component_catalog_input_change(path) || path == Path::new("docs/assets/rustdoc.css")
 }
 
 fn watcher_restart_required(path: &Path) -> bool {
@@ -993,6 +1064,70 @@ mod tests {
             RustdocWatchState::new(false).mode(),
             RustdocCacheMode::Disabled
         );
+    }
+
+    #[test]
+    fn component_catalog_cache_ignores_typst_but_not_catalog_inputs() {
+        for path in [
+            "docs/products/gammaloop/content/tutorial.typ",
+            "crates/linnest/typst/src/lib.typ",
+            "docs/architecture/nix-crane-cache-reuse.typ",
+            "docs/assets/site.css",
+            "docs/portal.toml",
+        ] {
+            assert!(!component_catalog_input_change(Path::new(path)), "{path}");
+        }
+        for path in [
+            "Cargo.toml",
+            "Cargo.lock",
+            "crates/spenso/src/lib.rs",
+            "crates/spenso/README.md",
+            "docs/api/python/spynso3.pyi",
+            "docs/products/registry.toml",
+            ".cargo/config.toml",
+        ] {
+            assert!(component_catalog_input_change(Path::new(path)), "{path}");
+        }
+    }
+
+    #[test]
+    fn component_catalog_cache_stays_dirty_until_a_generation_succeeds() {
+        let mut state = WatchCacheState::new();
+        assert!(state.refresh());
+
+        state.finish(false);
+        assert!(state.refresh());
+        state.finish(true);
+        state.observe(
+            &[PathBuf::from("docs/products/linnet/content/overview.typ")],
+            component_catalog_input_change,
+        );
+        assert!(!state.refresh());
+
+        state.observe(
+            &[PathBuf::from("crates/linnet/src/lib.rs")],
+            component_catalog_input_change,
+        );
+        assert!(state.refresh());
+    }
+
+    #[test]
+    fn reference_page_cache_ignores_typst_but_tracks_reference_inputs() {
+        for path in [
+            "docs/products/gammaloop/content/tutorial.typ",
+            "crates/linnest/typst/src/lib.typ",
+            "docs/assets/site.css",
+        ] {
+            assert!(!reference_page_input_change(Path::new(path)), "{path}");
+        }
+        for path in [
+            "crates/spenso/src/lib.rs",
+            "docs/api/python/spynso3.pyi",
+            "docs/products/registry.toml",
+            "docs/assets/rustdoc.css",
+        ] {
+            assert!(reference_page_input_change(Path::new(path)), "{path}");
+        }
     }
 
     #[test]

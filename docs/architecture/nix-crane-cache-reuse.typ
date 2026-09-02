@@ -1499,6 +1499,30 @@ an older sidecar appear current. New sidecars replace their prior cache
 atomically only after all registered root-crate indexes and Rustdoc's shared
 source, search, and static resources exist.
 
+Component API catalogues follow the same watch-session model. The first
+generation exports and validates every registered Rust and Python catalogue,
+then atomically publishes that complete set to a session cache. Later
+Typst-only generations still run the full documentation checker, but the
+checker parses the cached catalogues instead of starting one Cargo exporter
+per component; the product build copies the same checked artifacts rather
+than exporting them a second time. Rust and other crate inputs, checked-in
+Python stubs, Cargo inputs, and the product registry mark the catalogue cache
+dirty. A failed refresh leaves the previous cache intact and keeps the cache
+dirty until a complete generation succeeds. Release, Pages, and one-shot
+builds use generation-local catalogues, so no session artifact can enter a
+published build without being regenerated there.
+
+The live watcher also retains the fully generated and decorated API-reference
+subtree for each project. A Typst-only generation restores those pages, then
+recompiles and redecorates every authored page; authored routes below
+`reference/` therefore remain live inputs rather than cached output. Search is
+rebuilt from the combined tree and the complete link validator still runs
+before atomic publication. Crate, Cargo, checked-in API, Rustdoc-style, and
+project-registry changes regenerate the reference subtree. Missing, partial,
+or build-metadata-mismatched cache entries fall back to generation, and a
+refreshed tree replaces its predecessor only after all declared generated
+routes exist.
+
 This boundary is deliberately different from “prose never recompiles.” Typst
 still runs `typst::compile` after an edit and uses retained source identities
 and memoized queries to redo only affected work. Rust documentation comments

@@ -713,7 +713,9 @@ digest = "e901371a78210b31068a9ba102508bf7951b823e"
 path = "crates/alphal00p-docs-builder/src/watch.rs"
 symbol = "alphal00p_docs_builder::SiteBuilder::build_generation"
 anchor = "fn build_generation("
-digest = "c15d13e20091230b2ef8cc5397fa84edaa100c37"
+# Reviewed cache-only execution change: Typst edits retain exhaustive
+# validation while reusing atomically published component catalogues.
+digest = "f4bad7daa517f604cefd7f3ee54a8036fdab0dc0"
 
 [[section]]
 id = "documentation"
@@ -739,9 +741,9 @@ review_triggers = ["docs/developers.toml", "crates/alphal00p-docs-builder/src/li
 path = "crates/alphal00p-docs-builder/src/lib.rs"
 symbol = "alphal00p_docs_builder::SiteBuilder::check"
 anchor = "pub fn check(&self) -> Result<()> {"
-# Reviewed execution-only change: renderer injection and watch-only Rustdoc
-# sidecars leave authoring policy, registry validation, and navigation unchanged.
-digest = "51aa7aa8473018107f554cff175775383502bfb4"
+# Reviewed execution-only change: renderer injection and watch-session caches
+# leave authoring policy, exhaustive validation, and navigation unchanged.
+digest = "3979aa430b875bea90e15ae7e5044b6e46cae87f"
 
 [[section.note]]
 id = "documentation-improvement-plan"
