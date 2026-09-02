@@ -284,18 +284,23 @@ impl<'a> ComparableExpr<'a> {
 
         // Backend-local topology labels may differ on contracted indices.
         left.collect_factors() == right.collect_factors()
-            || left.canonize(Aind::Dummy).collect_factors()
-                == right.canonize(Aind::Dummy).collect_factors()
+            || Self::canonize_terms(&left).collect_factors()
+                == Self::canonize_terms(&right).collect_factors()
     }
 
     fn normalized(&self) -> Atom {
-        self.atom
-            .replace(crate::utils::GS.dim)
-            .with(4)
-            .simplify_metrics()
-            .to_dots()
-            .simplify_color()
-            .expand_num()
+        self.atom.map_terms_single_core(|term| {
+            term.replace(crate::utils::GS.dim)
+                .with(4)
+                .simplify_metrics()
+                .to_dots()
+                .simplify_color()
+                .expand_num()
+        })
+    }
+
+    fn canonize_terms(atom: &Atom) -> Atom {
+        atom.map_terms_single_core(|term| term.canonize(Aind::Dummy))
     }
 }
 
@@ -329,5 +334,19 @@ mod tests {
 
         assert_ne!(legacy.normalized(), hedge.normalized());
         assert!(legacy.equivalent_to(&hedge));
+    }
+
+    #[test]
+    fn compare_canonicalizes_each_term_independently() {
+        crate::initialisation::test_initialise().unwrap();
+        let expression = |topology| {
+            let external = mink!(4, Atom::from(Aind::Hedge(0, 0)));
+            let contracted = mink!(4, Atom::from(Aind::UVTerm(topology, 2)));
+            p!(external) + p!(contracted.clone()) * p!(contracted)
+        };
+        let legacy = expression(1);
+        let hedge = expression(0);
+
+        assert!(ComparableExpr::new(&legacy).equivalent_to(&ComparableExpr::new(&hedge)));
     }
 }
