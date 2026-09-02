@@ -1790,7 +1790,7 @@
 <a href=#1789 id=1789 data-nosnippet>1789</a>
 <a href=#1790 id=1790 data-nosnippet>1790</a>        <span class="kw">for </span>g <span class="kw">in </span>gs {
 <a href=#1791 id=1791 data-nosnippet>1791</a>            <span class="macro">insta::with_settings!</span>({
-<a href=#1792 id=1792 data-nosnippet>1792</a>                snapshot_suffix=&gt;<span class="macro">format!</span>(<span class="string">"{}"</span>,g.name),
+<a href=#1792 id=1792 data-nosnippet>1792</a>                snapshot_suffix=&gt;g.name.to_string(),
 <a href=#1793 id=1793 data-nosnippet>1793</a>            }, {
 <a href=#1794 id=1794 data-nosnippet>1794</a>                <span class="macro">insta::assert_snapshot!</span>(g.dot_lmb_of(<span class="kw-2">&amp;</span>g.full_filter(), <span class="kw-2">&amp;</span>g.loop_momentum_basis));
 <a href=#1795 id=1795 data-nosnippet>1795</a>            });
