@@ -121,12 +121,12 @@ placeholder slots:
 
 ```text
 chain(bis(D, i), bis(D, j),
-  gamma(in, out, mink(D, mu)),
-  gamma(in, out, mink(D, nu)))
+  gamma( mink(D, mu),in, out),
+  gamma( mink(D, nu),in, out))
 
 trace(bis(D), cyclic(
-  gamma(in, out, mink(D, mu)),
-  gamma(in, out, mink(D, nu))))
+  gamma( mink(D, mu),in, out),
+  gamma( mink(D, nu),in, out)))
 ```
 
 In expanded parsing, chain materialization replaces `in` and `out` with actual

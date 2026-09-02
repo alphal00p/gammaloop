@@ -203,16 +203,16 @@ mod tests {
     fn collect_gamma_chains_and_close_trace() {
         test_initialize();
         let gammas = parse_lit!(
-            gamma(bis(4, 3), bis(4, 4), p(2, mink(4)))
-                * gamma(bis(4, 4), bis(4, 5), mink(4, mu))
-                * gamma(bis(4, 5), bis(4, 3), p(3, mink(4))),
+            gamma(p(2, mink(4)), bis(4, 3), bis(4, 4))
+                * gamma(mink(4, mu), bis(4, 4), bis(4, 5))
+                * gamma(p(3, mink(4)), bis(4, 5), bis(4, 3)),
             default_namespace = "spenso"
         );
         let rep = Bispinor {}.into();
         let normalized = gammas.chainify(rep).chainify(rep);
         let collected = normalized.collect_chains(rep);
 
-        assert_snapshot!(collected.to_bare_ordered_string(), @"trace(bis(4),cyclic(gamma(in,out,mink(4,mu)),gamma(in,out,p(3,mink(4))),gamma(in,out,p(2,mink(4)))))");
+        assert_snapshot!(collected.to_bare_ordered_string(), @"trace(bis(4),cyclic(gamma(mink(4,mu),in,out),gamma(p(3,mink(4)),in,out),gamma(p(2,mink(4)),in,out)))");
     }
 
     #[test]
@@ -230,7 +230,7 @@ mod tests {
         );
         let rep = Bispinor {}.into();
 
-        assert_snapshot!(chains.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,c),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)),gamma(in,out,p(1,mink(4))))");
+        assert_snapshot!(chains.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,c),gamma(mink(4,mu),in,out),gamma(mink(4,nu),in,out),gamma(p(1,mink(4)),in,out))");
     }
 
     #[test]
@@ -242,7 +242,7 @@ mod tests {
             gamma!(slot!(r.mink4, mu)),
         );
 
-        assert_snapshot!(chain.undo_single_length().to_bare_ordered_string(), @"gamma(bis(4,a),bis(4,b),mink(4,mu))");
+        assert_snapshot!(chain.undo_single_length().to_bare_ordered_string(), @"gamma(mink(4,mu),bis(4,a),bis(4,b))");
     }
 
     #[test]
@@ -255,7 +255,7 @@ mod tests {
         );
         let rep = Bispinor {}.into();
 
-        assert_snapshot!(chain.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))");
+        assert_snapshot!(chain.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,b),gamma(mink(4,mu),in,out))");
     }
 
     #[test]
@@ -279,7 +279,7 @@ mod tests {
         let chains = shared_prefix.clone() * first_tail + shared_prefix * second_tail;
         let rep = Bispinor {}.into();
 
-        assert_snapshot!(chains.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,c),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,nu)))+chain(bis(4,a),bis(4,d),gamma(in,out,mink(4,mu)),gamma(in,out,mink(4,rho)))");
+        assert_snapshot!(chains.collect_chains(rep).to_bare_ordered_string(), @"chain(bis(4,a),bis(4,c),gamma(mink(4,mu),in,out),gamma(mink(4,nu),in,out))+chain(bis(4,a),bis(4,d),gamma(mink(4,mu),in,out),gamma(mink(4,rho),in,out))");
     }
 
     #[test]
@@ -292,7 +292,7 @@ mod tests {
     #[test]
     fn normalize_works_on_gammaloop_input() {
         let expr = parse!(
-            "spenso::chain(spenso::bis(4,gammalooprs::hedge(17)),spenso::bis(4,gammalooprs::hedge(17)),spenso::gamma(spenso::in,spenso::out,spenso::mink(gammalooprs::dim,gammalooprs::hedge(2))),spenso::gamma(spenso::in,spenso::out,gammalooprs::Q(9,spenso::mink(gammalooprs::dim))),spenso::gamma(spenso::in,spenso::out,spenso::mink(gammalooprs::dim,gammalooprs::hedge(1))),spenso::gamma(spenso::in,spenso::out,gammalooprs::Q(9,spenso::mink(gammalooprs::dim))),spenso::gamma(spenso::in,spenso::out,spenso::mink(gammalooprs::dim,gammalooprs::hedge(7))),spenso::gamma(spenso::in,spenso::out,gammalooprs::Q(4,spenso::mink(gammalooprs::dim))),spenso::gamma(spenso::in,spenso::out,spenso::mink(gammalooprs::dim,gammalooprs::hedge(7))),spenso::gamma(spenso::in,spenso::out,gammalooprs::Q(9,spenso::mink(gammalooprs::dim))),spenso::gamma(spenso::in,spenso::out,spenso::mink(gammalooprs::dim,gammalooprs::hedge(0))),spenso::gamma(spenso::in,spenso::out,gammalooprs::Q(9,spenso::mink(gammalooprs::dim))),spenso::gamma(spenso::in,spenso::out,spenso::mink(gammalooprs::dim,gammalooprs::hedge(3))))"
+            "spenso::chain(spenso::bis(4,gammalooprs::hedge(17)),spenso::bis(4,gammalooprs::hedge(17)),spenso::gamma(spenso::mink(gammalooprs::dim,gammalooprs::hedge(2)),spenso::in,spenso::out),spenso::gamma(gammalooprs::Q(9,spenso::mink(gammalooprs::dim)),spenso::in,spenso::out),spenso::gamma(spenso::mink(gammalooprs::dim,gammalooprs::hedge(1)),spenso::in,spenso::out),spenso::gamma(gammalooprs::Q(9,spenso::mink(gammalooprs::dim)),spenso::in,spenso::out),spenso::gamma(spenso::mink(gammalooprs::dim,gammalooprs::hedge(7)),spenso::in,spenso::out),spenso::gamma(gammalooprs::Q(4,spenso::mink(gammalooprs::dim)),spenso::in,spenso::out),spenso::gamma(spenso::mink(gammalooprs::dim,gammalooprs::hedge(7)),spenso::in,spenso::out),spenso::gamma(gammalooprs::Q(9,spenso::mink(gammalooprs::dim)),spenso::in,spenso::out),spenso::gamma(spenso::mink(gammalooprs::dim,gammalooprs::hedge(0)),spenso::in,spenso::out),spenso::gamma(gammalooprs::Q(9,spenso::mink(gammalooprs::dim)),spenso::in,spenso::out),spenso::gamma(spenso::mink(gammalooprs::dim,gammalooprs::hedge(3)),spenso::in,spenso::out))"
         );
 
         println!("{}", expr.normalize_chains())

@@ -2226,11 +2226,7 @@ mod tests {
             bis.slot(PartialIndex::open(1)),
             bis.slot(PartialIndex::open(2)),
         ];
-        let gamma = partial_tensor(
-            AGS.gamma,
-            &[gamma_logical[1], gamma_logical[2], gamma_logical[0]],
-            &gamma_logical,
-        );
+        let gamma = partial_tensor(AGS.gamma, &gamma_logical, &gamma_logical);
         let gamma_factor = chain_factors(&gamma, matrix_channel(&gamma).unwrap())
             .unwrap()
             .pop()
@@ -2239,13 +2235,13 @@ mod tests {
             panic!("expected a gamma factor")
         };
         let gamma_args = gamma_factor.iter().collect::<Vec<_>>();
-        assert!(matches!(gamma_args[0], AtomView::Var(v) if v.get_symbol() == SPENSO_TAG.chain_in));
-        assert!(
-            matches!(gamma_args[1], AtomView::Var(v) if v.get_symbol() == SPENSO_TAG.chain_out)
-        );
         assert_eq!(
-            Representation::<LibraryRep>::try_from(gamma_args[2]).unwrap(),
+            Representation::<LibraryRep>::try_from(gamma_args[0]).unwrap(),
             mink
+        );
+        assert!(matches!(gamma_args[1], AtomView::Var(v) if v.get_symbol() == SPENSO_TAG.chain_in));
+        assert!(
+            matches!(gamma_args[2], AtomView::Var(v) if v.get_symbol() == SPENSO_TAG.chain_out)
         );
 
         let adjoint: Representation<LibraryRep> = ColorAdjoint {}.new_rep(8).cast();
@@ -2408,16 +2404,8 @@ mod tests {
             channel_rep.slot(PartialIndex::open(0)),
             channel_rep.slot(PartialIndex::open(1)),
         ];
-        let left = partial_tensor(
-            AGS.gamma,
-            &[left_ports[1], left_ports[2], left_ports[0]],
-            &left_ports,
-        );
-        let right = partial_tensor(
-            AGS.gamma,
-            &[right_ports[1], right_ports[2], right_ports[0]],
-            &right_ports,
-        );
+        let left = partial_tensor(AGS.gamma, &left_ports, &left_ports);
+        let right = partial_tensor(AGS.gamma, &right_ports, &right_ports);
 
         let traced = trace_unique(
             &compose(

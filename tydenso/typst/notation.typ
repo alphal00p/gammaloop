@@ -534,9 +534,9 @@
 #let _render-gamma(ctx, settings) = {
   let node = ctx.node
   if node.arguments.len() != 3 { return _render-tensor(ctx, settings) }
-  let first = node.arguments.at(0)
-  let second = node.arguments.at(1)
-  let lorentz = node.arguments.at(2)
+  let lorentz = node.arguments.at(0)
+  let first = node.arguments.at(1)
+  let second = node.arguments.at(2)
   let forward = _is-marker(first, "in") and _is-marker(second, "out")
   let transposed = _is-marker(first, "out") and _is-marker(second, "in")
 

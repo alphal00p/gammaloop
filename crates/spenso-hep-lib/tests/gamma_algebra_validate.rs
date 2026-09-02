@@ -65,7 +65,7 @@ fn validate() {
     // gamma.reindex_storage(&[1, 2, 3]).unwrap().apply()
 
     let expr =
-        p(1) * (p(3) + q(3)) * gamma(1, 2, 1) * gamma(2, 3, 2) * gamma(3, 4, 3) * gamma(4, 1, 4);
+        p(1) * (p(3) + q(3)) * gamma(1, 1, 2) * gamma(2, 2, 3) * gamma(3, 3, 4) * gamma(4, 4, 1);
 
     validate_gamma(expr, const_map.clone());
     let _expr = p(1) * p(1);
@@ -84,26 +84,26 @@ fn validate() {
         mink.slot::<AbstractIndex, _>(2).to_atom()
     );
 
-    let expr = gamma(1, 2, 1) * gamma(2, 1, 1);
+    let expr = gamma(1, 1, 2) * gamma(1, 2, 1);
     validate_gamma(expr, const_map.clone());
-    let expr = gamma(1, 2, 2) * gamma(2, 1, 1) + gamma(1, 2, 1) * gamma(2, 1, 2);
-    validate_gamma(expr, const_map.clone());
-
-    let expr = gamma0(1, 2) * gamma(2, 3, 1) * gamma0(3, 4) - gammaconj(4, 1, 1);
-    // let expr2 = gamma0(1, 2) * gammaconj(3, 2, 1) * gamma0(3, 4);
-
+    let expr = gamma(2, 1, 2) * gamma(1, 2, 1) + gamma(1, 1, 2) * gamma(2, 2, 1);
     validate_gamma(expr, const_map.clone());
 
-    let expr = gammaadj(1, 2, 1) - gamma0(1, 3) * gamma(3, 4, 1) * gamma0(4, 2);
-    // let expr2 = gamma0(1, 2) * gammaconj(3, 2, 1) * gamma0(3, 4);
+    let expr = gamma0(1, 2) * gamma(1, 2, 3) * gamma0(3, 4) - gammaconj(1, 4, 1);
+    // let expr2 = gamma0(1, 2) * gammaconj(1, 3, 2) * gamma0(3, 4);
 
     validate_gamma(expr, const_map.clone());
 
-    let expr = gammaadj(1, 2, 1) - gammaconj(2, 1, 1);
-    // let expr2 = gamma0(1, 2) * gammaconj(3, 2, 1) * gamma0(3, 4);
+    let expr = gammaadj(1, 1, 2) - gamma0(1, 3) * gamma(1, 3, 4) * gamma0(4, 2);
+    // let expr2 = gamma0(1, 2) * gammaconj(1, 3, 2) * gamma0(3, 4);
 
     validate_gamma(expr, const_map.clone());
-    let _a = u(1, 1) * gamma(1, 2, 1) * ub(2, 2);
+
+    let expr = gammaadj(1, 1, 2) - gammaconj(1, 2, 1);
+    // let expr2 = gamma0(1, 2) * gammaconj(1, 3, 2) * gamma0(3, 4);
+
+    validate_gamma(expr, const_map.clone());
+    let _a = u(1, 1) * gamma(1, 1, 2) * ub(2, 2);
     // validate_gamma(
     //     a.conj()
     //         .replace(function!(Symbol::CONJ, symbol!("a__")))
@@ -115,7 +115,7 @@ fn validate() {
     //     const_map.clone(),
     // );
 
-    // let a = Atom::num(1) / u(1, 1) * gamma(1, 2, 1) * ub(2, 2);
+    // let a = Atom::num(1) / u(1, 1) * gamma(1, 1, 2) * ub(2, 2);
     // validate_gamma(
     //     a.conj()
     //         .replace(function!(Symbol::CONJ, symbol!("a__")))
@@ -128,15 +128,15 @@ fn validate() {
     // );
 
     // validate_gamma(expr2, const_map.clone());
-    // let expr = gamma(1, 2, 2) * gamma(2, 1, 1) + gamma(1, 2, 1) * gamma(2, 1, 2);
-    // // + gamma(1, 2, 1) * gamma(2, 1, 1);
+    // let expr = gamma(2, 1, 2) * gamma(1, 2, 1) + gamma(1, 1, 2) * gamma(2, 2, 1);
+    // // + gamma(1, 1, 2) * gamma(1, 2, 1);
 
     // // let expr = A(1, 2, 0) * B(2, 1, 3);
     // validate_gamma(expr, const_map.clone());
-    // let expr = gamma(1, 2, 1);
+    // let expr = gamma(1, 1, 2);
 
     // validate_gamma(expr, const_map.clone());
-    // let expr = gamma(2, 1, 1);
+    // let expr = gamma(1, 2, 1);
 
     // validate_gamma(expr, const_map.clone());
     // assert_eq!(pt, qt);
@@ -281,7 +281,7 @@ mod failing {
                 ^ 4
                 ^ -2 * (MC * g(bis(4, hedge(1)), bis(4, hedge(2)))
                     - K(0, mink(4, edge(1, 1)))
-                        * gamma(bis(4, hedge(1)), bis(4, hedge(2)), mink(4, edge(1, 1))))
+                        * gamma(mink(4, edge(1, 1)), bis(4, hedge(1)), bis(4, hedge(2))))
                     * (-K(0, mink(4, edge(3, 1))) - K(1, mink(4, edge(3, 1))))
                     * (-g(mink(4, hedge(7)), mink(4, hedge(8))) + MW
                         ^ -2 * (-P(0, mink(4, hedge(7))) - K(1, mink(4, hedge(7))))
@@ -290,10 +290,10 @@ mod failing {
                         + K(0, mink(4, edge(5, 1)))
                         + K(1, mink(4, edge(5, 1))))
                     * g(mink(4, hedge(0)), mink(4, hedge(8)))
-                    * gamma(bis(4, hedge(10)), bis(4, hedge(6)), mink(4, hedge(11)))
-                    * gamma(bis(4, hedge(2)), bis(4, vertex(1, 1)), mink(4, hedge(7)))
-                    * gamma(bis(4, hedge(6)), bis(4, hedge(5)), mink(4, edge(3, 1)))
-                    * gamma(bis(4, hedge(9)), bis(4, hedge(10)), mink(4, edge(5, 1)))
+                    * gamma(mink(4, hedge(11)), bis(4, hedge(10)), bis(4, hedge(6)))
+                    * gamma(mink(4, hedge(7)), bis(4, hedge(2)), bis(4, vertex(1, 1)))
+                    * gamma(mink(4, edge(3, 1)), bis(4, hedge(6)), bis(4, hedge(5)))
+                    * gamma(mink(4, edge(5, 1)), bis(4, hedge(9)), bis(4, hedge(10)))
                     * projm(bis(4, hedge(5)), bis(4, hedge(1)))
                     * projm(bis(4, vertex(1, 1)), bis(4, hedge(9)))
                     * (1 / 2)

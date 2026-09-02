@@ -58,7 +58,7 @@ fn trace4gen_chisholm_odd_interior_chain() {
         gamma!(slot!(r.mink4, mu)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"-2*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu3)),gamma(in,out,mink(4,nu2)),gamma(in,out,mink(4,nu1)))");
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"-2*chain(bis(4,a),bis(4,b),gamma(mink(4,nu3),in,out),gamma(mink(4,nu2),in,out),gamma(mink(4,nu1),in,out))");
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn gamma_five_epsilon_trick() {
 
     assert_snapshot!(expr
         .simplify_gamma_with(GammaSimplifySettings::repeated_pairs().with_gamma5_epsilon_expansion())
-        .to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,nu)))*g(mink(4,mu),mink(4,rho))+-1*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,sigma)),gamma5(in,out))*epsilon(mink(4,mu),mink(4,nu),mink(4,rho),mink(4,sigma))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,mu)))*g(mink(4,nu),mink(4,rho))+chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,rho)))*g(mink(4,mu),mink(4,nu))");
+        .to_bare_ordered_string(), @"-1*chain(bis(4,a),bis(4,b),gamma(mink(4,nu),in,out))*g(mink(4,mu),mink(4,rho))+-1*chain(bis(4,a),bis(4,b),gamma(mink(4,sigma),in,out),gamma5(in,out))*epsilon(mink(4,mu),mink(4,nu),mink(4,rho),mink(4,sigma))+chain(bis(4,a),bis(4,b),gamma(mink(4,mu),in,out))*g(mink(4,nu),mink(4,rho))+chain(bis(4,a),bis(4,b),gamma(mink(4,rho),in,out))*g(mink(4,mu),mink(4,nu))");
 }
 
 #[test]

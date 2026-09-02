@@ -817,10 +817,10 @@ mod tests {
         let gamma = AGS.gamma_strct(4);
         let _a = HEP_LIB.get(gamma.canonical()).unwrap();
 
-        let expr = parse!("gamma(bis(4,l_5),bis(4,l_4),mink(4,l_4))*gamma(bis(4,l_6),bis(4,l_5),mink(4,l_4))*gamma(bis(4,l_4),bis(4,l_6),mink(4,l_5))*p(mink(4,l_5))
+        let expr = parse!("gamma(mink(4,l_4),bis(4,l_5),bis(4,l_4))*gamma(mink(4,l_4),bis(4,l_6),bis(4,l_5))*gamma(mink(4,l_5),bis(4,l_4),bis(4,l_6))*p(mink(4,l_5))
             ",default_namespace="spenso");
         // let expr = parse!(
-        // "gamma(bis(4,l_4),bis(4,l_6),mink(4,l_5))*p(mink(4,l_5))
+        // "gamma(mink(4,l_5),bis(4,l_4),bis(4,l_6))*p(mink(4,l_5))
         // ",
         // "spenso"
         // );
@@ -908,121 +908,121 @@ mod tests {
             (-1 * G
                 ^ 3 * P(0, mink(4, 0))
                     * P(2, mink(4, 26))
-                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
-                    * gamma(bis(4, 7), bis(4, 6), mink(4, 1))
-                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
+                    * gamma(mink(4, 1), bis(4, 7), bis(4, 6))
+                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
                     + -1 * G
                 ^ 3 * P(0, mink(4, 26))
                     * P(1, mink(4, 1))
-                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
-                    * gamma(bis(4, 7), bis(4, 6), mink(4, 0))
-                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
+                    * gamma(mink(4, 0), bis(4, 7), bis(4, 6))
+                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
                     + -1 * G
                 ^ 3 * P(0, mink(4, 26))
                     * P(1, mink(4, 5))
                     * g(mink(4, 0), mink(4, 1))
-                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
-                    * gamma(bis(4, 7), bis(4, 6), mink(4, 5))
-                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
+                    * gamma(mink(4, 5), bis(4, 7), bis(4, 6))
+                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
                     + -1 * G
                 ^ 3 * P(0, mink(4, 5))
                     * P(2, mink(4, 26))
                     * g(mink(4, 0), mink(4, 1))
-                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
-                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
-                    * gamma(bis(4, 7), bis(4, 6), mink(4, 5))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
+                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
+                    * gamma(mink(4, 5), bis(4, 7), bis(4, 6))
                     + -1 * G
                 ^ 3 * P(1, mink(4, 1))
                     * P(1, mink(4, 26))
-                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
-                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
-                    * gamma(bis(4, 7), bis(4, 6), mink(4, 0))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
+                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
+                    * gamma(mink(4, 0), bis(4, 7), bis(4, 6))
                     + -1 * G
                 ^ 3 * P(1, mink(4, 26))
                     * P(1, mink(4, 5))
                     * g(mink(4, 0), mink(4, 1))
-                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
-                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
-                    * gamma(bis(4, 7), bis(4, 6), mink(4, 5))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
+                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
+                    * gamma(mink(4, 5), bis(4, 7), bis(4, 6))
                     + -2 * G
                 ^ 3 * P(0, mink(4, 1))
                     * P(0, mink(4, 26))
-                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
-                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
-                    * gamma(bis(4, 7), bis(4, 6), mink(4, 0))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
+                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
+                    * gamma(mink(4, 0), bis(4, 7), bis(4, 6))
                     + -2 * G
                 ^ 3 * P(0, mink(4, 1))
                     * P(1, mink(4, 26))
-                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
-                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
-                    * gamma(bis(4, 7), bis(4, 6), mink(4, 0))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
+                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
+                    * gamma(mink(4, 0), bis(4, 7), bis(4, 6))
                     + -2 * G
                 ^ 3 * P(0, mink(4, 5))
                     * Q(0, mink(4, 5))
                     * g(mink(4, 0), mink(4, 1))
-                    * gamma(bis(4, 3), bis(4, 2), mink(4, 4))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 2))
                     + -2 * G
                 ^ 3 * P(1, mink(4, 0))
                     * P(1, mink(4, 1))
-                    * gamma(bis(4, 3), bis(4, 2), mink(4, 4))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 2))
                     + -2 * G
                 ^ 3 * P(1, mink(4, 0))
                     * P(2, mink(4, 26))
-                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
-                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
-                    * gamma(bis(4, 7), bis(4, 6), mink(4, 1))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
+                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
+                    * gamma(mink(4, 1), bis(4, 7), bis(4, 6))
                     + -2 * G
                 ^ 3 * P(1, mink(4, 1))
                     * P(2, mink(4, 0))
-                    * gamma(bis(4, 3), bis(4, 2), mink(4, 4))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 2))
                     + -2 * G
                 ^ 3 * P(1, mink(4, 5))
                     * P(2, mink(4, 5))
                     * g(mink(4, 0), mink(4, 1))
-                    * gamma(bis(4, 3), bis(4, 2), mink(4, 4))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 2))
                     + -4 * G
                 ^ 3 * P(0, mink(4, 1))
                     * P(2, mink(4, 0))
-                    * gamma(bis(4, 3), bis(4, 2), mink(4, 4))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 2))
                     + 2 * G
                 ^ 3 * P(0, mink(4, 0))
                     * P(0, mink(4, 1))
-                    * gamma(bis(4, 3), bis(4, 2), mink(4, 4))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 2))
                     + 2 * G
                 ^ 3 * P(0, mink(4, 0))
                     * P(2, mink(4, 1))
-                    * gamma(bis(4, 3), bis(4, 2), mink(4, 4))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 2))
                     + 2 * G
                 ^ 3 * P(0, mink(4, 1))
                     * P(2, mink(4, 26))
-                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
-                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
-                    * gamma(bis(4, 7), bis(4, 6), mink(4, 0))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
+                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
+                    * gamma(mink(4, 0), bis(4, 7), bis(4, 6))
                     + 2 * G
                 ^ 3 * P(0, mink(4, 26))
                     * P(1, mink(4, 0))
-                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
-                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
-                    * gamma(bis(4, 7), bis(4, 6), mink(4, 1))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
+                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
+                    * gamma(mink(4, 1), bis(4, 7), bis(4, 6))
                     + 2 * G
                 ^ 3 * P(0, mink(4, 5))
                     * P(2, mink(4, 5))
                     * g(mink(4, 0), mink(4, 1))
-                    * gamma(bis(4, 3), bis(4, 2), mink(4, 4))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 2))
                     + 2 * G
                 ^ 3 * P(1, mink(4, 0))
                     * P(1, mink(4, 26))
-                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
-                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
-                    * gamma(bis(4, 7), bis(4, 6), mink(4, 1))
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
+                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
+                    * gamma(mink(4, 1), bis(4, 7), bis(4, 6))
                     + 2 * G
                 ^ 3 * P(1, mink(4, i))
-                ^ 2 * g(mink(4, 0), mink(4, 1)) * gamma(bis(4, 3), bis(4, 2), mink(4, 4)) + G
+                ^ 2 * g(mink(4, 0), mink(4, 1)) * gamma(mink(4, 4), bis(4, 3), bis(4, 2)) + G
                 ^ 3 * P(1, mink(4, 1))
                     * P(2, mink(4, 26))
-                    * gamma(bis(4, 3), bis(4, 7), mink(4, 4))
-                    * gamma(bis(4, 6), bis(4, 2), mink(4, 26))
-                    * gamma(bis(4, 7), bis(4, 6), mink(4, 0))),
+                    * gamma(mink(4, 4), bis(4, 3), bis(4, 7))
+                    * gamma(mink(4, 26), bis(4, 6), bis(4, 2))
+                    * gamma(mink(4, 0), bis(4, 7), bis(4, 6))),
             default_namespace = "spenso"
         );
         // println!("{}", expr);

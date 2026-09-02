@@ -28,7 +28,7 @@ fn dirac_simplify_id2_odd_interior_chain() {
         gamma!(slot!(r.mink4, mu)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"-2*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,nu)))");
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"-2*chain(bis(4,a),bis(4,b),gamma(mink(4,sigma),in,out),gamma(mink(4,rho),in,out),gamma(mink(4,nu),in,out))");
 }
 
 #[test]
@@ -49,13 +49,13 @@ fn dirac_simplify_id3_four_interior_chain() {
         "{}",
         simplified.spenso_print(&SpensoPrintSettings::compact())
     );
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"(2*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,sigma)))+2*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho))))*1/2");
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"(2*chain(bis(4,i),bis(4,j),gamma(mink(4,rho),in,out),gamma(mink(4,beta),in,out),gamma(mink(4,alpha),in,out),gamma(mink(4,sigma),in,out))+2*chain(bis(4,i),bis(4,j),gamma(mink(4,sigma),in,out),gamma(mink(4,alpha),in,out),gamma(mink(4,beta),in,out),gamma(mink(4,rho),in,out)))*1/2");
     let simplified = expr.simplify_gamma_with(GammaSimplifySettings::canonical());
     println!(
         "{}",
         simplified.spenso_print(&SpensoPrintSettings::compact())
     );
-    assert_snapshot!(&expr.simplify_gamma_with(GammaSimplifySettings::canonical()).to_bare_ordered_string(), @"((((-1*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,sigma)))+2*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)))*g(mink(4,rho),mink(4,sigma)))*-1+2*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,rho)))*g(mink(4,beta),mink(4,sigma)))*-1+2*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho)))*g(mink(4,alpha),mink(4,sigma)))*2+(((-1*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,sigma)))+2*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,sigma)))*g(mink(4,alpha),mink(4,beta)))*-1+2*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,sigma)))*g(mink(4,alpha),mink(4,rho)))*-1+2*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,sigma)))*g(mink(4,beta),mink(4,rho)))*2)*1/2");
+    assert_snapshot!(&expr.simplify_gamma_with(GammaSimplifySettings::canonical()).to_bare_ordered_string(), @"((((-1*chain(bis(4,i),bis(4,j),gamma(mink(4,alpha),in,out),gamma(mink(4,beta),in,out),gamma(mink(4,rho),in,out),gamma(mink(4,sigma),in,out))+2*chain(bis(4,i),bis(4,j),gamma(mink(4,alpha),in,out),gamma(mink(4,beta),in,out))*g(mink(4,rho),mink(4,sigma)))*-1+2*chain(bis(4,i),bis(4,j),gamma(mink(4,alpha),in,out),gamma(mink(4,rho),in,out))*g(mink(4,beta),mink(4,sigma)))*-1+2*chain(bis(4,i),bis(4,j),gamma(mink(4,beta),in,out),gamma(mink(4,rho),in,out))*g(mink(4,alpha),mink(4,sigma)))*2+(((-1*chain(bis(4,i),bis(4,j),gamma(mink(4,alpha),in,out),gamma(mink(4,beta),in,out),gamma(mink(4,rho),in,out),gamma(mink(4,sigma),in,out))+2*chain(bis(4,i),bis(4,j),gamma(mink(4,rho),in,out),gamma(mink(4,sigma),in,out))*g(mink(4,alpha),mink(4,beta)))*-1+2*chain(bis(4,i),bis(4,j),gamma(mink(4,beta),in,out),gamma(mink(4,sigma),in,out))*g(mink(4,alpha),mink(4,rho)))*-1+2*chain(bis(4,i),bis(4,j),gamma(mink(4,alpha),in,out),gamma(mink(4,sigma),in,out))*g(mink(4,beta),mink(4,rho)))*2)*1/2");
 }
 
 #[test]
@@ -70,7 +70,7 @@ fn dirac_simplify_id4_slash_sandwich() {
             * gamma!(q.clone(), slot!(r.bis4, a), slot!(r.bis4, b))
             * gamma!(p.clone(), slot!(r.bis4, b), slot!(r.bis4, j));
 
-    assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"-2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*g(p(mink(4)),q(mink(4)))+chain(bis(4,i),bis(4,j),gamma(in,out,q(mink(4))))*g(p(mink(4)),p(mink(4)))+g(bis(4,i),bis(4,j))*g(p(mink(4)),p(mink(4)))*m");
+    assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"-2*chain(bis(4,i),bis(4,j),gamma(p(mink(4)),in,out))*g(p(mink(4)),q(mink(4)))+chain(bis(4,i),bis(4,j),gamma(q(mink(4)),in,out))*g(p(mink(4)),p(mink(4)))+g(bis(4,i),bis(4,j))*g(p(mink(4)),p(mink(4)))*m");
 }
 
 #[test]
@@ -83,7 +83,7 @@ fn dirac_simplify_id5_gamma5_anticommutes_left() {
         gamma!(slot!(r.mink4, mu)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"-1*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)),gamma5(in,out))");
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"-1*chain(bis(4,i),bis(4,j),gamma(mink(4,mu),in,out),gamma5(in,out))");
 }
 
 #[test]
@@ -96,7 +96,7 @@ fn dirac_simplify_id23_trace_evaluation_can_stay_disabled() {
         gamma!(slot!(r.mink4, a))
     ) + gamma!(a, 1, 2) * gamma!(a, 2, 3);
 
-    assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()).to_bare_ordered_string(), @"4*g(bis(4,1),bis(4,3))+trace(bis(4),cyclic(gamma(in,out,mink(4,a)),gamma(in,out,mink(4,a)),gamma(in,out,mink(4,b))))");
+    assert_snapshot!(expr.simplify_gamma_with(GammaSimplifySettings::repeated_pairs().without_trace_evaluation()).to_bare_ordered_string(), @"4*g(bis(4,1),bis(4,3))+trace(bis(4),cyclic(gamma(mink(4,a),in,out),gamma(mink(4,a),in,out),gamma(mink(4,b),in,out)))");
 }
 
 #[test]
@@ -114,7 +114,7 @@ fn dirac_simplify_id24_odd_trace_vanishes() {
         gamma!(slot!(r.mink4, b)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,a)),gamma(in,out,mink(4,b)))");
+    assert_snapshot!(expr.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,i),bis(4,j),gamma(mink(4,a),in,out),gamma(mink(4,b),in,out))");
 }
 
 #[test]
@@ -135,7 +135,7 @@ fn dirac_simplify_id25_four_trace_recurses_beside_open_chain() {
         gamma!(slot!(r.mink4, d)),
     );
 
-    assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"-4*g(mink(4,a),mink(4,c))*g(mink(4,b),mink(4,d))+4*g(mink(4,a),mink(4,b))*g(mink(4,c),mink(4,d))+4*g(mink(4,a),mink(4,d))*g(mink(4,b),mink(4,c))+chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,a)),gamma(in,out,mink(4,b)),gamma(in,out,mink(4,c)),gamma(in,out,mink(4,d)))");
+    assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"-4*g(mink(4,a),mink(4,c))*g(mink(4,b),mink(4,d))+4*g(mink(4,a),mink(4,b))*g(mink(4,c),mink(4,d))+4*g(mink(4,a),mink(4,d))*g(mink(4,b),mink(4,c))+chain(bis(4,i),bis(4,j),gamma(mink(4,a),in,out),gamma(mink(4,b),in,out),gamma(mink(4,c),in,out),gamma(mink(4,d),in,out))");
 }
 
 #[test]
@@ -196,7 +196,7 @@ fn dirac_simplify_id40_repeated_gamma_and_two_trace() {
             gamma!(slot!(r.mink4, nu))
         );
 
-    assert_snapshot!((open + tr).simplify_gamma().expand().to_bare_ordered_string(), @"-2*c1*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))+4*c1*g(bis(4,i),bis(4,j))*m+4*c2*g(mink(4,mu),mink(4,nu))");
+    assert_snapshot!((open + tr).simplify_gamma().expand().to_bare_ordered_string(), @"-2*c1*chain(bis(4,i),bis(4,j),gamma(p(mink(4)),in,out))+4*c1*g(bis(4,i),bis(4,j))*m+4*c2*g(mink(4,mu),mink(4,nu))");
 }
 
 #[test]
@@ -217,8 +217,8 @@ fn dirac_simplify_id45_slash_square_and_sandwich() {
         gamma!(p),
     );
 
-    assert_snapshot!(slash_square.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)))*g(p(mink(4)),p(mink(4)))");
-    assert_snapshot!(sandwich.simplify_gamma().expand().to_bare_ordered_string(), @"-1*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)))*g(p(mink(4)),p(mink(4)))+2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*p(mink(4,mu))");
+    assert_snapshot!(slash_square.simplify_gamma().to_bare_ordered_string(), @"chain(bis(4,i),bis(4,j),gamma(mink(4,mu),in,out))*g(p(mink(4)),p(mink(4)))");
+    assert_snapshot!(sandwich.simplify_gamma().expand().to_bare_ordered_string(), @"-1*chain(bis(4,i),bis(4,j),gamma(mink(4,mu),in,out))*g(p(mink(4)),p(mink(4)))+2*chain(bis(4,i),bis(4,j),gamma(p(mink(4)),in,out))*p(mink(4,mu))");
 }
 
 #[test]
@@ -236,5 +236,5 @@ fn dirac_simplify_id46_d_dim_repeated_gamma_slash_sum() {
             * gamma!(slot!(r.mink_d, mu), slot!(r.bis_d, i), slot!(r.bis_d, a))
             * gamma!(slot!(r.mink_d, mu), slot!(r.bis_d, a), slot!(r.bis_d, j));
 
-    assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"-1*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))*d+-1*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))*d+2*chain(bis(d,i),bis(d,j),gamma(in,out,p(mink(d))))+2*chain(bis(d,i),bis(d,j),gamma(in,out,q(mink(d))))+d*g(bis(d,i),bis(d,j))*m");
+    assert_snapshot!(expr.simplify_gamma().expand().to_bare_ordered_string(), @"-1*chain(bis(d,i),bis(d,j),gamma(p(mink(d)),in,out))*d+-1*chain(bis(d,i),bis(d,j),gamma(q(mink(d)),in,out))*d+2*chain(bis(d,i),bis(d,j),gamma(p(mink(d)),in,out))+2*chain(bis(d,i),bis(d,j),gamma(q(mink(d)),in,out))+d*g(bis(d,i),bis(d,j))*m");
 }

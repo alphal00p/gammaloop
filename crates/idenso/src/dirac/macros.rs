@@ -15,8 +15,9 @@ macro_rules! id {
 ///
 /// With one argument, this builds a chain factor using the placeholder indices
 /// `in` and `out`; use this form only as a factor inside `chain!` or `trace!`.
-/// With three arguments, this builds the ordinary gamma tensor with explicit
-/// spinor endpoints and a Lorentz slot.
+/// With three arguments, this builds the ordinary gamma tensor in
+/// representation order: the Lorentz slot followed by the two explicit spinor
+/// endpoints.
 ///
 /// Arguments are converted through `spenso::shadowing::IntoAtom`, so they
 /// can be typed slots, atoms, or atom views.
@@ -40,9 +41,9 @@ macro_rules! id {
 macro_rules! gamma {
     ($mu:expr) => {
         symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma)
+            .add_arg(spenso::shadowing::IntoAtom::into_atom($mu))
             .add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_in))
             .add_arg(symbolica::atom::Atom::var(spenso::network::tags::SPENSO_TAG.chain_out))
-            .add_arg(spenso::shadowing::IntoAtom::into_atom($mu))
             .finish()
     };
     ($base:ident . $mu:ident, $($rest:tt)*) => {
@@ -128,9 +129,9 @@ macro_rules! gamma {
     };
     (@tensor_done $mu:expr, $i:expr, $j:expr) => {
         symbolica::atom::FunctionBuilder::new($crate::dirac::AGS.gamma)
+            .add_arg(spenso::shadowing::IntoAtom::into_atom($mu))
             .add_arg(spenso::shadowing::IntoAtom::into_atom($i))
             .add_arg(spenso::shadowing::IntoAtom::into_atom($j))
-            .add_arg(spenso::shadowing::IntoAtom::into_atom($mu))
             .finish()
     };
 }

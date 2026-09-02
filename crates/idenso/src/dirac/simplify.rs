@@ -198,8 +198,8 @@ impl<'a> DiracFactor<'a> {
     /// Classifies a factor inside a `chain(...)` or `trace(...)` without
     /// materializing owned atoms.
     ///
-    /// Ordinary gammas are recognized as `gamma(in,out,mu)` or
-    /// `gamma(out,in,mu)` and keep `mu` by view. Their dimension is inferred
+    /// Ordinary gammas are recognized as `gamma(mu,in,out)` or
+    /// `gamma(mu,out,in)` and keep `mu` by view. Their dimension is inferred
     /// from `mu` when it is a Minkowski slot, or from the first visible
     /// Minkowski representation inside slash-like tensorial indices such as
     /// `P(1,mink(D))`.
@@ -210,7 +210,7 @@ impl<'a> DiracFactor<'a> {
 
         if f.get_symbol() == AGS.gamma && f.get_nargs() == 3 {
             let mut args = f.iter();
-            let (Some(left), Some(right), Some(mink_index)) =
+            let (Some(mink_index), Some(left), Some(right)) =
                 (args.next(), args.next(), args.next())
             else {
                 return Self::Other(factor);
@@ -1077,9 +1077,9 @@ fn gamma5_factor() -> Atom {
 
 fn gamma_factor(mink_index: impl IntoAtom) -> Atom {
     FunctionBuilder::new(AGS.gamma)
+        .add_arg(mink_index.into_atom())
         .add_arg(Atom::var(T.chain_in))
         .add_arg(Atom::var(T.chain_out))
-        .add_arg(mink_index.into_atom())
         .finish()
 }
 

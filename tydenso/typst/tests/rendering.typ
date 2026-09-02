@@ -31,6 +31,8 @@
 #let atom-shape(node) = {
   if node.kind == "function" {
     node.short-name + "(" + node.arguments.map(atom-shape).join(",") + ")"
+  } else if node.kind == "product" {
+    node.factors.map(atom-shape).join("*")
   } else if node.kind == "symbol" {
     node.short-name
   } else if node.kind == "number" {
@@ -43,6 +45,7 @@
 #let product = dot(p(1, M), q(2, M))
 #let gamma-factor = gamma(mu)
 #let gamma-tensor = gamma(mu, a, b)
+#let simplified-gamma-chain = simplify-gamma(chain(a, b, gamma(mu), gamma(mu)))
 #let open-chain = chain(
   u(1, B),
   v(2, B),
@@ -112,14 +115,15 @@
 #let lower-only-expression = A(slot(layout-L-dual, 3))
 
 #assert(atom-shape(inspect(product)) == "dot(p(1,mink(4)),q(2,mink(4)))")
-#assert(atom-shape(inspect(gamma-factor)) == "gamma(in,out,mink(4,1))")
+#assert(atom-shape(inspect(gamma-factor)) == "gamma(mink(4,1),in,out)")
 #assert(
   atom-shape(inspect(gamma-tensor))
-    == "gamma(bis(4,1),bis(4,2),mink(4,1))",
+    == "gamma(mink(4,1),bis(4,1),bis(4,2))",
 )
+#assert(atom-shape(inspect(simplified-gamma-chain)) == "4*g(bis(4,1),bis(4,2))")
 #assert(
   atom-shape(inspect(open-chain))
-    == "chain(u(1,bis(4)),v(2,bis(4)),gamma(in,out,mink(4,1)),gamma(in,out,p(1,mink(4))),gamma(in,out,mink(4,2)))",
+    == "chain(u(1,bis(4)),v(2,bis(4)),gamma(mink(4,1),in,out),gamma(p(1,mink(4)),in,out),gamma(mink(4,2),in,out))",
 )
 #assert(
   atom-shape(inspect(mixed-polarity))

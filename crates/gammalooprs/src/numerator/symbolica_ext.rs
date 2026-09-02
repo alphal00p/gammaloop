@@ -291,44 +291,44 @@ mod tests {
                     * gammalooprs::e(0, spenso::mink(4, gammalooprs::hedge(1)))
                     * gammalooprs::ebar(0, spenso::mink(4, gammalooprs::hedge(0)))
                     * spenso::gamma(
+                        spenso::mink(4, gammalooprs::edge(5, 1)),
                         spenso::bis(4, gammalooprs::hedge(10)),
-                        spenso::bis(4, gammalooprs::hedge(11)),
-                        spenso::mink(4, gammalooprs::edge(5, 1))
+                        spenso::bis(4, gammalooprs::hedge(11))
                     )
                     * spenso::gamma(
+                        spenso::mink(4, gammalooprs::hedge(1)),
                         spenso::bis(4, gammalooprs::hedge(11)),
-                        spenso::bis(4, gammalooprs::hedge(7)),
-                        spenso::mink(4, gammalooprs::hedge(1))
+                        spenso::bis(4, gammalooprs::hedge(7))
                     )
                     * spenso::gamma(
+                        spenso::mink(4, gammalooprs::edge(2, 1)),
                         spenso::bis(4, gammalooprs::hedge(2)),
-                        spenso::bis(4, gammalooprs::hedge(3)),
-                        spenso::mink(4, gammalooprs::edge(2, 1))
+                        spenso::bis(4, gammalooprs::hedge(3))
                     )
                     * spenso::gamma(
+                        spenso::mink(4, gammalooprs::hedge(5)),
                         spenso::bis(4, gammalooprs::hedge(3)),
-                        spenso::bis(4, gammalooprs::hedge(0)),
-                        spenso::mink(4, gammalooprs::hedge(5))
+                        spenso::bis(4, gammalooprs::hedge(0))
                     )
                     * spenso::gamma(
+                        spenso::mink(4, gammalooprs::hedge(4)),
                         spenso::bis(4, gammalooprs::hedge(6)),
-                        spenso::bis(4, gammalooprs::edge(0)),
-                        spenso::mink(4, gammalooprs::hedge(4))
+                        spenso::bis(4, gammalooprs::edge(0))
                     )
                     * spenso::gamma(
+                        spenso::mink(4, gammalooprs::edge(4, 1)),
                         spenso::bis(4, gammalooprs::hedge(7)),
-                        spenso::bis(4, gammalooprs::hedge(6)),
-                        spenso::mink(4, gammalooprs::edge(4, 1))
+                        spenso::bis(4, gammalooprs::hedge(6))
                     )
                     * spenso::gamma(
+                        spenso::mink(4, gammalooprs::edge(1, 1)),
                         spenso::bis(4, gammalooprs::hedge(8)),
-                        spenso::bis(4, gammalooprs::hedge(9)),
-                        spenso::mink(4, gammalooprs::edge(1, 1))
+                        spenso::bis(4, gammalooprs::hedge(9))
                     )
                     * spenso::gamma(
+                        spenso::mink(4, gammalooprs::hedge(0)),
                         spenso::bis(4, gammalooprs::hedge(9)),
-                        spenso::bis(4, gammalooprs::hedge(10)),
-                        spenso::mink(4, gammalooprs::hedge(0))
+                        spenso::bis(4, gammalooprs::hedge(10))
                     )
         );
         println!("a:{}", a);
@@ -388,44 +388,44 @@ mod tests {
                     * gammalooprs::e(0, spenso::mink(4, gammalooprs::hedge(1)))
                     * gammalooprs::ebar(0, spenso::mink(4, gammalooprs::hedge(0)))
                     * spenso::gamma(
+                        spenso::mink(4, gammalooprs::hedge(0)),
                         spenso::bis(4, gammalooprs::hedge(10)),
-                        spenso::bis(4, gammalooprs::hedge(9)),
-                        spenso::mink(4, gammalooprs::hedge(0))
+                        spenso::bis(4, gammalooprs::hedge(9))
                     )
                     * spenso::gamma(
+                        spenso::mink(4, gammalooprs::edge(5, 1)),
                         spenso::bis(4, gammalooprs::hedge(11)),
-                        spenso::bis(4, gammalooprs::hedge(10)),
-                        spenso::mink(4, gammalooprs::edge(5, 1))
+                        spenso::bis(4, gammalooprs::hedge(10))
                     )
                     * spenso::gamma(
+                        spenso::mink(4, gammalooprs::hedge(4)),
                         spenso::bis(4, gammalooprs::hedge(2)),
-                        spenso::bis(4, gammalooprs::edge(0)),
-                        spenso::mink(4, gammalooprs::hedge(4))
+                        spenso::bis(4, gammalooprs::edge(0))
                     )
                     * spenso::gamma(
+                        spenso::mink(4, gammalooprs::edge(2, 1)),
                         spenso::bis(4, gammalooprs::hedge(3)),
-                        spenso::bis(4, gammalooprs::hedge(2)),
-                        spenso::mink(4, gammalooprs::edge(2, 1))
+                        spenso::bis(4, gammalooprs::hedge(2))
                     )
                     * spenso::gamma(
+                        spenso::mink(4, gammalooprs::edge(4, 1)),
                         spenso::bis(4, gammalooprs::hedge(6)),
-                        spenso::bis(4, gammalooprs::hedge(7)),
-                        spenso::mink(4, gammalooprs::edge(4, 1))
+                        spenso::bis(4, gammalooprs::hedge(7))
                     )
                     * spenso::gamma(
+                        spenso::mink(4, gammalooprs::hedge(1)),
                         spenso::bis(4, gammalooprs::hedge(7)),
-                        spenso::bis(4, gammalooprs::hedge(11)),
-                        spenso::mink(4, gammalooprs::hedge(1))
+                        spenso::bis(4, gammalooprs::hedge(11))
                     )
                     * spenso::gamma(
+                        spenso::mink(4, gammalooprs::hedge(5)),
                         spenso::bis(4, gammalooprs::hedge(8)),
-                        spenso::bis(4, gammalooprs::hedge(0)),
-                        spenso::mink(4, gammalooprs::hedge(5))
+                        spenso::bis(4, gammalooprs::hedge(0))
                     )
                     * spenso::gamma(
+                        spenso::mink(4, gammalooprs::edge(1, 1)),
                         spenso::bis(4, gammalooprs::hedge(9)),
-                        spenso::bis(4, gammalooprs::hedge(8)),
-                        spenso::mink(4, gammalooprs::edge(1, 1))
+                        spenso::bis(4, gammalooprs::hedge(8))
                     )
         );
 

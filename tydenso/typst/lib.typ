@@ -486,11 +486,10 @@
     panic("gamma needs either one Lorentz argument or two spinor endpoints")
   }
   let arguments = if endpoints.len() == 0 {
-    // Spenso chain factors carry literal `in` and `out` placeholder symbols.
-    ("in", "out", lorentz)
+    // The representation-derived gamma signature is Lorentz, then spinor in/out.
+    (lorentz, "in", "out")
   } else {
-    // The Atom stores spinor endpoints first and the Lorentz argument last.
-    (endpoints.at(0), endpoints.at(1), lorentz)
+    (lorentz, endpoints.at(0), endpoints.at(1))
   }
   // Idenso has already registered this head with its tensor tag, linearity,
   // and custom printer. Parsing the existing symbol preserves that definition.
@@ -981,10 +980,9 @@
 
 /// Construct an Idenso gamma tensor or a gamma chain factor.
 ///
-/// With one argument this emits the actual Spenso factor
-/// `gamma(in,out,lorentz)`. With all three arguments it emits
-/// `gamma(first,second,lorentz)`, which is the explicit tensor order stored in
-/// the Atom even though the Typst API places the Lorentz argument first.
+/// With one argument this emits `gamma(lorentz,in,out)`. With all three
+/// arguments it emits `gamma(lorentz,first,second)`: the same order inferred
+/// from Spenso's representation declaration and used by the Python API.
 ///
 /// ```example
 /// #let M = mink(4)

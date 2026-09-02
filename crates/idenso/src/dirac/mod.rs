@@ -63,9 +63,9 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                         return None;
                     }
                     let mut argitem = f.iter();
+                    let mu = argitem.next().unwrap();
                     let i = argitem.next().unwrap();
                     let j = argitem.next().unwrap();
-                    let mu = argitem.next().unwrap();
 
                     let mut out = match resolved.backend {
                         SpensoPrintBackend::Latex => r"\gamma",

@@ -484,14 +484,14 @@ fn kaapo_gl34_color_input_simplifies_to_zero() {
         * g(coad(-1 + Nc^2, hedge(12)), coad(-1 + Nc^2, hedge(13)))
         * g(coad(-1 + Nc^2, hedge(14)), coad(-1 + Nc^2, hedge(15)))
         * g(coad(-1 + Nc^2, hedge(16)), coad(-1 + Nc^2, hedge(17)))
-        * gamma(bis(4, hedge(0)), bis(4, hedge(2)), mink(4, hedge(4)))
-        * gamma(bis(4, hedge(3)), bis(4, hedge(9)), mink(4, hedge(14)))
-        * gamma(bis(4, hedge(7)), bis(4, hedge(1)), mink(4, hedge(12)))
-        * gamma(bis(4, hedge(8)), bis(4, hedge(6)), mink(4, hedge(10)))
-        * gamma(bis(4, hedge(1)), bis(4, hedge(0)), mink(4, edge(0, 1)))
-        * gamma(bis(4, hedge(2)), bis(4, hedge(3)), mink(4, edge(1, 1)))
-        * gamma(bis(4, hedge(6)), bis(4, hedge(7)), mink(4, edge(3, 1)))
-        * gamma(bis(4, hedge(9)), bis(4, hedge(8)), mink(4, edge(4, 1)))
+        * gamma( mink(4, hedge(4)),bis(4, hedge(0)), bis(4, hedge(2)))
+        * gamma( mink(4, hedge(14)),bis(4, hedge(3)), bis(4, hedge(9)))
+        * gamma( mink(4, hedge(12)),bis(4, hedge(7)), bis(4, hedge(1)))
+        * gamma( mink(4, hedge(10)),bis(4, hedge(8)), bis(4, hedge(6)))
+        * gamma( mink(4, edge(0, 1)),bis(4, hedge(1)), bis(4, hedge(0)))
+        * gamma( mink(4, edge(1, 1)),bis(4, hedge(2)), bis(4, hedge(3)))
+        * gamma( mink(4, edge(3, 1)),bis(4, hedge(6)), bis(4, hedge(7)))
+        * gamma( mink(4, edge(4, 1)),bis(4, hedge(9)), bis(4, hedge(8)))
         * t(coad(-1 + Nc^2, hedge(4)), cof(Nc, hedge(2)), dind(cof(Nc, hedge(0))))
         * t(coad(-1 + Nc^2, hedge(10)), cof(Nc, hedge(6)), dind(cof(Nc, hedge(8))))
         * t(coad(-1 + Nc^2, hedge(12)), cof(Nc, hedge(1)), dind(cof(Nc, hedge(7))))
@@ -977,7 +977,7 @@ fn colored_matrix_element() -> (Atom, Atom) {
             *g(coad(Nc^2-1,6),coad(Nc^2-1,9))
             *g(cof(Nc,0),dind(cof(Nc,5)))
             *g(cof(Nc,4),dind(cof(Nc,1)))
-            *gamma(bis(D,5),bis(D,4),mink(D,4))
+            *gamma(mink(D,4),bis(D,5),bis(D,4))
             *vbar(1,bis(D,1))
             *u(0,bis(D,0))
             *ϵbar(2,mink(D,2))
@@ -1074,7 +1074,7 @@ fn test_val() {
             * g(coad(Nc ^ 2 - 1, 1), coad(Nc ^ 2 - 1, l(9)))
             * g(coad(Nc ^ 2 - 1, 4), coad(Nc ^ 2 - 1, l(10)))
             * g(coad(Nc ^ 2 - 1, l(7)), coad(Nc ^ 2 - 1, l(11)))
-            * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
+            * gamma(mink(4, l(5)), bis(4, l(6)), bis(4, l(5)))
             * t(coad(Nc ^ 2 - 1, l(7)), cof(Nc, l(6)), dind(cof(Nc, l(5))))
             * f(
                 coad(Nc ^ 2 - 1, l(8)),
@@ -1106,7 +1106,7 @@ fn test_val() {
                 * g(coad(Nc ^ 2 - 1, 1), coad(Nc ^ 2 - 1, l(9)))
                 * g(coad(Nc ^ 2 - 1, 4), coad(Nc ^ 2 - 1, l(10)))
                 * g(coad(Nc ^ 2 - 1, l(7)), coad(Nc ^ 2 - 1, l(11)))
-                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
+                * gamma(mink(4, l(5)), bis(4, l(6)), bis(4, l(5)))
                 * t(coad(Nc ^ 2 - 1, l(7)), cof(Nc, l(6)), dind(cof(Nc, l(5))))
                 * f(
                     coad(Nc ^ 2 - 1, l(8)),
@@ -1138,7 +1138,7 @@ fn test_val() {
                 * g(coad(Nc ^ 2 - 1, 1), coad(Nc ^ 2 - 1, l(9)))
                 * g(coad(Nc ^ 2 - 1, 4), coad(Nc ^ 2 - 1, l(10)))
                 * g(coad(Nc ^ 2 - 1, l(7)), coad(Nc ^ 2 - 1, l(11)))
-                * gamma(bis(4, l(6)), bis(4, l(5)), mink(4, l(5)))
+                * gamma(mink(4, l(5)), bis(4, l(6)), bis(4, l(5)))
                 * t(coad(Nc ^ 2 - 1, l(7)), cof(Nc, l(6)), dind(cof(Nc, l(5))))
                 * f(
                     coad(Nc ^ 2 - 1, l(8)),
@@ -1170,7 +1170,7 @@ fn test_val() {
                     * g(coad(Nc ^ 2 - 1, 1), coad(Nc ^ 2 - 1, r(9)))
                     * g(coad(Nc ^ 2 - 1, 4), coad(Nc ^ 2 - 1, r(10)))
                     * g(coad(Nc ^ 2 - 1, r(7)), coad(Nc ^ 2 - 1, r(11)))
-                    * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
+                    * gamma(mink(4, r(5)), bis(4, r(5)), bis(4, r(6)))
                     * t(coad(Nc ^ 2 - 1, r(7)), cof(Nc, r(5)), dind(cof(Nc, r(6))))
                     * f(
                         coad(Nc ^ 2 - 1, r(8)),
@@ -1202,7 +1202,7 @@ fn test_val() {
                     * g(coad(Nc ^ 2 - 1, 1), coad(Nc ^ 2 - 1, r(9)))
                     * g(coad(Nc ^ 2 - 1, 4), coad(Nc ^ 2 - 1, r(10)))
                     * g(coad(Nc ^ 2 - 1, r(7)), coad(Nc ^ 2 - 1, r(11)))
-                    * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
+                    * gamma(mink(4, r(5)), bis(4, r(5)), bis(4, r(6)))
                     * t(coad(Nc ^ 2 - 1, r(7)), cof(Nc, r(5)), dind(cof(Nc, r(6))))
                     * f(
                         coad(Nc ^ 2 - 1, r(8)),
@@ -1234,7 +1234,7 @@ fn test_val() {
                     * g(coad(Nc ^ 2 - 1, 1), coad(Nc ^ 2 - 1, r(9)))
                     * g(coad(Nc ^ 2 - 1, 4), coad(Nc ^ 2 - 1, r(10)))
                     * g(coad(Nc ^ 2 - 1, r(7)), coad(Nc ^ 2 - 1, r(11)))
-                    * gamma(bis(4, r(5)), bis(4, r(6)), mink(4, r(5)))
+                    * gamma(mink(4, r(5)), bis(4, r(5)), bis(4, r(6)))
                     * t(coad(Nc ^ 2 - 1, r(7)), cof(Nc, r(5)), dind(cof(Nc, r(6))))
                     * f(
                         coad(Nc ^ 2 - 1, r(8)),
@@ -1467,8 +1467,8 @@ mod failing {
             "
                 1/4*1/(D-2)^2*
                 (
-                    (-1) * gamma(bis(D,left(1)),bis(D,right(1)),mink(D,1337))*Q(1,mink(D,1337))
-                    * gamma(bis(D,right(0)),bis(D,left(0)),mink(D,1338))*Q(0,mink(D,1338))
+                    (-1) * gamma(mink(D,1337),bis(D,left(1)),bis(D,right(1)))*Q(1,mink(D,1337))
+                    * gamma(mink(D,1338),bis(D,right(0)),bis(D,left(0)))*Q(0,mink(D,1338))
                     * (-1) * g(mink(D,left(2)),mink(D,right(2)))
                     * (-1) * g(mink(D,left(3)),mink(D,right(3)))
                     )
@@ -1560,8 +1560,8 @@ mod failing {
             "
                 1/4*1/(D-2)^2*
                 (
-                    (-1) * gamma(bis(D,left(1)),bis(D,right(1)),mink(D,1337))*Q(1,mink(D,1337))
-                    * gamma(bis(D,right(0)),bis(D,left(0)),mink(D,1338))*Q(0,mink(D,1338))
+                    (-1) * gamma(mink(D,1337),bis(D,left(1)),bis(D,right(1)))*Q(1,mink(D,1337))
+                    * gamma(mink(D,1338),bis(D,right(0)),bis(D,left(0)))*Q(0,mink(D,1338))
                     * (-1) * g(mink(D,left(2)),mink(D,right(2)))
                     * (-1) * g(mink(D,left(3)),mink(D,right(3)))
                     )
@@ -1588,7 +1588,7 @@ mod failing {
         println!("Amplitude squared:\n{}", amp_squared.factor());
 
         let _spin_sum_pat = parse!(
-            "gamma(bis(D,left(1)),bis(D,right(1)),mink(D,1337))",
+            "gamma(mink(D,1337),bis(D,left(1)),bis(D,right(1)))",
             default_namespace = "spenso"
         )
         .to_pattern();

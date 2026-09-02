@@ -13,16 +13,16 @@ dirac_form_four_gamma_trace [Dirac4, GammaDefault, enabled]
 -4*g(mink(4,mu),mink(4,rho))*g(mink(4,nu),mink(4,sigma))+4*g(mink(4,mu),mink(4,nu))*g(mink(4,rho),mink(4,sigma))+4*g(mink(4,mu),mink(4,sigma))*g(mink(4,nu),mink(4,rho))
 
 dirac_feyncalc_open_chain_chisholm_id2 [Dirac4, GammaDefault, enabled]
--2*chain(bis(4,a),bis(4,b),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,nu)))
+-2*chain(bis(4,a),bis(4,b),gamma(mink(4,sigma),in,out),gamma(mink(4,rho),in,out),gamma(mink(4,nu),in,out))
 
 dirac_feyncalc_open_chain_chisholm_id3 [Dirac4, GammaDefault, enabled]
-chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,rho)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,sigma)))+chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,sigma)),gamma(in,out,mink(4,alpha)),gamma(in,out,mink(4,beta)),gamma(in,out,mink(4,rho)))
+chain(bis(4,i),bis(4,j),gamma(mink(4,rho),in,out),gamma(mink(4,beta),in,out),gamma(mink(4,alpha),in,out),gamma(mink(4,sigma),in,out))+chain(bis(4,i),bis(4,j),gamma(mink(4,sigma),in,out),gamma(mink(4,alpha),in,out),gamma(mink(4,beta),in,out),gamma(mink(4,rho),in,out))
 
 dirac_feyncalc_slash_sandwich_id4 [Dirac4, GammaDefault, enabled]
--2*chain(bis(4,i),bis(4,j),gamma(in,out,p(mink(4))))*g(p(mink(4)),q(mink(4)))+chain(bis(4,i),bis(4,j),gamma(in,out,q(mink(4))))*g(p(mink(4)),p(mink(4)))+g(bis(4,i),bis(4,j))*g(p(mink(4)),p(mink(4)))*m
+-2*chain(bis(4,i),bis(4,j),gamma(p(mink(4)),in,out))*g(p(mink(4)),q(mink(4)))+chain(bis(4,i),bis(4,j),gamma(q(mink(4)),in,out))*g(p(mink(4)),p(mink(4)))+g(bis(4,i),bis(4,j))*g(p(mink(4)),p(mink(4)))*m
 
 dirac_feyncalc_gamma5_anticommutes_id5 [Dirac4, GammaDefault, enabled]
--1*chain(bis(4,i),bis(4,j),gamma(in,out,mink(4,mu)),gamma5(in,out))
+-1*chain(bis(4,i),bis(4,j),gamma(mink(4,mu),in,out),gamma5(in,out))
 
 dirac_feyncalc_order_anticommutator_id30 [Dirac4, GammaCanonical, enabled]
 0
