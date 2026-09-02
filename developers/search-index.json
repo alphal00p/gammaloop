@@ -2244,6 +2244,12 @@
     "kind": "developer current living engineering record heading"
   },
   {
+    "title": "Follow-up: toolchain refresh source and target boundaries",
+    "summary": "Nix and Crane artifact reuse",
+    "href": "architecture/nix-crane-cache-reuse/#follow-up-toolchain-refresh-source-and-target-boundaries",
+    "kind": "developer current living engineering record heading"
+  },
+  {
     "title": "Remaining caveats",
     "summary": "Nix and Crane artifact reuse",
     "href": "architecture/nix-crane-cache-reuse/#remaining-caveats-2",

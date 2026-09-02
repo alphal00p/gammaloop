@@ -1237,7 +1237,7 @@
                 "kind": "associated-function",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Load or create a GammaLoop state and initialize its CLI session.\n\nParameters\n----------\nstate_folder : path-like, optional\n    State directory to load or create. The default is ``./gammaloop_state``.\nboot_commands_path : path-like, optional\n    TOML run card whose commands are applied during startup.\nmodel_file : path-like, optional\n    Model file override used while loading or initializing the state.\ntrace_logs_filename : str, optional\n    File receiving native trace records for this session.\nlevel : LogLevel, optional\n    Terminal log-level override for this session.\nlogfile_level : LogLevel, optional\n    File log-level override for this session.\nlogging_prefix : object, optional\n    Native logging-prefix configuration.\nread_only_state : bool, default=False\n    Prevent writes whose target lies inside the active state directory and\n    disable file logging there. In-memory session changes remain possible.\nsettings_global_path : path-like, optional\n    TOML file overriding the global settings loaded at startup.\nsettings_runtime_defaults_path : path-like, optional\n    TOML file overriding the default runtime settings loaded at startup.\nclean_state : bool, default=False\n    Remove the resolved state path before startup. This is destructive and\n    cannot be combined with ``read_only_state=True``.\n\nReturns\n-------\nGammaLoopAPI\n    A stateful API instance sharing one state, history, and settings session.\n\nRaises\n------\nException\n    If startup options conflict, the state or settings cannot be loaded, a\n    boot command fails, or a boot card requests process exit.\n\nExamples\n--------\nOpen an existing generated state without permitting writes to it::\n\n    api = GammaLoopAPI(state_folder=\"./state\", read_only_state=True)"
+                  "body": "Load or create a GammaLoop state and initialize its CLI session.\n\nParameters\n----------\nstate_folder : path-like, optional\n    State directory to load or create. The default is ``./gammaloop_state``.\nboot_commands_path : path-like, optional\n    TOML run card whose commands are applied during startup.\nmodel_file : path-like, optional\n    Model file override used while loading or initializing the state.\ntrace_logs_filename : str, optional\n    File receiving native trace records for this session.\nlevel : LogLevel, optional\n    Terminal log-level override for this session.\nlogfile_level : LogLevel, optional\n    File log-level override for this session.\nlogging_prefix : object, optional\n    Native logging-prefix configuration.\nread_only_state : bool, default=False\n    Prevent writes whose target lies inside the active state directory and\n    disable file logging there. In-memory session changes remain possible.\nsettings_global_path : path-like, optional\n    TOML file overriding the global settings loaded at startup.\nsettings_runtime_defaults_path : path-like, optional\n    TOML file overriding the default runtime settings loaded at startup.\nclean_state : bool, default=False\n    Remove the resolved state path before startup. This is destructive and\n    cannot be combined with ``read_only_state=True``.\n\nReturns\n-------\nGammaLoopAPI\n    A stateful API instance sharing one state, history, and settings session.\n\nRaises\n------\nException\n    If startup options conflict, the state or settings cannot be loaded, a\n    boot command fails, or a boot card requests process exit.\n\nExamples\n--------\nOpen an existing generated state without permitting writes to it:\n\n```python\napi = GammaLoopAPI(state_folder=\"./state\", read_only_state=True)\n```"
                 },
                 "signature": "def __new__(cls, state_folder: Optional[str | os.PathLike | pathlib.Path] = None, boot_commands_path: Optional[str | os.PathLike | pathlib.Path] = None, model_file: Optional[str | os.PathLike | pathlib.Path] = None, trace_logs_filename: Optional[str] = None, level: Optional[LogLevel] = None, logfile_level: Optional[LogLevel] = None, logging_prefix: object | None = None, read_only_state: bool = False, settings_global_path: Optional[str | os.PathLike | pathlib.Path] = None, settings_runtime_defaults_path: Optional[str | os.PathLike | pathlib.Path] = None, clean_state: bool = False) -> GammaLoopAPI:",
                 "default": null,
@@ -1370,7 +1370,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Evaluate one integration or momentum-space sample.\n\nParameters\n----------\npoint : Sequence[float]\n    Coordinates for one sample. In integration space, the length must match\n    the selected integrand and ``discrete_dim``. In momentum space, values\n    are grouped as ``(px, py, pz)`` with one triplet per independent loop\n    momentum. Energy components and external momenta are not accepted.\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand to evaluate. Supply this when selection is ambiguous.\nuse_arb_prec : bool, default=False\n    Legacy compatibility option selecting the configured ``f128`` stability\n    level, or arbitrary precision when no ``f128`` level is available.\n    Returned numeric fields remain ``float64``.\nminimal_output : bool, default=False\n    Omit the optional evaluation metadata from the returned sample.\nreturn_events : bool, optional\n    Temporarily override event generation for this call. The integrand setting\n    is restored afterward.\nmomentum_space : bool, default=False\n    Interpret ``point`` as consecutive spatial loop-momentum ``(px, py, pz)``\n    triplets instead of integration-space coordinates.\nintegrator_weight : float, optional\n    Weight associated with this sample. The default is 1.0.\ndiscrete_dim : Sequence[int], optional\n    Discrete integration coordinates used to determine the expected dimension.\ngraph_name : str, optional\n    Graph selected for momentum-space evaluation.\norientation : int, optional\n    Orientation index for ``graph_name`` in momentum-space evaluation.\n\nReturns\n-------\nEvaluationResult\n    The sample evaluation and the observable snapshot for its one-row batch.\n\nRaises\n------\nException\n    If integrand selection is ambiguous or invalid, dimensions do not match,\n    graph or orientation selection is invalid, or warm-up/evaluation fails.\n\nNotes\n-----\nWith ``use_arb_prec=False``, evaluation follows the configured ``f64``,\n``f128``, and arbitrary-precision stability ladder. Despite its historical\nname, ``use_arb_prec=True`` selects configured ``f128`` and falls back to\narbitrary precision only when that level is absent. Python-visible numeric\nfields use the package's ``float64`` output contract. Evaluation may\nwarm the integrand and update in-memory caches or observable snapshots even in\na read-only-state session.\n\nSee Also\n--------\nGammaLoop's sample-evaluation contract in the interface guide and the\nmaintained events-and-observables example.\n\nExamples\n--------\nEvaluate one point from the repository's differential API regression fixture::\n\n    from pathlib import Path\n\n    from gammaloop import GammaLoopAPI\n\n    example = Path(\"examples/api/python/epem_a_ddxg_xs_LO\")\n    api = GammaLoopAPI(\n        state_folder=example / \"state\",\n        boot_commands_path=example / \"run.toml\",\n        clean_state=True,\n    )\n    point = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67]\n    result = api.evaluate_sample(point, return_events=True)\n    assert result.parameterization_jacobian is not None\n    assert result.stability_results\n    assert result.event_groups\n\nThis card verifies API and event plumbing. Its powered coupling selector is not an\nindependently reviewed perturbative-order definition or normalization benchmark."
+                  "body": "Evaluate one integration or momentum-space sample.\n\nParameters\n----------\npoint : Sequence[float]\n    Coordinates for one sample. In integration space, the length must match\n    the selected integrand and ``discrete_dim``. In momentum space, values\n    are grouped as ``(px, py, pz)`` with one triplet per independent loop\n    momentum. Energy components and external momenta are not accepted.\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand to evaluate. Supply this when selection is ambiguous.\nuse_arb_prec : bool, default=False\n    Legacy compatibility option selecting the configured ``f128`` stability\n    level, or arbitrary precision when no ``f128`` level is available.\n    Returned numeric fields remain ``float64``.\nminimal_output : bool, default=False\n    Omit the optional evaluation metadata from the returned sample.\nreturn_events : bool, optional\n    Temporarily override event generation for this call. The integrand setting\n    is restored afterward.\nmomentum_space : bool, default=False\n    Interpret ``point`` as consecutive spatial loop-momentum ``(px, py, pz)``\n    triplets instead of integration-space coordinates.\nintegrator_weight : float, optional\n    Weight associated with this sample. The default is 1.0.\ndiscrete_dim : Sequence[int], optional\n    Discrete integration coordinates used to determine the expected dimension.\ngraph_name : str, optional\n    Graph selected for momentum-space evaluation.\norientation : int, optional\n    Orientation index for ``graph_name`` in momentum-space evaluation.\n\nReturns\n-------\nEvaluationResult\n    The sample evaluation and the observable snapshot for its one-row batch.\n\nRaises\n------\nException\n    If integrand selection is ambiguous or invalid, dimensions do not match,\n    graph or orientation selection is invalid, or warm-up/evaluation fails.\n\nNotes\n-----\nWith ``use_arb_prec=False``, evaluation follows the configured ``f64``,\n``f128``, and arbitrary-precision stability ladder. Despite its historical\nname, ``use_arb_prec=True`` selects configured ``f128`` and falls back to\narbitrary precision only when that level is absent. Python-visible numeric\nfields use the package's ``float64`` output contract. Evaluation may\nwarm the integrand and update in-memory caches or observable snapshots even in\na read-only-state session.\n\nSee Also\n--------\nGammaLoop's sample-evaluation contract in the interface guide and the\nmaintained events-and-observables example.\n\nExamples\n--------\nEvaluate one point from the repository's differential API regression fixture:\n\n```python\nfrom pathlib import Path\n\nfrom gammaloop import GammaLoopAPI\n\nexample = Path(\"examples/api/python/epem_a_ddxg_xs_LO\")\napi = GammaLoopAPI(\n    state_folder=example / \"state\",\n    boot_commands_path=example / \"run.toml\",\n    clean_state=True,\n)\npoint = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67]\nresult = api.evaluate_sample(point, return_events=True)\nassert result.parameterization_jacobian is not None\nassert result.stability_results\nassert result.event_groups\n```\n\nThis card verifies API and event plumbing. Its powered coupling selector is not an\nindependently reviewed perturbative-order definition or normalization benchmark."
                 },
                 "signature": "def evaluate_sample(self, point: Sequence[float], process_id: Optional[int] = None, integrand_name: Optional[str] = None, use_arb_prec: bool = False, minimal_output: bool = False, return_events: Optional[bool] = None, momentum_space: bool = False, integrator_weight: Optional[float] = None, discrete_dim: Optional[Sequence[int]] = None, graph_name: Optional[str] = None, orientation: Optional[int] = None) -> EvaluationResult:",
                 "default": null,
@@ -1503,7 +1503,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Evaluate a batch of integration or momentum-space samples.\n\nParameters\n----------\npoints : numpy.ndarray[numpy.float64]\n    Two-dimensional array with one sample per row. Integration-space columns\n    must match the selected integrand; momentum-space columns are flattened\n    ``(px, py, pz)`` groups with one triplet per independent loop momentum.\n    Energy components and external momenta are not accepted.\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand to evaluate. Supply this when selection is ambiguous.\nuse_arb_prec : bool, default=False\n    Legacy compatibility option selecting the configured ``f128`` stability\n    level, or arbitrary precision when no ``f128`` level is available.\n    Returned numeric fields remain ``float64``.\nminimal_output : bool, default=False\n    Omit the optional evaluation metadata from every returned sample.\nreturn_events : bool, optional\n    Temporarily override event generation for this call. The integrand setting\n    is restored afterward.\nmomentum_space : bool, default=False\n    Interpret each row as consecutive spatial loop-momentum ``(px, py, pz)``\n    triplets instead of integration-space coordinates.\nintegrator_weights : numpy.ndarray[numpy.float64], optional\n    One weight per row. Defaults to 1.0 for every sample.\ndiscrete_dims : numpy.ndarray[numpy.unsignedinteger], optional\n    Two-dimensional array with one row of discrete coordinates per sample.\ngraph_names : Sequence[str | None], optional\n    Momentum-space graph selection for each sample.\norientations : Sequence[int | None], optional\n    Momentum-space orientation selection for each sample.\n\nReturns\n-------\nBatchEvaluationResult\n    Per-sample evaluations and one observable snapshot for the complete batch.\n\nRaises\n------\nException\n    If integrand selection is ambiguous or invalid, array or option lengths do\n    not match, dimensions are invalid, or warm-up/evaluation fails.\n\nNotes\n-----\nWith ``use_arb_prec=False``, evaluation follows the configured ``f64``,\n``f128``, and arbitrary-precision stability ladder. Despite its historical\nname, ``use_arb_prec=True`` selects configured ``f128`` and falls back to\narbitrary precision only when that level is absent. Python-visible numeric\nfields use the package's ``float64`` output contract. Evaluation may\nupdate in-memory caches or observable snapshots in a read-only-state session.\n\nSee Also\n--------\nGammaLoop's sample-evaluation contract in the interface guide and the\nmaintained events-and-observables example.\n\nExamples\n--------\nEvaluate two rows and inspect their per-sample events and batch-level histograms::\n\n    from pathlib import Path\n\n    import numpy as np\n    from gammaloop import GammaLoopAPI\n\n    example = Path(\"examples/api/python/epem_a_ddxg_xs_LO\")\n    api = GammaLoopAPI(\n        state_folder=example / \"state\",\n        boot_commands_path=example / \"run.toml\",\n        clean_state=True,\n    )\n    points = np.array([\n        [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],\n        [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],\n    ], dtype=float)\n    result = api.evaluate_samples(points, return_events=True)\n    assert len(result.samples) == 2\n    assert all(sample.event_groups for sample in result.samples)\n    assert result.observables[\"leading_jet_pt_hist\"].sample_count == 2\n    assert len(result.observables[\"leading_jet_pt_hist\"].bins) == 8\n\nThe fixture exercises the API surface; its powered coupling selector is not a validated\nperturbative-order or normalization benchmark."
+                  "body": "Evaluate a batch of integration or momentum-space samples.\n\nParameters\n----------\npoints : numpy.ndarray[numpy.float64]\n    Two-dimensional array with one sample per row. Integration-space columns\n    must match the selected integrand; momentum-space columns are flattened\n    ``(px, py, pz)`` groups with one triplet per independent loop momentum.\n    Energy components and external momenta are not accepted.\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand to evaluate. Supply this when selection is ambiguous.\nuse_arb_prec : bool, default=False\n    Legacy compatibility option selecting the configured ``f128`` stability\n    level, or arbitrary precision when no ``f128`` level is available.\n    Returned numeric fields remain ``float64``.\nminimal_output : bool, default=False\n    Omit the optional evaluation metadata from every returned sample.\nreturn_events : bool, optional\n    Temporarily override event generation for this call. The integrand setting\n    is restored afterward.\nmomentum_space : bool, default=False\n    Interpret each row as consecutive spatial loop-momentum ``(px, py, pz)``\n    triplets instead of integration-space coordinates.\nintegrator_weights : numpy.ndarray[numpy.float64], optional\n    One weight per row. Defaults to 1.0 for every sample.\ndiscrete_dims : numpy.ndarray[numpy.unsignedinteger], optional\n    Two-dimensional array with one row of discrete coordinates per sample.\ngraph_names : Sequence[str | None], optional\n    Momentum-space graph selection for each sample.\norientations : Sequence[int | None], optional\n    Momentum-space orientation selection for each sample.\n\nReturns\n-------\nBatchEvaluationResult\n    Per-sample evaluations and one observable snapshot for the complete batch.\n\nRaises\n------\nException\n    If integrand selection is ambiguous or invalid, array or option lengths do\n    not match, dimensions are invalid, or warm-up/evaluation fails.\n\nNotes\n-----\nWith ``use_arb_prec=False``, evaluation follows the configured ``f64``,\n``f128``, and arbitrary-precision stability ladder. Despite its historical\nname, ``use_arb_prec=True`` selects configured ``f128`` and falls back to\narbitrary precision only when that level is absent. Python-visible numeric\nfields use the package's ``float64`` output contract. Evaluation may\nupdate in-memory caches or observable snapshots in a read-only-state session.\n\nSee Also\n--------\nGammaLoop's sample-evaluation contract in the interface guide and the\nmaintained events-and-observables example.\n\nExamples\n--------\nEvaluate two rows and inspect their per-sample events and batch-level histograms:\n\n```python\nfrom pathlib import Path\n\nimport numpy as np\nfrom gammaloop import GammaLoopAPI\n\nexample = Path(\"examples/api/python/epem_a_ddxg_xs_LO\")\napi = GammaLoopAPI(\n    state_folder=example / \"state\",\n    boot_commands_path=example / \"run.toml\",\n    clean_state=True,\n)\npoints = np.array([\n    [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],\n    [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],\n], dtype=float)\nresult = api.evaluate_samples(points, return_events=True)\nassert len(result.samples) == 2\nassert all(sample.event_groups for sample in result.samples)\nassert result.observables[\"leading_jet_pt_hist\"].sample_count == 2\nassert len(result.observables[\"leading_jet_pt_hist\"].bins) == 8\n```\n\nThe fixture exercises the API surface; its powered coupling selector is not a validated\nperturbative-order or normalization benchmark."
                 },
                 "signature": "def evaluate_samples(self, points: numpy.NDArray[numpy.float64], process_id: Optional[int] = None, integrand_name: Optional[str] = None, use_arb_prec: bool = False, minimal_output: bool = False, return_events: Optional[bool] = None, momentum_space: bool = False, integrator_weights: Optional[numpy.NDArray[numpy.float64]] = None, discrete_dims: numpy.NDArray[numpy.unsignedinteger] | None = None, graph_names: Optional[Sequence[Optional[str]]] = None, orientations: Optional[Sequence[Optional[int]]] = None) -> BatchEvaluationResult:",
                 "default": null,
@@ -1927,7 +1927,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Describe the selected generated integrand and its graph structure.\n\nParameters\n----------\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand to inspect. Supply this when selection is ambiguous.\n\nReturns\n-------\nIntegrandInfo\n    Structured process, backend, graph, orientation, cut, and size metadata.\n\nRaises\n------\nException\n    If no unique generated integrand matches the selection.\n\nExamples\n--------\nInspect the generated graph groups in the repository's differential API fixture::\n\n    from pathlib import Path\n\n    from gammaloop import GammaLoopAPI\n\n    example = Path(\"examples/api/python/epem_a_ddxg_xs_LO\")\n    api = GammaLoopAPI(\n        state_folder=example / \"state\",\n        boot_commands_path=example / \"run.toml\",\n        clean_state=True,\n    )\n    info = api.get_integrand_info()\n    assert info.kind == \"cross section\"\n    assert info.graph_count == 2\n    assert info.graph_group_count == len(info.graph_groups)\n    assert all(\n        sum(graph.is_master for graph in group.graphs) == 1\n        for group in info.graph_groups\n    )\n\nThis fixture's powered coupling selector is a regression input, not a reviewed physical\nperturbative-order definition."
+                  "body": "Describe the selected generated integrand and its graph structure.\n\nParameters\n----------\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand to inspect. Supply this when selection is ambiguous.\n\nReturns\n-------\nIntegrandInfo\n    Structured process, backend, graph, orientation, cut, and size metadata.\n\nRaises\n------\nException\n    If no unique generated integrand matches the selection.\n\nExamples\n--------\nInspect the generated graph groups in the repository's differential API fixture:\n\n```python\nfrom pathlib import Path\n\nfrom gammaloop import GammaLoopAPI\n\nexample = Path(\"examples/api/python/epem_a_ddxg_xs_LO\")\napi = GammaLoopAPI(\n    state_folder=example / \"state\",\n    boot_commands_path=example / \"run.toml\",\n    clean_state=True,\n)\ninfo = api.get_integrand_info()\nassert info.kind == \"cross section\"\nassert info.graph_count == 2\nassert info.graph_group_count == len(info.graph_groups)\nassert all(\n    sum(graph.is_master for graph in group.graphs) == 1\n    for group in info.graph_groups\n)\n```\n\nThis fixture's powered coupling selector is a regression input, not a reviewed physical\nperturbative-order definition."
                 },
                 "signature": "def get_integrand_info(self, process_id: Optional[int] = None, integrand_name: Optional[str] = None) -> IntegrandInfo:",
                 "default": null,
@@ -1961,7 +1961,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Return a detached, read-only snapshot of one integrand's settings.\n\nParameters\n----------\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand whose settings are required.\n\nReturns\n-------\nSettingsValue\n    Serialized settings snapshot supporting ``get(path)``, attribute access,\n    indexing, and ``to_dict()``. Mutating it does not update the live session.\n\nRaises\n------\nException\n    If selection fails, the integrand has not been generated, or its settings\n    cannot be serialized.\n\nExamples\n--------\nRead a nested setting without changing the live integrand::\n\n    settings = api.get_integrand_settings(process_id=0)\n    print(settings.get(\"general.generate_events\"))"
+                  "body": "Return a detached, read-only snapshot of one integrand's settings.\n\nParameters\n----------\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand whose settings are required.\n\nReturns\n-------\nSettingsValue\n    Serialized settings snapshot supporting ``get(path)``, attribute access,\n    indexing, and ``to_dict()``. Mutating it does not update the live session.\n\nRaises\n------\nException\n    If selection fails, the integrand has not been generated, or its settings\n    cannot be serialized.\n\nExamples\n--------\nRead a nested setting without changing the live integrand:\n\n```python\nsettings = api.get_integrand_settings(process_id=0)\nprint(settings.get(\"general.generate_events\"))\n```"
                 },
                 "signature": "def get_integrand_settings(self, process_id: Optional[int] = None, integrand_name: Optional[str] = None) -> SettingsValue:",
                 "default": null,
@@ -1995,7 +1995,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Render the current in-memory run history as TOML.\n\nReturns\n-------\nstr\n    TOML representation of the history owned by this API instance.\n\nRaises\n------\nException\n    If the current history cannot be serialized.\n\nNotes\n-----\nThis reports the live session, including commands run through ``run``; it does\nnot imply that the history has been persisted to the state directory.\n\nExamples\n--------\nCapture a reproducible run card from the current session::\n\n    run_card_toml = api.get_run_history()"
+                  "body": "Render the current in-memory run history as TOML.\n\nReturns\n-------\nstr\n    TOML representation of the history owned by this API instance.\n\nRaises\n------\nException\n    If the current history cannot be serialized.\n\nNotes\n-----\nThis reports the live session, including commands run through ``run``; it does\nnot imply that the history has been persisted to the state directory.\n\nExamples\n--------\nCapture a reproducible run card from the current session:\n\n```python\nrun_card_toml = api.get_run_history()\n```"
                 },
                 "signature": "def get_run_history(self) -> str:",
                 "default": null,
@@ -2006,7 +2006,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Render the current effective CLI and global settings as TOML.\n\nReturns\n-------\nstr\n    TOML representation of the settings used by this API session.\n\nRaises\n------\nException\n    If the settings cannot be rendered.\n\nExamples\n--------\nRecord the effective settings after applying startup overrides::\n\n    settings_toml = api.get_global_settings()"
+                  "body": "Render the current effective CLI and global settings as TOML.\n\nReturns\n-------\nstr\n    TOML representation of the settings used by this API session.\n\nRaises\n------\nException\n    If the settings cannot be rendered.\n\nExamples\n--------\nRecord the effective settings after applying startup overrides:\n\n```python\nsettings_toml = api.get_global_settings()\n```"
                 },
                 "signature": "def get_global_settings(self) -> str:",
                 "default": null,
@@ -2017,7 +2017,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Return the named command blocks in the current run history.\n\nReturns\n-------\ndict[str, list[str]]\n    Mapping from block name to its rendered CLI commands.\n\nExamples\n--------\nInspect the commands currently grouped under each block::\n\n    for name, commands in api.get_active_command_blocks().items():\n        print(name, commands)"
+                  "body": "Return the named command blocks in the current run history.\n\nReturns\n-------\ndict[str, list[str]]\n    Mapping from block name to its rendered CLI commands.\n\nExamples\n--------\nInspect the commands currently grouped under each block:\n\n```python\nfor name, commands in api.get_active_command_blocks().items():\n    print(name, commands)\n```"
                 },
                 "signature": "def get_active_command_blocks(self) -> dict[str, list[str]]:",
                 "default": null,
@@ -2028,7 +2028,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Return a detached, read-only snapshot of the default runtime settings.\n\nReturns\n-------\nSettingsValue\n    Serialized settings including defaults. Use ``get(path)`` or ``to_dict()``\n    to inspect it; changes to derived Python values do not affect the session.\n\nRaises\n------\nException\n    If the settings cannot be serialized.\n\nExamples\n--------\nInspect a runtime default by its documented settings path::\n\n    runtime = api.get_default_runtime_settings()\n    print(runtime.get(\"integrator.n_start\"))"
+                  "body": "Return a detached, read-only snapshot of the default runtime settings.\n\nReturns\n-------\nSettingsValue\n    Serialized settings including defaults. Use ``get(path)`` or ``to_dict()``\n    to inspect it; changes to derived Python values do not affect the session.\n\nRaises\n------\nException\n    If the settings cannot be serialized.\n\nExamples\n--------\nInspect a runtime default by its documented settings path:\n\n```python\nruntime = api.get_default_runtime_settings()\nprint(runtime.get(\"integrator.n_start\"))\n```"
                 },
                 "signature": "def get_default_runtime_settings(self) -> SettingsValue:",
                 "default": null,
@@ -2084,7 +2084,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Parse and execute a CLI command in this API instance's session.\n\nParameters\n----------\ncommand : str\n    GammaLoop CLI command text.\n\nReturns\n-------\nNone\n    The command's normal output is emitted through the configured CLI/logging\n    sinks; inspect structured state through the corresponding getter methods.\n\nRaises\n------\nException\n    If the command cannot be parsed or execution fails.\n\nNotes\n-----\nCommands share and may mutate the instance's in-memory state, settings, and run\nhistory. ``read_only_state=True`` only blocks writes inside the active state\ndirectory. The API does not automatically persist the session after this call;\npersistence depends on the executed command's explicit output behavior.\n\nExamples\n--------\nDisplay the processes loaded in the current state::\n\n    api.run(\"display processes\")"
+                  "body": "Parse and execute a CLI command in this API instance's session.\n\nParameters\n----------\ncommand : str\n    GammaLoop CLI command text.\n\nReturns\n-------\nNone\n    The command's normal output is emitted through the configured CLI/logging\n    sinks; inspect structured state through the corresponding getter methods.\n\nRaises\n------\nException\n    If the command cannot be parsed or execution fails.\n\nNotes\n-----\nCommands share and may mutate the instance's in-memory state, settings, and run\nhistory. ``read_only_state=True`` only blocks writes inside the active state\ndirectory. The API does not automatically persist the session after this call;\npersistence depends on the executed command's explicit output behavior.\n\nExamples\n--------\nDisplay the processes loaded in the current state:\n\n```python\napi.run(\"display processes\")\n```"
                 },
                 "signature": "def run(self, command: str) -> None:",
                 "default": null,
@@ -2235,7 +2235,7 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Mutable continuous or discrete histogram accumulator with sample-level statistics.\n\nNotes\n-----\nThe example below deliberately places at most one entry in each bin. If several correlated\nentries land in one bin, the current helper records their squared weights separately rather\nthan grouping their weights like GammaLoop's native observable pipeline. Do not replay raw\nevent groups through this class until that statistical contract is aligned.\n\nExamples\n--------\nMerge two pending, statistically independent samples before committing them::\n\n    from gammaloop import HistogramAccumulator\n\n    left = HistogramAccumulator.continuous(\"energy\", 0.0, 4.0, 4)\n    right = HistogramAccumulator.continuous(\"energy\", 0.0, 4.0, 4)\n    left.fill_continuous_sample([(0.5, 2.0)])\n    right.fill_continuous_sample([(2.5, 3.0)])\n    left.merge_in_place(right)\n    left.update_results()\n\n    snapshot = left.snapshot()\n    assert snapshot.sample_count == 2\n    assert snapshot.bins[0].sum_weights == 2.0\n    assert snapshot.bins[0].sum_weights_squared == 4.0\n    assert snapshot.bins[0].sum_weights / snapshot.sample_count == 1.0\n    assert snapshot.bins[2].sum_weights == 3.0\n    assert snapshot.bins[2].sum_weights_squared == 9.0\n    assert right.snapshot().sample_count == 0\n    assert len(left.rebin(2).snapshot().bins) == 2"
+              "body": "Mutable continuous or discrete histogram accumulator with sample-level statistics.\n\nNotes\n-----\nThe example below deliberately places at most one entry in each bin. If several correlated\nentries land in one bin, the current helper records their squared weights separately rather\nthan grouping their weights like GammaLoop's native observable pipeline. Do not replay raw\nevent groups through this class until that statistical contract is aligned.\n\nExamples\n--------\nMerge two pending, statistically independent samples before committing them:\n\n```python\nfrom gammaloop import HistogramAccumulator\n\nleft = HistogramAccumulator.continuous(\"energy\", 0.0, 4.0, 4)\nright = HistogramAccumulator.continuous(\"energy\", 0.0, 4.0, 4)\nleft.fill_continuous_sample([(0.5, 2.0)])\nright.fill_continuous_sample([(2.5, 3.0)])\nleft.merge_in_place(right)\nleft.update_results()\n\nsnapshot = left.snapshot()\nassert snapshot.sample_count == 2\nassert snapshot.bins[0].sum_weights == 2.0\nassert snapshot.bins[0].sum_weights_squared == 4.0\nassert snapshot.bins[0].sum_weights / snapshot.sample_count == 1.0\nassert snapshot.bins[2].sum_weights == 3.0\nassert snapshot.bins[2].sum_weights_squared == 9.0\nassert right.snapshot().sample_count == 0\nassert len(left.rebin(2).snapshot().bins) == 2\n```"
             },
             "summary": "Mutable continuous or discrete histogram accumulator with sample-level statistics.",
             "signature": "class HistogramAccumulator:",
@@ -2620,7 +2620,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramAccumulator",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 997,
+              "line": 1017,
               "column": 1
             }
           },
@@ -2785,7 +2785,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramBin",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1172,
+              "line": 1194,
               "column": 1
             }
           },
@@ -3003,7 +3003,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramSnapshot",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1246,
+              "line": 1268,
               "column": 1
             }
           },
@@ -3067,7 +3067,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramStats",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1337,
+              "line": 1359,
               "column": 1
             }
           },
@@ -3154,7 +3154,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegralEstimate",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1358,
+              "line": 1380,
               "column": 1
             }
           },
@@ -3207,7 +3207,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandActiveThresholdCut",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1378,
+              "line": 1400,
               "column": 1
             }
           },
@@ -3293,7 +3293,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandCut",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1394,
+              "line": 1416,
               "column": 1
             }
           },
@@ -3379,7 +3379,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandCutThreshold",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1425,
+              "line": 1447,
               "column": 1
             }
           },
@@ -3443,7 +3443,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandGraph",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1456,
+              "line": 1478,
               "column": 1
             }
           },
@@ -3562,7 +3562,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandGraphGroup",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1477,
+              "line": 1499,
               "column": 1
             }
           },
@@ -3714,7 +3714,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandInfo",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1523,
+              "line": 1545,
               "column": 1
             }
           },
@@ -3789,7 +3789,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandLoopMomentumBasis",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1584,
+              "line": 1606,
               "column": 1
             }
           },
@@ -3842,7 +3842,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandOrientation",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1610,
+              "line": 1632,
               "column": 1
             }
           },
@@ -3928,7 +3928,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandThresholdEsurface",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1626,
+              "line": 1648,
               "column": 1
             }
           },
@@ -3991,7 +3991,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationOutput",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1657,
+              "line": 1679,
               "column": 1
             }
           },
@@ -4055,7 +4055,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1670,
+              "line": 1692,
               "column": 1
             }
           },
@@ -4206,7 +4206,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationStatisticsSnapshot",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1680,
+              "line": 1702,
               "column": 1
             }
           },
@@ -4301,7 +4301,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationTableComponentResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1716,
+              "line": 1738,
               "column": 1
             }
           },
@@ -4364,7 +4364,7 @@
             "source": {
               "identifier": "gammaloop-python::MaxWeightInfoEntry",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1738,
+              "line": 1760,
               "column": 1
             }
           },
@@ -4516,7 +4516,7 @@
             "source": {
               "identifier": "gammaloop-python::SampleEvaluationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1752,
+              "line": 1774,
               "column": 1
             }
           },
@@ -4737,7 +4737,7 @@
             "source": {
               "identifier": "gammaloop-python::SettingsValue",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1811,
+              "line": 1833,
               "column": 1
             }
           },
@@ -4840,7 +4840,7 @@
             "source": {
               "identifier": "gammaloop-python::SlotIntegrationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1903,
+              "line": 1925,
               "column": 1
             }
           },
@@ -4926,7 +4926,7 @@
             "source": {
               "identifier": "gammaloop-python::StabilityResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1927,
+              "line": 1949,
               "column": 1
             }
           },
@@ -5023,7 +5023,7 @@
             "source": {
               "identifier": "gammaloop-python::LogLevel",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1958,
+              "line": 1980,
               "column": 1
             }
           },
@@ -5040,7 +5040,7 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Parse a Symbolica expression and return its canonical string form.\n\nParameters\n----------\natom_str : str\n    Symbolica expression to parse and normalize.\n\nReturns\n-------\nstr\n    The parsed expression in canonical string form.\n\nRaises\n------\nException\n    If ``atom_str`` is not a valid Symbolica expression.\n\nExamples\n--------\nNormalize a symbolic expression before comparing or storing it::\n\n    atom_to_canonical_string(\"x + x\")"
+              "body": "Parse a Symbolica expression and return its canonical string form.\n\nParameters\n----------\natom_str : str\n    Symbolica expression to parse and normalize.\n\nReturns\n-------\nstr\n    The parsed expression in canonical string form.\n\nRaises\n------\nException\n    If ``atom_str`` is not a valid Symbolica expression.\n\nExamples\n--------\nNormalize a symbolic expression before comparing or storing it:\n\n```python\natom_to_canonical_string(\"x + x\")\n```"
             },
             "summary": "Parse a Symbolica expression and return its canonical string form.",
             "signature": "def atom_to_canonical_string(atom_str: str) -> str:",
@@ -5053,7 +5053,7 @@
             "source": {
               "identifier": "gammaloop-python::atom_to_canonical_string",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1984,
+              "line": 2006,
               "column": 1
             }
           },
@@ -5070,7 +5070,7 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Evaluate a graph's symbolic overall factor and return its canonical form.\n\nParameters\n----------\noverall_factor : str\n    Symbolica expression used as the graph's overall factor.\n\nReturns\n-------\nstr\n    The evaluated factor in canonical Symbolica form.\n\nRaises\n------\nException\n    If the expression cannot be parsed or evaluated.\n\nExamples\n--------\nEvaluate the symmetry and fermion-loop factors attached to a graph::\n\n    evaluate_graph_overall_factor(\n        \"AutG(2)^-1*InternalFermionLoopSign(-1)\"\n    )"
+              "body": "Evaluate a graph's symbolic overall factor and return its canonical form.\n\nParameters\n----------\noverall_factor : str\n    Symbolica expression used as the graph's overall factor.\n\nReturns\n-------\nstr\n    The evaluated factor in canonical Symbolica form.\n\nRaises\n------\nException\n    If the expression cannot be parsed or evaluated.\n\nExamples\n--------\nEvaluate the symmetry and fermion-loop factors attached to a graph:\n\n```python\nevaluate_graph_overall_factor(\n    \"AutG(2)^-1*InternalFermionLoopSign(-1)\"\n)\n```"
             },
             "summary": "Evaluate a graph's symbolic overall factor and return its canonical form.",
             "signature": "def evaluate_graph_overall_factor(overall_factor: str) -> str:",
@@ -5083,7 +5083,7 @@
             "source": {
               "identifier": "gammaloop-python::evaluate_graph_overall_factor",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2010,
+              "line": 2034,
               "column": 1
             }
           },
@@ -5100,7 +5100,7 @@
             ],
             "docs": {
               "format": "python-docstring",
-              "body": "Rewrite a Symbolica tensor expression into Idenso dot-product notation.\n\nParameters\n----------\natom_str : str\n    Symbolica tensor expression whose repeated indices encode contractions.\n\nReturns\n-------\nstr\n    The equivalent expression using Idenso dot-product notation.\n\nRaises\n------\nException\n    If ``atom_str`` cannot be parsed or converted.\n\nExamples\n--------\nRewrite a contraction before passing it to an Idenso workflow::\n\n    to_dots(\"p(mu) * q(mu)\")"
+              "body": "Rewrite a Symbolica tensor expression into Idenso dot-product notation.\n\nParameters\n----------\natom_str : str\n    Symbolica tensor expression whose repeated indices encode contractions.\n\nReturns\n-------\nstr\n    The equivalent expression using Idenso dot-product notation.\n\nRaises\n------\nException\n    If ``atom_str`` cannot be parsed or converted.\n\nExamples\n--------\nRewrite a contraction before passing it to an Idenso workflow:\n\n```python\nto_dots(\"p(mu) * q(mu)\")\n```"
             },
             "summary": "Rewrite a Symbolica tensor expression into Idenso dot-product notation.",
             "signature": "def to_dots(atom_str: str) -> str:",
@@ -5113,7 +5113,7 @@
             "source": {
               "identifier": "gammaloop-python::to_dots",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2038,
+              "line": 2064,
               "column": 1
             }
           }
