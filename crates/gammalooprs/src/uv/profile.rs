@@ -262,6 +262,7 @@ impl Default for ProfileSettings {
             analyse_analytically: false,
             allow_vanishing_missing_fits: false,
             use_f128: false,
+            allow_vanishing_missing_fits: false,
             orientation_mode: OrientationProfileMode::Summed,
             fixed_uv_ray: None,
             graph_id: None,
