@@ -133,20 +133,20 @@ fn color_trace(r: &ConcreteReps, indices: &[symbolica::atom::Symbol]) -> Atom {
 
 fn dirac_form_two_gamma_trace() -> Atom {
     initialize();
-    crate::gamma!(mu, a, b) * crate::gamma!(nu, b, a)
+    crate::gamma!(a, b, mu) * crate::gamma!(b, a, nu)
 }
 
 fn dirac_form_odd_gamma_trace() -> Atom {
     initialize();
-    crate::gamma!(mu, a, b) * crate::gamma!(nu, b, c) * crate::gamma!(rho, c, a)
+    crate::gamma!(a, b, mu) * crate::gamma!(b, c, nu) * crate::gamma!(c, a, rho)
 }
 
 fn dirac_form_four_gamma_trace() -> Atom {
     initialize();
-    crate::gamma!(mu, a, b)
-        * crate::gamma!(nu, b, c)
-        * crate::gamma!(rho, c, d)
-        * crate::gamma!(sigma, d, a)
+    crate::gamma!(a, b, mu)
+        * crate::gamma!(b, c, nu)
+        * crate::gamma!(c, d, rho)
+        * crate::gamma!(d, a, sigma)
 }
 
 fn dirac_feyncalc_open_chain_chisholm_id2() -> Atom {
@@ -181,11 +181,11 @@ fn dirac_feyncalc_slash_sandwich_id4() -> Atom {
     let p = p!(&r.mink4);
     let q = q!(&r.mink4);
     Atom::var(s!(m))
-        * crate::gamma!(p.clone(), slot!(r.bis4, i), slot!(r.bis4, a))
-        * crate::gamma!(p.clone(), slot!(r.bis4, a), slot!(r.bis4, j))
-        - crate::gamma!(p.clone(), slot!(r.bis4, i), slot!(r.bis4, a))
-            * crate::gamma!(q.clone(), slot!(r.bis4, a), slot!(r.bis4, b))
-            * crate::gamma!(p.clone(), slot!(r.bis4, b), slot!(r.bis4, j))
+        * crate::gamma!(slot!(r.bis4, i), slot!(r.bis4, a), p.clone())
+        * crate::gamma!(slot!(r.bis4, a), slot!(r.bis4, j), p.clone())
+        - crate::gamma!(slot!(r.bis4, i), slot!(r.bis4, a), p.clone())
+            * crate::gamma!(slot!(r.bis4, a), slot!(r.bis4, b), q.clone())
+            * crate::gamma!(slot!(r.bis4, b), slot!(r.bis4, j), p.clone())
 }
 
 fn dirac_feyncalc_gamma5_anticommutes_id5() -> Atom {

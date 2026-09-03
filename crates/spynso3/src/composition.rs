@@ -148,8 +148,14 @@ fn port_matches(value: AtomView<'_>, expected: PartialSlot) -> bool {
     match expected.aind {
         PartialIndex::Explicit(index) => Slot::<LibraryRep, AbstractIndex>::try_from(value)
             .is_ok_and(|slot| slot.rep() == expected.rep() && slot.aind() == index),
-        PartialIndex::Open(_) => Representation::<LibraryRep>::try_from(value)
-            .is_ok_and(|representation| representation == expected.rep()),
+        PartialIndex::Open(_) => {
+            Representation::<LibraryRep>::try_from(value)
+                .is_ok_and(|representation| representation == expected.rep())
+                || Slot::<LibraryRep, AbstractIndex>::try_from(value).is_ok_and(|slot| {
+                    slot.rep() == expected.rep()
+                        && matches!(slot.aind(), AbstractIndex::Open { .. })
+                })
+        }
     }
 }
 
@@ -478,9 +484,16 @@ fn matching_interface_position(
 ) -> Option<usize> {
     if let Ok(slot) = Slot::<LibraryRep, AbstractIndex>::try_from(value) {
         return slots.iter().enumerate().position(|(position, expected)| {
-            !claimed[position]
-                && expected.rep() == slot.rep()
-                && matches!(expected.aind, PartialIndex::Explicit(index) if index == slot.aind())
+            if claimed[position] || expected.rep() != slot.rep() {
+                return false;
+            }
+            match expected.aind {
+                PartialIndex::Explicit(index) => index == slot.aind(),
+                // Atom-level open markers are local to a tensor occurrence,
+                // while partial-interface IDs are renumbered whenever
+                // interfaces are combined or ports are removed.
+                PartialIndex::Open(_) => matches!(slot.aind(), AbstractIndex::Open { .. }),
+            }
         });
     }
 
