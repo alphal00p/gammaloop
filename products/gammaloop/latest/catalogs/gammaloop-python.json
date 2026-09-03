@@ -1370,7 +1370,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Evaluate one integration or momentum-space sample.\n\nParameters\n----------\npoint : Sequence[float]\n    Coordinates for one sample. In integration space, the length must match\n    the selected integrand and ``discrete_dim``. In momentum space, values\n    are grouped as ``(px, py, pz)`` with one triplet per independent loop\n    momentum. Energy components and external momenta are not accepted.\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand to evaluate. Supply this when selection is ambiguous.\nuse_arb_prec : bool, default=False\n    Legacy compatibility option selecting the configured ``f128`` stability\n    level, or arbitrary precision when no ``f128`` level is available.\n    Returned numeric fields remain ``float64``.\nminimal_output : bool, default=False\n    Omit the optional evaluation metadata from the returned sample.\nreturn_events : bool, optional\n    Temporarily override event generation for this call. The integrand setting\n    is restored afterward.\nmomentum_space : bool, default=False\n    Interpret ``point`` as consecutive spatial loop-momentum ``(px, py, pz)``\n    triplets instead of integration-space coordinates.\nintegrator_weight : float, optional\n    Weight associated with this sample. The default is 1.0.\ndiscrete_dim : Sequence[int], optional\n    Discrete integration coordinates used to determine the expected dimension.\ngraph_name : str, optional\n    Graph selected for momentum-space evaluation.\norientation : int, optional\n    Orientation index for ``graph_name`` in momentum-space evaluation.\n\nReturns\n-------\nEvaluationResult\n    The sample evaluation and the observable snapshot for its one-row batch.\n\nRaises\n------\nException\n    If integrand selection is ambiguous or invalid, dimensions do not match,\n    graph or orientation selection is invalid, or warm-up/evaluation fails.\n\nNotes\n-----\nWith ``use_arb_prec=False``, evaluation follows the configured ``f64``,\n``f128``, and arbitrary-precision stability ladder. Despite its historical\nname, ``use_arb_prec=True`` selects configured ``f128`` and falls back to\narbitrary precision only when that level is absent. Python-visible numeric\nfields use the package's ``float64`` output contract. Evaluation may\nwarm the integrand and update in-memory caches or observable snapshots even in\na read-only-state session.\n\nSee Also\n--------\nGammaLoop's sample-evaluation contract in the interface guide and the\nmaintained events-and-observables example.\n\nExamples\n--------\nEvaluate one point from the repository's differential API regression fixture:\n\n```python\nfrom pathlib import Path\n\nfrom gammaloop import GammaLoopAPI\n\nexample = Path(\"examples/api/python/epem_a_ddxg_xs_LO\")\napi = GammaLoopAPI(\n    state_folder=example / \"state\",\n    boot_commands_path=example / \"run.toml\",\n    clean_state=True,\n)\npoint = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67]\nresult = api.evaluate_sample(point, return_events=True)\nassert result.parameterization_jacobian is not None\nassert result.stability_results\nassert result.event_groups\n```\n\nThis card verifies API and event plumbing. Its powered coupling selector is not an\nindependently reviewed perturbative-order definition or normalization benchmark."
+                  "body": "Evaluate one integration or momentum-space sample.\n\nParameters\n----------\npoint : Sequence[float]\n    Coordinates for one sample. In integration space, the length must match\n    the selected integrand and ``discrete_dim``. In momentum space, values\n    are grouped as ``(px, py, pz)`` with one triplet per independent loop\n    momentum. Energy components and external momenta are not accepted.\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand to evaluate. Supply this when selection is ambiguous.\nuse_arb_prec : bool, default=False\n    Force arbitrary-precision (Arb) internal evaluation instead of following\n    the configured stability ladder.\n    Returned numeric fields remain ``float64``.\nminimal_output : bool, default=False\n    Omit the optional evaluation metadata from the returned sample.\nreturn_events : bool, optional\n    Temporarily override event generation for this call. The integrand setting\n    is restored afterward.\nmomentum_space : bool, default=False\n    Interpret ``point`` as consecutive spatial loop-momentum ``(px, py, pz)``\n    triplets instead of integration-space coordinates.\nintegrator_weight : float, optional\n    Weight associated with this sample. The default is 1.0.\ndiscrete_dim : Sequence[int], optional\n    Discrete integration coordinates used to determine the expected dimension.\ngraph_name : str, optional\n    Graph selected for momentum-space evaluation.\norientation : int, optional\n    Orientation index for ``graph_name`` in momentum-space evaluation.\n\nReturns\n-------\nEvaluationResult\n    The sample evaluation and the observable snapshot for its one-row batch.\n\nRaises\n------\nException\n    If integrand selection is ambiguous or invalid, dimensions do not match,\n    graph or orientation selection is invalid, or warm-up/evaluation fails.\n\nNotes\n-----\nWith ``use_arb_prec=False``, evaluation follows the configured ``f64``,\n``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``\nforces arbitrary-precision (Arb) internal evaluation. Python-visible numeric\nfields use the package's ``float64`` output contract. Evaluation may\nwarm the integrand and update in-memory caches or observable snapshots even in\na read-only-state session.\n\nSee Also\n--------\nGammaLoop's sample-evaluation contract in the interface guide and the\nmaintained events-and-observables example.\n\nExamples\n--------\nEvaluate one point from the repository's differential API regression fixture:\n\n```python\nfrom pathlib import Path\n\nfrom gammaloop import GammaLoopAPI\n\nexample = Path(\"examples/api/python/epem_a_ddxg_xs_LO\")\napi = GammaLoopAPI(\n    state_folder=example / \"state\",\n    boot_commands_path=example / \"run.toml\",\n    clean_state=True,\n)\npoint = [0.17, 0.31, 0.53, 0.23, 0.41, 0.67]\nresult = api.evaluate_sample(point, return_events=True)\nassert result.parameterization_jacobian is not None\nassert result.stability_results\nassert result.event_groups\n```\n\nThis card verifies API and event plumbing. Its powered coupling selector is not an\nindependently reviewed perturbative-order definition or normalization benchmark."
                 },
                 "signature": "def evaluate_sample(self, point: Sequence[float], process_id: Optional[int] = None, integrand_name: Optional[str] = None, use_arb_prec: bool = False, minimal_output: bool = False, return_events: Optional[bool] = None, momentum_space: bool = False, integrator_weight: Optional[float] = None, discrete_dim: Optional[Sequence[int]] = None, graph_name: Optional[str] = None, orientation: Optional[int] = None) -> EvaluationResult:",
                 "default": null,
@@ -1413,7 +1413,7 @@
                     "kind": "parameter",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "Legacy compatibility option selecting the configured ``f128`` stability level, or arbitrary precision when no ``f128`` level is available. Returned numeric fields remain ``float64``."
+                      "body": "Force arbitrary-precision (Arb) internal evaluation instead of following the configured stability ladder. Returned numeric fields remain ``float64``."
                     },
                     "signature": "bool",
                     "default": "False",
@@ -1503,7 +1503,7 @@
                 "kind": "method",
                 "docs": {
                   "format": "python-docstring",
-                  "body": "Evaluate a batch of integration or momentum-space samples.\n\nParameters\n----------\npoints : numpy.ndarray[numpy.float64]\n    Two-dimensional array with one sample per row. Integration-space columns\n    must match the selected integrand; momentum-space columns are flattened\n    ``(px, py, pz)`` groups with one triplet per independent loop momentum.\n    Energy components and external momenta are not accepted.\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand to evaluate. Supply this when selection is ambiguous.\nuse_arb_prec : bool, default=False\n    Legacy compatibility option selecting the configured ``f128`` stability\n    level, or arbitrary precision when no ``f128`` level is available.\n    Returned numeric fields remain ``float64``.\nminimal_output : bool, default=False\n    Omit the optional evaluation metadata from every returned sample.\nreturn_events : bool, optional\n    Temporarily override event generation for this call. The integrand setting\n    is restored afterward.\nmomentum_space : bool, default=False\n    Interpret each row as consecutive spatial loop-momentum ``(px, py, pz)``\n    triplets instead of integration-space coordinates.\nintegrator_weights : numpy.ndarray[numpy.float64], optional\n    One weight per row. Defaults to 1.0 for every sample.\ndiscrete_dims : numpy.ndarray[numpy.unsignedinteger], optional\n    Two-dimensional array with one row of discrete coordinates per sample.\ngraph_names : Sequence[str | None], optional\n    Momentum-space graph selection for each sample.\norientations : Sequence[int | None], optional\n    Momentum-space orientation selection for each sample.\n\nReturns\n-------\nBatchEvaluationResult\n    Per-sample evaluations and one observable snapshot for the complete batch.\n\nRaises\n------\nException\n    If integrand selection is ambiguous or invalid, array or option lengths do\n    not match, dimensions are invalid, or warm-up/evaluation fails.\n\nNotes\n-----\nWith ``use_arb_prec=False``, evaluation follows the configured ``f64``,\n``f128``, and arbitrary-precision stability ladder. Despite its historical\nname, ``use_arb_prec=True`` selects configured ``f128`` and falls back to\narbitrary precision only when that level is absent. Python-visible numeric\nfields use the package's ``float64`` output contract. Evaluation may\nupdate in-memory caches or observable snapshots in a read-only-state session.\n\nSee Also\n--------\nGammaLoop's sample-evaluation contract in the interface guide and the\nmaintained events-and-observables example.\n\nExamples\n--------\nEvaluate two rows and inspect their per-sample events and batch-level histograms:\n\n```python\nfrom pathlib import Path\n\nimport numpy as np\nfrom gammaloop import GammaLoopAPI\n\nexample = Path(\"examples/api/python/epem_a_ddxg_xs_LO\")\napi = GammaLoopAPI(\n    state_folder=example / \"state\",\n    boot_commands_path=example / \"run.toml\",\n    clean_state=True,\n)\npoints = np.array([\n    [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],\n    [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],\n], dtype=float)\nresult = api.evaluate_samples(points, return_events=True)\nassert len(result.samples) == 2\nassert all(sample.event_groups for sample in result.samples)\nassert result.observables[\"leading_jet_pt_hist\"].sample_count == 2\nassert len(result.observables[\"leading_jet_pt_hist\"].bins) == 8\n```\n\nThe fixture exercises the API surface; its powered coupling selector is not a validated\nperturbative-order or normalization benchmark."
+                  "body": "Evaluate a batch of integration or momentum-space samples.\n\nParameters\n----------\npoints : numpy.ndarray[numpy.float64]\n    Two-dimensional array with one sample per row. Integration-space columns\n    must match the selected integrand; momentum-space columns are flattened\n    ``(px, py, pz)`` groups with one triplet per independent loop momentum.\n    Energy components and external momenta are not accepted.\nprocess_id : int, optional\n    Process containing the integrand. Supply this when selection is ambiguous.\nintegrand_name : str, optional\n    Integrand to evaluate. Supply this when selection is ambiguous.\nuse_arb_prec : bool, default=False\n    Force arbitrary-precision (Arb) internal evaluation instead of following\n    the configured stability ladder.\n    Returned numeric fields remain ``float64``.\nminimal_output : bool, default=False\n    Omit the optional evaluation metadata from every returned sample.\nreturn_events : bool, optional\n    Temporarily override event generation for this call. The integrand setting\n    is restored afterward.\nmomentum_space : bool, default=False\n    Interpret each row as consecutive spatial loop-momentum ``(px, py, pz)``\n    triplets instead of integration-space coordinates.\nintegrator_weights : numpy.ndarray[numpy.float64], optional\n    One weight per row. Defaults to 1.0 for every sample.\ndiscrete_dims : numpy.ndarray[numpy.unsignedinteger], optional\n    Two-dimensional array with one row of discrete coordinates per sample.\ngraph_names : Sequence[str | None], optional\n    Momentum-space graph selection for each sample.\norientations : Sequence[int | None], optional\n    Momentum-space orientation selection for each sample.\n\nReturns\n-------\nBatchEvaluationResult\n    Per-sample evaluations and one observable snapshot for the complete batch.\n\nRaises\n------\nException\n    If integrand selection is ambiguous or invalid, array or option lengths do\n    not match, dimensions are invalid, or warm-up/evaluation fails.\n\nNotes\n-----\nWith ``use_arb_prec=False``, evaluation follows the configured ``f64``,\n``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``\nforces arbitrary-precision (Arb) internal evaluation. Python-visible numeric\nfields use the package's ``float64`` output contract. Evaluation may\nupdate in-memory caches or observable snapshots in a read-only-state session.\n\nSee Also\n--------\nGammaLoop's sample-evaluation contract in the interface guide and the\nmaintained events-and-observables example.\n\nExamples\n--------\nEvaluate two rows and inspect their per-sample events and batch-level histograms:\n\n```python\nfrom pathlib import Path\n\nimport numpy as np\nfrom gammaloop import GammaLoopAPI\n\nexample = Path(\"examples/api/python/epem_a_ddxg_xs_LO\")\napi = GammaLoopAPI(\n    state_folder=example / \"state\",\n    boot_commands_path=example / \"run.toml\",\n    clean_state=True,\n)\npoints = np.array([\n    [0.17, 0.31, 0.53, 0.23, 0.41, 0.67],\n    [0.11, 0.29, 0.47, 0.19, 0.37, 0.59],\n], dtype=float)\nresult = api.evaluate_samples(points, return_events=True)\nassert len(result.samples) == 2\nassert all(sample.event_groups for sample in result.samples)\nassert result.observables[\"leading_jet_pt_hist\"].sample_count == 2\nassert len(result.observables[\"leading_jet_pt_hist\"].bins) == 8\n```\n\nThe fixture exercises the API surface; its powered coupling selector is not a validated\nperturbative-order or normalization benchmark."
                 },
                 "signature": "def evaluate_samples(self, points: numpy.NDArray[numpy.float64], process_id: Optional[int] = None, integrand_name: Optional[str] = None, use_arb_prec: bool = False, minimal_output: bool = False, return_events: Optional[bool] = None, momentum_space: bool = False, integrator_weights: Optional[numpy.NDArray[numpy.float64]] = None, discrete_dims: numpy.NDArray[numpy.unsignedinteger] | None = None, graph_names: Optional[Sequence[Optional[str]]] = None, orientations: Optional[Sequence[Optional[int]]] = None) -> BatchEvaluationResult:",
                 "default": null,
@@ -1546,7 +1546,7 @@
                     "kind": "parameter",
                     "docs": {
                       "format": "python-docstring",
-                      "body": "Legacy compatibility option selecting the configured ``f128`` stability level, or arbitrary precision when no ``f128`` level is available. Returned numeric fields remain ``float64``."
+                      "body": "Force arbitrary-precision (Arb) internal evaluation instead of following the configured stability ladder. Returned numeric fields remain ``float64``."
                     },
                     "signature": "bool",
                     "default": "False",
@@ -2620,7 +2620,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramAccumulator",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1017,
+              "line": 1015,
               "column": 1
             }
           },
@@ -2785,7 +2785,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramBin",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1194,
+              "line": 1192,
               "column": 1
             }
           },
@@ -3003,7 +3003,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramSnapshot",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1268,
+              "line": 1266,
               "column": 1
             }
           },
@@ -3067,7 +3067,7 @@
             "source": {
               "identifier": "gammaloop-python::HistogramStats",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1359,
+              "line": 1357,
               "column": 1
             }
           },
@@ -3154,7 +3154,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegralEstimate",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1380,
+              "line": 1378,
               "column": 1
             }
           },
@@ -3207,7 +3207,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandActiveThresholdCut",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1400,
+              "line": 1398,
               "column": 1
             }
           },
@@ -3293,7 +3293,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandCut",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1416,
+              "line": 1414,
               "column": 1
             }
           },
@@ -3379,7 +3379,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandCutThreshold",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1447,
+              "line": 1445,
               "column": 1
             }
           },
@@ -3443,7 +3443,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandGraph",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1478,
+              "line": 1476,
               "column": 1
             }
           },
@@ -3562,7 +3562,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandGraphGroup",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1499,
+              "line": 1497,
               "column": 1
             }
           },
@@ -3714,7 +3714,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandInfo",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1545,
+              "line": 1543,
               "column": 1
             }
           },
@@ -3789,7 +3789,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandLoopMomentumBasis",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1606,
+              "line": 1604,
               "column": 1
             }
           },
@@ -3842,7 +3842,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandOrientation",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1632,
+              "line": 1630,
               "column": 1
             }
           },
@@ -3928,7 +3928,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrandThresholdEsurface",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1648,
+              "line": 1646,
               "column": 1
             }
           },
@@ -3991,7 +3991,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationOutput",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1679,
+              "line": 1677,
               "column": 1
             }
           },
@@ -4055,7 +4055,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1692,
+              "line": 1690,
               "column": 1
             }
           },
@@ -4206,7 +4206,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationStatisticsSnapshot",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1702,
+              "line": 1700,
               "column": 1
             }
           },
@@ -4301,7 +4301,7 @@
             "source": {
               "identifier": "gammaloop-python::IntegrationTableComponentResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1738,
+              "line": 1736,
               "column": 1
             }
           },
@@ -4364,7 +4364,7 @@
             "source": {
               "identifier": "gammaloop-python::MaxWeightInfoEntry",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1760,
+              "line": 1758,
               "column": 1
             }
           },
@@ -4516,7 +4516,7 @@
             "source": {
               "identifier": "gammaloop-python::SampleEvaluationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1774,
+              "line": 1772,
               "column": 1
             }
           },
@@ -4737,7 +4737,7 @@
             "source": {
               "identifier": "gammaloop-python::SettingsValue",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1833,
+              "line": 1831,
               "column": 1
             }
           },
@@ -4840,7 +4840,7 @@
             "source": {
               "identifier": "gammaloop-python::SlotIntegrationResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1925,
+              "line": 1923,
               "column": 1
             }
           },
@@ -4926,7 +4926,7 @@
             "source": {
               "identifier": "gammaloop-python::StabilityResult",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1949,
+              "line": 1947,
               "column": 1
             }
           },
@@ -5023,7 +5023,7 @@
             "source": {
               "identifier": "gammaloop-python::LogLevel",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 1980,
+              "line": 1978,
               "column": 1
             }
           },
@@ -5053,7 +5053,7 @@
             "source": {
               "identifier": "gammaloop-python::atom_to_canonical_string",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2006,
+              "line": 2004,
               "column": 1
             }
           },
@@ -5083,7 +5083,7 @@
             "source": {
               "identifier": "gammaloop-python::evaluate_graph_overall_factor",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2034,
+              "line": 2032,
               "column": 1
             }
           },
@@ -5113,7 +5113,7 @@
             "source": {
               "identifier": "gammaloop-python::to_dots",
               "file": "docs/api/python/gammaloop-python.pyi",
-              "line": 2064,
+              "line": 2062,
               "column": 1
             }
           }

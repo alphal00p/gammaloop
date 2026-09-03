@@ -464,8 +464,8 @@ class GammaLoopAPI:
         integrand_name : str, optional
             Integrand to evaluate. Supply this when selection is ambiguous.
         use_arb_prec : bool, default=False
-            Legacy compatibility option selecting the configured ``f128`` stability
-            level, or arbitrary precision when no ``f128`` level is available.
+            Force arbitrary-precision (Arb) internal evaluation instead of following
+            the configured stability ladder.
             Returned numeric fields remain ``float64``.
         minimal_output : bool, default=False
             Omit the optional evaluation metadata from the returned sample.
@@ -498,9 +498,8 @@ class GammaLoopAPI:
         Notes
         -----
         With ``use_arb_prec=False``, evaluation follows the configured ``f64``,
-        ``f128``, and arbitrary-precision stability ladder. Despite its historical
-        name, ``use_arb_prec=True`` selects configured ``f128`` and falls back to
-        arbitrary precision only when that level is absent. Python-visible numeric
+        ``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``
+        forces arbitrary-precision (Arb) internal evaluation. Python-visible numeric
         fields use the package's ``float64`` output contract. Evaluation may
         warm the integrand and update in-memory caches or observable snapshots even in
         a read-only-state session.
@@ -551,8 +550,8 @@ class GammaLoopAPI:
         integrand_name : str, optional
             Integrand to evaluate. Supply this when selection is ambiguous.
         use_arb_prec : bool, default=False
-            Legacy compatibility option selecting the configured ``f128`` stability
-            level, or arbitrary precision when no ``f128`` level is available.
+            Force arbitrary-precision (Arb) internal evaluation instead of following
+            the configured stability ladder.
             Returned numeric fields remain ``float64``.
         minimal_output : bool, default=False
             Omit the optional evaluation metadata from every returned sample.
@@ -585,9 +584,8 @@ class GammaLoopAPI:
         Notes
         -----
         With ``use_arb_prec=False``, evaluation follows the configured ``f64``,
-        ``f128``, and arbitrary-precision stability ladder. Despite its historical
-        name, ``use_arb_prec=True`` selects configured ``f128`` and falls back to
-        arbitrary precision only when that level is absent. Python-visible numeric
+        ``f128``, and arbitrary-precision stability ladder. ``use_arb_prec=True``
+        forces arbitrary-precision (Arb) internal evaluation. Python-visible numeric
         fields use the package's ``float64`` output contract. Evaluation may
         update in-memory caches or observable snapshots in a read-only-state session.
 

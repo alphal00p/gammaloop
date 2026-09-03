@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "https://inspirehep.net",
-  "updated": "2026-09-02",
+  "updated": "2026-09-03",
   "api_url": "https://inspirehep.net/api/literature?sort=mostrecent&q=%28a+V.Hirschi.1+or+a+M.Fraaije.1+or+a+L.Huber.1+or+a+B.Ruijl.1+or+a+Kaapo.Seppanen.1+or+a+Zeno.Capatti.1%29",
   "authors": [
     {
@@ -1072,7 +1072,7 @@
       "venue": "JHEP 04 (2021) 104",
       "doi": "10.1007/JHEP04(2021)104",
       "arxiv": "2010.01068",
-      "citations": 68,
+      "citations": 69,
       "types": [
         "article"
       ],
@@ -1596,7 +1596,7 @@
       "venue": "CERN Yellow Rep.Monogr. 7 (2019) 1",
       "doi": "10.23731/CYRM-2019-007.1",
       "arxiv": "1902.04070",
-      "citations": 318,
+      "citations": 319,
       "types": [
         "book chapter"
       ],
@@ -2180,7 +2180,7 @@
       "venue": "JHEP 11 (2021) 085",
       "doi": "10.1007/JHEP11(2021)085",
       "arxiv": "1804.10017",
-      "citations": 559,
+      "citations": 561,
       "types": [
         "article"
       ],
@@ -2579,7 +2579,7 @@
       "venue": "JHEP 05 (2017) 037",
       "doi": "10.1007/JHEP05(2017)037",
       "arxiv": "1703.03776",
-      "citations": 74,
+      "citations": 75,
       "types": [
         "article"
       ],
@@ -3508,7 +3508,7 @@
       "venue": "JHEP 10 (2015) 146",
       "doi": "10.1007/JHEP10(2015)146",
       "arxiv": "1507.00020",
-      "citations": 213,
+      "citations": 214,
       "types": [
         "article"
       ],
@@ -3706,7 +3706,7 @@
       "venue": "JHEP 07 (2014) 079",
       "doi": "10.1007/JHEP07(2014)079",
       "arxiv": "1405.0301",
-      "citations": 10767,
+      "citations": 10769,
       "types": [
         "article"
       ],
@@ -4118,7 +4118,7 @@
       "venue": "JHEP 05 (2011) 044",
       "doi": "10.1007/JHEP05(2011)044",
       "arxiv": "1103.0621",
-      "citations": 546,
+      "citations": 547,
       "types": [
         "article"
       ],

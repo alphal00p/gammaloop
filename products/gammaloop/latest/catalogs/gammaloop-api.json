@@ -1613,7 +1613,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Evaluate one or more integrand inputs through the ordinary `f64` result boundary.\n\nEach row of [`Self::points`] has one of two layouts:\n\n- with [`Self::momentum_space`] set to `false`, the row contains integration-space\ncoordinates and must have the dimension selected by the integrand and\n[`Self::discrete_dims`];\n- with [`Self::momentum_space`] set to `true`, the row contains exactly one\n`(px, py, pz)` triplet per independent loop momentum. The flattened order is\n`[k1x, k1y, k1z, k2x, k2y, k2z, ...]`. Energies and external momenta are not\ninputs to this interface.\n\nA momentum-space row whose length is not a multiple of three is rejected before\nevaluation. The selected integrand, graph, or graph group determines the required\nnumber of loop momenta and rejects the wrong number of complete triplets.\n\n[`Self::use_arb_prec`] is a legacy compatibility flag: it selects the configured\n`f128` stability level, falling back to arbitrary precision only when no `f128`\nlevel exists. It does not change this type's `f64` output contract. Use\n[`EvaluateSamplesPrecise`] when the caller must retain an `f64`, `f128`, or\narbitrary-precision result.\n\nThe [GammaLoop sample-evaluation contract](https://alphal00p.github.io/gammaloop/products/gammaloop/latest/reference/interfaces/#sample-evaluation-contract)\nconnects this request to the CLI and Python interfaces and to the maintained\nchecked example.\n\n# Example\n\n```rust\nuse gammaloop_api::commands::evaluate_samples::EvaluateSamples;\nuse ndarray::arr2;\n\nlet loop_momenta = arr2(&[[\n0.11, -0.07, 0.19, // k1 = (px, py, pz)\n-0.13, 0.05, 0.29, // k2 = (px, py, pz)\n]]);\nlet request = EvaluateSamples {\nprocess_id: Some(0),\nintegrand_name: None,\nuse_arb_prec: true,\nminimal_output: true,\nreturn_generated_events: None,\nmomentum_space: true,\npoints: loop_momenta.view(),\nintegrator_weights: None,\ndiscrete_dims: None,\ngraph_names: None,\norientations: None,\n};\n\nassert_eq!(request.points.ncols(), 2 * 3);\nassert!(request.momentum_space);\n```"
+              "body": "Evaluate one or more integrand inputs through the ordinary `f64` result boundary.\n\nEach row of [`Self::points`] has one of two layouts:\n\n- with [`Self::momentum_space`] set to `false`, the row contains integration-space\ncoordinates and must have the dimension selected by the integrand and\n[`Self::discrete_dims`];\n- with [`Self::momentum_space`] set to `true`, the row contains exactly one\n`(px, py, pz)` triplet per independent loop momentum. The flattened order is\n`[k1x, k1y, k1z, k2x, k2y, k2z, ...]`. Energies and external momenta are not\ninputs to this interface.\n\nA momentum-space row whose length is not a multiple of three is rejected before\nevaluation. The selected integrand, graph, or graph group determines the required\nnumber of loop momenta and rejects the wrong number of complete triplets.\n\n[`Self::use_arb_prec`] forces arbitrary-precision internal evaluation, using the\nconfigured Arb stability level when one exists and a default Arb level otherwise.\nIt does not change this type's `f64` output contract. Use [`EvaluateSamplesPrecise`]\nwhen the caller must retain an `f64`, `f128`, or arbitrary-precision result.\n\nThe [GammaLoop sample-evaluation contract](https://alphal00p.github.io/gammaloop/products/gammaloop/latest/reference/interfaces/#sample-evaluation-contract)\nconnects this request to the CLI and Python interfaces and to the maintained\nchecked example.\n\n# Example\n\n```rust\nuse gammaloop_api::commands::evaluate_samples::EvaluateSamples;\nuse ndarray::arr2;\n\nlet loop_momenta = arr2(&[[\n0.11, -0.07, 0.19, // k1 = (px, py, pz)\n-0.13, 0.05, 0.29, // k2 = (px, py, pz)\n]]);\nlet request = EvaluateSamples {\nprocess_id: Some(0),\nintegrand_name: None,\nuse_arb_prec: true,\nminimal_output: true,\nreturn_generated_events: None,\nmomentum_space: true,\npoints: loop_momenta.view(),\nintegrator_weights: None,\ndiscrete_dims: None,\ngraph_names: None,\norientations: None,\n};\n\nassert_eq!(request.points.ncols(), 2 * 3);\nassert!(request.momentum_space);\n```"
             },
             "summary": "Selects an integrand, coordinates, weights, discrete dimensions, and optional momentum-space channels for a batch.",
             "signature": "pub struct EvaluateSamples < 'a > {}",
@@ -1661,7 +1661,7 @@
                 "kind": "field",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "Select configured f128, or Arb when f128 is unavailable, instead of the full ladder."
+                  "body": "Force Arb internal evaluation instead of the configured stability ladder."
                 },
                 "signature": "bool",
                 "default": null,
@@ -1759,7 +1759,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::EvaluateSamples",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 76,
+              "line": 75,
               "column": 1
             }
           },
@@ -1809,7 +1809,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_sample",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 380,
+              "line": 379,
               "column": 1
             }
           },
@@ -1859,7 +1859,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_samples",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 369,
+              "line": 368,
               "column": 1
             }
           },
@@ -1872,7 +1872,7 @@
             "required_features": [],
             "docs": {
               "format": "rust-markdown",
-              "body": "Evaluate inputs while preserving the numeric type used by the final stability level.\n\nCoordinate layouts and validation are identical to [`EvaluateSamples`]. With\n[`Self::use_arb_prec`] set to `false`, the configured stability ladder may return\nan `f64`, `f128`, or arbitrary-precision result. Setting it to `true` selects the\nconfigured `f128` level, or arbitrary precision when `f128` is unavailable. Unlike\n[`EvaluateSamples`], this request retains that active result type."
+              "body": "Evaluate inputs while preserving the numeric type used by the final stability level.\n\nCoordinate layouts and validation are identical to [`EvaluateSamples`]. With\n[`Self::use_arb_prec`] set to `false`, the configured stability ladder may return\nan `f64`, `f128`, or arbitrary-precision result. Setting it to `true` forces Arb,\nusing the configured Arb level when available and a default Arb level otherwise.\nUnlike [`EvaluateSamples`], this request retains that active result type."
             },
             "summary": "Accepts f64 integration or momentum-space coordinates while preserving the selected precision for internal computation and returned values.",
             "signature": "pub struct EvaluateSamplesPrecise < 'a > {}",
@@ -1915,7 +1915,7 @@
                 "kind": "field",
                 "docs": {
                   "format": "rust-markdown",
-                  "body": "Select configured f128, or Arb when f128 is unavailable, instead of the full ladder."
+                  "body": "Force Arb evaluation instead of the configured stability ladder."
                 },
                 "signature": "bool",
                 "default": null,
@@ -2013,7 +2013,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::EvaluateSamplesPrecise",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 211,
+              "line": 210,
               "column": 1
             }
           },
@@ -2063,7 +2063,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_sample_precise",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 349,
+              "line": 348,
               "column": 1
             }
           },
@@ -2113,7 +2113,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::evaluate_samples::evaluate_samples_precise",
               "file": "crates/gammaloop-api/src/commands/evaluate_samples.rs",
-              "line": 338,
+              "line": 337,
               "column": 1
             }
           },

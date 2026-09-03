@@ -2,5 +2,5 @@ alphal00p documentation
 product=spenso
 channel=latest
 tag=
-commit=08c2608f623e4bd1ac06fc4e3eb0e6fafe5a1562
+commit=addf846a86d5a791511c2064b2a5cac7c6e6e211
 route=/products/spenso/latest/
