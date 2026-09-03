@@ -681,7 +681,10 @@ connection, component provenance, and ownership are not.
   lifecycles are registry-owned. Current diagnostics, drawing, and Idenso
   reference material has rendered routes; READMEs link to those routes.
 - Portal task routes and federated rendered-content search provide the first
-  integrated views without copying the underlying prose.
+  integrated views without copying the underlying prose. The portal pages
+  themselves are Typst sources that load task, product, people, talks,
+  affiliation, publication, and citation metadata directly; Rust retains
+  validation and build orchestration rather than a parallel page structure.
 
 *Still required*
 

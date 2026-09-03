@@ -4,6 +4,44 @@ title = "Open tools for precision collider physics."
 summary = "The αLoop collaboration develops theoretical and algorithmic methods for automated cross-section calculations in quantum field theory, centred on Local Unitarity."
 funding = "Research associated with Local Unitarity has been supported by the Swiss National Science Foundation."
 funding_url = "https://data.snf.ch/grants/grant/203335"
+graphs = [
+  "aa-2l-gl00",
+  "aa-2l-gl08",
+  "aa-3l-gl000",
+  "aa-3l-gl150",
+  "aa-3l-gl300",
+  "gg-hhh-3l",
+  "gg-hhh-1l",
+  "qq-aaa-pentabox",
+  "ad-ad-gluon",
+  "epem-bbx",
+  "epem-ttbar-cut",
+]
+
+[[task]]
+label = "Calculations"
+product = "gammaloop"
+role = "Calculation application"
+
+[[task]]
+label = "Graphs"
+product = "linnet"
+role = "Graph-algorithm library"
+
+[[task]]
+label = "Tensors"
+product = "spenso"
+role = "Tensor-network library"
+
+[[task]]
+label = "Identities"
+product = "idenso"
+role = "Symbolic-identity library"
+
+[[task]]
+label = "Integrals"
+product = "vakint"
+role = "Integral-evaluation library"
 
 [[pillar]]
 label = "01 · Physics"

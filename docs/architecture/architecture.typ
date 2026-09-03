@@ -17,6 +17,18 @@ context without pretending to describe HEAD. Superseded records keep a
 route and replacement edge but are removed from primary navigation and
 search.
 
+The collaboration portal is authored in `docs/portal/`. One Typst bundle
+emits the landing, About, People, Talks, Publications, and Citations routes.
+Those sources load `docs/portal.toml`, `docs/talks.toml`,
+`docs/products/registry.toml`, and the generated INSPIRE publication cache
+directly. Page bodies use ordinary Typst headings, paragraphs, emphasis, links,
+and data-driven loops. Their layout calls name semantic portal components rather
+than CSS classes. Only `docs/portal/components.typ` maps those components, the site
+shell, and interactive browser controls to semantic HTML and CSS selectors. The
+Rust documentation builder validates those inputs, invokes Typst, copies assets,
+federates search, and checks links; it does not own the public page prose or HTML
+composition.
+
 Project tutorials and manuals remain under
 `/products/<project>/latest/`. Architecture notes may explain internal
 ownership and execution flow, but they do not replace the supported

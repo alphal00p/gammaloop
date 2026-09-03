@@ -34,26 +34,6 @@ use typst_render::{CliTypstRenderer, TypstRenderJob, TypstRenderer};
 use walkdir::WalkDir;
 
 const PRODUCT_IDS: [&str; 5] = ["gammaloop", "linnet", "spenso", "idenso", "vakint"];
-const PORTAL_TASKS: [(&str, &str, &str); 5] = [
-    ("Calculations", "gammaloop", "Calculation application"),
-    ("Graphs", "linnet", "Graph-algorithm library"),
-    ("Tensors", "spenso", "Tensor-network library"),
-    ("Identities", "idenso", "Symbolic-identity library"),
-    ("Integrals", "vakint", "Integral-evaluation library"),
-];
-const PORTAL_GRAPH_IDS: [&str; 11] = [
-    "aa-2l-gl00",
-    "aa-2l-gl08",
-    "aa-3l-gl000",
-    "aa-3l-gl150",
-    "aa-3l-gl300",
-    "gg-hhh-3l",
-    "gg-hhh-1l",
-    "qq-aaa-pentabox",
-    "ad-ad-gluon",
-    "epem-bbx",
-    "epem-ttbar-cut",
-];
 const PORTAL_SCHEMA_VERSION: u32 = 2;
 const TALKS_SCHEMA_VERSION: u32 = 1;
 const DEVELOPER_SCHEMA_VERSION: u32 = 3;
@@ -63,8 +43,8 @@ const PUBLISHED_DOCS_ROOT: &str = "https://alphal00p.github.io/gammaloop";
 const STRICT_RUSTDOC_FLAGS: &str = "-D rustdoc::broken_intra_doc_links \
     -D rustdoc::invalid_html_tags -D rustdoc::bare_urls";
 
-fn portal_graph_assets() -> impl Iterator<Item = String> {
-    PORTAL_GRAPH_IDS.into_iter().flat_map(|graph| {
+fn portal_graph_assets(graphs: &[String]) -> impl Iterator<Item = String> + '_ {
+    graphs.iter().flat_map(|graph| {
         ["light", "dark"]
             .into_iter()
             .map(move |theme| format!("portal-graph-{graph}-{theme}.svg"))
@@ -303,11 +283,22 @@ struct PortalConfig {
     funding: String,
     funding_url: String,
     #[serde(default)]
+    graphs: Vec<String>,
+    #[serde(default)]
+    task: Vec<PortalTask>,
+    #[serde(default)]
     pillar: Vec<PortalPillar>,
     #[serde(default)]
     people: Vec<PortalPerson>,
     #[serde(default)]
     affiliation: Vec<PortalAffiliation>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+struct PortalTask {
+    label: String,
+    product: String,
+    role: String,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1033,8 +1024,30 @@ impl SiteBuilder {
         ensure!(
             !self.portal.pillar.is_empty()
                 && !self.portal.people.is_empty()
-                && !self.portal.affiliation.is_empty(),
-            "portal must define research pillars, people, and affiliations"
+                && !self.portal.affiliation.is_empty()
+                && !self.portal.graphs.is_empty(),
+            "portal must define research pillars, people, affiliations, and graph assets"
+        );
+        let task_products = self
+            .portal
+            .task
+            .iter()
+            .map(|task| task.product.as_str())
+            .collect::<BTreeSet<_>>();
+        ensure!(
+            task_products == ids && self.portal.task.len() == ids.len(),
+            "portal tasks must cover every product exactly once"
+        );
+        for task in &self.portal.task {
+            ensure!(
+                !task.label.trim().is_empty() && !task.role.trim().is_empty(),
+                "portal task for {} is incomplete",
+                task.product
+            );
+        }
+        ensure!(
+            self.portal.graphs.iter().collect::<BTreeSet<_>>().len() == self.portal.graphs.len(),
+            "portal graph asset ids must be unique"
         );
         ensure!(
             self.publications.schema == PUBLICATION_SCHEMA_VERSION,
@@ -1190,6 +1203,15 @@ impl SiteBuilder {
         self.require_file(Path::new("docs/assets/STIX-Two-OFL.txt"))?;
         self.require_file(Path::new("scripts/render-docs-svg-assets.sh"))?;
         for source in [
+            "docs/portal/main.typ",
+            "docs/portal/shared.typ",
+            "docs/portal/components.typ",
+            "docs/portal/index.typ",
+            "docs/portal/about.typ",
+            "docs/portal/people.typ",
+            "docs/portal/talks.typ",
+            "docs/portal/publications.typ",
+            "docs/portal/citations.typ",
             "docs/assets/typst/theme.typ",
             "docs/assets/typst/marks/local-unitarity.typ",
             "docs/assets/typst/marks/gammaloop.typ",
@@ -1205,13 +1227,13 @@ impl SiteBuilder {
         }
         self.require_file(Path::new("docs/assets/local-unitarity-light.svg"))?;
         self.require_file(Path::new("docs/assets/local-unitarity-dark.svg"))?;
-        for graph in PORTAL_GRAPH_IDS {
+        for graph in &self.portal.graphs {
             self.require_file(
                 &Path::new("docs/assets/typst/portal-graphs/graphs")
                     .join(format!("portal-graph-{graph}.typ")),
             )?;
         }
-        for graph in portal_graph_assets() {
+        for graph in portal_graph_assets(&self.portal.graphs) {
             self.require_file(&Path::new("docs/assets/graphs").join(&graph))?;
         }
         for asset in about_assets() {
@@ -1785,6 +1807,10 @@ impl SiteBuilder {
                 ],
             )
         };
+        ensure!(
+            scope != BuildScope::FullSite || request.include_typst,
+            "--skip-typst is only supported for single-product metadata previews"
+        );
 
         let requested_output = absolute_from(&self.root, &request.output);
         ensure_safe_output(&self.root, &requested_output)?;
@@ -1831,7 +1857,13 @@ impl SiteBuilder {
                     request.dependency_output.as_deref(),
                     renderer,
                 )?;
-                self.write_portal(&output, request.channel, tag)?;
+                self.write_portal(
+                    &output,
+                    request.channel,
+                    tag,
+                    request.dependency_output.as_deref(),
+                    renderer,
+                )?;
                 self.write_federated_search_index(&output, request.channel, tag)?;
             }
             BuildScope::ProductPreview => {
@@ -2087,7 +2119,7 @@ impl SiteBuilder {
     fn write_portal_assets(&self, destination: &Path) -> Result<()> {
         let graphs = destination.join("assets/graphs");
         fs::create_dir_all(&graphs)?;
-        for graph in portal_graph_assets() {
+        for graph in portal_graph_assets(&self.portal.graphs) {
             fs::copy(
                 self.root.join("docs/assets/graphs").join(&graph),
                 graphs.join(&graph),
@@ -4456,506 +4488,69 @@ impl SiteBuilder {
         )
     }
 
-    fn write_portal(&self, output: &Path, channel: BuildChannel, tag: Option<&str>) -> Result<()> {
+    fn write_portal(
+        &self,
+        output: &Path,
+        channel: BuildChannel,
+        tag: Option<&str>,
+        dependency_output: Option<&Path>,
+        renderer: &mut dyn TypstRenderer,
+    ) -> Result<()> {
         self.write_site_assets(output)?;
         self.write_portal_assets(output)?;
-        let channel_route = match channel {
-            BuildChannel::Latest => "latest".to_owned(),
-            BuildChannel::Snapshot => format!(
-                "snapshots/{}",
-                tag.expect("snapshot tag was validated before rendering the portal")
-            ),
-        };
-        let tasks = PORTAL_TASKS
-            .iter()
-            .enumerate()
-            .map(|(index, (task, product_id, role))| -> Result<String> {
-                let product = self
-                    .registry
-                    .product
-                    .iter()
-                    .find(|product| product.id == *product_id)
-                    .wrap_err_with(|| format!("portal task {task} references unknown product {product_id}"))?;
-                let quickstart = product
-                    .pages
-                    .iter()
-                    .find(|page| page.id == "quickstart")
-                    .wrap_err_with(|| format!("{} has no quickstart route", product.id))?;
-                Ok(format!(
-                    r#"<a class="portal-task-link" data-product="{}" href="products/{}/{}/{}"><span class="portal-task-order">{:02}</span><span class="portal-task-copy"><strong>{}</strong><span>{} · {}</span><small>{}</small></span><span class="portal-task-arrow" aria-hidden="true">→</span></a>"#,
-                    escape_html(&product.id),
-                    escape_html(&product.id),
-                    escape_html(&channel_route),
-                    escape_html(&quickstart.route),
-                    index + 1,
-                    escape_html(task),
-                    escape_html(&product.title),
-                    escape_html(role),
-                    escape_html(&product.tagline),
-                ))
-            })
-            .collect::<Result<Vec<_>>>()?
-            .join("");
-        let projects = self
-            .registry
-            .product
-            .iter()
-            .enumerate()
-            .map(|(index, product)| -> Result<String> {
-                let role = PORTAL_TASKS
-                    .iter()
-                    .find(|(_, product_id, _)| *product_id == product.id)
-                    .map(|(_, _, role)| *role)
-                    .wrap_err_with(|| format!("{} has no portal ecosystem role", product.id))?;
-                let packages = product
-                    .rust_components
-                    .iter()
-                    .chain(&product.python_components)
-                    .map(|component| component.package.as_str())
-                    .collect::<BTreeSet<_>>()
-                    .into_iter()
-                    .map(|package| {
-                        format!(
-                            "<span class=\"portal-package\">{}</span>",
-                            escape_html(package)
-                        )
-                    })
-                    .collect::<String>();
-                let guide_route = product
-                    .pages
-                    .iter()
-                    .find(|page| page.group == "Guides")
-                    .map(|page| page.route.as_str())
-                    .wrap_err_with(|| format!("{} has no portal guide", product.id))?;
-                let quickstart_route = product
-                    .pages
-                    .iter()
-                    .find(|page| page.id == "quickstart")
-                    .map(|page| page.route.as_str())
-                    .wrap_err_with(|| format!("{} has no portal quickstart", product.id))?;
-                Ok(format!(
-                    r#"<article class="portal-project-card" data-product="{}"><div class="portal-project-meta"><span>{:02}</span><span>{}</span></div><h3><a href="products/{}/{}/">{}</a></h3><p class="portal-project-summary">{}</p><div class="portal-packages" aria-label="{} crates and modules"><span class="portal-packages-label">Crates &amp; modules</span>{}</div><nav class="portal-card-links" aria-label="{} documentation"><a class="portal-card-primary" href="products/{}/{}/">Overview <span aria-hidden="true">↗</span></a><a href="products/{}/{}/{}">Get started</a><a href="products/{}/{}/{}">Guides</a><a href="products/{}/{}/reference/">Reference</a><a class="portal-card-cite" href="citations/#{}">Cite</a></nav></article>"#,
-                    escape_html(&product.id),
-                    index + 1,
-                    escape_html(role),
-                    escape_html(&product.id),
-                    escape_html(&channel_route),
-                    escape_html(&product.title),
-                    escape_html(&product.tagline),
-                    escape_html(&product.title),
-                    packages,
-                    escape_html(&product.title),
-                    escape_html(&product.id),
-                    escape_html(&channel_route),
-                    escape_html(&product.id),
-                    escape_html(&channel_route),
-                    escape_html(quickstart_route),
-                    escape_html(&product.id),
-                    escape_html(&channel_route),
-                    escape_html(guide_route),
-                    escape_html(&product.id),
-                    escape_html(&channel_route),
-                    escape_html(&product.id),
-                ))
-            })
-            .collect::<Result<Vec<_>>>()?
-            .join("");
-        let process_graphs = PORTAL_GRAPH_IDS
-            .iter()
-            .map(|graph| {
-                format!(
-                    r#"<span class="portal-process-graph"><img class="portal-graph-theme portal-graph-theme-light" src="assets/graphs/portal-graph-{graph}-light.svg" alt=""><img class="portal-graph-theme portal-graph-theme-dark" src="assets/graphs/portal-graph-{graph}-dark.svg" alt=""></span>"#,
-                )
-            })
-            .collect::<String>();
-        let funding = format!(
-            r#"<aside class="portal-funding" aria-labelledby="funding-title"><span class="portal-funding-mark" aria-hidden="true">α</span><div class="portal-funding-copy"><p class="portal-kicker">Funding</p><h2 id="funding-title">Publicly funded research</h2><p>{}</p></div><a class="portal-text-link" href="{}">Funding record <span aria-hidden="true">↗</span></a></aside>"#,
-            escape_html(&self.portal.funding),
-            escape_html(&self.portal.funding_url),
+
+        let target = self.root.join("target");
+        fs::create_dir_all(&target)?;
+        let work = TempDirBuilder::new()
+            .prefix("alphal00p-portal-typst-")
+            .tempdir_in(target)?;
+        let bundle = work.path().join("bundle");
+        let timestamp = self.git_timestamp();
+        ensure!(
+            timestamp > 0,
+            "cannot determine the documented commit timestamp; set SOURCE_DATE_EPOCH"
         );
-        let favicon = favicon_links("assets/");
-        let html = format!(
-            r##"<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="{}"><meta name="theme-color" content="#f9f6f0">{favicon}<title>αLoop · Research software for collider physics</title><link rel="stylesheet" href="assets/site.css"><script defer src="assets/site.js"></script></head><body class="portal-body" data-search-index="search-index.json" data-search-root=""><a class="skip-link" href="#main-content">Skip to content</a><header class="portal-header"><a class="portal-brand" href="#overview" aria-label="αLoop home"><span class="portal-brand-logo" aria-hidden="true"></span><span class="portal-brand-copy"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class="portal-nav" aria-label="Primary"><a href="#tasks">Tasks</a><a href="people/">People</a><a href="publications/">Publications</a><a href="developers/">Developers</a></nav><div class="portal-header-actions"><button class="portal-search-button" type="button" data-search-open>Search <span class="header-button-label">⌘K</span></button><a class="portal-source-link" href="https://github.com/alphal00p/gammaloop">GitHub <span aria-hidden="true">↗</span></a><button class="portal-theme-button" type="button" data-theme-toggle aria-label="Toggle color theme"><span aria-hidden="true">◐</span></button></div></header><main class="portal-main" id="main-content"><section class="portal-hero portal-section" id="overview"><div class="portal-hero-copy"><p class="portal-kicker">{}</p><h1>{}</h1><p class="portal-lede">{}</p><div class="portal-hero-actions"><a class="portal-button portal-button-primary" href="#tasks">Choose a task <span aria-hidden="true">↓</span></a><a class="portal-button" href="products/gammaloop/{}/quickstart/">Start with GammaLoop <span aria-hidden="true">↗</span></a><a class="portal-button" href="citations/">Cite the software <span aria-hidden="true">↗</span></a></div></div><div class="portal-hero-art"><div class="portal-wordmark" aria-label="αLoop collaboration mark" role="img"></div><div class="portal-graph-field" role="img" aria-label="A jumble of Feynman graphs rendered by GammaLoop from real process and test data">{process_graphs}</div><p>Local cancellation.<br>Global precision.</p></div></section><section class="portal-section portal-task-chooser" id="tasks" aria-labelledby="tasks-title"><header class="portal-task-heading"><div><p class="portal-kicker">Choose by task · 01—05</p><h2 id="tasks-title">What do you want to work on?</h2></div><p>Start with the scientific object or operation you have in hand. Each route opens the maintained first workflow for the component that owns it.</p></header><nav class="portal-task-grid" aria-label="Documentation by task">{tasks}</nav></section><section class="portal-section portal-projects" id="projects" aria-labelledby="projects-title"><div class="portal-section-heading"><div><p class="portal-kicker">Research software · 01—05</p><h2 id="projects-title">Projects &amp; crates</h2></div><p>Five connected codebases spanning numerical cross-sections, graph algorithms, tensor networks, symbolic identities, and integral evaluation.</p></div><div class="portal-project-grid">{projects}</div></section>{funding}</main><footer class="portal-footer"><div><span class="portal-footer-mark" aria-hidden="true"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label="Footer"><a href="#tasks">Tasks</a><a href="#projects">Projects</a><a href="people/">People</a><a href="publications/">Publications</a><a href="citations/">Cite</a><a href="developers/">Developers</a><a href="https://github.com/alphal00p/gammaloop">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer><dialog class="search-dialog" data-search-dialog><form class="search-form" method="dialog"><input class="search-input" type="search" data-search-input placeholder="Search all projects and developer notes" aria-label="Search all documentation"><button class="header-button" value="close">Close</button></form><ul class="search-results" data-search-results aria-live="polite"></ul></dialog></body></html>"##,
-            escape_html(&self.portal.summary),
-            escape_html(&self.portal.eyebrow),
-            escape_html(&self.portal.title),
-            escape_html(&self.portal.summary),
-            escape_html(&channel_route),
-        );
-        let html = html
-            .replace(
-                "<nav class=\"portal-nav\" aria-label=\"Primary\"><a href=\"#tasks\">Tasks</a><a href=\"people/\">People</a><a href=\"publications/\">Publications</a><a href=\"developers/\">Developers</a></nav>",
-                "<nav class=\"portal-nav\" aria-label=\"Primary\"><a href=\"about/\">About</a><a href=\"#projects\">Projects</a><a href=\"people/\">People</a><a href=\"talks/\">Talks</a><a href=\"publications/\">Publications</a><a href=\"developers/\">Developers</a></nav>",
-            )
-            .replace(
-                "<nav aria-label=\"Footer\"><a href=\"#tasks\">Tasks</a><a href=\"#projects\">Projects</a><a href=\"people/\">People</a><a href=\"publications/\">Publications</a><a href=\"citations/\">Cite</a><a href=\"developers/\">Developers</a><a href=\"https://github.com/alphal00p/gammaloop\">Source</a></nav>",
-                "<nav aria-label=\"Footer\"><a href=\"about/\">About</a><a href=\"#projects\">Projects</a><a href=\"people/\">People</a><a href=\"talks/\">Talks</a><a href=\"publications/\">Publications</a><a href=\"citations/\">Cite</a><a href=\"developers/\">Developers</a><a href=\"https://github.com/alphal00p/gammaloop\">Source</a></nav>",
+        renderer.render(TypstRenderJob {
+            key: "portal".to_owned(),
+            label: "collaboration portal".to_owned(),
+            wrapper: "#include \"/docs/portal/main.typ\"\n".to_owned(),
+            inputs: vec![
+                (
+                    "channel".to_owned(),
+                    match channel {
+                        BuildChannel::Latest => "latest",
+                        BuildChannel::Snapshot => "snapshot",
+                    }
+                    .to_owned(),
+                ),
+                (
+                    "snapshot-tag".to_owned(),
+                    tag.unwrap_or_default().to_owned(),
+                ),
+            ],
+            timestamp: i64::try_from(timestamp)
+                .context("documented commit timestamp exceeds Typst's supported range")?,
+            output: bundle.clone(),
+            dependency_file: dependency_output.map(|directory| directory.join("portal.deps")),
+        })?;
+
+        for page in [
+            "index.html",
+            "about/index.html",
+            "people/index.html",
+            "talks/index.html",
+            "publications/index.html",
+            "citations/index.html",
+        ] {
+            ensure!(
+                bundle.join(page).is_file(),
+                "Typst emitted no portal page {page}"
             );
-        fs::write(output.join("index.html"), html)?;
-        self.write_people_page(output)?;
-        self.write_about_page(output)?;
-        self.write_talks_page(output)?;
-        self.write_publications_page(output)?;
-        self.write_citations_page(output)?;
+        }
+        copy_tree(&bundle, output)?;
         fs::write(output.join(".nojekyll"), b"")?;
         Ok(())
     }
-
-    fn write_about_page(&self, output: &Path) -> Result<()> {
-        let pillars = self
-            .portal
-            .pillar
-            .iter()
-            .map(|pillar| {
-                format!(
-                    "<article class=\"about-pillar\"><p class=\"portal-kicker\">{}</p><h2>{}</h2><p>{}</p></article>",
-                    escape_html(&pillar.label),
-                    escape_html(&pillar.title),
-                    escape_html(&pillar.summary),
-                )
-            })
-            .collect::<String>();
-        let affiliations = self
-            .portal
-            .affiliation
-            .iter()
-            .map(|affiliation| {
-                format!(
-                    "<a class=\"about-affiliation\" href=\"{}\"><span>{}</span><strong>{}</strong><small>{}</small><p>{}</p><b aria-hidden=\"true\">↗</b></a>",
-                    escape_html(&affiliation.url),
-                    escape_html(&affiliation.location),
-                    escape_html(&affiliation.name),
-                    escape_html(&affiliation.location),
-                    escape_html(&affiliation.summary),
-                )
-            })
-            .collect::<String>();
-        let body = format!(
-            r#"<header class="portal-page-hero about-page-hero"><p class="portal-kicker">About the collaboration</p><h1>Precision through local cancellation.</h1><p>{}</p></header><section class="about-origin"><div class="about-origin-copy"><p class="portal-kicker">Why αLoop</p><h2>Precision is another path to discovery.</h2><p>The lack of obvious sign of new physics phenomenon in collider experiments is an opportunity to take a step back and reflect on the amazing theory we have discovered so far: the Standard Model. In particular, we must now strive to make ever more precise predictions so as to hunt for indirect evidence of new physics in small departure from expectations.</p><p>For this reason, our collaboration is dedicated to theoretical and algorithmic research for the automated computation of cross-sections in Quantum Field Theories at arbitrary perturbative orders. In particular, we develop a new theoretical framework called <em>Local Unitarity</em> (LU) which approaches this problem from an unorthodox way, particularly suited to numerical computations.</p><nav aria-label="Learn about Local Unitarity"><a class="portal-button portal-button-primary" href="https://arxiv.org/abs/2110.15662">Read the introduction <span aria-hidden="true">↗</span></a><a class="portal-button" href="../publications/">Explore publications <span aria-hidden="true">→</span></a></nav></div><aside class="about-equation" aria-label="Schematic Local Unitarity cross-section"><div class="about-equation-illustration"><img src="../assets/about-double-triangle-light.svg" alt="" class="about-equation-graph portal-graph-theme-light"><img src="../assets/about-double-triangle-dark.svg" alt="" class="about-equation-graph portal-graph-theme-dark"></div><div class="about-equation-formula" role="img" aria-label="The differential cross section is a sum over graphs of loop-momentum integrals and a sum over cuts of the Local Unitarity integrand, constrained by the observable."><img src="../assets/about-local-unitarity-equation-light.svg" alt="" class="portal-graph-theme-light"><img src="../assets/about-local-unitarity-equation-dark.svg" alt="" class="portal-graph-theme-dark"></div><small>Real and virtual contributions share one numerical representation.</small></aside></section><section class="about-pillars" aria-labelledby="about-pillars-title"><header><p class="portal-kicker">From method to software</p><h2 id="about-pillars-title">One research programme, connected structures.</h2></header><div>{pillars}</div></section><section class="about-affiliations" aria-labelledby="about-affiliations-title"><header><p class="portal-kicker">Affiliations</p><h2 id="about-affiliations-title">Research across institutions.</h2><p>αLoop connects collider-physics research, mathematical structures, and open scientific-software development.</p></header><div>{affiliations}</div></section><aside class="portal-funding about-funding" aria-labelledby="about-funding-title"><span class="portal-funding-mark" aria-hidden="true">α</span><div class="portal-funding-copy"><p class="portal-kicker">Funding</p><h2 id="about-funding-title">Publicly funded research</h2><p>{}</p></div><a class="portal-text-link" href="{}">Funding record <span aria-hidden="true">↗</span></a></aside><section class="about-next"><p class="portal-kicker">The collaboration</p><h2>Meet the people doing the work.</h2><nav aria-label="Explore the collaboration"><a class="portal-button portal-button-primary" href="../people/">People <span aria-hidden="true">→</span></a><a class="portal-button" href="../talks/">Talks <span aria-hidden="true">→</span></a></nav></section>"#,
-            escape_html(&self.portal.summary),
-            escape_html(&self.portal.funding),
-            escape_html(&self.portal.funding_url),
-        );
-        let directory = output.join("about");
-        fs::create_dir_all(&directory)?;
-        fs::write(
-            directory.join("index.html"),
-            portal_subpage_document(
-                "About",
-                "The αLoop collaboration develops Local Unitarity methods and open research software for precision collider physics.",
-                "about",
-                &body,
-            ),
-        )?;
-        Ok(())
-    }
-
-    fn write_talks_page(&self, output: &Path) -> Result<()> {
-        let people = self
-            .portal
-            .people
-            .iter()
-            .map(|person| (person.id.as_str(), person))
-            .collect::<BTreeMap<_, _>>();
-        let mut talks = self.talks.talk.iter().collect::<Vec<_>>();
-        talks.sort_by(|left, right| {
-            right
-                .date
-                .cmp(&left.date)
-                .then(left.title.cmp(&right.title))
-        });
-        let mut years = BTreeMap::<i32, Vec<&TalkConfig>>::new();
-        for talk in talks {
-            let date = NaiveDate::parse_from_str(&talk.date, "%Y-%m-%d")?;
-            years
-                .entry(date.format("%Y").to_string().parse()?)
-                .or_default()
-                .push(talk);
-        }
-        let timeline = years
-            .into_iter()
-            .rev()
-            .map(|(year, talks)| {
-                let cards = talks
-                    .into_iter()
-                    .map(|talk| {
-                        let person = people
-                            .get(talk.speaker.as_str())
-                            .expect("talk speaker was validated");
-                        let date = NaiveDate::parse_from_str(&talk.date, "%Y-%m-%d")
-                            .expect("talk date was validated");
-                        let mut links = format!(
-                            "<a href=\"{}\">Event record <span aria-hidden=\"true\">↗</span></a>",
-                            escape_html(&talk.event_url),
-                        );
-                        if let Some(url) = &talk.slides_url {
-                            links.push_str(&format!(
-                                "<a href=\"{}\">Slides <span aria-hidden=\"true\">↗</span></a>",
-                                escape_html(url),
-                            ));
-                        }
-                        if let Some(url) = &talk.recording_url {
-                            links.push_str(&format!(
-                                "<a href=\"{}\">Recording <span aria-hidden=\"true\">↗</span></a>",
-                                escape_html(url),
-                            ));
-                        }
-                        format!(
-                            "<article class=\"talk-card\" id=\"{}\"><div class=\"talk-card-date\"><time datetime=\"{}\">{}</time><span>{}</span></div><div class=\"talk-card-copy\"><p class=\"portal-kicker\"><a href=\"../people/#{}\">{}</a></p><h3>{}</h3><p><strong>{}</strong><br>{}</p><nav aria-label=\"Resources for {}\">{links}</nav></div></article>",
-                            escape_html(&talk.id),
-                            escape_html(&talk.date),
-                            date.format("%d %b"),
-                            year,
-                            escape_html(&person.id),
-                            escape_html(&person.name),
-                            escape_html(&talk.title),
-                            escape_html(&talk.event),
-                            escape_html(&talk.location),
-                            escape_html(&talk.title),
-                        )
-                    })
-                    .collect::<String>();
-                format!(
-                    "<section class=\"talk-year\" aria-labelledby=\"talk-year-{year}\"><h2 id=\"talk-year-{year}\">{year}</h2><div>{cards}</div></section>"
-                )
-            })
-            .collect::<String>();
-        let body = format!(
-            "<header class=\"portal-page-hero talks-page-hero\"><p class=\"portal-kicker\">Seminars &amp; conferences</p><h1>Talks</h1><p>Selected presentations on Local Unitarity, numerical perturbation theory, GammaLoop, and the scientific software surrounding them.</p><p class=\"talks-provenance\">{} talks · linked to public conference records, slides, and recordings where available.</p></header><div class=\"talk-timeline\">{timeline}</div>",
-            self.talks.talk.len(),
-        );
-        let directory = output.join("talks");
-        fs::create_dir_all(&directory)?;
-        fs::write(
-            directory.join("index.html"),
-            portal_subpage_document(
-                "Talks",
-                "Talks by αLoop collaborators on Local Unitarity, numerical methods, GammaLoop, and related research software.",
-                "talks",
-                &body,
-            ),
-        )?;
-        Ok(())
-    }
-
-    fn write_people_page(&self, output: &Path) -> Result<()> {
-        let cards = self
-            .portal
-            .people
-            .iter()
-            .map(|person| {
-                let portrait = person.portrait.as_ref().map_or_else(
-                    || {
-                        format!(
-                            "<span class=\"people-card-initials\" aria-hidden=\"true\">{}</span>",
-                            escape_html(&person.initials),
-                        )
-                    },
-                    |portrait| {
-                        format!(
-                            "<img class=\"people-card-portrait\" src=\"../assets/people/{}\" alt=\"\" width=\"720\" height=\"720\" loading=\"lazy\">",
-                            escape_html(portrait),
-                        )
-                    },
-                );
-                let mut links = format!(
-                    "<a href=\"{}\">Professional profile <span aria-hidden=\"true\">↗</span></a><a href=\"{}\">GitHub <span aria-hidden=\"true\">↗</span></a>",
-                    escape_html(&person.url),
-                    escape_html(&person.github),
-                );
-                if let Some(recid) = person.inspire_recid {
-                    links.push_str(&format!(
-                        "<a href=\"https://inspirehep.net/authors/{recid}\">INSPIRE HEP <span aria-hidden=\"true\">↗</span></a>"
-                    ));
-                }
-                if let Some(orcid) = &person.orcid {
-                    links.push_str(&format!(
-                        "<a href=\"https://orcid.org/{}\">ORCID <span aria-hidden=\"true\">↗</span></a>",
-                        escape_html(orcid),
-                    ));
-                }
-                format!(
-                    "<article class=\"people-card\" id=\"{}\">{portrait}<div class=\"people-card-copy\"><p class=\"portal-kicker\">Collaboration</p><h2>{}</h2><p>{}</p><nav aria-label=\"{} profiles\">{links}</nav></div></article>",
-                    escape_html(&person.id),
-                    escape_html(&person.name),
-                    escape_html(&person.role),
-                    escape_html(&person.name),
-                )
-            })
-            .collect::<String>();
-        let body = format!(
-            "<header class=\"portal-page-hero\"><p class=\"portal-kicker\">People</p><h1>People building GammaLoop</h1><p>Researchers and collaborators developing GammaLoop, Local Unitarity methods, and the scientific software that supports them.</p></header><section class=\"people-page-grid\">{cards}</section>"
-        );
-        let directory = output.join("people");
-        fs::create_dir_all(&directory)?;
-        fs::write(
-            directory.join("index.html"),
-            portal_subpage_document(
-                "People",
-                "Researchers and collaborators building GammaLoop.",
-                "people",
-                &body,
-            ),
-        )?;
-        Ok(())
-    }
-
-    fn write_publications_page(&self, output: &Path) -> Result<()> {
-        let author_options = self
-            .publications
-            .authors
-            .iter()
-            .map(|author| {
-                format!(
-                    "<option value=\"{}\">{}</option>",
-                    escape_html(&author.id),
-                    escape_html(&author.name),
-                )
-            })
-            .collect::<String>();
-        let years = self
-            .publications
-            .publications
-            .iter()
-            .map(|publication| publication.year)
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .rev()
-            .map(|year| format!("<option value=\"{year}\">{year}</option>"))
-            .collect::<String>();
-        let types = self
-            .publications
-            .publications
-            .iter()
-            .flat_map(|publication| publication.types.iter())
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .map(|kind| {
-                format!(
-                    "<option value=\"{}\">{}</option>",
-                    escape_html(kind),
-                    escape_html(&publication_type_label(kind)),
-                )
-            })
-            .collect::<String>();
-        let cards = self
-            .publications
-            .publications
-            .iter()
-            .map(|publication| {
-                let people = publication.people.join(" ");
-                let kinds = publication.types.join("|");
-                let venue = publication.venue.as_ref().map_or_else(String::new, |venue| {
-                    format!("<span>{}</span>", escape_html(venue))
-                });
-                let doi = publication.doi.as_ref().map_or_else(String::new, |doi| {
-                    format!(
-                        "<a href=\"https://doi.org/{}\">DOI <span aria-hidden=\"true\">↗</span></a>",
-                        escape_html(doi),
-                    )
-                });
-                let arxiv = publication.arxiv.as_ref().map_or_else(String::new, |arxiv| {
-                    format!(
-                        "<a href=\"https://arxiv.org/abs/{}\">arXiv <span aria-hidden=\"true\">↗</span></a>",
-                        escape_html(arxiv),
-                    )
-                });
-                format!(
-                    "<article class=\"publication-card\" data-publication data-title=\"{}\" data-people=\"{}\" data-year=\"{}\" data-date=\"{}\" data-types=\"{}\" data-citations=\"{}\"><div class=\"publication-card-meta\"><time datetime=\"{}\">{}</time>{venue}<span>{} citations</span></div><h2><a href=\"{}\">{}</a></h2><p class=\"publication-authors\">{}</p><nav aria-label=\"Citation links\"><a href=\"{}\">INSPIRE</a>{doi}{arxiv}<a href=\"{}\">BibTeX</a></nav></article>",
-                    escape_html(&publication.title.to_lowercase()),
-                    escape_html(&people),
-                    publication.year,
-                    escape_html(&publication.date),
-                    escape_html(&kinds),
-                    publication.citations,
-                    escape_html(&publication.date),
-                    publication.year,
-                    publication.citations,
-                    escape_html(&publication.url),
-                    escape_html(&publication.title),
-                    escape_html(&compact_authors(&publication.authors)),
-                    escape_html(&publication.url),
-                    escape_html(&publication.bibtex_url),
-                )
-            })
-            .collect::<String>();
-        let count = self.publications.publications.len();
-        let body = format!(
-            "<header class=\"portal-page-hero\"><p class=\"portal-kicker\">Research output</p><h1>Publications</h1><p>Automatically assembled from stable INSPIRE HEP author identifiers, deduplicated across coauthors, and cached for a reproducible documentation build.</p><p class=\"publication-provenance\">Updated {} · <a href=\"{}\">Open the live INSPIRE query</a></p></header><form class=\"publication-filters\" data-publication-filters><label>Search<input type=\"search\" data-publication-search placeholder=\"Title or author\"></label><label>Author<select data-publication-author><option value=\"\">All authors</option>{author_options}</select></label><label>Year<select data-publication-year><option value=\"\">All years</option>{years}</select></label><label>Type<select data-publication-type><option value=\"\">All types</option>{types}</select></label><label>Sort<select data-publication-sort><option value=\"newest\">Newest</option><option value=\"cited\">Most cited</option></select></label><output data-publication-count aria-live=\"polite\">{count} publications</output></form><section class=\"publication-list\" data-publication-list>{cards}</section><noscript><p class=\"portal-page-note\">All records are shown above. Enable JavaScript only if you want to filter or sort them in the browser.</p></noscript>",
-            escape_html(&self.publications.updated),
-            escape_html(&self.publications.api_url),
-        );
-        let directory = output.join("publications");
-        fs::create_dir_all(&directory)?;
-        fs::write(
-            directory.join("index.html"),
-            portal_subpage_document(
-                "Publications",
-                "Filterable publications by verified αLoop contributors, sourced from INSPIRE HEP.",
-                "publications",
-                &body,
-            ),
-        )?;
-        Ok(())
-    }
-
-    fn write_citations_page(&self, output: &Path) -> Result<()> {
-        let cards = self
-            .registry
-            .product
-            .iter()
-            .map(|product| {
-                let version = self.component_version(
-                    product
-                        .rust_components
-                        .first()
-                        .expect("validated product has a Rust component"),
-                )?;
-                let citation = software_citation(product, &version);
-                let bibtex = software_bibtex(product, &version);
-                let persistent = product.citation.doi.as_ref().map_or_else(
-                    || {
-                        "<p class=\"citation-status\">No registered software DOI is currently configured; this citation uses the versioned source repository.</p>".to_owned()
-                    },
-                    |doi| {
-                        format!(
-                            "<p class=\"citation-status\"><a href=\"https://doi.org/{}\">doi:{}</a></p>",
-                            escape_html(doi),
-                            escape_html(doi),
-                        )
-                    },
-                );
-                Ok::<_, eyre::Report>(format!(
-                    "<article class=\"citation-card\" id=\"{}\"><p class=\"portal-kicker\">Version {}</p><h2>{}</h2>{persistent}<h3>Suggested citation</h3><pre id=\"citation-{}\"><code>{}</code></pre><button class=\"portal-button\" type=\"button\" data-copy-target=\"citation-{}\">Copy citation</button><details><summary>BibTeX</summary><pre id=\"bibtex-{}\"><code>{}</code></pre><button class=\"portal-button\" type=\"button\" data-copy-target=\"bibtex-{}\">Copy BibTeX</button></details></article>",
-                    escape_html(&product.id),
-                    escape_html(&version),
-                    escape_html(&product.title),
-                    escape_html(&product.id),
-                    escape_html(&citation),
-                    escape_html(&product.id),
-                    escape_html(&product.id),
-                    escape_html(&bibtex),
-                    escape_html(&product.id),
-                ))
-            })
-            .collect::<Result<String>>()?;
-        let body = format!(
-            "<header class=\"portal-page-hero\"><p class=\"portal-kicker\">Credit the software</p><h1>Cite αLoop projects</h1><p>Use the version-specific records below. Where a Zenodo DOI exists, it is the persistent citation target; otherwise the citation names the versioned source repository without inventing an identifier.</p></header><section class=\"citation-grid\">{cards}</section>"
-        );
-        let directory = output.join("citations");
-        fs::create_dir_all(&directory)?;
-        fs::write(
-            directory.join("index.html"),
-            portal_subpage_document(
-                "Citations",
-                "Version-specific citations for αLoop research software.",
-                "",
-                &body,
-            ),
-        )?;
-        Ok(())
-    }
-
     fn write_product_redirect(&self, product: &ProductConfig, output: &Path) -> Result<()> {
         let directory = output.join("products").join(&product.id);
         fs::create_dir_all(&directory)?;
@@ -5392,82 +4987,6 @@ fn documentation_issue_url(title: &str, route: &str, commit: &str) -> String {
         "https://github.com/alphal00p/gammaloop/issues/new?labels=documentation&title={}&body={}",
         utf8_percent_encode(&title, NON_ALPHANUMERIC),
         utf8_percent_encode(&body, NON_ALPHANUMERIC),
-    )
-}
-
-fn portal_subpage_document(title: &str, description: &str, active: &str, body: &str) -> String {
-    let current = |item: &str| {
-        if item == active {
-            " aria-current=\"page\""
-        } else {
-            ""
-        }
-    };
-    let favicon = favicon_links("../assets/");
-    format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"description\" content=\"{}\"><meta name=\"theme-color\" content=\"#f9f6f0\">{favicon}<title>{} · αLoop</title><link rel=\"stylesheet\" href=\"../assets/site.css\"><script defer src=\"../assets/site.js\"></script></head><body class=\"portal-body portal-subpage-body\"><a class=\"skip-link\" href=\"#main-content\">Skip to content</a><header class=\"portal-header\"><a class=\"portal-brand\" href=\"../\" aria-label=\"αLoop home\"><span class=\"portal-brand-logo\" aria-hidden=\"true\"></span><span class=\"portal-brand-copy\"><strong>αLoop</strong><small>Local Unitarity research</small></span></a><nav class=\"portal-nav\" aria-label=\"Primary\"><a href=\"../#projects\">Projects</a><a href=\"../about/\"{}>About</a><a href=\"../people/\"{}>People</a><a href=\"../talks/\"{}>Talks</a><a href=\"../publications/\"{}>Publications</a><a href=\"../developers/\">Developers</a></nav><div class=\"portal-header-actions\"><a class=\"portal-source-link\" href=\"https://github.com/alphal00p/gammaloop\">GitHub <span aria-hidden=\"true\">↗</span></a><button class=\"portal-theme-button\" type=\"button\" data-theme-toggle aria-label=\"Toggle color theme\"><span aria-hidden=\"true\">◐</span></button></div></header><main class=\"portal-main portal-subpage-main\" id=\"main-content\">{body}</main><footer class=\"portal-footer\"><div><span class=\"portal-footer-mark\" aria-hidden=\"true\"></span><p><strong>αLoop</strong><br>Local Unitarity research software</p></div><nav aria-label=\"Footer\"><a href=\"../about/\">About</a><a href=\"../#projects\">Projects</a><a href=\"../people/\">People</a><a href=\"../talks/\">Talks</a><a href=\"../publications/\">Publications</a><a href=\"../citations/\">Cite</a><a href=\"../developers/\">Developers</a><a href=\"https://github.com/alphal00p/gammaloop\">Source</a></nav><p>Physics, algorithms, and software<br>developed in the open.</p></footer></body></html>",
-        escape_html(description),
-        escape_html(title),
-        current("about"),
-        current("people"),
-        current("talks"),
-        current("publications"),
-    )
-}
-
-fn compact_authors(authors: &[String]) -> String {
-    if authors.len() <= 8 {
-        authors.join(", ")
-    } else {
-        format!("{}, et al.", authors[..6].join(", "))
-    }
-}
-
-fn publication_type_label(kind: &str) -> String {
-    kind.split(['-', '_'])
-        .filter(|word| !word.is_empty())
-        .map(|word| {
-            let mut characters = word.chars();
-            characters.next().map_or_else(String::new, |first| {
-                first.to_uppercase().collect::<String>() + characters.as_str()
-            })
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn software_citation(product: &ProductConfig, version: &str) -> String {
-    let target = product.citation.doi.as_ref().map_or_else(
-        || product.citation.repository.clone(),
-        |doi| format!("https://doi.org/{doi}"),
-    );
-    format!(
-        "{} ({}). {} (Version {}) [Computer software]. {}",
-        product.citation.creators.join(", "),
-        product.citation.year,
-        product.citation.title,
-        version,
-        target,
-    )
-}
-
-fn software_bibtex(product: &ProductConfig, version: &str) -> String {
-    let doi = product
-        .citation
-        .doi
-        .as_ref()
-        .map_or_else(String::new, |doi| format!("  doi = {{{doi}}},\n"));
-    let url = product.citation.doi.as_ref().map_or_else(
-        || product.citation.repository.clone(),
-        |doi| format!("https://doi.org/{doi}"),
-    );
-    format!(
-        "@software{{{}{},\n  author = {{{}}},\n  title = {{{}}},\n  version = {{{version}}},\n  year = {{{}}},\n{doi}  url = {{{url}}}\n}}",
-        product.id,
-        product.citation.year,
-        product.citation.creators.join(" and "),
-        product.citation.title,
-        product.citation.year,
     )
 }
 
@@ -9757,6 +9276,18 @@ fn resolve_local_link(
 mod tests {
     use super::*;
 
+    fn write_test_portal(
+        builder: &SiteBuilder,
+        output: &Path,
+        channel: BuildChannel,
+        tag: Option<&str>,
+    ) {
+        let mut renderer = CliTypstRenderer::new(&builder.root);
+        builder
+            .write_portal(output, channel, tag, None, &mut renderer)
+            .unwrap();
+    }
+
     fn generated_component_catalogs(builder: &SiteBuilder, product: &ProductConfig) -> TempDir {
         let catalogs = tempfile::tempdir().unwrap();
         for (language, component) in product
@@ -12170,9 +11701,7 @@ mod tests {
     fn portal_focuses_on_projects_and_keeps_dedicated_routes() {
         let builder = SiteBuilder::discover().unwrap();
         let output = tempfile::tempdir().unwrap();
-        builder
-            .write_portal(output.path(), BuildChannel::Latest, None)
-            .unwrap();
+        write_test_portal(&builder, output.path(), BuildChannel::Latest, None);
 
         let html = fs::read_to_string(output.path().join("index.html")).unwrap();
         assert_eq!(html.matches("class=\"portal-project-card\"").count(), 5);
@@ -12192,12 +11721,12 @@ mod tests {
         ));
         assert_eq!(
             html.matches("class=\"portal-process-graph\"").count(),
-            PORTAL_GRAPH_IDS.len()
+            builder.portal.graphs.len()
         );
         assert_eq!(
             html.matches("class=\"portal-graph-theme portal-graph-theme-")
                 .count(),
-            PORTAL_GRAPH_IDS.len() * 2
+            builder.portal.graphs.len() * 2
         );
         assert!(html.contains(
             "class=\"portal-wordmark\" aria-label=\"αLoop collaboration mark\" role=\"img\""
@@ -12250,7 +11779,7 @@ mod tests {
         ] {
             assert!(output.path().join("assets").join(asset).is_file());
         }
-        let mut svg_assets = portal_graph_assets()
+        let mut svg_assets = portal_graph_assets(&builder.portal.graphs)
             .map(|graph| output.path().join("assets/graphs").join(graph))
             .collect::<Vec<_>>();
         svg_assets.extend(
@@ -12365,7 +11894,7 @@ mod tests {
                 "website SVG renderer uses external generation: {forbidden}"
             );
         }
-        for graph in PORTAL_GRAPH_IDS {
+        for graph in &builder.portal.graphs {
             let source = builder
                 .root
                 .join("docs/assets/typst/portal-graphs/graphs")
@@ -12487,17 +12016,19 @@ mod tests {
             (BuildChannel::Snapshot, Some("v1.2.3"), "snapshots/v1.2.3"),
         ] {
             let output = tempfile::tempdir().unwrap();
-            builder.write_portal(output.path(), channel, tag).unwrap();
+            write_test_portal(&builder, output.path(), channel, tag);
             let html = fs::read_to_string(output.path().join("index.html")).unwrap();
 
             assert!(html.contains("id=\"tasks\" aria-labelledby=\"tasks-title\""));
             assert_eq!(html.matches("class=\"portal-task-link\"").count(), 5);
-            for (task, product_id, role) in PORTAL_TASKS {
+            for task in &builder.portal.task {
+                let product_id = &task.product;
+                let role = &task.role;
                 let product = builder
                     .registry
                     .product
                     .iter()
-                    .find(|product| product.id == product_id)
+                    .find(|product| product.id == task.product)
                     .unwrap();
                 let quickstart = product
                     .pages
@@ -12508,7 +12039,7 @@ mod tests {
                     "class=\"portal-task-link\" data-product=\"{product_id}\" href=\"products/{product_id}/{channel_route}/{}\"",
                     quickstart.route
                 )));
-                assert!(html.contains(&format!("<strong>{task}</strong>")));
+                assert!(html.contains(&format!("<strong>{}</strong>", task.label)));
                 assert!(html.contains(&format!("{} · {role}", product.title)));
             }
         }
@@ -12518,13 +12049,13 @@ mod tests {
     fn portal_project_cards_use_accurate_ecosystem_roles() {
         let builder = SiteBuilder::discover().unwrap();
         let output = tempfile::tempdir().unwrap();
-        builder
-            .write_portal(output.path(), BuildChannel::Latest, None)
-            .unwrap();
+        write_test_portal(&builder, output.path(), BuildChannel::Latest, None);
         let html = fs::read_to_string(output.path().join("index.html")).unwrap();
 
         assert!(!html.contains("Research project"));
-        for (_, product_id, role) in PORTAL_TASKS {
+        for task in &builder.portal.task {
+            let product_id = &task.product;
+            let role = &task.role;
             assert!(html.contains(&format!(
                 "<article class=\"portal-project-card\" data-product=\"{product_id}\"><div class=\"portal-project-meta\"><span>"
             )));
@@ -13120,9 +12651,7 @@ mod tests {
         let builder = SiteBuilder::discover().unwrap();
         let mut renderer = CliTypstRenderer::new(&builder.root);
         let output = tempfile::tempdir().unwrap();
-        builder
-            .write_portal(output.path(), BuildChannel::Latest, None)
-            .unwrap();
+        write_test_portal(&builder, output.path(), BuildChannel::Latest, None);
         let portal = fs::read_to_string(output.path().join("index.html")).unwrap();
         assert!(portal.contains("data-search-index=\"search-index.json\""));
         assert!(portal.contains("class=\"portal-search-button\""));
