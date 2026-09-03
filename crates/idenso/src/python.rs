@@ -579,14 +579,14 @@ pub fn to_dots(expression: &PythonExpression) -> PythonExpression {
 /// # Examples:
 /// ```python
 /// from symbolica.community.idenso import simplify_metrics, to_dots
-/// from symbolica.community.spenso import Representation, TensorName
+/// from symbolica.community.spenso import Representation, TensorExpression, TensorName
 /// q = TensorName("q")
-/// g = TensorName.g()
 /// rep = Representation.euc(3)
+/// g = TensorExpression.g(rep)
 /// # With slots (creates TensorExpression)
 /// mu = rep("mu")
 /// nu = rep("nu")
-/// print(simplify_metrics(g(mu, nu) * q(mu)))
+/// print(simplify_metrics(g("mu", "nu") * q(mu)))
 /// ```
 pub fn simplify_metrics(expression: &PythonExpression) -> PythonExpression {
     expression.expr.simplify_metrics().into()

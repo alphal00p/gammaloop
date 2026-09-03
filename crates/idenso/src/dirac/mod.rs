@@ -425,6 +425,25 @@ impl GammaLibrary {
     ) -> Canonicalized<ExplicitKey<Aind>> {
         spinor_matrix_structure(self.gamma5, dim)
     }
+
+    /// Canonicalizes sigma while retaining the logical port order
+    /// `[mink(dim), mink(dim), bis(4), bis(4)]` in its layout.
+    pub fn sigma_strct<Aind: AbsInd>(
+        &self,
+        dim: impl Into<Dimension>,
+    ) -> Canonicalized<ExplicitKey<Aind>> {
+        let dim = dim.into();
+        ExplicitKey::from_iter(
+            [
+                LibraryRep::from(Minkowski {}).new_rep(dim),
+                LibraryRep::from(Minkowski {}).new_rep(dim),
+                Bispinor {}.new_rep(4).cast(),
+                Bispinor {}.new_rep(4).cast(),
+            ],
+            self.sigma,
+            None,
+        )
+    }
 }
 
 pub struct PolSymbols {

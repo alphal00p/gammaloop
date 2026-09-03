@@ -72,6 +72,24 @@ fn gamma_construct() {
 }
 
 #[test]
+fn sigma_structure_preserves_logical_interface() {
+    test_initialize();
+
+    let structure = AGS.sigma_strct::<AbstractIndex>(6);
+    let canonical_reps = structure.canonical().external_reps();
+
+    assert_eq!(
+        structure.layout().canonical_to_logical(&canonical_reps),
+        [
+            LibraryRep::from(Minkowski {}).new_rep(6),
+            LibraryRep::from(Minkowski {}).new_rep(6),
+            Bispinor {}.new_rep(4).cast(),
+            Bispinor {}.new_rep(4).cast(),
+        ]
+    );
+}
+
+#[test]
 fn chain_test() {
     test_initialize();
 

@@ -67,6 +67,7 @@ pub mod display;
 pub mod expression;
 pub mod library;
 pub mod network;
+pub mod pattern;
 pub mod structure;
 
 use composition::StructuredAtom;
@@ -157,6 +158,7 @@ pub(crate) fn initialize_spenso(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(set_symbolica_rayon_enabled, m)?)?;
     display::register(m)?;
     expression::register(m)?;
+    pattern::register(m)?;
     Spensor::init(m)?;
     m.add_class::<structure::SpensoName>()?;
     m.add_class::<structure::SpensoSlot>()?;

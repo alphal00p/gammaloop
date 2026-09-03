@@ -2,12 +2,11 @@ use super::*;
 use ahash::AHashMap;
 use eyre::eyre;
 
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::atom::{AtomOrView, FunctionBuilder};
 use symbolica::printer::{PrintState, PrintUserData};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
-    symbol,
-};
+#[cfg(test)]
+use symbolica::symbol;
 
 use crate::network::tags::SPENSO_TAG;
 use crate::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
@@ -225,7 +224,7 @@ impl ExplicitTensorSymbols {
 
 crate::symbolica_init_lazy_static! {
 pub static ETS, ETS_INNER: ExplicitTensorSymbols = || ExplicitTensorSymbols {
-    flat: symbol!("♭";Symmetric;print = |a, opt, _state| {
+    flat: tensor_symbol!("♭";Symmetric;print = |a, opt, _state| {
 
         match SpensoPrintSettings::resolve(opt) {
             Some(resolved)=>{

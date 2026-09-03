@@ -30,7 +30,7 @@ use spenso::{
     },
     tensors::parametric::MixedTensor,
 };
-use symbolica::atom::{Atom, DefaultNamespace, FunctionBuilder, SymbolBuilder};
+use symbolica::atom::{Atom, DefaultNamespace, SymbolBuilder};
 use symbolica::{
     api::python::PythonExpression,
     atom::{AtomView, Symbol},
@@ -38,7 +38,9 @@ use symbolica::{
 };
 
 use crate::{
-    Spensor, broadcast::SpensoBroadcastFunction, expression::TensorExpression,
+    Spensor,
+    broadcast::SpensoBroadcastFunction,
+    expression::{TensorExpression, value_to_structured_atom},
     structure::SpensoName,
 };
 
@@ -358,16 +360,13 @@ fn tensor_reference(
     args: Vec<Atom>,
     interface: PartialStructure,
 ) -> PyResult<Py<TensorExpression>> {
-    let atom = FunctionBuilder::new(name)
-        .add_args(&args)
-        .add_args(
-            interface
-                .logical_slots()
-                .into_iter()
-                .map(|slot| slot.rep().to_symbolic([])),
-        )
-        .finish();
-    TensorExpression::from_atom_interface_descriptor(py, atom, interface, Some(name), args)
+    let structure = ExplicitKey::from_iter(
+        interface.logical_slots().into_iter().map(|slot| slot.rep()),
+        name,
+        (!args.is_empty()).then_some(args.clone()),
+    );
+    let value = value_to_structured_atom(&structure)?;
+    TensorExpression::from_atom_interface_descriptor(py, value.atom, interface, Some(name), args)
 }
 
 #[allow(clippy::new_without_default)]
@@ -597,7 +596,8 @@ mod tests {
     use std::ffi::CString;
 
     use super::*;
-    use idenso::representations::initialize;
+    use idenso::{color::CS, representations::initialize};
+    use pyo3::types::PyFloat;
     use spenso::network::{ExecutionResult, Sequential, SmallestDegree};
     use spenso::structure::{
         OrderedStructure,
@@ -721,6 +721,48 @@ mod tests {
             vec![mink, euc]
         );
         assert!(reference.signature().contains("7"));
+    }
+
+    #[test]
+    fn typed_structure_constant_uses_the_existing_library_key() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let factory = py
+                .get_type::<TensorExpression>()
+                .call_method1("f", (8,))?
+                .extract::<Py<TensorExpression>>()?;
+            let reference = ExactLibraryReference::from_expression(&factory.bind(py).borrow())?;
+            assert_eq!(reference.key, CS.f_strct::<AbstractIndex>(8));
+            assert!(reference.args.is_empty());
+
+            let tensor = Py::new(
+                py,
+                Spensor::sparse(
+                    factory.bind(py).as_any().extract()?,
+                    py.get_type::<PyFloat>(),
+                )?,
+            )?;
+            let mut library = SpensorLibrary::new();
+            library.register(tensor.bind(py).borrow())?;
+
+            let stored = library.__getitem__(
+                py,
+                ConvertibleToLibraryReference(LibraryReference::Exact(Box::new(reference))),
+            )?;
+            assert_ne!(stored.bind(py).borrow().as_super().expr, Atom::Zero);
+            let indexed = stored.bind(py).call1(("a", "b", "c"))?;
+            assert_eq!(indexed.getattr("rank")?.extract::<usize>()?, 3);
+            assert_ne!(
+                indexed
+                    .call_method0("to_expression")?
+                    .extract::<PythonExpression>()?
+                    .expr,
+                Atom::Zero
+            );
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]

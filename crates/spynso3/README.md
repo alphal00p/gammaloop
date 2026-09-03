@@ -1,11 +1,12 @@
 # Spenso Python API
 
-Spenso is available from `symbolica.community.spenso`. Its public Python API has
-one symbolic structured type, one data-bearing tensor type, and one executable
-network type:
+Spenso is available from `symbolica.community.spenso`. Its central Python types
+separate concrete tensor structure, pattern syntax, stored data, and execution:
 
 - `TensorExpression` carries a Symbolica expression and its ordered external
   tensor interface.
+- `TensorPattern` and `PortPattern` build tagged Symbolica patterns without
+  requiring a concrete tensor interface.
 - `Tensor` owns dense or sparse data and has a `TensorExpression` as its exact
   structure.
 - `TensorNetwork` represents operations in which concrete tensors or existing
@@ -14,16 +15,16 @@ network type:
 ## Symbolic expressions
 
 ```python
-from symbolica.community.spenso import _, Representation, TensorName
+from symbolica.community.spenso import _, Representation, TensorExpression, TensorName
 
 mink = Representation.mink(4)
 bis = Representation.bis(4)
 
 p = TensorName.vector("p", is_linear=True, tags=["kinematics"])
-gamma = TensorName.gamma()(mink, bis, bis)
+gamma = TensorExpression.gamma(4)
 
 square = p(1, mink) * p(1, mink)
-line = gamma.index(mink("mu"), _, _) * gamma.index(mink("nu"), _, _)
+line = gamma("mu", _, _) * gamma("nu", _, _)
 dirac_trace = line.trace()
 
 print(square.format_tensor())
@@ -31,7 +32,7 @@ print(dirac_trace.to_typst())
 display(dirac_trace.formatted())
 ```
 
-Calling a `TensorName` always returns a `TensorExpression`. Scalar key
+Calling a user-defined `TensorName` returns a `TensorExpression`. Scalar key
 arguments come first and structural `Slot` or `Representation` arguments come
 after them. A `Slot` is an explicit port; a `Representation` is an unresolved
 port. They may be mixed in one call:
@@ -62,6 +63,101 @@ names may have any number of structural ports, including none:
 mass = TensorName("mass")(1)       # rank-zero TensorExpression
 momentum = p(1, mink)              # rank-one TensorExpression
 ```
+
+### Predefined tensors
+
+Predefined tensors have typed factories on `TensorExpression`. A factory fixes
+the representations and returns an expression whose ports are unresolved;
+calling that result supplies indices in logical interface order:
+
+```python
+generator = TensorExpression.t(8, 3)
+structure_constant = TensorExpression.f(8)
+
+T_aij = generator("a", "i", "j")
+f_abc = structure_constant("a", "b", "c")
+gamma_muij = TensorExpression.gamma(4)("mu", "i", "j")
+```
+
+The available factories and their logical interfaces are:
+
+| Factory | Logical interface |
+| --- | --- |
+| `TensorExpression.g(rep)` | `rep, rep` |
+| `TensorExpression.flat(rep)` | `rep, rep` |
+| `TensorExpression.gamma(D)` | `mink(D), bis(4), bis(4)` |
+| `TensorExpression.gamma5(D)` | `bis(D), bis(D)` |
+| `TensorExpression.projm(D)` | `bis(D), bis(D)` |
+| `TensorExpression.projp(D)` | `bis(D), bis(D)` |
+| `TensorExpression.sigma(D)` | `mink(D), mink(D), bis(4), bis(4)` |
+| `TensorExpression.f(DA)` | `coad(DA), coad(DA), coad(DA)` |
+| `TensorExpression.t(DA, DF)` | `coad(DA), cof(DF), coaf(DF)` |
+
+Factory dimensions belong to these representations. They are not scalar tensor
+arguments and therefore do not add fields to tensor-library keys. The
+corresponding `TensorName.g()`, `TensorName.gamma()`, and other predefined name
+accessors expose the raw fixed heads for inspection and pattern construction;
+calling those names directly as concrete tensors is an error.
+
+## Tensor patterns
+
+`TensorPattern` and `PortPattern` construct matching syntax rather than concrete
+tensors. They inherit Symbolica expression behavior, so they can be passed
+directly to `Expression.replace`, tensor-network replacement, and conditions.
+Pattern dimensions, indices, and variadic tails remain ordinary Symbolica
+wildcards:
+
+```python
+from symbolica import S
+from symbolica.community.spenso import PortPattern, TensorName, TensorPattern
+
+D_, mu_, i_, j_, args___ = S("D_", "mu_", "i_", "j_", "args___")
+
+gamma_pattern = TensorPattern.gamma(D_, mu_, i_, j_)
+fixed_head = TensorPattern(
+    TensorName("A"),
+    args=[args___],
+    ports=[PortPattern.self_dual("R_", D_, i_)],
+)
+any_tensor = TensorPattern.any("T_", ports=[args___])
+any_vector = TensorPattern.vector(
+    "P_", ports=[PortPattern.any("R_", D_, i_)]
+)
+```
+
+The general constructor always emits scalar `args` before structural `ports`.
+A port may be a concrete `Representation` or `Slot`, a `PortPattern`, or an
+arbitrary expression such as a sequence wildcard. `TensorPattern.any` constrains
+its head to tensor-tagged symbols, while `TensorPattern.vector` additionally
+requires the rank-one tag. Wildcard head names end in exactly one underscore.
+Dimensions, indices, and scalar arguments use numbers or Symbolica expressions;
+bare strings are reserved for the wildcard-head names rather than implicitly
+creating pattern variables.
+
+Use `PortPattern.exact(rep, index=None)` for a fixed representation.
+`PortPattern.any`, `.self_dual`, and `.dualizable` constrain a wildcard
+representation head by its Spenso tags. Passing `dual=True` to `.dualizable`
+matches the dual orientation. Omitting `index` in any of these methods builds a
+stripped representation pattern.
+
+Every predefined tensor also has a pattern shortcut whose indices follow the
+same logical ordering as its concrete factory:
+
+```python
+TensorPattern.g(rep_pattern, i_, j_)
+TensorPattern.flat(rep_pattern, i_, j_)
+TensorPattern.gamma(D_, mu_, i_, j_)
+TensorPattern.gamma5(D_, i_, j_)
+TensorPattern.projm(D_, i_, j_)
+TensorPattern.projp(D_, i_, j_)
+TensorPattern.sigma(D_, mu_, nu_, i_, j_)
+TensorPattern.f(DA_, a_, b_, c_)
+TensorPattern.t(DA_, DF_, a_, i_, j_)
+```
+
+The builders translate logical ordering to Spenso's canonical atom ordering.
+Callers therefore do not need to encode internal storage permutations in a
+replacement rule.
 
 ## Tensor-aware algebra
 

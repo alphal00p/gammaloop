@@ -3,11 +3,12 @@ use std::collections::{HashMap, HashSet};
 use idenso::{
     Cookable,
     color::CS,
+    dirac::AGS,
     python::{
         PyColorCasimirSettings, PyColorSimplifySettings, PyCookSettings, PyGammaSimplifySettings,
         PySchoonschipSettings, RegisteredRepresentation,
     },
-    representations::ColorAdjoint,
+    representations::{Bispinor, ColorAdjoint, ColorAntiFundamental, ColorFundamental},
     tensor::SymbolicTensor,
 };
 use pyo3::{
@@ -30,10 +31,11 @@ use spenso::{
     },
     shadowing,
     structure::{
-        Canonicalized, HasName, OrderedStructure, StructureError, TensorStructure, ToSymbolic,
+        Canonicalized, HasName, OrderedStructure, StructureError, TensorStructure,
         abstract_index::AbstractIndex,
+        dimension::Dimension,
         partial::{PartialIndex, PartialStructure, PartialStructureExt},
-        representation::{LibraryRep, RepName, Representation},
+        representation::{LibraryRep, Minkowski, RepName, Representation},
         slot::{IsAbstractSlot, Slot},
     },
 };
@@ -50,8 +52,8 @@ use crate::{
     library::SpensorLibrary,
     network::{ConvertibleToSpensoNet, SpensoNet},
     structure::{
-        ArithmeticStructure, ConvertibleToAbstractIndex, ConvertibleToSpensoName, SpensoIndices,
-        SpensoName, SpensoRepresentation, SpensoSlot,
+        ArithmeticStructure, ConvertibleToAbstractIndex, ConvertibleToDimension,
+        ConvertibleToSpensoName, SpensoIndices, SpensoName, SpensoRepresentation, SpensoSlot,
     },
 };
 
@@ -77,6 +79,24 @@ impl AutoIndex {
 }
 
 /// A Symbolica expression with an ordered external tensor interface.
+///
+/// Predefined tensors are constructed by typed factories and indexed afterward
+/// in logical interface order. Dimensions are representation metadata, not
+/// scalar tensor arguments.
+///
+/// Examples
+/// --------
+/// >>> from symbolica.community.spenso import Representation, TensorExpression
+/// >>> mink = Representation.mink(4)
+/// >>> metric = TensorExpression.g(mink)("mu", "nu")
+/// >>> flat = TensorExpression.flat(mink)("mu", "nu")
+/// >>> gamma = TensorExpression.gamma(4)("mu", "i", "j")
+/// >>> gamma5 = TensorExpression.gamma5(4)("i", "j")
+/// >>> projm = TensorExpression.projm(4)("i", "j")
+/// >>> projp = TensorExpression.projp(4)("i", "j")
+/// >>> sigma = TensorExpression.sigma(4)("mu", "nu", "i", "j")
+/// >>> structure_constant = TensorExpression.f(8)("a", "b", "c")
+/// >>> generator = TensorExpression.t(8, 3)("a", "i", "j")
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
     frozen,
@@ -289,26 +309,254 @@ fn additive_interfaces_match(left: &PartialStructure, right: &PartialStructure) 
             && left.canonical() == right.canonical())
 }
 
-pub(crate) fn validate_color_structure_ports(
+fn builtin_tensor_structure(
     symbol: Symbol,
-    argument_count: usize,
-    ports: &[Representation<LibraryRep>],
-) -> PyResult<()> {
-    if symbol != CS.f {
-        return Ok(());
+    arguments: &[AtomView<'_>],
+) -> PyResult<Option<Canonicalized<ExplicitKey<AbstractIndex>>>> {
+    let builtin = symbol == ETS.metric
+        || symbol == ETS.flat
+        || symbol == AGS.gamma
+        || symbol == AGS.gamma5
+        || symbol == AGS.projm
+        || symbol == AGS.projp
+        || symbol == AGS.sigma
+        || symbol == CS.f
+        || symbol == CS.t;
+    if !builtin {
+        return Ok(None);
     }
-    if argument_count != 3 || ports.len() != 3 {
-        return Err(PyValueError::new_err(
-            "color structure constant f requires exactly three typed adjoint ports",
-        ));
+
+    let compact_metric = symbol == ETS.metric
+        && arguments.len() == 2
+        && arguments.iter().all(|argument| {
+            Slot::<LibraryRep, AbstractIndex>::try_from(*argument).is_err()
+                && Representation::<LibraryRep>::try_from(*argument).is_err()
+                && !is_chain_placeholder(*argument)
+                && has_structured_syntax(*argument)
+        });
+    if compact_metric {
+        return Ok(None);
     }
-    let adjoint: LibraryRep = ColorAdjoint {}.into();
-    if ports.iter().any(|port| port.rep != adjoint)
-        || ports.iter().skip(1).any(|port| port.dim != ports[0].dim)
+
+    let ports = arguments
+        .iter()
+        .map(|argument| {
+            if is_chain_placeholder(*argument) {
+                Ok(None)
+            } else {
+                Slot::<LibraryRep, AbstractIndex>::try_from(*argument)
+                    .map(|slot| Some(slot.rep()))
+                    .or_else(|_| Representation::<LibraryRep>::try_from(*argument).map(Some))
+                    .map_err(|_| ())
+            }
+        })
+        .collect::<Result<Vec<_>, _>>();
+    let dimension = |representation: LibraryRep| {
+        ports
+            .as_ref()
+            .ok()
+            .and_then(|ports| {
+                ports
+                    .iter()
+                    .flatten()
+                    .find(|port| port.rep == representation)
+            })
+            .map(|port| port.dim)
+    };
+    let invalid = |factory: &str, signature: &str| {
+        PyValueError::new_err(format!(
+            "predefined tensor `{factory}` requires {signature}; use \
+             TensorExpression.{factory}(...) to construct it"
+        ))
+    };
+
+    let (factory, signature, expected): (_, _, Option<Canonicalized<ExplicitKey<AbstractIndex>>>) =
+        if symbol == ETS.metric || symbol == ETS.flat {
+            let factory = if symbol == ETS.metric { "g" } else { "flat" };
+            let ports = ports
+                .as_ref()
+                .map_err(|_| invalid(factory, "two compatible representation ports"))?;
+            if arguments.len() != 2 {
+                return Err(invalid(factory, "two compatible representation ports"));
+            }
+            let visible = ports.iter().flatten().copied().collect::<Vec<_>>();
+            let compatible = visible.len() < 2
+                || if symbol == ETS.metric {
+                    visible[0] == visible[1] || visible[0].matches(&visible[1])
+                } else {
+                    visible[0] == visible[1]
+                };
+            if !compatible {
+                return Err(invalid(factory, "two compatible representation ports"));
+            }
+            let expected = match visible.as_slice() {
+                [left, right] => Some(ExplicitKey::from_iter([*left, *right], symbol, None)),
+                _ => None,
+            };
+            (factory, "two compatible representation ports", expected)
+        } else if symbol == AGS.gamma {
+            (
+                "gamma",
+                "one Minkowski and two four-dimensional bispinor ports",
+                Some(
+                    AGS.gamma_strct(
+                        dimension(Minkowski {}.into()).unwrap_or(Dimension::Concrete(1)),
+                    ),
+                ),
+            )
+        } else if symbol == AGS.gamma5 || symbol == AGS.projm || symbol == AGS.projp {
+            let dimension = dimension(Bispinor {}.into()).unwrap_or(Dimension::Concrete(1));
+            let (factory, expected) = if symbol == AGS.gamma5 {
+                ("gamma5", AGS.gamma5_strct(dimension))
+            } else if symbol == AGS.projm {
+                ("projm", AGS.projm_strct(dimension))
+            } else {
+                ("projp", AGS.projp_strct(dimension))
+            };
+            (factory, "two equal bispinor ports", Some(expected))
+        } else if symbol == AGS.sigma {
+            (
+                "sigma",
+                "two equal Minkowski and two four-dimensional bispinor ports",
+                Some(
+                    AGS.sigma_strct(
+                        dimension(Minkowski {}.into()).unwrap_or(Dimension::Concrete(1)),
+                    ),
+                ),
+            )
+        } else if symbol == CS.f {
+            (
+                "f",
+                "three equal adjoint ports",
+                Some(
+                    CS.f_strct(dimension(ColorAdjoint {}.into()).unwrap_or(Dimension::Concrete(1))),
+                ),
+            )
+        } else if symbol == CS.t {
+            let adjoint_dimension =
+                dimension(ColorAdjoint {}.into()).unwrap_or(Dimension::Concrete(1));
+            let fundamental_dimension = dimension(ColorFundamental {}.into())
+                .or_else(|| dimension(ColorAntiFundamental {}.into()))
+                .unwrap_or(Dimension::Concrete(1));
+            (
+                "t",
+                "adjoint, fundamental, and antifundamental ports with matching color dimensions",
+                Some(CS.t_strct(fundamental_dimension, adjoint_dimension)),
+            )
+        } else {
+            unreachable!("every predefined tensor symbol was handled")
+        };
+
+    let ports = ports.map_err(|_| invalid(factory, signature))?;
+    let placeholders = arguments
+        .iter()
+        .enumerate()
+        .filter_map(|(position, argument)| {
+            let AtomView::Var(variable) = *argument else {
+                return None;
+            };
+            let symbol = variable.get_symbol();
+            is_chain_placeholder(*argument).then_some((position, symbol))
+        })
+        .collect::<Vec<_>>();
+    if !placeholders.is_empty()
+        && (!matches!(placeholders.as_slice(), [(_, input), (_, output)] if *input != *output)
+            || !placeholders
+                .iter()
+                .any(|(_, symbol)| *symbol == SPENSO_TAG.chain_in)
+            || !placeholders
+                .iter()
+                .any(|(_, symbol)| *symbol == SPENSO_TAG.chain_out))
     {
-        return Err(PyValueError::new_err(
-            "color structure constant f requires three adjoint ports with the same explicit dimension",
-        ));
+        return Err(invalid(factory, signature));
+    }
+    let Some(expected) = expected else {
+        return Ok(None);
+    };
+    let expected_ports = expected
+        .canonical()
+        .external_reps_iter()
+        .collect::<Vec<_>>();
+    if ports.len() != expected_ports.len()
+        || ports
+            .iter()
+            .zip(&expected_ports)
+            .any(|(actual, expected)| actual.is_some_and(|actual| actual != *expected))
+    {
+        return Err(invalid(factory, signature));
+    }
+    if !placeholders.is_empty() {
+        let input = placeholders
+            .iter()
+            .find(|(_, symbol)| *symbol == SPENSO_TAG.chain_in)
+            .expect("placeholder names were validated")
+            .0;
+        let output = placeholders
+            .iter()
+            .find(|(_, symbol)| *symbol == SPENSO_TAG.chain_out)
+            .expect("placeholder names were validated")
+            .0;
+        let input = expected_ports[input];
+        let output = expected_ports[output];
+        let oriented = input.rep.is_self_dual() || (input.rep.is_base() && output.rep.is_dual());
+        if !input.matches(&output) || !oriented {
+            return Err(invalid(factory, signature));
+        }
+    }
+    Ok(Some(expected))
+}
+
+fn validate_builtin_placeholder_channels(
+    value: AtomView<'_>,
+    input: Representation<LibraryRep>,
+    output: Representation<LibraryRep>,
+) -> PyResult<()> {
+    match value {
+        AtomView::Add(add) => {
+            for term in add.iter() {
+                validate_builtin_placeholder_channels(term, input, output)?;
+            }
+        }
+        AtomView::Mul(mul) => {
+            for factor in mul.iter() {
+                validate_builtin_placeholder_channels(factor, input, output)?;
+            }
+        }
+        AtomView::Pow(power) => {
+            let (base, exponent) = power.get_base_exp();
+            validate_builtin_placeholder_channels(base, input, output)?;
+            validate_builtin_placeholder_channels(exponent, input, output)?;
+        }
+        AtomView::Fun(function) => {
+            let arguments = function.iter().collect::<Vec<_>>();
+            if arguments
+                .iter()
+                .any(|argument| is_chain_placeholder(*argument))
+            {
+                let resolved = arguments
+                    .iter()
+                    .map(|argument| match *argument {
+                        AtomView::Var(variable) if variable.get_symbol() == SPENSO_TAG.chain_in => {
+                            input.to_symbolic([])
+                        }
+                        AtomView::Var(variable)
+                            if variable.get_symbol() == SPENSO_TAG.chain_out =>
+                        {
+                            output.to_symbolic([])
+                        }
+                        argument => argument.to_owned(),
+                    })
+                    .collect::<Vec<_>>();
+                let resolved = resolved.iter().map(Atom::as_view).collect::<Vec<_>>();
+                builtin_tensor_structure(function.get_symbol(), &resolved)?;
+            }
+            for argument in arguments {
+                if !is_chain_placeholder(argument) {
+                    validate_builtin_placeholder_channels(argument, input, output)?;
+                }
+            }
+        }
+        _ => {}
     }
     Ok(())
 }
@@ -395,7 +643,7 @@ impl TensorOperand {
     }
 }
 
-fn value_to_structured_atom(
+pub(crate) fn value_to_structured_atom(
     value: &Canonicalized<ExplicitKey<AbstractIndex>>,
 ) -> PyResult<StructuredAtom> {
     let structure = value.canonical();
@@ -403,9 +651,24 @@ fn value_to_structured_atom(
         .global_name
         .ok_or_else(|| PyRuntimeError::new_err("tensor structure has no name"))?;
     let args = structure.additional_args.as_deref().unwrap_or_default();
-    let atom = value.to_symbolic_with(name, args, None);
     let canonical = value.canonical().external_reps_iter().collect::<Vec<_>>();
     let logical = value.layout().canonical_to_logical(&canonical);
+    let logical_axes = (0..logical.len()).collect::<Vec<_>>();
+    let canonical_axes = value.layout().logical_to_canonical(&logical_axes);
+    let owner = crate::fresh_open_owner();
+    let atom = FunctionBuilder::new(name)
+        .add_args(args)
+        .add_args(
+            canonical
+                .iter()
+                .zip(canonical_axes)
+                .map(|(representation, axis)| {
+                    representation
+                        .slot::<AbstractIndex, _>(AbstractIndex::Open { owner, axis })
+                        .to_atom()
+                }),
+        )
+        .finish();
     let interface = PartialStructure::from_logical_slots(
         logical
             .into_iter()
@@ -443,6 +706,7 @@ fn index_value(value: ConvertibleToAbstractIndex, cook: bool) -> PyResult<Abstra
 
 fn has_structured_syntax(value: AtomView<'_>) -> bool {
     value.is_tensorial(StrictTensorFilter::Tagged)
+        || is_unmaterialized_tensor_leaf(value)
         || matches!(
             value,
             AtomView::Fun(projector)
@@ -450,6 +714,18 @@ fn has_structured_syntax(value: AtomView<'_>) -> bool {
                     || projector.get_symbol() == *shadowing::ANTISYM
                     || projector.get_symbol() == *shadowing::CYCLIC
         )
+}
+
+fn is_unmaterialized_tensor_leaf(value: AtomView<'_>) -> bool {
+    let AtomView::Fun(function) = value else {
+        return false;
+    };
+    function.get_symbol().has_tag(&SPENSO_TAG.tensor)
+        && function.iter().any(is_chain_placeholder)
+        && function.iter().all(|argument| {
+            Slot::<LibraryRep, AbstractIndex>::try_from(argument).is_err()
+                && Representation::<LibraryRep>::try_from(argument).is_err()
+        })
 }
 
 fn is_chain_placeholder(value: AtomView<'_>) -> bool {
@@ -501,6 +777,8 @@ fn validate_placeholder_scope(value: AtomView<'_>, inside_factor: bool) -> Resul
             }
 
             let tensor_leaf = symbol.has_tag(&SPENSO_TAG.tensor);
+            let mut inputs = 0;
+            let mut outputs = 0;
             for argument in function.iter() {
                 if is_chain_placeholder(argument) {
                     if !(inside_factor && tensor_leaf) {
@@ -509,9 +787,22 @@ fn validate_placeholder_scope(value: AtomView<'_>, inside_factor: bool) -> Resul
                                 .into(),
                         );
                     }
+                    let AtomView::Var(variable) = argument else {
+                        unreachable!("chain placeholders are variables")
+                    };
+                    if variable.get_symbol() == SPENSO_TAG.chain_in {
+                        inputs += 1;
+                    } else {
+                        outputs += 1;
+                    }
                 } else {
                     validate_placeholder_scope(argument, inside_factor)?;
                 }
+            }
+            if inputs + outputs > 0 && (inputs != 1 || outputs != 1) {
+                return Err(format!(
+                    "tensor factor `{symbol}` requires exactly one direct `in` and one direct `out` placeholder"
+                ));
             }
             Ok(())
         }
@@ -569,24 +860,19 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
                     ));
                     return;
                 }
-                if symbol == CS.f {
-                    let ports = arguments
-                        .iter()
-                        .filter_map(|argument| {
-                            Slot::<LibraryRep, AbstractIndex>::try_from(*argument)
-                                .map(|slot| slot.rep())
-                                .or_else(|_| Representation::<LibraryRep>::try_from(*argument))
-                                .ok()
-                        })
-                        .collect::<Vec<_>>();
-                    if let Err(error) =
-                        validate_color_structure_ports(symbol, arguments.len(), &ports)
-                    {
-                        syntax_error = Some(error.to_string());
-                        return;
-                    }
-                }
                 if !symbol.has_tag(&SPENSO_TAG.tensor) {
+                    return;
+                }
+
+                let compact_metric = symbol == ETS.metric
+                    && arguments.len() == 2
+                    && arguments.iter().all(|argument| {
+                        Slot::<LibraryRep, AbstractIndex>::try_from(*argument).is_err()
+                            && Representation::<LibraryRep>::try_from(*argument).is_err()
+                            && has_structured_syntax(*argument)
+                    });
+                if let Err(error) = builtin_tensor_structure(symbol, &arguments) {
+                    syntax_error = Some(error.to_string());
                     return;
                 }
 
@@ -605,13 +891,6 @@ fn infer_interface(atom: &Atom) -> PyResult<PartialStructure> {
                     })
                     .map(|(position, _)| position)
                     .collect::<Vec<_>>();
-                let compact_metric = symbol == ETS.metric
-                    && arguments.len() == 2
-                    && arguments.iter().all(|argument| {
-                        Slot::<LibraryRep, AbstractIndex>::try_from(*argument).is_err()
-                            && Representation::<LibraryRep>::try_from(*argument).is_err()
-                            && has_structured_syntax(*argument)
-                    });
                 let ports_are_final = ports
                     .iter()
                     .copied()
@@ -828,6 +1107,7 @@ fn infer_validated_interface(atom: &Atom) -> PyResult<PartialStructure> {
     if let AtomView::Fun(function) = atom.as_view() {
         let symbol = function.get_symbol();
         let arguments = function.iter().collect::<Vec<_>>();
+        let unmaterialized_tensor_leaf = is_unmaterialized_tensor_leaf(atom.as_view());
         if symbol == *shadowing::SYM
             || symbol == *shadowing::ANTISYM
             || symbol == *shadowing::CYCLIC
@@ -864,9 +1144,12 @@ fn infer_validated_interface(atom: &Atom) -> PyResult<PartialStructure> {
         }
 
         let compact_metric = symbol == ETS.metric
+            && arguments.len() == 2
             && arguments.iter().all(|argument| {
                 Slot::<LibraryRep, AbstractIndex>::try_from(*argument).is_err()
                     && Representation::<LibraryRep>::try_from(*argument).is_err()
+                    && !is_chain_placeholder(*argument)
+                    && has_structured_syntax(*argument)
             });
         if symbol == SPENSO_TAG.dot || compact_metric {
             let [left, right] = arguments.as_slice() else {
@@ -916,6 +1199,31 @@ fn infer_validated_interface(atom: &Atom) -> PyResult<PartialStructure> {
             return infer_validated_interface(&argument.to_owned());
         }
 
+        if let Some(structure) = builtin_tensor_structure(symbol, &arguments)? {
+            let canonical_ports = arguments
+                .iter()
+                .enumerate()
+                .map(|(position, argument)| {
+                    if let Ok(slot) = Slot::<LibraryRep, AbstractIndex>::try_from(*argument) {
+                        let index = match slot.aind() {
+                            AbstractIndex::Open { axis, .. } => PartialIndex::open(axis),
+                            index => PartialIndex::Explicit(index),
+                        };
+                        Some(slot.rep().slot(index))
+                    } else {
+                        Representation::<LibraryRep>::try_from(*argument)
+                            .ok()
+                            .map(|representation| representation.slot(PartialIndex::open(position)))
+                    }
+                })
+                .collect::<Option<Vec<_>>>();
+            if let Some(canonical_ports) = canonical_ports {
+                return Ok(PartialStructure::from_logical_slots(
+                    structure.layout().canonical_to_logical(&canonical_ports),
+                ));
+            }
+        }
+
         if symbol == SPENSO_TAG.chain {
             let endpoints = arguments[..2]
                 .iter()
@@ -933,6 +1241,15 @@ fn infer_validated_interface(atom: &Atom) -> PyResult<PartialStructure> {
                     }
                 })
                 .collect::<PyResult<Vec<_>>>()?;
+            let input = endpoints[0].rep();
+            let output = endpoints[1].rep();
+            if !input.matches(&output)
+                || !(input.rep.is_self_dual() || (input.rep.is_base() && output.rep.is_dual()))
+            {
+                return Err(PyValueError::new_err(
+                    "chain endpoints do not form a compatible input-to-output channel",
+                ));
+            }
             let mut interfaces = Vec::new();
             for factor in &arguments[2..] {
                 if !has_structured_syntax(*factor) {
@@ -940,6 +1257,7 @@ fn infer_validated_interface(atom: &Atom) -> PyResult<PartialStructure> {
                         "chain factors must contain structured tensors",
                     ));
                 }
+                validate_builtin_placeholder_channels(*factor, input, output)?;
                 interfaces.push(infer_validated_interface(&factor.to_owned())?);
             }
             let spectators = merge_explicit_interface_sequence(&interfaces)?;
@@ -947,6 +1265,11 @@ fn infer_validated_interface(atom: &Atom) -> PyResult<PartialStructure> {
                 endpoints.into_iter().chain(spectators.logical_slots()),
             ));
         } else if symbol == SPENSO_TAG.trace {
+            let representation =
+                Representation::<LibraryRep>::try_from(arguments[0]).map_err(|_| {
+                    PyValueError::new_err("trace metadata is not a Spenso representation")
+                })?;
+            let dual = representation.dual();
             let mut interfaces = Vec::new();
             for factor in shadowing::trace_factor_views(&arguments[1..]) {
                 if !has_structured_syntax(factor) {
@@ -954,6 +1277,7 @@ fn infer_validated_interface(atom: &Atom) -> PyResult<PartialStructure> {
                         "trace factors must contain structured tensors",
                     ));
                 }
+                validate_builtin_placeholder_channels(factor, representation, dual)?;
                 interfaces.push(infer_validated_interface(&factor.to_owned())?);
             }
             return merge_explicit_interface_sequence(&interfaces);
@@ -979,6 +1303,9 @@ fn infer_validated_interface(atom: &Atom) -> PyResult<PartialStructure> {
                         "tensor metadata for `{symbol}` must be scalar"
                     )));
                 }
+            }
+            if unmaterialized_tensor_leaf {
+                return Ok(PartialStructure::from_logical_slots([]));
             }
         }
     }
@@ -1020,7 +1347,8 @@ fn infer_validated_interface(atom: &Atom) -> PyResult<PartialStructure> {
     };
     // `OrderedStructure` canonicalizes slots and its fast function inference
     // does not retain that permutation. Read the direct structural arguments
-    // back from the atom so ordinary leaves follow their encoded syntax order.
+    // back from the atom so ordinary non-built-in leaves follow their encoded
+    // syntax order.
     let logical = syntactic_leaf_slots(materialized.as_view());
     if logical.len() != inferred.canonical().order() {
         return Err(PyValueError::new_err(format!(
@@ -1031,10 +1359,10 @@ fn infer_validated_interface(atom: &Atom) -> PyResult<PartialStructure> {
     }
     Ok(PartialStructure::from_logical_slots(
         logical.into_iter().map(|slot| {
-            let index = if open_markers.contains(&slot.aind()) {
-                PartialIndex::open(0)
-            } else {
-                PartialIndex::Explicit(slot.aind())
+            let index = match slot.aind() {
+                AbstractIndex::Open { axis, .. } => PartialIndex::open(axis),
+                index if open_markers.contains(&index) => PartialIndex::open(0),
+                index => PartialIndex::Explicit(index),
             };
             slot.rep().slot(index)
         }),
@@ -1176,6 +1504,122 @@ fn inferred_descriptor(atom: AtomView<'_>) -> (Option<Symbol>, Vec<Atom>) {
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl TensorExpression {
+    /// Create an unresolved metric tensor for `rep`.
+    ///
+    /// Call the result with two indices to fill its ports in logical order.
+    #[staticmethod]
+    fn g(py: Python<'_>, rep: &SpensoRepresentation) -> PyResult<Py<TensorExpression>> {
+        let structure = ExplicitKey::<AbstractIndex>::from_iter(
+            [rep.representation, rep.representation],
+            ETS.metric,
+            None,
+        );
+        Self::from_structure(py, &structure)
+    }
+
+    /// Create an unresolved musical-isomorphism tensor for `rep`.
+    ///
+    /// Call the result with two indices to fill its ports in logical order.
+    #[staticmethod]
+    fn flat(py: Python<'_>, rep: &SpensoRepresentation) -> PyResult<Py<TensorExpression>> {
+        let structure = ExplicitKey::<AbstractIndex>::from_iter(
+            [rep.representation, rep.representation],
+            ETS.flat,
+            None,
+        );
+        Self::from_structure(py, &structure)
+    }
+
+    /// Create an unresolved gamma matrix with Minkowski dimension
+    /// `minkowski_dimension`.
+    ///
+    /// Its logical ports are Minkowski, bispinor, and bispinor. The bispinor
+    /// dimension is four. Call the result with `(mu, i, j)` to index it.
+    #[staticmethod]
+    fn gamma(
+        py: Python<'_>,
+        minkowski_dimension: ConvertibleToDimension,
+    ) -> PyResult<Py<TensorExpression>> {
+        Self::from_structure(py, &AGS.gamma_strct::<AbstractIndex>(minkowski_dimension.0))
+    }
+
+    /// Create an unresolved gamma-five matrix with two bispinor ports of
+    /// `spinor_dimension`; call the result with `(i, j)`.
+    #[staticmethod]
+    fn gamma5(
+        py: Python<'_>,
+        spinor_dimension: ConvertibleToDimension,
+    ) -> PyResult<Py<TensorExpression>> {
+        Self::from_structure(py, &AGS.gamma5_strct::<AbstractIndex>(spinor_dimension.0))
+    }
+
+    /// Create an unresolved left-chiral projector with two bispinor ports of
+    /// `spinor_dimension`; call the result with `(i, j)`.
+    #[staticmethod]
+    fn projm(
+        py: Python<'_>,
+        spinor_dimension: ConvertibleToDimension,
+    ) -> PyResult<Py<TensorExpression>> {
+        Self::from_structure(py, &AGS.projm_strct::<AbstractIndex>(spinor_dimension.0))
+    }
+
+    /// Create an unresolved right-chiral projector with two bispinor ports of
+    /// `spinor_dimension`; call the result with `(i, j)`.
+    #[staticmethod]
+    fn projp(
+        py: Python<'_>,
+        spinor_dimension: ConvertibleToDimension,
+    ) -> PyResult<Py<TensorExpression>> {
+        Self::from_structure(py, &AGS.projp_strct::<AbstractIndex>(spinor_dimension.0))
+    }
+
+    /// Create an unresolved sigma matrix with Minkowski dimension
+    /// `minkowski_dimension`.
+    ///
+    /// Its logical ports are two Minkowski ports followed by two four-dimensional
+    /// bispinor ports. Call the result with `(mu, nu, i, j)` to index it.
+    #[staticmethod]
+    fn sigma(
+        py: Python<'_>,
+        minkowski_dimension: ConvertibleToDimension,
+    ) -> PyResult<Py<TensorExpression>> {
+        Self::from_structure(py, &AGS.sigma_strct::<AbstractIndex>(minkowski_dimension.0))
+    }
+
+    /// Create an unresolved color structure constant.
+    ///
+    /// All three logical ports are adjoint representations of
+    /// `adjoint_dimension`; call the result with `(a, b, c)`.
+    #[staticmethod]
+    fn f(
+        py: Python<'_>,
+        adjoint_dimension: ConvertibleToDimension,
+    ) -> PyResult<Py<TensorExpression>> {
+        Self::from_structure(py, &CS.f_strct::<AbstractIndex>(adjoint_dimension.0))
+    }
+
+    /// Create an unresolved color generator.
+    ///
+    /// The logical ports are adjoint, fundamental, and antifundamental. Dimensions
+    /// belong to those representations and are not tensor key arguments.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.spenso import TensorExpression
+    /// >>> generator = TensorExpression.t(8, 3)
+    /// >>> indexed = generator("a", "i", "j")
+    #[staticmethod]
+    fn t(
+        py: Python<'_>,
+        adjoint_dimension: ConvertibleToDimension,
+        fundamental_dimension: ConvertibleToDimension,
+    ) -> PyResult<Py<TensorExpression>> {
+        Self::from_structure(
+            py,
+            &CS.t_strct::<AbstractIndex>(fundamental_dimension.0, adjoint_dimension.0),
+        )
+    }
+
     /// Number of external tensor ports in the ordered interface.
     #[getter]
     fn rank(&self) -> usize {
@@ -2564,7 +3008,7 @@ mod tests {
     use super::*;
     use idenso::{IndexTooling, IndexToolingError};
     use spenso::structure::{dimension::Dimension, representation::ExtendibleReps};
-    use symbolica::atom::FunctionBuilder;
+    use symbolica::{atom::FunctionBuilder, symbol};
 
     fn explicit_interface(
         representation: Representation<LibraryRep>,
@@ -2579,6 +3023,15 @@ mod tests {
         Python::attach(|py| -> PyResult<()> {
             let expression_type = py.get_type::<TensorExpression>();
             for name in [
+                "g",
+                "flat",
+                "gamma",
+                "gamma5",
+                "projm",
+                "projp",
+                "sigma",
+                "f",
+                "t",
                 "rank",
                 "is_scalar",
                 "interface",
@@ -2654,6 +3107,303 @@ mod tests {
             Ok(())
         })
         .unwrap();
+    }
+
+    #[test]
+    fn builtin_factories_define_logical_interfaces_without_key_arguments() {
+        use idenso::representations::ColorAntiFundamental;
+
+        idenso::representations::initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let expression_type = py.get_type::<TensorExpression>();
+            let euc = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
+            let euc_object = Py::new(
+                py,
+                SpensoRepresentation {
+                    representation: euc,
+                },
+            )?;
+            let adjoint: Representation<LibraryRep> =
+                ColorAdjoint {}.new_rep(Dimension::Concrete(8)).cast();
+            let fundamental: Representation<LibraryRep> =
+                ColorFundamental {}.new_rep(Dimension::Concrete(3)).cast();
+            let antifundamental: Representation<LibraryRep> = ColorAntiFundamental {}
+                .new_rep(Dimension::Concrete(3))
+                .cast();
+            let minkowski: Representation<LibraryRep> =
+                Minkowski {}.new_rep(Dimension::Concrete(4)).cast();
+            let bispinor: Representation<LibraryRep> =
+                Bispinor {}.new_rep(Dimension::Concrete(4)).cast();
+
+            let cases = [
+                (
+                    expression_type.call_method1("g", (euc_object.clone_ref(py),))?,
+                    vec![euc, euc],
+                ),
+                (
+                    expression_type.call_method1("flat", (euc_object,))?,
+                    vec![euc, euc],
+                ),
+                (
+                    expression_type.call_method1("gamma", (4,))?,
+                    vec![minkowski, bispinor, bispinor],
+                ),
+                (
+                    expression_type.call_method1("gamma5", (4,))?,
+                    vec![bispinor, bispinor],
+                ),
+                (
+                    expression_type.call_method1("projm", (4,))?,
+                    vec![bispinor, bispinor],
+                ),
+                (
+                    expression_type.call_method1("projp", (4,))?,
+                    vec![bispinor, bispinor],
+                ),
+                (
+                    expression_type.call_method1("sigma", (4,))?,
+                    vec![minkowski, minkowski, bispinor, bispinor],
+                ),
+                (
+                    expression_type.call_method1("f", (8,))?,
+                    vec![adjoint, adjoint, adjoint],
+                ),
+                (
+                    expression_type.call_method1("t", (8, 3))?,
+                    vec![adjoint, fundamental, antifundamental],
+                ),
+            ];
+            let structures = [
+                ExplicitKey::<AbstractIndex>::from_iter([euc, euc], ETS.metric, None),
+                ExplicitKey::<AbstractIndex>::from_iter([euc, euc], ETS.flat, None),
+                AGS.gamma_strct::<AbstractIndex>(4),
+                AGS.gamma5_strct::<AbstractIndex>(4),
+                AGS.projm_strct::<AbstractIndex>(4),
+                AGS.projp_strct::<AbstractIndex>(4),
+                AGS.sigma_strct::<AbstractIndex>(4),
+                CS.f_strct::<AbstractIndex>(8),
+                CS.t_strct::<AbstractIndex>(3, 8),
+            ];
+
+            for ((value, expected), structure) in cases.iter().zip(&structures) {
+                let tensor = value.extract::<PyRef<'_, TensorExpression>>()?;
+                assert_eq!(
+                    tensor
+                        .interface
+                        .logical_slots()
+                        .into_iter()
+                        .map(|slot| slot.rep())
+                        .collect::<Vec<_>>(),
+                    *expected
+                );
+                assert!(tensor.name_args.is_empty());
+                assert_eq!(tensor.interface.open_positions().len(), expected.len());
+                let AtomView::Fun(function) = tensor.as_super().expr.as_view() else {
+                    panic!("a predefined tensor factory must remain an atomic leaf")
+                };
+                let canonical_slots = function
+                    .iter()
+                    .map(|argument| {
+                        Slot::<LibraryRep, AbstractIndex>::try_from(argument)
+                            .expect("factory ports must carry distinct open indices")
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    canonical_slots
+                        .iter()
+                        .map(IsAbstractSlot::rep)
+                        .collect::<Vec<_>>(),
+                    structure
+                        .canonical()
+                        .external_reps_iter()
+                        .collect::<Vec<_>>()
+                );
+                assert_eq!(function.get_nargs(), expected.len());
+                drop(tensor);
+
+                let logical_slots = expected
+                    .iter()
+                    .enumerate()
+                    .map(|(position, representation)| {
+                        representation.slot(AbstractIndex::Normal(100 + position))
+                    })
+                    .collect::<Vec<_>>();
+                let indices = logical_slots
+                    .iter()
+                    .map(|slot| Py::new(py, SpensoSlot { slot: *slot }))
+                    .collect::<PyResult<Vec<_>>>()?;
+                let full = PyTuple::new(py, indices.iter())?;
+                let indexed = value
+                    .call(&full, None)?
+                    .extract::<PyRef<'_, TensorExpression>>()?;
+                assert_eq!(
+                    indexed.interface.logical_slots(),
+                    logical_slots
+                        .iter()
+                        .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind())))
+                        .collect::<Vec<_>>()
+                );
+                let AtomView::Fun(function) = indexed.as_super().expr.as_view() else {
+                    panic!("an indexed predefined tensor must remain an atomic leaf")
+                };
+                assert_eq!(
+                    function
+                        .iter()
+                        .map(
+                            |argument| Slot::<LibraryRep, AbstractIndex>::try_from(argument)
+                                .unwrap()
+                        )
+                        .collect::<Vec<_>>(),
+                    structure.layout().logical_to_canonical(&logical_slots)
+                );
+                drop(indexed);
+
+                let short = PyTuple::new(py, indices.iter().take(indices.len() - 1))?;
+                let error = value
+                    .call(&short, None)
+                    .expect_err("every predefined factory must enforce its indexing arity");
+                assert!(error.is_instance_of::<PyValueError>(py));
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn builtin_factories_keep_symbolic_dimensions_in_ports_only() {
+        idenso::representations::initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let dimension = Dimension::from(symbol!("factory_symbolic_dimension"));
+            let adjoint_dimension = Dimension::from(symbol!("factory_symbolic_adjoint"));
+            let fundamental_dimension = Dimension::from(symbol!("factory_symbolic_fundamental"));
+            let concrete_four = Dimension::Concrete(4);
+            let euc_object = SpensoRepresentation {
+                representation: ExtendibleReps::EUCLIDEAN.new_rep(dimension),
+            };
+            let cases = vec![
+                (TensorExpression::g(py, &euc_object)?, vec![dimension; 2]),
+                (TensorExpression::flat(py, &euc_object)?, vec![dimension; 2]),
+                (
+                    TensorExpression::gamma(py, ConvertibleToDimension(dimension))?,
+                    vec![dimension, concrete_four, concrete_four],
+                ),
+                (
+                    TensorExpression::gamma5(py, ConvertibleToDimension(dimension))?,
+                    vec![dimension; 2],
+                ),
+                (
+                    TensorExpression::projm(py, ConvertibleToDimension(dimension))?,
+                    vec![dimension; 2],
+                ),
+                (
+                    TensorExpression::projp(py, ConvertibleToDimension(dimension))?,
+                    vec![dimension; 2],
+                ),
+                (
+                    TensorExpression::sigma(py, ConvertibleToDimension(dimension))?,
+                    vec![dimension, dimension, concrete_four, concrete_four],
+                ),
+                (
+                    TensorExpression::f(py, ConvertibleToDimension(adjoint_dimension))?,
+                    vec![adjoint_dimension; 3],
+                ),
+                (
+                    TensorExpression::t(
+                        py,
+                        ConvertibleToDimension(adjoint_dimension),
+                        ConvertibleToDimension(fundamental_dimension),
+                    )?,
+                    vec![
+                        adjoint_dimension,
+                        fundamental_dimension,
+                        fundamental_dimension,
+                    ],
+                ),
+            ];
+
+            for (expression, expected_dimensions) in cases {
+                let expression = expression.bind(py).borrow();
+                assert_eq!(
+                    expression
+                        .interface
+                        .logical_slots()
+                        .iter()
+                        .map(IsAbstractSlot::dim)
+                        .collect::<Vec<_>>(),
+                    expected_dimensions
+                );
+                assert!(expression.name_args.is_empty());
+                let AtomView::Fun(function) = expression.as_super().expr.as_view() else {
+                    panic!("a symbolic-dimension factory must produce one tensor leaf")
+                };
+                assert_eq!(function.get_nargs(), expected_dimensions.len());
+                assert!(
+                    function
+                        .iter()
+                        .all(
+                            |argument| Slot::<LibraryRep, AbstractIndex>::try_from(argument)
+                                .is_ok()
+                        )
+                );
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn raw_predefined_tensor_leaves_use_their_shared_structure() {
+        Python::initialize();
+        idenso::representations::initialize();
+        let minkowski = Minkowski {}.new_rep(Dimension::Concrete(4));
+        let malformed = FunctionBuilder::new(CS.t)
+            .add_args([
+                minkowski.to_symbolic([]),
+                minkowski.to_symbolic([]),
+                minkowski.to_symbolic([]),
+            ])
+            .finish();
+        let error = infer_interface(&malformed).expect_err("invalid t ports must be rejected");
+        assert!(error.to_string().contains("TensorExpression.t"));
+
+        let generator_structure = CS.t_strct::<AbstractIndex>(3, 8);
+        let expected = generator_structure.layout().canonical_to_logical(
+            &generator_structure
+                .canonical()
+                .external_reps_iter()
+                .collect::<Vec<_>>(),
+        );
+        let generator = value_to_structured_atom(&generator_structure).unwrap();
+        let inferred = infer_interface(&generator.atom).unwrap();
+        assert_eq!(
+            inferred
+                .logical_slots()
+                .into_iter()
+                .map(|slot| slot.rep())
+                .collect::<Vec<_>>(),
+            expected
+        );
+
+        let bispinor: Representation<LibraryRep> =
+            Bispinor {}.new_rep(Dimension::Concrete(4)).cast();
+        let gamma = FunctionBuilder::new(AGS.gamma)
+            .add_args([
+                minkowski
+                    .slot::<AbstractIndex, _>(AbstractIndex::Normal(1))
+                    .to_atom(),
+                bispinor
+                    .slot::<AbstractIndex, _>(AbstractIndex::Normal(2))
+                    .to_atom(),
+                bispinor
+                    .slot::<AbstractIndex, _>(AbstractIndex::Normal(3))
+                    .to_atom(),
+            ])
+            .finish();
+        let error = infer_interface(&gamma)
+            .expect_err("raw predefined tensors must use canonical atom ordering");
+        assert!(error.to_string().contains("TensorExpression.gamma"));
     }
 
     #[test]
@@ -3224,6 +3974,7 @@ mod tests {
 
     #[test]
     fn chain_placeholders_require_a_factor_scope() {
+        Python::initialize();
         let placeholder = Atom::var(SPENSO_TAG.chain_in);
         assert!(validate_placeholder_scope(placeholder.as_view(), false).is_err());
 
@@ -3239,6 +3990,117 @@ mod tests {
             .finish();
 
         assert!(validate_placeholder_scope(chain.as_view(), false).is_ok());
+
+        let bispinor: Representation<LibraryRep> =
+            Bispinor {}.new_rep(Dimension::Concrete(4)).cast();
+        let minkowski: Representation<LibraryRep> =
+            Minkowski {}.new_rep(Dimension::Concrete(4)).cast();
+        let gamma_factor = |input: Symbol, output: Option<Symbol>| {
+            let mut factor = FunctionBuilder::new(AGS.gamma).add_arg(Atom::var(input));
+            if let Some(output) = output {
+                factor = factor.add_arg(Atom::var(output));
+            }
+            factor
+                .add_arg(
+                    minkowski
+                        .slot::<AbstractIndex, _>(AbstractIndex::Normal(23))
+                        .to_atom(),
+                )
+                .finish()
+        };
+        let gamma_chain =
+            |factor| SPENSO_TAG.chain(bispinor.to_symbolic([]), bispinor.to_symbolic([]), [factor]);
+        assert!(
+            infer_interface(&gamma_chain(gamma_factor(
+                SPENSO_TAG.chain_in,
+                Some(SPENSO_TAG.chain_out),
+            )))
+            .is_ok()
+        );
+        assert!(infer_interface(&gamma_chain(gamma_factor(SPENSO_TAG.chain_in, None))).is_err());
+        assert!(
+            infer_interface(&gamma_chain(gamma_factor(
+                SPENSO_TAG.chain_in,
+                Some(SPENSO_TAG.chain_in),
+            )))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn placeholder_only_tensor_leaves_remain_structured_chain_factors() {
+        Python::initialize();
+        idenso::representations::initialize();
+        let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
+        let placeholder_leaf = |name| {
+            FunctionBuilder::new(name)
+                .add_arg(Atom::var(SPENSO_TAG.chain_in))
+                .add_arg(Atom::var(SPENSO_TAG.chain_out))
+                .finish()
+        };
+        let generic_name = SPENSO_TAG.tensor_symbol("placeholder_only_factor");
+        let generic_with_key = FunctionBuilder::new(generic_name)
+            .add_arg(Atom::num(7))
+            .add_arg(Atom::var(SPENSO_TAG.chain_in))
+            .add_arg(Atom::var(SPENSO_TAG.chain_out))
+            .finish();
+
+        for factor in [generic_with_key, placeholder_leaf(ETS.metric)] {
+            let chain = SPENSO_TAG.chain(
+                representation.to_symbolic([]),
+                representation.to_symbolic([]),
+                [factor.clone()],
+            );
+            assert_eq!(infer_interface(&chain).unwrap().canonical().order(), 2);
+
+            let trace = SPENSO_TAG.trace(representation.to_symbolic([]), [factor]);
+            assert!(infer_interface(&trace).unwrap().canonical().is_scalar());
+        }
+
+        let invalid_factors = [
+            FunctionBuilder::new(generic_name)
+                .add_arg(Atom::var(SPENSO_TAG.chain_in))
+                .finish(),
+            FunctionBuilder::new(generic_name)
+                .add_arg(Atom::var(SPENSO_TAG.chain_in))
+                .add_arg(Atom::var(SPENSO_TAG.chain_in))
+                .finish(),
+            FunctionBuilder::new(generic_name)
+                .add_arg(Atom::var(SPENSO_TAG.chain_in))
+                .add_arg(Atom::var(SPENSO_TAG.chain_out))
+                .add_arg(Atom::num(7))
+                .finish(),
+        ];
+        for factor in invalid_factors {
+            let chain = SPENSO_TAG.chain(
+                representation.to_symbolic([]),
+                representation.to_symbolic([]),
+                [factor],
+            );
+            assert!(infer_interface(&chain).is_err());
+        }
+
+        Python::attach(|py| -> PyResult<()> {
+            let metric = TensorExpression::g(py, &SpensoRepresentation { representation })?;
+            let right = metric.clone_ref(py);
+            let TensorDispatch::Expression(composed) = TensorExpression::compose(
+                metric.bind(py).borrow(),
+                py,
+                right.bind(py).as_any(),
+                (0, 1),
+                (0, 1),
+            )?
+            else {
+                panic!("composing symbolic metrics produced a network")
+            };
+            let reinferred = TensorExpression::reinfer(composed.bind(py).borrow(), py)?;
+            assert_eq!(
+                reinferred.bind(py).borrow().interface.canonical().order(),
+                2
+            );
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]
