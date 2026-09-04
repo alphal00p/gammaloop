@@ -68,6 +68,7 @@
   accuracy: 0.001,
   optimize: true,
   offset-side: none,
+  split-gap: 0,
 )
 
 #let _edge-routing-defaults = (
@@ -76,6 +77,7 @@
   anchor-control-distance: auto,
   route: "edge-pos",
   route-points: "ignore",
+  dangling-tangent: auto,
 )
 
 #let _mark-defaults = (
@@ -315,6 +317,7 @@
     same and _style-value(source-style, "optimize") == _style-value(sink-style, "optimize")
   )
   same = same and _style-value(source-style, "offset-side") == _style-value(sink-style, "offset-side")
+  same = same and _style-value(source-style, "split-gap") == _style-value(sink-style, "split-gap")
   same
 }
 
@@ -451,7 +454,7 @@
   }
 }
 
-#let _layer(segment, style, start-outset, end-outset, label-pos, center-outset) = {
+#let _path-layer(path, style, start-outset, end-outset, label-pos, center-outset) = {
   let geometry = _edge-geometry(style)
   let side-point = if geometry.offset-side == "label" { label-pos } else { none }
   let length = geometry.length
@@ -463,7 +466,7 @@
     ratio = none
   }
   curve-api.layer(
-    curve-api.from-cubic(segment),
+    path,
     offset: geometry.offset,
     length: length,
     ratio: ratio,
@@ -474,6 +477,10 @@
     accuracy: geometry.accuracy,
     optimize: geometry.optimize,
   )
+}
+
+#let _layer(segment, style, start-outset, end-outset, label-pos, center-outset) = {
+  _path-layer(curve-api.from-cubic(segment), style, start-outset, end-outset, label-pos, center-outset)
 }
 
 #let _geometry-segments(
@@ -502,28 +509,7 @@
   label-pos,
   center-outset,
 ) = {
-  let geometry = _edge-geometry(style)
-  let side-point = if geometry.offset-side == "label" { label-pos } else { none }
-  let length = geometry.length
-  let ratio = geometry.ratio
-  if center-outset != auto {
-    start-outset = start-outset + center-outset
-    end-outset = end-outset + center-outset
-    length = none
-    ratio = none
-  }
-  curve-api.segments(curve-api.layer(
-    path,
-    offset: geometry.offset,
-    length: length,
-    ratio: ratio,
-    resolve-length: geometry.resolve-length,
-    start-outset: start-outset,
-    end-outset: end-outset,
-    side-point: if side-point == none { none } else { _point(side-point) },
-    accuracy: geometry.accuracy,
-    optimize: geometry.optimize,
-  ))
+  curve-api.segments(_path-layer(path, style, start-outset, end-outset, label-pos, center-outset))
 }
 
 #let _half-geometry(segment, style, outsets, label-pos) = {
@@ -554,6 +540,15 @@
       0,
     )
   }
+}
+
+#let _merged-half-outsets(outsets, half-length, start: 0, end: 0) = {
+  if outsets == none {
+    return none
+  }
+  let start = calc.max(outsets.start, start)
+  let end = calc.max(outsets.end, end)
+  if start + end >= half-length { none } else { (start: start, end: end) }
 }
 
 #let _auto-anchor-control-distance(start, route, end) = {
@@ -644,37 +639,58 @@
   let source-length = curve-api.length(source-path, accuracy: accuracy)
   let sink-length = curve-api.length(sink-path, accuracy: accuracy)
   let base-length = source-length + sink-length
-  let source-outsets = _visible-half-outsets(
-    base-length,
-    0,
+  let source-split-outset = calc.min(
     source-length,
-    source-style,
-    source-outset,
-    sink-outset,
+    calc.max(0, _style-value(source-style, "split-gap")) / 2,
   )
-  let source-geometry = _half-path-geometry(source-path, source-style, source-outsets, label-pos)
-  let sink-geometry = if _same-layer-geometry(source-style, sink-style) {
-    let sink-outsets = _visible-half-outsets(
+  let sink-split-outset = calc.min(
+    sink-length,
+    calc.max(0, _style-value(sink-style, "split-gap")) / 2,
+  )
+  let source-outsets = _merged-half-outsets(
+    _visible-half-outsets(
       base-length,
+      0,
       source-length,
-      sink-length,
       source-style,
       source-outset,
       sink-outset,
+    ),
+    source-length,
+    end: source-split-outset,
+  )
+  let source-geometry = _half-path-geometry(source-path, source-style, source-outsets, label-pos)
+  let sink-geometry = if _same-layer-geometry(source-style, sink-style) {
+    let sink-outsets = _merged-half-outsets(
+      _visible-half-outsets(
+        base-length,
+        source-length,
+        sink-length,
+        source-style,
+        source-outset,
+        sink-outset,
+      ),
+      sink-length,
+      start: sink-split-outset,
     )
     _half-path-geometry(sink-path, source-style, sink-outsets, label-pos)
   } else {
-    let sink-outsets = _visible-half-outsets(
-      base-length,
-      source-length,
+    let sink-outsets = _merged-half-outsets(
+      _visible-half-outsets(
+        base-length,
+        source-length,
+        sink-length,
+        sink-style,
+        source-outset,
+        sink-outset,
+      ),
       sink-length,
-      sink-style,
-      source-outset,
-      sink-outset,
+      start: sink-split-outset,
     )
     _half-path-geometry(sink-path, sink-style, sink-outsets, label-pos)
   }
-  let whole-geometry = if _same-layer-geometry(source-style, sink-style) {
+  let split-gap = source-split-outset + sink-split-outset
+  let whole-geometry = if _same-layer-geometry(source-style, sink-style) and split-gap == 0 {
     let center-outset = _center-outset(base-length, source-style, source-outset, sink-outset)
     _geometry-path-segments(curve, source-style, source-outset, sink-outset, label-pos, center-outset)
   } else {
@@ -685,6 +701,7 @@
     sink: sink-geometry,
     curve: curve,
     whole: whole-geometry,
+    split-gap: split-gap,
   )
 }
 
@@ -806,12 +823,20 @@
     omega: omega,
     accuracy: accuracy,
   )
-  (
-    source: _geometry-path-segments(source-path, source-style, source-start-outset, 0, label-pos, 0),
-    sink: _geometry-path-segments(sink-path, sink-style, 0, sink-end-outset, label-pos, 0),
-    curve: curve-api.hobby-spline((start, route, end), omega: omega, accuracy: accuracy),
-    whole: none,
+  let halves = _split-edge-geometry(
+    source-path,
+    sink-path,
+    curve-api.hobby-spline((start, route, end), omega: omega, accuracy: accuracy),
+    source-style,
+    sink-style,
+    source-start-outset,
+    sink-end-outset,
+    label-pos,
+    accuracy,
   )
+  // The fallback halves contain anchor guides that are absent from `curve`.
+  halves.whole = none
+  halves
 }
 
 #let edge-halves(edge, nodes, options) = {
@@ -835,11 +860,33 @@
     end-outset: sink-outset,
     accuracy: accuracy,
   )
+  let split-outset = calc.max(0, options.at("split-gap", default: 0)) / 2
+  let source = split.parts.at(0)
+  let sink = split.parts.at(1)
+  let source-split-outset = 0
+  let sink-split-outset = 0
+  if split-outset > 0 {
+    let source-length = curve-api.length(source, accuracy: accuracy)
+    let sink-length = curve-api.length(sink, accuracy: accuracy)
+    source-split-outset = calc.min(split-outset, source-length)
+    sink-split-outset = calc.min(split-outset, sink-length)
+    source = if source-split-outset == source-length {
+      curve-api.path()
+    } else {
+      curve-api.trim(source, end-outset: source-split-outset, accuracy: accuracy)
+    }
+    sink = if sink-split-outset == sink-length {
+      curve-api.path()
+    } else {
+      curve-api.trim(sink, start-outset: sink-split-outset, accuracy: accuracy)
+    }
+  }
 
   (
-    source: split.parts.at(0),
-    sink: split.parts.at(1),
+    source: source,
+    sink: sink,
     curve: split.curve,
+    split-gap: source-split-outset + sink-split-outset,
   )
 }
 #let to-cetz-edge-halves(
@@ -854,6 +901,7 @@
       omega: options.omega,
       source-outset: options.source-outset,
       sink-outset: options.sink-outset,
+      split-gap: options.at("split-gap", default: 0),
       accuracy: options.accuracy,
     ),
   )
@@ -903,54 +951,19 @@
     omega: omega,
     source-outset: 0,
     sink-outset: 0,
+    split-gap: 0,
     accuracy: accuracy,
   ))
-  let source-path = base.source
-  let sink-path = base.sink
-  let source-length = curve-api.length(source-path, accuracy: accuracy)
-  let sink-length = curve-api.length(sink-path, accuracy: accuracy)
-  let base-length = source-length + sink-length
-  let source-outsets = _visible-half-outsets(
-    base-length,
-    0,
-    source-length,
+  _split-edge-geometry(
+    base.source,
+    base.sink,
+    base.curve,
     source-style,
+    sink-style,
     source-outset,
     sink-outset,
-  )
-  let source-geometry = _half-path-geometry(source-path, source-style, source-outsets, label-pos)
-  let sink-geometry = if _same-layer-geometry(source-style, sink-style) {
-    let sink-outsets = _visible-half-outsets(
-      base-length,
-      source-length,
-      sink-length,
-      source-style,
-      source-outset,
-      sink-outset,
-    )
-    _half-path-geometry(sink-path, source-style, sink-outsets, label-pos)
-  } else {
-    let sink-outsets = _visible-half-outsets(
-      base-length,
-      source-length,
-      sink-length,
-      sink-style,
-      source-outset,
-      sink-outset,
-    )
-    _half-path-geometry(sink-path, sink-style, sink-outsets, label-pos)
-  }
-  let whole-geometry = if _same-layer-geometry(source-style, sink-style) {
-    let center-outset = _center-outset(base-length, source-style, source-outset, sink-outset)
-    _geometry-path-segments(base.curve, source-style, source-outset, sink-outset, label-pos, center-outset)
-  } else {
-    none
-  }
-  (
-    source: source-geometry,
-    sink: sink-geometry,
-    curve: base.curve,
-    whole: whole-geometry,
+    label-pos,
+    accuracy,
   )
 }
 
@@ -1014,8 +1027,8 @@
   (elements: elements, length: length)
 }
 
-#let _segment-elements(segment, style, phase, anchor-start, anchor-end, label-pos) = {
-  let path = _layer(segment, style, 0, 0, label-pos, auto)
+#let _path-elements(path, style, phase, anchor-start, anchor-end, label-pos) = {
+  let path = _path-layer(path, style, 0, 0, label-pos, auto)
   if _has-mark(style) and _mark-position(style) == "center" and not _has-pattern(style) {
     let length = curve-api.length(path, accuracy: _style-value(style, "accuracy"))
     let first = curve-api.trim(path, end-outset: length / 2, accuracy: _style-value(style, "accuracy"))
@@ -1065,6 +1078,10 @@
   }
 }
 
+#let _segment-elements(segment, style, phase, anchor-start, anchor-end, label-pos) = {
+  _path-elements(curve-api.from-cubic(segment), style, phase, anchor-start, anchor-end, label-pos)
+}
+
 #let _pattern-edge-halves(halves, source-style, sink-style) = {
   let elements = ()
   let whole = halves.at("whole", default: none)
@@ -1075,7 +1092,8 @@
     let source = _segments-elements(halves.source, source-style, auto, true, false)
     let wavelength = _style-value(source-style, "pattern-wavelength")
     let phase = _style-value(source-style, "pattern-phase")
-    let sink-phase = phase + 2 * calc.pi * source.length / wavelength
+    let hidden-length = halves.at("split-gap", default: 0)
+    let sink-phase = phase + 2 * calc.pi * (source.length + hidden-length) / wavelength
     let sink-elements = _segments-elements(halves.sink, sink-style, sink-phase, false, true).elements
     if _has-mark(source-style) and not _has-mark(sink-style) {
       for element in sink-elements {
@@ -1140,8 +1158,46 @@
   curve-api.segments(curve-api.quad(start, control, end)).first()
 }
 
-#let _pattern-dangling(start, end, bend, style, label-pos) = {
-  _segment-elements(_bent-line-segment(start, end, bend), style, auto, true, true, label-pos).elements
+#let _dangling-path(start, end, bend, style, dangling-at-start: false) = {
+  let segment = _bent-line-segment(start, end, bend)
+  let tangent = _style-value(style, "dangling-tangent")
+  if tangent == auto {
+    return curve-api.from-cubic(segment)
+  }
+  if tangent != "horizontal" and tangent != "vertical" {
+    panic("draw: dangling-tangent must be auto, \"horizontal\", or \"vertical\"")
+  }
+
+  let distance = _point-distance(start, end)
+  if distance == 0 {
+    return curve-api.from-cubic(segment)
+  }
+  let control-distance = _style-value(style, "anchor-control-distance")
+  if control-distance == auto or control-distance <= 0 {
+    control-distance = distance / 3
+  } else {
+    control-distance = calc.min(control-distance, 0.9 * distance)
+  }
+  let delta = if tangent == "horizontal" {
+    _point-x(end) - _point-x(start)
+  } else {
+    _point-y(end) - _point-y(start)
+  }
+  let direction = if delta < 0 { -1 } else { 1 }
+  if tangent == "horizontal" and dangling-at-start {
+    segment.control-start = (_point-x(start) + direction * control-distance, _point-y(start))
+  } else if tangent == "horizontal" {
+    segment.control-end = (_point-x(end) - direction * control-distance, _point-y(end))
+  } else if dangling-at-start {
+    segment.control-start = (_point-x(start), _point-y(start) + direction * control-distance)
+  } else {
+    segment.control-end = (_point-x(end), _point-y(end) - direction * control-distance)
+  }
+  curve-api.from-cubic(segment)
+}
+
+#let _pattern-dangling(path, style, label-pos) = {
+  _path-elements(path, style, auto, true, true, label-pos).elements
 }
 
 #let _node-outset(style, node-outset) = {
@@ -1310,6 +1366,8 @@
   let edge-resolve-length = options.edge-resolve-length
   let edge-accuracy = options.edge-accuracy
   let edge-optimize = options.edge-optimize
+  let edge-split-gap = options.edge-split-gap
+  let edge-dangling-tangent = options.edge-dangling-tangent
   let source-style = options.source-style
   let sink-style = options.sink-style
   let edge-label = options.edge-label
@@ -1481,6 +1539,8 @@
             resolve-length: edge-resolve-length,
             accuracy: edge-accuracy,
             optimize: edge-optimize,
+            split-gap: edge-split-gap,
+            dangling-tangent: edge-dangling-tangent,
           )
           let source-style-layers = _style-layers(source-style, edge-data)
           let sink-style-layers = _style-layers(sink-style, edge-data)
@@ -1593,7 +1653,7 @@
                   elements.push(element)
                 }
               }
-	            } else if source-half-edge != none {
+            } else if source-half-edge != none {
               let source-geometry-style = if source-style-value == none { sink-style-value } else { source-style-value }
               let source-anchor = _style-value(source-geometry-style, "source-anchor")
               let line-start = if source-anchor == auto {
@@ -1606,9 +1666,10 @@
                 _node-anchor-point(node-boxes.at(source-half-edge.node), source-anchor)
               }
               let bend = edge.at("bend", default: none)
+              let dangling-path = _dangling-path(line-start, edge.pos, bend, source-geometry-style)
               if source-label-segments == none and source-geometry-style != none {
-                source-label-segments = _geometry-segments(
-                  _bent-line-segment(line-start, edge.pos, bend),
+                source-label-segments = _geometry-path-segments(
+                  dangling-path,
                   source-geometry-style,
                   0,
                   0,
@@ -1619,9 +1680,7 @@
               if source-style-value != none and source-in-subgraph and subgraph-edge-underlay {
                 for subgraph-style in source-subgraph-styles {
                   for element in _pattern-dangling(
-                    line-start,
-                    edge.pos,
-                    bend,
+                    dangling-path,
                     _without-mark-style(_without-pattern-style(_dangling-mark-style(source-style-value))) + subgraph-style,
                     label-pos,
                   ) {
@@ -1630,11 +1689,11 @@
                 }
               }
               if source-style-value != none {
-                for element in _pattern-dangling(line-start, edge.pos, bend, _dangling-mark-style(source-draw-style), label-pos) {
+                for element in _pattern-dangling(dangling-path, _dangling-mark-style(source-draw-style), label-pos) {
                   elements.push(element)
                 }
               }
-	            } else if sink-half-edge != none {
+            } else if sink-half-edge != none {
               let sink-geometry-style = if sink-style-value == none { source-style-value } else { sink-style-value }
               let sink-anchor = _style-value(sink-geometry-style, "sink-anchor")
               let line-end = if sink-anchor == auto {
@@ -1647,9 +1706,16 @@
                 _node-anchor-point(node-boxes.at(sink-half-edge.node), sink-anchor)
               }
               let bend = edge.at("bend", default: none)
+              let dangling-path = _dangling-path(
+                edge.pos,
+                line-end,
+                bend,
+                sink-geometry-style,
+                dangling-at-start: true,
+              )
               if sink-label-segments == none and sink-geometry-style != none {
-                sink-label-segments = _geometry-segments(
-                  _bent-line-segment(edge.pos, line-end, bend),
+                sink-label-segments = _geometry-path-segments(
+                  dangling-path,
                   sink-geometry-style,
                   0,
                   0,
@@ -1660,9 +1726,7 @@
               if sink-style-value != none and sink-in-subgraph and subgraph-edge-underlay {
                 for subgraph-style in sink-subgraph-styles {
                   for element in _pattern-dangling(
-                    edge.pos,
-                    line-end,
-                    bend,
+                    dangling-path,
                     _without-mark-style(_without-pattern-style(_dangling-mark-style(sink-style-value))) + subgraph-style,
                     label-pos,
                   ) {
@@ -1671,7 +1735,7 @@
                 }
               }
               if sink-style-value != none {
-                for element in _pattern-dangling(edge.pos, line-end, bend, _dangling-mark-style(sink-draw-style), label-pos) {
+                for element in _pattern-dangling(dangling-path, _dangling-mark-style(sink-draw-style), label-pos) {
                   elements.push(element)
                 }
               }

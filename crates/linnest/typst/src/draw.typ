@@ -7,8 +7,10 @@
 
 /// Split a laid-out graph edge into source and sink half-edge paths.
 ///
-/// The returned dictionary has `source`, `sink`, and `curve`. The split point is
-/// the edge layout point, so the two half-edges join smoothly there.
+/// The returned dictionary has `source`, `sink`, `curve`, and `split-gap`. The
+/// split point is the edge layout point, so a zero-gap pair joins smoothly
+/// there. `split-gap` reports the effective gap when a requested half-gap is
+/// longer than either half-edge.
 /// -> dictionary
 #let edge-halves(
   /// Edge record returned by `graph.edges(layout(g))`. -> dictionary
@@ -21,6 +23,8 @@
   source-outset: 0,
   /// Arc-length trim applied at the sink node side. -> int | float
   sink-outset: 0,
+  /// Total arc-length gap centered on the edge layout point. -> int | float
+  split-gap: 0,
   /// Arc-length accuracy used while trimming. -> float
   accuracy: 0.001,
 ) = {
@@ -31,6 +35,7 @@
       omega: omega,
       source-outset: source-outset,
       sink-outset: sink-outset,
+      split-gap: split-gap,
       accuracy: accuracy,
     ),
   )
@@ -55,6 +60,8 @@
   source-outset: 0,
   /// Arc-length trim applied at the sink node side. -> int | float
   sink-outset: 0,
+  /// Total arc-length gap centered on the edge layout point. -> int | float
+  split-gap: 0,
   /// Arc-length accuracy used while trimming. -> float
   accuracy: 0.001,
   /// CeTZ style for the source half edge. -> dictionary
@@ -70,6 +77,7 @@
       omega: omega,
       source-outset: source-outset,
       sink-outset: sink-outset,
+      split-gap: split-gap,
       accuracy: accuracy,
       source-style: source-style,
       sink-style: sink-style,
@@ -308,6 +316,14 @@
   edge-accuracy: 0.001,
   /// Let Kurbo optimize the fitted parallel path. -> bool
   edge-optimize: true,
+  /// Total arc-length gap centered on the source/sink split at the edge layout
+  /// point. A per-layer `split-gap` overrides this value. -> int | float
+  edge-split-gap: 0,
+  /// Tangent constraint at dangling edge positions. `"horizontal"` and
+  /// `"vertical"` preserve `bend` while making the corresponding endpoint
+  /// tangent exact. A per-layer `dangling-tangent` overrides this value.
+  /// -> auto | string
+  edge-dangling-tangent: auto,
   /// Source half-edge style dictionary, array of layer dictionaries, or
   /// callback. `mark-position: "center-if-dangling"` keeps an end marker at the
   /// paired-edge split point while centering it on dangling half edges.
@@ -398,6 +414,8 @@
       edge-resolve-length: edge-resolve-length,
       edge-accuracy: edge-accuracy,
       edge-optimize: edge-optimize,
+      edge-split-gap: edge-split-gap,
+      edge-dangling-tangent: edge-dangling-tangent,
       source-style: source-style,
       sink-style: sink-style,
       edge-label: edge-label,
