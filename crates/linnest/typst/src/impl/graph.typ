@@ -134,14 +134,6 @@
   result
 }
 
-#let _statements-with-value(statements, key, value, context_) = {
-  let result = statements
-  if value != none {
-    result.insert(key, _statement-value(value, context_ + "." + key))
-  }
-  result
-}
-
 #let _statement-value(value, context_) = {
   if type(value) == str {
     value
@@ -150,6 +142,14 @@
   } else {
     panic(context_ + ": statement values must be flat scalars; use data for nested data or Typst content")
   }
+}
+
+#let _statements-with-value(statements, key, value, context_) = {
+  let result = statements
+  if value != none {
+    result.insert(key, _statement-value(value, context_ + "." + key))
+  }
+  result
 }
 
 #let _flat-statements(statements, context_) = {

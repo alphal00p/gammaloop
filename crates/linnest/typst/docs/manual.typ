@@ -581,6 +581,32 @@ receiving `(base-length, length, ratio)`.
 Set `offset-side: "label"` on an offset layer to choose the sign of `offset`
 so the layer is drawn on the same side of the curve as the edge label.
 
+Paired edges are Kurvst paths split at their edge layout point. Set
+`edge-split-gap` on `draw` to open a centered arc-length gap there, or set
+`split-gap` on an individual source/sink style layer to override the global
+value for only that layer. Wave and coil phases continue across the hidden
+span. `edge-halves` and `to-cetz-edge-halves` accept the same `split-gap`
+control and report the effective gap if either half is too short. This cuts at
+`edge.pos`; it does not detect arbitrary crossings.
+
+For dangling edges, `edge-dangling-tangent: "horizontal"` or `"vertical"`
+constrains the tangent at the free edge position while retaining the edge's
+`bend`; the per-layer override is `dangling-tangent`. `auto` keeps the ordinary
+bent route, and `anchor-control-distance` controls the constrained handle
+length. `bend` affects dangling edges only. A paired edge instead follows its
+source node, `edge.pos`, and sink node, with `edge-omega` controlling its Hobby
+curve.
+
+```typ
+#draw(
+  g,
+  edge-split-gap: 0.28,
+  edge-dangling-tangent: "horizontal",
+  source-style: edge => (stroke: black, split-gap: 0.4),
+  sink-style: edge => (stroke: black, split-gap: 0.4),
+)
+```
+
 Data defaults are also the global styling hook for all sources, sinks,
 nodes, and edges. More specific data can be added with captured named arguments
 on node, edge, source, and sink items, or by running

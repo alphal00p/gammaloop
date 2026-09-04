@@ -87,6 +87,9 @@
 #let _particle-style(edge, half) = {
   let entry = _entry(edge)
   let style = entry.at(half, default: entry.source)
+  if _field(edge, "cut", false) == true {
+    style += (split-gap: _number(edge, "cut-gap", 0.55))
+  }
   let route = _field(edge, "route", none)
   if route != none { style += (route: route) }
   if entry.at("fermion", default: false) {
@@ -205,8 +208,9 @@
 }
 
 // Put the complete label box beyond the offset momentum shaft, with a fixed
-// gap. Its center follows any along-edge momentum-arrow-shift as well. Keeping
-// the collision-selected side avoids moving several nearby labels together.
+// gap. Its center follows `momentum-arrow-shift` on paired edges unless an
+// explicit `momentum-label-shift` overrides it. Keeping the collision-selected
+// side avoids moving several nearby labels together.
 #let position-labels(graph_, gap: 0.32) = {
   let nodes = graph.nodes(graph_)
   graph.map(graph_, edge: edge => {
@@ -219,9 +223,10 @@
     let radial = _dot(displacement, normal)
     let side = if radial < 0 { -1 } else { 1 }
     let paired = _has-half(edge, "source") and _has-half(edge, "sink")
-    let shift = if paired { _number(edge, "momentum-arrow-shift", 0) } else {
-      0
-    }
+    let arrow-shift = if paired {
+      _number(edge, "momentum-arrow-shift", 0)
+    } else { 0 }
+    let shift = _number(edge, "momentum-label-shift", arrow-shift)
     let label-extent = (
       (
         calc.abs(_x(normal)) * _number(edge, "label-width", 0)
