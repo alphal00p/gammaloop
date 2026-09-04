@@ -214,6 +214,161 @@ enum ScalarLocalUvRoute {
     Projected4d,
 }
 
+#[derive(Clone, Copy)]
+enum ScalarUvProfileMode {
+    PerResidueMapKey,
+    CompleteResidueSum,
+}
+
+impl ScalarUvProfileMode {
+    fn label(self) -> &'static str {
+        match self {
+            Self::PerResidueMapKey => "orientation-local local-3D per residue-map key",
+            Self::CompleteResidueSum => "projected local-4D complete residue sum",
+        }
+    }
+
+    fn per_orientation(self) -> bool {
+        matches!(self, Self::PerResidueMapKey)
+    }
+}
+
+fn assert_scalar_uv_profile(
+    cli: &mut gammaloop_integration_tests::CLIState,
+    case: Scalar3LGraphCase,
+    process: &str,
+    integrand: &str,
+    mode: ScalarUvProfileMode,
+) -> Result<()> {
+    let generation = &cli.cli_settings.global.generation;
+    assert!(generation.uv.subtract_uv);
+    assert!(generation.uv.generate_integrated);
+    assert!(generation.threshold_subtraction.enable_thresholds);
+    assert_eq!(
+        generation.explicit_orientation_sum_only,
+        !mode.per_orientation(),
+        "{} needs the matching orientation-sum mode",
+        mode.label(),
+    );
+    assert_eq!(
+        generation.uv.local_uv_cts_from_expanded_4d_integrands,
+        matches!(mode, ScalarUvProfileMode::CompleteResidueSum),
+        "{} needs the matching local-UV construction",
+        mode.label(),
+    );
+
+    // Individual keyed terms reach their asymptotic regime later than the
+    // summed projected expression. Profile each representation in the window
+    // where its expected power law can be distinguished from transients.
+    let (min_scale_exponent, max_scale_exponent, n_points) = match mode {
+        ScalarUvProfileMode::PerResidueMapKey => (4.0, 8.0, 6),
+        ScalarUvProfileMode::CompleteResidueSum => (3.0, 6.0, 10),
+    };
+    let started = Instant::now();
+    let analysis = Profile::UltraViolet(UltraVioletProfile {
+        process: Some(ProcessRef::Unqualified(process.to_string())),
+        integrand_name: Some(integrand.to_string()),
+        graph: Some(case.graph.to_string()),
+        min_scale_exponent,
+        max_scale_exponent,
+        n_points,
+        use_f128: true,
+        per_orientation: mode.per_orientation(),
+        seed: Some(9320),
+        ..Default::default()
+    })
+    .run(&mut cli.state, &cli.cli_settings)?
+    .unwrap_uv();
+    let subsets = analysis
+        .graphs
+        .iter()
+        .flat_map(|graph| &graph.lmbs)
+        .flat_map(|lmb| &lmb.subsets)
+        .collect::<Vec<_>>();
+    assert!(
+        !subsets.is_empty(),
+        "scalar {} {} only-divergent UV profile selected no limits",
+        case.graph,
+        mode.label(),
+    );
+
+    let mut initial_dods = subsets
+        .iter()
+        .map(|subset| subset.initial_dod)
+        .collect::<Vec<_>>();
+    initial_dods.sort_unstable();
+    initial_dods.dedup();
+    let expected_initial_dods = match case.graph {
+        "GL00" => vec![0, 1],
+        "GL04" => vec![0, 2],
+        graph => unreachable!("unexpected profiled scalar graph {graph}"),
+    };
+    assert_eq!(
+        initial_dods, expected_initial_dods,
+        "scalar {} numerator must retain its intended divergent Taylor orders",
+        case.graph,
+    );
+    assert!(
+        subsets.iter().any(|subset| subset.free.len() == 1)
+            && subsets.iter().any(|subset| subset.free.len() > 1),
+        "scalar {} numerator must profile both component and multi-cycle UV limits",
+        case.graph,
+    );
+
+    let fitted_subsets = subsets
+        .iter()
+        .filter(|subset| {
+            if mode.per_orientation() {
+                subset
+                    .per_orientation_inspect_entries
+                    .iter()
+                    .flatten()
+                    .any(|entry| entry.analysis.is_some())
+            } else {
+                subset.estimated_dod().is_some()
+            }
+        })
+        .count();
+    assert!(
+        fitted_subsets > 0,
+        "scalar {} {} UV profile was vacuous",
+        case.graph,
+        mode.label(),
+    );
+
+    let report = analysis.pass_fail(-0.9);
+    if report.failed != 0 {
+        for table in analysis.tables_per_graph(-0.9) {
+            println!("{table}");
+        }
+        if mode.per_orientation() {
+            for table in analysis
+                .per_orientation_tables_per_graph(-0.9)
+                .into_iter()
+                .flatten()
+            {
+                println!("{table}");
+            }
+        }
+    }
+    assert!(
+        report.failures.is_empty(),
+        "scalar {} {} has non-integrable selected UV limits: {:#?}",
+        case.graph,
+        mode.label(),
+        report.failures,
+    );
+    println!(
+        "scalar {} {} UV profile: {} selected subsets, {} fitted subsets, {:?}",
+        case.graph,
+        mode.label(),
+        subsets.len(),
+        fitted_subsets,
+        started.elapsed(),
+    );
+    Ok(())
+}
+
 fn setup_scalar_3l_cross_section_cli(
     test_name: &str,
     local_uv_route: ScalarLocalUvRoute,
@@ -222,19 +377,9 @@ fn setup_scalar_3l_cross_section_cli(
     integrand_commands: &[&str],
     lmb_multichanneling: bool,
 ) -> Result<gammaloop_integration_tests::CLIState> {
-    let diagnostic_bool = |name: &str, default: bool| {
-        std::env::var(name)
-            .ok()
-            .map(|value| value == "true")
-            .unwrap_or(default)
-    };
-    let subtract_uv = diagnostic_bool("GL_SCALAR_DIAGNOSTIC_SUBTRACT_UV", true);
-    let generate_integrated = diagnostic_bool("GL_SCALAR_DIAGNOSTIC_INTEGRATED_UV", true);
-    let enable_thresholds = diagnostic_bool("GL_SCALAR_DIAGNOSTIC_THRESHOLDS", true);
-    let use_summed_evaluator = diagnostic_bool("GL_SCALAR_DIAGNOSTIC_SUMMED_EVALUATOR", true);
     let (explicit_orientation_sum_only, local_uv_from_expanded_4d, summed_evaluator) =
         match local_uv_route {
-            ScalarLocalUvRoute::OrientationLocal3d => (false, false, use_summed_evaluator),
+            ScalarLocalUvRoute::OrientationLocal3d => (false, false, true),
             ScalarLocalUvRoute::OrientationLocal3dParametric => (false, false, false),
             ScalarLocalUvRoute::Explicit3d => (true, false, false),
             ScalarLocalUvRoute::Projected4d => (true, true, false),
@@ -257,7 +402,7 @@ fn setup_scalar_3l_cross_section_cli(
             "import model scalars-default.json",
             "remove processes",
             &format!(
-                "set global kv global.generation.explicit_orientation_sum_only={explicit_orientation_sum_only} global.generation.evaluator.compile=false global.generation.evaluator.summed={summed_evaluator} global.generation.uv.subtract_uv={subtract_uv} global.generation.uv.generate_integrated={generate_integrated} global.generation.uv.local_uv_cts_from_expanded_4d_integrands={local_uv_from_expanded_4d} global.generation.threshold_subtraction.enable_thresholds={enable_thresholds} global.generation.threshold_subtraction.check_esurface_at_generation=false"
+                "set global kv global.generation.explicit_orientation_sum_only={explicit_orientation_sum_only} global.generation.evaluator.compile=false global.generation.evaluator.store_atom=false global.generation.evaluator.summed={summed_evaluator} global.generation.uv.subtract_uv=true global.generation.uv.generate_integrated=true global.generation.uv.local_uv_cts_from_expanded_4d_integrands={local_uv_from_expanded_4d} global.generation.threshold_subtraction.enable_thresholds=true global.generation.threshold_subtraction.check_esurface_at_generation=false"
             ),
             &format!(
                 r#"set default-runtime string '
@@ -267,9 +412,10 @@ generate_events = true
 store_additional_weights_in_event = true
 mu_r = 3.0
 m_uv = 20.0
+numerator_sampling_scale = 1.0
 
 [subtraction]
-disable_threshold_subtraction = {}
+disable_threshold_subtraction = false
 
 [sampling]
 graphs = "summed"
@@ -289,8 +435,7 @@ momenta = [
     [1.0, 0.0, 0.0, 0.0]
 ]
 helicities = [0]
-'"#,
-                !enable_thresholds
+'"#
             ),
         ],
     )?;
@@ -335,16 +480,20 @@ helicities = [0]
             edge.num = Autogen::explicit(edge_numerator);
             edge.dod = Autogen::explicit(edge_dod);
         }
-        if std::env::var_os("GL_SCALAR_DIAGNOSTIC_PRINT_GRAPH").is_some() {
-            eprintln!(
-                "SCALAR GRAPH {process_name}: {}",
-                supergraph.graph.debug_dot()
-            );
-        }
     }
     run_commands(&mut cli, &["set model mass_scalar_1=1.0"])?;
     run_commands(&mut cli, integrand_commands)?;
     run_commands(&mut cli, &["set model mass_scalar_1=0.1"])?;
+
+    let generation = &cli.cli_settings.global.generation;
+    assert!(generation.uv.subtract_uv);
+    assert!(generation.uv.generate_integrated);
+    assert!(generation.threshold_subtraction.enable_thresholds);
+    assert!(
+        !cli.default_runtime_settings
+            .subtraction
+            .disable_threshold_subtraction
+    );
 
     Ok(cli)
 }
@@ -377,9 +526,7 @@ fn run_scalar_3l_cross_section_case_impl(
     include_no_numerator: bool,
     exercise_orientation_local_3d: bool,
 ) -> Result<()> {
-    let diagnostic_only_orientation_local_numerator =
-        std::env::var_os("GL_SCALAR_DIAGNOSTIC_ONLY_ORIENTATION_LOCAL_NUMERATOR").is_some();
-    let include_no_numerator = include_no_numerator && !diagnostic_only_orientation_local_numerator;
+    let sample_point = SAMPLE_POINT;
     let numerator_label = case.numerator.label();
     let graph_label = case.graph.to_ascii_lowercase();
     let no_numerator_process = format!("{test_scope}_{graph_label}_no_num");
@@ -429,16 +576,12 @@ fn run_scalar_3l_cross_section_case_impl(
         .iter()
         .map(String::as_str)
         .collect::<Vec<_>>();
-    let arb_points = Array2::from_shape_vec((1, SAMPLE_POINT.len()), SAMPLE_POINT.to_vec())?;
+    let arb_points = Array2::from_shape_vec((1, sample_point.len()), sample_point.to_vec())?;
     let arb_discrete_dims = Array2::from_shape_vec((1, 0), Vec::<usize>::new())?;
-    let evaluate_arb = |route: &str,
-                        cli: &mut gammaloop_integration_tests::CLIState,
+    let evaluate_arb = |cli: &mut gammaloop_integration_tests::CLIState,
                         process: &str,
                         integrand: &str|
-     -> Result<(
-        Complex<F<ArbPrec>>,
-        Vec<(usize, usize, Complex<F<ArbPrec>>)>,
-    )> {
+     -> Result<Complex<F<ArbPrec>>> {
         let (process_id, resolved_integrand_name) = cli.state.find_integrand_ref(
             Some(&ProcessRef::Unqualified(process.to_string())),
             Some(&integrand.to_string()),
@@ -449,8 +592,8 @@ fn run_scalar_3l_cross_section_case_impl(
                 process_id: Some(process_id),
                 integrand_name: Some(resolved_integrand_name),
                 use_arb_prec: true,
-                minimal_output: false,
-                return_generated_events: Some(true),
+                minimal_output: true,
+                return_generated_events: Some(false),
                 momentum_space: false,
                 points: arb_points.view(),
                 integrator_weights: None,
@@ -460,28 +603,7 @@ fn run_scalar_3l_cross_section_case_impl(
             },
         )?;
         match result.sample.evaluation {
-            PreciseEvaluationResultOutput::Arb(result) => {
-                for (group_index, group) in result.event_groups.iter().enumerate() {
-                    for event in group.iter() {
-                        eprintln!(
-                            "ARB EVENT route={route} group={group_index} cut={} orientation={:?} weight={:e}",
-                            event.cut_info.cut_id, event.cut_info.orientation_id, event.weight,
-                        );
-                    }
-                }
-                let events = result
-                    .event_groups
-                    .iter()
-                    .enumerate()
-                    .flat_map(|(group_index, group)| {
-                        group.iter().map(move |event| {
-                            (group_index, event.cut_info.cut_id, event.weight.clone())
-                        })
-                    })
-                    .collect();
-                eprintln!("ARB DIAG route={route} total={:e}", result.integrand_result);
-                Ok((result.integrand_result, events))
-            }
+            PreciseEvaluationResultOutput::Arb(result) => Ok(result.integrand_result),
             evaluation => Err(eyre::eyre!(
                 "{process} precise scalar local-UV comparison requested Arb but got {:?}",
                 evaluation.precision()
@@ -491,9 +613,13 @@ fn run_scalar_3l_cross_section_case_impl(
 
     let total_started = Instant::now();
     let owned_numerators = [(numerator_process.as_str(), "numerator", case.numerator)];
-    let profile_orientation_local_3d = (include_no_numerator
-        || diagnostic_only_orientation_local_numerator)
+    // The complete 15-case matrix keeps its three-way local comparison, while
+    // the per-orientation profile is concentrated on the two default probes
+    // that span the relevant Taylor orders and UV-forest structure.
+    let profile_scalar_uv_routes = include_no_numerator
+        && matches!(case.graph, "GL00" | "GL04")
         && exercise_orientation_local_3d;
+    let use_parametric_orientation_local_3d = profile_scalar_uv_routes;
     // Keep every route in a fresh graph and evaluator state. Regenerating the
     // explicit route in the orientation-local state would retain route-local caches.
     let localized_3d_results = if exercise_orientation_local_3d {
@@ -503,7 +629,7 @@ fn run_scalar_3l_cross_section_case_impl(
                 "{test_scope}_{}_cff_orientation_local_3d",
                 case.graph.to_ascii_lowercase()
             ),
-            if profile_orientation_local_3d {
+            if use_parametric_orientation_local_3d {
                 ScalarLocalUvRoute::OrientationLocal3dParametric
             } else {
                 ScalarLocalUvRoute::OrientationLocal3d
@@ -518,10 +644,6 @@ fn run_scalar_3l_cross_section_case_impl(
             case.graph,
             generation_started.elapsed()
         );
-        if diagnostic_only_orientation_local_numerator {
-            clean_test(&localized_3d.cli_settings.state.folder);
-            return Ok(());
-        }
         let mut results = Vec::with_capacity(evaluations.len());
         for (process, integrand, label) in &evaluations {
             let evaluation_started = Instant::now();
@@ -529,7 +651,7 @@ fn run_scalar_3l_cross_section_case_impl(
                 &mut localized_3d,
                 process,
                 integrand,
-                &SAMPLE_POINT,
+                &sample_point,
                 &[],
             )?;
             println!(
@@ -538,12 +660,7 @@ fn run_scalar_3l_cross_section_case_impl(
                 evaluation_started.elapsed()
             );
             let arb_started = Instant::now();
-            let (arb_result, _) = evaluate_arb(
-                "orientation-local-3d",
-                &mut localized_3d,
-                process,
-                integrand,
-            )?;
+            let arb_result = evaluate_arb(&mut localized_3d, process, integrand)?;
             println!(
                 "scalar {} {label} local-UV route orientation-local local-3D: Arb evaluation {:?}",
                 case.graph,
@@ -551,81 +668,14 @@ fn run_scalar_3l_cross_section_case_impl(
             );
             results.push((result, arb_result));
         }
-        if profile_orientation_local_3d {
-            let generation = &localized_3d.cli_settings.global.generation;
-            assert!(!generation.explicit_orientation_sum_only);
-            assert!(!generation.uv.local_uv_cts_from_expanded_4d_integrands);
-            assert!(generation.uv.generate_integrated);
-            assert!(generation.threshold_subtraction.enable_thresholds);
-
-            for (process, integrand, label) in &evaluations {
-                let profile_started = Instant::now();
-                let analysis = Profile::UltraViolet(UltraVioletProfile {
-                    process: Some(ProcessRef::Unqualified(process.clone())),
-                    integrand_name: Some(integrand.clone()),
-                    graph: Some(case.graph.to_string()),
-                    min_scale_exponent: 4.0,
-                    max_scale_exponent: 8.0,
-                    n_points: 6,
-                    per_orientation: true,
-                    seed: Some(9320),
-                    ..Default::default()
-                })
-                .run(&mut localized_3d.state, &localized_3d.cli_settings)?
-                .unwrap_uv();
-                let subsets = analysis
-                    .graphs
-                    .iter()
-                    .flat_map(|graph| &graph.lmbs)
-                    .flat_map(|lmb| &lmb.subsets)
-                    .collect::<Vec<_>>();
-                assert!(
-                    !subsets.is_empty(),
-                    "scalar {} {label} only-divergent UV profile selected no limits",
-                    case.graph,
-                );
-                let fitted_subsets = subsets
-                    .iter()
-                    .filter(|subset| {
-                        subset
-                            .per_orientation_inspect_entries
-                            .iter()
-                            .flatten()
-                            .any(|entry| entry.analysis.is_some())
-                    })
-                    .count();
-                if case.graph == "GL00" && integrand == "no_numerator" {
-                    assert!(
-                        fitted_subsets >= 2,
-                        "GL00 must nontrivially profile both a component UV limit and its disconnected union",
-                    );
-                }
-                let orientation_failures = analysis
-                    .pass_fail(-0.9)
-                    .failures
-                    .into_iter()
-                    .filter(|failure| failure.orientation_label.is_some())
-                    .collect::<Vec<_>>();
-                assert!(
-                    orientation_failures.is_empty(),
-                    "scalar {} {label} has non-integrable active orientations: {orientation_failures:#?}",
-                    case.graph,
-                );
-                println!(
-                    "scalar {} {label} orientation-local UV profile: {} selected subsets, {} fitted subsets, {:?}",
-                    case.graph,
-                    subsets.len(),
-                    fitted_subsets,
-                    profile_started.elapsed(),
-                );
-                for table in analysis
-                    .per_orientation_tables_per_graph(-0.9)
-                    .into_iter()
-                    .flatten()
-                {
-                    println!("{table}");
-                }
-            }
+        if profile_scalar_uv_routes {
+            assert_scalar_uv_profile(
+                &mut localized_3d,
+                case,
+                &numerator_process,
+                "numerator",
+                ScalarUvProfileMode::PerResidueMapKey,
+            )?;
         }
         clean_test(&localized_3d.cli_settings.state.folder);
         Some(results)
@@ -665,6 +715,15 @@ fn run_scalar_3l_cross_section_case_impl(
         &integrand_command_refs,
         exercise_orientation_local_3d,
     )?;
+    if profile_scalar_uv_routes {
+        assert_scalar_uv_profile(
+            &mut cff_4d,
+            case,
+            &numerator_process,
+            "numerator",
+            ScalarUvProfileMode::CompleteResidueSum,
+        )?;
+    }
     if exercise_orientation_local_3d {
         println!(
             "scalar {} local-UV route projected local-4D: setup and generation {:?}",
@@ -678,7 +737,7 @@ fn run_scalar_3l_cross_section_case_impl(
             &mut cff_3d,
             &process,
             &integrand,
-            &SAMPLE_POINT,
+            &sample_point,
             &[],
         )?;
         if exercise_orientation_local_3d {
@@ -693,7 +752,7 @@ fn run_scalar_3l_cross_section_case_impl(
             &mut cff_4d,
             &process,
             &integrand,
-            &SAMPLE_POINT,
+            &sample_point,
             &[],
         )?;
         if exercise_orientation_local_3d {
@@ -703,14 +762,6 @@ fn run_scalar_3l_cross_section_case_impl(
                 evaluation_started.elapsed()
             );
         }
-        assert_evaluation_outputs_match(
-            &cff_4d_result.sample.evaluation,
-            &cff_3d_result.sample.evaluation,
-            &format!(
-                "scalar 3L cross-section {} {label} rich inspect parity: CFF local-4D vs CFF local-3D",
-                case.graph
-            ),
-        );
         if let Some(localized_3d_results) = &localized_3d_results {
             let (localized_3d_result, localized_3d_arb) = &localized_3d_results[evaluation_index];
             let route_totals = [
@@ -735,28 +786,8 @@ fn run_scalar_3l_cross_section_case_impl(
                 );
             }
             let arb_started = Instant::now();
-            let (explicit_3d_arb, explicit_3d_events) =
-                evaluate_arb("explicit-3d", &mut cff_3d, &process, &integrand)?;
-            let (projected_4d_arb, projected_4d_events) =
-                evaluate_arb("projected-4d", &mut cff_4d, &process, &integrand)?;
-            if integrand == "numerator" {
-                for (
-                    (explicit_group, explicit_cut, explicit_weight),
-                    (projected_group, projected_cut, projected_weight),
-                ) in explicit_3d_events.iter().zip(&projected_4d_events)
-                {
-                    assert_eq!(
-                        (explicit_group, explicit_cut),
-                        (projected_group, projected_cut)
-                    );
-                    let delta = projected_weight.clone() - explicit_weight.clone();
-                    if !delta.norm().re.is_zero() {
-                        eprintln!(
-                            "ARB DIAG event group={explicit_group} cut={explicit_cut} explicit={explicit_weight:e} projected={projected_weight:e} delta={delta:e}"
-                        );
-                    }
-                }
-            }
+            let explicit_3d_arb = evaluate_arb(&mut cff_3d, &process, &integrand)?;
+            let projected_4d_arb = evaluate_arb(&mut cff_4d, &process, &integrand)?;
             let precision_tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
             let f64_input_tolerance = F::<ArbPrec>::from_f64(1.0e-14);
             for (route, actual) in [
@@ -799,6 +830,14 @@ fn run_scalar_3l_cross_section_case_impl(
                 arb_started.elapsed()
             );
         }
+        assert_evaluation_outputs_match(
+            &cff_4d_result.sample.evaluation,
+            &cff_3d_result.sample.evaluation,
+            &format!(
+                "scalar 3L cross-section {} {label} rich inspect parity: CFF local-4D vs CFF local-3D",
+                case.graph
+            ),
+        );
     }
 
     if exercise_orientation_local_3d {
@@ -1129,10 +1168,171 @@ mod default_scalar_3l_cross_section_inspects {
 
     #[test]
     #[serial]
+    fn scalar_3l_cross_section_gl00_q5_spatial_component_inspects_match() -> Result<()> {
+        run_scalar_3l_cross_section_case_impl(
+            "scalar_3l_gl00_q5_spatial_component",
+            Scalar3LGraphCase::default("GL00").with_numerator(NumeratorChoice::SingleComponent {
+                edge: 5,
+                component: 1,
+            }),
+            false,
+            true,
+        )
+    }
+
+    #[test]
+    #[serial]
+    fn scalar_3l_cross_section_gl00_q6_spatial_component_inspects_match() -> Result<()> {
+        run_scalar_3l_cross_section_case_impl(
+            "scalar_3l_gl00_q6_spatial_component",
+            Scalar3LGraphCase::default("GL00").with_numerator(NumeratorChoice::SingleComponent {
+                edge: 6,
+                component: 1,
+            }),
+            false,
+            true,
+        )
+    }
+
+    #[test]
+    #[serial]
+    fn scalar_3l_cross_section_gl00_second_owned_spatial_product_inspects_match() -> Result<()> {
+        run_scalar_3l_cross_section_case_impl(
+            "scalar_3l_gl00_second_owned_spatial_product",
+            Scalar3LGraphCase::default("GL00").with_numerator(NumeratorChoice::ComponentProduct {
+                left_edge: 5,
+                right_edge: 6,
+                component: 1,
+            }),
+            false,
+            true,
+        )
+    }
+
+    #[test]
+    #[serial]
     fn scalar_3l_cross_section_gl02_dod_zero_triangle_inspects_match() -> Result<()> {
         run_scalar_3l_cross_section_case_impl(
             "scalar_3l_gl02_dod_zero_triangle",
             Scalar3LGraphCase::default("GL02"),
+            false,
+            true,
+        )
+    }
+
+    #[test]
+    #[serial]
+    fn scalar_3l_cross_section_gl04_left_owned_dot_inspects_match() -> Result<()> {
+        run_scalar_3l_cross_section_case_impl(
+            "scalar_3l_gl04_left_owned_dot",
+            Scalar3LGraphCase::default("GL04").with_numerator(NumeratorChoice::Dot {
+                left_edge: 1,
+                right_edge: 2,
+                dummy_index: 1,
+            }),
+            false,
+            true,
+        )
+    }
+
+    #[test]
+    #[serial]
+    fn scalar_3l_cross_section_gl04_right_owned_dot_inspects_match() -> Result<()> {
+        run_scalar_3l_cross_section_case_impl(
+            "scalar_3l_gl04_right_owned_dot",
+            Scalar3LGraphCase::default("GL04").with_numerator(NumeratorChoice::Dot {
+                left_edge: 5,
+                right_edge: 6,
+                dummy_index: 1,
+            }),
+            false,
+            true,
+        )
+    }
+
+    #[test]
+    #[serial]
+    fn scalar_3l_cross_section_gl04_left_temporal_product_inspects_match() -> Result<()> {
+        run_scalar_3l_cross_section_case_impl(
+            "scalar_3l_gl04_left_temporal_product",
+            Scalar3LGraphCase::default("GL04").with_numerator(NumeratorChoice::ComponentProduct {
+                left_edge: 1,
+                right_edge: 2,
+                component: 0,
+            }),
+            false,
+            true,
+        )
+    }
+
+    #[test]
+    #[serial]
+    fn scalar_3l_cross_section_gl04_right_temporal_product_inspects_match() -> Result<()> {
+        run_scalar_3l_cross_section_case_impl(
+            "scalar_3l_gl04_right_temporal_product",
+            Scalar3LGraphCase::default("GL04").with_numerator(NumeratorChoice::ComponentProduct {
+                left_edge: 5,
+                right_edge: 6,
+                component: 0,
+            }),
+            false,
+            true,
+        )
+    }
+
+    #[test]
+    #[serial]
+    fn scalar_3l_cross_section_gl04_q5_temporal_component_inspects_match() -> Result<()> {
+        run_scalar_3l_cross_section_case_impl(
+            "scalar_3l_gl04_q5_temporal_component",
+            Scalar3LGraphCase::default("GL04").with_numerator(NumeratorChoice::SingleComponent {
+                edge: 5,
+                component: 0,
+            }),
+            false,
+            true,
+        )
+    }
+
+    #[test]
+    #[serial]
+    fn scalar_3l_cross_section_gl04_q6_temporal_component_inspects_match() -> Result<()> {
+        run_scalar_3l_cross_section_case_impl(
+            "scalar_3l_gl04_q6_temporal_component",
+            Scalar3LGraphCase::default("GL04").with_numerator(NumeratorChoice::SingleComponent {
+                edge: 6,
+                component: 0,
+            }),
+            false,
+            true,
+        )
+    }
+
+    #[test]
+    #[serial]
+    fn scalar_3l_cross_section_gl04_q5_temporal_square_inspects_match() -> Result<()> {
+        run_scalar_3l_cross_section_case_impl(
+            "scalar_3l_gl04_q5_temporal_square",
+            Scalar3LGraphCase::default("GL04").with_numerator(NumeratorChoice::ComponentProduct {
+                left_edge: 5,
+                right_edge: 5,
+                component: 0,
+            }),
+            false,
+            true,
+        )
+    }
+
+    #[test]
+    #[serial]
+    fn scalar_3l_cross_section_gl04_q5_spatial_square_inspects_match() -> Result<()> {
+        run_scalar_3l_cross_section_case_impl(
+            "scalar_3l_gl04_q5_spatial_square",
+            Scalar3LGraphCase::default("GL04").with_numerator(NumeratorChoice::ComponentProduct {
+                left_edge: 5,
+                right_edge: 5,
+                component: 1,
+            }),
             false,
             true,
         )

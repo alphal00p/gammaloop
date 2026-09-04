@@ -947,7 +947,12 @@ impl UpdateAndGetParams<ArbPrec> for ParamBuilder<f64> {
 
         let mut values: Vec<Complex<F<ArbPrec>>> = self.values[value_index]
             .iter()
-            .map(|v| v.higher().higher())
+            .map(|value| {
+                Complex::new(
+                    F::<ArbPrec>::from_ff64(value.re),
+                    F::<ArbPrec>::from_ff64(value.im),
+                )
+            })
             .collect();
 
         let flattened_loop_momenta = if let Some(dual_loop_moms) = &sample.sample.dual_loop_moms {
@@ -1722,6 +1727,13 @@ impl<T: FloatLike> Display for ParamBuilder<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        dot,
+        graph::parse::from_dot::IntoGraph,
+        initialisation::test_initialise,
+        momentum::sample::{BareMomentumSample, LoopMomenta},
+        utils::PrecisionUpgradable,
+    };
 
     #[test]
     fn initialize_duals_extends_value_buffers_by_requested_size() {
@@ -1754,6 +1766,55 @@ mod tests {
 
         param_builder.initialize_duals(4);
         assert_eq!(param_builder.values.len(), 4);
+    }
+
+    #[test]
+    fn arb_parameter_baseline_does_not_pass_through_quad_precision() {
+        test_initialise().unwrap();
+        let graph = dot!(
+            digraph arb_parameter_baseline {
+                edge [num=1 mass=0]
+                node [num=1]
+                A -> B [id=0]
+            }
+        )
+        .unwrap();
+        let mut param_builder = ParamBuilder::<f64>::new_empty();
+        param_builder.values = vec![vec![Complex::new(F(0.1_f64), F(-0.3_f64))]];
+        let sample = MomentumSample {
+            sample: BareMomentumSample {
+                loop_moms: LoopMomenta(Vec::new()),
+                dual_loop_moms: None,
+                loop_mom_cache_id: 0,
+                loop_mom_base_cache_id: 0,
+                external_moms: Vec::new().into(),
+                external_mom_cache_id: 0,
+                external_mom_base_cache_id: 0,
+                jacobian: F::<ArbPrec>::from_f64(1.0),
+                orientation: None,
+                parameterization_branch: None,
+            },
+        };
+        let through_quad = param_builder.values[0][0].higher().higher();
+
+        let lifted = <ParamBuilder<f64> as UpdateAndGetParams<ArbPrec>>::update_emr_and_get_params(
+            &mut param_builder,
+            (false, false),
+            &sample,
+            &graph,
+            &[],
+            &[],
+            None,
+            None,
+            None,
+        );
+        let direct = Complex::new(
+            F::<ArbPrec>::from_ff64(F(0.1_f64)),
+            F::<ArbPrec>::from_ff64(F(-0.3_f64)),
+        );
+
+        assert_eq!(lifted.as_slice(), &[direct]);
+        assert_ne!(lifted.as_slice(), &[through_quad]);
     }
 }
 

@@ -19,8 +19,6 @@ mod projection_branches;
 mod residue_localizer;
 
 #[cfg(test)]
-mod diagnostic_whole_projection;
-#[cfg(test)]
 mod tests;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -47,10 +45,22 @@ pub(super) struct OrientationIntegrandBranch {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct OrientationIntegrands(pub(super) Vec<OrientationIntegrandBranch>);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum SourceSelectorHosting {
+    /// Direct 3D branches inherit one compatible complete production key.
+    PhysicalPrefix,
+    /// Projected local-4D sources are summed independently. Prefer a compatible
+    /// production key as stable mapping metadata, but fall back to any
+    /// permitted deterministic host when a generalized source has no complete
+    /// physical extension. The source-local energy map owns evaluation.
+    IndependentSum,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Localizer<'a> {
     pub(super) cutset: &'a CutSet,
     pub(super) orientation: OrientationProjection<'a>,
+    pub(super) source_selector_hosting: SourceSelectorHosting,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -59,9 +69,6 @@ pub(crate) enum Local3DCts {
     /// opaque while the Taylor forest is built.
     Direct(Direct3dCts),
     Projected4d(Projected4dCts),
-    /// Exact whole-expression projection remains a diagnostic-only route.
-    #[cfg(test)]
-    Projected(Integrands),
 }
 
 impl Neg for Local3DCts {
@@ -71,8 +78,6 @@ impl Neg for Local3DCts {
         match self {
             Self::Direct(direct) => Self::Direct(-direct),
             Self::Projected4d(sectors) => Self::Projected4d(-sectors),
-            #[cfg(test)]
-            Self::Projected(integrands) => Self::Projected(-integrands),
         }
     }
 }
@@ -88,27 +93,10 @@ impl Local3DCts {
     }
 
     #[cfg(test)]
-    pub(crate) fn projected_integrands(&self) -> Result<&Integrands> {
-        match self {
-            Self::Projected(integrands) => Ok(integrands),
-            _ => Err(eyre!(
-                "direct 3D terms are grouped by production orientation IDs"
-            )),
-        }
-    }
-
-    #[cfg(test)]
     pub(crate) fn map<F: FnMut(&Atom) -> Result<Atom>>(&self, mut f: F) -> Result<Self> {
         match self {
             Self::Direct(direct) => Ok(Self::Direct(direct.map(&mut f)?)),
             Self::Projected4d(sectors) => Ok(Self::Projected4d(sectors.map(&mut f)?)),
-            #[cfg(test)]
-            Self::Projected(integrands) => Ok(Self::Projected(integrands.fallible_map(f)?)),
         }
-    }
-
-    #[cfg(test)]
-    fn from_projected(integrands: Integrands) -> Self {
-        Self::Projected(integrands)
     }
 }

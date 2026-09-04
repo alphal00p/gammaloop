@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, ops::Neg};
 
 use color_eyre::Result;
 use eyre::eyre;
-use linnet::half_edge::subgraph::{SuBitGraph, SubSetOps};
+use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetOps};
 use symbolica::atom::Atom;
 
 use crate::{
@@ -22,12 +22,36 @@ use crate::{
 
 use super::{
     branches::{DirectResidueBranches, DirectResidueKey},
-    kernel::{Local3DLoopRescaling, apply_taylor},
+    kernel::{DirectCoordinateFrame, Local3DLoopRescaling, apply_taylor, coordinate_lmb},
 };
+
+fn extend_coordinate_frames(
+    prior_frames: Vec<DirectCoordinateFrame>,
+    frame: DirectCoordinateFrame,
+) -> Result<Vec<DirectCoordinateFrame>> {
+    let mut next = Vec::with_capacity(prior_frames.len() + 1);
+    for prior in prior_frames {
+        if frame.active_subgraph.intersects(&prior.active_subgraph) {
+            if !frame.active_subgraph.includes(&prior.active_subgraph) {
+                return Err(eyre!(
+                    "a direct local-3D coordinate frame partially overlaps a prior forest frame"
+                ));
+            }
+        } else {
+            next.push(prior);
+        }
+    }
+    next.push(frame);
+    Ok(next)
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub(crate) struct DirectSector {
     pub(crate) active_subgraph: SuBitGraph,
+    /// Loop coordinates in which each connected part of `active` was Taylor
+    /// expanded. Descendants retain disjoint frames separately and combine
+    /// them only when one enclosing Taylor operation contains both parts.
+    pub(crate) coordinate_frames: Vec<DirectCoordinateFrame>,
     pub(crate) active: DirectResidueBranches,
     pub(crate) frozen_integrands: Integrands,
 }
@@ -44,6 +68,7 @@ impl Neg for DirectSector {
     fn neg(self) -> Self::Output {
         Self {
             active_subgraph: self.active_subgraph,
+            coordinate_frames: self.coordinate_frames,
             active: -self.active,
             frozen_integrands: self.frozen_integrands,
         }
@@ -188,6 +213,7 @@ impl Direct3dCts {
                     .map(|sector| {
                         Ok(DirectSector {
                             active_subgraph: sector.active_subgraph.clone(),
+                            coordinate_frames: sector.coordinate_frames.clone(),
                             active: sector.active.fallible_map(|_, atom| map(atom))?,
                             frozen_integrands: sector.frozen_integrands.clone(),
                         })
@@ -260,40 +286,71 @@ impl<'a> Direct3dApproximation<'a> {
         let marker = UvMarker::new(ctx.settings);
         let reduced_subgraph = current.reduced_subgraph(given);
         let sectors = match local {
-            Direct3dCts::Root(branches) => vec![DirectSector {
-                active_subgraph: self.graph.empty_subgraph(),
-                active: branches.clone(),
-                frozen_integrands: branches.identity_integrands(),
-            }],
-            Direct3dCts::Sectors(sectors) => sectors.clone(),
+            Direct3dCts::Root(branches) => vec![(
+                self.graph.empty_subgraph(),
+                Vec::new(),
+                branches.clone(),
+                branches.identity_integrands(),
+            )],
+            Direct3dCts::Sectors(sectors) => sectors
+                .iter()
+                .map(|sector| {
+                    (
+                        sector.active_subgraph.clone(),
+                        sector.coordinate_frames.clone(),
+                        sector.active.clone(),
+                        sector.frozen_integrands.clone(),
+                    )
+                })
+                .collect(),
         };
         let mut next = Vec::with_capacity(sectors.len() + usize::from(integrated_t.is_some()));
 
-        for sector in sectors {
-            let active_subgraph = sector.active_subgraph.union(&reduced_subgraph);
+        for (prior_active_subgraph, prior_frames, active, frozen_integrands) in sectors {
+            let active_subgraph = prior_active_subgraph.union(&reduced_subgraph);
+            let rescaled_subgraph = active_subgraph.intersection(current.subgraph());
+            let coordinate_lmb = coordinate_lmb(
+                &ctx,
+                current,
+                given,
+                Some(&prior_active_subgraph),
+                &prior_frames,
+                &rescaled_subgraph,
+            )?;
+            let coordinate_frames = extend_coordinate_frames(
+                prior_frames,
+                DirectCoordinateFrame {
+                    active_subgraph: rescaled_subgraph.clone(),
+                    lmb: coordinate_lmb.clone(),
+                },
+            )?;
             // A normalized integrated prefix is inert under every later Taylor
             // operation. Transform only its complete active CFF and retain the
             // frozen localizing kernel outside the series.
-            let active = -sector.active.fallible_map(|key, atom| {
+            let active = -active.fallible_map(|key, atom| {
                 apply_taylor(
                     Local3DLoopRescaling::FullSubgraph,
                     &ctx,
                     self.localizer.orientation,
                     current,
                     given,
-                    Some(active_subgraph.clone()),
+                    Some(rescaled_subgraph.clone()),
+                    &coordinate_lmb,
                     key,
                     atom,
                 )
             })?;
             next.push(DirectSector {
                 active_subgraph,
+                coordinate_frames,
                 active,
-                frozen_integrands: sector.frozen_integrands,
+                frozen_integrands,
             });
         }
 
         if let Some((active, frozen_integrands)) = integrated_t {
+            let coordinate_lmb =
+                coordinate_lmb(&ctx, current, given, None, &[], &reduced_subgraph)?;
             let active = -active.fallible_map(|key, atom| {
                 apply_taylor(
                     Local3DLoopRescaling::ReducedSubgraph,
@@ -302,12 +359,17 @@ impl<'a> Direct3dApproximation<'a> {
                     current,
                     given,
                     Some(reduced_subgraph.clone()),
+                    &coordinate_lmb,
                     key,
                     atom,
                 )
             })?;
             next.push(DirectSector {
-                active_subgraph: reduced_subgraph,
+                active_subgraph: reduced_subgraph.clone(),
+                coordinate_frames: vec![DirectCoordinateFrame {
+                    active_subgraph: reduced_subgraph,
+                    lmb: coordinate_lmb,
+                }],
                 active,
                 frozen_integrands,
             });
@@ -334,37 +396,67 @@ impl<'a> Direct3dApproximation<'a> {
         let ctx = UVCtx::new(self.graph, self.settings);
         let reduced_subgraph = current.reduced_subgraph(given);
         let sectors = match local {
-            Direct3dCts::Root(branches) => vec![DirectSector {
-                active_subgraph: self.graph.empty_subgraph(),
-                active: branches.clone(),
-                frozen_integrands: branches.identity_integrands(),
-            }],
-            Direct3dCts::Sectors(sectors) => sectors.clone(),
+            Direct3dCts::Root(branches) => vec![(
+                self.graph.empty_subgraph(),
+                Vec::new(),
+                branches.clone(),
+                branches.identity_integrands(),
+            )],
+            Direct3dCts::Sectors(sectors) => sectors
+                .iter()
+                .map(|sector| {
+                    (
+                        sector.active_subgraph.clone(),
+                        sector.coordinate_frames.clone(),
+                        sector.active.clone(),
+                        sector.frozen_integrands.clone(),
+                    )
+                })
+                .collect(),
         };
         let next = sectors
             .into_iter()
-            .map(|sector| {
-                let active_subgraph = sector.active_subgraph.union(&reduced_subgraph);
-                // Retain the complete active mask for descendants, but rescale
-                // only the component-local part covered by this path.
-                let rescaled_subgraph = active_subgraph.intersection(current.subgraph());
-                Ok(DirectSector {
-                    active_subgraph,
-                    active: -sector.active.fallible_map(|key, atom| {
-                        apply_taylor(
-                            Local3DLoopRescaling::FullSubgraph,
-                            &ctx,
-                            self.localizer.orientation,
-                            current,
-                            given,
-                            Some(rescaled_subgraph.clone()),
-                            key,
-                            atom,
-                        )
-                    })?,
-                    frozen_integrands: sector.frozen_integrands,
-                })
-            })
+            .map(
+                |(prior_active_subgraph, prior_frames, active, frozen_integrands)| {
+                    let active_subgraph = prior_active_subgraph.union(&reduced_subgraph);
+                    // Retain the complete active mask for descendants, but rescale
+                    // only the component-local part covered by this path.
+                    let rescaled_subgraph = active_subgraph.intersection(current.subgraph());
+                    let coordinate_lmb = coordinate_lmb(
+                        &ctx,
+                        current,
+                        given,
+                        Some(&prior_active_subgraph),
+                        &prior_frames,
+                        &rescaled_subgraph,
+                    )?;
+                    let coordinate_frames = extend_coordinate_frames(
+                        prior_frames,
+                        DirectCoordinateFrame {
+                            active_subgraph: rescaled_subgraph.clone(),
+                            lmb: coordinate_lmb.clone(),
+                        },
+                    )?;
+                    Ok(DirectSector {
+                        active_subgraph,
+                        coordinate_frames,
+                        active: -active.fallible_map(|key, atom| {
+                            apply_taylor(
+                                Local3DLoopRescaling::FullSubgraph,
+                                &ctx,
+                                self.localizer.orientation,
+                                current,
+                                given,
+                                Some(rescaled_subgraph.clone()),
+                                &coordinate_lmb,
+                                key,
+                                atom,
+                            )
+                        })?,
+                        frozen_integrands,
+                    })
+                },
+            )
             .collect::<Result<Vec<_>>>()?;
 
         Direct3dCts::from_sectors(next)?.map(|atom| {
@@ -393,6 +485,7 @@ impl<'a> Direct3dApproximation<'a> {
         )?;
         let ctx = UVCtx::new(self.graph, self.settings);
         let active_subgraph = current.reduced_subgraph(given);
+        let coordinate_lmb = coordinate_lmb(&ctx, current, given, None, &[], &active_subgraph)?;
         let active = -active.fallible_map(|key, atom| {
             apply_taylor(
                 Local3DLoopRescaling::ReducedSubgraph,
@@ -401,12 +494,17 @@ impl<'a> Direct3dApproximation<'a> {
                 current,
                 given,
                 Some(active_subgraph.clone()),
+                &coordinate_lmb,
                 key,
                 atom,
             )
         })?;
         let sector = DirectSector {
-            active_subgraph,
+            active_subgraph: active_subgraph.clone(),
+            coordinate_frames: vec![DirectCoordinateFrame {
+                active_subgraph,
+                lmb: coordinate_lmb,
+            }],
             active,
             frozen_integrands,
         };

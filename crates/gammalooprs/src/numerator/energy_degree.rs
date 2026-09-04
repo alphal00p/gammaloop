@@ -9,7 +9,7 @@ use spenso::structure::{
     abstract_index::AIND_SYMBOLS,
     representation::{LibraryRep, Minkowski},
 };
-use symbolica::atom::{Atom, AtomView, FunctionBuilder, Symbol};
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use thiserror::Error;
 
 use crate::{
@@ -67,10 +67,10 @@ impl EnergyPowerCapMap {
 
 /// Serial exact-energy occurrences certified for one immutable source owner.
 ///
-/// Untagged and fixed numerator factors stay on the lowest canonical
-/// occurrence. Only denominator-derived factors may be load-balanced over all
-/// certified copies of that owner. Momentum-routing signs are restored while
-/// mapping the numerator, and candidate sets belonging to distinct source
+/// Untagged and fixed numerator factors stay on the explicitly designated base
+/// occurrence. Denominator-derived factors are load-balanced only over the
+/// derivative-created copies of that owner. Momentum-routing signs are restored
+/// while mapping the numerator, and candidate sets belonging to distinct source
 /// owners remain disjoint.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 enum EnergyCandidateFamily {
@@ -192,6 +192,46 @@ impl EquivalentEnergyCandidates {
         }))
     }
 
+    /// Build production candidate sets from one retained source occurrence and
+    /// its derivative-created serial copies. The base is explicit because
+    /// exact-topology canonicalization may place it after a generated copy in
+    /// the occurrence-local energy namespace.
+    pub(crate) fn try_from_partitioned_source_occurrences(
+        groups: impl IntoIterator<Item = (EdgeIndex, usize, Vec<usize>)>,
+    ) -> Result<Self, EnergyPowerAnalysisError> {
+        let mut groups = groups.into_iter().collect::<Vec<_>>();
+        let mut candidates = Self::try_from_source_occurrences(groups.iter().map(
+            |(edge, base, derivative_copies)| {
+                (
+                    *edge,
+                    std::iter::once(*base)
+                        .chain(derivative_copies.iter().copied())
+                        .collect(),
+                )
+            },
+        ))?;
+        for (edge, base, derivative_copies) in &mut groups {
+            derivative_copies.sort_unstable();
+            candidates
+                .by_family
+                .insert(EnergyCandidateFamily::Unprovenanced(*edge), vec![*base]);
+            candidates
+                .by_family
+                .insert(EnergyCandidateFamily::Fixed(*edge), vec![*base]);
+            if derivative_copies.is_empty() {
+                candidates
+                    .by_family
+                    .remove(&EnergyCandidateFamily::DenominatorDerived(*edge));
+            } else {
+                candidates.by_family.insert(
+                    EnergyCandidateFamily::DenominatorDerived(*edge),
+                    derivative_copies.clone(),
+                );
+            }
+        }
+        Ok(candidates)
+    }
+
     fn get(&self, family: EnergyCandidateFamily) -> Option<&[usize]> {
         self.by_family.get(&family).map(Vec::as_slice)
     }
@@ -238,10 +278,6 @@ enum PlannedEnergyExpression {
         symbol: Symbol,
         arguments: Vec<Self>,
     },
-    Denominator {
-        metadata: [Atom; 3],
-        value: Box<Self>,
-    },
 }
 
 impl PlannedEnergyExpression {
@@ -263,7 +299,6 @@ impl PlannedEnergyExpression {
                     product.add_assign(factor.degrees());
                     product
                 }),
-            Self::Denominator { value, .. } => value.degrees(),
         }
     }
 
@@ -271,19 +306,32 @@ impl PlannedEnergyExpression {
         &self,
         candidates: &EquivalentEnergyCandidates,
     ) -> Result<BTreeMap<usize, BTreeMap<EdgeIndex, usize>>, EnergyPowerAnalysisError> {
-        type OwnerState = (Vec<usize>, BTreeMap<usize, usize>);
+        #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+        struct OwnerState {
+            energy_loads: Vec<usize>,
+            derived_unit_loads: Vec<usize>,
+            assignments: BTreeMap<usize, usize>,
+        }
 
         fn prune(mut states: Vec<OwnerState>) -> Vec<OwnerState> {
             states.sort();
-            states.dedup_by(|left, right| left.0 == right.0);
+            states.dedup_by(|left, right| {
+                left.energy_loads == right.energy_loads
+                    && left.derived_unit_loads == right.derived_unit_loads
+            });
             let mut pareto = Vec::new();
             'candidate: for (index, state) in states.iter().enumerate() {
                 for (other_index, other) in states.iter().enumerate() {
                     if index != other_index
                         && other
-                            .0
+                            .energy_loads
                             .iter()
-                            .zip(&state.0)
+                            .zip(&state.energy_loads)
+                            .all(|(left, right)| left <= right)
+                        && other
+                            .derived_unit_loads
+                            .iter()
+                            .zip(&state.derived_unit_loads)
                             .all(|(left, right)| left <= right)
                     {
                         continue 'candidate;
@@ -300,27 +348,35 @@ impl PlannedEnergyExpression {
             additive: bool,
         ) -> Vec<OwnerState> {
             let mut combined = Vec::new();
-            for (left_loads, left_assignments) in &left {
-                for (right_loads, right_assignments) in &right {
-                    let loads = left_loads
-                        .iter()
-                        .zip(right_loads)
-                        .map(|(left, right)| {
-                            if additive {
-                                (*left).max(*right)
-                            } else {
-                                left + right
-                            }
-                        })
-                        .collect();
-                    let mut assignments = left_assignments.clone();
-                    for (factor, candidate) in right_assignments {
+            for left in &left {
+                for right in &right {
+                    let combine_loads = |left: &[usize], right: &[usize]| {
+                        left.iter()
+                            .zip(right)
+                            .map(|(left, right)| {
+                                if additive {
+                                    (*left).max(*right)
+                                } else {
+                                    left + right
+                                }
+                            })
+                            .collect()
+                    };
+                    let energy_loads = combine_loads(&left.energy_loads, &right.energy_loads);
+                    let derived_unit_loads =
+                        combine_loads(&left.derived_unit_loads, &right.derived_unit_loads);
+                    let mut assignments = left.assignments.clone();
+                    for (factor, candidate) in &right.assignments {
                         // This insertion is part of the algorithm: keeping it
                         // inside `debug_assert!` would erase it in release builds.
                         let previous = assignments.insert(*factor, *candidate);
                         debug_assert!(previous.is_none());
                     }
-                    combined.push((loads, assignments));
+                    combined.push(OwnerState {
+                        energy_loads,
+                        derived_unit_loads,
+                        assignments,
+                    });
                 }
             }
             prune(combined)
@@ -333,24 +389,23 @@ impl PlannedEnergyExpression {
             candidate_positions: &BTreeMap<usize, usize>,
             candidates: &EquivalentEnergyCandidates,
         ) -> Result<Vec<OwnerState>, EnergyPowerAnalysisError> {
-            let zero = || vec![(vec![0; owner_candidates.len()], BTreeMap::new())];
+            let zero = || {
+                vec![OwnerState {
+                    energy_loads: vec![0; owner_candidates.len()],
+                    derived_unit_loads: vec![0; owner_candidates.len()],
+                    assignments: BTreeMap::new(),
+                }]
+            };
             match expression {
                 PlannedEnergyExpression::Factor {
                     id,
-                    expression,
                     degrees,
                     families,
+                    ..
                 } => {
                     let Some(degree) = degrees.degrees.get(&owner).copied() else {
                         return Ok(zero());
                     };
-                    if degree != 1 {
-                        return Err(EnergyPowerAnalysisError::UnfactorizedEnergyPower {
-                            expression: expression.log_print(None),
-                            edge: owner.into(),
-                            degree,
-                        });
-                    }
                     let family = families[&owner];
                     let eligible = candidates.get(family).ok_or(
                         EnergyPowerAnalysisError::MissingEquivalentEnergyCandidates {
@@ -361,9 +416,20 @@ impl PlannedEnergyExpression {
                     Ok(eligible
                         .iter()
                         .map(|candidate| {
-                            let mut loads = vec![0; owner_candidates.len()];
-                            loads[candidate_positions[candidate]] = 1;
-                            (loads, BTreeMap::from([(*id, *candidate)]))
+                            let mut energy_loads = vec![0; owner_candidates.len()];
+                            let position = candidate_positions[candidate];
+                            energy_loads[position] = degree;
+                            let mut derived_unit_loads = vec![0; owner_candidates.len()];
+                            if degree == 1
+                                && family == EnergyCandidateFamily::DenominatorDerived(owner)
+                            {
+                                derived_unit_loads[position] = 1;
+                            }
+                            OwnerState {
+                                energy_loads,
+                                derived_unit_loads,
+                                assignments: BTreeMap::from([(*id, *candidate)]),
+                            }
                         })
                         .collect())
                 }
@@ -398,32 +464,28 @@ impl PlannedEnergyExpression {
                         false,
                     ))
                 }),
-                // Keep a positive common-denominator completion factor
-                // structurally wrapped, while minimizing its derivative-owned
-                // temporal factors over the serial copies of that same line.
-                // Every candidate has the same source owner, mass, incidence,
-                // and routed hard momentum; occurrence-local routing signs are
-                // restored when each factor is mapped.
-                PlannedEnergyExpression::Denominator { value, .. } => frontier(
-                    value,
-                    owner,
-                    owner_candidates,
-                    candidate_positions,
-                    candidates,
-                ),
             }
         }
 
         let mut factor_assignments = BTreeMap::<usize, BTreeMap<EdgeIndex, usize>>::new();
         for (owner, _) in self.degrees().iter() {
-            let owner_candidates = candidates
+            let mut owner_candidates = candidates
                 .get(EnergyCandidateFamily::DenominatorDerived(owner))
-                .ok_or(
+                .unwrap_or_default()
+                .to_vec();
+            if let Some(fixed_candidates) = candidates.get(EnergyCandidateFamily::Fixed(owner)) {
+                owner_candidates.extend_from_slice(fixed_candidates);
+            }
+            owner_candidates.sort_unstable();
+            owner_candidates.dedup();
+            if owner_candidates.is_empty() {
+                return Err(
                     EnergyPowerAnalysisError::MissingEquivalentEnergyCandidates {
                         edge: owner.into(),
                         degree: self.degrees().degrees[&owner],
                     },
-                )?;
+                );
+            }
             let candidate_positions = owner_candidates
                 .iter()
                 .enumerate()
@@ -432,21 +494,25 @@ impl PlannedEnergyExpression {
             let states = frontier(
                 self,
                 owner,
-                owner_candidates,
+                &owner_candidates,
                 &candidate_positions,
                 candidates,
             )?;
-            let (_, assignments) = states
+            let assignments = states
                 .into_iter()
-                .min_by_key(|(loads, assignments)| {
+                .min_by_key(|state| {
                     (
-                        loads.iter().copied().max().unwrap_or(0),
-                        loads.iter().sum::<usize>(),
-                        assignments.clone(),
-                        loads.clone(),
+                        state.energy_loads.iter().copied().max().unwrap_or(0),
+                        state.derived_unit_loads.iter().copied().max().unwrap_or(0),
+                        state.energy_loads.iter().sum::<usize>(),
+                        state.derived_unit_loads.iter().sum::<usize>(),
+                        state.assignments.clone(),
+                        state.energy_loads.clone(),
+                        state.derived_unit_loads.clone(),
                     )
                 })
-                .expect("every planned expression has one owner-assignment state");
+                .expect("every planned expression has one owner-assignment state")
+                .assignments;
             for (factor, candidate) in assignments {
                 factor_assignments
                     .entry(factor)
@@ -505,7 +571,6 @@ impl PlannedEnergyExpression {
                 }
                 Ok(product)
             }
-            Self::Denominator { value, .. } => value.exact_degrees(assignments),
         }
     }
 
@@ -535,15 +600,6 @@ impl PlannedEnergyExpression {
                     builder = builder.add_arg(mapped.as_view());
                 }
                 Ok(builder.finish())
-            }
-            Self::Denominator { metadata, value } => {
-                let mapped = value.map(assignments, map)?;
-                Ok(FunctionBuilder::new(GS.den)
-                    .add_arg(metadata[0].as_view())
-                    .add_arg(metadata[1].as_view())
-                    .add_arg(metadata[2].as_view())
-                    .add_arg(mapped.as_view())
-                    .finish())
             }
         }
     }
@@ -580,13 +636,17 @@ pub enum EnergyPowerAnalysisError {
         edge: usize,
     },
     #[error(
-        "energy-dependent numerator factor `{expression}` retains unsplit degree {degree} in physical EMR edge {edge}"
+        "positive denominator wrapper `{expression}` is owned by edge {owner} but its active energy depends on edge {dependent}"
     )]
-    UnfactorizedEnergyPower {
+    NonlocalPositiveDenominator {
         expression: String,
-        edge: usize,
-        degree: usize,
+        owner: usize,
+        dependent: usize,
     },
+    #[error(
+        "positive denominator wrapper `{expression}` mixes incompatible energy-provenance families for owner {owner}"
+    )]
+    MixedPositiveDenominatorProvenance { expression: String, owner: usize },
     #[error(
         "physical-EMR energy-power analysis cannot assign loop-basis expression `{expression}` to a source edge; normalize it to Q(edge, index) before CFF analysis"
     )]
@@ -759,13 +819,82 @@ impl EnergyPowerAnalyzer {
             AtomView::Fun(function)
                 if function.get_nargs() == 4 && function.get_symbol() == GS.den =>
             {
-                Ok(PlannedEnergyExpression::Denominator {
-                    metadata: [
-                        function.get(0).to_owned(),
-                        function.get(1).to_owned(),
-                        function.get(2).to_owned(),
-                    ],
-                    value: Box::new(self.plan_view(function.get(3), next_factor_id)?),
+                let owner = EdgeIndex(usize::try_from(function.get(0)).map_err(|_| {
+                    EnergyPowerAnalysisError::InvalidEmrEdgeArgument {
+                        argument: function.get(0).to_owned().log_print(None),
+                    }
+                })?);
+                let expression = expression.to_owned();
+                let degrees =
+                    self.analyze_view(function.get(3), EnergyPowerAnalysisMode::StrictPolynomial)?;
+                let mut value_families = BTreeSet::new();
+                let mut family_error = None;
+                let _ = function.get(3).to_owned().replace_map(|view, _, _| {
+                    if family_error.is_some() {
+                        return;
+                    }
+                    let AtomView::Fun(momentum) = view else {
+                        return;
+                    };
+                    if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() != 2 {
+                        return;
+                    }
+                    let family = match self.emr_candidate_family(momentum.get(0)) {
+                        Ok(family) => family,
+                        Err(error) => {
+                            family_error = Some(error);
+                            return;
+                        }
+                    };
+                    if self.is_internal_edge(family.edge())
+                        && !self
+                            .component_degree(family.edge(), momentum.get(1))
+                            .is_empty()
+                    {
+                        value_families.insert(family);
+                    }
+                });
+                if let Some(error) = family_error {
+                    return Err(error);
+                }
+                if value_families.len() > 1 {
+                    return Err(
+                        EnergyPowerAnalysisError::MixedPositiveDenominatorProvenance {
+                            expression: expression.log_print(None),
+                            owner: owner.into(),
+                        },
+                    );
+                }
+                let value_family = value_families.into_iter().next();
+                let mut families = BTreeMap::new();
+                for (dependent, _) in degrees.iter() {
+                    if dependent != owner {
+                        return Err(EnergyPowerAnalysisError::NonlocalPositiveDenominator {
+                            expression: expression.log_print(None),
+                            owner: owner.into(),
+                            dependent: dependent.into(),
+                        });
+                    }
+                    let family = value_family.ok_or_else(|| {
+                        EnergyPowerAnalysisError::InvalidEmrEdgeArgument {
+                            argument: expression.log_print(None),
+                        }
+                    })?;
+                    families.insert(dependent, family);
+                }
+                let id = *next_factor_id;
+                *next_factor_id += 1;
+                // Conservatively keep a positive common-denominator
+                // completion as one assignment unit. This gives its temporal
+                // and spatial/mass pieces one occurrence frame without
+                // expanding the wrapper. Separate wrappers may still be
+                // load-balanced over serial copies of the same line, and the
+                // mapper restores each selected routing sign.
+                Ok(PlannedEnergyExpression::Factor {
+                    id,
+                    expression,
+                    degrees,
+                    families,
                 })
             }
             AtomView::Fun(function)
@@ -1321,6 +1450,15 @@ mod tests {
             .finish()
     }
 
+    fn production_candidates_with_two_derived_copies() -> EquivalentEnergyCandidates {
+        EquivalentEnergyCandidates::try_from_partitioned_source_occurrences([(
+            EdgeIndex(3),
+            10,
+            vec![11, 12],
+        )])
+        .unwrap()
+    }
+
     fn planned_candidates(expression: &Atom) -> (Vec<(usize, usize)>, Vec<usize>, Atom) {
         let edge = EdgeIndex(3);
         let plan = EnergyPowerAnalyzer::for_physical_emr_edges([edge])
@@ -1391,7 +1529,45 @@ mod tests {
     }
 
     #[test]
-    fn positive_denominator_completion_minimizes_over_serial_occurrences() {
+    fn production_minimax_reserves_base_and_splits_units_in_a_saturated_branch() {
+        let edge = EdgeIndex(3);
+        let q3 = uv_owned_q3(true, GS.cind(0));
+        let source_momentum = FunctionBuilder::new(GS.emr_mom).add_arg(3).finish();
+        let denominator = FunctionBuilder::new(GS.den)
+            .add_arg(3)
+            .add_arg(source_momentum.as_view())
+            .add_arg(Atom::one().as_view())
+            .add_arg(q3.clone().pow(2).as_view())
+            .finish();
+        let expression = denominator.clone().pow(2) + q3.clone().pow(2);
+        let plan = EnergyPowerAnalyzer::for_physical_emr_edges([edge])
+            .plan_atom_assignment(
+                &expression,
+                &production_candidates_with_two_derived_copies(),
+            )
+            .unwrap();
+
+        assert_eq!(plan.energy_degree_bounds(), &[(11, 2), (12, 2)]);
+        let mut denominator_assignments = Vec::new();
+        let mut unit_assignments = Vec::new();
+        let _ = plan
+            .map_factors(|factor, assignments| {
+                if factor == &denominator {
+                    denominator_assignments.push(assignments[&edge]);
+                } else if factor == &q3 {
+                    unit_assignments.push(assignments[&edge]);
+                }
+                Ok::<_, ()>(factor.clone())
+            })
+            .unwrap();
+        denominator_assignments.sort_unstable();
+        unit_assignments.sort_unstable();
+        assert_eq!(denominator_assignments, vec![11, 12]);
+        assert_eq!(unit_assignments, vec![11, 12]);
+    }
+
+    #[test]
+    fn positive_denominator_completion_stays_in_one_occurrence_frame() {
         let edge = EdgeIndex(3);
         let q3 = uv_owned_q3(true, GS.cind(0));
         let spatial_mass = Atom::var(symbol!("energy_assignment_test::spatial_mass"));
@@ -1406,26 +1582,164 @@ mod tests {
             .plan_atom_assignment(&denominator, &two_equivalent_candidates())
             .unwrap();
 
-        assert_eq!(plan.energy_degree_bounds(), &[(10, 1), (11, 1)]);
-        let candidate_10 = Atom::var(symbol!("energy_assignment_test::candidate_10"));
-        let candidate_11 = Atom::var(symbol!("energy_assignment_test::candidate_11"));
+        assert_eq!(plan.energy_degree_bounds(), &[(10, 2)]);
+        let mut assignments_seen = Vec::new();
         let mapped = plan
             .map_factors(|factor, assignments| {
-                Ok::<_, ()>(match assignments.get(&edge) {
-                    Some(10) => candidate_10.clone(),
-                    Some(11) => candidate_11.clone(),
-                    Some(candidate) => panic!("unexpected candidate {candidate}"),
-                    None => factor.clone(),
-                })
+                assert_eq!(factor, &denominator);
+                assignments_seen.push(assignments[&edge]);
+                Ok::<_, ()>(factor.clone())
             })
             .unwrap();
-        let expected = FunctionBuilder::new(GS.den)
+        assert_eq!(assignments_seen, vec![10]);
+        assert_eq!(mapped, denominator);
+    }
+
+    #[test]
+    fn positive_denominator_completion_obeys_embedded_emr_provenance() {
+        let edge = EdgeIndex(3);
+        let source_momentum = FunctionBuilder::new(GS.emr_mom).add_arg(3).finish();
+        let denominator = |energy: &Atom| {
+            FunctionBuilder::new(GS.den)
+                .add_arg(3)
+                .add_arg(source_momentum.as_view())
+                .add_arg(Atom::one().as_view())
+                .add_arg(energy.clone().pow(2).as_view())
+                .finish()
+        };
+        let assert_assignment = |energy: Atom,
+                                 candidates: EquivalentEnergyCandidates,
+                                 expected_bound: (usize, usize)| {
+            let expression = denominator(&energy);
+            let plan = EnergyPowerAnalyzer::for_physical_emr_edges([edge])
+                .plan_atom_assignment(&expression, &candidates)
+                .unwrap();
+            assert_eq!(plan.energy_degree_bounds(), &[expected_bound]);
+            let mut assignments = Vec::new();
+            let mapped = plan
+                .map_factors(|factor, factor_assignments| {
+                    assert_eq!(factor, &expression);
+                    assignments.push(factor_assignments[&edge]);
+                    Ok::<_, ()>(factor.clone())
+                })
+                .unwrap();
+            assert_eq!(assignments, vec![expected_bound.0]);
+            assert_eq!(mapped, expression);
+        };
+
+        let base_only = EquivalentEnergyCandidates::try_from_partitioned_source_occurrences([(
+            edge,
+            10,
+            Vec::new(),
+        )])
+        .unwrap();
+        assert_assignment(function!(GS.emr_mom, 3, GS.cind(0)), base_only, (10, 2));
+
+        assert_assignment(
+            uv_owned_q3(false, GS.cind(0)),
+            production_candidates_with_two_derived_copies(),
+            (10, 2),
+        );
+        assert_assignment(
+            uv_owned_q3(true, GS.cind(0)),
+            production_candidates_with_two_derived_copies(),
+            (11, 2),
+        );
+    }
+
+    #[test]
+    fn positive_denominator_completion_rejects_mixed_emr_provenance() {
+        let edge = EdgeIndex(3);
+        let fixed = uv_owned_q3(false, GS.cind(0));
+        let derived = uv_owned_q3(true, GS.cind(0));
+        let source_momentum = FunctionBuilder::new(GS.emr_mom).add_arg(3).finish();
+        let denominator = FunctionBuilder::new(GS.den)
             .add_arg(3)
             .add_arg(source_momentum.as_view())
             .add_arg(Atom::one().as_view())
-            .add_arg((&candidate_10 * &candidate_11 - spatial_mass).as_view())
+            .add_arg((fixed * derived).as_view())
             .finish();
-        assert_eq!(mapped, expected);
+        let error = EnergyPowerAnalyzer::for_physical_emr_edges([edge])
+            .plan_atom_assignment(
+                &denominator,
+                &production_candidates_with_two_derived_copies(),
+            )
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            EnergyPowerAnalysisError::MixedPositiveDenominatorProvenance { owner: 3, .. }
+        ));
+    }
+
+    #[test]
+    fn separate_positive_denominator_completions_may_use_separate_occurrences() {
+        let edge = EdgeIndex(3);
+        let q3 = uv_owned_q3(true, GS.cind(0));
+        let source_momentum = FunctionBuilder::new(GS.emr_mom).add_arg(3).finish();
+        let denominator = FunctionBuilder::new(GS.den)
+            .add_arg(3)
+            .add_arg(source_momentum.as_view())
+            .add_arg(Atom::one().as_view())
+            .add_arg(q3.pow(2).as_view())
+            .finish();
+        let expression = denominator.pow(2);
+        let plan = EnergyPowerAnalyzer::for_physical_emr_edges([edge])
+            .plan_atom_assignment(&expression, &two_equivalent_candidates())
+            .unwrap();
+
+        assert_eq!(plan.energy_degree_bounds(), &[(10, 2), (11, 2)]);
+        let mut assignments_seen = Vec::new();
+        let mapped = plan
+            .map_factors(|factor, assignments| {
+                assert_eq!(factor, &denominator);
+                assignments_seen.push(assignments[&edge]);
+                Ok::<_, ()>(factor.clone())
+            })
+            .unwrap();
+        assignments_seen.sort_unstable();
+        assert_eq!(assignments_seen, vec![10, 11]);
+        assert_eq!(mapped, expression);
+    }
+
+    #[test]
+    fn positive_denominator_completion_rejects_a_nonlocal_energy_owner() {
+        let q4 = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(
+                GS.uv_momentum_provenance_tag(
+                    Atom::num(4).as_view(),
+                    true,
+                    FunctionBuilder::new(GS.emr_mom)
+                        .add_arg(4)
+                        .finish()
+                        .as_view(),
+                ),
+            )
+            .add_arg(GS.cind(0))
+            .finish();
+        let denominator = FunctionBuilder::new(GS.den)
+            .add_arg(3)
+            .add_arg(
+                FunctionBuilder::new(GS.emr_mom)
+                    .add_arg(3)
+                    .finish()
+                    .as_view(),
+            )
+            .add_arg(Atom::one().as_view())
+            .add_arg(q4.pow(2).as_view())
+            .finish();
+        let error = EnergyPowerAnalyzer::for_physical_emr_edges([EdgeIndex(3), EdgeIndex(4)])
+            .plan_atom_assignment(&denominator, &two_equivalent_candidates())
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            EnergyPowerAnalysisError::NonlocalPositiveDenominator {
+                owner: 3,
+                dependent: 4,
+                ..
+            }
+        ));
     }
 
     #[test]
@@ -1610,6 +1924,54 @@ mod tests {
         assert!(matches!(
             duplicate,
             EnergyPowerAnalysisError::DuplicateEquivalentEnergyCandidate { .. }
+        ));
+    }
+
+    #[test]
+    fn partitioned_source_candidates_do_not_infer_the_base_from_energy_id_order() {
+        let candidates = EquivalentEnergyCandidates::try_from_partitioned_source_occurrences([
+            (EdgeIndex(3), 12, vec![10, 11]),
+            (EdgeIndex(7), 20, Vec::new()),
+        ])
+        .unwrap();
+
+        assert_eq!(
+            candidates.get(EnergyCandidateFamily::Unprovenanced(EdgeIndex(3))),
+            Some([12].as_slice())
+        );
+        assert_eq!(
+            candidates.get(EnergyCandidateFamily::Fixed(EdgeIndex(3))),
+            Some([12].as_slice())
+        );
+        assert_eq!(
+            candidates.get(EnergyCandidateFamily::DenominatorDerived(EdgeIndex(3))),
+            Some([10, 11].as_slice())
+        );
+        assert_eq!(
+            candidates.get(EnergyCandidateFamily::Fixed(EdgeIndex(7))),
+            Some([20].as_slice())
+        );
+        assert_eq!(
+            candidates.get(EnergyCandidateFamily::DenominatorDerived(EdgeIndex(7))),
+            None,
+            "an owner without a derivative-created serial copy must not accept a derivative-owned numerator factor"
+        );
+    }
+
+    #[test]
+    fn partitioned_source_candidates_reject_derived_factors_without_a_copy() {
+        let edge = EdgeIndex(3);
+        let candidates = EquivalentEnergyCandidates::try_from_partitioned_source_occurrences([(
+            edge,
+            12,
+            Vec::new(),
+        )])
+        .unwrap();
+        let derived = uv_owned_q3(true, mink_index("mu"));
+        assert!(matches!(
+            EnergyPowerAnalyzer::for_physical_emr_edges([edge])
+                .plan_atom_assignment(&derived, &candidates),
+            Err(EnergyPowerAnalysisError::MissingEquivalentEnergyCandidates { .. })
         ));
     }
 

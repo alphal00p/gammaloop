@@ -178,7 +178,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .get_single_atom()
             .expect("graph numerator should be available")
             * global_num;
-
+        let localizer = self.localizer.with_independent_source_sum();
         // Only the projected local-4D route reaches this assembly boundary.
         // Its child Taylor coefficient deliberately omits the untouched
         // cograph; construct that outer CFF exactly once here.
@@ -211,20 +211,19 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 // oracle too, so opposite leading powers cannot cancel
                 // before generalized-CFF generation.
                 let analysis_numerator = sector.active.factorized_capacity_envelope() * &resnum;
-                let outer = self
-                    .localizer
+                let outer = localizer
                     .projected_cff(
                         graph,
                         current.subgraph(),
                         &analysis_numerator,
-                        CffGenerationContext::FactorizedContour,
+                        CffGenerationContext::EmbeddedCffFactor,
                     )?
                     .map(|atom| atom * &fourddenoms);
                 let active = outer.zip_mul_mapped_factor(
                     &sector.active,
                     |orientation_id, source_edge_energy_map, active| {
                         let factorized_numerator = active * &resnum;
-                        self.localizer.map_numerator(
+                        localizer.map_numerator(
                             graph,
                             orientation_id,
                             source_edge_energy_map,
@@ -242,6 +241,9 @@ impl<'a> FinalIntegrandBuilder<'a> {
         let localized_local = localized_local
             .ok_or_else(|| eyre::eyre!("factorized local term has no active UV sectors"))?
             .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
+        // The integrated addback is shared with the direct route and keeps its
+        // physical-prefix host. Independent source hosting applies only to the
+        // projected local-4D Taylor coefficient assembled above.
         let localized_integrated = self
             .localizer
             .localize(

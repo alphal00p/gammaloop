@@ -160,13 +160,17 @@ fn epem_a_ddx_nlo_is_alpha_s_over_pi_times_lo_in_all_local_uv_routes() -> Result
                 gl0_reports.iter().any(|report| {
                     report.source_kind == CffEnergyBoundSourceKind::ExactFourD
                         && report.physical_parent_bounds == expected_exact_gl0_parents
-                        && report.assigned_cff_source_bounds.len() == 3
-                        && report
-                            .assigned_cff_source_bounds
-                            .iter()
-                            .all(|(_, degree)| *degree == 1)
+                        && {
+                            let mut assigned_degrees = report
+                                .assigned_cff_source_bounds
+                                .iter()
+                                .map(|(_, degree)| *degree)
+                                .collect::<Vec<_>>();
+                            assigned_degrees.sort_unstable();
+                            assigned_degrees == [1, 2]
+                        }
                 }),
-                "{process} must dispatch the projected exact-4D GL0 parent bounds over exactly three degree-one occurrence-local energies: {gl0_reports:?}",
+                "{process} must keep each complete projected exact-4D GL0 numerator atom coherent on one deterministic degenerate occurrence, without depending on incidental occurrence IDs: {gl0_reports:?}",
             );
         }
         assert!(

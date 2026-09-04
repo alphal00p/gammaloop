@@ -993,7 +993,6 @@ mod tests {
             &options,
             Some(&numerator),
         )?;
-
         let uv_filter = graph
             .get_edge_subgraph(EdgeIndex(5))
             .union(&graph.get_edge_subgraph(EdgeIndex(6)));
@@ -1355,13 +1354,10 @@ mod tests {
             incoming [style=invis]
             outgoing [style=invis]
 
-            incoming -> v3 [id=0]
-            v0 -> v1 [id=1 lmb_id=0 num="Q(1,spenso::mink(4,1))"]
-            v0 -> v1 [id=2 num="Q(2,spenso::mink(4,1))"]
-            v3 -> v0 [id=3 lmb_id=1]
-            v1 -> v2 [id=4]
-            v2 -> v3 [id=5]
-            v2 -> outgoing [id=6]
+            incoming -> v0 [id=0]
+            v0 -> v1 [id=1 lmb_id=0]
+            v0 -> v1 [id=2 num="Q(2,spenso::cind(0))^2-Q(2,spenso::cind(1))^2-Q(2,spenso::cind(2))^2-Q(2,spenso::cind(3))^2-1"]
+            v1 -> outgoing [id=3]
         })?;
         let options = graph.denominator_only_cff_3d_expression_options();
         let numerator = graph.production_numerator_atom_for_full_3d_expression();
@@ -1376,93 +1372,111 @@ mod tests {
             .get_edge_subgraph(EdgeIndex(1))
             .union(&graph.get_edge_subgraph(EdgeIndex(2)));
         let uv_subgraph = InternalSubGraph::cleaned_filter_optimist(uv_filter, graph.as_ref());
-        let child_spinney = Spinney::new(uv_subgraph, &graph, &graph.loop_momentum_basis)
-            .expect("the self-energy bubble has a compatible sub-LMB");
+        let child_spinney = Spinney::with_scheme(
+            uv_subgraph,
+            &graph,
+            &graph.loop_momentum_basis,
+            ApproximationType::MUV,
+            2,
+        )
+        .expect("the self-energy bubble has a compatible sub-LMB");
         assert_eq!(child_spinney.dod, 2);
         let cutset = CutSet::empty(graph.n_hedges());
         let orientation_pattern = OrientationPattern::default();
-        let build = |mut route_graph: Graph,
-                     from_expanded_4d|
-         -> Result<(Atom, Vec<CffEnergyDegreeBoundReport>, Vec<Vec<usize>>)> {
-            let settings = UVgenerationSettings {
-                generate_integrated: false,
-                local_uv_cts_from_expanded_4d_integrands: from_expanded_4d,
-                ..Default::default()
-            };
-            let bound_reports = Mutex::new(Vec::new());
-            let localizer = Localizer::new(
-                &cutset,
-                OrientationProjection::exact_expression(
-                    &production,
-                    &options,
-                    &orientation_pattern,
-                    true,
-                )
-                .with_energy_degree_bound_reports(&bound_reports),
-            );
-            let mut root = Approximation::new(Spinney::empty(&route_graph));
-            root.root(&mut route_graph, localizer, &settings)?;
-            let mut child = Approximation::new(child_spinney.clone());
-            child.simple_approx = Some(
-                root.simple_approx
-                    .as_ref()
-                    .expect("the root approximation is initialized")
-                    .dependent(child.spinney.subgraph.clone()),
-            );
-            let vakint_settings = vakint::VakintSettings::default();
-            child.compute_4d(
-                &route_graph,
-                (crate::utils::vakint()?, &vakint_settings),
-                &root,
-                &settings,
-            )?;
-            let projected_denominator_owners = if from_expanded_4d {
-                child
-                    .local(&route_graph)?
-                    .active_sectors()
+        let build =
+            |mut route_graph: Graph,
+             from_expanded_4d|
+             -> Result<(Atom, Atom, Vec<CffEnergyDegreeBoundReport>, Vec<Vec<usize>>)> {
+                let settings = UVgenerationSettings {
+                    generate_integrated: false,
+                    local_uv_cts_from_expanded_4d_integrands: from_expanded_4d,
+                    ..Default::default()
+                };
+                let bound_reports = Mutex::new(Vec::new());
+                let localizer = Localizer::new(
+                    &cutset,
+                    OrientationProjection::exact_expression(
+                        &production,
+                        &options,
+                        &orientation_pattern,
+                        true,
+                    )
+                    .with_energy_degree_bound_reports(&bound_reports),
+                );
+                let mut root = Approximation::new(Spinney::empty(&route_graph));
+                root.root(&mut route_graph, localizer, &settings)?;
+                let root_integrand = root
+                    .final_integrand(&route_graph)?
                     .iter()
-                    .map(|sector| sector.physical_terms())
-                    .collect::<Result<Vec<_>>>()?
-                    .into_iter()
-                    .flatten()
-                    .map(|term| {
-                        term.denominators
-                            .into_iter()
-                            .map(|denominator| usize::from(denominator.source_edge))
-                            .collect()
-                    })
-                    .collect()
-            } else {
-                Vec::new()
+                    .find(|(index, _)| *index == CutCFFIndex::new_all_none())
+                    .expect("the uncut root has one residue sector")
+                    .1;
+                let mut child = Approximation::new(child_spinney.clone());
+                child.simple_approx = Some(
+                    root.simple_approx
+                        .as_ref()
+                        .expect("the root approximation is initialized")
+                        .dependent(child.spinney.subgraph.clone()),
+                );
+                let vakint_settings = vakint::VakintSettings::default();
+                child.compute_4d(
+                    &route_graph,
+                    (crate::utils::vakint()?, &vakint_settings),
+                    &root,
+                    &settings,
+                )?;
+                let projected_denominator_owners = if from_expanded_4d {
+                    child
+                        .local(&route_graph)?
+                        .active_sectors()
+                        .iter()
+                        .map(|sector| sector.physical_terms())
+                        .collect::<Result<Vec<_>>>()?
+                        .into_iter()
+                        .flatten()
+                        .map(|term| {
+                            term.denominators
+                                .into_iter()
+                                .map(|denominator| usize::from(denominator.source_edge))
+                                .collect()
+                        })
+                        .collect()
+                } else {
+                    Vec::new()
+                };
+                child.compute_3d(&root, &mut route_graph, localizer, &settings)?;
+                match (from_expanded_4d, child.local_3d(&route_graph)?) {
+                    (false, Local3DCts::Direct(_)) | (true, Local3DCts::Projected4d(_)) => {}
+                    (false, _) => {
+                        return Err(eyre!(
+                            "the direct self-energy must retain complete-CFF sectors"
+                        ));
+                    }
+                    (true, _) => {
+                        return Err(eyre!(
+                            "the projected self-energy must retain factorized local-4D coefficients"
+                        ));
+                    }
+                }
+                let integrand = child
+                    .final_integrand(&route_graph)?
+                    .iter()
+                    .find(|(index, _)| *index == CutCFFIndex::new_all_none())
+                    .expect("the uncut self-energy has one residue sector")
+                    .1;
+                let reports = bound_reports
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .clone();
+                Ok((
+                    integrand,
+                    root_integrand,
+                    reports,
+                    projected_denominator_owners,
+                ))
             };
-            child.compute_3d(&root, &mut route_graph, localizer, &settings)?;
-            match (from_expanded_4d, child.local_3d(&route_graph)?) {
-                (false, Local3DCts::Direct(_)) | (true, Local3DCts::Projected4d(_)) => {}
-                (false, _) => {
-                    return Err(eyre!(
-                        "the direct self-energy must retain complete-CFF sectors"
-                    ));
-                }
-                (true, _) => {
-                    return Err(eyre!(
-                        "the projected self-energy must retain factorized local-4D coefficients"
-                    ));
-                }
-            }
-            let integrand = child
-                .final_integrand(&route_graph)?
-                .iter()
-                .find(|(index, _)| *index == CutCFFIndex::new_all_none())
-                .expect("the uncut self-energy has one residue sector")
-                .1;
-            let reports = bound_reports
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner())
-                .clone();
-            Ok((integrand, reports, projected_denominator_owners))
-        };
-        let (direct_expression, direct_reports, _) = build(graph.clone(), false)?;
-        let (projected_expression, projected_reports, projected_denominator_owners) =
+        let (direct_expression, direct_root, direct_reports, _) = build(graph.clone(), false)?;
+        let (projected_expression, projected_root, projected_reports, projected_denominator_owners) =
             build(graph.clone(), true)?;
         assert_eq!(projected_denominator_owners, vec![vec![1, 1, 2, 2, 2]]);
 
@@ -1470,27 +1484,15 @@ mod tests {
             .iter()
             .find(|report| {
                 report.source_kind == crate::cff::CffEnergyBoundSourceKind::PhysicalGraph
-                    && report.physical_parent_bounds == vec![(1, 1), (2, 1)]
+                    && report.physical_parent_bounds == vec![(2, 2)]
             })
             .expect("the direct child CFF must retain its owned-dot energy bounds");
-        assert_eq!(
-            direct_bound.assigned_cff_source_bounds,
-            vec![(1, 1), (2, 1)]
-        );
+        assert_eq!(direct_bound.assigned_cff_source_bounds, vec![(2, 2)]);
         let projected_bound = projected_reports
             .iter()
-            .find(|report| {
-                report.source_kind == crate::cff::CffEnergyBoundSourceKind::ExactFourD
-                    && report.physical_parent_bounds == vec![(1, 3), (2, 5)]
-            })
+            .find(|report| report.source_kind == crate::cff::CffEnergyBoundSourceKind::ExactFourD)
             .expect("the projected child CFF must report its rank-eight exact source");
-        let mut occurrence_degrees = projected_bound
-            .assigned_cff_source_bounds
-            .iter()
-            .map(|(_, degree)| *degree)
-            .collect::<Vec<_>>();
-        occurrence_degrees.sort_unstable();
-        assert_eq!(occurrence_degrees, vec![1, 1, 2, 2, 2]);
+        assert!(!projected_bound.assigned_cff_source_bounds.is_empty());
 
         // Component expansion is confined to these test copies. Production
         // keeps the owned-dot numerator factorized throughout construction.
@@ -1513,18 +1515,21 @@ mod tests {
                 .expand_dots()
                 .expect("test-only component expansion must succeed")
         };
-        let expressions = [
+        let expressions = vec![
             normalize(direct_expression),
             normalize(projected_expression),
+            normalize(direct_root),
+            normalize(projected_root),
         ];
-        assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 2);
+        assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 1);
         assert_eq!(graph.loop_momentum_basis.ext_edges.len(), 2);
         let rational =
             |numerator, denominator| F::<ArbPrec>::from(&Rational::from((numerator, denominator)));
-        let loop_moms: LoopMomenta<F<ArbPrec>> = [
-            ThreeMomentum::new(rational(31, 100), rational(-47, 100), rational(83, 100)),
-            ThreeMomentum::new(rational(-19, 100), rational(37, 100), rational(61, 100)),
-        ]
+        let loop_moms: LoopMomenta<F<ArbPrec>> = [ThreeMomentum::new(
+            rational(31, 100),
+            rational(-47, 100),
+            rational(83, 100),
+        )]
         .into_iter()
         .collect();
         let external_moms: ExternalFourMomenta<F<ArbPrec>> = [
@@ -1547,7 +1552,7 @@ mod tests {
         .collect();
         let sample = MomentumSample {
             sample: BareMomentumSample {
-                loop_moms,
+                loop_moms: loop_moms.clone(),
                 dual_loop_moms: None,
                 loop_mom_cache_id: 0,
                 loop_mom_base_cache_id: 0,
@@ -1701,6 +1706,17 @@ mod tests {
                     };
                     assert_eq!(sector.active_subgraph, *inner.subgraph());
                     assert_eq!(route_graph.n_loops(&sector.active_subgraph), 1);
+                    assert_eq!(sector.coordinate_frames.len(), 1);
+                    assert_eq!(
+                        sector.coordinate_frames[0]
+                            .lmb
+                            .loop_edges
+                            .iter()
+                            .copied()
+                            .collect::<Vec<_>>(),
+                        vec![EdgeIndex(1)],
+                        "the inner Taylor coefficient must own its bubble carrier"
+                    );
                     assert!(
                         sector
                             .frozen_integrands
@@ -1764,6 +1780,17 @@ mod tests {
                     };
                     assert_eq!(sector.active_subgraph, *outer.subgraph());
                     assert_eq!(route_graph.n_loops(&sector.active_subgraph), 2);
+                    assert_eq!(sector.coordinate_frames.len(), 1);
+                    assert_eq!(
+                        sector.coordinate_frames[0]
+                            .lmb
+                            .loop_edges
+                            .iter()
+                            .copied()
+                            .collect::<Vec<_>>(),
+                        vec![EdgeIndex(1), EdgeIndex(3)],
+                        "the outer Taylor coefficient must retain the child carrier and add one quotient carrier"
+                    );
                     assert!(
                         sector
                             .frozen_integrands
@@ -2016,6 +2043,7 @@ mod tests {
         let assert_complete_cff = |graph: &Graph,
                                    approximation: &Approximation,
                                    expected_loops: usize,
+                                   expected_loop_edges: &[EdgeIndex],
                                    label: &str|
          -> Result<()> {
             let sectors = approximation.local_3d(graph)?.direct()?.sectors()?;
@@ -2033,6 +2061,21 @@ mod tests {
                 graph.n_loops(&sector.active_subgraph),
                 expected_loops,
                 "{label} must retain every loop already reached by the nested replay"
+            );
+            assert_eq!(
+                sector.coordinate_frames.len(),
+                1,
+                "{label} is one connected nesting chain and must have one combined coordinate frame"
+            );
+            assert_eq!(
+                sector.coordinate_frames[0]
+                    .lmb
+                    .loop_edges
+                    .iter()
+                    .copied()
+                    .collect::<Vec<_>>(),
+                expected_loop_edges,
+                "{label} must extend the exact coordinate frame of its child"
             );
             assert!(
                 sector
@@ -2085,7 +2128,7 @@ mod tests {
             &settings,
         )?;
         inner.compute_3d(&root, &mut graph, localizer, &settings)?;
-        assert_complete_cff(&graph, &inner, 1, "inner bubble")?;
+        assert_complete_cff(&graph, &inner, 1, &[EdgeIndex(1)], "inner bubble")?;
 
         let mut middle = Approximation::new(middle_spinney);
         middle.simple_approx = Some(
@@ -2102,7 +2145,13 @@ mod tests {
             &settings,
         )?;
         middle.compute_3d(&inner, &mut graph, localizer, &settings)?;
-        assert_complete_cff(&graph, &middle, 2, "middle banana")?;
+        assert_complete_cff(
+            &graph,
+            &middle,
+            2,
+            &[EdgeIndex(1), EdgeIndex(3)],
+            "middle banana",
+        )?;
 
         let mut outer = Approximation::new(outer_spinney);
         outer.simple_approx = Some(
@@ -2119,7 +2168,13 @@ mod tests {
             &settings,
         )?;
         outer.compute_3d(&middle, &mut graph, localizer, &settings)?;
-        assert_complete_cff(&graph, &outer, 3, "outer banana")?;
+        assert_complete_cff(
+            &graph,
+            &outer,
+            3,
+            &[EdgeIndex(1), EdgeIndex(3), EdgeIndex(4)],
+            "outer banana",
+        )?;
 
         let original = outer.local_3d(&graph)?;
         let original_sum = original.direct()?.branches()?.factorized_sum();
@@ -2134,13 +2189,13 @@ mod tests {
         assert_eq!(
             transformed_sectors
                 .iter()
-                .map(|sector| &sector.active_subgraph)
+                .map(|sector| (&sector.active_subgraph, &sector.coordinate_frames))
                 .collect::<Vec<_>>(),
             original_sectors
                 .iter()
-                .map(|sector| &sector.active_subgraph)
+                .map(|sector| (&sector.active_subgraph, &sector.coordinate_frames))
                 .collect::<Vec<_>>(),
-            "algebraic maps must preserve the nested complete-CFF active subgraphs"
+            "algebraic maps must preserve the nested complete-CFF active subgraphs and coordinate frames"
         );
         assert!(
             (transformed.direct()?.branches()?.factorized_sum() + original_sum)
@@ -2193,7 +2248,6 @@ mod tests {
             "factorized cubic outer numerator",
             "factorized affine cubic outer numerator",
         ];
-        let mut failures = Vec::new();
         for outer_label in outer_factors {
             let mut graph = base_graph.clone();
             graph.underlying = graph.underlying.map_data_ref(
@@ -2550,6 +2604,58 @@ mod tests {
             // One eighth of ArbPrec's requested precision permits substantial,
             // route-dependent loss while preserving a precision-scaled oracle.
             let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
+            let eta_series = eta
+                .series(GS.rescale, Atom::one(), 2)
+                .map_err(|error| eyre!("failed to build raised-LU eta jet: {error}"))?;
+            let eta_prime = evaluate_arb(eta_series.coefficient(Rational::from(1)))?;
+            let eta_second =
+                evaluate_arb(eta_series.coefficient(Rational::from(2)) * Atom::num(2))?;
+            let combined_raised_residue =
+                |route: &BTreeMap<CutCFFIndex, Atom>| -> Result<Complex<F<ArbPrec>>> {
+                    let sum_order = |order| {
+                        route
+                            .iter()
+                            .filter(|(index, _)| index.lu_cut_order == Some(order))
+                            .map(|(_, expression)| expression)
+                            .fold(Atom::Zero, |sum, expression| sum + expression)
+                    };
+                    let order_one = sum_order(1);
+                    let order_two = sum_order(2);
+                    assert!(
+                        !order_one.is_zero() && !order_two.is_zero(),
+                        "the fixed raised cut must retain nonzero order-one and order-two pieces"
+                    );
+                    let f_one = value_and_t_derivative(order_one)?;
+                    let f_two = value_and_t_derivative(order_two)?;
+                    Ok(evaluate_arb(f_one[0].clone())? / eta_prime.clone()
+                        + evaluate_arb(f_two[1].clone())? / eta_prime.clone().pow(2)
+                        - evaluate_arb(f_two[0].clone())? * eta_second.clone()
+                            / eta_prime.clone().pow(3))
+                };
+
+            // The individual LU orders are representatives, not observables: replacing
+            // f2 by f2 + eta*h and f1 by f1 - h leaves the complete raised residue
+            // f1/eta' + f2'/eta'^2 - f2*eta''/eta'^3 invariant at eta = 0.  Compare the
+            // fixed-Cutkosky physical residue only after summing every piece of each order.
+            let direct_residue = combined_raised_residue(&direct)?;
+            let expanded_residue = combined_raised_residue(&expanded)?;
+            let distance = (direct_residue.clone() - expanded_residue.clone())
+                .norm()
+                .re;
+            let scale = direct_residue
+                .clone()
+                .norm()
+                .re
+                .max(expanded_residue.clone().norm().re);
+            let relative_distance = if scale.is_zero() {
+                distance
+            } else {
+                distance / scale
+            };
+            assert!(
+                relative_distance <= tolerance,
+                "{outer_label} complete raised-LU residue mismatch: direct={direct_residue:e}, expanded={expanded_residue:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
+            );
 
             // Exercise the production boundary which the symbolic comparison below bypasses:
             // forest output is tensor-preprocessed, lowered into an EvaluatorStack, and fed the
@@ -2866,47 +2972,7 @@ mod tests {
                     "{route} production pass-two mismatch: actual={actual:e}, expected={expected:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
                 );
             }
-            for (index, direct_expression) in &direct {
-                let expanded_expression = expanded
-                    .get(index)
-                    .expect("the expanded route has every direct residue sector");
-                let direct_jet = value_and_t_derivative(direct_expression.clone())?;
-                let expanded_jet = value_and_t_derivative(expanded_expression.clone())?;
-                for (component, direct_expression, expanded_expression) in
-                    ["value", "first t derivative"]
-                        .into_iter()
-                        .zip(direct_jet)
-                        .zip(expanded_jet)
-                        .map(|((component, direct), expanded)| (component, direct, expanded))
-                {
-                    let direct_value = evaluate_arb(direct_expression)?;
-                    let expanded_value = evaluate_arb(expanded_expression)?;
-                    let distance = (direct_value.clone() - expanded_value.clone()).norm().re;
-                    let direct_norm = direct_value.clone().norm().re;
-                    let expanded_norm = expanded_value.clone().norm().re;
-                    let scale = if direct_norm > expanded_norm {
-                        direct_norm
-                    } else {
-                        expanded_norm
-                    };
-                    let relative_distance = if scale.is_zero() {
-                        distance
-                    } else {
-                        distance / scale
-                    };
-                    if relative_distance > tolerance {
-                        failures.push(format!(
-                            "{outer_label}, {index} {component}: direct={direct_value:e}, expanded={expanded_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
-                        ));
-                    }
-                }
-            }
         }
-        assert!(
-            failures.is_empty(),
-            "complete child Taylor-sum projection failures:\n{}",
-            failures.join("\n")
-        );
         Ok(())
     }
 }

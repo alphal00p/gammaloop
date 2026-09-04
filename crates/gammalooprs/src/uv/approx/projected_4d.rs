@@ -4,6 +4,7 @@ use color_eyre::Result;
 use eyre::eyre;
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike};
 use symbolica::atom::Atom;
+use three_dimensional_reps::CffGenerationContext;
 
 use crate::{
     cff::CutCFFIndex,
@@ -112,7 +113,13 @@ impl Localizer<'_> {
         }
 
         let child_cutset = CutSet::empty(graph.n_hedges());
-        let options = self.orientation.cff_options(graph);
+        // Each Taylor component is an independently closed contour which is
+        // multiplied into the outer CFF afterwards.  Keep every causal term
+        // when finite-pole denominators remain, but do not reopen the two
+        // equivalent closure records of a terminal D=L contour: there one
+        // deterministic Below representative is the complete integral.
+        let mut options = self.orientation.cff_options(graph);
+        options.cff_generation_context = CffGenerationContext::EmbeddedCffFactor;
         let mut terms = Vec::new();
         for term in sector.physical_terms()? {
             let mut component_denominators = vec![Vec::new(); sector.active_components.len()];
@@ -221,6 +228,14 @@ impl Localizer<'_> {
                 );
                 let mut next_states = Vec::new();
                 for (carrier, numerator) in std::mem::take(states) {
+                    debug_tags!(#generation, #uv, #local, #four_d, #cff, #trace;
+                        component,
+                        source_scope = %source_scope.string_label(),
+                        log.numerator = &numerator,
+                        "Preparing factorized local-4D child numerator for component {component} in {}: {}",
+                        source_scope.string_label(),
+                        numerator,
+                    );
                     let (cff, _) = graph.cff_from_4d_denominators_in_uv_sub_lmb(
                         denominators,
                         uv_edges.iter().copied(),
@@ -250,6 +265,14 @@ impl Localizer<'_> {
                                         denominators
                                     )
                                 })?;
+                            debug_tags!(#generation, #uv, #local, #four_d, #cff, #trace;
+                                component,
+                                source_scope = %source_scope.string_label(),
+                                log.mapped_numerator = mapped_numerator,
+                                "Mapped factorized local-4D child numerator for component {component} in {}: {}",
+                                source_scope.string_label(),
+                                mapped_numerator,
+                            );
                             next_states.push((
                                 &carrier * &orientation.expression * &production_prefactor,
                                 mapped_numerator,
@@ -368,6 +391,7 @@ mod tests {
         graph::{LMBext, parse::IntoGraph},
         initialisation::test_initialise,
         settings::global::OrientationPattern,
+        utils::W_,
         uv::{Spinney, UltravioletGraph, approx::OrientationProjection},
     };
     use linnet::half_edge::{
@@ -375,6 +399,208 @@ mod tests {
         subgraph::{InternalSubGraph, SubSetOps},
     };
     use symbolica::atom::{AtomCore, FunctionBuilder};
+
+    #[test]
+    fn nested_banana_quotient_powered_component_has_the_analytic_one_energy_sign() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph nested_banana_quotient_sign {
+            edge [num=1 mass=1]
+            node [num=1]
+            incoming [style=invis]
+            outgoing [style=invis]
+
+            incoming -> a [id=0]
+            a -> b [id=1 lmb_id=0]
+            a -> b [id=2 lmb_id=1]
+            a -> b [id=3]
+            b -> outgoing [id=4]
+        })?;
+        let inner_filter = graph
+            .get_edge_subgraph(EdgeIndex(1))
+            .union(&graph.get_edge_subgraph(EdgeIndex(2)));
+        let outer_filter = inner_filter.union(&graph.get_edge_subgraph(EdgeIndex(3)));
+        let inner_subgraph =
+            InternalSubGraph::cleaned_filter_optimist(inner_filter, graph.as_ref());
+        let outer_subgraph =
+            InternalSubGraph::cleaned_filter_optimist(outer_filter.clone(), graph.as_ref());
+        let quotient_lmb = graph.shrunken_sub_lmb(
+            &outer_filter,
+            &inner_subgraph,
+            graph.dummy_stripped_external_flows_of(&outer_subgraph),
+            None,
+        )?;
+        assert_eq!(
+            quotient_lmb.loop_edges.iter().copied().collect::<Vec<_>>(),
+            vec![EdgeIndex(3)]
+        );
+
+        let edge = EdgeIndex(3);
+        let momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(usize::from(edge))
+            .finish();
+        let mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
+        let energy_squared = (1..=3).fold(mass_squared.clone(), |sum, spatial_index| {
+            sum + GS.emr_mom(edge, GS.cind(spatial_index)).pow(2)
+        });
+        let full_denominator = GS.emr_mom(edge, GS.cind(0)).pow(2) - &energy_squared;
+        let denominator = GS.den(
+            usize::from(edge),
+            momentum.clone(),
+            mass_squared.clone(),
+            full_denominator,
+        );
+        let provenance = GS.uv_momentum_provenance_tag(
+            Atom::num(usize::from(edge) as i64).as_view(),
+            true,
+            momentum.as_view(),
+        );
+        let tagged_momentum = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(provenance.clone())
+            .finish();
+        let tagged_energy_squared = (1..=3).fold(mass_squared.clone(), |sum, spatial_index| {
+            sum + FunctionBuilder::new(GS.emr_mom)
+                .add_arg(provenance.clone())
+                .add_arg(GS.cind(spatial_index))
+                .finish()
+                .pow(2)
+        });
+        let tagged_full_denominator = FunctionBuilder::new(GS.emr_mom)
+            .add_arg(provenance)
+            .add_arg(GS.cind(0))
+            .finish()
+            .pow(2)
+            - tagged_energy_squared;
+        let tagged_denominator = GS.den(
+            usize::from(edge),
+            tagged_momentum,
+            mass_squared.clone(),
+            tagged_full_denominator,
+        );
+        let constant = Atom::one() - mass_squared;
+        let component = vec![(
+            graph.get_edge_subgraph(edge),
+            outer_filter,
+            quotient_lmb.clone(),
+        )];
+        let powered_sector = FourDSector::new(
+            (&tagged_denominator + &constant) * denominator.pow(-2),
+            component.clone(),
+            Some(quotient_lmb.clone()),
+            Vec::new(),
+        );
+        let cancelled_sector = FourDSector::new(
+            tagged_denominator * denominator.pow(-2),
+            component.clone(),
+            Some(quotient_lmb.clone()),
+            Vec::new(),
+        );
+        let dotted_sector = FourDSector::new(
+            denominator.pow(-2),
+            component.clone(),
+            Some(quotient_lmb.clone()),
+            Vec::new(),
+        );
+        let one_pole_sector = FourDSector::new(
+            denominator.pow(-1),
+            component,
+            Some(quotient_lmb),
+            Vec::new(),
+        );
+        let [powered_term] = powered_sector
+            .physical_terms()?
+            .try_into()
+            .map_err(|terms: Vec<_>| eyre!("powered quotient produced {} terms", terms.len()))?;
+        assert_eq!(powered_term.denominators.len(), 2);
+
+        let pattern = OrientationPattern::default();
+        let cutset = CutSet::empty(graph.n_hedges());
+        let localizer = Localizer::new(&cutset, OrientationProjection::new(&[], &pattern));
+        let powered = localizer.project_factorized_taylor_sector(
+            &mut graph,
+            &powered_sector,
+            &Atom::one(),
+        )?;
+        let cancelled = localizer.project_factorized_taylor_sector(
+            &mut graph,
+            &cancelled_sector,
+            &Atom::one(),
+        )?;
+        let dotted =
+            localizer.project_factorized_taylor_sector(&mut graph, &dotted_sector, &Atom::one())?;
+        let one_pole = localizer.project_factorized_taylor_sector(
+            &mut graph,
+            &one_pole_sector,
+            &Atom::one(),
+        )?;
+
+        // D/D^2 = 1/D, while the repeated-pole remainder obeys
+        // CFF[1/D^2] = -CFF[1/D]/(2 E^2). Compare each term directly to the
+        // absolute one-pole normalization.
+        let unwrap_denominator = |atom: Atom| {
+            GS.erase_uv_momentum_provenance(
+                &atom.replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_)).with(W_.d_),
+            )
+        };
+        let powered = unwrap_denominator(powered);
+        let cancelled = unwrap_denominator(cancelled);
+        let dotted = unwrap_denominator(dotted);
+        let one_pole_projection = unwrap_denominator(one_pole);
+        for (mass, spatial, energy) in [
+            (
+                Atom::num(2),
+                [Atom::Zero, Atom::Zero, Atom::Zero],
+                Atom::num(2),
+            ),
+            (
+                Atom::num(symbolica::domains::rational::Rational::from((3, 5))),
+                [
+                    Atom::num(symbolica::domains::rational::Rational::from((4, 5))),
+                    Atom::Zero,
+                    Atom::Zero,
+                ],
+                Atom::one(),
+            ),
+        ] {
+            let fixed_point = |mut atom: Atom| {
+                atom = atom.replace(GS.m_uv_expansion).with(mass.clone());
+                for (spatial_index, value) in spatial.iter().enumerate() {
+                    atom = atom
+                        .replace(GS.emr_mom(edge, GS.cind(spatial_index + 1)))
+                        .with(value.clone());
+                }
+                atom.together()
+            };
+            let powered = fixed_point(powered.clone());
+            let cancelled = fixed_point(cancelled.clone());
+            let dotted = fixed_point(dotted.clone());
+            let one_pole_projection = fixed_point(one_pole_projection.clone());
+            let energy_squared = energy.pow(2);
+            let constant = Atom::one() - mass.pow(2);
+            let one_pole = Atom::i() / (Atom::num(16) * Atom::var(GS.pi).pow(3) * energy);
+            let expected_powered = &one_pole * (Atom::num(2) * &energy_squared - &constant)
+                / (Atom::num(2) * &energy_squared);
+            let difference = (&powered - &expected_powered).together();
+            let opposite = (&powered + expected_powered).together();
+            let cancellation = (&cancelled - &one_pole).together();
+            let dotted_difference =
+                (&dotted + &one_pole / (Atom::num(2) * energy_squared)).together();
+            let linearity = (&cancelled + constant * &dotted - &powered).together();
+            let cancellation_to_generated_one_pole = (&cancelled - &one_pole_projection).together();
+            assert!(
+                [
+                    &difference,
+                    &cancellation,
+                    &dotted_difference,
+                    &linearity,
+                    &cancellation_to_generated_one_pole,
+                ]
+                .into_iter()
+                .all(Atom::is_zero),
+                "the isolated powered quotient violates its analytic one-energy form at mass={mass}, spatial={spatial:?}: powered difference={difference}, opposite-sign diagnostic={opposite}, D/D^2 difference={cancellation}, dotted difference={dotted_difference}, linearity difference={linearity}, generated one-pole={one_pole_projection}, D/D^2-to-generated-one-pole difference={cancellation_to_generated_one_pole}"
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn typed_taylor_wave_batches_genuine_owner_relabelled_terms() -> Result<()> {

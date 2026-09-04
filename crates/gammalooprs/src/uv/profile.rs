@@ -2098,9 +2098,13 @@ impl<'a> UVProfileRunner<'a> {
         let orientation_labels = if profiles_per_orientation {
             let integrand = self.integrand.lock().expect("integrand mutex poisoned");
             match &*integrand {
-                ProcessIntegrand::Amplitude(amplitude) => {
-                    Some(orientation_labels_for_graph(amplitude, graph_id)?)
-                }
+                ProcessIntegrand::Amplitude(amplitude) => Some(
+                    orientation_labels_for_graph(amplitude, graph_id)?
+                        .into_iter()
+                        .enumerate()
+                        .map(|(orientation_id, label)| format!("{label}|sigma({orientation_id})"))
+                        .collect::<Vec<_>>(),
+                ),
                 ProcessIntegrand::CrossSection(_) => {
                     unreachable!("UV profiling expects amplitudes")
                 }
@@ -2224,7 +2228,15 @@ impl<'a> UVProfileRunner<'a> {
                             "an explicit orientation sum cannot be profiled by production orientation"
                         ));
                     }
-                    Some(orientation_labels_for_graph(cross_section, graph_id)?)
+                    Some(
+                        orientation_labels_for_graph(cross_section, graph_id)?
+                            .into_iter()
+                            .enumerate()
+                            .map(|(orientation_id, label)| {
+                                format!("{label}|sigma({orientation_id})")
+                            })
+                            .collect::<Vec<_>>(),
+                    )
                 }
                 ProcessIntegrand::Amplitude(_) => {
                     unreachable!("cross-section UV profiling expects cross sections")

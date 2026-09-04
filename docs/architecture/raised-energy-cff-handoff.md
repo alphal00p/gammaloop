@@ -24,7 +24,94 @@ EMR dispatch, remains a separate construction selected only by
 physical-shell algorithm must have its own setting and must support both
 orientation representations identically.
 
-Last updated: 2026-09-01
+## Authoritative route-comparison boundary
+
+**Equality between the direct local-3D and projected local-4D routes is an
+equality of the complete residue functional for one fixed Cutkosky cut.** It is
+checked only after summing every generalized residue-map entry and assembling
+every derivative piece belonging to all raised-order slots of that cut. A
+single generalized key, contact/remainder family, or `lu_cut_order` entry is an
+internal decomposition term, not a separately invariant physical quantity.
+The direct and projected routes may legitimately use different numbers of such
+terms and redistribute finite contributions among them.
+
+For a double-pole residue, write the assembled functional schematically as
+
+\[
+  \mathcal R_C=\left.\partial_\eta f_2(\eta)\right|_{\eta=0}+f_1(0).
+\]
+
+The redefinition
+
+\[
+  f_2(\eta)\longmapsto f_2(\eta)+\eta h(\eta),
+  \qquad
+  f_1(\eta)\longmapsto f_1(\eta)-h(0)
+\]
+
+leaves \(\mathcal R_C\) unchanged while changing both stored raised-order
+pieces. Higher powers admit the analogous triangular redistributions between
+adjacent derivative slots. Therefore a disagreement in one `lu_cut_order`
+followed by compensation in another is not a route mismatch. Conversely,
+agreement of one order cannot certify the full cut. Keep the physical
+Cutkosky-cut identity fixed, assemble its required jets and raised orders, sum
+all residue maps, and compare only that result. Per-key UV finiteness remains a
+separate required property of the orientation-local direct-3D construction;
+it does not create a key-by-key comparison with projected local-4D.
+
+Projected component composition must preserve numerator factorization while
+forming that sum. Each independently integrated component carries a pair
+`(C_i, N_i)`: its CFF carrier `C_i` and its still-factorized numerator `N_i`.
+The component's exact source map acts only on the factors it owns. The mapped
+pair is then passed to the next component, and the outer production map acts
+once on the still-unmapped soft/cograph factors. Products remain products;
+the implementation must not expand a full numerator to align residue keys.
+Cartesian multiplication is required only for genuinely independent,
+unsummed component states. Repeated production hosts of an already summed
+child coefficient are mapping metadata and must not multiply that coefficient
+again.
+
+The projected local-4D route has one non-negotiable reconstruction invariant.
+For every completed Taylor term, the numerator retained in the original hard
+sub-LMB and the candidate numerator written in the EMRs of the reconstructed
+UV graph **must become exactly the same symbolic function after both are
+expressed in one common set of formal loop momenta**. The original edge owner
+and hard-LMB payload carried through the Taylor operator provide the left-hand
+side; the owner-built UV skeleton, including only derivative-created serial
+copies, provides the right-hand side. This exact identity is the correctness
+gate before generalized CFF generation. Any EMR spelling which passes it is
+valid; minimizing its energy-rank envelope is a later performance optimization,
+not part of the definition. The comparison may expand expressions in tests or
+debug assertions, but production numerator construction and evaluation must
+remain factorized. LMB coordinates are used here only to prove equality of two
+representations; they never become EMR identities or CFF capacity labels. See
+the dedicated “common-LMB commutative reconstruction invariant” section in
+[`exact-powered-denominator-cff-lifting.md`](exact-powered-denominator-cff-lifting.md).
+
+This is a **stop rule**, not an optional diagnostic.  For every projected-4D
+discrepancy, do not change CFF signs, contact terms, prefactors, or test targets
+until the *actual production candidate* has been checked in this order:
+
+1. take the completed post-`T` numerator in its stored compatible hard sub-LMB;
+2. build the UV skeleton solely from retained source-edge owners, adding only
+   derivative-created serial copies of those same lines;
+3. apply the immutable production energy-assignment plan, including its exact
+   selected occurrences and the complete `H = h R`, `P = r R`, hence
+   `H^0 = h r P^0`, sign conversion;
+4. substitute both the post-`T` numerator and that final mapped candidate into
+   one neutral set of formal `K`/`P` four-momenta and prove their exact
+   difference is zero;
+5. independently certify denominator momentum (modulo only the even identity
+   `D(Q) = D(-Q)`), mass, multiplicity, and component domain;
+6. only after both certificates pass, compare generalized-CFF output and final
+   residue aggregation with residue-summed direct local-3D.
+
+A comparison made before the assignment plan or before occurrence-routing
+signs is not this certificate.  Nor is equality of only the numerical final
+answer.  Algebraic expansion is permitted for a disposable test/debug copy at
+step 4; the production numerator must remain factorized throughout.
+
+Last updated: 2026-09-03
 
 This is the machine-independent continuation note for the raised-energy CFF
 work. The detailed chronological record, evidence, and decision history remain
@@ -212,11 +299,188 @@ counterterms. The local subtraction then either:
     canonical authoritative `edge_q0` and retain one deterministic `loop_q0`
     diagnostic. It was explicitly deferred and is not a rebase blocker.
 
+## Generalized-CFF inherited-contour sign
+
+The generalized-CFF recursion has one sign rule which belongs entirely to the
+`three-dimensional-reps` crate. GammaLoop must neither reconstruct nor
+compensate for it.
+
+When a powered-pole contact removes a contour coordinate, the recursive lower
+sector can factor into `C` rational denominator components. The lower-sector
+builder evaluates those components independently and multiplies their CFFs.
+Relating that product of independently closed contours to the parent contour
+requires the relative component-product convention
+
+\[
+  (-1)^{C-1}
+\]
+
+exactly when the lower sector starts, or inherits, that component-product
+frame. At the top level it always starts a new frame. For a recursive contact,
+the deleted contour rows are stored from outermost to innermost. The inherited
+frame survives precisely when the **outermost** deleted row still has a carrier
+among the surviving denominator rows. If that row has no surviving carrier,
+the parent contact has completely consumed that contour direction; an inner
+row may fix a component-local closure, but it cannot reopen the already
+consumed product frame.
+
+This predicate deliberately ignores the sign of the carrier. Reversing a
+routing changes the Above/Below closure and the residue Jacobian together;
+those are component-local oriented-residue data already applied separately.
+It does not change whether the denominator still carries the deleted
+direction, and therefore cannot change the component-product bridge.
+
+The rule corrects an assumption introduced in `d54de2049`: a deleted row lying
+wholly in one powered component was assumed not to need the bridge because the
+component's public CFF supposedly owned the relevant duplicate parity. That
+conflated two different signs. Duplicate-denominator parity belongs to the
+component's own rational CFF, whereas `(-1)^(C-1)` relates the product of
+component contours to its parent contour. A powered component can therefore
+need both. The correction is internal to generalized CFF and must not be
+mirrored by a GammaLoop "production bridge".
+
+The protected direct-core oracles include:
+
+- `repeated_cubic_pole_with_squared_denominator_numerator_pinches_to_simple_pole`,
+  which checks `D(Q)^2 / D(Q)^3 = 1 / D(Q)` without a GammaLoop convention;
+- the repeated-quintic lowering tests, including multiple pinches, numerator
+  sampling scales, and routing reversals. The mixed-cograph oracle checks
+  `D(Q) / D(Q)^5 = 1 / D(Q)^4` for both disconnected and incidence-connected
+  two-component products, with both `Q` and `-Q` routing;
+- the lower-sector component-product and nested inherited-contour tests, which
+  separately cover an outer surviving carrier, its routing reversal, and an
+  outer row with no surviving carrier.
+
+An isolated A/B check at the pre-correction `c8e763173` source boundary is a
+particularly useful diagnostic. With only the incidence-connected,
+oppositely-routed mixed-cograph fixture added, the old predicate returned
+`-1/9` times the independently generated quartic lower channel at all three
+kinematic points. Applying only the inherited-component bridge correction made
+the same test agree locally. This establishes that the correction acts inside
+generalized-CFF recursion rather than through GammaLoop prefactor handling.
+
+The historical CFF-versus-LTD suite remains the strongest future independent
+regression gate when proper LTD is ported. It validated the predecessor
+higher-power implementation, but it predates `inherited_contour_rows` and
+`requires_inherited_component_bridge`; it must therefore not be cited as proof
+of this post-`d54de2049` correction. When LTD support is absorbed, rerun at
+least `ltd_multiloop_high_power_boundaries_match_cff` and its independent
+`3Drep test-cff-ltd` counterpart before changing this rule again.
+
 The theory reference used for the audit is
 [`generalised_ltd.tex` at revision `65ab03e4`](https://github.com/alphal00p/generalised_ltd/blob/65ab03e4fb7d442ff362392df2c2a59ef323d28c/docs/generalised_ltd.tex).
 In particular, CFF retains denominator powers and applies repeated-channel
 normal form; the numerator remains a black box with one argument and degree cap
 per original EMR edge.
+
+## GammaLoop CFF normalization boundaries
+
+The inherited-contour rule above is internal to generalized CFF. A separate,
+typed boundary converts each **freshly generated source-local rational
+component** to GammaLoop's source-denominator convention. For a component `c`
+with `N_c` denominator occurrences, GammaLoop applies
+
+\[
+B_c =
+\begin{cases}
+B_{\mathrm{core},c},
+  & \text{global source product},\\
+(-1)^{N_c} B_{\mathrm{den},c} B_{\mathrm{core},c},
+  & \text{variant-local source}.
+\end{cases}
+\]
+
+The complete fresh-source conversion is `product_c B_c`. The three factors have distinct
+origins: `B_core` is the generalized-CFF shared contour convention,
+`B_den` is the scalar denominator-source convention, and `(-1)^N` converts the
+variant-local positive `1/(2E)` factors to GammaLoop's `1/(-2E)` convention.
+`EmbeddedCffFactor` retains one deterministic representative when a terminal
+contour would otherwise be duplicated; that changes the catalogue only.  The
+retained representative therefore uses the same component bridge as the
+corresponding standalone residue.  This is a hard invariant: generation
+context may not enter the production-prefactor bridge.  In particular, a
+repeated source such as `D(Q)^-5` is nonterminal, so standalone and embedded
+generation both call the same bounded-CFF builder and return byte-for-byte the
+same raw rational functional.  Assigning those identical expressions opposite
+signs merely because one is later multiplied by an outer graph has no contour,
+measure, or BPHZ justification.
+For a one-loop repeated channel, this fresh-source bridge is invariant under algebraic
+lowering.  At `N=2` it is `(+1)(-1)(+1)=-1`; at `N=3` it is
+`(-1)(+1)(+1)=-1`; and the same alternation continues for quartic and quintic
+sources.  The occurrence conversion and denominator-frame parity cancel each
+other's change when one copy of `D(Q)` moves between numerator and denominator.
+Consequently neither the aggregate core sign nor the aggregate denominator
+sign is a valid **fresh-source** bridge on its own.
+
+This rule must not be applied a second time when consuming the persisted
+production root. That object already is the graph's complete production
+residue functional. Its `GlobalSourceProduct`/`VariantLocal` field records
+where the energy factors live; it does not request another denominator-frame
+conversion. The stored-root boundary therefore consumes exactly
+
+\[
+  B_{\mathrm{stored\ root}} = B_{\mathrm{core}}.
+\]
+
+The distinction is by object lifetime and ownership, not by a physics mode:
+
+- a newly reconstructed exact/local-4D source crosses the componentwise
+  source-convention bridge once;
+- a stored production root has already crossed its construction boundary and
+  reuses only its recorded core sign when materialized for direct post-CFF
+  Taylor subtraction.
+
+Do not use the fresh-source helper in `cff_from_production_expression`. Doing
+so double-converts the stored residue frame. Conversely, do not remove the
+componentwise bridge from exact 4D sources; that reintroduces the powered-source
+sign error described below.
+
+An exact clean-tree A/B at `c8e763173` freezes why the fresh-source bridge belongs
+to the GammaLoop adapter rather than to generalized-CFF recursion. With a
+core-only **fresh exact-source** adapter, the already-existing uncancelled powered-source
+oracle evaluated
+
+```text
+D(Q) * (Q0 + c) / D(Q)^3  ->  +2.015720902074968...e-3 i
+(Q0 + c) / D(Q)^2         ->  -2.015720902074968...e-3 i
+```
+
+at the exact point `|q|=0`, `E=1`, `c=2`: the values were exact opposites at
+Arb precision.  The raw generalized-CFF lowering identities were already
+green.  Applying the component bridge above makes this production comparison
+green, as well as its scalar, globally reversed-routing, quintic-to-quartic,
+and raised-LU-residue variants.  Thus the gross powered-source sign was a
+latent ownership-conversion defect at the GammaLoop boundary: ordinary CFF
+clears local half-edge factors and appends `prod 1/(-2E)`, whereas generalized
+variants retain `prod 1/(2E)`.  It is not evidence for changing the residue
+map or its contact recursion.
+
+The fresh-source fold must remain component-local. A disconnected product can mix a
+variant-local powered bubble with a global ordinary component, and aggregate
+ownership cannot reconstruct that mixture. `GeneratedThreeDExpression`
+therefore persists `energy_factor_components`; its source-bound report remains
+transient analysis metadata. This changes the positional bincode layout, so
+states written before this metadata was persisted must be regenerated rather
+than decoded as the new format. Neither GammaLoop boundary rule may be copied
+back into generalized CFF, and neither may be conflated with the internal
+`(-1)^(C-1)` inherited-component rule.
+
+The minimal stored-root regression is the scalar self-energy `T0` source with
+the untouched outer numerator `Q3^0 Q4^0`. Its production root has five
+variant-local denominator occurrences with `B_den=+1` and `B_core=-1`.
+Applying the fresh-source formula would give
+`(-1)^5 B_den B_core=+1`, while the stored-root contract gives `-1`.
+Changing only that consumer boundary to the fresh-source value makes the
+assembled direct result the exact negative of the independently reconstructed
+child-times-outer result. In this deliberately canonical `T0` fixture, keeping
+the stored core sign also happens to make the separately stored LU-order pieces
+agree bit-for-bit at 1000-bit Arb precision, for both the values and their
+required first Taylor derivatives. That fixture-specific stronger equality is
+not the route contract: in general only the sum of all raised-order derivative
+pieces and residue-map entries for the fixed cut is invariant. The raw
+generalized residue family and projected child remain unchanged in this A/B,
+which locates the defect in GammaLoop's stored-root adapter rather than in
+generalized-CFF recursion.
 
 ## Current NLO normalization acceptance
 

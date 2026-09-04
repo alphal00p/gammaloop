@@ -64,6 +64,24 @@ fn normalization() {
 }
 
 #[test]
+fn spatial_emr_rescaling_covers_abstract_and_concrete_indices() {
+    let edge = EdgeIndex(1);
+    let abstract_index = parse_lit!(spenso::mink(4, 1));
+    let abstract_momentum = GS.emr_vec_index(edge, abstract_index.as_view());
+    let concrete_momentum = GS.emr_vec_index(edge, GS.cind(1));
+    let rescale = |momentum: &symbolica::atom::Atom| {
+        momentum
+            .replace(GS.emr_vec_index(edge, crate::utils::W_.x___))
+            .with(GS.emr_vec_index(edge, crate::utils::W_.x___) * GS.rescale)
+            .replace(GS.emr_mom(edge, crate::utils::W_.x___))
+            .with(GS.emr_mom(edge, crate::utils::W_.x___) * GS.rescale)
+    };
+
+    assert_eq!(rescale(&abstract_momentum), abstract_momentum * GS.rescale);
+    assert_eq!(rescale(&concrete_momentum), concrete_momentum * GS.rescale);
+}
+
+#[test]
 fn test_inv_param() {
     let x = [
         F(0.1),

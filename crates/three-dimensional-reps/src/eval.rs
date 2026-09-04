@@ -1016,6 +1016,71 @@ mod tests {
     use super::*;
 
     #[test]
+    fn unused_rank_capacity_preserves_raw_scalar_cff() {
+        let parsed = ParsedGraph {
+            internal_edges: (0..3)
+                .map(|edge_id| ParsedGraphInternalEdge {
+                    edge_id,
+                    tail: 0,
+                    head: 1,
+                    label: format!("q{edge_id}"),
+                    mass_key: Some(format!("m{edge_id}")),
+                    signature: MomentumSignature {
+                        loop_signature: match edge_id {
+                            0 => vec![1, 0],
+                            1 => vec![0, 1],
+                            _ => vec![-1, -1],
+                        },
+                        external_signature: Vec::new(),
+                    },
+                    had_pow: false,
+                })
+                .collect(),
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["q0".to_string(), "q1".to_string()],
+            external_names: Vec::new(),
+            node_name_to_internal: BTreeMap::from([("a".to_string(), 0), ("b".to_string(), 1)]),
+        };
+        let scalar = generate_3d_expression(
+            &parsed,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(Vec::new()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let bounded = generate_3d_expression(
+            &parsed,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(vec![(0, 2)]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let input = EvaluationInput::deterministic(&parsed, 1337, &BTreeMap::new(), None).unwrap();
+        let scalar_raw = evaluate_expression(&parsed, &scalar.expression, "1", &input)
+            .unwrap()
+            .value;
+        let bounded_raw = evaluate_expression(&parsed, &bounded.expression, "1", &input)
+            .unwrap()
+            .value;
+        assert_eq!(
+            scalar.core_global_prefactor_sign,
+            bounded.core_global_prefactor_sign
+        );
+        assert_eq!(
+            scalar.denominator_only_global_prefactor_sign,
+            bounded.denominator_only_global_prefactor_sign
+        );
+        let scale = scalar_raw
+            .abs()
+            .max(bounded_raw.abs())
+            .max(f64::MIN_POSITIVE);
+        assert!((scalar_raw - bounded_raw).abs() <= 1.0e-12 * scale);
+    }
+
+    #[test]
     fn evaluator_includes_projected_residual_tree_denominators() {
         let parsed = crate::graph_io::test_graphs::pure_tree_graph();
         let expression = generate_3d_expression_from_parsed(
@@ -1183,6 +1248,69 @@ mod tests {
         assert!(
             (value - -17.21131191349002).abs() < 1.0e-10,
             "initial-cut repeated-spectator finite-pole identity mismatch: {value}"
+        );
+    }
+
+    #[test]
+    fn selected_cut_through_quadratic_source_excludes_its_contact_quotient() {
+        let edge = |edge_id, tail, head, loop_signature| ParsedGraphInternalEdge {
+            edge_id,
+            tail,
+            head,
+            label: format!("q{edge_id}"),
+            mass_key: Some(format!("m{edge_id}")),
+            signature: MomentumSignature {
+                loop_signature,
+                external_signature: Vec::new(),
+            },
+            had_pow: false,
+        };
+        // In q0^2/(D0 D1 D2) = 1/(D1 D2) + E0^2/(D0 D1 D2), the
+        // denominator-cancelled contact has no q0 pole. A cut that requires
+        // q0 must therefore retain only E0^2 times the scalar selected-cut CFF.
+        let parsed = ParsedGraph {
+            internal_edges: vec![
+                edge(0, 0, 1, vec![1, 0]),
+                edge(1, 0, 1, vec![0, 1]),
+                edge(2, 1, 0, vec![-1, -1]),
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["k0".to_string(), "k1".to_string()],
+            external_names: Vec::new(),
+            node_name_to_internal: BTreeMap::from([("v0".to_string(), 0), ("v1".to_string(), 1)]),
+        };
+        let cut = [vec![linnet::half_edge::involution::EdgeIndex(0)]];
+        let quadratic = generate_3d_expression_from_parsed(
+            &parsed,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(vec![(0, 2)]),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+        .restrict_to_cut_alternatives(&cut);
+        let scalar =
+            generate_3d_expression_from_parsed(&parsed, &Generate3DExpressionOptions::default())
+                .unwrap()
+                .restrict_to_cut_alternatives(&cut);
+        let input = EvaluationInput::deterministic(&parsed, 1337, &BTreeMap::new(), None).unwrap();
+        let actual = evaluate_expression(&parsed, &quadratic, "edges[0][0]**2", &input)
+            .unwrap()
+            .value;
+        let edge_energy_squared = input.loop_spatial_momenta[0]
+            .iter()
+            .map(|component| component * component)
+            .sum::<f64>()
+            + input.masses[0].powi(2);
+        let expected = evaluate_expression(&parsed, &scalar, "1", &input)
+            .unwrap()
+            .value
+            * edge_energy_squared;
+        let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+        assert!(
+            (actual - expected).abs() <= 1.0e-12 * scale,
+            "selected cut retained a contact without its required q0 pole: actual={actual:e}, expected={expected:e}"
         );
     }
 
@@ -2267,7 +2395,7 @@ mod tests {
 
     #[test]
     fn repeated_quintic_channel_lowers_inside_a_mixed_cograph_product() {
-        let mixed_channel = |power: usize| ParsedGraph {
+        let mixed_channel = |power: usize, reverse_uv: bool, join_incidence: bool| ParsedGraph {
             internal_edges: [
                 ParsedGraphInternalEdge {
                     edge_id: 0,
@@ -2295,17 +2423,27 @@ mod tests {
                 },
             ]
             .into_iter()
-            .chain((0..power).map(|occurrence| ParsedGraphInternalEdge {
-                edge_id: occurrence + 2,
-                tail: occurrence + 2,
-                head: (occurrence + 1) % power + 2,
-                label: format!("u{occurrence}"),
-                mass_key: Some("muv".to_string()),
-                signature: MomentumSignature {
-                    loop_signature: vec![0, 1],
-                    external_signature: Vec::new(),
-                },
-                had_pow: false,
+            .chain((0..power).map(|occurrence| {
+                let uv_node = |position| {
+                    if join_incidence && position == 0 {
+                        0
+                    } else {
+                        position + 2
+                    }
+                };
+                let endpoints = (uv_node(occurrence), uv_node((occurrence + 1) % power));
+                ParsedGraphInternalEdge {
+                    edge_id: occurrence + 2,
+                    tail: if reverse_uv { endpoints.1 } else { endpoints.0 },
+                    head: if reverse_uv { endpoints.0 } else { endpoints.1 },
+                    label: format!("u{occurrence}"),
+                    mass_key: Some("muv".to_string()),
+                    signature: MomentumSignature {
+                        loop_signature: vec![0, if reverse_uv { -1 } else { 1 }],
+                        external_signature: Vec::new(),
+                    },
+                    had_pow: false,
+                }
             }))
             .collect(),
             external_edges: Vec::new(),
@@ -2316,81 +2454,88 @@ mod tests {
                 .map(|node| (format!("v{node}"), node))
                 .collect(),
         };
-        let graphs = [mixed_channel(5), mixed_channel(4)];
-        let generated = [
-            generate_3d_expression(
-                &graphs[0],
-                &Generate3DExpressionOptions {
-                    energy_degree_bounds: Some(vec![(0, 1), (2, 6)]),
-                    numerator_sampling_scale: NumeratorSamplingScaleMode::BeyondQuadratic,
-                    ..Default::default()
-                },
-            )
-            .unwrap(),
-            generate_3d_expression(
-                &graphs[1],
-                &Generate3DExpressionOptions {
-                    energy_degree_bounds: Some(vec![(0, 1), (2, 4)]),
-                    numerator_sampling_scale: NumeratorSamplingScaleMode::BeyondQuadratic,
-                    ..Default::default()
-                },
-            )
-            .unwrap(),
-        ];
-        let origins = generated
-            .iter()
-            .map(|generated| {
-                generated
-                    .expression
-                    .orientations
-                    .iter()
-                    .flat_map(|orientation| &orientation.variants)
-                    .filter_map(|variant| variant.origin.clone())
-                    .collect::<std::collections::BTreeSet<_>>()
-            })
-            .collect::<Vec<_>>();
         let mut failures = Vec::new();
-        for (point, (cograph_momentum, uv_momentum)) in [
-            ([0.31, -0.47, 0.83], [-0.59, 0.23, 1.07]),
-            ([-0.41, 0.73, 0.29], [1.19, -0.71, 0.43]),
-            ([0.67, 0.37, -0.53], [-0.89, 1.13, 0.17]),
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            let inputs = [5, 4].map(|power| EvaluationInput {
-                external_momenta: Vec::new(),
-                loop_spatial_momenta: vec![cograph_momentum, uv_momentum],
-                masses: [0.41, 0.67]
-                    .into_iter()
-                    .chain(std::iter::repeat_n(0.73, power))
-                    .collect(),
-                uniform_scale: Some(0.91),
-            });
-            let common = evaluate_expression(
-                &graphs[0],
-                &generated[0].expression,
-                "(dot(edges[2],edges[2])-0.5329)*edges[2][0]**4",
-                &inputs[0],
-            )
-            .unwrap()
-            .value;
-            let lower = evaluate_expression(
-                &graphs[1],
-                &generated[1].expression,
-                "edges[2][0]**4",
-                &inputs[1],
-            )
-            .unwrap()
-            .value;
-            let scale = common.abs().max(lower.abs()).max(f64::MIN_POSITIVE);
-            if (common - lower).abs() > 1.0e-10 * scale {
-                failures.push(format!(
-                    "factorized UV cancellation, point {point}: common={common:e}, lower={lower:e}, ratio={}, common core={}, lower core={}, origins={origins:?}",
-                    common / lower,
-                    generated[0].core_global_prefactor_sign.factor(),
-                    generated[1].core_global_prefactor_sign.factor(),
-                ));
+        for join_incidence in [false, true] {
+            for reverse_uv in [false, true] {
+                let graphs = [
+                    mixed_channel(5, reverse_uv, join_incidence),
+                    mixed_channel(4, reverse_uv, join_incidence),
+                ];
+                let generated = [
+                    generate_3d_expression(
+                        &graphs[0],
+                        &Generate3DExpressionOptions {
+                            energy_degree_bounds: Some(vec![(0, 1), (2, 6)]),
+                            numerator_sampling_scale: NumeratorSamplingScaleMode::BeyondQuadratic,
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap(),
+                    generate_3d_expression(
+                        &graphs[1],
+                        &Generate3DExpressionOptions {
+                            energy_degree_bounds: Some(vec![(0, 1), (2, 4)]),
+                            numerator_sampling_scale: NumeratorSamplingScaleMode::BeyondQuadratic,
+                            ..Default::default()
+                        },
+                    )
+                    .unwrap(),
+                ];
+                let origins = generated
+                    .iter()
+                    .map(|generated| {
+                        generated
+                            .expression
+                            .orientations
+                            .iter()
+                            .flat_map(|orientation| &orientation.variants)
+                            .filter_map(|variant| variant.origin.clone())
+                            .collect::<std::collections::BTreeSet<_>>()
+                    })
+                    .collect::<Vec<_>>();
+                for (point, (cograph_momentum, uv_momentum)) in [
+                    ([0.31, -0.47, 0.83], [-0.59, 0.23, 1.07]),
+                    ([-0.41, 0.73, 0.29], [1.19, -0.71, 0.43]),
+                    ([0.67, 0.37, -0.53], [-0.89, 1.13, 0.17]),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    let inputs = [5, 4].map(|power| EvaluationInput {
+                        external_momenta: Vec::new(),
+                        loop_spatial_momenta: vec![cograph_momentum, uv_momentum],
+                        masses: [0.41, 0.67]
+                            .into_iter()
+                            .chain(std::iter::repeat_n(0.73, power))
+                            .collect(),
+                        uniform_scale: Some(0.91),
+                    });
+                    let common = evaluate_expression(
+                        &graphs[0],
+                        &generated[0].expression,
+                        "(dot(edges[2],edges[2])-0.5329)*edges[2][0]**4",
+                        &inputs[0],
+                    )
+                    .unwrap()
+                    .value;
+                    let lower = evaluate_expression(
+                        &graphs[1],
+                        &generated[1].expression,
+                        "edges[2][0]**4",
+                        &inputs[1],
+                    )
+                    .unwrap()
+                    .value;
+                    let scale = common.abs().max(lower.abs()).max(f64::MIN_POSITIVE);
+                    if (common - lower).abs() > 1.0e-10 * scale {
+                        failures.push(format!(
+                        "factorized UV cancellation, join_incidence={join_incidence}, reverse_uv={reverse_uv}, point {point}: common={common:e}, lower={lower:e}, ratio={}, common core={}, lower core={}, origins={origins:?}",
+                        common / lower,
+                        generated[0].core_global_prefactor_sign.factor(),
+                        generated[1].core_global_prefactor_sign.factor(),
+                    ));
+                    }
+                }
             }
         }
         assert!(failures.is_empty(), "{}", failures.join("\n"));
@@ -3137,6 +3282,102 @@ mod tests {
             failures.is_empty(),
             "independent-bubble bounded maps violate their CFF product invariants:\n{}",
             failures.join("\n"),
+        );
+    }
+
+    #[test]
+    fn two_loop_mixed_carrier_denominator_numerator_pinches_locally() {
+        let edge = |edge_id: usize,
+                    tail: usize,
+                    head: usize,
+                    loop_signature: [i32; 2],
+                    external_signature: i32| ParsedGraphInternalEdge {
+            edge_id,
+            tail,
+            head,
+            label: format!("q{edge_id}"),
+            mass_key: Some("m".to_string()),
+            signature: MomentumSignature {
+                loop_signature: loop_signature.to_vec(),
+                external_signature: vec![external_signature],
+            },
+            had_pow: false,
+        };
+        let parent = ParsedGraph {
+            internal_edges: vec![
+                edge(0, 0, 1, [1, 0], 0),
+                edge(1, 0, 1, [-1, 1], 0),
+                edge(2, 3, 0, [0, 1], 0),
+                edge(3, 1, 2, [0, 1], 0),
+                edge(4, 2, 3, [0, 1], -1),
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["k1".to_string(), "k3".to_string()],
+            external_names: vec!["p".to_string()],
+            node_name_to_internal: (0..4).map(|node| (format!("v{node}"), node)).collect(),
+        };
+        let residual = ParsedGraph {
+            internal_edges: vec![
+                edge(0, 0, 0, [1, 0], 0),
+                edge(1, 2, 0, [0, 1], 0),
+                edge(2, 0, 1, [0, 1], 0),
+                edge(3, 1, 2, [0, 1], -1),
+            ],
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: parent.loop_names.clone(),
+            external_names: parent.external_names.clone(),
+            node_name_to_internal: (0..3).map(|node| (format!("r{node}"), node)).collect(),
+        };
+        let parent_generated = generate_3d_expression(
+            &parent,
+            &Generate3DExpressionOptions {
+                energy_degree_bounds: Some(vec![(1, 2)]),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let residual_generated =
+            generate_3d_expression(&residual, &Generate3DExpressionOptions::default()).unwrap();
+        let parent_input = EvaluationInput {
+            external_momenta: vec![[2.4, 0.0, 0.0, 0.0]],
+            loop_spatial_momenta: vec![[0.31, -0.47, 0.83], [-0.19, 0.37, 0.61]],
+            masses: vec![1.0; 5],
+            uniform_scale: None,
+        };
+        let residual_input = EvaluationInput {
+            masses: vec![1.0; 4],
+            ..parent_input.clone()
+        };
+        let parent_raw = evaluate_expression(
+            &parent,
+            &parent_generated.expression,
+            "dot(edges[1],edges[1])-1",
+            &parent_input,
+        )
+        .unwrap()
+        .value;
+        let residual_raw = evaluate_expression(
+            &residual,
+            &residual_generated.expression,
+            "1",
+            &residual_input,
+        )
+        .unwrap()
+        .value;
+        // This is a raw generalized-3D-representation identity: both sides
+        // still own their variant-local half-edge factors, so GammaLoop's
+        // downstream production-frame metadata must not be applied here.
+        let scale = parent_raw
+            .abs()
+            .max(residual_raw.abs())
+            .max(f64::MIN_POSITIVE);
+        assert!(
+            (parent_raw - residual_raw).abs() <= 1.0e-12 * scale,
+            "D(Q2)/D(Q2) must reproduce the contracted scalar graph: parent={parent_raw:.17e} (frame={}), residual={residual_raw:.17e} (frame={})",
+            parent_generated.core_global_prefactor_sign.factor(),
+            residual_generated.core_global_prefactor_sign.factor(),
         );
     }
 

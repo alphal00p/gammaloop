@@ -6,7 +6,7 @@ use linnet::half_edge::{
     involution::{EdgeIndex, EdgeVec, Orientation},
     subgraph::{SuBitGraph, SubSetLike, SubSetOps},
 };
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::atom::Atom;
 use three_dimensional_reps::CffGenerationContext;
 
 use crate::{
@@ -14,23 +14,32 @@ use crate::{
         CutCFF, CutCFFIndex,
         expression::{OrientationExpression, OrientationID, OrientationSelector},
         orientations::GraphOrientation,
-        surface::{GammaLoopLinearEnergyExpr, LinearEnergyExpr},
+        surface::LinearEnergyExpr,
     },
-    graph::{Graph, GraphThreeDSource, LoopMomentumBasis, cuts::CutSet},
-    momentum::SignOrZero,
+    graph::{Graph, cuts::CutSet},
     settings::global::OrientationPattern,
     utils::GS,
     uv::approx::OrientationProjection,
 };
 
-use super::{Localizer, OrientationIntegrandBranch, OrientationIntegrands};
+use super::{Localizer, OrientationIntegrandBranch, OrientationIntegrands, SourceSelectorHosting};
 
 impl<'a> Localizer<'a> {
     pub(crate) fn new(cutset: &'a CutSet, orientation: OrientationProjection<'a>) -> Self {
         Self {
             cutset,
             orientation,
+            source_selector_hosting: SourceSelectorHosting::PhysicalPrefix,
         }
+    }
+
+    /// Projected local-4D pieces carry independent CFF sums. Their temporary
+    /// production host never becomes a selector and cannot discard a
+    /// source-local residue map merely because it has no complete physical
+    /// extension.
+    pub(in crate::uv::approx) fn with_independent_source_sum(mut self) -> Self {
+        self.source_selector_hosting = SourceSelectorHosting::IndependentSum;
+        self
     }
 
     fn cff_contract_subgraph(self, graph: &Graph, to_contract: &SuBitGraph) -> SuBitGraph {
@@ -224,177 +233,24 @@ impl<'a> Localizer<'a> {
         }
     }
 
-    #[allow(clippy::type_complexity)]
     pub(crate) fn source_selector_representatives(
         self,
         graph: &Graph,
-        source_lmb: &LoopMomentumBasis,
         reduced: &OrientationExpression,
         contract_subgraph: &SuBitGraph,
-        physical_source_frame: Option<(&[(EdgeIndex, Atom)], &[EdgeIndex])>,
     ) -> Result<Vec<OrientationID>> {
         let production = self
             .orientation
             .exact_orientations()
             .expect("source selectors are only requested for an exact projector");
-        if let Some((physical_source_energies, physical_boundary_edges)) = physical_source_frame {
-            {
-                // A generalized production map owns two distinct coordinate
-                // systems: `loop_energy_map` retains the physical contour, while
-                // `edge_energy_map` may contain synthetic +/-M/zero samples used
-                // only to evaluate a higher-rank numerator. Reconstruct the former
-                // in the same contracted source frame used for production CFF
-                // generation before comparing physical selector hosts.
-                let production_contract_subgraph =
-                    graph.tree_edges.subtract(&graph.initial_state_cut);
-                let production_contract_edges = graph.paired_edges(&production_contract_subgraph);
-                let production_source = GraphThreeDSource::new(graph, &production_contract_edges)?;
-                let physical_edges = physical_boundary_edges.to_vec();
-                let production_physical_energy_maps = production
-                .iter()
-                .map(|full| {
-                    physical_edges
-                        .iter()
-                        .map(|edge| {
-                            let coordinates = production_source
-                                .reconstructible_outer_loop_coordinates(*edge)
-                                .ok_or_else(|| {
-                                    eyre!(
-                                        "production edge {} cannot be reconstructed in the contracted physical source frame",
-                                        usize::from(*edge),
-                                    )
-                                })?;
-                            if coordinates.len() != full.loop_energy_map.len() {
-                                return Err(eyre!(
-                                    "production edge {} has {} outer coordinates for {} physical loop-energy maps",
-                                    usize::from(*edge),
-                                    coordinates.len(),
-                                    full.loop_energy_map.len(),
-                                ));
-                            }
-                            let mut energy = coordinates.iter().zip(&full.loop_energy_map).fold(
-                                LinearEnergyExpr::zero(),
-                                |sum, (coefficient, loop_energy)| {
-                                    sum + loop_energy.clone().scale_rational(coefficient.clone())
-                                },
-                            );
-                            let signature = &graph.loop_momentum_basis.edge_signatures[*edge];
-                            for (external_edge, sign) in graph
-                                .loop_momentum_basis
-                                .ext_edges
-                                .iter()
-                                .zip(&signature.external)
-                            {
-                                let coefficient = match sign {
-                                    SignOrZero::Zero => 0,
-                                    SignOrZero::Plus => 1,
-                                    SignOrZero::Minus => -1,
-                                };
-                                energy = energy
-                                    + LinearEnergyExpr::external(*external_edge, coefficient);
-                            }
-                            Ok((*edge, energy.canonical().to_atom_gs(&[])))
-                        })
-                        .collect::<Result<BTreeMap<_, _>>>()
-                })
-                .collect::<Result<Vec<_>>>()?;
-                let mut has_physical_pole_carrier = false;
-                let compatible = production
-                    .iter_enumerated()
-                    .zip(&production_physical_energy_maps)
-                    .filter(|((_, full), full_physical_energies)| {
-                        let mut saw_pole_carrier = false;
-                        let matches_pole_carriers =
-                            physical_source_energies.iter().all(|(edge, energy)| {
-                                let physical_energy = physical_boundary_edges.iter().fold(
-                                    energy.clone(),
-                                    |physical_energy, boundary_edge| {
-                                        let production_energy =
-                                            full_physical_energies[boundary_edge].clone();
-                                        physical_energy
-                                            .replace(GS.emr_mom(*boundary_edge, GS.cind(0)))
-                                            .with(production_energy.clone())
-                                            .replace(crate::utils::external_energy_atom_from_index(
-                                                *boundary_edge,
-                                            ))
-                                            .with(production_energy)
-                                    },
-                                );
-                                let positive_pole = GS.ose(*edge);
-                                let is_positive = (physical_energy.clone() - &positive_pole)
-                                    .expand()
-                                    .is_zero();
-                                let is_negative = (physical_energy.clone() + &positive_pole)
-                                    .expand()
-                                    .is_zero();
-                                if !is_positive && !is_negative {
-                                    // A dependent source edge is not the residue carrier
-                                    // of this term. Its affine energy belongs in the CFF
-                                    // denominator and cannot constrain a global line
-                                    // orientation, which is represented by +/-OSE(edge).
-                                    return true;
-                                }
-                                saw_pole_carrier = true;
-                                // The source-local map owns the numerator
-                                // coordinates. A production map only hosts
-                                // the corresponding exact residue-map key, so its
-                                // affine energy need not reproduce the source
-                                // pole coordinate.  Compare only the physical
-                                // pole direction with that sector.
-                                matches!(
-                                    (is_positive, is_negative, full.data.orientation[*edge]),
-                                    (true, false, Orientation::Default)
-                                        | (false, true, Orientation::Reversed)
-                                )
-                            });
-                        has_physical_pole_carrier |= saw_pole_carrier;
-                        saw_pole_carrier && matches_pole_carriers
-                    })
-                    .map(|((id, _), _)| id)
-                    .collect::<Vec<_>>();
-                if has_physical_pole_carrier {
-                    if compatible.is_empty() {
-                        return Err(eyre!(
-                            "no production orientation matches the exact physical pole-carrier energies {:?} after substituting physical boundary edges {:?}",
-                            physical_source_energies,
-                            physical_boundary_edges,
-                        ));
-                    }
-                    return Ok(compatible
-                        .into_iter()
-                        .filter(|id| {
-                            self.orientation.orientation_pattern.filter_orientation(
-                                &production
-                                    .get(*id)
-                                    .expect("source selector belongs to the production map set")
-                                    .data
-                                    .orientation,
-                            )
-                        })
-                        .collect());
-                }
-            }
-            // This residue has no simple physical pole among the term's
-            // singleton hard channels. Its poles therefore belong to a
-            // repeated hard channel, whose synthetic occurrence directions
-            // must be summed before selecting one physical production host.
-            // Fall through to physical-edge-prefix compatibility below.
-        }
         let contracted_edges = graph.paired_edges(contract_subgraph);
-        // The reduced source map owns numerator energies, while its loop lift
-        // still owns the residue direction in the exact LMB which generated
-        // that source. A generalized contact can set all physical sampling
-        // energies to zero without erasing the surviving pole: reconstruct only
-        // exact +/-OSE directions from that LMB so the two opposite lower
-        // residues are not assigned to the same residue-map-key host.
-        // Production maps then extend those directions into full sectors; the
-        // zero source map remains authoritative for numerator evaluation.
-        // Exact denominator occurrences append synthetic orientation entries.
-        // They describe algebraic contour pieces, not extra physical graph
-        // directions, and only their complete sum has the powered-denominator
-        // normalization.  Restrict production-host compatibility to the
-        // original graph edge prefix; the complete exact source map remains
-        // authoritative for numerator sampling below.
+        // The reduced source map owns numerator energies. Production maps only
+        // host its surviving physical graph-edge directions. Exact denominator
+        // occurrences may append synthetic directions, but those are algebraic
+        // contour pieces rather than selector coordinates and are deliberately
+        // excluded from this physical prefix. Contracted and initial-cut edges
+        // cannot constrain the outer production host. No LMB or energy-frame
+        // reconstruction is involved at this selector boundary.
         let mut explicit_reduced_orientation = EdgeVec::from_iter(
             reduced
                 .data
@@ -416,38 +272,6 @@ impl<'a> Localizer<'a> {
         // constrain the production orientation which hosts that child.
         for (_, edge, _) in graph.iter_edges_of(&graph.initial_state_cut) {
             explicit_reduced_orientation[edge] = Orientation::Undirected;
-        }
-        let external_energy_map = source_lmb
-            .ext_edges
-            .iter()
-            .map(|edge| LinearEnergyExpr::external(*edge, 1))
-            .collect::<Vec<_>>();
-        for edge in graph
-            .as_ref()
-            .iter_edges()
-            .filter_map(|(pair, edge, data)| {
-                (pair.is_paired() && !data.data.is_dummy && !contracted_edges.contains(&edge))
-                    .then_some(edge)
-            })
-        {
-            let signature = &source_lmb.edge_signatures[edge];
-            if signature.internal.len() != reduced.loop_energy_map.len() {
-                continue;
-            }
-            let Some(edge_energy) = signature
-                .try_compute_momentum(&reduced.loop_energy_map, &external_energy_map)
-                .map(LinearEnergyExpr::canonical)
-            else {
-                continue;
-            };
-            if explicit_reduced_orientation[edge] != Orientation::Undirected {
-                continue;
-            }
-            if edge_energy == LinearEnergyExpr::ose(edge, 1) {
-                explicit_reduced_orientation[edge] = Orientation::Default;
-            } else if edge_energy == LinearEnergyExpr::ose(edge, -1) {
-                explicit_reduced_orientation[edge] = Orientation::Reversed;
-            }
         }
         let compatible = production
             .iter_enumerated()
@@ -515,7 +339,6 @@ impl<'a> Localizer<'a> {
     pub(super) fn localized_orientation_terms(
         self,
         graph: &Graph,
-        source_lmb: &LoopMomentumBasis,
         reduced: &OrientationExpression,
         reduced_expression: &Atom,
         contract_subgraph: &SuBitGraph,
@@ -523,7 +346,6 @@ impl<'a> Localizer<'a> {
         valid_production_ids: Option<&BTreeSet<OrientationID>>,
         production_orientation_id: Option<OrientationID>,
         source_edge_energy_map: Option<&[LinearEnergyExpr]>,
-        physical_source_frame: Option<(&[(EdgeIndex, Atom)], &[EdgeIndex])>,
     ) -> Result<Vec<(OrientationID, Atom)>> {
         if let Some(id) = production_orientation_id {
             if valid_production_ids.is_some_and(|valid| !valid.contains(&id)) {
@@ -548,25 +370,52 @@ impl<'a> Localizer<'a> {
                 .unwrap_or_default());
         }
         let candidate_representatives = if self.orientation.exact_orientations().is_some() {
-            if source_edge_energy_map.is_some() {
-                self.source_selector_representatives(
-                    graph,
-                    source_lmb,
-                    reduced,
-                    contract_subgraph,
-                    physical_source_frame,
-                )?
-            } else {
+            if source_edge_energy_map.is_none() {
                 self.exact_representatives(graph, reduced, contract_subgraph)?
+            } else {
+                match self.source_selector_representatives(graph, reduced, contract_subgraph) {
+                    Ok(representatives) if !representatives.is_empty() => representatives,
+                    Ok(_) | Err(_)
+                        if self.source_selector_hosting
+                            == SourceSelectorHosting::IndependentSum =>
+                    {
+                        // A compatible physical-prefix host is the most stable
+                        // mapping frame. Some generalized numerator samples do
+                        // not define a complete production orientation at all;
+                        // the projected local-4D lane must still keep them once
+                        // under a permitted deterministic bookkeeping host.
+                        self.orientation.orientation_ids()
+                    }
+                    Ok(representatives) => representatives,
+                    Err(error) => return Err(error),
+                }
             }
         } else {
             self.coarse_representatives(&reduced.data.orientation)?
         };
-        let representatives = candidate_representatives
+        let mut representatives = candidate_representatives
             .iter()
             .copied()
             .filter(|id| valid_production_ids.is_none_or(|valid| valid.contains(id)))
             .collect::<Vec<_>>();
+        if representatives.is_empty()
+            && source_edge_energy_map.is_some()
+            && (self.source_selector_hosting == SourceSelectorHosting::IndependentSum
+                || self.orientation.explicit_orientation_sum_only)
+        {
+            // A selected cut can exclude every otherwise compatible physical
+            // host. An independently summed source—or any source after the
+            // orientation selectors have explicitly been summed—still owns
+            // this residue through its exact energy map. Use a remaining
+            // cut-valid ID only as deterministic bookkeeping rather than
+            // dropping that residue-map sample.
+            representatives = self
+                .orientation
+                .orientation_ids()
+                .into_iter()
+                .filter(|id| valid_production_ids.is_none_or(|valid| valid.contains(id)))
+                .collect();
+        }
         let mut selector_edges = graph
             .as_ref()
             .iter_edges()
@@ -738,43 +587,6 @@ impl<'a> Localizer<'a> {
             // Preserve the ordinary coarse-localization convention.
             graph.paired_edges(to_contract)
         };
-        // The generated source's loop map is the physical contour authority.
-        // Generalized numerator interpolation changes only `edge_energy_map`,
-        // so all of its +/-/zero samples must inherit the selector obtained by
-        // lifting this unchanged loop map through the same contracted source
-        // coordinates that were used during CFF generation.
-        let contracted_source = self
-            .orientation
-            .exact_orientations()
-            .is_some()
-            .then(|| GraphThreeDSource::new(graph, &internal_edges))
-            .transpose()?;
-        let physical_source_edges = contracted_source.as_ref().map(|source| {
-            graph
-                .as_ref()
-                .iter_edges()
-                .filter_map(|(pair, edge_id, edge)| {
-                    (pair.is_paired()
-                        && !edge.data.is_dummy
-                        && !internal_edges.contains(&edge_id)
-                        && source
-                            .reconstructible_outer_loop_coordinates(edge_id)
-                            .is_some())
-                    .then_some(edge_id)
-                })
-                .collect::<Vec<_>>()
-        });
-        let physical_boundary_edges = contracted_source.as_ref().map(|_| {
-            let mut edges = graph
-                .dummy_stripped_external_flows_of(&contract_subgraph)
-                .included_iter()
-                .map(|hedge| graph.underlying[&hedge])
-                .collect::<Vec<_>>();
-            edges.sort_unstable();
-            edges.dedup();
-            edges
-        });
-
         for (index, cff_term) in cff.terms {
             let valid_production_ids = valid_production_ids.as_ref().map(|valid_by_index| {
                 valid_by_index
@@ -791,60 +603,9 @@ impl<'a> Localizer<'a> {
                     .exact_orientations()
                     .is_some()
                     .then(|| reduced.orientation.edge_energy_map.clone());
-                let physical_source_energies = contracted_source
-                    .as_ref()
-                    .zip(physical_source_edges.as_ref())
-                    .map(|(source, edges)| {
-                        edges
-                            .iter()
-                            .map(|edge_id| {
-                                let coordinates = source
-                                    .reconstructible_outer_loop_coordinates(*edge_id)
-                                    .expect("physical source edges were filtered above");
-                                if coordinates.len() != reduced.orientation.loop_energy_map.len() {
-                                    return Err(eyre!(
-                                        "contracted edge {} has {} outer coordinates for {} generated loop-energy maps",
-                                        usize::from(*edge_id),
-                                        coordinates.len(),
-                                        reduced.orientation.loop_energy_map.len(),
-                                    ));
-                                }
-                                let mut energy = coordinates
-                                    .iter()
-                                    .zip(&reduced.orientation.loop_energy_map)
-                                    .fold(LinearEnergyExpr::zero(), |sum, (coefficient, loop_energy)| {
-                                        sum + loop_energy
-                                            .clone()
-                                            .scale_rational(coefficient.clone())
-                                    });
-                                let signature = &graph.loop_momentum_basis.edge_signatures[*edge_id];
-                                for (external_edge, sign) in graph
-                                    .loop_momentum_basis
-                                    .ext_edges
-                                    .iter()
-                                    .zip(&signature.external)
-                                {
-                                    let coefficient = match sign {
-                                        SignOrZero::Zero => 0,
-                                        SignOrZero::Plus => 1,
-                                        SignOrZero::Minus => -1,
-                                    };
-                                    energy = energy
-                                        + LinearEnergyExpr::external(*external_edge, coefficient);
-                                }
-                                Ok((*edge_id, energy.canonical().to_atom_gs(&[])))
-                            })
-                            .collect::<Result<Vec<_>>>()
-                    })
-                    .transpose()?;
-                let physical_source_frame = physical_source_energies
-                    .as_deref()
-                    .filter(|energies| !energies.is_empty())
-                    .zip(physical_boundary_edges.as_deref());
                 let reduced_expression = &reduced.expression * &production_prefactor;
                 let localized = self.localized_orientation_terms(
                     graph,
-                    &graph.loop_momentum_basis,
                     &reduced.orientation,
                     &reduced_expression,
                     &contract_subgraph,
@@ -852,7 +613,6 @@ impl<'a> Localizer<'a> {
                     valid_production_ids,
                     reduced.production_orientation_id,
                     source_edge_energy_map.as_deref(),
-                    physical_source_frame,
                 )?;
                 for (id, expression) in localized {
                     if !terms.iter().any(|(selector_id, energy_map, _)| {

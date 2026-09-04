@@ -63,9 +63,9 @@ impl NumeratorSamplingScaleMode {
 }
 
 /// Selects whether a CFF source is a standalone orientation catalogue or one
-/// independently integrated factor in an already factorized contour.
+/// independently integrated CFF factor embedded in a larger product.
 ///
-/// A factorized source keeps the ordinary causal sum whenever finite-pole
+/// An embedded source keeps the ordinary causal sum whenever finite-pole
 /// denominators remain. If its denominator set is itself a complete residue
 /// basis, it retains the single deterministic Below residue instead of
 /// reopening the two equivalent routings of every terminal contour.
@@ -76,7 +76,7 @@ impl NumeratorSamplingScaleMode {
 pub enum CffGenerationContext {
     #[default]
     Standalone,
-    FactorizedContour,
+    EmbeddedCffFactor,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -118,13 +118,20 @@ pub enum CffEnergyFactorOwnership {
 
 /// Ownership of the on-shell energy factors for one rational denominator
 /// component. Edge IDs use the internal-energy namespace of the generated
-/// expression. The component boundaries follow the denominator vector
-/// matroid, so they are retained both for graph-disconnected products and for
-/// independent loop factors joined only by incidence.
+/// expression. Component boundaries follow independently generated rational
+/// source frames and survive their deterministic product. A vector-matroid
+/// factorization internal to one Laurent functional remains in that single
+/// frame because its numerator and variant-local factors are not independent.
 #[derive(Debug, Clone, PartialEq, Eq, Encode, Decode)]
 pub struct CffEnergyFactorComponent {
     pub internal_edge_ids: Vec<usize>,
     pub ownership: CffEnergyFactorOwnership,
+    /// The scalar denominator source's uniform CFF convention in this
+    /// independently generated rational component.
+    pub denominator_only_global_prefactor_sign: CffGlobalPrefactorSign,
+    /// The shared causal core's uniform contour convention in this
+    /// independently generated rational component.
+    pub core_global_prefactor_sign: CffGlobalPrefactorSign,
 }
 
 impl CffEnergyFactorComponent {
@@ -139,6 +146,8 @@ impl CffEnergyFactorComponent {
         Self {
             internal_edge_ids,
             ownership: self.ownership,
+            denominator_only_global_prefactor_sign: self.denominator_only_global_prefactor_sign,
+            core_global_prefactor_sign: self.core_global_prefactor_sign,
         }
     }
 }
@@ -160,13 +169,15 @@ pub struct CffGlobalPrefactorSign {
 }
 
 impl CffGlobalPrefactorSign {
-    fn from_exponent(exponent: usize) -> Self {
+    /// Construct the sign represented by `(-1)^exponent`.
+    pub const fn from_exponent(exponent: usize) -> Self {
         Self {
             odd: !exponent.is_multiple_of(2),
         }
     }
 
-    fn product(self, rhs: Self) -> Self {
+    /// Compose two independent uniform prefactor conventions.
+    pub const fn product(self, rhs: Self) -> Self {
         Self {
             odd: self.odd != rhs.odd,
         }
@@ -181,24 +192,25 @@ impl CffGlobalPrefactorSign {
 pub struct GeneratedThreeDExpression<E = (), H = ()> {
     pub expression: ThreeDExpression<OrientationID, E, H>,
     pub energy_factor_ownership: CffEnergyFactorOwnership,
-    /// Transient generation metadata. Persisted expressions retain the
-    /// aggregate ownership above; exact-source consumers use these component
-    /// boundaries before the converted expression is stored.
+    /// Rational-component metadata retained with persisted expressions.  The
+    /// aggregate ownership above is insufficient for products mixing ordinary
+    /// and generalized components, whose source-convention signs must be
+    /// converted independently.
     pub energy_factor_components: Vec<CffEnergyFactorComponent>,
     /// Transient source-edge bounds supplied to this generation call. These always
     /// remain in the generator input's namespace; higher-level consumers that also
     /// need physical-parent bounds must retain them as separate metadata.
     pub source_energy_degree_bounds: Vec<(usize, usize)>,
     /// The scalar denominator source's uniform CFF convention, independent of
-    /// numerator bounds and generalized interpolation. For a physical graph
-    /// source this is the production bridge; exact occurrence sources may
-    /// instead be embedded with a provenance-derived physical-owner bridge.
+    /// numerator bounds and generalized interpolation. This is one ingredient
+    /// of a consumer's componentwise convention bridge; it is not, by itself,
+    /// the GammaLoop production bridge.
     pub denominator_only_global_prefactor_sign: CffGlobalPrefactorSign,
     pub core_global_prefactor_sign: CffGlobalPrefactorSign,
 }
 
-// Component boundaries and source bounds remain transient. The ordinary CFF
-// core prefactor is persisted; energy factors need no separate frame state.
+// Component boundaries and prefactor conventions are persisted because they
+// define the source frame. Source bounds remain transient analysis metadata.
 impl<E, H> bincode::Encode for GeneratedThreeDExpression<E, H>
 where
     ThreeDExpression<OrientationID, E, H>: bincode::Encode,
@@ -209,6 +221,7 @@ where
     ) -> std::result::Result<(), bincode::error::EncodeError> {
         bincode::Encode::encode(&self.expression, encoder)?;
         bincode::Encode::encode(&self.energy_factor_ownership, encoder)?;
+        bincode::Encode::encode(&self.energy_factor_components, encoder)?;
         bincode::Encode::encode(&self.denominator_only_global_prefactor_sign, encoder)?;
         bincode::Encode::encode(&self.core_global_prefactor_sign, encoder)
     }
@@ -227,7 +240,7 @@ where
         Ok(Self {
             expression: bincode::Decode::decode(decoder)?,
             energy_factor_ownership: bincode::Decode::decode(decoder)?,
-            energy_factor_components: Vec::new(),
+            energy_factor_components: bincode::Decode::decode(decoder)?,
             source_energy_degree_bounds: Vec::new(),
             denominator_only_global_prefactor_sign: bincode::Decode::decode(decoder)?,
             core_global_prefactor_sign: bincode::Decode::decode(decoder)?,
@@ -250,18 +263,31 @@ mod generated_expression_persistence_tests {
     }
 
     #[test]
-    fn persisted_core_prefactor_sign_roundtrips() {
-        let generated: GeneratedThreeDExpression = GeneratedThreeDExpression {
-            expression: ThreeDExpression::new_empty(),
-            energy_factor_ownership: CffEnergyFactorOwnership::VariantLocal,
-            energy_factor_components: vec![CffEnergyFactorComponent {
-                internal_edge_ids: vec![3, 4],
-                ownership: CffEnergyFactorOwnership::VariantLocal,
-            }],
-            source_energy_degree_bounds: vec![(3, 2)],
-            denominator_only_global_prefactor_sign: CffGlobalPrefactorSign::from_exponent(1),
-            core_global_prefactor_sign: CffGlobalPrefactorSign::from_exponent(0),
-        };
+    fn persisted_component_prefactor_metadata_roundtrips() {
+        let generated: GeneratedThreeDExpression =
+            GeneratedThreeDExpression {
+                expression: ThreeDExpression::new_empty(),
+                energy_factor_ownership: CffEnergyFactorOwnership::VariantLocal,
+                energy_factor_components: vec![
+                    CffEnergyFactorComponent {
+                        internal_edge_ids: vec![3, 4],
+                        ownership: CffEnergyFactorOwnership::VariantLocal,
+                        denominator_only_global_prefactor_sign:
+                            CffGlobalPrefactorSign::from_exponent(1),
+                        core_global_prefactor_sign: CffGlobalPrefactorSign::from_exponent(0),
+                    },
+                    CffEnergyFactorComponent {
+                        internal_edge_ids: vec![8],
+                        ownership: CffEnergyFactorOwnership::GlobalSourceProduct,
+                        denominator_only_global_prefactor_sign:
+                            CffGlobalPrefactorSign::from_exponent(0),
+                        core_global_prefactor_sign: CffGlobalPrefactorSign::from_exponent(1),
+                    },
+                ],
+                source_energy_degree_bounds: vec![(3, 2)],
+                denominator_only_global_prefactor_sign: CffGlobalPrefactorSign::from_exponent(1),
+                core_global_prefactor_sign: CffGlobalPrefactorSign::from_exponent(0),
+            };
 
         let bytes = bincode::encode_to_vec(&generated, bincode::config::standard()).unwrap();
 
@@ -285,7 +311,10 @@ mod generated_expression_persistence_tests {
             decoded.core_global_prefactor_sign,
             generated.core_global_prefactor_sign
         );
-        assert!(decoded.energy_factor_components.is_empty());
+        assert_eq!(
+            decoded.energy_factor_components,
+            generated.energy_factor_components
+        );
         assert!(decoded.source_energy_degree_bounds.is_empty());
         assert_eq!(
             bincode::encode_to_vec(decoded, bincode::config::standard()).unwrap(),
@@ -440,11 +469,15 @@ fn generate_3d_expression_from_parsed_generated(
     let uses_generalized_expression = cff_bounds_need_generalized_expression(parsed, &bounds);
     let denominator_edge_ids = parsed.denominator_internal_edge_ids();
     let duplicate_excess = cff_duplicate_signature_excess(parsed);
-    let denominator_only_global_prefactor_sign = CffGlobalPrefactorSign::from_exponent(
-        parsed.loop_names.len().saturating_sub(1) + duplicate_excess,
-    );
+    // The scalar denominator convention is the product of the independent
+    // rational contour frames. Incidence may join those factors at a vertex,
+    // but it cannot replace their (-1)^(L-C) product by (-1)^(L-1).
+    let denominator_only_global_prefactor_sign = denominator_contour_frame_sign(parsed);
+    let embedded_terminal_basis = options.cff_generation_context
+        == CffGenerationContext::EmbeddedCffFactor
+        && denominator_set_is_complete_residue_basis(parsed);
     let (expression, energy_factor_ownership, core_global_prefactor_sign) =
-        if options.cff_generation_context == CffGenerationContext::FactorizedContour {
+        if embedded_terminal_basis {
             (
                 KnownFactorCffBuilder::new(parsed, bounds, options.numerator_sampling_scale)
                     .build(true)?,
@@ -487,6 +520,8 @@ fn generate_3d_expression_from_parsed_generated(
         .then_some(CffEnergyFactorComponent {
             internal_edge_ids: denominator_edge_ids,
             ownership: energy_factor_ownership,
+            denominator_only_global_prefactor_sign,
+            core_global_prefactor_sign,
         })
         .into_iter()
         .collect();
@@ -498,6 +533,18 @@ fn generate_3d_expression_from_parsed_generated(
         denominator_only_global_prefactor_sign,
         core_global_prefactor_sign,
     })
+}
+
+/// Whether the denominator set closes every loop-energy contour without
+/// leaving a finite-pole denominator behind.
+///
+/// Only this terminal case retains the deterministic Below residue when it is
+/// embedded as one independently integrated factor of a larger product. A nonterminal or
+/// repeated source still represents an ordinary generalized CFF sum.
+fn denominator_set_is_complete_residue_basis(parsed: &ParsedGraph) -> bool {
+    parsed.denominator_internal_edge_ids().len() == parsed.loop_names.len()
+        && denominator_connected_components(parsed).len() == 1
+        && repeated_groups(parsed).is_empty()
 }
 
 fn generate_pure_cff_expression_from_parsed(
@@ -2396,7 +2443,7 @@ impl<'a> BoundedCffBuilder<'a> {
                 });
         if repeated_channel_needs_known_factor {
             return KnownFactorCffBuilder::new(self.parsed, self.bounds, self.sampling_scale_mode)
-                .build(false);
+                .build_with_inherited_contours(false, &self.inherited_contour_rows);
         }
         if !uniform_sampling_for_nonlinear_degree && self.supports_quadratic_e_surface_only() {
             self.build_quadratic_e_surface_only()?;
@@ -2408,7 +2455,7 @@ impl<'a> BoundedCffBuilder<'a> {
         }
         if self.supports_known_factor_recursive() {
             return KnownFactorCffBuilder::new(self.parsed, self.bounds, self.sampling_scale_mode)
-                .build(false);
+                .build_with_inherited_contours(false, &self.inherited_contour_rows);
         }
         Err(GenerationError::CffHigherEnergyPowerNotImplemented)
     }
@@ -2500,14 +2547,17 @@ impl<'a> BoundedCffBuilder<'a> {
         );
         contact_builder.sampling_scale_mode = self.sampling_scale_mode;
         let mut contact = contact_builder.build_quadratic_recursive(true)?;
-        if subparsed.denominator_internal_edge_ids().len() == subparsed.loop_names.len()
+        let active_is_repeated_denominator = repeated_groups(self.parsed)
+            .iter()
+            .any(|group| group.edge_ids.contains(&active_edge));
+        if active_is_repeated_denominator
+            && subparsed.denominator_internal_edge_ids().len() == subparsed.loop_names.len()
             && denominator_connected_components(&subparsed).len() == 1
             && repeated_groups(&subparsed).is_empty()
         {
-            // The compact terminal carries the signed all-Below residue,
-            // whose uniform core differs by one minus from the surrounding
-            // ordinary CFF core. Consume that ratio on its coefficients now;
-            // determinant, routing, and interpolation signs remain untouched.
+            // Removing one occurrence of an exact repeated denominator leaves
+            // its terminal pole in the duplicate-channel frame. Consume that
+            // frame transition; unequal-mass parallel lines are not repeated.
             for variant in contact
                 .orientations
                 .iter_mut()
@@ -2684,9 +2734,6 @@ impl<'a> BoundedCffBuilder<'a> {
                     .denominator_edges
                     .iter()
                     .map(|edge| EdgeIndex(edge_map.get(&edge.0).copied().unwrap_or(edge.0)))
-                    .chain(std::iter::once(EdgeIndex(edge_id)))
-                    .sorted()
-                    .dedup()
                     .collect::<Vec<_>>();
 
                 for component in &components {
@@ -3217,7 +3264,15 @@ impl<'a> KnownFactorCffBuilder<'a> {
         }
     }
 
-    fn build(mut self, lower_sector_base: bool) -> Result<ThreeDExpression<OrientationID>> {
+    fn build(self, lower_sector_base: bool) -> Result<ThreeDExpression<OrientationID>> {
+        self.build_with_inherited_contours(lower_sector_base, &[])
+    }
+
+    fn build_with_inherited_contours(
+        mut self,
+        lower_sector_base: bool,
+        inherited_contour_rows: &[Vec<i32>],
+    ) -> Result<ThreeDExpression<OrientationID>> {
         let local_to_orig = (0..self.original.internal_edges.len()).collect::<Vec<_>>();
         let recursion_budget = self.recursion_budget();
         self.channel_recursive_terms(
@@ -3226,6 +3281,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
             &BTreeMap::new(),
             &[],
             &[],
+            inherited_contour_rows,
             0,
             Rational::one(),
             lower_sector_base,
@@ -3258,6 +3314,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         replacements: &BTreeMap<usize, LinearEnergyExpr>,
         known_factors: &[KnownLinearExpr],
         extra_half_edges: &[usize],
+        inherited_contour_rows: &[Vec<i32>],
         extra_uniform_scale_power: usize,
         prefactor: Rational,
         lower_sector_base: bool,
@@ -3277,6 +3334,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 replacements,
                 known_factors,
                 extra_half_edges,
+                inherited_contour_rows,
                 extra_uniform_scale_power,
                 prefactor,
                 lower_sector_base,
@@ -3325,6 +3383,11 @@ impl<'a> KnownFactorCffBuilder<'a> {
                     .iter()
                     .map(|local_id| local_to_orig[*local_id])
                     .collect::<Vec<_>>();
+                // Removing serial copies of one repeated denominator channel
+                // selects an algebraic quotient; it does not integrate out a
+                // loop-energy direction. Preserve only genuine inherited
+                // contour closures from the parent recursion.
+                let next_contour_rows = inherited_contour_rows.to_vec();
 
                 let mut sub_replacements = replacements.clone();
                 for local_id in &channel.members {
@@ -3394,6 +3457,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                         &sub_replacements,
                         &sub_known,
                         &next_half_edges,
+                        &next_contour_rows,
                         extra_uniform_scale_power + channel_uniform_power,
                         channel_prefactor,
                         lower_sector_base || !delete.is_empty(),
@@ -3413,6 +3477,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                             &sub_replacements,
                             &next_known,
                             &next_half_edges,
+                            &next_contour_rows,
                             extra_uniform_scale_power + channel_uniform_power,
                             channel_prefactor,
                         )?;
@@ -3432,6 +3497,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         replacements: &BTreeMap<usize, LinearEnergyExpr>,
         known_factors: &[KnownLinearExpr],
         extra_half_edges: &[usize],
+        inherited_contour_rows: &[Vec<i32>],
         extra_uniform_scale_power: usize,
         prefactor: Rational,
         lower_sector_base: bool,
@@ -3494,6 +3560,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 replacements,
                 &known_factors,
                 extra_half_edges,
+                inherited_contour_rows,
                 extra_uniform_scale_power,
                 prefactor.clone(),
                 lower_sector_base,
@@ -3532,6 +3599,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 &next_replacements,
                 &sampled_factors,
                 &next_half_edges,
+                inherited_contour_rows,
                 extra_uniform_scale_power,
                 prefactor.clone(),
                 lower_sector_base,
@@ -3573,6 +3641,8 @@ impl<'a> KnownFactorCffBuilder<'a> {
             .iter()
             .map(|local_id| local_to_orig[*local_id])
             .collect::<Vec<_>>();
+        let mut next_contour_rows = inherited_contour_rows.to_vec();
+        next_contour_rows.push(active_signature.clone());
         for (sample, poly) in contact_weight_polys(total_bounds[active]) {
             for (power, coeff) in poly.into_iter().enumerate() {
                 if coeff.is_zero() {
@@ -3610,6 +3680,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                         &next_replacements,
                         &remapped_factors,
                         &next_half_edges,
+                        &next_contour_rows,
                         extra_uniform_scale_power,
                         branch_prefactor,
                         true,
@@ -3628,6 +3699,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                             &next_replacements,
                             &sampled_factors,
                             &next_half_edges,
+                            &next_contour_rows,
                             extra_uniform_scale_power,
                             branch_prefactor,
                         )?;
@@ -3648,6 +3720,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         replacements: &BTreeMap<usize, LinearEnergyExpr>,
         known_factors: &[KnownLinearExpr],
         extra_half_edges: &[usize],
+        inherited_contour_rows: &[Vec<i32>],
         extra_uniform_scale_power: usize,
         prefactor: Rational,
     ) -> Result<()> {
@@ -3664,6 +3737,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 replacements,
                 branch,
                 extra_half_edges,
+                inherited_contour_rows,
                 extra_uniform_scale_power,
                 prefactor.clone(),
             )?;
@@ -3679,6 +3753,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         replacements: &BTreeMap<usize, LinearEnergyExpr>,
         branch: KnownPolynomialBranch,
         extra_half_edges: &[usize],
+        inherited_contour_rows: &[Vec<i32>],
         extra_uniform_scale_power: usize,
         prefactor: Rational,
     ) -> Result<()> {
@@ -3714,6 +3789,13 @@ impl<'a> KnownFactorCffBuilder<'a> {
             .iter()
             .map(|local_id| local_to_orig[*local_id])
             .collect::<Vec<_>>();
+        let mut branch_contour_rows = inherited_contour_rows.to_vec();
+        branch_contour_rows.extend(delete.iter().map(|local_id| {
+            parsed.internal_edges[*local_id]
+                .signature
+                .loop_signature
+                .clone()
+        }));
         let original_signatures = self
             .original
             .internal_edges
@@ -3735,7 +3817,10 @@ impl<'a> KnownFactorCffBuilder<'a> {
         // CFF, not a simplification of the physical 4D numerator. Construct it
         // through the same lower-sector CFF path as every other quotient; no
         // independent contour or residue-frame oracle is introduced.
-        let base_expression = LowerSectorCffBuilder::new(&branch_parsed).build()?;
+        let mut lower_sector = LowerSectorCffBuilder::new(&branch_parsed);
+        lower_sector.inherited_contour_rows = branch_contour_rows;
+        let base_expression = lower_sector.build()?;
+        let branch_prefactor = prefactor;
         let edge_map = branch_local_to_orig
             .iter()
             .enumerate()
@@ -3781,7 +3866,8 @@ impl<'a> KnownFactorCffBuilder<'a> {
             }
 
             for variant in &orientation.variants {
-                let base_coeff = rational_from_coefficient(&variant.prefactor) * prefactor.clone();
+                let base_coeff =
+                    rational_from_coefficient(&variant.prefactor) * branch_prefactor.clone();
                 if base_coeff.is_zero() {
                     continue;
                 }
@@ -3903,6 +3989,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         replacements: &BTreeMap<usize, LinearEnergyExpr>,
         known_factors: &[KnownLinearExpr],
         extra_half_edges: &[usize],
+        inherited_contour_rows: &[Vec<i32>],
         extra_uniform_scale_power: usize,
         prefactor: Rational,
         lower_sector_base: bool,
@@ -3916,26 +4003,17 @@ impl<'a> KnownFactorCffBuilder<'a> {
         let bounded_lower = if repeated_channel_normal_form_consumed
             && cff_bounds_need_generalized_expression(parsed, &total_bounds)
         {
-            let generated = generate_3d_expression_from_parsed_generated(
-                parsed,
-                &Generate3DExpressionOptions {
-                    energy_degree_bounds: Some(
-                        total_bounds
-                            .iter()
-                            .copied()
-                            .enumerate()
-                            .filter_map(|(edge_id, degree)| {
-                                (degree != 0).then_some((edge_id, degree))
-                            })
-                            .collect(),
-                    ),
-                    numerator_sampling_scale: self.sampling_scale_mode,
-                    ..Default::default()
-                },
-            )?;
-            Some(generated.expression)
+            let mut bounded = BoundedCffBuilder::for_bounds(parsed, total_bounds.clone());
+            bounded.inherited_contour_rows = inherited_contour_rows.to_vec();
+            bounded.sampling_scale_mode = self.sampling_scale_mode;
+            Some(bounded.build()?)
         } else {
             None
+        };
+        let lower_sector_base_expression = || {
+            let mut lower = LowerSectorCffBuilder::new(parsed);
+            lower.inherited_contour_rows = inherited_contour_rows.to_vec();
+            lower.build()
         };
         let direct_base = || -> Result<ThreeDExpression<OrientationID>> {
             // Interpolation has already separated every powered channel before
@@ -3960,27 +4038,46 @@ impl<'a> KnownFactorCffBuilder<'a> {
             // its surviving duplicate parity directly on the generated
             // variants; the standard lower-sector constructor owns the
             // remaining component relation.
-            LowerSectorCffBuilder::new(parsed).build()?
+            lower_sector_base_expression()?
         } else if uses_terminal_residue_basis {
             // A fully reduced denominator basis inherits the ordered Below
             // contour which produced this contact. Retain that single residue
-            // instead of reopening both standalone CFF directions, but consume
-            // its one-minus all-Below-to-parent-core ratio before embedding it.
-            let mut terminal = generate_simple_residue_basis_expression_from_parsed(
-                parsed,
-                &vec![ContourClosure::Below; parsed.loop_names.len()],
-            )?;
-            for variant in terminal
-                .orientations
-                .iter_mut()
-                .flat_map(|orientation| &mut orientation.variants)
-            {
-                variant.prefactor =
-                    rational_to_coefficient(-rational_from_coefficient(&variant.prefactor))?;
+            // instead of reopening both standalone CFF directions. A root
+            // factorized pole and the reduction of an exact repeated channel
+            // consume the one-minus bridge to their public/duplicate core;
+            // an ordinary unequal-mass contact already carries the signed
+            // inherited residue in the parent frame.
+            let root_factorized_pole = inherited_contour_rows.is_empty();
+            let reduced_repeated_channel = repeated_groups(self.original).iter().any(|group| {
+                let surviving = group
+                    .edge_ids
+                    .iter()
+                    .filter(|edge_id| local_to_orig.contains(edge_id))
+                    .count();
+                surviving != 0 && surviving != group.edge_ids.len()
+            });
+            let needs_terminal_bridge = root_factorized_pole || reduced_repeated_channel;
+            let mut terminal = if root_factorized_pole {
+                generate_simple_residue_basis_expression_from_parsed(
+                    parsed,
+                    &vec![ContourClosure::Below; parsed.loop_names.len()],
+                )?
+            } else {
+                lower_sector_base_expression()?
+            };
+            if needs_terminal_bridge {
+                for variant in terminal
+                    .orientations
+                    .iter_mut()
+                    .flat_map(|orientation| &mut orientation.variants)
+                {
+                    variant.prefactor =
+                        rational_to_coefficient(-rational_from_coefficient(&variant.prefactor))?;
+                }
             }
             terminal
         } else if lower_sector_base {
-            LowerSectorCffBuilder::new(parsed).build()?
+            lower_sector_base_expression()?
         } else if !known_factors.is_empty() || !replacements.is_empty() {
             // The surrounding generalized branch has selected this exact
             // denominator product. Once interpolation has consumed every
@@ -3989,7 +4086,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
             if repeated_channel_normal_form_consumed {
                 direct_base()?
             } else {
-                LowerSectorCffBuilder::new(parsed).build()?
+                lower_sector_base_expression()?
             }
         } else {
             generate_pure_cff_expression_from_parsed(parsed)?
@@ -4727,22 +4824,21 @@ impl<'a> LowerSectorCffBuilder<'a> {
         let needs_inherited_component_bridge = components
             .iter()
             .any(|component| component.requires_inherited_component_bridge);
-        // A component product needs the relative core sign (-1)^(C-1). When
-        // the denominator rows split, C counts their independent rational
-        // factors even if incidence joins them at one vertex; otherwise it
-        // counts genuinely disconnected incidence components. An inherited
-        // contour needs that bridge only when it couples several rational
-        // components or is consumed by a compact D=L residue. A row with no
-        // surviving carrier, or one contained in a powered component whose
-        // public CFF already owns its duplicate parity, cannot alter it.
-        let denominator_component_count =
-            if self.force_component_factorization || needs_inherited_component_bridge {
-                components.len()
-            } else {
-                denominator_connected_components(self.parsed).len()
-            };
+        // `assemble_component_product` multiplies one independently closed
+        // rational contour per vector-matroid component. A top-level product
+        // needs the relative (-1)^(C-1) convention. A nested lower sector needs
+        // that bridge exactly when its outermost deleted contour still closes
+        // on a surviving denominator carrier. If that first contour has no
+        // carrier, its parent contact already fixed the residual product frame;
+        // later inherited closures act inside that frame and cannot reopen it.
+        // Closure direction and its Jacobian remain component-local signs.
+        let starts_component_product_frame = self.inherited_contour_rows.is_empty()
+            || self.force_component_factorization
+            || needs_inherited_component_bridge;
+        let component_product_exponent =
+            components.len().saturating_sub(1) * usize::from(starts_component_product_frame);
         let component_product_sign = if self.parsed.initial_state_cut_edges.is_empty()
-            && denominator_component_count.is_multiple_of(2)
+            && !component_product_exponent.is_multiple_of(2)
         {
             Rational::from(-1)
         } else {
@@ -4924,12 +5020,20 @@ impl<'a> LowerSectorCffBuilder<'a> {
             .iter()
             .map(|component| Self::component_basis_edges(signatures, component))
             .collect::<Vec<_>>();
+        // Keep the canonical component order while cumulatively resolving an
+        // inherited contour. Which component supplies the final independent
+        // pivot is part of the residue construction: reordering a terminal
+        // D=L component behind a nonterminal D>L component can replace the
+        // latter's complete public CFF by one compact pole representative and
+        // thereby lose half of a contact term.
+        let component_elimination_order = 0..components.len();
         let mut inherited_closures = vec![Vec::new(); components.len()];
         let mut inherited_component_bridges = vec![false; components.len()];
-        for inherited_row in &self.inherited_contour_rows {
+        for (inherited_row_index, inherited_row) in self.inherited_contour_rows.iter().enumerate() {
             let mut ordered_basis_rows = Vec::new();
             let mut selected = None;
-            for (component_id, basis_edges) in component_bases.iter().enumerate() {
+            for component_id in component_elimination_order.clone() {
+                let basis_edges = &component_bases[component_id];
                 for (local_basis_id, edge_id) in basis_edges.iter().copied().enumerate() {
                     let mut basis_row = signatures[edge_id].loop_signature.clone();
                     if basis_row
@@ -4977,30 +5081,14 @@ impl<'a> LowerSectorCffBuilder<'a> {
             let Some((component_id, local_basis_id, closure, jacobian_sign)) = selected else {
                 continue;
             };
-            let component_rows = component_bases[component_id]
-                .iter()
-                .map(|edge_id| {
-                    signatures[*edge_id]
-                        .loop_signature
-                        .iter()
-                        .map(|value| i64::from(*value))
-                        .collect::<Vec<_>>()
-                })
-                .collect::<Vec<_>>();
-            let component_rank = component_rows.len();
-            let mut component_with_inherited = component_rows;
-            component_with_inherited.push(
-                inherited_row
-                    .iter()
-                    .map(|value| i64::from(*value))
-                    .collect(),
-            );
-            // A row outside the selected component's own span closed only
-            // after earlier components entered the ordered elimination. It
-            // therefore couples their contour frames and needs the C-1
-            // component-product bridge even when this component is powered.
-            inherited_component_bridges[component_id] |=
-                rank_i64(&component_with_inherited) > component_rank;
+            // Contact rows are appended outermost to innermost. Only the
+            // outermost row decides whether the parent's component-product
+            // contour frame survives into this lower sector. Its routing sign
+            // is deliberately not folded into this predicate: `closure` and
+            // `jacobian_sign` already carry that oriented residue data.
+            if inherited_row_index == 0 {
+                inherited_component_bridges[component_id] = true;
+            }
             inherited_closures[component_id].push((local_basis_id, closure, jacobian_sign));
         }
         components
@@ -5085,8 +5173,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
             basis_edges,
             local_to_sub,
             expression,
-            requires_inherited_component_bridge: inherited_component_bridge
-                || (uses_simple_residue_basis && !inherited_closures.is_empty()),
+            requires_inherited_component_bridge: inherited_component_bridge,
         })
     }
 
@@ -5852,6 +5939,66 @@ fn cff_duplicate_signature_excess(parsed: &ParsedGraph) -> usize {
     counts.values().map(|count| count.saturating_sub(1)).sum()
 }
 
+fn denominator_contour_frame_exponent(parsed: &ParsedGraph) -> usize {
+    let signatures = parsed
+        .internal_edges
+        .iter()
+        .map(|edge| edge.signature.clone())
+        .collect::<Vec<_>>();
+    let denominator_rows = parsed
+        .denominator_internal_edge_ids()
+        .into_iter()
+        .map(|edge_id| {
+            signatures[edge_id]
+                .loop_signature
+                .iter()
+                .map(|coefficient| i64::from(*coefficient))
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    // Projected lower sectors retain the parent's loop-coordinate namespace,
+    // including directions already consumed by deleted contours. Their
+    // denominator frame is set by the rank that remains in the rational
+    // denominator, not by the number of names in that ambient namespace.
+    let denominator_rank = rank_i64(&denominator_rows);
+    let rational_component_count = LowerSectorCffBuilder::new(parsed)
+        .vector_matroid_components(&signatures)
+        .into_iter()
+        .filter(|component| {
+            component.iter().any(|edge_id| {
+                signatures[*edge_id]
+                    .loop_signature
+                    .iter()
+                    .any(|coefficient| *coefficient != 0)
+            })
+        })
+        .count();
+    let mut active_signature_counts = BTreeMap::<(MomentumSignature, Option<String>), usize>::new();
+    for edge_id in parsed.denominator_internal_edge_ids() {
+        let signature = &signatures[edge_id];
+        if !signature
+            .loop_signature
+            .iter()
+            .any(|coefficient| *coefficient != 0)
+        {
+            continue;
+        }
+        let (canonical, _) = signature.canonical_up_to_sign();
+        *active_signature_counts
+            .entry((canonical, parsed.internal_edges[edge_id].mass_key.clone()))
+            .or_default() += 1;
+    }
+    let duplicate_excess = active_signature_counts
+        .values()
+        .map(|count| count.saturating_sub(1))
+        .sum::<usize>();
+    denominator_rank.saturating_sub(rational_component_count) + duplicate_excess
+}
+
+fn denominator_contour_frame_sign(parsed: &ParsedGraph) -> CffGlobalPrefactorSign {
+    CffGlobalPrefactorSign::from_exponent(denominator_contour_frame_exponent(parsed))
+}
+
 fn has_duplicate_signature_ignoring_mass(parsed: &ParsedGraph) -> bool {
     let mut counts = BTreeMap::<MomentumSignature, usize>::new();
     for edge in &parsed.internal_edges {
@@ -6132,7 +6279,7 @@ mod causal_generation_tests {
     }
 
     #[test]
-    fn factorized_full_rank_contour_keeps_single_below_residue() {
+    fn embedded_full_rank_factor_keeps_single_below_residue() {
         let parsed = ParsedGraph {
             internal_edges: vec![ParsedGraphInternalEdge {
                 edge_id: 0,
@@ -6165,7 +6312,7 @@ mod causal_generation_tests {
         };
 
         let standalone = generate(CffGenerationContext::Standalone);
-        let factorized = generate(CffGenerationContext::FactorizedContour);
+        let factorized = generate(CffGenerationContext::EmbeddedCffFactor);
 
         assert_eq!(standalone.expression.orientations.len(), 2);
         let factorized_orientation = factorized
@@ -6189,7 +6336,563 @@ mod causal_generation_tests {
     }
 
     #[test]
-    fn factorized_nonterminal_contour_keeps_full_standalone_residue_sum() {
+    fn factorized_generalized_core_does_not_duplicate_denominator_parity() {
+        let parsed = ParsedGraph {
+            internal_edges: (0..2)
+                .map(|edge_id| ParsedGraphInternalEdge {
+                    edge_id,
+                    tail: edge_id,
+                    head: (edge_id + 1) % 2,
+                    label: format!("q{edge_id}"),
+                    mass_key: Some("m".to_string()),
+                    signature: MomentumSignature {
+                        loop_signature: vec![1],
+                        external_signature: Vec::new(),
+                    },
+                    had_pow: false,
+                })
+                .collect(),
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: vec!["q".to_string()],
+            external_names: Vec::new(),
+            node_name_to_internal: BTreeMap::from([("n0".to_string(), 0), ("n1".to_string(), 1)]),
+        };
+        let generate = |energy_degree_bounds| {
+            generate_3d_expression_from_parsed_generated(
+                &parsed,
+                &Generate3DExpressionOptions {
+                    cff_generation_context: CffGenerationContext::EmbeddedCffFactor,
+                    energy_degree_bounds: Some(energy_degree_bounds),
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+        };
+
+        let constant = generate(Vec::new());
+        let generalized = generate(vec![(0, 2)]);
+
+        assert_eq!(cff_duplicate_signature_excess(&parsed), 1);
+        assert_eq!(constant.core_global_prefactor_sign.factor(), -1);
+        assert_eq!(
+            generalized.core_global_prefactor_sign.factor(),
+            1,
+            "variant-local generalized residues already carry the repeated-channel parity",
+        );
+        assert_eq!(
+            generalized.denominator_only_global_prefactor_sign.factor(),
+            -1,
+            "denominator-only source metadata remains independent of numerator ownership",
+        );
+    }
+
+    #[cfg(feature = "eval")]
+    fn powered_identity_test_graph(
+        signatures: Vec<MomentumSignature>,
+        loop_count: usize,
+        external_count: usize,
+    ) -> ParsedGraph {
+        let edge_count = signatures.len();
+        ParsedGraph {
+            internal_edges: signatures
+                .into_iter()
+                .enumerate()
+                .map(|(edge_id, signature)| ParsedGraphInternalEdge {
+                    edge_id,
+                    tail: edge_id,
+                    head: (edge_id + 1) % edge_count,
+                    label: format!("q{edge_id}"),
+                    mass_key: Some("m".to_string()),
+                    signature,
+                    had_pow: false,
+                })
+                .collect(),
+            external_edges: Vec::new(),
+            initial_state_cut_edges: Vec::new(),
+            loop_names: (0..loop_count)
+                .map(|loop_id| format!("k{loop_id}"))
+                .collect(),
+            external_names: (0..external_count)
+                .map(|external_id| format!("p{external_id}"))
+                .collect(),
+            node_name_to_internal: (0..edge_count)
+                .map(|node| (format!("n{node}"), node))
+                .collect(),
+        }
+    }
+
+    #[cfg(feature = "eval")]
+    fn powered_identity_test_generate(
+        parsed: &ParsedGraph,
+        degree: usize,
+    ) -> GeneratedThreeDExpression {
+        generate_3d_expression_from_parsed_generated(
+            parsed,
+            &Generate3DExpressionOptions {
+                cff_generation_context: CffGenerationContext::Standalone,
+                energy_degree_bounds: (degree != 0).then_some(vec![(0, degree)]),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    }
+
+    #[cfg(feature = "eval")]
+    fn powered_identity_test_value(
+        parsed: &ParsedGraph,
+        generated: &GeneratedThreeDExpression,
+        numerator: &str,
+        input: &crate::eval::EvaluationInput,
+    ) -> f64 {
+        crate::eval::evaluate_expression(parsed, &generated.expression, numerator, input)
+            .unwrap()
+            .value
+    }
+
+    #[cfg(feature = "eval")]
+    #[test]
+    fn same_routing_unequal_mass_quadratic_matches_partial_fractions() {
+        let signature = || MomentumSignature {
+            loop_signature: vec![1],
+            external_signature: Vec::new(),
+        };
+        let with_mass_keys = |mut parsed: ParsedGraph, mass_keys: &[&str]| {
+            for (edge, mass_key) in parsed.internal_edges.iter_mut().zip(mass_keys) {
+                edge.mass_key = Some((*mass_key).to_string());
+            }
+            parsed
+        };
+        let parent = with_mass_keys(
+            powered_identity_test_graph(vec![signature(), signature()], 1, 0),
+            &["ma", "mb"],
+        );
+        let pole_a = with_mass_keys(
+            powered_identity_test_graph(vec![signature()], 1, 0),
+            &["ma"],
+        );
+        let pole_b = with_mass_keys(
+            powered_identity_test_graph(vec![signature()], 1, 0),
+            &["mb"],
+        );
+        let spatial = [0.31, -0.47, 0.83];
+        let mass_a: f64 = 0.73;
+        let mass_b: f64 = 1.19;
+        let energy_a_squared = spatial
+            .iter()
+            .map(|component| component * component)
+            .sum::<f64>()
+            + mass_a.powi(2);
+        let energy_b_squared = spatial
+            .iter()
+            .map(|component| component * component)
+            .sum::<f64>()
+            + mass_b.powi(2);
+        let input = |masses| crate::eval::EvaluationInput {
+            external_momenta: Vec::new(),
+            loop_spatial_momenta: vec![spatial],
+            masses,
+            uniform_scale: None,
+        };
+        let generate = |parsed: &ParsedGraph, cff_generation_context, energy_degree_bounds| {
+            generate_3d_expression_from_parsed_generated(
+                parsed,
+                &Generate3DExpressionOptions {
+                    cff_generation_context,
+                    energy_degree_bounds,
+                    ..Default::default()
+                },
+            )
+            .unwrap()
+        };
+
+        let simple_a = generate(
+            &pole_a,
+            CffGenerationContext::EmbeddedCffFactor,
+            Some(Vec::new()),
+        );
+        let simple_b = generate(
+            &pole_b,
+            CffGenerationContext::EmbeddedCffFactor,
+            Some(Vec::new()),
+        );
+        let value_a = powered_identity_test_value(&pole_a, &simple_a, "1", &input(vec![mass_a]));
+        let value_b = powered_identity_test_value(&pole_b, &simple_b, "1", &input(vec![mass_b]));
+        // Each factorized one-pole expression is the public positive pole
+        // convention.  The reduced pole inside the two-denominator parent
+        // instead retains its signed Below contour, hence the overall minus.
+        let expected = -(energy_a_squared * value_a - energy_b_squared * value_b)
+            / (energy_a_squared - energy_b_squared);
+        let mut failures = Vec::new();
+        for context in [
+            CffGenerationContext::Standalone,
+            CffGenerationContext::EmbeddedCffFactor,
+        ] {
+            let quadratic = generate(&parent, context, Some(vec![(0, 2)]));
+            let actual = powered_identity_test_value(
+                &parent,
+                &quadratic,
+                "edges[0][0]**2",
+                &input(vec![mass_a, mass_b]),
+            );
+            let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+            if (actual - expected).abs() > 1.0e-12 * scale {
+                failures.push(format!(
+                    "{context:?}: actual={actual:.17e}, expected={expected:.17e}"
+                ));
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "same-routing unequal-mass quadratic partial fractions failed: {}",
+            failures.join("; "),
+        );
+    }
+
+    #[cfg(feature = "eval")]
+    #[test]
+    fn powered_denominator_lowering_preserves_linear_factor_and_routing() {
+        let graph = |signs: &[i32]| {
+            powered_identity_test_graph(
+                signs
+                    .iter()
+                    .map(|sign| MomentumSignature {
+                        loop_signature: vec![*sign],
+                        external_signature: Vec::new(),
+                    })
+                    .collect(),
+                1,
+                0,
+            )
+        };
+        let input = |edge_count| crate::eval::EvaluationInput {
+            external_momenta: Vec::new(),
+            loop_spatial_momenta: vec![[0.31, -0.47, 0.83]],
+            masses: vec![0.73; edge_count],
+            uniform_scale: None,
+        };
+        let denominator = "dot(edges[0],edges[0])-0.5329";
+        let mut reference: Option<f64> = None;
+        for (parent_signs, child_signs) in [
+            (&[1, 1, 1][..], &[1, 1][..]),
+            (&[1, 1, -1][..], &[1, 1][..]),
+            (&[-1, 1, 1][..], &[-1, 1][..]),
+            (&[1, -1, 1][..], &[1, -1][..]),
+        ] {
+            let parent = graph(parent_signs);
+            let child = graph(child_signs);
+            let parent_generated = powered_identity_test_generate(&parent, 3);
+            let child_generated = powered_identity_test_generate(&child, 1);
+            let physical_q0 = |sign: i32| {
+                if sign == 1 {
+                    "edges[0][0]+0.37".to_string()
+                } else {
+                    "-edges[0][0]+0.37".to_string()
+                }
+            };
+            let parent_numerator = format!("({denominator})*({})", physical_q0(parent_signs[0]));
+            let child_numerator = physical_q0(child_signs[0]);
+            let parent_value = powered_identity_test_value(
+                &parent,
+                &parent_generated,
+                &parent_numerator,
+                &input(parent_signs.len()),
+            );
+            let child_value = powered_identity_test_value(
+                &child,
+                &child_generated,
+                &child_numerator,
+                &input(child_signs.len()),
+            );
+            let scale = parent_value
+                .abs()
+                .max(child_value.abs())
+                .max(f64::MIN_POSITIVE);
+            assert!(
+                (parent_value - child_value).abs() <= 1.0e-11 * scale,
+                "D(Q)*(Q0+c)/D(Q)^3 changed under denominator lowering or routing {parent_signs:?}: parent={parent_value:e}, child={child_value:e}",
+            );
+            if let Some(reference) = reference {
+                assert!(
+                    (parent_value - reference).abs() <= 1.0e-11 * scale,
+                    "the physical powered quotient changed under Q/-Q occurrence reordering: parent={parent_value:e}, reference={reference:e}",
+                );
+            } else {
+                reference = Some(parent_value);
+            }
+        }
+    }
+
+    #[cfg(feature = "eval")]
+    #[test]
+    fn powered_denominator_lowering_preserves_quadratic_retained_factor() {
+        let graph = |power| {
+            powered_identity_test_graph(
+                (0..power)
+                    .map(|_| MomentumSignature {
+                        loop_signature: vec![1],
+                        external_signature: Vec::new(),
+                    })
+                    .collect(),
+                1,
+                0,
+            )
+        };
+        let parent = graph(3);
+        let child = graph(2);
+        let parent_generated = powered_identity_test_generate(&parent, 4);
+        let child_generated = powered_identity_test_generate(&child, 2);
+        let parent_input = crate::eval::EvaluationInput {
+            external_momenta: Vec::new(),
+            loop_spatial_momenta: vec![[-0.59, 0.23, 1.07]],
+            masses: vec![0.73; 3],
+            uniform_scale: None,
+        };
+        let child_input = crate::eval::EvaluationInput {
+            masses: vec![0.73; 2],
+            ..parent_input.clone()
+        };
+        let retained = "(edges[0][0]+0.37)**2";
+        let parent_value = powered_identity_test_value(
+            &parent,
+            &parent_generated,
+            &format!("(dot(edges[0],edges[0])-0.5329)*{retained}"),
+            &parent_input,
+        );
+        let child_value =
+            powered_identity_test_value(&child, &child_generated, retained, &child_input);
+        let scale = parent_value
+            .abs()
+            .max(child_value.abs())
+            .max(f64::MIN_POSITIVE);
+        assert!(
+            (parent_value - child_value).abs() <= 1.0e-11 * scale,
+            "the DOD-2 retained quadratic changed under D(Q)/D(Q)^3 -> 1/D(Q)^2: parent={parent_value:e}, child={child_value:e}",
+        );
+    }
+
+    #[cfg(feature = "eval")]
+    #[test]
+    fn quadratic_repeated_channel_matches_half_simple_pole_under_physical_routing_reversal() {
+        let signature = |sign| MomentumSignature {
+            loop_signature: vec![sign],
+            external_signature: Vec::new(),
+        };
+        let spatial = [0.11_f64, -0.17, 0.23];
+        let mass = 0.73_f64;
+        let input = |edge_count| crate::eval::EvaluationInput {
+            external_momenta: Vec::new(),
+            loop_spatial_momenta: vec![spatial],
+            masses: vec![mass; edge_count],
+            uniform_scale: None,
+        };
+        let simple = powered_identity_test_graph(vec![signature(1)], 1, 0);
+        let simple_generated = generate_3d_expression_from_parsed_generated(
+            &simple,
+            &Generate3DExpressionOptions {
+                cff_generation_context: CffGenerationContext::EmbeddedCffFactor,
+                energy_degree_bounds: Some(Vec::new()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let expected =
+            powered_identity_test_value(&simple, &simple_generated, "1", &input(1)) / 2.0;
+
+        for signs in [[1, -1], [-1, 1], [1, 1], [-1, -1]] {
+            let mut parsed =
+                powered_identity_test_graph(signs.into_iter().map(signature).collect(), 1, 0);
+            for (edge, sign) in parsed.internal_edges.iter_mut().zip(signs) {
+                if sign == -1 {
+                    std::mem::swap(&mut edge.tail, &mut edge.head);
+                }
+            }
+            assert!(crate::validate_parsed_graph(&parsed).ok);
+            for context in [
+                CffGenerationContext::Standalone,
+                CffGenerationContext::EmbeddedCffFactor,
+            ] {
+                let generated = generate_3d_expression_from_parsed_generated(
+                    &parsed,
+                    &Generate3DExpressionOptions {
+                        cff_generation_context: context,
+                        energy_degree_bounds: Some(vec![(0, 2)]),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                let actual =
+                    powered_identity_test_value(&parsed, &generated, "edges[0][0]**2", &input(2));
+                let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+                assert!(
+                    (actual - expected).abs() <= 1.0e-12 * scale,
+                    "Q0^2/D(Q)^2 changed under the valid routing {signs:?} in {context:?}: actual={actual:e}, expected={expected:e}",
+                );
+            }
+        }
+    }
+
+    #[cfg(feature = "eval")]
+    #[test]
+    fn quartic_repeated_channel_is_invariant_under_physical_routing_reversal() {
+        let graph = |signs: [i32; 3]| {
+            let mut parsed = powered_identity_test_graph(
+                signs
+                    .iter()
+                    .map(|sign| MomentumSignature {
+                        loop_signature: vec![*sign],
+                        external_signature: Vec::new(),
+                    })
+                    .collect(),
+                1,
+                0,
+            );
+            // Reversing Q -> -Q for a physical propagator also reverses its
+            // incidence. Keeping these two pieces synchronized is essential:
+            // provenance/routing changes may not manufacture a graph which
+            // violates momentum conservation at its vertices.
+            for (edge, sign) in parsed.internal_edges.iter_mut().zip(signs) {
+                if sign == -1 {
+                    std::mem::swap(&mut edge.tail, &mut edge.head);
+                }
+            }
+            assert!(crate::validate_parsed_graph(&parsed).ok);
+            parsed
+        };
+        let spatial = [0.11_f64, -0.17, 0.23];
+        let mass = 0.73_f64;
+        let energy = (spatial
+            .iter()
+            .map(|component| component * component)
+            .sum::<f64>()
+            + mass * mass)
+            .sqrt();
+        let expected = 3.0 / (16.0 * energy);
+        let mut reference: Option<f64> = None;
+
+        for signs in [[1, 1, 1], [-1, 1, 1], [1, -1, -1], [-1, -1, -1]] {
+            let parsed = graph(signs);
+            let input = crate::eval::EvaluationInput {
+                external_momenta: Vec::new(),
+                loop_spatial_momenta: vec![spatial],
+                masses: vec![mass; 3],
+                uniform_scale: None,
+            };
+            for context in [
+                CffGenerationContext::Standalone,
+                CffGenerationContext::EmbeddedCffFactor,
+            ] {
+                let generated = generate_3d_expression_from_parsed_generated(
+                    &parsed,
+                    &Generate3DExpressionOptions {
+                        cff_generation_context: context,
+                        energy_degree_bounds: Some(vec![(0, 4)]),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                let actual =
+                    powered_identity_test_value(&parsed, &generated, "edges[0][0]**4", &input);
+                let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+                assert!(
+                    (actual - expected).abs() <= 1.0e-12 * scale,
+                    "Q0^4/D(Q)^3 changed under the valid routing {signs:?} in {context:?}: actual={actual:e}, expected={expected:e}",
+                );
+                if let Some(reference) = reference {
+                    assert!(
+                        (actual - reference).abs() <= 1.0e-12 * scale,
+                        "Q0^4/D(Q)^3 is not routing/context invariant: actual={actual:e}, reference={reference:e}",
+                    );
+                } else {
+                    reference = Some(actual);
+                }
+            }
+        }
+    }
+
+    #[cfg(feature = "eval")]
+    #[test]
+    fn shifted_spectator_powered_quotient_matches_lower_source() {
+        let signature = |loop_signature, external_signature| MomentumSignature {
+            loop_signature,
+            external_signature,
+        };
+        let parent = powered_identity_test_graph(
+            vec![
+                signature(vec![1], vec![0]),
+                signature(vec![1], vec![0]),
+                signature(vec![1], vec![1, 0]),
+                signature(vec![1], vec![0, 1]),
+            ],
+            1,
+            2,
+        );
+        let child = powered_identity_test_graph(
+            vec![
+                signature(vec![1], vec![1, 0]),
+                signature(vec![1], vec![0, 1]),
+            ],
+            1,
+            2,
+        );
+        let parent_generated = powered_identity_test_generate(&parent, 4);
+        let child_generated = powered_identity_test_generate(&child, 0);
+        let parent_input = crate::eval::EvaluationInput {
+            external_momenta: vec![[1.4, 0.2, -0.1, 0.3], [0.9, -0.1, 0.4, -0.2]],
+            loop_spatial_momenta: vec![[0.31, -0.47, 0.83]],
+            masses: vec![0.73; 4],
+            uniform_scale: None,
+        };
+        let child_input = crate::eval::EvaluationInput {
+            masses: vec![0.73; 2],
+            ..parent_input.clone()
+        };
+        let parent_value = powered_identity_test_value(
+            &parent,
+            &parent_generated,
+            "(dot(edges[0],edges[0])-0.5329)**2",
+            &parent_input,
+        );
+        let child_value = powered_identity_test_value(&child, &child_generated, "1", &child_input);
+        let scale = parent_value
+            .abs()
+            .max(child_value.abs())
+            .max(f64::MIN_POSITIVE);
+        assert!(
+            (parent_value - child_value).abs() <= 1.0e-11 * scale,
+            "D(q)^2/[D(q)^2 D(q+p) D(q+r)] did not reduce to 1/[D(q+p) D(q+r)]: parent={parent_value:e}, child={child_value:e}",
+        );
+    }
+
+    #[cfg(feature = "eval")]
+    #[test]
+    fn denominator_frame_metadata_uses_active_rank_after_loop_direction_deletion() {
+        let signature = |loop_signature| MomentumSignature {
+            loop_signature,
+            external_signature: Vec::new(),
+        };
+        let parent = powered_identity_test_graph(
+            vec![
+                signature(vec![1, 0]),
+                signature(vec![1, 0]),
+                signature(vec![0, 1]),
+            ],
+            2,
+            0,
+        );
+        let child =
+            powered_identity_test_graph(vec![signature(vec![1, 0]), signature(vec![1, 0])], 2, 0);
+
+        assert_eq!(denominator_contour_frame_sign(&parent).factor(), -1);
+        assert_eq!(
+            denominator_contour_frame_sign(&child).factor(),
+            -1,
+            "a projected child must not count a consumed ambient loop direction in its denominator metadata",
+        );
+    }
+
+    #[test]
+    fn embedded_nonterminal_factor_keeps_full_standalone_residue_sum() {
         let parsed = crate::graph_io::test_graphs::box_graph();
         let generate = |cff_generation_context| {
             generate_3d_expression_from_parsed_generated(
@@ -6204,7 +6907,7 @@ mod causal_generation_tests {
         };
 
         let standalone = generate(CffGenerationContext::Standalone);
-        let factorized = generate(CffGenerationContext::FactorizedContour);
+        let factorized = generate(CffGenerationContext::EmbeddedCffFactor);
 
         assert!(standalone.expression.orientations.len() > 1);
         assert_eq!(
@@ -6396,10 +7099,16 @@ mod causal_generation_tests {
         let mut powered = parsed.clone();
         powered.internal_edges.push(edge(2, vec![0, 1]));
         assert!(
-            !component_bridges(&powered, vec![vec![0, 1]])
+            component_bridges(&powered, vec![vec![0, 1]])
                 .into_iter()
                 .any(|bridges| bridges),
-            "a row contained in one powered component keeps that component's public duplicate parity",
+            "an outermost deleted contour with a surviving powered carrier retains the parent component-product frame",
+        );
+        assert!(
+            component_bridges(&powered, vec![vec![0, -1]])
+                .into_iter()
+                .any(|bridges| bridges),
+            "reversing the carrier changes its closure and Jacobian, not whether the component-product frame survives",
         );
         assert!(
             component_bridges(&powered, vec![vec![1, 0]])
@@ -6417,6 +7126,12 @@ mod causal_generation_tests {
                 .into_iter()
                 .any(|bridges| bridges),
             "a deleted row with no surviving carrier creates no component anchor",
+        );
+        assert!(
+            !component_bridges(&no_carrier, vec![vec![0, 0, 1], vec![0, 1, 0]])
+                .into_iter()
+                .any(|bridges| bridges),
+            "an inner surviving carrier cannot reopen a product frame consumed by the outer contact",
         );
     }
 
@@ -7327,6 +8042,7 @@ mod causal_generation_tests {
                     &BTreeMap::from([(0, replacement)]),
                     &[selector],
                     &[0],
+                    &[],
                     0,
                     Rational::one(),
                     false,
@@ -7914,6 +8630,9 @@ mod graph_source_tests {
             vec![CffEnergyFactorComponent {
                 internal_edge_ids: vec![10, 11, 12, 13],
                 ownership: generated.energy_factor_ownership,
+                denominator_only_global_prefactor_sign: generated
+                    .denominator_only_global_prefactor_sign,
+                core_global_prefactor_sign: generated.core_global_prefactor_sign,
             }]
         );
         let expression = generated.expression;
@@ -8120,6 +8839,9 @@ mod cff_tests {
             vec![CffEnergyFactorComponent {
                 internal_edge_ids: vec![0, 1, 2],
                 ownership: generated.energy_factor_ownership,
+                denominator_only_global_prefactor_sign: generated
+                    .denominator_only_global_prefactor_sign,
+                core_global_prefactor_sign: generated.core_global_prefactor_sign,
             }]
         );
         let expression = generated.expression;
@@ -8181,6 +8903,9 @@ mod cff_tests {
             vec![CffEnergyFactorComponent {
                 internal_edge_ids: vec![1, 2, 3],
                 ownership: generated.energy_factor_ownership,
+                denominator_only_global_prefactor_sign: generated
+                    .denominator_only_global_prefactor_sign,
+                core_global_prefactor_sign: generated.core_global_prefactor_sign,
             }]
         );
         assert_eq!(
@@ -8548,10 +9273,18 @@ mod cff_tests {
                 CffEnergyFactorComponent {
                     internal_edge_ids: vec![0, 1],
                     ownership: CffEnergyFactorOwnership::VariantLocal,
+                    denominator_only_global_prefactor_sign: CffGlobalPrefactorSign::from_exponent(
+                        1
+                    ),
+                    core_global_prefactor_sign: CffGlobalPrefactorSign::from_exponent(0),
                 },
                 CffEnergyFactorComponent {
                     internal_edge_ids: vec![2, 3],
                     ownership: CffEnergyFactorOwnership::GlobalSourceProduct,
+                    denominator_only_global_prefactor_sign: CffGlobalPrefactorSign::from_exponent(
+                        0,
+                    ),
+                    core_global_prefactor_sign: CffGlobalPrefactorSign::from_exponent(0),
                 },
             ],
             "component-local ownership must survive the deterministic disconnected product order"
@@ -8700,6 +9433,9 @@ mod cff_tests {
             vec![CffEnergyFactorComponent {
                 internal_edge_ids: vec![0, 1, 2, 3, 4],
                 ownership: CffEnergyFactorOwnership::VariantLocal,
+                denominator_only_global_prefactor_sign: quadratic
+                    .denominator_only_global_prefactor_sign,
+                core_global_prefactor_sign: quadratic.core_global_prefactor_sign,
             }]
         );
     }

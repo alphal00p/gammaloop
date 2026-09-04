@@ -363,6 +363,7 @@ impl Graph {
             graph = %self.name,
             physical_energy_degree_bounds = ?physical_energy_degree_bounds,
             equivalent_energy_candidates = ?candidates,
+            energy_assignment_plan = ?energy_assignment_plan,
             exact_energy_degree_bounds = ?energy_assignment_plan.energy_degree_bounds(),
             "planned factorized exact-CFF numerator energy assignment"
         );

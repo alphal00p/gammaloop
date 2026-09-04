@@ -34,7 +34,7 @@ use crate::{
     graph::{Graph, LMBext, LoopMomentumBasis},
     momentum::SignOrZero,
     numerator::energy_degree::{EnergyPowerAssignmentPlan, EquivalentEnergyCandidates},
-    utils::{GS, W_, symbols::UvMomentumProvenanceRole},
+    utils::{GS, W_},
     uv::uv_graph::UVE,
 };
 
@@ -100,6 +100,7 @@ struct ExactParsedOccurrence {
     local_edge_id: usize,
     energy_edge_id: usize,
     original_occurrence: usize,
+    is_base: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -117,6 +118,7 @@ struct ExactSourceOwnerOccurrence {
     energy_edge_id: usize,
     raw_momentum: Atom,
     raw_to_parsed_sign: i64,
+    is_base: bool,
 }
 
 /// The exact source coordinates needed to evaluate a parent numerator under
@@ -149,20 +151,36 @@ impl ExactSourceEnergyMapper {
         physical_edges: impl IntoIterator<Item = EdgeIndex>,
     ) -> Result<EquivalentEnergyCandidates> {
         let physical_edges = physical_edges.into_iter().collect::<BTreeSet<_>>();
-        Ok(EquivalentEnergyCandidates::try_from_source_occurrences(
-            self.source_edge_occurrences
-                .iter()
-                .filter(|(edge, _)| physical_edges.contains(edge))
-                .map(|(edge, occurrences)| {
-                    (
-                        *edge,
-                        occurrences
-                            .iter()
-                            .map(|occurrence| occurrence.energy_edge_id)
-                            .collect(),
+        let groups = self
+            .source_edge_occurrences
+            .iter()
+            .filter(|(edge, _)| physical_edges.contains(edge))
+            .map(|(edge, occurrences)| {
+                let mut bases = occurrences.iter().filter(|occurrence| occurrence.is_base);
+                let base = bases.next().ok_or_else(|| {
+                    eyre::eyre!(
+                        "exact source edge {} has no retained base occurrence",
+                        usize::from(*edge),
                     )
-                }),
-        )?)
+                })?;
+                if bases.next().is_some() {
+                    return Err(eyre::eyre!(
+                        "exact source edge {} has more than one retained base occurrence",
+                        usize::from(*edge),
+                    ));
+                }
+                Ok((
+                    *edge,
+                    base.energy_edge_id,
+                    occurrences
+                        .iter()
+                        .filter(|occurrence| !occurrence.is_base)
+                        .map(|occurrence| occurrence.energy_edge_id)
+                        .collect(),
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(EquivalentEnergyCandidates::try_from_partitioned_source_occurrences(groups)?)
     }
 
     /// Replace only temporal components. Spatial components remain in the
@@ -182,7 +200,8 @@ impl ExactSourceEnergyMapper {
             .iter()
             .filter_map(|(edge, occurrences)| {
                 occurrences
-                    .first()
+                    .iter()
+                    .find(|occurrence| occurrence.is_base)
                     .map(|occurrence| (*edge, occurrence.energy_edge_id))
             })
             .collect();
@@ -257,6 +276,11 @@ impl ExactSourceEnergyMapper {
         numerator: &Atom,
         assignments: &BTreeMap<EdgeIndex, usize>,
     ) -> Result<Atom> {
+        crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #trace;
+            assignments = ?assignments,
+            log.numerator = numerator,
+            "Mapping one factorized exact-source numerator factor"
+        );
         let parent_loop_count = self.parent_loop_coordinates.len();
         let expected_active_loop_count = parent_loop_count - self.inactive_loop_count;
         if loop_energy_map.len() != expected_active_loop_count {
@@ -425,22 +449,42 @@ impl ExactSourceEnergyMapper {
                 });
                 return;
             };
-            // The oriented occurrence map already carries the incidence sign
-            // of a fixed owner. A dispatched derivative-grown factor must also
-            // cross from its selected parsed copy back through the raw
-            // rewritten-denominator frame before reaching the stored hard
-            // frame.
-            let occurrence_to_hard_sign = hard_to_raw_sign
-                * if role == UvMomentumProvenanceRole::DenominatorDerived {
-                    occurrence.raw_to_parsed_sign
-                } else {
-                    1
-                };
+            // The CFF energy map is expressed in the canonical parsed
+            // occurrence frame. Convert that sample back through the raw
+            // rewritten-denominator frame to the immutable hard momentum.
+            // Provenance role controls occurrence assignment, not this frame
+            // conversion: H=hR and P=rR imply H^0=h*r*P^0 for either role.
+            let occurrence_to_hard_sign =
+                hard_to_raw_sign * occurrence.raw_to_parsed_sign;
             let signed_energy = if occurrence_to_hard_sign == -1 {
                 -energy.clone()
             } else {
                 energy.clone()
             };
+            crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #trace;
+                owner = usize::from(owner),
+                role = ?role,
+                energy_edge_id = occurrence.energy_edge_id,
+                assignments = ?assignments,
+                hard_to_raw_sign,
+                raw_to_parsed_sign = occurrence.raw_to_parsed_sign,
+                occurrence_to_hard_sign,
+                log.hard = hard,
+                log.raw_momentum = occurrence.raw_momentum,
+                log.selected_energy = energy,
+                log.mapped_energy = signed_energy,
+                "Mapped exact-source tagged temporal factor: owner={} role={:?} occurrence={} hard_to_raw={} raw_to_parsed={} occurrence_to_hard={} hard={} raw={} selected={} mapped={}",
+                usize::from(owner),
+                role,
+                occurrence.energy_edge_id,
+                hard_to_raw_sign,
+                occurrence.raw_to_parsed_sign,
+                occurrence_to_hard_sign,
+                hard,
+                occurrence.raw_momentum,
+                energy,
+                signed_energy,
+            );
             if concrete_temporal {
                 **output = signed_energy;
                 return;
@@ -984,6 +1028,7 @@ impl<'a> GraphThreeDSource<'a> {
                                 local_edge_id: *local_edge_id,
                                 energy_edge_id: *energy_edge_id,
                                 original_occurrence: *original_occurrence,
+                                is_base: true,
                             },
                         )
                     })
@@ -1719,6 +1764,7 @@ impl<'a> GraphThreeDSource<'a> {
                         energy_edge_id: occurrence.energy_edge_id,
                         raw_momentum: denominator.momentum.clone(),
                         raw_to_parsed_sign,
+                        is_base: occurrence.is_base,
                     });
             }
         }
@@ -2098,7 +2144,6 @@ impl<'a> GraphThreeDSource<'a> {
             let (incidences, auxiliary_nodes) = serial_power_chain_incidences(
                 node_map[&self.graph.node_id(source)],
                 node_map[&self.graph.node_id(sink)],
-                1,
                 members.len(),
                 &mut next_node,
             );
@@ -2158,6 +2203,7 @@ impl<'a> GraphThreeDSource<'a> {
                     local_edge_id,
                     energy_edge_id,
                     original_occurrence,
+                    is_base: position == 0,
                 });
                 internal_energy_edges.insert(local_edge_id, energy_edge_id);
             }
@@ -3002,10 +3048,13 @@ fn union_parent(parent: &mut [usize], left: usize, right: usize) {
     }
 }
 
+/// Subdivide one inherited physical incidence into a directed serial chain.
+/// Every copy uses the same tail-to-head routing; denominator-sign
+/// canonicalization is applied once to the common group signature, never to
+/// individual copies.
 fn serial_power_chain_incidences(
     tail: usize,
     head: usize,
-    source_routing_sign: i32,
     power: usize,
     next_node: &mut usize,
 ) -> (Vec<(usize, usize)>, Vec<usize>) {
@@ -3020,13 +3069,7 @@ fn serial_power_chain_incidences(
         .collect::<Vec<_>>();
     let incidences = chain_nodes
         .windows(2)
-        .map(|endpoints| {
-            if source_routing_sign == 1 {
-                (endpoints[0], endpoints[1])
-            } else {
-                (endpoints[1], endpoints[0])
-            }
-        })
+        .map(|endpoints| (endpoints[0], endpoints[1]))
         .collect();
     (incidences, auxiliary_nodes)
 }
@@ -3259,6 +3302,7 @@ mod tests {
         initialisation::test_initialise,
         momentum::sample::LoopIndex,
         numerator::energy_degree::{EnergyPowerAnalyzer, EquivalentEnergyCandidates},
+        utils::symbols::UvMomentumProvenanceRole,
     };
     use color_eyre::Result;
     use linnet::half_edge::subgraph::SubSetOps;
@@ -3387,6 +3431,12 @@ mod tests {
         let [first, second, third] = parsed.internal_edges.as_slice() else {
             panic!("the cubic exact propagator must retain three occurrences");
         };
+        assert!(
+            [second, third]
+                .into_iter()
+                .all(|copy| copy.signature == first.signature),
+            "all serial copies of one physical denominator must use one parsed momentum routing"
+        );
         let mut in_degree = BTreeMap::<usize, usize>::new();
         let mut out_degree = BTreeMap::<usize, usize>::new();
         for edge in [first, second, third] {
@@ -3424,6 +3474,42 @@ mod tests {
                 (offset + 2, usize::from(edge)),
             ])
         );
+        let mapper = source
+            .exact_source_energy_mapper()
+            .expect("a powered exact source has an energy mapper");
+        let owner_occurrences = &mapper.source_edge_occurrences[&edge];
+        assert_eq!(owner_occurrences.len(), 3);
+        assert_eq!(
+            owner_occurrences
+                .iter()
+                .filter(|occurrence| occurrence.is_base)
+                .count(),
+            1,
+            "one serial power chain must retain exactly one base occurrence"
+        );
+        assert_eq!(
+            owner_occurrences
+                .iter()
+                .map(|occurrence| occurrence.energy_edge_id)
+                .collect::<BTreeSet<_>>()
+                .len(),
+            3,
+            "serial copies must keep distinct generalized-CFF energy slots"
+        );
+        let options = graph.denominator_only_cff_3d_expression_options();
+        let generated = graph
+            .generate_3d_expression_for_4d_term(&source, &options, &Atom::one(), None)?
+            .0;
+        for orientation in &generated.expression.orientations {
+            assert!(
+                orientation.data.orientation.iter().count() >= offset + 3,
+                "every serial copy must retain its own residue-map orientation slot"
+            );
+            assert!(
+                orientation.edge_energy_map.len() >= offset + 3,
+                "every serial copy must retain its own edge-energy-map slot"
+            );
+        }
         Ok(())
     }
 
@@ -3972,6 +4058,7 @@ mod tests {
                         .momentum
                         .clone(),
                     raw_to_parsed_sign: 1,
+                    is_base: true,
                 }],
                 "an empty-forest source must preserve numerator provenance and routing",
             );
@@ -4024,6 +4111,7 @@ mod tests {
                 energy_edge_id: 1,
                 raw_momentum: -FunctionBuilder::new(GS.emr_mom).add_arg(1).finish(),
                 raw_to_parsed_sign: -1,
+                is_base: true,
             }],
             "D(-Q) must compose its literal sign with the source routing sign without changing the odd physical numerator Q",
         );
@@ -4304,6 +4392,7 @@ mod tests {
                         energy_edge_id: 0,
                         raw_momentum: FunctionBuilder::new(GS.emr_mom).add_arg(0).finish(),
                         raw_to_parsed_sign: 1,
+                        is_base: true,
                     }],
                 ),
                 (
@@ -4312,6 +4401,7 @@ mod tests {
                         energy_edge_id: 1,
                         raw_momentum: -FunctionBuilder::new(GS.emr_mom).add_arg(1).finish(),
                         raw_to_parsed_sign: -1,
+                        is_base: true,
                     }],
                 ),
             ])
@@ -4600,6 +4690,7 @@ mod tests {
                         .add_arg(usize::from(unique_edge))
                         .finish(),
                     raw_to_parsed_sign: 1,
+                    is_base: true,
                 }],
             )]),
             cut_alias_edges: AHashSet::new(),
@@ -4629,7 +4720,7 @@ mod tests {
     fn exact_energy_bounds_accept_equivalent_literal_occurrences() -> Result<()> {
         test_initialise()?;
         let repeated_edge = EdgeIndex(4);
-        let occurrences = [EdgeIndex(13), EdgeIndex(14)];
+        let occurrences = [EdgeIndex(13), EdgeIndex(14), EdgeIndex(15)];
         let energy = Atom::var(symbolica::symbol!(
             "three_d_source_test::equivalent_bound_energy"
         ));
@@ -4643,12 +4734,14 @@ mod tests {
                 occurrences
                     .iter()
                     .copied()
-                    .map(|occurrence| ExactSourceOwnerOccurrence {
+                    .enumerate()
+                    .map(|(position, occurrence)| ExactSourceOwnerOccurrence {
                         energy_edge_id: usize::from(occurrence),
                         raw_momentum: FunctionBuilder::new(GS.emr_mom)
                             .add_arg(usize::from(repeated_edge))
                             .finish(),
                         raw_to_parsed_sign: 1,
+                        is_base: position == 0,
                     })
                     .collect(),
             )]),
@@ -4676,11 +4769,10 @@ mod tests {
     }
 
     #[test]
-    fn exact_energy_bounds_choose_the_lowest_certified_occurrence_deterministically() -> Result<()>
-    {
+    fn exact_energy_bounds_use_the_explicit_base_independent_of_occurrence_order() -> Result<()> {
         test_initialise()?;
         let repeated_edge = EdgeIndex(4);
-        let occurrences = [EdgeIndex(13), EdgeIndex(14)];
+        let occurrences = [EdgeIndex(13), EdgeIndex(14), EdgeIndex(15)];
         let mapper = ExactSourceEnergyMapper {
             inactive_loop_count: 0,
             parent_loop_coordinates: Vec::new(),
@@ -4698,6 +4790,7 @@ mod tests {
                             .add_arg(usize::from(repeated_edge))
                             .finish(),
                         raw_to_parsed_sign: 1,
+                        is_base: occurrence == occurrences[0],
                     })
                     .collect(),
             )]),
@@ -4750,6 +4843,7 @@ mod tests {
                                 .add_arg(usize::from(repeated_edge))
                                 .finish(),
                             raw_to_parsed_sign: sign,
+                            is_base: *occurrence == occurrences[0],
                         })
                         .collect(),
                 )]),
@@ -4795,7 +4889,7 @@ mod tests {
     fn denominator_derived_dispatch_composes_each_occurrence_routing_sign() -> Result<()> {
         test_initialise()?;
         let owner = EdgeIndex(4);
-        let occurrences = [EdgeIndex(13), EdgeIndex(14)];
+        let occurrences = [EdgeIndex(13), EdgeIndex(14), EdgeIndex(15)];
         let energy = Atom::var(symbolica::symbol!(
             "three_d_source_test::derived_dispatch_energy"
         ));
@@ -4835,9 +4929,12 @@ mod tests {
             let abstract_numerator =
                 function!(GS.dot, reference.as_view(), tagged_abstract.as_view());
 
-            for (raw_signs, parsed_sign) in
-                [([1, -1], 1), ([-1, 1], 1), ([1, -1], -1), ([-1, 1], -1)]
-            {
+            for (raw_signs, parsed_sign) in [
+                ([1, 1, -1], 1),
+                ([1, -1, 1], 1),
+                ([-1, 1, -1], -1),
+                ([-1, -1, 1], -1),
+            ] {
                 let mapper = ExactSourceEnergyMapper {
                     inactive_loop_count: 0,
                     parent_loop_coordinates: Vec::new(),
@@ -4858,6 +4955,7 @@ mod tests {
                                 // P = parsed_sign * H and R = raw_sign * H,
                                 // hence P = (parsed_sign * raw_sign) * R.
                                 raw_to_parsed_sign: parsed_sign * raw_sign,
+                                is_base: *occurrence == occurrences[0],
                             })
                             .collect(),
                     )]),
@@ -4873,14 +4971,14 @@ mod tests {
                         .collect(),
                 };
                 let candidates = mapper.equivalent_energy_candidates([owner])?;
-                let mut edge_energy_map = vec![LinearEnergyExpr::zero(); 15];
+                let mut edge_energy_map = vec![LinearEnergyExpr::zero(); 16];
                 for occurrence in occurrences {
                     edge_energy_map[usize::from(occurrence)] =
                         LinearEnergyExpr::ose(occurrence, parsed_sign);
                 }
                 let expected_bounds = [
-                    (usize::from(occurrences[0]), 1),
                     (usize::from(occurrences[1]), 1),
+                    (usize::from(occurrences[2]), 1),
                 ];
                 let temporal_plan = EnergyPowerAnalyzer::for_physical_emr_edges([owner])
                     .plan_atom_assignment(&temporal_numerator, &candidates)?;
@@ -4894,7 +4992,7 @@ mod tests {
 
                 let expected_vector = Atom::num(hard_sign) * GS.emr_vec_index(owner, &mink_index)
                     + Atom::num(hard_sign) * &energy * GS.energy_delta(&mink_index);
-                for occurrence in occurrences {
+                for occurrence in occurrences.into_iter().skip(1) {
                     let forced_candidates =
                         EquivalentEnergyCandidates::try_from_source_occurrences([(
                             owner,
@@ -4919,6 +5017,249 @@ mod tests {
     }
 
     #[test]
+    fn gl04_t2_planned_lift_matches_post_t_numerator_in_common_loop_coordinates() -> Result<()> {
+        test_initialise()?;
+        let owner_5 = EdgeIndex(5);
+        let owner_6 = EdgeIndex(6);
+        let occurrences_5 = [EdgeIndex(9), EdgeIndex(12)];
+        let occurrences_6 = [EdgeIndex(10), EdgeIndex(11), EdgeIndex(13)];
+        let q_5 = FunctionBuilder::new(GS.emr_mom).add_arg(5).finish();
+        let minus_q_5 = -q_5.clone();
+        let tagged = |owner: EdgeIndex, derived: bool, hard: &Atom, index: Atom| {
+            FunctionBuilder::new(GS.emr_mom)
+                .add_arg(GS.uv_momentum_provenance_tag(
+                    Atom::num(usize::from(owner) as i64).as_view(),
+                    derived,
+                    hard.as_view(),
+                ))
+                .add_arg(index)
+                .finish()
+        };
+        let tagged_momentum = |owner: EdgeIndex, hard: &Atom| {
+            FunctionBuilder::new(GS.emr_mom)
+                .add_arg(GS.uv_momentum_provenance_tag(
+                    Atom::num(usize::from(owner) as i64).as_view(),
+                    true,
+                    hard.as_view(),
+                ))
+                .finish()
+        };
+        let q_5_fixed_0 = tagged(owner_5, false, &q_5, GS.cind(0));
+        let q_5_derived = (0..4)
+            .map(|index| tagged(owner_5, true, &q_5, GS.cind(index)))
+            .collect::<Vec<_>>();
+        let q_6_derived = (0..4)
+            .map(|index| tagged(owner_6, true, &minus_q_5, GS.cind(index)))
+            .collect::<Vec<_>>();
+        let uv_mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
+        let minkowski_square = |components: &[Atom]| {
+            components[0].clone().pow(2)
+                - components[1..]
+                    .iter()
+                    .fold(Atom::Zero, |sum, component| sum + component.clone().pow(2))
+        };
+        let d_5 = GS.den(
+            5,
+            tagged_momentum(owner_5, &q_5),
+            uv_mass_squared.clone(),
+            minkowski_square(&q_5_derived) - &uv_mass_squared,
+        );
+        let d_6 = GS.den(
+            6,
+            tagged_momentum(owner_6, &minus_q_5),
+            uv_mass_squared.clone(),
+            minkowski_square(&q_6_derived) - &uv_mass_squared,
+        );
+        let p = (0..4)
+            .map(|index| {
+                Atom::var(symbolica::symbol!(format!(
+                    "gl04_t2_certificate::p_{index}"
+                )))
+            })
+            .collect::<Vec<_>>();
+        let p_squared = minkowski_square(&p);
+        let p_dot_minus_q = &p[0] * &q_6_derived[0]
+            - p[1..]
+                .iter()
+                .zip(&q_6_derived[1..])
+                .fold(Atom::Zero, |sum, (left, right)| sum + left * right);
+        let planned_numerator = -q_5_fixed_0.pow(2)
+            * (-&d_5 * d_6.clone().pow(2) + (&uv_mass_squared + &p_squared) * &d_5 * &d_6
+                - Atom::num(4) * p_dot_minus_q.clone().pow(2) * &d_5
+                + &uv_mass_squared * d_6.clone().pow(2)
+                + Atom::num(2) * &p_dot_minus_q * &d_5 * &d_6);
+
+        let mapper = ExactSourceEnergyMapper {
+            inactive_loop_count: 0,
+            parent_loop_coordinates: Vec::new(),
+            parent_loop_edges: Vec::new(),
+            edge_coordinates: vec![
+                (owner_5, Vec::new(), Vec::new()),
+                (owner_6, Vec::new(), Vec::new()),
+            ],
+            source_edge_occurrences: BTreeMap::from([
+                (
+                    owner_5,
+                    occurrences_5
+                        .into_iter()
+                        .enumerate()
+                        .map(|(position, occurrence)| ExactSourceOwnerOccurrence {
+                            energy_edge_id: usize::from(occurrence),
+                            raw_momentum: q_5.clone(),
+                            raw_to_parsed_sign: 1,
+                            is_base: position == 0,
+                        })
+                        .collect(),
+                ),
+                (
+                    owner_6,
+                    occurrences_6
+                        .into_iter()
+                        .enumerate()
+                        .map(|(position, occurrence)| ExactSourceOwnerOccurrence {
+                            energy_edge_id: usize::from(occurrence),
+                            raw_momentum: minus_q_5.clone(),
+                            raw_to_parsed_sign: -1,
+                            is_base: position == 0,
+                        })
+                        .collect(),
+                ),
+            ]),
+            cut_alias_edges: AHashSet::new(),
+            exact_ose_replacements: Vec::new(),
+        };
+        let candidates = mapper.equivalent_energy_candidates([owner_5, owner_6])?;
+        let plan = EnergyPowerAnalyzer::for_physical_emr_edges([owner_5, owner_6])
+            .plan_atom_assignment(&planned_numerator, &candidates)?;
+        assert_eq!(
+            plan.energy_degree_bounds(),
+            &[(9, 2), (11, 2), (12, 2), (13, 2)]
+        );
+
+        // First retain distinct symbols for the occurrence samples. They are
+        // not independent proof variables: the structural invariant before
+        // the common-LMB diagonal is that original factors stay on the base
+        // occurrence while denominator-derived factors use only new copies.
+        let mut fixed_assignments = BTreeMap::<EdgeIndex, Vec<usize>>::new();
+        let mut derived_assignments = BTreeMap::<EdgeIndex, BTreeSet<usize>>::new();
+        let _ = plan.map_factors(|factor, assignments| {
+            let mut factor_provenance = BTreeSet::new();
+            let _ = factor.replace_map(|view, _, _| {
+                let AtomView::Fun(momentum) = view else {
+                    return;
+                };
+                if momentum.get_symbol() != GS.emr_mom || momentum.get_nargs() < 1 {
+                    return;
+                }
+                if let Some((owner, role, _)) = GS.uv_momentum_provenance_data(momentum.get(0)) {
+                    factor_provenance.insert((owner, role));
+                }
+            });
+            for (&owner, &occurrence) in assignments {
+                let roles = factor_provenance
+                    .iter()
+                    .filter_map(|(provenance_owner, role)| {
+                        (*provenance_owner == owner).then_some(*role)
+                    })
+                    .collect::<BTreeSet<_>>();
+                assert_eq!(
+                    roles.len(),
+                    1,
+                    "each energy-bearing planned factor must have one provenance role per owner"
+                );
+                let role = *roles.first().expect("one provenance role was certified");
+                match role {
+                    UvMomentumProvenanceRole::DenominatorDerived => {
+                        derived_assignments
+                            .entry(owner)
+                            .or_default()
+                            .insert(occurrence);
+                    }
+                    UvMomentumProvenanceRole::TaylorFixed
+                    | UvMomentumProvenanceRole::PhysicalSourceFixed => {
+                        fixed_assignments.entry(owner).or_default().push(occurrence);
+                    }
+                }
+            }
+            Ok::<_, std::convert::Infallible>(factor.clone())
+        });
+        assert_eq!(fixed_assignments, BTreeMap::from([(owner_5, vec![9, 9])]));
+        assert_eq!(derived_assignments[&owner_5], BTreeSet::from([12]));
+        assert_eq!(derived_assignments[&owner_6], BTreeSet::from([11, 13]));
+
+        let mut edge_energy_map = vec![LinearEnergyExpr::zero(); 14];
+        let mut occurrence_energies = BTreeMap::new();
+        for occurrence in occurrences_5.into_iter().chain(occurrences_6) {
+            let energy = Atom::var(symbolica::symbol!(format!(
+                "gl04_t2_certificate::P_{}_0",
+                usize::from(occurrence)
+            )));
+            edge_energy_map[usize::from(occurrence)].constant = energy.clone();
+            occurrence_energies.insert(occurrence, energy);
+        }
+        let mapped = mapper.map_planned_numerator(&[], &edge_energy_map, &plan)?;
+        let mapped = GS.erase_uv_momentum_provenance(
+            &mapped
+                .replace(GS.den(W_.a_, W_.b_, W_.c_, W_.d_))
+                .with(W_.d_),
+        );
+        let q_spatial = (1..4)
+            .map(|index| GS.emr_mom(owner_5, GS.cind(index)))
+            .collect::<Vec<_>>();
+        let spatial_square = q_spatial
+            .iter()
+            .fold(Atom::Zero, |sum, component| sum + component.clone().pow(2));
+
+        // All serial occurrences denote the same formal loop momentum in the
+        // reconstructed graph LMB. The occurrence-specific samples used by
+        // generalized CFF are deliberately not independent proof variables.
+        let q_0 = Atom::var(symbolica::symbol!("gl04_t2_certificate::q_0"));
+        let common_chart = occurrence_energies
+            .values()
+            .map(|energy| Replacement::new(energy.to_pattern(), q_0.to_pattern()))
+            .collect::<Vec<_>>();
+        let mapped = mapped.replace_multiple(&common_chart);
+        let d = q_0.clone().pow(2) - &spatial_square - &uv_mass_squared;
+        let p_dot_minus_q = -&p[0] * &q_0
+            + p[1..]
+                .iter()
+                .zip(&q_spatial)
+                .fold(Atom::Zero, |sum, (left, right)| sum + left * right);
+        let post_t = -q_0.pow(2)
+            * (-d.clone().pow(3) + (&uv_mass_squared + p_squared) * d.clone().pow(2)
+                - Atom::num(4) * p_dot_minus_q.clone().pow(2) * &d
+                + &uv_mass_squared * d.clone().pow(2)
+                + Atom::num(2) * p_dot_minus_q * d.pow(2));
+        let difference = (mapped - post_t).expand().together();
+        assert!(
+            difference.is_zero(),
+            "the actual GL04 T2 occurrence plan must commute with substitution into one common formal loop momentum: {difference}"
+        );
+
+        // Certify the denominator independently so its evenness cannot hide a
+        // sign error in the numerator check above. The owner-built source has
+        // two serial copies of D(+q) and three of D(-q); the reconstructed
+        // exact source has five occurrences on the same common-LMB carrier.
+        assert_eq!(mapper.source_edge_occurrences[&owner_5].len(), 2);
+        assert_eq!(mapper.source_edge_occurrences[&owner_6].len(), 3);
+        let minus_q_denominator = (-&q_0).pow(2)
+            - q_spatial
+                .iter()
+                .fold(Atom::Zero, |sum, component| sum + (-component).pow(2))
+            - &uv_mass_squared;
+        let post_t_denominator = d.clone().pow(2) * minus_q_denominator.pow(3);
+        let reconstructed_denominator = d.pow(5);
+        let denominator_difference = (post_t_denominator - reconstructed_denominator)
+            .expand()
+            .together();
+        assert!(
+            denominator_difference.is_zero(),
+            "the GL04 T2 owner-built A^2 B^3 denominator must equal the five-occurrence reconstructed source in the common loop chart: {denominator_difference}"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn exact_energy_mapper_uses_source_loop_map_across_distinct_occurrence_pole_maps() -> Result<()>
     {
         test_initialise()?;
@@ -4937,12 +5278,14 @@ mod tests {
                 occurrences
                     .iter()
                     .copied()
-                    .map(|occurrence| ExactSourceOwnerOccurrence {
+                    .enumerate()
+                    .map(|(position, occurrence)| ExactSourceOwnerOccurrence {
                         energy_edge_id: usize::from(occurrence),
                         raw_momentum: FunctionBuilder::new(GS.emr_mom)
                             .add_arg(usize::from(repeated_edge))
                             .finish(),
                         raw_to_parsed_sign: 1,
+                        is_base: position == 0,
                     })
                     .collect(),
             )]),
@@ -5016,18 +5359,19 @@ mod tests {
                         owner,
                         occurrences
                             .into_iter()
-                            .map(|occurrence| ExactSourceOwnerOccurrence {
+                            .enumerate()
+                            .map(|(position, occurrence)| ExactSourceOwnerOccurrence {
                                 energy_edge_id: usize::from(occurrence),
                                 raw_momentum: FunctionBuilder::new(GS.emr_mom)
                                     .add_arg(usize::from(owner))
                                     .finish(),
                                 // Mirror the GL24 T^0 triangle: the second
                                 // even denominator is routed oppositely by
-                                // canonicalization. Its oriented occurrence
-                                // sample already carries that incidence sign
-                                // for a fixed factor; only a dispatched
-                                // derivative factor crosses this frame again.
+                                // canonicalization. Every temporal factor must
+                                // convert the selected parsed occurrence back
+                                // to its immutable hard-momentum frame.
                                 raw_to_parsed_sign: if owner_position == 0 { 1 } else { -1 },
+                                is_base: position == 0,
                             })
                             .collect(),
                     )
@@ -5085,9 +5429,10 @@ mod tests {
             "fixed factors must stay on the canonical occurrence of their own physical owner",
         );
         // Exercise every occurrence-orientation sign pair and every branch in
-        // which either selected contact sample vanishes. A fixed numerator
-        // remains in its canonical occurrence's Laurent functional without a
-        // second parsed-incidence sign.
+        // which either selected contact sample vanishes. Provenance keeps a
+        // fixed numerator on its canonical owner occurrence, while the frame
+        // identity H=hR, P=rR requires H^0=h*r*P^0 after that occurrence has
+        // been selected.
         for left_sign in [-1, 0, 1] {
             for right_sign in [-1, 0, 1] {
                 edge_energy_map[usize::from(occurrences[0][0])].constant =
@@ -5099,16 +5444,18 @@ mod tests {
                     &edge_energy_map,
                     &fixed_temporal_plan,
                 )?;
-                let expected = Atom::num(left_sign * right_sign) * &contacts[0] * &contacts[1];
+                let expected = -Atom::num(left_sign * right_sign) * &contacts[0] * &contacts[1];
                 assert!(
                     (actual - expected).expand().is_zero(),
-                    "fixed factors must consume owner-local samples without a second parsed-routing sign ({left_sign:+}, {right_sign:+})",
+                    "fixed factors must consume owner-local samples in their immutable hard-momentum frame ({left_sign:+}, {right_sign:+})",
                 );
             }
         }
 
         for (owner_occurrences, contact) in occurrences.iter().zip(&contacts) {
-            edge_energy_map[usize::from(owner_occurrences[0])].constant = contact.clone();
+            for occurrence in owner_occurrences {
+                edge_energy_map[usize::from(*occurrence)].constant = contact.clone();
+            }
         }
 
         let abstract_index = LibraryRep::from(Minkowski {}).to_symbolic([Atom::var(W_.a__)]);
@@ -5131,8 +5478,8 @@ mod tests {
                 &fixed_abstract_plan,
             )?,
             (&mapped_vectors[0] + &contacts[0] * GS.energy_delta(&abstract_index))
-                * (&mapped_vectors[1] + &contacts[1] * GS.energy_delta(&abstract_index)),
-            "abstract fixed factors must keep their spatial part and consume the oriented owner-local sample once",
+                * (&mapped_vectors[1] - &contacts[1] * GS.energy_delta(&abstract_index)),
+            "abstract fixed factors must keep their spatial part while converting the selected temporal sample to the hard-momentum frame",
         );
 
         let derived_temporal = tagged(
@@ -5153,7 +5500,7 @@ mod tests {
                 &derived_temporal_plan,
             )?,
             -&contacts[0] * &contacts[1],
-            "denominator-derived factors must retain occurrence-local contact samples and routing signs",
+            "denominator-derived factors must obey the same selected-occurrence frame conversion as fixed factors",
         );
 
         let derived_abstract = tagged(
@@ -5208,6 +5555,7 @@ mod tests {
                         .add_arg(usize::from(literal_edge))
                         .finish(),
                     raw_to_parsed_sign: 1,
+                    is_base: true,
                 }],
             )]),
             cut_alias_edges: AHashSet::new(),
@@ -5288,6 +5636,7 @@ mod tests {
                     .add_arg(usize::from(literal_edge))
                     .finish(),
                 raw_to_parsed_sign: 1,
+                is_base: false,
             });
         edge_energy_map[usize::from(duplicate_occurrence)] = LinearEnergyExpr {
             internal_terms: vec![(duplicate_ose, Atom::num(3))],
@@ -5339,12 +5688,14 @@ mod tests {
                 cut_edge,
                 [1, 2]
                     .into_iter()
-                    .map(|energy_edge_id| ExactSourceOwnerOccurrence {
+                    .enumerate()
+                    .map(|(position, energy_edge_id)| ExactSourceOwnerOccurrence {
                         energy_edge_id,
                         raw_momentum: FunctionBuilder::new(GS.emr_mom)
                             .add_arg(usize::from(cut_edge))
                             .finish(),
                         raw_to_parsed_sign: 1,
+                        is_base: position == 0,
                     })
                     .collect(),
             )]),
@@ -5405,6 +5756,7 @@ mod tests {
                     .add_arg(usize::from(carrier))
                     .finish(),
                 raw_to_parsed_sign: 1,
+                is_base: true,
             }]
         );
         let mut edge_energy_map = vec![LinearEnergyExpr::zero(); usize::from(occurrence) + 1];
@@ -6269,7 +6621,7 @@ mod tests {
                         && (&mapped_left_temporal + &mapped_right_temporal)
                             .expand()
                             .is_zero(),
-                    "nonzero fixed +Q and -Q owner samples must remain opposite in orientation {orientation_id}: left={mapped_left_temporal}, right={mapped_right_temporal}, directions={:?}, label={:?}, origins={:?}",
+                    "the selected +Q and -Q occurrences must map to opposite immutable hard-momentum samples in orientation {orientation_id}: left={mapped_left_temporal}, right={mapped_right_temporal}, directions={:?}, label={:?}, origins={:?}",
                     pair_orientation.data.orientation,
                     pair_orientation.data.label,
                     pair_orientation
@@ -6295,15 +6647,17 @@ mod tests {
         }
         assert_eq!(
             contact_samples,
-            BTreeSet::from([(-1, 1), (0, 1), (1, 1)]),
-            "the fixed-owner bubble must retain the deterministic e0=-,0,+ contact family while the untouched right owner stays at +E, including the (0,+E) lower-sector map",
+            BTreeSet::from([(-1, 1), (0, 0), (1, -1)]),
+            "the fixed-owner bubble must retain the deterministic e0=-,0,+ contact family, with the selected +Q and -Q occurrences mapped oppositely in every branch, including the zero-energy lower sector",
         );
 
         // Canonicalizing the even D(-Q) denominator may change its oriented
         // parsed-edge contact sample. A fixed factor stays on its canonical
         // owner occurrence, whereas a denominator-derived factor may use a
-        // serial copy and therefore composes that copy's routing sign. The
-        // dedicated mapper-role regression exercises the latter dispatch.
+        // serial copy. Once either occurrence is selected, both compose that
+        // occurrence's raw-to-parsed sign to recover the immutable hard
+        // momentum. The dedicated mapper-role regression exercises the two
+        // eligibility rules with this common frame conversion.
         let mapped_hard = mapper.map_numerator(
             &orientation.loop_energy_map,
             &orientation.edge_energy_map,

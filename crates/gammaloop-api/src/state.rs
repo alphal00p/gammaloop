@@ -1558,10 +1558,10 @@ pub struct State {
 
 const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
 const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
-// Version 4 persists the generated CFF core global-prefactor sign. Older states
-// use the previous positional bincode layout and must be regenerated rather
-// than decoded as the new expression type.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 4;
+// Version 5 persists component-local generated-CFF ownership and prefactor
+// metadata. Older states use a previous positional bincode layout and must be
+// regenerated rather than decoded as the new expression type.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 5;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

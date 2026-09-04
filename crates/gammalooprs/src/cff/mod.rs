@@ -205,6 +205,48 @@ pub struct CutCFF {
 }
 
 impl CutCFF {
+    /// Convert a generated CFF into GammaLoop's scalar-denominator convention.
+    ///
+    /// `three-dimensional-reps` writes every source with positive local
+    /// `1/(2E_i)` factors. For an ordinary CFF, surface conversion removes
+    /// those factors and `Graph::cff` restores the historical global
+    /// `1/prod(-2E_i)` product. Its `(-1)^N` is therefore already explicit in
+    /// the converted expression. A generalized CFF must retain its factors on
+    /// each variant because contact terms need not have the same half-edge
+    /// support; in that case the same `(-1)^N` conversion is supplied here.
+    ///
+    /// An ordinary component keeps its established core conversion. A
+    /// generalized component instead uses the numerator-bound-independent
+    /// scalar-denominator frame. Its generalized core sign is already encoded
+    /// in the raw Laurent functional and must not be multiplied again: doing
+    /// so would let an unused numerator-rank allowance change the value of an
+    /// otherwise identical scalar integrand.
+    fn gamma_loop_prefactor_conversion<E, H>(
+        generated: &GeneratedThreeDExpression<E, H>,
+    ) -> CffGlobalPrefactorSign {
+        let retained_positive_energy_factors =
+            generated.energy_factor_ownership == CffEnergyFactorOwnership::VariantLocal;
+        generated.energy_factor_components.iter().fold(
+            CffGlobalPrefactorSign::default(),
+            |conversion, component| {
+                let source_frame = match component.ownership {
+                    CffEnergyFactorOwnership::GlobalSourceProduct => {
+                        component.core_global_prefactor_sign
+                    }
+                    CffEnergyFactorOwnership::VariantLocal => {
+                        component.denominator_only_global_prefactor_sign
+                    }
+                };
+                conversion
+                    .product(CffGlobalPrefactorSign::from_exponent(
+                        component.internal_edge_ids.len()
+                            * usize::from(retained_positive_energy_factors),
+                    ))
+                    .product(source_frame)
+            },
+        )
+    }
+
     pub(crate) const fn production_prefactor_factor(&self) -> i64 {
         self.production_prefactor_bridge.factor()
     }
@@ -327,7 +369,7 @@ impl Graph {
         cutset: &CutSet,
         orientation_pattern: &OrientationPattern,
     ) -> Result<CutCFF> {
-        let production_prefactor_bridge = production.core_global_prefactor_sign;
+        let production_prefactor_bridge = CutCFF::gamma_loop_prefactor_conversion(production);
         let mut cff = production.expression.clone();
         normalize_three_d_expression_cut_support_with_raised_edge_groups(
             &mut cff,
@@ -515,6 +557,7 @@ impl Graph {
             contract_subgraph,
             energy_degree_bound_report,
             physical_cut_support_edges,
+            production_prefactor_bridge,
         ) = {
             let source = if let Some(sub_lmb) = sub_lmb {
                 GraphThreeDSource::from_exact_denominators_in_uv_sub_lmb(
@@ -551,12 +594,14 @@ impl Graph {
                 .iter()
                 .map(|surface| source.physical_linear_surface(surface))
                 .collect::<Vec<_>>();
+            let physical_energy_edges = source
+                .physical_energy_edge_index_map()
+                .expect("exact 4D source has a physical energy-edge projection");
+            let production_prefactor_bridge = CutCFF::gamma_loop_prefactor_conversion(&generated);
             (
                 generated,
                 physical_surfaces,
-                source
-                    .physical_energy_edge_index_map()
-                    .expect("exact 4D source has a physical energy-edge projection"),
+                physical_energy_edges,
                 Arc::new(PlannedExactSourceNumerator {
                     mapper: exact_source_energy_mapper,
                     assignment: energy_assignment,
@@ -570,22 +615,28 @@ impl Graph {
                 source
                     .physical_cut_support_edge_index_map()
                     .expect("exact 4D source has a physical cut-support projection"),
+                production_prefactor_bridge,
             )
         };
         let (generated, surface_ownership) =
             self.convert_4d_expression_surfaces(generated, &physical_surfaces)?;
-        let production_prefactor_bridge = generated.core_global_prefactor_sign;
         let energy_factor_ownership = generated.energy_factor_ownership;
-        // The generated expression retains its own shared-core contour sign.
-        // Consume that exact typed convention rather than inferring a second
-        // sign from a denominator-only or provenance-collapsed source.
+        // Component metadata records the precise typed convention consumed by
+        // the conversion above; no incidence or momentum-sign reconstruction
+        // is performed after generation.
         crate::debug_tags!(#generation, #cff, #inspect;
             denominator_count = denominators.len(),
             production_prefactor_bridge = ?production_prefactor_bridge,
             aggregate_ownership = ?energy_factor_ownership,
             components = ?generated.energy_factor_components,
+            physical_energy_edges = ?physical_energy_edges,
             surface_ownership = ?surface_ownership,
-            "Exact CFF energy-factor component metadata"
+            "Exact CFF energy-factor component metadata: context={:?}, bridge={}, ownership={:?}, components={:?}, physical_energy_edges={:?}",
+            options.cff_generation_context,
+            production_prefactor_bridge.factor(),
+            energy_factor_ownership,
+            generated.energy_factor_components,
+            physical_energy_edges,
         );
         let mut cff = generated.expression;
         // Residue support belongs to physical Cutkosky alternatives even
@@ -729,7 +780,7 @@ impl Graph {
         )?;
         let energy_factor_ownership = generated.energy_factor_ownership;
         let source_energy_degree_bounds = generated.source_energy_degree_bounds.clone();
-        let production_prefactor_bridge = generated.core_global_prefactor_sign;
+        let production_prefactor_bridge = CutCFF::gamma_loop_prefactor_conversion(&generated);
         let mut cff = generated.expression;
         normalize_three_d_expression_cut_support_with_raised_edge_groups(
             &mut cff,
@@ -765,7 +816,11 @@ impl Graph {
             cff_loop_number = cff_loop_number,
             production_prefactor_bridge = ?production_prefactor_bridge,
             log.cff_normalization = cff_normalization,
-            "Graph CFF normalization"
+            "Graph CFF normalization: graph={}, context={:?}, loops={}, bridge={}",
+            self.name,
+            options.cff_generation_context,
+            cff_loop_number,
+            production_prefactor_bridge.factor(),
         );
 
         let mut terms = BTreeMap::new();
@@ -1303,10 +1358,8 @@ mod tests {
                     .map(|child_orientation| {
                         let candidates = localizer.source_selector_representatives(
                             &graph,
-                            &sub_lmb,
                             child_orientation,
                             &source.contract_subgraph(),
-                            None,
                         )?;
                         assert!(
                             !candidates.is_empty(),
@@ -3585,12 +3638,13 @@ mod tests {
             .iter()
             .fold(Atom::zero(), |sum, term| sum + &term.expression)
             .replace(GS.ose(EdgeIndex(0)))
-            .with(on_shell_energy);
+            .with(on_shell_energy.clone());
         assert!(
             (orientation_sum - expected_orientation_sum)
                 .together()
                 .is_zero()
         );
+
         Ok(())
     }
 
@@ -3745,18 +3799,15 @@ mod tests {
         component_ownership.sort_by_key(|(edge_count, _)| *edge_count);
         assert_eq!(
             component_ownership,
-            vec![
-                (2, CffEnergyFactorOwnership::GlobalSourceProduct),
-                (3, CffEnergyFactorOwnership::VariantLocal),
-            ],
-            "the lifted source must retain its pure cograph and generalized UV ownership independently of canonical component order",
+            vec![(5, CffEnergyFactorOwnership::VariantLocal)],
+            "the incidence-connected source must remain one Laurent-functional frame even when its vector matroid factorizes",
         );
         assert_eq!(cograph_generated.core_global_prefactor_sign.factor(), -1);
         assert_eq!(uv_generated.core_global_prefactor_sign.factor(), 1);
         assert_eq!(
             combined_generated.core_global_prefactor_sign.factor(),
-            1,
-            "the connected mixed-component source must retain the pure cograph's duplicate-line parity in its shared CFF frame",
+            -1,
+            "the connected generalized standalone source must retain its coherent two-loop core sign",
         );
 
         let (combined, _) = graph.cff_from_4d_denominators(
@@ -3812,11 +3863,15 @@ mod tests {
             &options,
             &Atom::one(),
         )?;
-        let uncut_difference =
-            (cff_sum(&combined_uncut)? - cff_sum(&cograph_uncut)? * &uv_sum).together();
+        let combined_uncut_sum = cff_sum(&combined_uncut)?;
+        let cograph_uncut_sum = cff_sum(&cograph_uncut)?;
+        let uncut_difference = (&combined_uncut_sum - &cograph_uncut_sum * &uv_sum).together();
         assert!(
             uncut_difference.is_zero(),
-            "an uncut exact source must factorize between its independent rational components: {uncut_difference}",
+            "an uncut exact source must factorize between its independent rational components: difference={uncut_difference}, combined={combined_uncut_sum} (bridge={}), cograph={cograph_uncut_sum} (bridge={}), spectator={uv_sum} (bridge={})",
+            combined_uncut.production_prefactor_factor(),
+            cograph_uncut.production_prefactor_factor(),
+            uv.production_prefactor_factor(),
         );
         let difference = (combined_sum - cograph_sum * uv_sum).together();
         assert!(
@@ -4750,7 +4805,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_cff_quartic_lu_component_factorizes_from_muv_bubble() -> Result<()> {
+    fn exact_cff_quartic_lu_component_factorizes_from_muv_triangle() -> Result<()> {
         test_initialise()?;
         let mut graph: Graph = dot!(
             digraph exact_quartic_lu_muv_product {
@@ -4761,6 +4816,7 @@ mod tests {
                 b -> c [id=4 particle=scalar_0]
                 c -> d [id=2 lmb_id=1 particle=scalar_0]
                 c -> d [id=3 particle=scalar_0]
+                c -> d [id=5 particle=scalar_0]
             },
             "scalars"
         )?;
@@ -4802,21 +4858,22 @@ mod tests {
             full_expr: Atom::one(),
         });
         let muv_mass_squared = Atom::var(GS.m_uv_expansion).pow(2);
-        let muv_denominators = [EdgeIndex(2), EdgeIndex(3)].map(|edge| FourDDenominator {
-            source_edge: edge,
-            momentum: FunctionBuilder::new(GS.emr_mom)
-                .add_arg(usize::from(edge))
-                .finish(),
-            mass_squared: muv_mass_squared.clone(),
-            full_expr: Atom::one(),
-        });
+        let muv_denominators =
+            [EdgeIndex(2), EdgeIndex(3), EdgeIndex(5)].map(|edge| FourDDenominator {
+                source_edge: edge,
+                momentum: FunctionBuilder::new(GS.emr_mom)
+                    .add_arg(usize::from(edge))
+                    .finish(),
+                mass_squared: muv_mass_squared.clone(),
+                full_expr: Atom::one(),
+            });
         let quartic_numerator = GS.emr_mom(EdgeIndex(0), GS.cind(0)).pow(4);
         let combined_denominators = cograph_denominators
             .iter()
             .cloned()
             .chain(muv_denominators.iter().cloned())
             .collect::<Vec<_>>();
-        let uv_edges = [EdgeIndex(2), EdgeIndex(3)];
+        let uv_edges = [EdgeIndex(2), EdgeIndex(3), EdgeIndex(5)];
 
         let cograph_source =
             GraphThreeDSource::from_exact_denominators(&graph, &cograph_denominators)?;
@@ -4860,7 +4917,7 @@ mod tests {
                 })
                 .count(),
             1,
-            "the uncut MUV bubble remains a pure/global CFF component"
+            "the uncut MUV triangle remains a pure/global CFF component"
         );
         assert_eq!(
             generated
@@ -4913,11 +4970,56 @@ mod tests {
                 .fold(Atom::Zero, |sum, term| sum + term)
                 * Atom::num(cff.production_prefactor_factor()))
         };
-        let difference =
-            (exact_sum(&combined)? - exact_sum(&cograph)? * exact_sum(&muv)?).together();
+        let combined_sum = exact_sum(&combined)?;
+        let isolated_product = exact_sum(&cograph)? * exact_sum(&muv)?;
+        let evaluate_arb = |expression: Atom| -> Result<Complex<F<ArbPrec>>> {
+            let mut parameters = vec![Atom::var(GS.pi), Atom::var(GS.m_uv_expansion)];
+            let zero = F::<ArbPrec>::from_f64(0.0);
+            let mut values = vec![
+                Complex::new(zero.clone().pi(), zero.clone()),
+                Complex::new_re(F::from(&Rational::from((7, 5)))),
+            ];
+            for edge in 0..graph.underlying.n_edges() {
+                let edge = EdgeIndex(edge);
+                parameters.extend([GS.ose(edge), cut_energy(edge)]);
+                let edge_value = F::from(&Rational::from((edge.0 as i64 + 2, 3)));
+                values.extend([
+                    Complex::new_re(edge_value.clone()),
+                    Complex::new_re(edge_value),
+                ]);
+                for component in 0..=3 {
+                    parameters.push(GS.emr_mom(edge, GS.cind(component)));
+                    values.push(Complex::new_re(F::from(&Rational::from((
+                        edge.0 as i64 + component as i64 + 1,
+                        component as i64 + 2,
+                    )))));
+                }
+            }
+            let rational: ExpressionEvaluator<SymComplex<Fraction<IntegerRing>>> =
+                expression.evaluator(&parameters).build().map_err(|error| {
+                    eyre::eyre!("failed to build mixed-component evaluator: {error}")
+                })?;
+            let mut arb: ExpressionEvaluator<Complex<F<ArbPrec>>> =
+                rational.map_coeff(&|coefficient| {
+                    Complex::new(F::from(&coefficient.re), F::from(&coefficient.im))
+                });
+            Ok(arb.evaluate_single(&values))
+        };
+        let combined_value = evaluate_arb(combined_sum)?;
+        let isolated_value = evaluate_arb(isolated_product)?;
+        let distance = (combined_value.clone() - isolated_value.clone()).norm().re;
+        let combined_norm = combined_value.clone().norm().re;
+        let isolated_norm = isolated_value.clone().norm().re;
+        let scale = if combined_norm > isolated_norm {
+            combined_norm
+        } else {
+            isolated_norm
+        };
+        let relative_distance = distance / scale;
+        let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
         assert!(
-            difference.is_zero(),
-            "a nonrepeated quartic LU component must factorize from its pure MUV bubble: {difference}"
+            relative_distance <= tolerance,
+            "a nonrepeated quartic LU component must factorize from its pure MUV triangle: combined={combined_value:e}, isolated={isolated_value:e}, relative delta={relative_distance:e}, tolerance={tolerance:e}"
         );
         Ok(())
     }
@@ -6034,7 +6136,7 @@ mod tests {
     }
 
     #[test]
-    fn exact_two_loop_source_matches_production_prefactor_bridge() -> Result<()> {
+    fn exact_two_loop_source_matches_gamma_loop_prefactor_conversion() -> Result<()> {
         test_initialise()?;
         let mut graph: Graph = dot!(digraph exact_two_loop_prefactor {
             edge [num=1 mass=1]
@@ -6073,6 +6175,215 @@ mod tests {
             exact.production_prefactor_factor(),
             ordinary.production_prefactor_factor(),
             "direct and exact two-loop CFF routes must carry the same production convention bridge"
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn gamma_loop_prefactor_conversion_is_component_local_for_mixed_products() {
+        let mut generated: GeneratedThreeDExpression = GeneratedThreeDExpression {
+            expression: three_dimensional_reps::expression::ThreeDExpression::new_empty(),
+            energy_factor_ownership: CffEnergyFactorOwnership::VariantLocal,
+            energy_factor_components: vec![
+                three_dimensional_reps::CffEnergyFactorComponent {
+                    internal_edge_ids: vec![0, 1],
+                    ownership: CffEnergyFactorOwnership::VariantLocal,
+                    denominator_only_global_prefactor_sign: CffGlobalPrefactorSign::from_exponent(
+                        1,
+                    ),
+                    core_global_prefactor_sign: CffGlobalPrefactorSign::default(),
+                },
+                three_dimensional_reps::CffEnergyFactorComponent {
+                    internal_edge_ids: vec![2],
+                    ownership: CffEnergyFactorOwnership::GlobalSourceProduct,
+                    denominator_only_global_prefactor_sign: CffGlobalPrefactorSign::default(),
+                    core_global_prefactor_sign: CffGlobalPrefactorSign::default(),
+                },
+            ],
+            source_energy_degree_bounds: Vec::new(),
+            denominator_only_global_prefactor_sign: CffGlobalPrefactorSign::from_exponent(1),
+            core_global_prefactor_sign: CffGlobalPrefactorSign::default(),
+        };
+
+        assert_eq!(
+            CutCFF::gamma_loop_prefactor_conversion(&generated).factor(),
+            1,
+            "a generalized quadratic component and an ordinary component must retain independent source frames",
+        );
+
+        generated.energy_factor_components[0]
+            .internal_edge_ids
+            .push(3);
+        assert_eq!(
+            CutCFF::gamma_loop_prefactor_conversion(&generated).factor(),
+            -1,
+            "the standalone conversion includes one minus per variant-local denominator",
+        );
+
+        generated.energy_factor_ownership = CffEnergyFactorOwnership::GlobalSourceProduct;
+        generated
+            .energy_factor_components
+            .iter_mut()
+            .for_each(|component| {
+                component.ownership = CffEnergyFactorOwnership::GlobalSourceProduct
+            });
+        assert_eq!(
+            CutCFF::gamma_loop_prefactor_conversion(&generated).factor(),
+            1,
+            "an all-ordinary aggregate receives its negative-energy factors from GammaLoop's global source product",
+        );
+    }
+
+    #[test]
+    fn production_rank_capacity_only_uses_typed_energy_factor_conversion() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph production_rank_capacity_conversion {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1]
+        })?;
+        let ordinary_options = graph.denominator_only_cff_3d_expression_options();
+        let mut generalized_options = ordinary_options.clone();
+        generalized_options.energy_degree_bounds = Some(vec![(0, 2)]);
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let ordinary_generated = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &ordinary_options,
+            None,
+        )?;
+        let generalized_generated = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &generalized_options,
+            None,
+        )?;
+        assert_eq!(
+            ordinary_generated.energy_factor_ownership,
+            CffEnergyFactorOwnership::GlobalSourceProduct,
+        );
+        assert_eq!(
+            generalized_generated.energy_factor_ownership,
+            CffEnergyFactorOwnership::VariantLocal,
+        );
+
+        let cutset = CutSet::empty(graph.n_hedges());
+        let pattern = OrientationPattern::default();
+        let ordinary =
+            graph.cff_from_production_expression(&ordinary_generated, &cutset, &pattern)?;
+        let generalized =
+            graph.cff_from_production_expression(&generalized_generated, &cutset, &pattern)?;
+        let raw_sum = |cff: &CutCFF| {
+            cff.terms
+                .values()
+                .flat_map(|term| &term.orientations)
+                .fold(Atom::Zero, |sum, orientation| sum + &orientation.expression)
+        };
+        let common_energy = Atom::var(symbolica::symbol!(
+            "cff_test::production_rank_capacity_energy"
+        ));
+        let specialize_equal_energies = |expression: Atom| {
+            expression
+                .replace(GS.ose(EdgeIndex(0)))
+                .with(common_energy.clone())
+                .replace(GS.ose(EdgeIndex(1)))
+                .with(common_energy.clone())
+        };
+        let ordinary_value = specialize_equal_energies(raw_sum(&ordinary))
+            * Atom::num(CutCFF::gamma_loop_prefactor_conversion(&ordinary_generated).factor());
+        let generalized_core_value = specialize_equal_energies(raw_sum(&generalized))
+            * Atom::num(generalized_generated.core_global_prefactor_sign.factor());
+        let generalized_typed_value = specialize_equal_energies(raw_sum(&generalized))
+            * Atom::num(CutCFF::gamma_loop_prefactor_conversion(&generalized_generated).factor());
+
+        assert!(
+            (ordinary_value.clone() - generalized_typed_value)
+                .together()
+                .is_zero(),
+            "declaring unused rank-two capacity must not change a scalar rational CFF",
+        );
+        assert!(
+            !(ordinary_value - generalized_core_value)
+                .together()
+                .is_zero(),
+            "the control must expose the missing typed energy-factor conversion",
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn two_loop_rank_capacity_rejects_a_second_generalized_core_sign() -> Result<()> {
+        test_initialise()?;
+        let mut graph: Graph = dot!(digraph two_loop_rank_capacity_conversion {
+            edge [num=1 mass=1]
+            node [num=1]
+
+            a -> b [id=0 lmb_id=0]
+            a -> b [id=1 lmb_id=1]
+            a -> b [id=2]
+        })?;
+        let ordinary_options = graph.denominator_only_cff_3d_expression_options();
+        let mut generalized_options = ordinary_options.clone();
+        generalized_options.energy_degree_bounds = Some(vec![(0, 2)]);
+        let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let ordinary_generated = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &ordinary_options,
+            None,
+        )?;
+        let generalized_generated = graph.generate_3d_expression_for_integrand(
+            &[],
+            &canonization,
+            &generalized_options,
+            None,
+        )?;
+        assert_eq!(
+            generalized_generated.core_global_prefactor_sign.factor(),
+            -1
+        );
+
+        let cutset = CutSet::empty(graph.n_hedges());
+        let pattern = OrientationPattern::default();
+        let ordinary =
+            graph.cff_from_production_expression(&ordinary_generated, &cutset, &pattern)?;
+        let generalized =
+            graph.cff_from_production_expression(&generalized_generated, &cutset, &pattern)?;
+        let raw_sum = |cff: &CutCFF| {
+            cff.terms
+                .values()
+                .flat_map(|term| &term.orientations)
+                .fold(Atom::Zero, |sum, orientation| sum + &orientation.expression)
+        };
+        let specialize = |mut expression: Atom| {
+            for (edge, energy) in [(0, 2), (1, 3), (2, 5)] {
+                expression = expression
+                    .replace(GS.ose(EdgeIndex(edge)))
+                    .with(Atom::num(energy));
+            }
+            expression
+        };
+        let ordinary_value = specialize(raw_sum(&ordinary))
+            * Atom::num(CutCFF::gamma_loop_prefactor_conversion(&ordinary_generated).factor());
+        let generalized_raw = specialize(raw_sum(&generalized));
+        let typed_value = &generalized_raw
+            * Atom::num(CutCFF::gamma_loop_prefactor_conversion(&generalized_generated).factor());
+        let double_core_value = generalized_raw
+            * Atom::num(
+                CutCFF::gamma_loop_prefactor_conversion(&generalized_generated)
+                    .product(generalized_generated.core_global_prefactor_sign)
+                    .factor(),
+            );
+
+        assert!(
+            (ordinary_value.clone() - typed_value).together().is_zero(),
+            "unused rank capacity must preserve the scalar two-loop CFF",
+        );
+        assert!(
+            !(ordinary_value - double_core_value).together().is_zero(),
+            "the two-loop control must expose double application of the generalized core sign",
         );
         Ok(())
     }

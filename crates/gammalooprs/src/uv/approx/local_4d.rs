@@ -240,24 +240,6 @@ impl Full4dCts {
     }
 
     #[cfg(test)]
-    pub(crate) fn from_frozen_coefficient<S: SubGraphLike>(
-        coefficient: &Atom,
-        graph: &Graph,
-        cograph: &S,
-        lmb: &LoopMomentumBasis,
-    ) -> Self {
-        Self(FourDSectors::new(
-            vec![FourDSector::new(
-                coefficient * graph.denominator(cograph, |_| -1),
-                Vec::new(),
-                None,
-                vec![lmb.clone()],
-            )],
-            Vec::new(),
-        ))
-    }
-
-    #[cfg(test)]
     pub(crate) fn terms(&self) -> Result<Vec<FourDTerm>> {
         FourDTerm::from_view(self.0.atom.as_view())
     }

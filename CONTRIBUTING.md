@@ -85,6 +85,38 @@ to preserve a factorized numerator. Each progress report for a discrepancy
 should state: what is shared, what first differs, what has been excluded, the
 smallest current reproducer, and the single next comparison that will reduce it.
 
+#### Projected local-4D UV reconstruction stop rule
+
+For a projected local-4D UV-to-CFF mismatch, reconstruction must be certified
+*before* investigating CFF recursion, contour signs, or residue aggregation.
+This is a mandatory correctness boundary, not an optional diagnostic:
+
+1. Retain the completed post-Taylor numerator in the compatible hard sub-LMB,
+   including the original edge owner on every pre-existing numerator factor.
+2. Construct the factorized UV skeleton only from those original owners. A UV
+   derivative may add serial copies of its own physical line; do not infer a
+   graph from denominator incidence or use momentum conservation across lines
+   to reassign numerator factors.
+3. Keep every original numerator factor on its retained owner. Only new energy
+   factors created by differentiating a denominator may be dispatched, and
+   only among the derivative-created serial copies of that same line.
+4. Apply the exact immutable production assignment plan, including the signed
+   hard/raw/parsed conversion `H = h R`, `P = r R`, and `H^0 = h r P^0`.
+5. Substitute the source post-Taylor numerator and the reconstructed UV-EMR
+   numerator into one neutral set of formal loop four-momenta (and the same
+   fixed external data) and require their exact symbolic difference to vanish.
+6. Independently require equality of denominator momentum, mass, multiplicity,
+   and component domain, using `D(Q) = D(-Q)` only on the denominator side.
+
+Only after both exact certificates pass may a discrepancy be attributed to
+generalized-CFF input normalization, CFF generation, component composition, or
+residue aggregation. The common LMB is only a coordinate chart for this proof;
+it never supplies EMR ownership or CFF rank capacity. Correctness of the EMR
+rewrite precedes minimax rank optimization. Production numerators remain
+factorized; test-only copies may be expanded solely to establish the identity.
+The worked GL04 `1zs/T2` certificate is maintained in
+[`docs/architecture/exact-powered-denominator-cff-lifting.md`](docs/architecture/exact-powered-denominator-cff-lifting.md#worked-live-reproducer-gl04-temporal-square-1zst2).
+
 ## Debug Logging Pattern
 
 - Prefer `debug_tags!` plus the log filter environment variables over ad hoc

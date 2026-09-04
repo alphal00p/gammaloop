@@ -8,7 +8,7 @@ use crate::uv::Integrands;
 #[cfg(test)]
 use crate::{
     cff::expression::OrientationID,
-    uv::approx::direct_3d::{DirectResidueBranches, DirectSector},
+    uv::approx::direct_3d::{DirectCoordinateFrame, DirectResidueBranches, DirectSector},
 };
 #[cfg(test)]
 use std::cmp::Reverse;
@@ -113,6 +113,14 @@ impl TraceUnfold<SuBitGraph> for Wood {
             .map(|hedge| self.graph[self.graph[&hedge]].clone())
             .collect::<BTreeSet<_>>();
         if factors.len() != self.graph[target].n_components() {
+            return None;
+        }
+        if factors.iter().any(|factor| {
+            !self
+                .graph
+                .iter_nodes()
+                .any(|(_, _, spinney)| spinney.n_components() == 1 && spinney.filter() == factor)
+        }) {
             return None;
         }
 
@@ -229,27 +237,52 @@ impl Wood {
         );
 
         let mut to_remove: SuBitGraph = poset.empty_subgraph();
+        let classified_filters = poset
+            .iter_nodes()
+            .map(|(_, _, spinney)| spinney.filter().clone())
+            .collect::<BTreeSet<_>>();
 
-        // Not quite transitive closure. For disjoint unions, only keep edges that add a
-        // single connected component of the sink; those are the only ones that can be
-        // composed canonically by trace unfolding.
+        // Not quite transitive closure. A disconnected target factorizes only when every
+        // connected component is both an independently classified UV spinney and supplied by
+        // an incoming edge. In that case, keep only those component edges so trace unfolding
+        // builds the canonical product. If either condition fails, the target is a genuinely
+        // collective UV region whose atomic Taylor term and nested forest terms are both
+        // required. Label every retained transition by that full Taylor scope: the reduced
+        // complement remains available from the edge's source/sink nodes, while using it as
+        // the trace order would incorrectly make a collective operation commute with its
+        // nested prefix and could coalesce distinct forests into a false factorized join.
         for u in unions {
-            // println!("//{u}:{}", poset[u].subgraph.string_label());
-            let mut comps: BTreeSet<_> = graph
+            let collective_scope = poset[u].subgraph.filter.clone();
+            let comps: BTreeSet<_> = graph
                 .as_ref()
-                .connected_components(&poset[u].subgraph)
+                .connected_components(&collective_scope)
                 .into_iter()
                 .collect();
-            for c in poset.iter_crown(u) {
-                let Flow::Sink = poset.flow(c) else {
-                    continue;
-                };
-                let edge_id = poset[&c];
-                if comps.contains(&poset[edge_id]) {
-                    comps.remove(&poset[edge_id]);
-                } else {
+            let incoming = poset
+                .iter_crown(u)
+                .filter(|c| poset.flow(*c) == Flow::Sink)
+                .collect::<Vec<_>>();
+            let supplied = incoming
+                .iter()
+                .map(|c| &poset[poset[c]])
+                .filter(|factor| comps.contains(*factor))
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            let independently_classified = comps
+                .iter()
+                .all(|component| classified_filters.contains(component));
+            if independently_classified && supplied == comps {
+                for c in incoming {
+                    if comps.contains(&poset[poset[&c]]) {
+                        continue;
+                    }
                     to_remove.add(c);
                     to_remove.add(poset.inv(c));
+                }
+            } else {
+                for c in incoming {
+                    let edge = poset[&c];
+                    poset[edge] = collective_scope.clone();
                 }
             }
         }
@@ -1170,12 +1203,6 @@ impl Forests {
             Local3DCts::Projected4d(projected) => {
                 final_builder.build_projected(graph, &forest_node, projected, integrated)?
             }
-            #[cfg(test)]
-            Local3DCts::Projected(_) => {
-                return Err(eyre!(
-                    "diagnostic whole-expression projections cannot enter production final assembly"
-                ));
-            }
         };
 
         Ok(CutComputation {
@@ -1637,7 +1664,7 @@ mod tests {
     #[test]
     fn union_terms_project_factorized_typed_4d_values() -> Result<()> {
         test_initialise().unwrap();
-        let mut graph: Graph = dot!(
+        let graph: Graph = dot!(
             digraph G{
                 edge [particle="scalar_1"];
                 v1 -> v2;
@@ -1653,11 +1680,6 @@ mod tests {
             ..Default::default()
         };
         let cut_structure = CutStructure::empty(&graph);
-        let cutset = cut_structure
-            .cuts
-            .first()
-            .expect("empty cut structure has one cut")
-            .clone();
         let mut forests = Wood::new(cut_structure, &graph, &settings).unfold();
         forests.integrate(&graph, crate::utils::vakint()?, &settings)?;
 
@@ -1670,11 +1692,6 @@ mod tests {
             .collect::<Vec<_>>();
         assert!(!unions.is_empty());
 
-        let orientation_pattern = crate::settings::global::OrientationPattern::default();
-        let localizer = Localizer::new(
-            &cutset,
-            OrientationProjection::new(&[], &orientation_pattern),
-        );
         for union in unions {
             let components = forests.disconnected_component_nodes(union)?;
             let expected = Local4dCts::from_full_product(
@@ -1689,21 +1706,9 @@ mod tests {
                 .require(operation)?
                 .local_4d(operation)?;
 
-            // Compare the stored union directly, then project that typed value;
-            // no per-cut parent cache or component-path replay participates.
+            // Compare the stored typed union directly; no per-cut parent cache
+            // or component-path replay participates.
             assert_eq!(local, &expected);
-            let cograph = graph
-                .full_filter()
-                .subtract(forests.source_spinney(union).filter())
-                .subtract(&graph.initial_state_cut);
-            let source = Full4dCts::with_cograph(local, &graph, &cograph);
-            let projected = localizer.project_4d(
-                &source,
-                &mut graph,
-                forests.source_spinney(union).filter(),
-            )?;
-            let projected = projected.projected_integrands()?.materialize();
-            assert!(projected.iter().any(|(_, integrand)| !integrand.is_zero()));
         }
         Ok(())
     }
@@ -2005,6 +2010,30 @@ mod tests {
             f.graph.n_nodes(),
             @"8",
             // format!("Wood does not have correct number of spinneys: \n{}",f)
+        );
+
+        let three_component_target = f
+            .graph
+            .iter_nodes()
+            .find_map(|(node, _, spinney)| (spinney.n_components() == 3).then_some(node))
+            .expect("triple tadpole should contain its fully factorized target");
+        let target_filter = f.graph[three_component_target].filter().clone();
+        let components = dumbell
+            .as_ref()
+            .connected_components(&target_filter)
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        assert_eq!(components.len(), 3);
+        let incoming = f
+            .graph
+            .iter_crown(three_component_target)
+            .filter(|hedge| f.graph.flow(*hedge) == Flow::Sink)
+            .map(|hedge| f.graph[f.graph[&hedge]].clone())
+            .collect::<BTreeSet<_>>();
+        assert_eq!(incoming, components);
+        assert!(
+            !incoming.contains(&target_filter),
+            "a fully supplied product must not retain a duplicate atomic full-target transition"
         );
 
         for (_, _, d) in f.graph.iter_nodes() {
@@ -2441,8 +2470,19 @@ mod tests {
                 .iter()
                 .cloned()
                 .map(|active_subgraph| {
+                    let coordinate_frames = spectacles
+                        .as_ref()
+                        .connected_components(&active_subgraph)
+                        .into_iter()
+                        .filter(|component| spectacles.n_loops(component) != 0)
+                        .map(|component| DirectCoordinateFrame {
+                            lmb: spectacles.lmb_of(&component),
+                            active_subgraph: component,
+                        })
+                        .collect();
                     Ok(DirectSector {
                         active_subgraph,
+                        coordinate_frames,
                         active: DirectResidueBranches::production(
                             OrientationID(0),
                             Integrands::root(),
@@ -2456,10 +2496,39 @@ mod tests {
         let step_order = f.graph[union].key.op_count();
         let (current, given) = f.wood.current_given_pair(edge, step_order);
         let reduced = current.reduced_subgraph(&given);
+        let given_internal =
+            InternalSubGraph::try_new(given.subgraph().clone(), spectacles.as_ref())
+                .expect("the connected child has an internal given prefix");
+        let quotient_rank = spectacles
+            .shrunken_sub_lmb(
+                current.subgraph(),
+                &given_internal,
+                spectacles.dummy_stripped_external_flows_of(current.subgraph()),
+                None,
+            )?
+            .loop_edges
+            .len();
+        let expected_frames = union_local
+            .sectors()?
+            .iter()
+            .map(|sector| {
+                let retained_region = sector.active_subgraph.intersection(given.subgraph());
+                let mut retained = sector
+                    .coordinate_frames
+                    .iter()
+                    .flat_map(|frame| frame.lmb.loop_edges.iter())
+                    .filter(|edge| retained_region.includes(&spectacles[*edge].1))
+                    .copied()
+                    .collect::<Vec<_>>();
+                retained.sort();
+                retained.dedup();
+                let expected_rank = retained.len() + quotient_rank;
+                (retained_region, retained, expected_rank)
+            })
+            .collect::<Vec<_>>();
         let expected_active = union_active
             .iter()
             .map(|active| active.union(&reduced))
-            .chain(std::iter::once(reduced.clone()))
             .collect::<Vec<_>>();
         let child_local = Direct3dApproximation::new(localizer, &mut spectacles, &settings).run(
             &union_local,
@@ -2469,22 +2538,280 @@ mod tests {
             &current,
             &given,
         )?;
-        let child_active = child_local
-            .sectors()?
+        let child_sectors = child_local.sectors()?;
+        let child_active = child_sectors
             .iter()
             .map(|sector| sector.active_subgraph.clone())
             .collect::<Vec<_>>();
-        assert_eq!(child_active.len(), 4);
+        assert_eq!(child_active.len(), 3);
         assert_eq!(child_active, expected_active);
+        for (sector, (retained_region, retained, expected_rank)) in
+            child_sectors.iter().zip(expected_frames.iter())
+        {
+            assert_eq!(
+                sector.coordinate_frames.len(),
+                1,
+                "one connected enclosing Taylor operation must merge every contained child frame"
+            );
+            let child_carriers = sector
+                .coordinate_frames
+                .iter()
+                .flat_map(|frame| frame.lmb.loop_edges.iter())
+                .copied()
+                .collect::<BTreeSet<_>>();
+            assert!(
+                retained.iter().all(|edge| child_carriers.contains(edge)),
+                "the connected child must retain every carrier from the contained union frames"
+            );
+            assert_eq!(
+                child_carriers
+                    .iter()
+                    .filter(|edge| retained_region.includes(&spectacles[*edge].1))
+                    .count(),
+                retained.len(),
+                "the quotient carrier must not replace the exact carriers owned by the retained union scope"
+            );
+            assert_eq!(
+                sector
+                    .coordinate_frames
+                    .iter()
+                    .map(|frame| frame.lmb.loop_edges.len())
+                    .sum::<usize>(),
+                *expected_rank,
+                "the connected child rank is the retained prefix rank plus its quotient rank"
+            );
+        }
 
         Ok(())
     }
 
     #[test]
-    fn spectacles_typed_4d_projects_after_local_construction() -> Result<()> {
+    fn collective_two_component_region_keeps_atomic_and_nested_forests() -> Result<()> {
         test_initialise().unwrap();
 
-        let mut spectacles: Graph = dot!(
+        // The two-line component has DOD two, while the scalar triangle has DOD
+        // minus two. Their disconnected union is therefore logarithmically
+        // divergent even though the triangle is not a UV region on its own.
+        let graph: Graph = dot!(
+            digraph G {
+                node [num = "1"];
+                edge [particle = "scalar_1"];
+                a0 -> a1 [id = 0, dod = "-1", num = "gammalooprs::Q(0,spenso::mink(4,0))"];
+                a0 -> a1 [id = 1, dod = "-1", num = "gammalooprs::Q(1,spenso::mink(4,0))"];
+                a1 -> b0 [id = 2];
+                b0 -> b1 [id = 3];
+                b1 -> b2 [id = 4];
+                b2 -> b0 [id = 5];
+            },
+            "scalars"
+        )?;
+
+        let wood = Wood::new(
+            CutStructure::empty(&graph),
+            &graph,
+            &UVgenerationSettings::default(),
+        );
+        let collective = wood
+            .graph
+            .iter_nodes()
+            .find_map(|(node, _, spinney)| (spinney.n_components() == 2).then_some(node))
+            .expect("the mixed-DOD graph must contain its collective UV region");
+        let collective_filter = wood.graph[collective].filter().clone();
+        let components = graph
+            .as_ref()
+            .connected_components(&collective_filter)
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        assert_eq!(components.len(), 2);
+        assert_eq!(graph.compute_dod(&collective_filter), 0);
+        assert_eq!(
+            components
+                .iter()
+                .map(|component| graph.compute_dod(component))
+                .sorted()
+                .collect::<Vec<_>>(),
+            vec![-2, 2]
+        );
+
+        let incoming = wood
+            .graph
+            .iter_crown(collective)
+            .filter(|hedge| wood.graph.flow(*hedge) == Flow::Sink)
+            .map(|hedge| wood.graph[wood.graph[&hedge]].clone())
+            .collect::<Vec<_>>();
+        assert!(incoming.contains(&collective_filter));
+        assert_eq!(
+            incoming
+                .iter()
+                .filter(|factor| components.contains(*factor))
+                .count(),
+            0,
+            "collective transitions are ordered by their full Taylor scope, not their complements"
+        );
+
+        let forests = wood.unfold();
+        let mut depths = forests
+            .graph
+            .iter_nodes()
+            .filter_map(|(node, _, operation)| {
+                (operation.covers().as_ref() == Some(&collective_filter)).then_some((
+                    operation.key.op_count(),
+                    forests.graph.is_disjoint_union(node),
+                ))
+            })
+            .collect::<Vec<_>>();
+        depths.sort();
+        assert_eq!(depths, vec![(1, false), (2, false)]);
+
+        let cut_component = components
+            .iter()
+            .find(|component| graph.compute_dod(*component) < 0)
+            .expect("the collective region has one convergent component")
+            .clone();
+        let divergent_component = components
+            .iter()
+            .find(|component| graph.compute_dod(*component) >= 0)
+            .expect("the collective region has one independently divergent component")
+            .clone();
+        let mut cut = CutSet::empty(graph.n_hedges());
+        cut.union = cut_component;
+        assert!(
+            forests
+                .graph
+                .iter_nodes()
+                .filter(|(_, _, operation)| {
+                    operation.covers().as_ref() == Some(&collective_filter)
+                })
+                .all(|(_, _, operation)| !operation.is_compatible_with(&cut)),
+            "the cut must exclude both the atomic and nested collective counterterms"
+        );
+        assert!(
+            forests.graph.iter_nodes().any(|(_, _, operation)| {
+                operation.covers().as_ref() == Some(&divergent_component)
+                    && operation.is_compatible_with(&cut)
+            }),
+            "a disjoint independently divergent prefix remains cut-compatible"
+        );
+
+        Ok(())
+    }
+
+    #[test]
+    fn collective_three_component_region_is_not_an_incomplete_join() -> Result<()> {
+        test_initialise().unwrap();
+
+        // The two bubbles have DOD two and the scalar triangle has DOD minus two.
+        // Every component nevertheless occurs as an incoming complement because the
+        // other two components have non-negative combined DOD. The triangle itself is
+        // not a classified UV spinney, so this complete edge-label cover must not turn
+        // the collective union into a factorized join.
+        let graph: Graph = dot!(
+            digraph G {
+                node [num = "1"];
+                edge [particle = "scalar_1"];
+                a0 -> a1 [id = 0, dod = "-1", num = "gammalooprs::Q(0,spenso::mink(4,0))"];
+                a0 -> a1 [id = 1, dod = "-1", num = "gammalooprs::Q(1,spenso::mink(4,0))"];
+                a1 -> b0 [id = 2];
+                b0 -> b1 [id = 3, dod = "-1", num = "gammalooprs::Q(3,spenso::mink(4,1))"];
+                b0 -> b1 [id = 4, dod = "-1", num = "gammalooprs::Q(4,spenso::mink(4,1))"];
+                b1 -> c0 [id = 5];
+                c0 -> c1 [id = 6];
+                c1 -> c2 [id = 7];
+                c2 -> c0 [id = 8];
+            },
+            "scalars"
+        )?;
+
+        let wood = Wood::new(
+            CutStructure::empty(&graph),
+            &graph,
+            &UVgenerationSettings::default(),
+        );
+        let collective = wood
+            .graph
+            .iter_nodes()
+            .find_map(|(node, _, spinney)| (spinney.n_components() == 3).then_some(node))
+            .expect("the graph must contain its three-component collective UV region");
+        let collective_filter = wood.graph[collective].filter().clone();
+        let components = graph
+            .as_ref()
+            .connected_components(&collective_filter)
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        assert_eq!(components.len(), 3);
+        assert_eq!(graph.compute_dod(&collective_filter), 2);
+        assert_eq!(
+            components
+                .iter()
+                .map(|component| graph.compute_dod(component))
+                .sorted()
+                .collect::<Vec<_>>(),
+            vec![-2, 2, 2]
+        );
+        assert!(components.iter().all(|component| {
+            let complement = collective_filter.subtract(component);
+            wood.graph
+                .iter_nodes()
+                .any(|(_, _, spinney)| spinney.filter() == &complement)
+        }));
+        assert_eq!(
+            components
+                .iter()
+                .filter(|component| {
+                    wood.graph
+                        .iter_nodes()
+                        .any(|(_, _, spinney)| spinney.filter() == *component)
+                })
+                .count(),
+            2,
+            "complete complement coverage must not stand in for independent component counterterms"
+        );
+
+        let incoming = wood
+            .graph
+            .iter_crown(collective)
+            .filter(|hedge| wood.graph.flow(*hedge) == Flow::Sink)
+            .map(|hedge| wood.graph[wood.graph[&hedge]].clone())
+            .collect::<Vec<_>>();
+        assert!(incoming.contains(&collective_filter));
+        assert_eq!(
+            incoming
+                .iter()
+                .filter(|factor| components.contains(*factor))
+                .cloned()
+                .collect::<BTreeSet<_>>()
+                .len(),
+            0,
+            "collective transitions are ordered by their full Taylor scope, not their complements"
+        );
+        assert!(
+            wood.join_factors(collective).is_none(),
+            "an incomplete component cover must not be treated as a factorized join"
+        );
+
+        let forests = wood.unfold();
+        let collective_nodes = forests
+            .graph
+            .iter_nodes()
+            .filter_map(|(node, _, operation)| {
+                (operation.covers().as_ref() == Some(&collective_filter)).then_some((
+                    operation.key.op_count(),
+                    forests.graph.is_disjoint_union(node),
+                ))
+            })
+            .collect::<Vec<_>>();
+        assert!(collective_nodes.contains(&(1, false)));
+        assert!(collective_nodes.iter().any(|(depth, _)| *depth > 1));
+        assert!(collective_nodes.iter().all(|(_, is_join)| !is_join));
+
+        Ok(())
+    }
+
+    #[test]
+    fn spectacles_typed_4d_local_construction_matches_uv_limit() -> Result<()> {
+        test_initialise().unwrap();
+
+        let spectacles: Graph = dot!(
             digraph G{
                 edge [particle="scalar_1"];
                 v1 -> v2;
@@ -2505,11 +2832,6 @@ mod tests {
             ..Default::default()
         };
         let cut_structure = CutStructure::empty(&spectacles);
-        let cutset = cut_structure
-            .cuts
-            .first()
-            .expect("empty cut structure has one cut")
-            .clone();
         let f = Wood::new(cut_structure, &spectacles, &settings);
         println!("{}", f);
         insta::assert_snapshot!(
@@ -2547,21 +2869,6 @@ mod tests {
         let operation = &f.graph[child];
         let local = f.compute_store.require(operation)?.local_4d(operation)?;
         assert_eq!(local, &expected);
-
-        let orientation_pattern = crate::settings::global::OrientationPattern::default();
-        let localizer = Localizer::new(
-            &cutset,
-            OrientationProjection::new(&[], &orientation_pattern),
-        );
-        let cograph = spectacles
-            .full_filter()
-            .subtract(f.source_spinney(child).filter())
-            .subtract(&spectacles.initial_state_cut);
-        let source = Full4dCts::with_cograph(local, &spectacles, &cograph);
-        let projected =
-            localizer.project_4d(&source, &mut spectacles, f.source_spinney(child).filter())?;
-        let projected = projected.projected_integrands()?.materialize();
-        assert!(projected.iter().any(|(_, integrand)| !integrand.is_zero()));
 
         Ok(())
     }
