@@ -2,7 +2,7 @@
 <nixcrane-cargo-artifact-reuse>
 #quote(block: true)[
 #strong[Status:] Living engineering record reviewed 2026-09-04 against
-`vtlnkvvr`
+`vnmlxtwk`
 
 This is a chronological investigation, not a uniformly current
 specification. Sections explicitly labelled “Historical” are superseded;
@@ -1682,16 +1682,42 @@ fixtures are therefore embedded in the docs-example test binary with
 `include_str!` rather than opened through `OUT_DIR` at runtime. Tests such
 as `trybuild` deliberately launch Cargo again; the archive runner gives
 those nested invocations an offline `CARGO_HOME` containing the same
-vendored Cargo configuration used to compile the archive.
+vendored Cargo configuration used to compile the archive. The docs-builder
+tests additionally consume the authored `docs/` tree, transitive Typst and
+graph inputs, checked-in changelogs, and the verified `flake.nix` scope at
+runtime, so the docs group carries those files in its remapped source. Its
+runner also provides the pinned Typst CLI, Git for provenance hashes, and
+Python for syntax-checking generated examples. The filtered test source has no
+`.git` directory, so the runner supplies stable, explicitly non-publishing
+commit and timestamp fixtures for generated-page tests. It also gives
+tempfile-based containment tests a dedicated `TMPDIR` below `target/` rather
+than exposing Nix's broad `/build` root as the persistent-cache namespace.
 
-The full documentation check renders the latest route once, validates its
-HTML, then renders the same historical snapshot twice and compares the
-complete copied outputs. This keeps both latest-route coverage and
-snapshot determinism while avoiding a fourth all-product render that
-exceeded NixCI\'s per-job runtime limit. Comparing two complete snapshot
-trees also exercises the immutable historical routes, portal pages,
-developer pages, and generated API material rather than narrowing the
-idempotence check to a subset.
+The latest Pages tree and the immutable snapshot fixture are now separate,
+independently cacheable terminal derivations over the same Cargo producer.
+The lightweight full documentation check consumes both completed trees,
+installs them through the Pages history updater, and asserts the latest and
+snapshot routes for all five products together with the portal, developer
+pages, and generated API material. The manual NixCI graph orders both render
+jobs after the shared documentation Cargo artifact and orders the merge check
+after both renders, preventing concurrent consumers from rebuilding the same
+producer.
+
+This separation is required by the hosted worker boundary rather than by a
+source failure. The former monolithic check still exited after 13 minutes 14
+seconds immediately after completing its second all-product render, even
+after a third redundant render had been removed. Keeping each render in its
+own derivation lets NixCI cache and schedule it independently, while the merge
+policy remains covered without rerendering either tree. Lower-level renderer
+tests retain deterministic-output and persistent-session coverage.
+
+The merge derivation provides Bash explicitly because the updater is a child
+shell process. Its first test intentionally captures an expected failure; if
+`bash` is absent from `PATH`, that command-not-found error is captured instead
+and the following message assertion fails without useful output. Shell tracing
+keeps future route-policy failures attributable to their exact assertion. Its
+cross-project link assertion uses the relative URL emitted by a full-site build;
+only isolated product previews rewrite that URL to the absolute public origin.
 
 The static graph and derivation shapes can be checked without building
 the cold Cargo closure:

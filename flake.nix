@@ -598,6 +598,26 @@
         };
 
         workspacePackageRuntimeTestExtraSourceRoots = {
+          "alphal00p-docs-builder" = [
+            "assets/embedded/drawing/templates"
+            "assets/gammalooplogo-dark.svg"
+            "assets/gammalooplogo-light.svg"
+            "crates/clinnet/CHANGELOG.typ"
+            "crates/idenso/CHANGELOG.typ"
+            "crates/kurvst/typst/docs"
+            "crates/linnest/typst/docs"
+            "crates/linnet/CHANGELOG.typ"
+            "crates/spenso-hep-lib/CHANGELOG.typ"
+            "crates/spenso-macros/CHANGELOG.typ"
+            "crates/spenso/CHANGELOG.typ"
+            "crates/spynso3/CHANGELOG.typ"
+            "docs"
+            "examples/cli/aa_aa/2L/graphs"
+            "examples/cli/gg_hhh/3L/3L_graph.dot"
+            "flake.nix"
+            "scripts/render-docs-svg-assets.sh"
+            "tests/resources/graphs"
+          ];
           "alphal00p-docs-catalogs" = [
             "docs/api/python"
           ];
@@ -3183,44 +3203,53 @@
           test ! -e "${output}/developers/architecture/spenso-parsing-flow/diagram.html"
         '';
 
-        alphal00pDocsCheck = craneLib.mkCargoDerivation (
+        # Keep the immutable-route render independently cacheable. The latest
+        # package already validates the shared authored/generated inputs, while
+        # this fixture exercises the snapshot-specific route layout and HTML.
+        # The merge check below can then test publication policy without putting
+        # two complete all-product renders in one time-limited NixCI builder.
+        alphal00pDocsSnapshotFixture = craneLib.mkCargoDerivation (
           alphal00pDocsDerivationArgs
           // {
-            pname = "alphal00p-docs";
+            pname = "alphal00p-docs-snapshot-fixture";
             ALPHAL00P_DOCS_GIT_COMMIT = nixCiBarrierRevision;
             ALPHAL00P_DOCS_GIT_TIMESTAMP = toString self.lastModified;
             buildPhaseCargoCommand = ''
-              docs_rustdoc=${lib.escapeShellArg alphal00pDocsCargoTargetRoot}
+              cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- \
+                build \
+                --product all \
+                --channel snapshot \
+                --snapshot-tag v0.3.4 \
+                --output "$out" \
+                --rustdoc-target-root ${lib.escapeShellArg alphal00pDocsCargoTargetRoot}
+              python3 scripts/check-docs-html.py "$out"
 
-              ${alphal00pDocsValidationCommands}
+              for product in gammaloop linnet spenso idenso vakint; do
+                test -s "$out/products/$product/snapshots/v0.3.4/.note"
+              done
+            '';
+          }
+        );
+
+        alphal00pDocsCheck =
+          pkgs.runCommand "alphal00p-docs-check"
+            {
+              nativeBuildInputs = [
+                pkgs.bash
+                pkgs.diffutils
+                pkgs.findutils
+                pkgs.gnugrep
+                pkgs.python313
+              ];
+            }
+            ''
+              set -x
 
               docs_first="$TMPDIR/alphal00p-docs-first"
-              docs_snapshot="$TMPDIR/alphal00p-docs-snapshot"
-              docs_snapshot_first="$TMPDIR/alphal00p-docs-snapshot-first"
-              cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- \
-                build \
-                --product all \
-                --channel latest \
-                --output "$docs_first" \
-                --rustdoc-target-root "$docs_rustdoc"
-              python3 scripts/check-docs-html.py "$docs_first"
-
-              cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- \
-                build \
-                --product all \
-                --channel snapshot \
-                --snapshot-tag v0.3.4 \
-                --output "$docs_snapshot" \
-                --rustdoc-target-root "$docs_rustdoc"
-              cp -R "$docs_snapshot" "$docs_snapshot_first"
-              cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- \
-                build \
-                --product all \
-                --channel snapshot \
-                --snapshot-tag v0.3.4 \
-                --output "$docs_snapshot" \
-                --rustdoc-target-root "$docs_rustdoc"
-              diff --recursive --brief "$docs_snapshot_first" "$docs_snapshot"
+              docs_snapshot=${alphal00pDocsSnapshotFixture}
+              mkdir -p "$docs_first"
+              cp -R ${alphal00pDocsPages}/. "$docs_first"
+              chmod -R u+w "$docs_first"
 
               docs_pages_test="$TMPDIR/alphal00p-docs-pages-test"
               mkdir -p "$docs_pages_test/products/gammaloop/snapshots/legacy"
@@ -3229,7 +3258,7 @@
               printf 'historical snapshot\n' > "$docs_pages_test/products/gammaloop/snapshots/legacy/.note"
               printf 'removed developer route\n' > "$docs_pages_test/developers/old.txt"
               mv "$docs_first/search-index.json" "$TMPDIR/federated-search-index.json"
-              if bash scripts/update-docs-pages.sh latest "$docs_first" "$docs_pages_test" \
+              if bash ${./scripts/update-docs-pages.sh} latest "$docs_first" "$docs_pages_test" \
                 2> "$TMPDIR/missing-federated-search-index.err"; then
                 missing_search_status=0
               else
@@ -3239,7 +3268,7 @@
               test "$missing_search_status" -ne 0
               grep -Fq 'latest build has no federated search index' \
                 "$TMPDIR/missing-federated-search-index.err"
-              bash scripts/update-docs-pages.sh latest "$docs_first" "$docs_pages_test"
+              bash ${./scripts/update-docs-pages.sh} latest "$docs_first" "$docs_pages_test"
               cmp "$docs_pages_test/search-index.json" "$docs_first/search-index.json"
               test -s "$docs_pages_test/products/gammaloop/snapshots/legacy/.note"
               test ! -e "$docs_pages_test/developers/old.txt"
@@ -3248,7 +3277,7 @@
               cp "$docs_pages_test/index.html" "$TMPDIR/portal-before-snapshot.html"
               cp "$docs_pages_test/developers/.note" "$TMPDIR/developers-before-snapshot.note"
               cp "$docs_pages_test/products/gammaloop/latest/.note" "$TMPDIR/latest-before-snapshot.note"
-              bash scripts/update-docs-pages.sh snapshot "$docs_snapshot" "$docs_pages_test" v0.3.4
+              bash ${./scripts/update-docs-pages.sh} snapshot "$docs_snapshot" "$docs_pages_test" v0.3.4
               cmp "$docs_pages_test/index.html" "$TMPDIR/portal-before-snapshot.html"
               cmp "$docs_pages_test/developers/.note" "$TMPDIR/developers-before-snapshot.note"
               cmp "$docs_pages_test/products/gammaloop/latest/.note" "$TMPDIR/latest-before-snapshot.note"
@@ -3332,11 +3361,9 @@
                 "$out/products/linnet/latest/search-index.json"
               ! grep -Fq '"title": "Parameters"' \
                 "$out/products/linnet/latest/search-index.json"
-              grep -Fq '/products/gammaloop/latest/guides/kurvst/' \
+              grep -Fq 'href="../../../../gammaloop/latest/guides/kurvst/"' \
                 "$out/products/linnet/latest/reference/typst/index.html"
             '';
-          }
-        );
 
         alphal00pDocsPages = craneLib.mkCargoDerivation (
           alphal00pDocsDerivationArgs
@@ -3551,6 +3578,11 @@
           }
           {
             name = "docs";
+            runtimeTools = [
+              docsTypst
+              nextestPython
+              pkgs.git
+            ];
             packages = [
               "alphal00p-docs-builder"
               "alphal00p-docs-catalogs"
@@ -3826,7 +3858,8 @@
                 pkgs.gcc
                 nextestFailureSummary
               ]
-              ++ lib.optionals (nextestUsesPythonModule target) [ nextestPython ];
+              ++ lib.optionals (nextestUsesPythonModule target) [ nextestPython ]
+              ++ (target.runtimeTools or [ ]);
               CC = nixCc;
               CXX = nixCxx;
               "${cargoLinkerVar}" = nixCc;
@@ -3859,6 +3892,19 @@
                 # targets that do not consume any files from them.
                 mkdir -p tests/resources examples/cli
                 ${workspaceMissingCargoTargetsScript}
+              ''
+              + lib.optionalString (target.name == "docs") ''
+                # The remapped Nix test source deliberately has no .git directory.
+                # Give generated test pages stable, explicitly non-publishing
+                # provenance rather than making the runner depend on repository
+                # metadata outside its declared source closure.
+                export ALPHAL00P_DOCS_GIT_COMMIT=0000000000000000000000000000000000000000
+                export ALPHAL00P_DOCS_GIT_TIMESTAMP=1
+                # Nix's TMPDIR is normally /build, which also contains the copied
+                # workspace. Isolate tempfile-based containment tests so /build is
+                # not mistaken for a general persistent-cache namespace.
+                export TMPDIR="$PWD/target/nix-ci-tmp"
+                mkdir -p "$TMPDIR"
               ''
               + lib.optionalString (nextestUsesPythonModule target) ''
                 export PYO3_PYTHON=${nextestPython}/bin/python3
@@ -4044,6 +4090,7 @@
           "gammaloop-python-module" = nixCiArtifactBarrier "gammaloop-python-module" gammaloop-python-module;
           "alphal00p-docs-cargo-artifacts" = alphal00pDocsCargoArtifacts;
           "alphal00p-docs-pages" = alphal00pDocsPages;
+          "alphal00p-docs-snapshot-fixture" = alphal00pDocsSnapshotFixture;
           "ci-workspace-graph-json" = guppyWorkspaceGraphJson;
           inherit linnest-wasm;
           linnestWasmCargoArtifacts = nixCiArtifactBarrier "linnest-wasm-cargo-artifacts" linnestWasmCargoArtifacts;

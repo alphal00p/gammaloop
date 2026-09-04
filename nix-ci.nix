@@ -908,6 +908,16 @@ let
       "checks.${system}.gammaloop-clippy" = [ "packages.${system}.cargoArtifacts" ];
       "checks.${system}.gammaloop-doc" = [ "packages.${system}.cargoArtifacts" ];
       "checks.${system}.gammaloop-doctest" = [ "packages.${system}.cargoArtifacts" ];
+      "packages.${system}.alphal00p-docs-pages" = [
+        "packages.${system}.alphal00p-docs-cargo-artifacts"
+      ];
+      "packages.${system}.alphal00p-docs-snapshot-fixture" = [
+        "packages.${system}.alphal00p-docs-cargo-artifacts"
+      ];
+      "checks.${system}.alphal00p-docs" = [
+        "packages.${system}.alphal00p-docs-pages"
+        "packages.${system}.alphal00p-docs-snapshot-fixture"
+      ];
       "packages.${system}.workspaceBuildArtifacts" = [ "packages.${system}.cargoArtifacts" ];
       "checks.${system}.gammaloop-nextest-binaries-core" = nextestArchiveDependenciesFor "core";
       "checks.${system}.gammaloop-nextest-binaries-docs" = nextestArchiveDependenciesFor "docs";

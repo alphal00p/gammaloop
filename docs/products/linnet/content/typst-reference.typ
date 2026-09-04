@@ -20,7 +20,11 @@ pages when you need an exact function, parameter, or default.
 - #link("reference/typst/subgraph/")[`subgraph`] is a module for constructing and
   inspecting zero-copy subgraph values.
 - `curve` is a re-export of Kurvst, not a second Linnest API. Use the canonical
-  #product-link("gammaloop", label: "Kurvst curve and path reference").
+  #product-link(
+    "gammaloop",
+    label: "Kurvst curve and path reference",
+    page: "guides/kurvst/",
+  ).
 
 #boundary("Modules and functions import differently", [
   Import `graph`, `physics`, and `subgraph` as modules when you want qualified calls such

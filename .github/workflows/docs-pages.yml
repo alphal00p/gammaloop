@@ -394,6 +394,8 @@ jobs:
     needs: build
     if: needs.build.outputs.publish == 'true'
     runs-on: ubuntu-24.04
+    outputs:
+      ready: ${{ steps.history.outputs.ready }}
     permissions:
       contents: write
       pages: write
@@ -426,16 +428,32 @@ jobs:
               "repos/$GITHUB_REPOSITORY/pulls/96" \
               --jq '[.state, .head.ref, (.head.repo.full_name // ""), .base.ref, .head.sha] | join("|")'); then
               echo "Could not revalidate temporary docs-branch publication" >&2
-              return 1
+              return 2
             fi
-            [ "$pull_request_authority" = "open|docs|$GITHUB_REPOSITORY|main|$GITHUB_SHA" ] || {
-              echo "Pull request 96 no longer authorizes docs-branch publication" >&2
-              return 1
-            }
+            [ "$pull_request_authority" = "open|docs|$GITHUB_REPOSITORY|main|$GITHUB_SHA" ]
+          }
+
+          skip_superseded_docs_publication() {
+            echo "::notice::Skipping Pages publication because this docs run is no longer the open pull request 96 head"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          require_current_docs_publication() {
+            local authorization_status
+            if authorize_temporary_docs_publication; then
+              return 0
+            else
+              authorization_status=$?
+            fi
+            if [ "$authorization_status" -eq 1 ]; then
+              skip_superseded_docs_publication
+            fi
+            return "$authorization_status"
           }
 
           if [ "$GITHUB_REF" = refs/heads/docs ]; then
-            authorize_temporary_docs_publication
+            require_current_docs_publication
           fi
 
           if git fetch origin gh-pages:refs/remotes/origin/gh-pages; then
@@ -463,17 +481,23 @@ jobs:
           fi
           if [ "$GITHUB_REF" = refs/heads/docs ]; then
             # Close the build-time authorization window before mutating the
-            # persistent branch. Main, tags, and manual runs do not use this
-            # temporary exception.
-            authorize_temporary_docs_publication
+            # persistent branch. Superseded serial builds retain their cache,
+            # but only the current pull-request head may update Pages. Main,
+            # tags, and manual runs do not use this temporary exception.
+            require_current_docs_publication
           fi
           git -C "$pages_root" push origin HEAD:gh-pages
-          echo "path=$pages_root" >> "$GITHUB_OUTPUT"
+          {
+            echo "path=$pages_root"
+            echo "ready=true"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Configure GitHub Pages
+        if: steps.history.outputs.ready == 'true'
         uses: actions/configure-pages@v5
 
       - name: Upload Pages artifact
+        if: steps.history.outputs.ready == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: ${{ steps.history.outputs.path }}
@@ -481,7 +505,7 @@ jobs:
   deploy:
     name: Deploy documentation Pages
     needs: [build, publish]
-    if: needs.build.outputs.publish == 'true'
+    if: needs.build.outputs.publish == 'true' && needs.publish.outputs.ready == 'true'
     runs-on: ubuntu-24.04
     environment:
       name: github-pages
