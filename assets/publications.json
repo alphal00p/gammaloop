@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "source": "https://inspirehep.net",
-  "updated": "2026-09-03",
+  "updated": "2026-09-04",
   "api_url": "https://inspirehep.net/api/literature?sort=mostrecent&q=%28a+V.Hirschi.1+or+a+M.Fraaije.1+or+a+L.Huber.1+or+a+B.Ruijl.1+or+a+Kaapo.Seppanen.1+or+a+Zeno.Capatti.1%29",
   "authors": [
     {
@@ -36,6 +36,46 @@
     }
   ],
   "publications": [
+    {
+      "id": 3199459,
+      "title": "A Task Force on Strong Coupling Determinations from Event Shapes",
+      "date": "2026-09-02",
+      "year": 2026,
+      "authors": [
+        "Badea, Anthony",
+        "Buonocore, Luca",
+        "Vita, Gherardo",
+        "Alioli, Simone",
+        "Capatti, Zeno",
+        "Chen, Yi",
+        "d'Enterria, David",
+        "Gehrmann, Thomas",
+        "Hoang, Andre H.",
+        "Huss, Alexander",
+        "Jaskiewicz, Sebastian",
+        "Karlberg, Alexander",
+        "Lee, Yen-Jie",
+        "Mangano, Michelangelo L.",
+        "Mateu, Vicent",
+        "Miao, Jiahao",
+        "Monni, Pier Francesco",
+        "Nason, Paolo",
+        "Rottoli, Luca",
+        "Stewart, Iain W.",
+        "Torrielli, Paolo",
+        "Zanderighi, Giulia"
+      ],
+      "people": [
+        "zeno-capatti"
+      ],
+      "arxiv": "2609.03002",
+      "citations": 0,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/3199459",
+      "bibtex_url": "https://inspirehep.net/api/literature/3199459?format=bibtex"
+    },
     {
       "id": 3168692,
       "title": "Static linear response of hot and dense QCD matter to electromagnetic fields: Leading hard and soft QCD corrections",
@@ -1991,7 +2031,7 @@
       "venue": "CERN Yellow Rep.Monogr. 7 (2019) 221",
       "doi": "10.23731/CYRM-2019-007.221",
       "arxiv": "1902.00134",
-      "citations": 1020,
+      "citations": 1021,
       "types": [
         "book chapter"
       ],
@@ -2017,7 +2057,7 @@
       "venue": "Phys.Lett.B 790 (2019) 436",
       "doi": "10.1016/j.physletb.2019.01.060",
       "arxiv": "1812.11818",
-      "citations": 100,
+      "citations": 101,
       "types": [
         "article"
       ],
@@ -2464,7 +2504,7 @@
       "venue": "JHEP 10 (2017) 041",
       "doi": "10.1007/JHEP10(2017)041",
       "arxiv": "1707.08315",
-      "citations": 292,
+      "citations": 293,
       "types": [
         "article"
       ],
@@ -2604,7 +2644,7 @@
       "venue": "JHEP 02 (2017) 090",
       "doi": "10.1007/JHEP02(2017)090",
       "arxiv": "1701.01404",
-      "citations": 497,
+      "citations": 498,
       "types": [
         "article"
       ],
@@ -3026,7 +3066,7 @@
       "venue": "CERN Yellow Rep.Monogr. 2 (2017) 1",
       "doi": "10.23731/CYRM-2017-002",
       "arxiv": "1610.07922",
-      "citations": 2899,
+      "citations": 2900,
       "types": [
         "article"
       ],
@@ -3706,7 +3746,7 @@
       "venue": "JHEP 07 (2014) 079",
       "doi": "10.1007/JHEP07(2014)079",
       "arxiv": "1405.0301",
-      "citations": 10770,
+      "citations": 10773,
       "types": [
         "article"
       ],
