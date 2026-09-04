@@ -1614,6 +1614,7 @@ impl LayoutConfig {
                 | "eps"
                 | "g-center"
                 | "gamma-dangling"
+                | "gamma-dangling-centroid"
                 | "gamma-ee"
                 | "gamma-ev"
                 | "incremental-energy"
@@ -1774,6 +1775,11 @@ struct SpringConfig {
         deserialize_with = "deserialize_f64"
     )]
     gamma_dangling: f64,
+    #[serde(
+        default = "default_gamma_dangling_centroid",
+        deserialize_with = "deserialize_f64"
+    )]
+    gamma_dangling_centroid: f64,
     #[serde(default = "default_gamma_ev", deserialize_with = "deserialize_f64")]
     gamma_ev: f64,
     #[serde(default = "default_gamma_ee", deserialize_with = "deserialize_f64")]
@@ -1796,6 +1802,7 @@ impl Default for SpringConfig {
             k_spring: default_k_spring(),
             beta: default_beta(),
             gamma_dangling: default_gamma_dangling(),
+            gamma_dangling_centroid: default_gamma_dangling_centroid(),
             gamma_ev: default_gamma_ev(),
             gamma_ee: default_gamma_ee(),
             g_center: default_g_center(),
@@ -1812,6 +1819,7 @@ impl From<&SpringConfig> for ParamTuning {
             k_spring: cfg.k_spring,
             beta: cfg.beta,
             gamma_dangling: cfg.gamma_dangling,
+            gamma_dangling_centroid: cfg.gamma_dangling_centroid,
             gamma_ev: cfg.gamma_ev,
             gamma_ee: cfg.gamma_ee,
             g_center: cfg.g_center,
@@ -1881,6 +1889,10 @@ fn default_beta() -> f64 {
 
 fn default_gamma_dangling() -> f64 {
     5.0
+}
+
+fn default_gamma_dangling_centroid() -> f64 {
+    0.0
 }
 
 fn default_gamma_ev() -> f64 {

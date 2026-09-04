@@ -2,10 +2,14 @@ use std::{collections::BTreeMap, fs};
 
 use figment::providers::Serialized;
 use figment::{Figment, Profile};
-use linnet::half_edge::layout::spring::{Constraint, ShiftDirection};
+use linnet::half_edge::layout::{
+    simulatedanneale::{Energy, Neighbor},
+    spring::{Constraint, PinnedLayoutNeighbor, ShiftDirection},
+};
 use linnet::half_edge::swap::Swap;
 use linnet::half_edge::{involution::EdgeIndex, NodeIndex};
 use linnet::{dot, parser::set::DotGraphSet};
+use rand::{rngs::SmallRng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -3859,5 +3863,98 @@ fn test_full() {
             typst_graph.to_cbor(),
             typst_graph.to_dot_graph().debug_dot(),
         ));
+    }
+}
+
+#[test]
+fn dangling_centroid_repulsion_keeps_grouped_external_edges_outside() {
+    let input = r#"digraph {
+        a [pin="y:0" pos="0,0" "pos-mode"="start" "pos-x-set"="true" "pos-y-set"="true"]
+        b [pin="y:-3" pos="-2,-3" "pos-mode"="start" "pos-x-set"="true" "pos-y-set"="true"]
+        c [pin="y:3" pos="-2,3" "pos-mode"="start" "pos-x-set"="true" "pos-y-set"="true"]
+        d [pin="y:0" pos="2,0" "pos-mode"="start" "pos-x-set"="true" "pos-y-set"="true"]
+        a -> c [id=0]
+        b -> a [id=1]
+        ext2 [style=invis]
+        ext2 -> b [id=2 pin="x:@-in,y:-4"]
+        ext3 [style=invis]
+        ext3 -> c [id=3 pin="x:@-in,y:4"]
+        ext4 [style=invis]
+        ext4 -> d [id=4 pin="x:@+out,y:4"]
+        ext5 [style=invis]
+        d -> ext5 [id=5 pin="x:@+out,y:-4"]
+        a -> d [id=6]
+        ext7 [style=invis]
+        b -> ext7 [id=7 pin="x:@+out,y:0"]
+        ext8 [style=invis]
+        ext8 -> c [id=8 pin="x:@-in,y:0"]
+    }"#;
+
+    let settings = BTreeMap::from([
+        ("steps".to_string(), "50".to_string()),
+        ("epochs".to_string(), "50".to_string()),
+        ("seed".to_string(), "7".to_string()),
+        ("gamma-dangling".to_string(), "3.0".to_string()),
+        ("gamma-dangling-centroid".to_string(), "1.25".to_string()),
+        ("gamma-ev".to_string(), "0.05".to_string()),
+        ("k-spring".to_string(), "4".to_string()),
+        ("beta".to_string(), "10".to_string()),
+        ("directional-force".to_string(), "10".to_string()),
+        ("length-scale".to_string(), "0.4".to_string()),
+    ]);
+    let figment = Figment::from(Serialized::from(settings, Profile::Default));
+    let mut graph = TypstGraph::parse(input).unwrap();
+    graph.layout_config = crate::LayoutConfig::from_figment(&figment);
+    let spring = linnet::half_edge::layout::spring::ParamTuning::from(&graph.layout_config.spring);
+    let (tree, energy) = graph.tree_init_cfg(&spring);
+    assert!((energy.dangling_centroid_charge / energy.c_vv - 1.25).abs() < 1e-12);
+    let (nodes, edges) = graph.new_positions(tree);
+    let (nodes, edges) = graph.optimized_positions(nodes, edges, &energy);
+
+    assert!(edges[EdgeIndex(4)].x > nodes[NodeIndex(3)].x);
+    assert!(edges[EdgeIndex(2)].x < nodes[NodeIndex(2)].x);
+}
+
+#[test]
+fn dangling_centroid_incremental_delta_matches_total_delta() {
+    let input = r#"digraph {
+        ext [style=invis]
+        ext -> a
+        b -> ext
+        a -> b
+        b -> c
+        c -> a
+    }"#;
+    let settings = BTreeMap::from([("gamma-dangling-centroid".to_string(), "1.25".to_string())]);
+    let figment = Figment::from(Serialized::from(settings, Profile::Default));
+    let mut graph = TypstGraph::parse(input).unwrap();
+    graph.layout_config = crate::LayoutConfig::from_figment(&figment);
+    let (mut state, energy) = graph.layout_energy_state();
+    let mut baseline_energy = energy;
+    baseline_energy.dangling_centroid_charge = 0.0;
+    let mut rng = SmallRng::seed_from_u64(17);
+    let mut cached = energy.energy(None, &state);
+    let mut baseline_cached = baseline_energy.energy(None, &state);
+
+    for iteration in 0..100 {
+        let next = PinnedLayoutNeighbor.propose(&state, &mut rng, 0.2, 0.3);
+        let incremental = energy.energy(Some((&state, cached)), &next);
+        let baseline_incremental = baseline_energy.energy(Some((&state, baseline_cached)), &next);
+        let mut full = next.clone();
+        full.incremental = false;
+        let exact = energy.energy(None, &full);
+        let baseline_exact = baseline_energy.energy(None, &full);
+        let incremental_centroid = incremental - baseline_incremental;
+        let exact_centroid = exact - baseline_exact;
+        assert!(
+            (incremental_centroid - exact_centroid).abs()
+                <= 1e-9 * (1.0 + exact_centroid.abs()),
+            "iteration {iteration}: incremental={incremental_centroid}, exact={exact_centroid}, difference={}",
+            incremental_centroid - exact_centroid,
+        );
+        state = next;
+        energy.on_accept(&mut state);
+        cached = incremental;
+        baseline_cached = baseline_incremental;
     }
 }

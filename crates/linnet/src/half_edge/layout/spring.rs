@@ -808,15 +808,16 @@ where
 
 #[derive(Clone, Copy)]
 pub struct SpringChargeEnergy {
-    pub spring_length: f64,    // L
-    pub k_spring: f64,         // 1.0
-    pub c_vv: f64,             // vertex-vertex charge (≈ 0.14*L^3)
-    pub dangling_charge: f64,  // dangling edge charge (≈ 0.14*L^3)
-    pub c_ev: f64,             // edge-vertex (≈ 0.028*L^3)
-    pub c_ee_local: f64,       // edge-edge local (≈ 0.014*L^3)
-    pub c_center: f64,         // central pull (dimensionless relative strength)
-    pub crossing_penalty: f64, // crossing energy penalty (≈ penalty*L^2)
-    pub eps: f64,              // softened distance (≈ eps*L)
+    pub spring_length: f64,            // L
+    pub k_spring: f64,                 // 1.0
+    pub c_vv: f64,                     // vertex-vertex charge (≈ 0.14*L^3)
+    pub dangling_charge: f64,          // dangling edge charge (≈ 0.14*L^3)
+    pub dangling_centroid_charge: f64, // dangling edge vs node-centroid charge
+    pub c_ev: f64,                     // edge-vertex (≈ 0.028*L^3)
+    pub c_ee_local: f64,               // edge-edge local (≈ 0.014*L^3)
+    pub c_center: f64,                 // central pull (dimensionless relative strength)
+    pub crossing_penalty: f64,         // crossing energy penalty (≈ penalty*L^2)
+    pub eps: f64,                      // softened distance (≈ eps*L)
 }
 
 impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Energy<LayoutState<'a, E, V, H, N>>
@@ -853,15 +854,16 @@ impl<'a, E, V, H, N: NodeStorageOps<NodeData = V> + Clone> Energy<LayoutState<'a
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 pub struct ParamTuning {
-    pub length_scale: f64,     // scales L: default 1.0
-    pub k_spring: f64,         // spring stiffness: default 1.0
-    pub beta: f64,             // vertex–vertex strength
-    pub gamma_dangling: f64,   // dangling edge vs vertex–vertex
-    pub gamma_ev: f64,         // edge–vertex vs vertex–vertex
-    pub gamma_ee: f64,         // local edge–edge vs vertex–vertex
-    pub g_center: f64,         // central vs vertex–vertex
-    pub crossing_penalty: f64, // fixed penalty per crossing
-    pub eps: f64,              // softening epsilon
+    pub length_scale: f64,            // scales L: default 1.0
+    pub k_spring: f64,                // spring stiffness: default 1.0
+    pub beta: f64,                    // vertex–vertex strength
+    pub gamma_dangling: f64,          // dangling edge vs vertex–vertex
+    pub gamma_dangling_centroid: f64, // dangling edge vs node centroid
+    pub gamma_ev: f64,                // edge–vertex vs vertex–vertex
+    pub gamma_ee: f64,                // local edge–edge vs vertex–vertex
+    pub g_center: f64,                // central vs vertex–vertex
+    pub crossing_penalty: f64,        // fixed penalty per crossing
+    pub eps: f64,                     // softening epsilon
 }
 
 impl ParamTuning {
@@ -882,6 +884,10 @@ impl ParamTuning {
         global_data.statements.insert(
             "gamma_dangling".to_string(),
             self.gamma_dangling.to_string(),
+        );
+        global_data.statements.insert(
+            "gamma_dangling_centroid".to_string(),
+            self.gamma_dangling_centroid.to_string(),
         );
         global_data
             .statements
@@ -910,6 +916,11 @@ impl ParamTuning {
                 "gamma_dangling" => {
                     if let Ok(v) = value.parse::<f64>() {
                         tune.gamma_dangling = v;
+                    }
+                }
+                "gamma_dangling_centroid" => {
+                    if let Ok(v) = value.parse::<f64>() {
+                        tune.gamma_dangling_centroid = v;
                     }
                 }
                 "k_spring" => {
@@ -961,6 +972,7 @@ impl Default for ParamTuning {
             k_spring: 1.0,
             beta: 0.14,
             gamma_dangling: 0.14,
+            gamma_dangling_centroid: 0.0,
             gamma_ev: 0.20,
             gamma_ee: 0.10,
             g_center: 0.05,
@@ -1100,6 +1112,37 @@ impl SpringChargeEnergy {
     #[cfg_attr(feature = "energy_trace", inline(never))]
     fn dangling_term(&self, dist: f64) -> f64 {
         0.5 * self.dangling_charge / (dist + self.eps)
+    }
+
+    #[cfg_attr(feature = "energy_trace", inline(never))]
+    fn dangling_centroid_term(&self, dist: f64) -> f64 {
+        self.dangling_centroid_charge / (dist + self.eps)
+    }
+
+    fn dangling_centroid_energy<'a, E, V, H, N>(&self, state: &LayoutState<'a, E, V, H, N>) -> f64
+    where
+        N: NodeStorageOps<NodeData = V> + Clone,
+    {
+        let n = state.vertex_points.len().0;
+        if self.dangling_centroid_charge == 0.0 || n == 0 {
+            return 0.0;
+        }
+
+        let centroid = Point2::from_vec(
+            state
+                .vertex_points
+                .iter()
+                .fold(Vector2::zero(), |sum, (_, point)| sum + point.to_vec())
+                / n as f64,
+        );
+        state
+            .ext
+            .included_iter()
+            .map(|hedge| {
+                let edge = state.graph[&hedge];
+                self.dangling_centroid_term(state.edge_points[edge].distance(centroid))
+            })
+            .sum()
     }
 
     #[cfg_attr(feature = "energy_trace", inline(never))]
@@ -1298,6 +1341,7 @@ impl SpringChargeEnergy {
                 energy += self.dangling_term(pi.distance(pj));
             }
         }
+        energy += self.dangling_centroid_energy(s);
         #[cfg(feature = "energy_trace")]
         energy_trace::record_dangling(dangling_start.elapsed());
 
@@ -1471,6 +1515,15 @@ impl SpringChargeEnergy {
                     - self.dangling_term(prev_pi.distance(prev_pj));
             }
         }
+        if self.dangling_centroid_charge != 0.0
+            && (!node_changes.is_empty()
+                || next
+                    .ext
+                    .included_iter()
+                    .any(|hedge| edge_changes.includes(&next.graph[&hedge])))
+        {
+            delta += self.dangling_centroid_energy(next) - self.dangling_centroid_energy(prev);
+        }
         #[cfg(feature = "energy_trace")]
         energy_trace::record_dangling(dangling_start.elapsed());
 
@@ -1519,6 +1572,7 @@ impl SpringChargeEnergy {
             c_ee_local: tune.beta * tune.gamma_ee * repulsion_scale,
             c_center: tune.beta * tune.g_center,
             dangling_charge: tune.gamma_dangling * tune.beta * repulsion_scale,
+            dangling_centroid_charge: tune.gamma_dangling_centroid * tune.beta * repulsion_scale,
             crossing_penalty: tune.crossing_penalty * spring_length_sq,
             eps: tune.eps * spring_length,
         }
@@ -1560,6 +1614,7 @@ mod tests {
             k_spring: 1.0,
             c_vv: 0.0,
             dangling_charge: 0.0,
+            dangling_centroid_charge: 0.0,
             c_ev: 0.0,
             c_ee_local: 0.0,
             c_center,
@@ -1583,6 +1638,7 @@ mod tests {
             k_spring: 11.0,
             beta: 3.0,
             gamma_dangling: 0.7,
+            gamma_dangling_centroid: 1.3,
             gamma_ev: 0.2,
             gamma_ee: 0.4,
             g_center: 0.05,
@@ -1606,6 +1662,10 @@ mod tests {
         assert_eq!(large.c_ev / small.c_ev, 8.0);
         assert_eq!(large.c_ee_local / small.c_ee_local, 8.0);
         assert_eq!(large.dangling_charge / small.dangling_charge, 8.0);
+        assert_eq!(
+            large.dangling_centroid_charge / small.dangling_centroid_charge,
+            8.0
+        );
         assert_eq!(large.crossing_penalty / small.crossing_penalty, 4.0);
         assert_eq!(large.eps / small.eps, 2.0);
         assert_eq!(large.c_center, small.c_center);

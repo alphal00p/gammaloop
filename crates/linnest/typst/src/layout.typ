@@ -83,8 +83,9 @@
   /// of the natural spring length. -> float
   delta: 0.4,
   /// Base repulsion strength for vertex-vertex interactions. Also scales
-  /// `gamma-ev`, `gamma-ee`, `gamma-dangling`, and `g-center`. Applies to both
-  /// modes through the shared spring energy.
+  /// `gamma-ev`, `gamma-ee`, `gamma-dangling`,
+  /// `gamma-dangling-centroid`, and `g-center`. Applies to both modes through
+  /// the shared spring energy.
   /// -> float
   beta: 50.0,
   /// Spring stiffness for node-to-edge incidence lengths. Applies to both
@@ -102,6 +103,10 @@
   /// Repulsion for dangling half edges, relative to `beta`. Applies to
   /// both modes through the shared spring energy. -> float
   gamma-dangling: 5.0,
+  /// Repulsion of every dangling endpoint from the current node centroid,
+  /// relative to `beta`. The equal-and-opposite reaction is shared over the
+  /// nodes, avoiding translational drift. Applies to both modes. -> float
+  gamma-dangling-centroid: 0.0,
   /// Local edge-edge repulsion, relative to `beta`. Applies to both
   /// modes. -> float
   gamma-ee: 0.1,
@@ -223,6 +228,7 @@
     epochs: str(epochs),
     crossing-penalty: str(crossing-penalty),
     gamma-dangling: str(gamma-dangling),
+    gamma-dangling-centroid: str(gamma-dangling-centroid),
     gamma-ee: str(gamma-ee),
     directional-force: str(directional-force),
     label-length-scale: str(label-length-scale),
