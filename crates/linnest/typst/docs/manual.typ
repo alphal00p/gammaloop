@@ -735,16 +735,18 @@ should route or relax selected edges without disturbing the node layout:
 
 The shared spring/charge model uses the following coefficients:
 
-$ c_("vv") = beta L^2 $
-$ c_("ev") = beta gamma_("ev") L^2 $
-$ c_("ee") = beta gamma_("ee") L^2 $
-$ c_("center") = beta g_("center") L^2 $
-$ c_("dangling") = beta gamma_("dangling") L^2 $
+$ c_("vv") = beta L^3 $
+$ c_("ev") = beta gamma_("ev") L^3 $
+$ c_("ee") = beta gamma_("ee") L^3 $
+$ c_("center") = beta g_("center") $
+$ c_("dangling") = beta gamma_("dangling") L^3 $
+$ c_("dangling-centroid") = beta gamma_("dangling-centroid") L^3 $
 
 The Typst parameter names are `beta` for $beta$, `gamma-ev` for
 $gamma_("ev")$, `gamma-ee` for $gamma_("ee")$, `g-center` for $g_("center")$,
-and `gamma-dangling` for $gamma_("dangling")$. The spring stiffness $k$ is
-`k-spring`, and the softening constant $epsilon$ is `eps`.
+`gamma-dangling` for $gamma_("dangling")$, and
+`gamma-dangling-centroid` for $gamma_("dangling-centroid")$. The spring
+stiffness $k$ is `k-spring`, and the softening constant $epsilon$ is `eps`.
 
 In `layout-algo: "anneal"`, linnest minimizes an energy:
 
@@ -754,20 +756,25 @@ sum_(i < j) 1/2 c_("vv") / (d(v_i, v_j) + epsilon)
 + sum_((v, e) " incident") 1/2 k (ell_e - d(v, e))^2
 \ + sum_("local edge pairs") 1/2 c_("ee") / (d(e_i, e_j) + epsilon)
 + sum_("dangling pairs") 1/2 c_("dangling") / (d(e_i, e_j) + epsilon)
++ sum_("dangling" e) c_("dangling-centroid") / (d(e, overline(v)) + epsilon)
 + sum_(i) 1/2 c_("center") d(v_i, 0)^2
 + p_("cross") N_("cross") $.
 
-Here $p_("cross")$ is `crossing-penalty` and $N_("cross")$ is the number of
-detected edge crossings. The quadratic center term pulls nodes toward the
-origin at every radius. `temp`, `step`, `seed`, `steps`, `epochs`, `cool`,
+Here $overline(v)$ is the mean node position. The centroid term pushes every
+dangling endpoint away from that mean; its equal-and-opposite reaction is
+shared over the nodes so it introduces no net force. $p_("cross")$ is
+`crossing-penalty` and $N_("cross")$ is the number of detected edge crossings.
+The quadratic center term pulls nodes toward the origin at every radius.
+`temp`, `step`, `seed`, `steps`, `epochs`, `cool`,
 `accept-floor`, `step-shrink`, and `incremental-energy` belong to this
 simulated annealing mode. `crossing-penalty` is also anneal-only; force mode
 does not currently add a crossing force.
 
 In `layout-algo: "force"`, linnest applies the direct forces corresponding to
 the same vertex-vertex, edge-vertex, incidence spring, local edge-edge,
-dangling-edge, and center terms. `step` is the integration step, `delta` clamps
-per-step movement, `steps` and `epochs` set the iteration budget, `cool` shrinks
+dangling-edge, dangling-centroid, and center terms. `step` is the integration
+step, `delta` clamps per-step movement, `steps` and `epochs` set the iteration
+budget, `cool` shrinks
 the step after each epoch, and `early-tol` stops when movement is small.
 `z-spring` and `z-spring-growth` are force-only helpers: the integrator gives
 points temporary z coordinates to break overlaps and pulls them back toward the

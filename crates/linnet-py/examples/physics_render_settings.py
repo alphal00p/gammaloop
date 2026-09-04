@@ -61,6 +61,7 @@ def _():
         spring_strength: float
         beta: float
         dangling_repulsion: float
+        dangling_centroid_repulsion: float
         edge_edge_repulsion: float
         label_steps: int
 
@@ -195,6 +196,9 @@ def _():
                 spring_strength=force_simulation.spring_strength,
                 beta=force_simulation.beta,
                 dangling_repulsion=force_simulation.dangling_repulsion,
+                dangling_centroid_repulsion=(
+                    force_simulation.dangling_centroid_repulsion
+                ),
                 edge_edge_repulsion=force_simulation.edge_edge_repulsion,
                 label_steps=force_simulation.label_steps,
             )
@@ -501,6 +505,15 @@ def _(mo):
         show_value=True,
         label="External-leg repulsion",
     )
+    dangling_centroid_repulsion = mo.ui.slider(
+        0,
+        5,
+        0.05,
+        1.25,
+        debounce=True,
+        show_value=True,
+        label="External legs from node centroid",
+    )
     edge_edge_repulsion = mo.ui.slider(
         0,
         0.5,
@@ -523,7 +536,7 @@ def _(mo):
         [
             mo.md(
                 "### Force simulation\n\n"
-                "Changes render after releasing a slider. The first seven controls "
+                "Changes render after releasing a slider. The first eight controls "
                 "apply only to Force; label relaxation runs after either layout."
             ),
             force_steps,
@@ -532,6 +545,7 @@ def _(mo):
             spring_strength,
             beta,
             dangling_repulsion,
+            dangling_centroid_repulsion,
             edge_edge_repulsion,
             label_steps,
         ],
@@ -540,6 +554,7 @@ def _(mo):
     return (
         beta,
         dangling_repulsion,
+        dangling_centroid_repulsion,
         directional_force,
         edge_edge_repulsion,
         force_seed,
@@ -554,6 +569,7 @@ def _(
     ForceSimulation,
     beta,
     dangling_repulsion,
+    dangling_centroid_repulsion,
     directional_force,
     edge_edge_repulsion,
     force_seed,
@@ -568,6 +584,7 @@ def _(
         spring_strength=spring_strength.value,
         beta=beta.value,
         dangling_repulsion=dangling_repulsion.value,
+        dangling_centroid_repulsion=dangling_centroid_repulsion.value,
         edge_edge_repulsion=edge_edge_repulsion.value,
         label_steps=label_steps.value,
     )

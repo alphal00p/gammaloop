@@ -432,6 +432,34 @@ where
         }
     }
 
+    // Repel each dangling endpoint from the current node centroid. Sharing the
+    // opposite reaction over all nodes prevents this internal force from
+    // introducing translational drift.
+    if energy.dangling_centroid_charge != 0.0 && n > 0 {
+        let centroid = state
+            .vertex_points
+            .iter()
+            .fold(Vector2::zero(), |sum, (_, point)| sum + point.to_vec())
+            / n as f64;
+        let mut reaction = Vector2::zero();
+        for &ei in &workset.dangling_edges {
+            let d = state.edge_points[ei].to_vec() - centroid;
+            let dist = d.magnitude();
+            if dist <= 1e-9 {
+                continue;
+            }
+            let force = d / dist * (energy.dangling_centroid_charge / (dist + energy.eps).powi(2));
+            if workset.force_edge[ei] {
+                forces_e[ei] += Vector3::new(force.x, force.y, 0.0);
+            }
+            reaction += force;
+        }
+        reaction /= n as f64;
+        for &ni in &workset.force_nodes {
+            forces_v[ni] -= Vector3::new(reaction.x, reaction.y, 0.0);
+        }
+    }
+
     // Center gravity (if enabled).
     if energy.c_center != 0.0 {
         for &ni in &workset.force_nodes {
