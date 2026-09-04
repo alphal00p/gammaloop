@@ -6083,7 +6083,7 @@ endobj
 <</Type/Annot/Subtype/Link/Rect[351.44293 125.897766 396.37244 139.73676]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/rust/vakint/struct.VakintExpression.html#method.evaluate_integral)>>/F 4/StructParent 27/Contents(reference/rust/vakint/struct.VakintExpression.html#method.evaluate_integral)>>
 endobj
 2028 0 obj
-<</Type/Annot/Subtype/Link/Rect[254.48141 423.79614 364.22742 437.63516]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/c315747c02d1517444e12e79485bbacfda9a6c5c/crates/vakint/src/topologies.rs)>>/F 4/StructParent 29/Contents(https://github.com/alphal00p/gammaloop/blob/c315747c02d1517444e12e79485bbacfda9a6c5c/crates/vakint/src/topologies.rs)>>
+<</Type/Annot/Subtype/Link/Rect[254.48141 423.79614 364.22742 437.63516]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e51747446aa724c3ffac5c42c4103d090c09c6b0/crates/vakint/src/topologies.rs)>>/F 4/StructParent 29/Contents(https://github.com/alphal00p/gammaloop/blob/e51747446aa724c3ffac5c42c4103d090c09c6b0/crates/vakint/src/topologies.rs)>>
 endobj
 2029 0 obj
 <</Type/Annot/Subtype/Link/Rect[65.62841 340.41714 93.06491 354.25613]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://arxiv.org/abs/1203.6543)>>/F 4/StructParent 30/Contents(https://arxiv.org/abs/1203.6543)>>
@@ -6113,13 +6113,13 @@ endobj
 <</Type/Annot/Subtype/Link/Rect[138.99437 324.5204 220.6436 338.3594]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/)>>/F 4/StructParent 39/Contents(reference/python/)>>
 endobj
 2038 0 obj
-<</Type/Annot/Subtype/Link/Rect[169.4629 780.4921 223.62192 794.3312]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/c315747c02d1517444e12e79485bbacfda9a6c5c/crates/vakint/src/lib.rs)>>/F 4/StructParent 41/Contents(https://github.com/alphal00p/gammaloop/blob/c315747c02d1517444e12e79485bbacfda9a6c5c/crates/vakint/src/lib.rs)>>
+<</Type/Annot/Subtype/Link/Rect[169.4629 780.4921 223.62192 794.3312]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e51747446aa724c3ffac5c42c4103d090c09c6b0/crates/vakint/src/lib.rs)>>/F 4/StructParent 41/Contents(https://github.com/alphal00p/gammaloop/blob/e51747446aa724c3ffac5c42c4103d090c09c6b0/crates/vakint/src/lib.rs)>>
 endobj
 2039 0 obj
-<</Type/Annot/Subtype/Link/Rect[244.67441 780.4921 326.63742 794.3312]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/c315747c02d1517444e12e79485bbacfda9a6c5c/crates/vakint/src/symbolica_community_module/mod.rs)>>/F 4/StructParent 42/Contents(https://github.com/alphal00p/gammaloop/blob/c315747c02d1517444e12e79485bbacfda9a6c5c/crates/vakint/src/symbolica_community_module/mod.rs)>>
+<</Type/Annot/Subtype/Link/Rect[244.67441 780.4921 326.63742 794.3312]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e51747446aa724c3ffac5c42c4103d090c09c6b0/crates/vakint/src/symbolica_community_module/mod.rs)>>/F 4/StructParent 42/Contents(https://github.com/alphal00p/gammaloop/blob/e51747446aa724c3ffac5c42c4103d090c09c6b0/crates/vakint/src/symbolica_community_module/mod.rs)>>
 endobj
 2040 0 obj
-<</Type/Annot/Subtype/Link/Rect[127.368416 631.75415 234.05891 645.59314]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/c315747c02d1517444e12e79485bbacfda9a6c5c/crates/vakint/Cargo.toml)>>/F 4/StructParent 43/Contents(https://github.com/alphal00p/gammaloop/blob/c315747c02d1517444e12e79485bbacfda9a6c5c/crates/vakint/Cargo.toml)>>
+<</Type/Annot/Subtype/Link/Rect[127.368416 631.75415 234.05891 645.59314]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e51747446aa724c3ffac5c42c4103d090c09c6b0/crates/vakint/Cargo.toml)>>/F 4/StructParent 43/Contents(https://github.com/alphal00p/gammaloop/blob/e51747446aa724c3ffac5c42c4103d090c09c6b0/crates/vakint/Cargo.toml)>>
 endobj
 2041 0 obj
 <</Type/Annot/Subtype/Link/Rect[132.77591 617.91516 228.08441 631.75415]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/vakint/tags)>>/F 4/StructParent 44/Contents(https://github.com/alphal00p/vakint/tags)>>
@@ -6131,25 +6131,25 @@ endobj
 <</Type/Annot/Subtype/Link/Rect[70.86614 578.3373 164.71814 592.72534]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/vakint-community/Vakint/)>>/F 4/StructParent 55/Contents(reference/python/vakint-community/Vakint/)>>
 endobj
 2044 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 578.3373 203.31714 592.72534]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/c315747c02d1517444e12e79485bbacfda9a6c5c/docs/api/python/vakint-community.pyi#L9)>>/F 4/StructParent 56/Contents(https://github.com/alphal00p/gammaloop/blob/c315747c02d1517444e12e79485bbacfda9a6c5c/docs/api/python/vakint-community.pyi#L9)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 578.3373 203.31714 592.72534]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e51747446aa724c3ffac5c42c4103d090c09c6b0/docs/api/python/vakint-community.pyi#L9)>>/F 4/StructParent 56/Contents(https://github.com/alphal00p/gammaloop/blob/e51747446aa724c3ffac5c42c4103d090c09c6b0/docs/api/python/vakint-community.pyi#L9)>>
 endobj
 2045 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 760.21063 164.71814 774.59863]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/vakint-community/VakintEvaluationMethod/)>>/F 4/StructParent 62/Contents(reference/python/vakint-community/VakintEvaluationMethod/)>>
 endobj
 2046 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 760.21063 203.31714 774.59863]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/c315747c02d1517444e12e79485bbacfda9a6c5c/docs/api/python/vakint-community.pyi#L245)>>/F 4/StructParent 63/Contents(https://github.com/alphal00p/gammaloop/blob/c315747c02d1517444e12e79485bbacfda9a6c5c/docs/api/python/vakint-community.pyi#L245)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 760.21063 203.31714 774.59863]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e51747446aa724c3ffac5c42c4103d090c09c6b0/docs/api/python/vakint-community.pyi#L245)>>/F 4/StructParent 63/Contents(https://github.com/alphal00p/gammaloop/blob/e51747446aa724c3ffac5c42c4103d090c09c6b0/docs/api/python/vakint-community.pyi#L245)>>
 endobj
 2047 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 491.49576 164.71814 505.88376]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/vakint-community/VakintExpression/)>>/F 4/StructParent 65/Contents(reference/python/vakint-community/VakintExpression/)>>
 endobj
 2048 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 491.49576 203.31714 505.88376]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/c315747c02d1517444e12e79485bbacfda9a6c5c/docs/api/python/vakint-community.pyi#L380)>>/F 4/StructParent 66/Contents(https://github.com/alphal00p/gammaloop/blob/c315747c02d1517444e12e79485bbacfda9a6c5c/docs/api/python/vakint-community.pyi#L380)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 491.49576 203.31714 505.88376]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e51747446aa724c3ffac5c42c4103d090c09c6b0/docs/api/python/vakint-community.pyi#L380)>>/F 4/StructParent 66/Contents(https://github.com/alphal00p/gammaloop/blob/e51747446aa724c3ffac5c42c4103d090c09c6b0/docs/api/python/vakint-community.pyi#L380)>>
 endobj
 2049 0 obj
 <</Type/Annot/Subtype/Link/Rect[70.86614 664.62683 164.71814 679.01483]/Border[0 0 0]/A<</Type/Action/S/URI/URI(reference/python/vakint-community/VakintNumericalResult/)>>/F 4/StructParent 70/Contents(reference/python/vakint-community/VakintNumericalResult/)>>
 endobj
 2050 0 obj
-<</Type/Annot/Subtype/Link/Rect[172.96814 664.62683 203.31714 679.01483]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/c315747c02d1517444e12e79485bbacfda9a6c5c/docs/api/python/vakint-community.pyi#L441)>>/F 4/StructParent 71/Contents(https://github.com/alphal00p/gammaloop/blob/c315747c02d1517444e12e79485bbacfda9a6c5c/docs/api/python/vakint-community.pyi#L441)>>
+<</Type/Annot/Subtype/Link/Rect[172.96814 664.62683 203.31714 679.01483]/Border[0 0 0]/A<</Type/Action/S/URI/URI(https://github.com/alphal00p/gammaloop/blob/e51747446aa724c3ffac5c42c4103d090c09c6b0/docs/api/python/vakint-community.pyi#L441)>>/F 4/StructParent 71/Contents(https://github.com/alphal00p/gammaloop/blob/e51747446aa724c3ffac5c42c4103d090c09c6b0/docs/api/python/vakint-community.pyi#L441)>>
 endobj
 2051 0 obj
 [/ICCBased 2271 0 R]
@@ -7359,16 +7359,16 @@ xœÍZÛnG}×WŒsÂT¬[Ww{må6ˆÒ[œGˆƒ,bmÖqò÷E53RWHö´—/¢x™9ÕçTOWîåÕoonŸ=[¾Z
 endstream
 endobj
 2270 0 obj
-<</Length 2155/Filter/FlateDecode>>
+<</Length 2160/Filter/FlateDecode>>
 stream
-xœÕ[KoE¾ûWH¯DÊUÕo“'‚ 8 |$ÂHH¬`ñÿïöxº§§æÕq–ƒw½;=]=_UõèÚ«ŸşşmÿüùÕ7o_7øòå«×7ÿ4Ô`ƒÍ3j‚·–tã,´ºyÿ×Õ{lŞÿÛ`óïûıÅ«Û›ÛÃÕ6d@7·ww·o·ı|ù"ş‚H;Çÿ÷ÇoHßŸFèã;›ÓçÓ;¹ôzü³ñq>nÇ´q^;6ÿî×Ûï.ŞÜ^üxñæ‡›«>$`¡XdkG± †HD¢‡ÂİÎ_¦ËŒ›)¹ş®<:>,çÍvw•:!ö.ÓKÌåeú;œ®FÁeîÏıø0»gî2]ò£şrLŞõdf‘.zŸ>u>ugÇÏ÷ÉŒ‡2‚ú@ÑD‡|úı»ÂÙ) Pq¯ÌÎ‹@D¼•øûô[J`‰÷vš4ı{Øî"¢BS^Z6}vµ[ğø6da*&½vŞ—ÌETÀà«İ3!„`C@/Ü/4¤¾æ"tVsôy²]÷£ĞbJwô0ƒÇÊÜ¢BU‚&	Á¹å|z\ååîöÏ²H}õıoû?.ßï²=³›#%+úì„“émÎ“RÙ•vB·•ì\U6™£XŞ¢íû—ãJ1`èyÈˆZiwõ˜^lAªr³¤rãÁoë}²ñh5‡ÄÛ©”÷ÕíÔÏ°ÓIÙçe§¤I$Fk.™b?aša€ÂíŠL“†10of‰•mSIYÏ›G¡NŒ·OÿÑM»ú7©%[âá! "bë¹ªoâ9;cJ¸¸3º /³Ò¾„JqÀ~wÚS÷éŞÓÁôiè+ÉP7c-Ú¾Šµ„³ÄNğòÉœoÚ—ëöåMûò¢}yÕıGa/E9n‹Ç[®Óû_¢¢®û7S7úe7ğËn®ÚM²£V‘ã}7Éñß×ı¡q6+(ÕûÇ8°ZBğ8º—•ÄÀ2ÏUÁ’ï;;^–•Çë9¯’\Ì½ÊÃĞOÛG×”Ş“ü}Ù·ëi bAVP…f SßÇ“lJ¦¼·¾HLW'ïi–“šVæè©KÂİœ+ö–Ôjà#¿Íö›ÎÆW1Œ,ösV!«ûv~ÓÿğJÈq‡1+«¼r•`ùV>ôë¬XkçHŸ`ıCßX>/[Î)"I³ĞCny7§IPÑŒe×’Eò°¾ ´Ën½A><ùÛQ"`!¶ìÀ¹úqk|¦d=ùpb§š† óRÒË€™Vk`1q!	&Nkæ­:IXèºÿ…kVZ›J°H,4t¬=°å9Òe8V²FûşU·bœ2i_Cÿ¢È)‡ëœ %İXR <W'E©LÉ<kRŠ˜CAÁDµèÅÜ¡
-ùaĞ`ÏYÅˆ`ÔĞ¿0 fv•`¸C Ã9ÒŸ„;ºã¨$æI×IZ•¹³®Ì¿uÂSWaÂ¬tÔ+\™Çı19êzBí	”³fıšâK¡Êk‚‡t}¾ôã|9)sVÕ»_Œe-«Šƒmê²: !9³ºÅ¨eZËà¬š³Š¥ÑÓ‹™!”&—ë`#Ğ ú&Fã[ß´“:4x(¼Ë¥è±¶ƒb7Á16ëóYœ¬ëUH«y§ï“;zÌ8èeàÉ»Ó³øˆ¾Î'übt•‘:óZvl\Ó½`	ÃøÀ²Úoc·qBÕZ T¯Áâ8Ş5¡NÉ|bB}´Ü§48ô‰d5„`Âj8—“ìĞI’ó`›±ˆ¡j/îê "Ñk¡lHäÚâåF8je¨”õm¥g}i{S¡ŞÉH‹“û
-,˜7E³ï®\O(Ü½¼&ƒx«Œ™9C`ª6`X ²)™“çn9ş%c8iI-»EĞœ’¢Ä•0.&0£¥(q°	ƒ½É`fè±È`£‚¯‹À`¦àT‚ö4GúÓ0ØÃ7É$i3ï0¤·PÑ‚ÖaÛVØÃìaxU¿¸o‚ÀS2?"{=Nrú^hÇBo¼G¿ùÅ„cK	` opÎ*Öæ®„rB¶ 4*®‹@8vèX1(ëçHÿÿú¥ "^öãX¡­Äh­ëWş­gJæ90NÖ×?FLSm¡ŸÙ:¡™a-òËGÌ‰¶éb<I{!,(Íu`Ç¡ĞÌ°Õ4Ï½™ÁÑx3Ã&*g'ü>Ã´g0¦~İ)}¦d>û¨ñ[ní’£A…68_	åb:q…Åz@K3±–M„øÅY©¢^‰MœTQßÇG;X¬ulç†GµÍJ‘Ù¶÷º	İ·<_ÿÇ(ĞÍ”Ì	º¹+„d3ó†q­y’
-3+!\L3¥ÂÌ6PÇó$¡0ã•T˜©‹À3^K…™mpÔÊ“6¥óç¿"N?g“÷ıº£¯ÔŞçÄF~èØ”3 ÉØmÌ1NV^è2×Á;oUu¶ÚÌ§…]y®Vƒ¸œ¯‚ÀW[a]EXÂªŒÀXÆÚ
-ÈS‡FçÑ
-­èVƒ§°ÁÒ'(*½èÚ«¶¯ÑrmŠ
-B3ú´Ğ	ŠZôÃÈƒ}‰šÖ‚·˜š‚•¨i#œ«r¶à$jªŒDM^¢¦­öuî5 Ph>GÖxã–§B¡ı\Û ¹>
-èÓRÏ†HYb’µğ-ÿ]*‰J6ºŠJµÄ%u ¸„ĞHd²’ªGXëz³H&OèÒ_MÄ5z‹ëÊ~5¼²‰?^ FXhDwÎ£Vi,áÎÿ k~üÔ
+xœÕ[Ko$Ç¾ëWtÑ ^Éz;»›@Ò"qŒèfûà]XxŒõÿôÌT««ºšıªÕNšÑô£Xı‘üÈb±÷ÿüÏ/‡·o÷ßß÷Ğàû÷w÷7ÿm¨Á›7Ô8o-éÆYhuóé·ı'l>ıŞ`óû§ÃÍİcƒÍãqÿ„ĞÍãÓËİí×ão?Şş„ˆ?!ÒÎãùÿÃù©ó·âËúüÍæòûòM.=sv}ÛkÚ¿8®÷óãßo><Şüpóáûû}°Ğ,²µ£XPC$"ÑCáiçoÓiÆÇˆÍ”œÿX¾:>,çv¾nŸ^tAìc¦—(˜ËÊôw¼œ‚#ÊÜûåavoÜm:åıå˜|ìÈÌ"ô!}ê|èÎ$Î¿Ÿ“e'ô4¢‰ùôøÇÂÙ) Pq¯ÌÎ‹@D¼•ø‡ô(%°Ä{;Mšş=lwoQ¡)O->;ÛMxÜYpCEÀ¤×zásÉ\DN±Ú½±B6t ô}áy¡!õ5¡³Â5@ß&îz}„ÎSjxÊ¤ÿ€<Væ%ª4IÎ-çÓó,owÿ.‹Ôûürø×í¯‡İ@¶G`vsd£dE__p2=ç¼(•]É:W²sCTÙd:bÙEÛï?+Å€aT ç!#j¥õê1½Ø‚TäfIåÆƒwëCâx4‚CâÆíÔÊûêvêgØé¤ìë²SR/$³5—q˜0Í0À‚ávEH¦IÃ˜ƒ7³ÄÊ¶©¤„¬ÍcŠP'ÆÛ§ÿ¦]Æı›Ô—8İ $ÄBFl=·y@uÇ ãSÂEÏè’¾ÌJû<’*Å»‹O=§¾!/kÓ§a¬$@ÜŒµhûz(Ö2Î;ÁË?´ß¶ïÚ»ô¿ÓÇCËçîü¾;=ã¾ı8)Ã%Ş`;9ñÇ]oÅÓ;ršvCE<}¼ïş‹·¼GújEAFğãÀj9ıPÀã¸Şf$SÊ|U¨
+6üÜYğ²õx<Ÿ3Øùü’“y<9]úUÂp‡”Ò;ãòşP@CG½\¨XP…T¡ÈÔîäîš’){Õ7‰áëä;]ßäéâIÓªÂ=uI¸ûBX%ĞŞ’Z|d–³Ùşµ3‡ñYs
+F¤ıœYÈªÀ¾ß÷Ü	«Ûa¶ÁŠÀ*¯\%Xş&HFtV¬µs¤Oğı±o,,[Î%I×ŸÇÜòN7§ËŸ,—[WKÉÃÊ‚Ò
+,»õyzòïF‰€…%°eÎÕÏ Xä3%óêÉ‡k¸T3—–»è™iµ³–¿dÀiÍ¼U'	}Ûÿ!ä'<P¬Xim*Á"±Ğ04°öÀ–çH—áXÉí÷Ÿ{¼ó”IûÆEH9\ä©(aÓÆ’å¹:©(HeJæU“ŠP¾Æò> ªÕ@/æUXÆğœY|†Fã3jfW	;TĞÙ:œ#ıU¸£ÛˆJrtcí˜,«²pÖø·xYÅU0+õJVæÅÿ"&GA}ÃH¨=rÖ¬÷©)¾ê»&xA×çK?Î—“2gÕ»ûµ¿XĞ¢±J x± ­BEV $gVC·˜u¡@kœUsf±4{z73…Ò$ğrlÔÃØÄˆ`|›6bR‡åRw¹=ÖpPì#8çf}>‹ƒu]
+éÇåxrG]<ywº‚è/ù€ßŒÎ2Rg^kãÇÆ9=–0Ì) «ı6v'T­Bõ,~†]#ê”ÌW&ÔËíEZAƒÃ˜HVC&¬†s9Éƒ$9Ö¸“ø+Tí…Â]T$z-”‰€\[¼ÜG­*e[é._ÚØT¨·E2Òâ–äa„	æ}Ñì»3ç­¡/aå51¤ÀÛXeœÈŒ°ÁiSı½Ã‘MÉœÜqËñ/ÃEKjÙ-‚æ””%®„q1-e‰Û€Mìa&ƒ™aÄ"€
+¾,ƒ™BP	ØÓé¯Ã`§#É iï0¥·PÑ‚Öa›+ìáö0¼ª_Ü7A`)™_=†'Ù»/´Æ„cBo¼G¿ùÅ„cKÀ ŞàœY¬-Ìí…	Ö„lAiT\	pì0
+°bPÖÏ‘şÿG8vo”R€Šx=ÚŒc…¶£	´®_ù·V`œ)™×À8Y÷[1]jÌÖ	Ík‘_Î8âšh›.Æiï„	¡™¡,ã8š¶šæµ738ofØDãìã„73L»cê×ÑØgJæk°¿å^Ğ^a±b4¨Ğ&ç+¡\L'®°@±ĞÒŒI¬e!qVª¨WAEb'UÔ·ÁñÅ6kmÛ¹aäQmsƒRd¶ù¾@7A â–çë¿–İLÉœ ›§âFˆ@63o×š'©0³ÂÅ4ãY*Ìlu|$f¼’
+3U`xÆk©0³Zë¤M›céøùûÃéïlğş¦_·õ•ÚûœÜÈ›r4»9ÆÉÊ]æ:x`ç­ªÎVB›ù´Ğë£+/ĞÕj—óUøj+¬«+ @X•€+ÀX[yíÔè:Ú B¡İjğ6XúE¡]{Õö5Z®MQAhFŸ:AQ‹^‰œq± /#QÓZğSS°5m„sÕš-8‰šê #Q“—¨i«}]{(šÏ‘€5ŞèÒã4B(´ŸkÀ ×çB¡}ZêÕ	!KL²¾åïÅ¡’¨d# «¨„PK\RKD&!©º…µ®‡0Ëdò]úÖDœÓ1¡·8¯ì­á•MDøå0ÂB#ºCpµÚHc	wşÚûB
 endstream
 endobj
 2271 0 obj
@@ -7389,12 +7389,12 @@ F§ëMkŠIˆ¹‘RŸB|êê&Ø¥n‚à¤‹¸º(¸H¹rëTÅ³üË9ğ`ùÕ¨a”&åÊº»ãî:Ùl
 endstream
 endobj
 2273 0 obj
-<</Title(Vakint)/Creator(Typst 0.15.0)/ModDate(D:20260904201335Z)/CreationDate(D:20260904201335Z)>>
+<</Title(Vakint)/Creator(Typst 0.15.0)/ModDate(D:20260904212450Z)/CreationDate(D:20260904212450Z)>>
 endobj
 2274 0 obj
 <</Length 1081/Type/Metadata/Subtype/XML>>
 stream
-<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="xmp-writer"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"  xmlns:xmp="http://ns.adobe.com/xap/1.0/"  xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"  xmlns:xmpTPg="http://ns.adobe.com/xap/1.0/t/pg/"  xmlns:pdf="http://ns.adobe.com/pdf/1.3/" ><dc:title><rdf:Alt><rdf:li xml:lang="x-default">Vakint</rdf:li></rdf:Alt></dc:title><xmp:CreatorTool>Typst 0.15.0</xmp:CreatorTool><dc:language><rdf:Bag><rdf:li>en</rdf:li></rdf:Bag></dc:language><xmp:ModifyDate>2026-09-04T20:13:35+00:00</xmp:ModifyDate><xmp:CreateDate>2026-09-04T20:13:35+00:00</xmp:CreateDate><xmpTPg:NPages>30</xmpTPg:NPages><dc:format>application/pdf</dc:format><xmpMM:InstanceID>Y2T8T8KtAG+X+YBBS7SLbg==</xmpMM:InstanceID><xmpMM:DocumentID>Y2T8T8KtAG+X+YBBS7SLbg==</xmpMM:DocumentID><xmpMM:RenditionClass>proof</xmpMM:RenditionClass><pdf:PDFVersion>1.7</pdf:PDFVersion></rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="r"?>
+<?xpacket begin="ï»¿" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="xmp-writer"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/"  xmlns:xmp="http://ns.adobe.com/xap/1.0/"  xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/"  xmlns:xmpTPg="http://ns.adobe.com/xap/1.0/t/pg/"  xmlns:pdf="http://ns.adobe.com/pdf/1.3/" ><dc:title><rdf:Alt><rdf:li xml:lang="x-default">Vakint</rdf:li></rdf:Alt></dc:title><xmp:CreatorTool>Typst 0.15.0</xmp:CreatorTool><dc:language><rdf:Bag><rdf:li>en</rdf:li></rdf:Bag></dc:language><xmp:ModifyDate>2026-09-04T21:24:50+00:00</xmp:ModifyDate><xmp:CreateDate>2026-09-04T21:24:50+00:00</xmp:CreateDate><xmpTPg:NPages>30</xmpTPg:NPages><dc:format>application/pdf</dc:format><xmpMM:InstanceID>3IFZeIB3TZZ4CXpDNGPyYw==</xmpMM:InstanceID><xmpMM:DocumentID>3IFZeIB3TZZ4CXpDNGPyYw==</xmpMM:DocumentID><xmpMM:RenditionClass>proof</xmpMM:RenditionClass><pdf:PDFVersion>1.7</pdf:PDFVersion></rdf:Description></rdf:RDF></x:xmpmeta><?xpacket end="r"?>
 endstream
 endobj
 2275 0 obj
@@ -9673,13 +9673,13 @@ xref
 0000349474 00000 n
 0000350041 00000 n
 0000351966 00000 n
-0000354193 00000 n
-0000354601 00000 n
-0000354945 00000 n
-0000355063 00000 n
-0000356223 00000 n
+0000354198 00000 n
+0000354606 00000 n
+0000354950 00000 n
+0000355068 00000 n
+0000356228 00000 n
 trailer
-<</Size 2276/Root 2275 0 R/Info 2273 0 R/ID[(Y2T8T8KtAG+X+YBBS7SLbg==)(Y2T8T8KtAG+X+YBBS7SLbg==)]>>
+<</Size 2276/Root 2275 0 R/Info 2273 0 R/ID[(3IFZeIB3TZZ4CXpDNGPyYw==)(3IFZeIB3TZZ4CXpDNGPyYw==)]>>
 startxref
-356544
+356549
 %%EOF
