@@ -688,8 +688,8 @@ kind = "Build engineering"
 status = "Living engineering record"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-09-02"
-review_ref = "mzlsmqsz"
+reviewed_at = "2026-09-04"
+review_ref = "zzmvlsnr"
 products = ["gammaloop"]
 topics = ["nix", "ci", "cache", "documentation"]
 review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/**", "crates/gammaloop-workspace-hack/**", "crates/alphal00p-docs-builder/**", "justfile"]
@@ -698,10 +698,10 @@ review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/*
 path = "flake.nix"
 symbol = "alphal00pDocsCargoArtifacts"
 anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
-# Reviewed after the main toolchain refresh: the docs renderer stays pinned,
-# catalog annotations declare their exact source slice, and the Python ABI
-# family builds only library targets. These remain isolated artifact families.
-digest = "98cf68bd6788ae1a231f2e194cef7a9867b7b662"
+# Reviewed after the terminal nextest archives switched to writable inherited
+# artifacts. The docs renderer remains pinned, and these stay isolated artifact
+# families despite the shared archive-construction helper changing.
+digest = "c3cda94526b396741b4091ebe37ea9e66ddf4c3e"
 
 [[section.note.scope]]
 path = "crates/alphal00p-docs-builder/src/typst_render.rs"
@@ -731,8 +731,8 @@ kind = "Contributor documentation policy"
 status = "Current guide"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-09-01"
-review_ref = "f8a0e490dd02bf2e71d7c8e59ff852384d143dfd"
+reviewed_at = "2026-09-04"
+review_ref = "zzmvlsnr"
 products = ["gammaloop", "linnet", "spenso", "idenso", "vakint"]
 topics = ["documentation", "architecture", "governance"]
 review_triggers = ["docs/developers.toml", "crates/alphal00p-docs-builder/src/lib.rs", "CONTRIBUTING.typ"]
@@ -741,9 +741,9 @@ review_triggers = ["docs/developers.toml", "crates/alphal00p-docs-builder/src/li
 path = "crates/alphal00p-docs-builder/src/lib.rs"
 symbol = "alphal00p_docs_builder::SiteBuilder::check"
 anchor = "pub fn check(&self) -> Result<()> {"
-# Reviewed portal-source change: semantic Typst pages are separate from the
-# presentation component boundary; Rust retains validation and build plumbing.
-digest = "3a8ee2ab4f9fb9b32465039272bfff839b36aeca"
+# Reviewed snapshot-link and Rustdoc-normalization changes: semantic Typst pages
+# remain separate from presentation; Rust resolves channels and validates links.
+digest = "193d98aa34e357fdeebb9692d6b8ae12d527feab"
 
 [[section.note]]
 id = "documentation-improvement-plan"

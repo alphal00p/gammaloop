@@ -3717,6 +3717,9 @@
               pname = "gammaloop-nextest-binaries-${target.name}-${package}";
               src = nextestSrcFor packageTarget;
               cargoArtifacts = packageCargoArtifacts;
+              # A changed transitive workspace source can make Cargo refresh an
+              # inherited artifact while constructing the terminal archive.
+              doNotLinkInheritedArtifacts = true;
               doCheck = false;
               doInstallCargoArtifacts = false;
               nativeBuildInputs =

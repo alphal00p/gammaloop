@@ -1853,6 +1853,8 @@ impl SiteBuilder {
             BuildScope::FullSite => {
                 self.write_developer_docs(
                     &output,
+                    request.channel,
+                    tag,
                     request.include_typst,
                     request.dependency_output.as_deref(),
                     renderer,
@@ -2699,6 +2701,14 @@ impl SiteBuilder {
 
         let destination = site.join("reference/rust");
         copy_tree(&rustdoc_source, &destination)?;
+        // Rustdoc's settings and help redirects target this sidecar root. The
+        // authored Rust API landing page replaces this marker below.
+        fs::write(destination.join("index.html"), b"")?;
+        // Whole-site validation repairs unresolved inherited Rustdoc paths. Do
+        // the same repair before immutable snapshots are compared, otherwise
+        // the first published tree is normalized only after it is copied while
+        // a repeat build is compared in its fresh, unnormalized form.
+        self.validate_generated_links_in_roots(site, true, &[destination.as_path()])?;
         fs::write(
             destination.join("index.html"),
             reference_page(
@@ -4108,6 +4118,8 @@ impl SiteBuilder {
     fn write_developer_docs(
         &self,
         output: &Path,
+        channel: BuildChannel,
+        snapshot_tag: Option<&str>,
         include_typst: bool,
         dependency_output: Option<&Path>,
         renderer: &mut dyn TypstRenderer,
@@ -4187,6 +4199,8 @@ impl SiteBuilder {
                     &commit,
                     &note_routes,
                     &self.root,
+                    channel,
+                    snapshot_tag,
                 )?;
                 (body, extract_typst_head_styles(&rendered)?)
             } else {
@@ -4604,15 +4618,23 @@ impl SiteBuilder {
     }
 
     fn validate_generated_links(&self, output: &Path, include_rustdoc: bool) -> Result<()> {
+        self.validate_generated_links_in_roots(output, include_rustdoc, &[output])
+    }
+
+    fn validate_generated_links_in_roots(
+        &self,
+        output: &Path,
+        include_rustdoc: bool,
+        roots: &[&Path],
+    ) -> Result<()> {
         let patterns = LinkValidationPatterns::new()?;
         let documented_revision = self.git_commit();
-        let roots = [output.to_path_buf()];
         let mut failures = vec![];
         let mut linked_pages = HashMap::new();
         let mut link_rewrites = LinkRewriteIndex::new();
         let mut local_paths = LocalPathIndex::new();
         for root in roots {
-            for entry in WalkDir::new(&root) {
+            for entry in WalkDir::new(root) {
                 let entry = entry?;
                 let relative = entry.path().strip_prefix(output)?;
                 if entry.file_type().is_file()
@@ -4697,7 +4719,7 @@ impl SiteBuilder {
                     }
                 }
             }
-            for entry in WalkDir::new(&root) {
+            for entry in WalkDir::new(root) {
                 let entry = entry?;
                 if !entry.file_type().is_file() || entry.file_name() != "search-index.json" {
                     continue;
@@ -4996,6 +5018,8 @@ fn rewrite_developer_source_links(
     commit: &str,
     note_routes: &BTreeMap<PathBuf, String>,
     repository_root: &Path,
+    channel: BuildChannel,
+    snapshot_tag: Option<&str>,
 ) -> Result<String> {
     let attribute = Regex::new(r#"(?P<name>href|src)=\"(?P<target>[^\"]+)\""#)?;
     Ok(attribute
@@ -5012,6 +5036,18 @@ fn rewrite_developer_source_links(
                     .is_some_and(|scheme| matches!(scheme, "http" | "https" | "mailto" | "data"));
             if external {
                 return format!("{name}=\"{target}\"");
+            }
+
+            if name == "href"
+                && channel == BuildChannel::Snapshot
+                && target.starts_with("../../../products/")
+                && target.contains("/latest/")
+            {
+                let tag = snapshot_tag.expect("snapshot tags are validated before rendering");
+                return format!(
+                    "{name}=\"{}\"",
+                    escape_html(&target.replacen("/latest/", &format!("/snapshots/{tag}/"), 1))
+                );
             }
 
             let suffix_start = target.find(['?', '#']).unwrap_or(target.len());
@@ -9346,6 +9382,27 @@ mod tests {
     }
 
     #[test]
+    fn snapshot_developer_product_links_follow_the_documented_revision() {
+        let html =
+            r#"<a href="../../../products/spenso/latest/tutorial/#first-result">Tutorial</a>"#;
+        let rendered = rewrite_developer_source_links(
+            html,
+            Path::new("docs/architecture/spenso-architecture.typ"),
+            "0123456789abcdef",
+            &BTreeMap::new(),
+            Path::new("."),
+            BuildChannel::Snapshot,
+            Some("v0.3.4"),
+        )
+        .unwrap();
+
+        assert_eq!(
+            rendered,
+            r#"<a href="../../../products/spenso/snapshots/v0.3.4/tutorial/#first-result">Tutorial</a>"#
+        );
+    }
+
+    #[test]
     fn python_sidebar_lists_only_the_current_module_and_marks_one_page() {
         let builder = SiteBuilder::discover().unwrap();
         let product = builder
@@ -10563,6 +10620,31 @@ mod tests {
         assert!(normalized.contains("href=\"javascript:void(0)\""));
         assert!(!normalized.contains("crate::Span"));
         assert!(!normalized.contains("href=\"dispatcher#default\""));
+    }
+
+    #[test]
+    fn rustdoc_link_repairs_can_run_before_whole_site_validation() {
+        let builder = SiteBuilder::discover().unwrap();
+        let output = tempfile::tempdir().unwrap();
+        let rustdoc = output.path().join("reference/rust/example");
+        fs::create_dir_all(&rustdoc).unwrap();
+        fs::write(
+            output.path().join("index.html"),
+            r#"<a href="not-built-yet.html">unfinished site</a>"#,
+        )
+        .unwrap();
+        fs::write(
+            rustdoc.join("index.html"),
+            r#"<a href="crate::Span">inherited type</a>"#,
+        )
+        .unwrap();
+
+        builder
+            .validate_generated_links_in_roots(output.path(), true, &[rustdoc.as_path()])
+            .unwrap();
+
+        let normalized = fs::read_to_string(rustdoc.join("index.html")).unwrap();
+        assert_eq!(normalized, "<a>inherited type</a>");
     }
 
     #[test]
@@ -12261,7 +12343,14 @@ mod tests {
         fs::create_dir_all(stale.parent().unwrap()).unwrap();
         fs::write(&stale, "stale route").unwrap();
         builder
-            .write_developer_docs(output.path(), false, None, &mut renderer)
+            .write_developer_docs(
+                output.path(),
+                BuildChannel::Latest,
+                None,
+                false,
+                None,
+                &mut renderer,
+            )
             .unwrap();
 
         let developer_root = output.path().join("developers");
@@ -12658,7 +12747,14 @@ mod tests {
         assert!(portal.contains("Search all projects and developer notes"));
 
         builder
-            .write_developer_docs(output.path(), false, None, &mut renderer)
+            .write_developer_docs(
+                output.path(),
+                BuildChannel::Latest,
+                None,
+                false,
+                None,
+                &mut renderer,
+            )
             .unwrap();
         let hub = fs::read_to_string(output.path().join("developers/index.html")).unwrap();
         assert!(hub.contains("data-search-index=\"../search-index.json\""));

@@ -1,8 +1,8 @@
 = Nix and Crane artifact reuse
 <nixcrane-cargo-artifact-reuse>
 #quote(block: true)[
-#strong[Status:] Living engineering record reviewed 2026-09-02 against
-`mzlsmqsz`
+#strong[Status:] Living engineering record reviewed 2026-09-04 against
+`zzmvlsnr`
 
 This is a chronological investigation, not a uniformly current
 specification. Sections explicitly labelled “Historical” are superseded;
@@ -1556,6 +1556,14 @@ would let either workflow replace the other\'s roots. Each workflow
 reuses the chain across its own runs; the Nix workflow realizes the raw
 documentation artifact before its consumer matrix is released.
 
+Rustdoc can emit unresolved pseudo-links inherited from dependency prose,
+such as Rust paths that are not navigable in a crate-only sidecar. Each copied
+sidecar now runs the same link normalization used by whole-site validation
+before an immutable snapshot is compared. The final validator still scans the
+combined site. This ordering keeps a second build byte-identical to the first:
+the previously published snapshot and the fresh candidate are both already in
+their normalized form when immutability is checked.
+
 Manual Pages dispatches with `publish=false` build and seed this cache
 without merging Pages history or configuring, uploading, or deploying
 GitHub Pages. A docs-only successor run can therefore validate cross-run
@@ -1652,13 +1660,16 @@ builds consume their self-contained, stripped `crate-deps-*` archive
 directly, and the Python build and package phases consume their
 preceding self-contained archive instead of routing it through a
 one-input `mergeCargoArtifacts`. The terminal nextest archives consume
-the matching package-local incremental artifact, use Crane\'s
-symlink-heavy inheritance for its materialized base, and overlay its
-writable delta. Crane does not follow a `target.tar.zst.prev` link whose
-target is a directory, so the archive derivation explicitly inherits
-that base before Crane\'s normal post-patch hook applies the delta. This
-avoids both a new materialized group merge and publication of another
-Cargo target tree.
+the matching package-local incremental artifact and deep-copy inherited
+artifacts before overlaying the package-specific delta. Cargo can decide
+that a transitive workspace unit needs refreshing when documentation or
+another source-only input changes; a store-backed symlink would make the
+resulting `.rmeta` write fail. Crane does not follow a
+`target.tar.zst.prev` link whose target is a directory, so the archive
+derivation still explicitly inherits that base before Crane\'s normal
+post-patch hook applies the delta. This avoids both a new materialized
+group merge and publication of another Cargo target tree while keeping
+the terminal target writable.
 
 The self-contained archive compaction step uses mtime epoch 1, matching
 Crane\'s artifact installer and Nix source timestamps. Using epoch 0 for
@@ -1722,7 +1733,10 @@ artifact family, where it is linked with its normal feature context.
   family. Normal Rust test archives should not depend on that family.
 - `doNotLinkInheritedArtifacts = true` remains on producer paths whose
   archive and stripping behavior still needs a focused chain test before
-  switching to Crane\'s symlink-heavy inheritance mode. It should not
-  cause recompilation, but it can add wall time. The next publication
-  experiment should compare Crane\'s `use-symlink` artifact-install mode
-  across a complete root-to-package-to-test-to-archive chain.
+  switching to Crane\'s symlink-heavy inheritance mode. Terminal
+  nextest archives also retain it because Cargo may refresh transitive
+  workspace metadata there. Deep copies should not cause recompilation,
+  but they can add wall time. The next publication experiment should
+  compare Crane\'s `use-symlink` artifact-install mode across earlier
+  root-to-package-to-test stages without reintroducing read-only terminal
+  artifacts.

@@ -3537,13 +3537,7 @@ fn add_settings_value_suggestions(
         return;
     }
 
-    add_type_hint_suggestion(
-        schema_hint.unwrap_or_else(|| kind.description().to_string()),
-        value_request,
-        pos,
-        suggestions,
-        seen,
-    );
+    add_type_hint_suggestion(kind.description(), value_request, pos, suggestions, seen);
 }
 
 fn add_type_hint_suggestion(

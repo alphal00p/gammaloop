@@ -838,6 +838,14 @@ let
       "gammaloop-tracing-filter-macros"
       "gammalooprs"
     ];
+    docs = [
+      "alphal00p-docs-builder"
+      "alphal00p-docs-catalogs"
+      "alphal00p-docs-examples"
+      "alphal00p-docs-macros"
+      "alphal00p-docs-python-exporter"
+      "alphal00p-docs-schema"
+    ];
     integration = [ "gammaloop-integration-tests" ];
     "python-api" = [ "gammaloop-integration-tests" ];
     clinnet = [ "clinnet" ];
@@ -902,6 +910,7 @@ let
       "checks.${system}.gammaloop-doctest" = [ "packages.${system}.cargoArtifacts" ];
       "packages.${system}.workspaceBuildArtifacts" = [ "packages.${system}.cargoArtifacts" ];
       "checks.${system}.gammaloop-nextest-binaries-core" = nextestArchiveDependenciesFor "core";
+      "checks.${system}.gammaloop-nextest-binaries-docs" = nextestArchiveDependenciesFor "docs";
       "checks.${system}.gammaloop-nextest-binaries-clinnet" = nextestArchiveDependenciesFor "clinnet";
       "checks.${system}.gammaloop-nextest-binaries-integration" =
         nextestArchiveDependenciesFor "integration";
@@ -923,6 +932,9 @@ let
       ];
       "packages.${system}.nix-ci-check-gammaloop-nextest-core" = [
         "checks.${system}.gammaloop-nextest-binaries-core"
+      ];
+      "packages.${system}.nix-ci-check-gammaloop-nextest-docs" = [
+        "checks.${system}.gammaloop-nextest-binaries-docs"
       ];
       "packages.${system}.nix-ci-check-gammaloop-nextest-integration" = [
         "checks.${system}.gammaloop-nextest-binaries-integration"
@@ -977,6 +989,7 @@ let
       "checks.${system}.gammaloop-nextest-binaries"
       "checks.${system}.gammaloop-nextest-clinnet"
       "checks.${system}.gammaloop-nextest-core"
+      "checks.${system}.gammaloop-nextest-docs"
       "checks.${system}.gammaloop-nextest-integration"
       "checks.${system}.gammaloop-nextest-python-api"
       "checks.${system}.gammaloop-nextest-linnet"
@@ -1092,6 +1105,13 @@ in
 
     gammaloop-nextest-core = {
       package = "packages.${system}.nix-ci-check-gammaloop-nextest-core";
+      system = system;
+      in-repo = true;
+      secrets = [ "SYMBOLICA_LICENSE" ];
+    };
+
+    gammaloop-nextest-docs = {
+      package = "packages.${system}.nix-ci-check-gammaloop-nextest-docs";
       system = system;
       in-repo = true;
       secrets = [ "SYMBOLICA_LICENSE" ];
