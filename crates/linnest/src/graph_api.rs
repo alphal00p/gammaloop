@@ -584,6 +584,7 @@ fn apply_typst_graph_structural_patch(
     patch: TypstGraphStructuralPatch,
 ) -> Result<(), String> {
     let mut node_positions = typst_node_positions(graph);
+    let mut refresh_positions = false;
 
     for node in patch.nodes {
         if node.index >= graph.graph.n_nodes() {
@@ -596,6 +597,7 @@ fn apply_typst_graph_structural_patch(
 
         let index = NodeIndex(node.index);
         if let Some(pos) = node.pos {
+            refresh_positions = true;
             let placement = pos.resolve(&node_positions, "node structural patch")?;
             let statements = std::mem::take(&mut graph.graph[index].statements);
             graph.graph[index].statements =
@@ -607,7 +609,11 @@ fn apply_typst_graph_structural_patch(
                 .statements
                 .insert("shift".to_string(), shift.to_statement()?);
         }
+        refresh_positions |= point_statements_changed(&node.statements);
         graph.graph[index].statements.extend(node.statements);
+        if let Some((x, y)) = statement_point(&graph.graph[index].statements, "shift") {
+            graph.graph[index].shift = Some(Vector2::new(x, y));
+        }
     }
 
     for edge in patch.edges {
@@ -621,6 +627,7 @@ fn apply_typst_graph_structural_patch(
 
         let index = EdgeIndex(edge.index);
         if let Some(pos) = edge.pos {
+            refresh_positions = true;
             let placement = pos.resolve(&node_positions, "edge structural patch")?;
             let statements = std::mem::take(&mut graph.graph[index].statements);
             graph.graph[index].statements =
@@ -646,7 +653,22 @@ fn apply_typst_graph_structural_patch(
                 .statements
                 .insert("bend".to_string(), format!("{bend}rad"));
         }
+        refresh_positions |= point_statements_changed(&edge.statements);
         graph.graph[index].statements.extend(edge.statements);
+        let data = &mut graph.graph[index];
+        if let Some((x, y)) = statement_point(&data.statements, "shift") {
+            data.shift = Some(Vector2::new(x, y));
+        }
+        if let Some((x, y)) = statement_point(&data.statements, "label-pos") {
+            data.label_pos = Some(Point2::new(x, y));
+        }
+        if let Some(angle) = statement_radians(&data.statements, "label-angle") {
+            data.label_angle = Some(angle);
+        }
+        if let Some(bend) = statement_radians(&data.statements, "bend") {
+            data.bend = Ok(Rad(bend));
+            data.bend_explicit = true;
+        }
     }
 
     for hedge in patch.hedges {
@@ -670,8 +692,19 @@ fn apply_typst_graph_structural_patch(
         }
     }
 
-    refresh_structural_state_from_statements(graph);
+    if refresh_positions {
+        refresh_structural_state_from_statements(graph);
+    }
     Ok(())
+}
+
+fn point_statements_changed(statements: &BTreeMap<String, String>) -> bool {
+    statements.keys().any(|key| {
+        matches!(
+            normalize_statement_key(key).as_str(),
+            "pos" | "pin" | "pos-x-set" | "pos-y-set" | "pos-mode"
+        )
+    })
 }
 
 fn typst_node_positions(graph: &TypstGraph) -> Vec<ResolvedPoint> {

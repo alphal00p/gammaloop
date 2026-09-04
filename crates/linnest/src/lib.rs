@@ -2390,6 +2390,8 @@ impl TypstGraph {
             }
         }
 
+        self.apply_cross_kind_grouped_constraints(pos_v, pos_e, false);
+
         for i in 0..node_len {
             let idx = NodeIndex(i);
             Self::apply_directional_constraint(&self[idx].constraints.x, &mut pos_v[idx].x);
@@ -2403,6 +2405,107 @@ impl TypstGraph {
         }
     }
 
+    fn apply_cross_kind_grouped_constraints(
+        &self,
+        pos_v: &mut NodeVec<Point2<f64>>,
+        pos_e: &mut EdgeVec<Point2<f64>>,
+        nodes_are_fixed: bool,
+    ) {
+        let mut x_groups = BTreeMap::<String, (Option<f64>, Option<f64>)>::new();
+        let mut y_groups = BTreeMap::<String, (Option<f64>, Option<f64>)>::new();
+        let node_groups = self.new_nodevec(|_, _, data| Self::constraint_groups(&data.statements));
+        let edge_groups = self.new_edgevec(|data, _, _| Self::constraint_groups(&data.statements));
+
+        for (node, (x_group, y_group)) in node_groups.iter() {
+            if let Some(group) = x_group {
+                x_groups
+                    .entry(group.clone())
+                    .or_default()
+                    .0
+                    .get_or_insert(pos_v[node].x);
+            }
+            if let Some(group) = y_group {
+                y_groups
+                    .entry(group.clone())
+                    .or_default()
+                    .0
+                    .get_or_insert(pos_v[node].y);
+            }
+        }
+        for (edge, (x_group, y_group)) in edge_groups.iter() {
+            if let Some(group) = x_group {
+                x_groups
+                    .entry(group.clone())
+                    .or_default()
+                    .1
+                    .get_or_insert(pos_e[edge].x);
+            }
+            if let Some(group) = y_group {
+                y_groups
+                    .entry(group.clone())
+                    .or_default()
+                    .1
+                    .get_or_insert(pos_e[edge].y);
+            }
+        }
+
+        let x_groups: BTreeMap<_, _> = x_groups
+            .into_iter()
+            .filter_map(|(group, (node, edge))| {
+                let node = node?;
+                Some((
+                    group,
+                    if nodes_are_fixed {
+                        node
+                    } else {
+                        (node + edge?) * 0.5
+                    },
+                ))
+            })
+            .collect();
+        let y_groups: BTreeMap<_, _> = y_groups
+            .into_iter()
+            .filter_map(|(group, (node, edge))| {
+                let node = node?;
+                Some((
+                    group,
+                    if nodes_are_fixed {
+                        node
+                    } else {
+                        (node + edge?) * 0.5
+                    },
+                ))
+            })
+            .collect();
+
+        if !nodes_are_fixed {
+            for (node, (x_group, y_group)) in node_groups.iter() {
+                if let Some(x) = x_group.as_ref().and_then(|group| x_groups.get(group)) {
+                    pos_v[node].x = *x;
+                }
+                if let Some(y) = y_group.as_ref().and_then(|group| y_groups.get(group)) {
+                    pos_v[node].y = *y;
+                }
+            }
+        }
+        for (edge, (x_group, y_group)) in edge_groups.iter() {
+            if let Some(x) = x_group.as_ref().and_then(|group| x_groups.get(group)) {
+                pos_e[edge].x = *x;
+            }
+            if let Some(y) = y_group.as_ref().and_then(|group| y_groups.get(group)) {
+                pos_e[edge].y = *y;
+            }
+        }
+    }
+
+    fn constraint_groups(
+        statements: &BTreeMap<String, String>,
+    ) -> (Option<String>, Option<String>) {
+        dot_statement_value(statements, "pin")
+            .and_then(|pin| PinConstraint::parse(pin))
+            .map_or((None, None), PinConstraint::into_axis_groups)
+    }
+
     fn apply_layout_constraints(
         &self,
         pos_v: &mut NodeVec<Point2<f64>>,
@@ -2410,6 +2513,7 @@ impl TypstGraph {
     ) {
         if self.layout_config.layout_nodes.nodes_are_fixed() {
             self.apply_edge_grouped_constraints(pos_e);
+            self.apply_cross_kind_grouped_constraints(pos_v, pos_e, true);
         } else {
             self.apply_grouped_constraints(pos_v, pos_e);
         }

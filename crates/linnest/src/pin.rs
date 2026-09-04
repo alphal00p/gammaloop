@@ -16,6 +16,21 @@ pub enum PinConstraint {
 }
 
 impl PinConstraint {
+    pub(crate) fn into_axis_groups(self) -> (Option<String>, Option<String>) {
+        match self {
+            PinConstraint::LinkX(group) => (Some(group), None),
+            PinConstraint::LinkY(group) => (None, Some(group)),
+            PinConstraint::LinkBoth(group) => (Some(group.clone()), Some(group)),
+            PinConstraint::Combined(x_constraint, y_constraint) => (
+                x_constraint.into_axis_groups().0,
+                y_constraint.into_axis_groups().1,
+            ),
+            PinConstraint::Fixed(_, _) | PinConstraint::FixX(_) | PinConstraint::FixY(_) => {
+                (None, None)
+            }
+        }
+    }
+
     pub fn point_constraint(
         &self,
         index: usize,
