@@ -1,0 +1,4129 @@
+{
+  "schema": 1,
+  "source": "https://inspirehep.net",
+  "updated": "2026-08-14",
+  "api_url": "https://inspirehep.net/api/literature?sort=mostrecent&q=%28a+V.Hirschi.1+or+a+M.Fraaije.1+or+a+L.Huber.1+or+a+B.Ruijl.1+or+a+Kaapo.Seppanen.1+or+a+Zeno.Capatti.1%29",
+  "authors": [
+    {
+      "id": "valentin-hirschi",
+      "name": "Valentin Hirschi",
+      "inspire_bai": "V.Hirschi.1"
+    },
+    {
+      "id": "mathijs-fraaije",
+      "name": "Mathijs Fraaije",
+      "inspire_bai": "M.Fraaije.1"
+    },
+    {
+      "id": "lucien-huber",
+      "name": "Lucien Huber",
+      "inspire_bai": "L.Huber.1"
+    },
+    {
+      "id": "ben-ruijl",
+      "name": "Ben Ruijl",
+      "inspire_bai": "B.Ruijl.1"
+    },
+    {
+      "id": "kaapo-seppanen",
+      "name": "Kaapo Seppänen",
+      "inspire_bai": "Kaapo.Seppanen.1"
+    },
+    {
+      "id": "zeno-capatti",
+      "name": "Zeno Capatti",
+      "inspire_bai": "Zeno.Capatti.1"
+    }
+  ],
+  "publications": [
+    {
+      "id": 3168692,
+      "title": "Static linear response of hot and dense QCD matter to electromagnetic fields: Leading hard and soft QCD corrections",
+      "date": "2026-06-15",
+      "year": 2026,
+      "authors": [
+        "Ferreira, Osvaldo",
+        "Fraga, Eduardo S.",
+        "Gorda, Tyler",
+        "Paatelainen, Risto",
+        "Sandbote, Leon",
+        "Seppänen, Kaapo"
+      ],
+      "people": [
+        "kaapo-seppanen"
+      ],
+      "arxiv": "2606.16377",
+      "citations": 0,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/3168692",
+      "bibtex_url": "https://inspirehep.net/api/literature/3168692?format=bibtex"
+    },
+    {
+      "id": 3082699,
+      "title": "A new approach to determine the thermodynamics of deconfined matter to high accuracy",
+      "date": "2025-11-12",
+      "year": 2025,
+      "authors": [
+        "Gorda, Tyler",
+        "Navarrete, Pablo",
+        "Paatelainen, Risto",
+        "Sandbote, Leon",
+        "Seppänen, Kaapo"
+      ],
+      "people": [
+        "kaapo-seppanen"
+      ],
+      "arxiv": "2511.09627",
+      "citations": 5,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/3082699",
+      "bibtex_url": "https://inspirehep.net/api/literature/3082699?format=bibtex"
+    },
+    {
+      "id": 3073013,
+      "title": "Five-loop beta function for gauge theories: computations, results and consequences",
+      "date": "2025-10-24",
+      "year": 2025,
+      "authors": [
+        "Herzog, Franz",
+        "Ruijl, Ben",
+        "Ueda, Takahiro",
+        "Vermaseren, Jos",
+        "Vogt, Andreas"
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "arxiv": "2510.21624",
+      "citations": 1,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/3073013",
+      "bibtex_url": "https://inspirehep.net/api/literature/3073013?format=bibtex"
+    },
+    {
+      "id": 2970544,
+      "title": "NNLO QCD corrections to γγ → QQ̅ from Local Unitarity combined with Coulomb resummation and NLO EW effects",
+      "date": "2025-09-16",
+      "year": 2025,
+      "authors": [
+        "Capatti, Zeno",
+        "Fraaije, Mathijs",
+        "Hirschi, Valentin",
+        "Huber, Lucien",
+        "Ruijl, Ben",
+        "Shao, Hua-Sheng"
+      ],
+      "people": [
+        "valentin-hirschi",
+        "mathijs-fraaije",
+        "lucien-huber",
+        "ben-ruijl",
+        "zeno-capatti"
+      ],
+      "venue": "JHEP 03 (2026) 068",
+      "doi": "10.1007/JHEP03(2026)068",
+      "arxiv": "2509.13439",
+      "citations": 6,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2970544",
+      "bibtex_url": "https://inspirehep.net/api/literature/2970544?format=bibtex"
+    },
+    {
+      "id": 3085745,
+      "title": "Quark Matter Thermodynamics from High-Order Perturbative QCD",
+      "date": "2025-09-12",
+      "year": 2025,
+      "authors": [
+        "Seppänen, Kaapo"
+      ],
+      "people": [
+        "kaapo-seppanen"
+      ],
+      "citations": 1,
+      "types": [
+        "thesis"
+      ],
+      "url": "https://inspirehep.net/literature/3085745",
+      "bibtex_url": "https://inspirehep.net/api/literature/3085745?format=bibtex"
+    },
+    {
+      "id": 2944143,
+      "title": "Cosmological phase transitions without high-temperature expansions",
+      "date": "2025-07-09",
+      "year": 2025,
+      "authors": [
+        "Navarrete, Pablo",
+        "Paatelainen, Risto",
+        "Seppänen, Kaapo",
+        "Tenkanen, Tuomas V.I."
+      ],
+      "people": [
+        "kaapo-seppanen"
+      ],
+      "venue": "JHEP 01 (2026) 113",
+      "doi": "10.1007/JHEP01(2026)113",
+      "arxiv": "2507.07014",
+      "citations": 23,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2944143",
+      "bibtex_url": "https://inspirehep.net/api/literature/2944143?format=bibtex"
+    },
+    {
+      "id": 2937276,
+      "title": "Multi-partonic interactions, iterated discontinuities and the virtuality expansion in deep inelastic scattering",
+      "date": "2025-06-19",
+      "year": 2025,
+      "authors": [
+        "Capatti, Zeno",
+        "Huber, Lucien",
+        "Ruf, Michael"
+      ],
+      "people": [
+        "lucien-huber",
+        "zeno-capatti"
+      ],
+      "arxiv": "2506.16489",
+      "citations": 2,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2937276",
+      "bibtex_url": "https://inspirehep.net/api/literature/2937276?format=bibtex"
+    },
+    {
+      "id": 2911625,
+      "title": "Tropical sampling from Feynman measures",
+      "date": "2025-04-13",
+      "year": 2025,
+      "authors": [
+        "Borinsky, Michael",
+        "Fraaije, Mathijs"
+      ],
+      "people": [
+        "mathijs-fraaije"
+      ],
+      "venue": "Comput.Phys.Commun. 317 (2025) 109846",
+      "doi": "10.1016/j.cpc.2025.109846",
+      "arxiv": "2504.09613",
+      "citations": 3,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2911625",
+      "bibtex_url": "https://inspirehep.net/api/literature/2911625?format=bibtex"
+    },
+    {
+      "id": 2874186,
+      "title": "Quark Matter at Four Loops: Hardships and How to Overcome Them",
+      "date": "2025-01-29",
+      "year": 2025,
+      "authors": [
+        "Kärkkäinen, Aapeli",
+        "Navarrete, Pablo",
+        "Nurmela, Mika",
+        "Paatelainen, Risto",
+        "Seppänen, Kaapo",
+        "Vuorinen, Aleksi"
+      ],
+      "people": [
+        "kaapo-seppanen"
+      ],
+      "venue": "Phys.Rev.Lett. 135 (2025) 021901",
+      "doi": "10.1103/627n-5g6l",
+      "arxiv": "2501.17921",
+      "citations": 15,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2874186",
+      "bibtex_url": "https://inspirehep.net/api/literature/2874186?format=bibtex"
+    },
+    {
+      "id": 2859905,
+      "title": "Classical worldlines from scattering amplitudes",
+      "date": "2024-12-14",
+      "year": 2024,
+      "authors": [
+        "Capatti, Zeno",
+        "Zeng, Mao"
+      ],
+      "people": [
+        "zeno-capatti"
+      ],
+      "venue": "Phys.Rev.D 111 (2025) 125002",
+      "doi": "10.1103/PhysRevD.111.125002",
+      "arxiv": "2412.10864",
+      "citations": 10,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2859905",
+      "bibtex_url": "https://inspirehep.net/api/literature/2859905?format=bibtex"
+    },
+    {
+      "id": 2811665,
+      "title": "Universal corrections to the superfluid gap in a cold Fermi gas",
+      "date": "2024-07-29",
+      "year": 2024,
+      "authors": [
+        "Beane, Silas R.",
+        "Capatti, Zeno",
+        "Farrell, Roland C."
+      ],
+      "people": [
+        "zeno-capatti"
+      ],
+      "venue": "Phys.Rev.A 111 (2025) 013309",
+      "doi": "10.1103/PhysRevA.111.013309",
+      "arxiv": "2407.20168",
+      "citations": 5,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2811665",
+      "bibtex_url": "https://inspirehep.net/api/literature/2811665?format=bibtex"
+    },
+    {
+      "id": 2764791,
+      "title": "Perturbative QCD meets phase quenching: The pressure of cold quark matter",
+      "date": "2024-03-04",
+      "year": 2024,
+      "authors": [
+        "Navarrete, Pablo",
+        "Paatelainen, Risto",
+        "Seppänen, Kaapo"
+      ],
+      "people": [
+        "kaapo-seppanen"
+      ],
+      "venue": "Phys.Rev.D 110 (2024) 094033",
+      "doi": "10.1103/PhysRevD.110.094033",
+      "arxiv": "2403.02180",
+      "citations": 18,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2764791",
+      "bibtex_url": "https://inspirehep.net/api/literature/2764791?format=bibtex"
+    },
+    {
+      "id": 2767951,
+      "title": "Exact Quark Mass Corrections to Higgs + Jet Production at the LHC",
+      "date": "2024",
+      "year": 2024,
+      "authors": [
+        "Bonciani, R.",
+        "Del Duca, V.",
+        "Frellesvig, H.",
+        "Hidding, M.",
+        "Hirschi, V.",
+        "Moriello, F.",
+        "Salvatori, G.",
+        "Somogyi, G.",
+        "Tramontano, F."
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "Acta Phys.Polon.Supp. 17 (2024) 2",
+      "doi": "10.5506/APhysPolBSupp.17.2-A2",
+      "citations": 0,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/2767951",
+      "bibtex_url": "https://inspirehep.net/api/literature/2767951?format=bibtex"
+    },
+    {
+      "id": 2741128,
+      "title": "Light-by-light scattering at next-to-leading order in QCD and QED",
+      "date": "2023-12-28",
+      "year": 2023,
+      "authors": [
+        "A H, Ajjath",
+        "Chaubey, Ekta",
+        "Fraaije, Mathijs",
+        "Hirschi, Valentin",
+        "Shao, Hua-Sheng"
+      ],
+      "people": [
+        "valentin-hirschi",
+        "mathijs-fraaije"
+      ],
+      "venue": "Phys.Lett.B 851 (2024) 138555",
+      "doi": "10.1016/j.physletb.2024.138555",
+      "arxiv": "2312.16956",
+      "citations": 33,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2741128",
+      "bibtex_url": "https://inspirehep.net/api/literature/2741128?format=bibtex"
+    },
+    {
+      "id": 2725981,
+      "title": "Derivation of the Cross-Free Family representation for the box diagram",
+      "date": "2023-11-24",
+      "year": 2023,
+      "authors": [
+        "Capatti, Zeno"
+      ],
+      "people": [
+        "zeno-capatti"
+      ],
+      "venue": "PoS RADCOR2023 (2024) 027",
+      "doi": "10.22323/1.432.0027",
+      "arxiv": "2311.14374",
+      "citations": 8,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/2725981",
+      "bibtex_url": "https://inspirehep.net/api/literature/2725981?format=bibtex"
+    },
+    {
+      "id": 2711263,
+      "title": "Flow Oriented Perturbation Theory",
+      "date": "2023-10-14",
+      "year": 2023,
+      "authors": [
+        "Salas-Bernárdez, Alexandre",
+        "Borinsky, Michael",
+        "Capatti, Zeno",
+        "Laenen, Eric"
+      ],
+      "people": [
+        "zeno-capatti"
+      ],
+      "venue": "PoS RADCOR2023 (2024) 026",
+      "doi": "10.22323/1.432.0026",
+      "arxiv": "2310.09708",
+      "citations": 1,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/2711263",
+      "bibtex_url": "https://inspirehep.net/api/literature/2711263?format=bibtex"
+    },
+    {
+      "id": 2709237,
+      "title": "Additional moments and x-space approximations of four-loop splitting functions in QCD",
+      "date": "2023-10-09",
+      "year": 2023,
+      "authors": [
+        "Moch, S.",
+        "Ruijl, B.",
+        "Ueda, T.",
+        "Vermaseren, J.",
+        "Vogt, A."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "Phys.Lett.B 849 (2024) 138468",
+      "doi": "10.1016/j.physletb.2024.138468",
+      "arxiv": "2310.05744",
+      "citations": 56,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2709237",
+      "bibtex_url": "https://inspirehep.net/api/literature/2709237?format=bibtex"
+    },
+    {
+      "id": 2678124,
+      "title": "Equation of State of Cold Quark Matter to O(αₛ³ ln αₛ)",
+      "date": "2023-07-17",
+      "year": 2023,
+      "authors": [
+        "Gorda, Tyler",
+        "Paatelainen, Risto",
+        "Säppi, Saga",
+        "Seppänen, Kaapo"
+      ],
+      "people": [
+        "kaapo-seppanen"
+      ],
+      "venue": "Phys.Rev.Lett. 131 (2023) 181902",
+      "doi": "10.1103/PhysRevLett.131.181902",
+      "arxiv": "2307.08734",
+      "citations": 79,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2678124",
+      "bibtex_url": "https://inspirehep.net/api/literature/2678124?format=bibtex"
+    },
+    {
+      "id": 2652858,
+      "title": "UFO 2.0: the ‘Universal Feynman Output’ format",
+      "date": "2023-04-19",
+      "year": 2023,
+      "authors": [
+        "Darmé, Luc",
+        "Degrande, Céline",
+        "Duhr, Claude",
+        "Fuks, Benjamin",
+        "Goodsell, Mark",
+        "Heinrich, Gudrun",
+        "Hirschi, Valentin",
+        "Höche, Stefan",
+        "Höfer, Marius",
+        "Isaacson, Joshua",
+        "Mattelaer, Olivier",
+        "Ohl, Thorsten",
+        "Pagani, Davide",
+        "Reuter, Jürgen",
+        "Richardson, Peter",
+        "Schumann, Steffen",
+        "Shao, Hua-Sheng",
+        "Siegert, Frank",
+        "Zaro, Marco"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "Eur.Phys.J.C 83 (2023) 631",
+      "doi": "10.1140/epjc/s10052-023-11780-9",
+      "arxiv": "2304.09883",
+      "citations": 145,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2652858",
+      "bibtex_url": "https://inspirehep.net/api/literature/2652858?format=bibtex"
+    },
+    {
+      "id": 2652607,
+      "title": "Soft gluon self-energy at finite temperature and density: hard NLO corrections in general covariant gauge",
+      "date": "2023-04-18",
+      "year": 2023,
+      "authors": [
+        "Gorda, Tyler",
+        "Paatelainen, Risto",
+        "Säppi, Saga",
+        "Seppänen, Kaapo"
+      ],
+      "people": [
+        "kaapo-seppanen"
+      ],
+      "venue": "JHEP 08 (2023) 021",
+      "doi": "10.1007/JHEP08(2023)021",
+      "arxiv": "2304.09187",
+      "citations": 17,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2652607",
+      "bibtex_url": "https://inspirehep.net/api/literature/2652607?format=bibtex"
+    },
+    {
+      "id": 2746050,
+      "title": "Singularities of Feynman diagrams and their local cancellation in collider cross-sections",
+      "date": "2023",
+      "year": 2023,
+      "authors": [
+        "Capatti, Zeno"
+      ],
+      "people": [
+        "zeno-capatti"
+      ],
+      "doi": "10.3929/ethz-b-000647466",
+      "citations": 0,
+      "types": [
+        "thesis"
+      ],
+      "url": "https://inspirehep.net/literature/2746050",
+      "bibtex_url": "https://inspirehep.net/api/literature/2746050?format=bibtex"
+    },
+    {
+      "id": 2183260,
+      "title": "Exposing the threshold structure of loop integrals",
+      "date": "2022-11-17",
+      "year": 2022,
+      "authors": [
+        "Capatti, Zeno"
+      ],
+      "people": [
+        "zeno-capatti"
+      ],
+      "venue": "Phys.Rev.D 107 (2023) L051902",
+      "doi": "10.1103/PhysRevD.107.L051902",
+      "arxiv": "2211.09653",
+      "citations": 24,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2183260",
+      "bibtex_url": "https://inspirehep.net/api/literature/2183260?format=bibtex"
+    },
+    {
+      "id": 2164086,
+      "title": "Flow-oriented perturbation theory",
+      "date": "2022-10-11",
+      "year": 2022,
+      "authors": [
+        "Borinsky, Michael",
+        "Capatti, Zeno",
+        "Laenen, Eric",
+        "Salas-Bernárdez, Alexandre"
+      ],
+      "people": [
+        "zeno-capatti"
+      ],
+      "venue": "JHEP 01 (2023) 172",
+      "doi": "10.1007/JHEP01(2023)172",
+      "arxiv": "2210.05532",
+      "citations": 11,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2164086",
+      "bibtex_url": "https://inspirehep.net/api/literature/2164086?format=bibtex"
+    },
+    {
+      "id": 2140458,
+      "title": "DIS coefficient functions at four loops in QCD and beyond",
+      "date": "2022-08-23",
+      "year": 2022,
+      "authors": [
+        "Moch, Sven-Olaf",
+        "Ruijl, Ben",
+        "Ueda, Takahiro",
+        "Vermaseren, Jos A.M.",
+        "Vogt, Andreas"
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "PoS LL2022 (2022) 047",
+      "doi": "10.22323/1.416.0047",
+      "arxiv": "2208.11067",
+      "citations": 5,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/2140458",
+      "bibtex_url": "https://inspirehep.net/api/literature/2140458?format=bibtex"
+    },
+    {
+      "id": 2099424,
+      "title": "On the reconstruction problem in quantum gravity",
+      "date": "2022-06-21",
+      "year": 2022,
+      "authors": [
+        "Fraaije, Mathijs",
+        "Platania, Alessia",
+        "Saueressig, Frank"
+      ],
+      "people": [
+        "mathijs-fraaije"
+      ],
+      "venue": "Phys.Lett.B 834 (2022) 137399",
+      "doi": "10.1016/j.physletb.2022.137399",
+      "arxiv": "2206.10626",
+      "citations": 21,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2099424",
+      "bibtex_url": "https://inspirehep.net/api/literature/2099424?format=bibtex"
+    },
+    {
+      "id": 2098298,
+      "title": "Next-to-leading-order QCD corrections to Higgs production in association with a jet",
+      "date": "2022-06-21",
+      "year": 2022,
+      "authors": [
+        "Bonciani, Roberto",
+        "Del Duca, Vittorio",
+        "Frellesvig, Hjalte",
+        "Hidding, Martijn",
+        "Hirschi, Valentin",
+        "Moriello, Francesco",
+        "Salvatori, Giulio",
+        "Somogyi, Gábor",
+        "Tramontano, Francesco"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "Phys.Lett.B 843 (2023) 137995",
+      "doi": "10.1016/j.physletb.2023.137995",
+      "arxiv": "2206.10490",
+      "citations": 46,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2098298",
+      "bibtex_url": "https://inspirehep.net/api/literature/2098298?format=bibtex"
+    },
+    {
+      "id": 2072440,
+      "title": "Degenerate fermionic matter at N3LO: Quantum electrodynamics",
+      "date": "2022-04-25",
+      "year": 2022,
+      "authors": [
+        "Gorda, Tyler",
+        "Kurkela, Aleksi",
+        "Österman, Juuso",
+        "Paatelainen, Risto",
+        "Säppi, Saga",
+        "Schicho, Philipp",
+        "Seppänen, Kaapo",
+        "Vuorinen, Aleksi"
+      ],
+      "people": [
+        "kaapo-seppanen"
+      ],
+      "venue": "Phys.Rev.D 107 (2023) L031501",
+      "doi": "10.1103/PhysRevD.107.L031501",
+      "arxiv": "2204.11893",
+      "citations": 13,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2072440",
+      "bibtex_url": "https://inspirehep.net/api/literature/2072440?format=bibtex"
+    },
+    {
+      "id": 2071916,
+      "title": "Soft photon propagation in a hot and dense medium to next-to-leading order",
+      "date": "2022-04-24",
+      "year": 2022,
+      "authors": [
+        "Gorda, Tyler",
+        "Kurkela, Aleksi",
+        "Österman, Juuso",
+        "Paatelainen, Risto",
+        "Säppi, Saga",
+        "Schicho, Philipp",
+        "Seppänen, Kaapo",
+        "Vuorinen, Aleksi"
+      ],
+      "people": [
+        "kaapo-seppanen"
+      ],
+      "venue": "Phys.Rev.D 107 (2023) 036012",
+      "doi": "10.1103/PhysRevD.107.036012",
+      "arxiv": "2204.11279",
+      "citations": 24,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2071916",
+      "bibtex_url": "https://inspirehep.net/api/literature/2071916?format=bibtex"
+    },
+    {
+      "id": 2055764,
+      "title": "Event generators for high-energy physics experiments",
+      "date": "2022-03-21",
+      "year": 2022,
+      "authors": [
+        "Campbell, J.M.",
+        "Diefenthaler, M.",
+        "Hobbs, T.J.",
+        "Höche, Stefan",
+        "Isaacson, Joshua",
+        "Kling, Felix",
+        "Mrenna, Stephen",
+        "Reuter, J.",
+        "Alioli, S.",
+        "Andersen, J.R.",
+        "Andreopoulos, C.",
+        "Ankowski, A.M.",
+        "Aschenauer, Elke Caroline",
+        "Ashkenazi, A.",
+        "Baker, M.D.",
+        "Barrow, Joshua L.",
+        "van Beekveld, Melissa",
+        "Bewick, Gavin",
+        "Bhattacharya, S.",
+        "Bierlich, Christian",
+        "Bothmann, Enrico",
+        "Bredt, P.",
+        "Broggio, A.",
+        "Buckley, Andy",
+        "Butter, A.",
+        "Butterworth, Jonathan Mark",
+        "Byrne, E.P.",
+        "Carloni-Calame, Carlo",
+        "Chakraborty, Smita",
+        "Chen, X.",
+        "Chiesa, M.",
+        "Childers, J.T.",
+        "Cruz-Martinez, J.",
+        "Currie, J.",
+        "Darvishi, N.",
+        "Dasgupta, M.",
+        "Denner, A.",
+        "Dreyer, F.A.",
+        "Dytman, S.",
+        "El-Menoufi, Basem Kamal",
+        "Engel, Tim",
+        "Ravasio, Silvia Ferrario",
+        "Figueroa, Daniel",
+        "Flower, L.",
+        "Forshaw, J.R.",
+        "Frederix, Rikkert",
+        "Friedland, Alex",
+        "Frixione, Stefano",
+        "Gallagher, H.",
+        "Gallmeister, K.",
+        "Gardiner, Simon",
+        "Gauld, Rhorry",
+        "Gaunt, Jonathan",
+        "Gavardi, A.",
+        "Gehrmann, T.",
+        "Gehrmann-De Ridder, Aude",
+        "Gellersen, Leif",
+        "Giele, Walter",
+        "Gieseke, Stefan",
+        "Giuli, Francesco",
+        "Glover, E.W. N.",
+        "Grazzini, Massimiliano",
+        "Grohsjean, A.",
+        "Gütschow, Christian",
+        "Hamilton, Keith",
+        "Han, T.",
+        "Hatcher, R.",
+        "Heinrich, G.",
+        "Helenius, Ilkka",
+        "Hen, O.",
+        "Hirschi, Valentin",
+        "Höfer, M.",
+        "Holguin, J.",
+        "Huss, Alexander",
+        "Ilten, Philip",
+        "Jadach, Stanislaw",
+        "Jentsch, A.",
+        "Jones, S.P.",
+        "Ju, W.",
+        "Kallweit, Stefan",
+        "Karlberg, Alexander",
+        "Katori, T.",
+        "Kerner, Matthias",
+        "Kilian, C.",
+        "Kilian, W.",
+        "Kirchgaeßer, M.M.",
+        "Klein, S.",
+        "Knobbe, Max",
+        "Krause, Claudius",
+        "Krauss, Frank",
+        "Lang, J.",
+        "Lang, J.-N.",
+        "Lee, G.",
+        "Li, S.W.",
+        "Lim, M.A.",
+        "Lindert, J.M.",
+        "Lombardi, D.",
+        "Lönnblad, Leif",
+        "Löschner, M.",
+        "Lurkin, N.",
+        "Ma, Y.",
+        "Machado, P.",
+        "Magerya, Vitaly",
+        "Maier, A.",
+        "Majer, I.",
+        "Maltoni, Fabio",
+        "Marcoli, M.",
+        "Marinelli, G.",
+        "Masouminia, M.R.",
+        "Mastrolia, Pierpaolo",
+        "Mattelaer, Olivier",
+        "Mazzitelli, J.",
+        "McFayden, Josh",
+        "Medves, Rok",
+        "Meinzinger, P.",
+        "Mo, J.",
+        "Monni, Pier Francesco",
+        "Montagna, Guido",
+        "Morgan, T.",
+        "Mosel, U.",
+        "Nachman, Benjamin",
+        "Nadolsky, Pavel",
+        "Nagar, R.",
+        "Nagy, Zoltan",
+        "Napoletano, Davide",
+        "Nason, Paolo",
+        "Neumann, Tobias",
+        "Nevay, L.J.",
+        "Nicrosini, Oreste",
+        "Niehues, J.",
+        "Niewczas, K.",
+        "Ohl, Thorsten",
+        "Ossola, Giovanni",
+        "Pandey, V.",
+        "Papadopoulou, A.",
+        "Papaefstathiou, Andreas",
+        "Paz, Gil",
+        "Pellen, Mathieu",
+        "Pelliccioli, Giovanni",
+        "Peraro, T.",
+        "Piccinini, Fluvio",
+        "Pickering, L.",
+        "Pires, J.",
+        "Placzek, Wieslaw",
+        "Plätzer, Simon",
+        "Plehn, Tilman",
+        "Pozzorini, Stefano",
+        "Prestel, Stefan",
+        "Preuss, Christian Tobias",
+        "Price, A.C.",
+        "Quackenbush, Seth",
+        "Re, Emanuele",
+        "Reichelt, Daniel",
+        "Reina, Laura",
+        "Reuschle, Christian",
+        "Richardson, Peter",
+        "Rocco, M.",
+        "Rocco, N.",
+        "Roda, M.",
+        "Garcia, A. Rodriguez",
+        "Roiser, Stefan",
+        "Rojo, Juan",
+        "Rottoli, Luca",
+        "Salam, Gavin P.",
+        "Schönherr, Marek",
+        "Schuchmann, S.",
+        "Schumann, Steffen",
+        "Schürmann, Robin",
+        "Scyboz, Ludovic",
+        "Seymour, Michael H.",
+        "Siegert, Frank",
+        "Signer, Adrian",
+        "Chahal, Gurpreet Singh",
+        "Siódmok, Andrzej",
+        "Sjöstrand, Torbjörn",
+        "Skands, Peter",
+        "Smillie, Jennifer M.",
+        "Sobczyk, J.T.",
+        "Soldin, Dennis",
+        "Soper, D.E.",
+        "Soto-Ontoso, Alba",
+        "Soyez, Gregory",
+        "Stagnitto, Giovanni",
+        "Tena-Vidal, J.",
+        "Tomalak, O.",
+        "Tramontano, Francesco",
+        "Trojanowski, Sebastian",
+        "Tu, Z.",
+        "Uccirati, Sandro",
+        "Ullrich, T.",
+        "Ulrich, Yannick",
+        "Utheim, Marius",
+        "Valassi, A.",
+        "Verbytskyi, Andrii",
+        "Verheyen, Rob",
+        "Wagman, M.",
+        "Walker, D.",
+        "Webber, B.R.",
+        "Weinstein, L.",
+        "White, O.",
+        "Whitehead, James",
+        "Wiesemann, Marius",
+        "Wilkinson, C.",
+        "Williams, C.",
+        "Winterhalder, Ramon",
+        "Wret, C.",
+        "Xie, K.",
+        "Yang, T-Z.",
+        "Yazgan, E.",
+        "Zanderighi, Giulia",
+        "Zanoli, S.",
+        "Zapp, Korinna"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "SciPost Phys. 16 (2024) 130",
+      "doi": "10.21468/SciPostPhys.16.5.130",
+      "arxiv": "2203.11110",
+      "citations": 201,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2055764",
+      "bibtex_url": "https://inspirehep.net/api/literature/2055764?format=bibtex"
+    },
+    {
+      "id": 2055752,
+      "title": "Local unitarity: cutting raised propagators and localising renormalisation",
+      "date": "2022-03-21",
+      "year": 2022,
+      "authors": [
+        "Capatti, Zeno",
+        "Hirschi, Valentin",
+        "Ruijl, Ben"
+      ],
+      "people": [
+        "valentin-hirschi",
+        "ben-ruijl",
+        "zeno-capatti"
+      ],
+      "venue": "JHEP 10 (2022) 120",
+      "doi": "10.1007/JHEP10(2022)120",
+      "arxiv": "2203.11038",
+      "citations": 39,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/2055752",
+      "bibtex_url": "https://inspirehep.net/api/literature/2055752?format=bibtex"
+    },
+    {
+      "id": 1981444,
+      "title": "Low moments of the four-loop splitting functions in QCD",
+      "date": "2021-11-30",
+      "year": 2021,
+      "authors": [
+        "Moch, S.",
+        "Ruijl, B.",
+        "Ueda, T.",
+        "Vermaseren, J.A.M.",
+        "Vogt, A."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "Phys.Lett.B 825 (2022) 136853",
+      "doi": "10.1016/j.physletb.2021.136853",
+      "arxiv": "2111.15561",
+      "citations": 88,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1981444",
+      "bibtex_url": "https://inspirehep.net/api/literature/1981444?format=bibtex"
+    },
+    {
+      "id": 1955851,
+      "title": "Local Unitarity",
+      "date": "2021-10-29",
+      "year": 2021,
+      "authors": [
+        "Capatti, Zeno"
+      ],
+      "people": [
+        "zeno-capatti"
+      ],
+      "venue": "SciPost Phys.Proc. 7 (2022) 024",
+      "doi": "10.21468/SciPostPhysProc.7.024",
+      "arxiv": "2110.15662",
+      "citations": 11,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1955851",
+      "bibtex_url": "https://inspirehep.net/api/literature/1955851?format=bibtex"
+    },
+    {
+      "id": 1823787,
+      "title": "Next-to-leading order corrections to light-quark mixed QCD-EW contributions to Higgs boson production",
+      "date": "2020-10-19",
+      "year": 2020,
+      "authors": [
+        "Becchetti, Matteo",
+        "Bonciani, Roberto",
+        "Del Duca, Vittorio",
+        "Hirschi, Valentin",
+        "Moriello, Francesco",
+        "Schweitzer, Armin"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "Phys.Rev.D 103 (2021) 054037",
+      "doi": "10.1103/PhysRevD.103.054037",
+      "arxiv": "2010.09451",
+      "citations": 45,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1823787",
+      "bibtex_url": "https://inspirehep.net/api/literature/1823787?format=bibtex"
+    },
+    {
+      "id": 1821266,
+      "title": "Local Unitarity: a representation of differential cross-sections that is locally free of infrared singularities at any order",
+      "date": "2020-10-02",
+      "year": 2020,
+      "authors": [
+        "Capatti, Zeno",
+        "Hirschi, Valentin",
+        "Pelloni, Andrea",
+        "Ruijl, Ben"
+      ],
+      "people": [
+        "valentin-hirschi",
+        "ben-ruijl",
+        "zeno-capatti"
+      ],
+      "venue": "JHEP 04 (2021) 104",
+      "doi": "10.1007/JHEP04(2021)104",
+      "arxiv": "2010.01068",
+      "citations": 68,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1821266",
+      "bibtex_url": "https://inspirehep.net/api/literature/1821266?format=bibtex"
+    },
+    {
+      "id": 1816713,
+      "title": "Manifestly Causal Loop-Tree Duality",
+      "date": "2020-09-11",
+      "year": 2020,
+      "authors": [
+        "Capatti, Zeno",
+        "Hirschi, Valentin",
+        "Kermanschah, Dario",
+        "Pelloni, Andrea",
+        "Ruijl, Ben"
+      ],
+      "people": [
+        "valentin-hirschi",
+        "ben-ruijl",
+        "zeno-capatti"
+      ],
+      "arxiv": "2009.05509",
+      "citations": 60,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1816713",
+      "bibtex_url": "https://inspirehep.net/api/literature/1816713?format=bibtex"
+    },
+    {
+      "id": 1806263,
+      "title": "Further developments of FORM",
+      "date": "2020-07-08",
+      "year": 2020,
+      "authors": [
+        "Ueda, T.",
+        "Kaneko, T.",
+        "Ruijl, B.",
+        "Vermaseren, J.A.M."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "J.Phys.Conf.Ser. 1525 (2020) 012013",
+      "doi": "10.1088/1742-6596/1525/1/012013",
+      "citations": 13,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1806263",
+      "bibtex_url": "https://inspirehep.net/api/literature/1806263?format=bibtex"
+    },
+    {
+      "id": 1806190,
+      "title": "reFORM: designing a new symbolic manipulation toolkit",
+      "date": "2020-07-08",
+      "year": 2020,
+      "authors": [
+        "Ruij, Ben"
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "J.Phys.Conf.Ser. 1525 (2020) 012006",
+      "doi": "10.1088/1742-6596/1525/1/012006",
+      "citations": 0,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1806190",
+      "bibtex_url": "https://inspirehep.net/api/literature/1806190?format=bibtex"
+    },
+    {
+      "id": 1790837,
+      "title": "Higgs production in bottom quark fusion: matching the 4- and 5-flavour schemes to third order in the strong coupling",
+      "date": "2020-04-09",
+      "year": 2020,
+      "authors": [
+        "Duhr, Claude",
+        "Dulat, Falko",
+        "Hirschi, Valentin",
+        "Mistlberger, Bernhard"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "JHEP 08 (2020) 017",
+      "doi": "10.1007/JHEP08(2020)017",
+      "arxiv": "2004.04752",
+      "citations": 67,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1790837",
+      "bibtex_url": "https://inspirehep.net/api/literature/1790837?format=bibtex"
+    },
+    {
+      "id": 1771932,
+      "title": "Numerical Loop-Tree Duality: contour deformation and subtraction",
+      "date": "2019-12-19",
+      "year": 2019,
+      "authors": [
+        "Capatti, Zeno",
+        "Hirschi, Valentin",
+        "Kermanschah, Dario",
+        "Pelloni, Andrea",
+        "Ruijl, Ben"
+      ],
+      "people": [
+        "valentin-hirschi",
+        "ben-ruijl",
+        "zeno-capatti"
+      ],
+      "venue": "JHEP 04 (2020) 096",
+      "doi": "10.1007/JHEP04(2020)096",
+      "arxiv": "1912.09291",
+      "citations": 87,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1771932",
+      "bibtex_url": "https://inspirehep.net/api/literature/1771932?format=bibtex"
+    },
+    {
+      "id": 1743599,
+      "title": "Two- and three-loop anomalous dimensions of Weinberg’s dimension-six CP-odd gluonic operator",
+      "date": "2019-07-10",
+      "year": 2019,
+      "authors": [
+        "de Vries, Jordy",
+        "Falcioni, Giulio",
+        "Herzog, Franz",
+        "Ruijl, Ben"
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "Phys.Rev.D 102 (2020) 016010",
+      "doi": "10.1103/PhysRevD.102.016010",
+      "arxiv": "1907.04923",
+      "citations": 53,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1743599",
+      "bibtex_url": "https://inspirehep.net/api/literature/1743599?format=bibtex"
+    },
+    {
+      "id": 1743570,
+      "title": "Automated simulations beyond the Standard Model: supersymmetry",
+      "date": "2019-07-10",
+      "year": 2019,
+      "authors": [
+        "Frixione, Stefano",
+        "Fuks, Benjamin",
+        "Hirschi, Valentin",
+        "Mawatari, Kentarou",
+        "Shao, Hua-Sheng",
+        "Sunder, P.A.",
+        "Zaro, Marco"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "JHEP 12 (2019) 008",
+      "doi": "10.1007/JHEP12(2019)008",
+      "arxiv": "1907.04898",
+      "citations": 64,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1743570",
+      "bibtex_url": "https://inspirehep.net/api/literature/1743570?format=bibtex"
+    },
+    {
+      "id": 1742198,
+      "title": "Proposal for the validation of Monte Carlo implementations of the standard model effective field theory",
+      "date": "2019-06-28",
+      "year": 2019,
+      "authors": [
+        "Durieux, Gauthier",
+        "Brivio, Ilaria",
+        "Maltoni, Fabio",
+        "Trott, Michael",
+        "Alioli, Simone",
+        "Buckley, Andy",
+        "Chiesa, Mauro",
+        "de Blas, Jorge",
+        "Dedes, Athanasios",
+        "Degrande, Céline",
+        "Denner, Ansgar",
+        "Englert, Christoph",
+        "Ferrando, James",
+        "Fuks, Benjamin",
+        "Galler, Peter",
+        "Greljo, Admir",
+        "Hirschi, Valentin",
+        "Isidori, Gino",
+        "Kilian, Wolfgang",
+        "Krauss, Frank",
+        "Lang, Jean-Nicolas",
+        "Lindert, Jonas",
+        "Mangano, Michelangelo",
+        "Marzocca, David",
+        "Mattelaer, Olivier",
+        "Mawatari, Kentarou",
+        "Mereghetti, Emanuele",
+        "Miller, David J.",
+        "Mimasu, Ken",
+        "Paraskevas, Michael",
+        "Plehn, Tilman",
+        "Reina, Laura",
+        "Rosiek, Janusz",
+        "Reuter, Jürgen",
+        "Santiago, José",
+        "Suxho, Kristaq",
+        "Trifyllis, Lampros",
+        "Vryonidou, Eleni",
+        "White, Christopher",
+        "Zhang, Cen",
+        "Zhang, Hantian"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "arxiv": "1906.12310",
+      "citations": 12,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1742198",
+      "bibtex_url": "https://inspirehep.net/api/literature/1742198?format=bibtex"
+    },
+    {
+      "id": 1739988,
+      "title": "Loop-Tree Duality for Multiloop Numerical Integration",
+      "date": "2019-06-14",
+      "year": 2019,
+      "authors": [
+        "Capatti, Zeno",
+        "Hirschi, Valentin",
+        "Kermanschah, Dario",
+        "Ruijl, Ben"
+      ],
+      "people": [
+        "valentin-hirschi",
+        "ben-ruijl",
+        "zeno-capatti"
+      ],
+      "venue": "Phys.Rev.Lett. 123 (2019) 151602",
+      "doi": "10.1103/PhysRevLett.123.151602",
+      "arxiv": "1906.06138",
+      "citations": 119,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1739988",
+      "bibtex_url": "https://inspirehep.net/api/literature/1739988?format=bibtex"
+    },
+    {
+      "id": 1722261,
+      "title": "One-loop weak corrections to Higgs production",
+      "date": "2019-02-26",
+      "year": 2019,
+      "authors": [
+        "Hirschi, Valentin",
+        "Lionetti, Simone",
+        "Schweitzer, Armin"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "JHEP 05 (2019) 002",
+      "doi": "10.1007/JHEP05(2019)002",
+      "arxiv": "1902.10167",
+      "citations": 13,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1722261",
+      "bibtex_url": "https://inspirehep.net/api/literature/1722261?format=bibtex"
+    },
+    {
+      "id": 1720009,
+      "title": "Report from Working Group 1",
+      "date": "2019-02-11",
+      "year": 2019,
+      "authors": [
+        "Azzi, P.",
+        "Farry, S.",
+        "Nason, P.",
+        "Tricoli, A.",
+        "Zeppenfeld, D.",
+        "Abdul Khalek, R.",
+        "Alimena, J.",
+        "Andari, N.",
+        "Aperio Bella, L.",
+        "Armbruster, A.J.",
+        "Baglio, J.",
+        "Bailey, S.",
+        "Bakos, E.",
+        "Bakshi, A.",
+        "Baldenegro, C.",
+        "Balli, F.",
+        "Barker, A.",
+        "Barter, W.",
+        "de Blas, J.",
+        "Blekman, F.",
+        "Bloch, D.",
+        "Bodek, A.",
+        "Boonekamp, M.",
+        "Boos, E.",
+        "Bossio Sola, J.D.",
+        "Cadamuro, L.",
+        "Camarda, S.",
+        "Campanario, F.",
+        "Campanelli, M.",
+        "Campbell, J.M.",
+        "Cao, Q.-H.",
+        "Cavaliere, V.",
+        "Cerri, A.",
+        "Chahal, G.S.",
+        "Chargeishvili, B.",
+        "Charlot, C.",
+        "Chen, S.-L.",
+        "Chen, T.",
+        "Cieri, L.",
+        "Ciuchini, M.",
+        "Corcella, G.",
+        "Cotogno, S.",
+        "Covarelli, R.",
+        "Cruz-Martinez, J.M.",
+        "Czakon, M.",
+        "Dainese, A.",
+        "Dang, N.P.",
+        "Darmé, L.",
+        "Dawson, S.",
+        "De la Torre, H.",
+        "Deile, M.",
+        "Deliot, F.",
+        "Demers, S.",
+        "Denner, A.",
+        "Derue, F.",
+        "Di Ciaccio, L.",
+        "Di Clemente, W.K.",
+        "Dominguez Damiani, D.",
+        "Dudko, L.",
+        "Durglishvili, A.",
+        "Dünser, M.",
+        "Ebadi, J.",
+        "Ferreira De Faria, R.B.",
+        "Ferrera, G.",
+        "Ferroglia, A.",
+        "Figy, T.M.",
+        "Finelli, K.D.",
+        "Fiolhais, M.C.N.",
+        "Franco, E.",
+        "Frederix, R.",
+        "Fuks, B.",
+        "Galhardo, B.",
+        "Gao, J.",
+        "Gaunt, J.R.",
+        "Gehrmann, T.",
+        "Gehrmann-De Ridder, A.",
+        "Giljanovic, D.",
+        "Giuli, F.",
+        "Glover, E.W.N.",
+        "Goodsell, M.D.",
+        "Gouveia, E.",
+        "Govoni, P.",
+        "Goy, C.",
+        "Grazzini, M.",
+        "Grohsjean, A.",
+        "Grosse-Oetringhaus, J.F.",
+        "Gunnellini, P.",
+        "Gwenlan, C.",
+        "Harland-Lang, L.A.",
+        "Harrison, P.F.",
+        "Heinrich, G.",
+        "Helsens, C.",
+        "Herndon, M.",
+        "Hindrichs, O.",
+        "Hirschi, V.",
+        "Hoang, A.",
+        "Hoepfner, K.",
+        "Hogan, J.M.",
+        "Huss, A.",
+        "Jahn, S.",
+        "Jain, Sa.",
+        "Jones, S.P.",
+        "Jung, A.W.",
+        "Jung, H.",
+        "Kallweit, S.",
+        "Kar, D.",
+        "Karlberg, A.",
+        "Kasemets, T.",
+        "Kerner, M.",
+        "Khandoga, M.K.",
+        "Khanpour, H.",
+        "Khatibi, S.",
+        "Khukhunaishvili, A.",
+        "Kieseler, J.",
+        "Kretzschmar, J.",
+        "Kroll, J.",
+        "Kryshen, E.",
+        "Lang, V.S.",
+        "Lechner, L.",
+        "Lee, C.A.",
+        "Leigh, M.",
+        "Lelas, D.",
+        "Les, R.",
+        "Lewis, I.M.",
+        "Li, B.",
+        "Li, Q.",
+        "Li, Y.",
+        "Lidrych, J.",
+        "Ligeti, Z.",
+        "Lindert, J.M.",
+        "Liu, Y.",
+        "Lohwasser, K.",
+        "Long, K.",
+        "Lontkovskyi, D.",
+        "Majumder, G.",
+        "Mancini, M.",
+        "Mandrik, P.",
+        "Mangano, M.L.",
+        "Marchesini, I.",
+        "Mayer, C.",
+        "Mazumdar, K.",
+        "McFayden, J.A.",
+        "Mendes Amaral Torres Lagarelhos, P.M.",
+        "Meyer, A.B.",
+        "Mikhalcov, S.",
+        "Mishima, S.",
+        "Mitov, A.",
+        "Mohammadi Najafabadi, M.",
+        "Moreno Llácer, M.",
+        "Mulders, M.",
+        "Myska, M.",
+        "Narain, M.",
+        "Nisati, A.",
+        "Nitta, T.",
+        "Onofre, A.",
+        "Pagan Griso, S.",
+        "Pagani, D.",
+        "Palencia Cortezon, E.",
+        "Papanastasiou, A.",
+        "Pedro, K.",
+        "Pellen, M.",
+        "Perfilov, M.",
+        "Perrozzi, L.",
+        "Petersen, B.A.",
+        "Pierini, M.",
+        "Pires, J.",
+        "Pleier, M.-A.",
+        "Plätzer, S.",
+        "Potamianos, K.",
+        "Pozzorini, S.",
+        "Price, A.C.",
+        "Rauch, M.",
+        "Re, E.",
+        "Reina, L.",
+        "Reuter, J.",
+        "Robens, T.",
+        "Rojo, J.",
+        "Royon, C.",
+        "Saito, S.",
+        "Savin, A.",
+        "Sawant, S.",
+        "Schneider, B.",
+        "Schoefbeck, R.",
+        "Schoenherr, M.",
+        "Schäfer-Siebert, H.",
+        "Seidel, M.",
+        "Selvaggi, M.",
+        "Shears, T.",
+        "Silvestrini, L.",
+        "Sjodahl, M.",
+        "Skovpen, K.",
+        "Smith, N.",
+        "Spitzbart, D.",
+        "Starovoitov, P.",
+        "Suster, C.J.E.",
+        "Tan, P.",
+        "Taus, R.",
+        "Teague, D.",
+        "Terashi, K.",
+        "Terron, J.",
+        "Uplap, S.",
+        "Veloso, F.",
+        "Verzetti, M.",
+        "Vesterinen, M.A.",
+        "Vladimirov, V.E.",
+        "Volkov, P.",
+        "Vorotnikov, G.",
+        "Vranjes Milosavljevic, M.",
+        "Vranjes, N.",
+        "Vryonidou, E.",
+        "Walker, D.",
+        "Wiesemann, M.",
+        "Wu, Y.",
+        "Xu, T.",
+        "Yacoob, S.",
+        "Yazgan, E.",
+        "Zahreddine, J.",
+        "Zanderighi, G.",
+        "Zaro, M.",
+        "Zenaiev, O.",
+        "Zevi Della Porta, G.",
+        "Zhang, C.",
+        "Zhang, W.",
+        "Zhu, H.L.",
+        "Zlebcik, R.",
+        "Zubair, F.N."
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "CERN Yellow Rep.Monogr. 7 (2019) 1",
+      "doi": "10.23731/CYRM-2019-007.1",
+      "arxiv": "1902.04070",
+      "citations": 317,
+      "types": [
+        "book chapter"
+      ],
+      "url": "https://inspirehep.net/literature/1720009",
+      "bibtex_url": "https://inspirehep.net/api/literature/1720009?format=bibtex"
+    },
+    {
+      "id": 1718163,
+      "title": "Report from Working Group 2",
+      "date": "2019-01-31",
+      "year": 2019,
+      "authors": [
+        "Cepeda, M.",
+        "Gori, S.",
+        "Ilten, P.",
+        "Kado, M.",
+        "Riva, F.",
+        "Abdul Khalek, R.",
+        "Aboubrahim, A.",
+        "Alimena, J.",
+        "Alioli, S.",
+        "Alves, A.",
+        "Asawatangtrakuldee, C.",
+        "Azatov, A.",
+        "Azzi, P.",
+        "Bailey, S.",
+        "Banerjee, S.",
+        "Barberio, E.L.",
+        "Barducci, D.",
+        "Barone, G.",
+        "Bauer, M.",
+        "Bautista, C.",
+        "Bechtle, P.",
+        "Becker, K.",
+        "Benaglia, A.",
+        "Bengala, M.",
+        "Berger, N.",
+        "Bertella, C.",
+        "Bethani, A.",
+        "Betti, A.",
+        "Biekotter, A.",
+        "Bishara, F.",
+        "Bloch, D.",
+        "Bokan, P.",
+        "Bondu, O.",
+        "Bonvini, M.",
+        "Borgonovi, L.",
+        "Borsato, M.",
+        "Boselli, S.",
+        "Braibant-Giacomelli, S.",
+        "Buchalla, G.",
+        "Cadamuro, L.",
+        "Caillol, C.",
+        "Calandri, A.",
+        "Calderon Tazon, A.",
+        "Campbell, J.M.",
+        "Caola, F.",
+        "Capozi, M.",
+        "Carena, M.",
+        "Carloni Calame, C.M.",
+        "Carmona, A.",
+        "Carquin, E.",
+        "Carvalho Antunes De Oliveira, A.",
+        "Castaneda Hernandez, A.",
+        "Cata, O.",
+        "Celis, A.",
+        "Cerri, A.",
+        "Cerutti, F.",
+        "Chahal, G.S.",
+        "Chakraborty, A.",
+        "Chaudhary, G.",
+        "Chen, X.",
+        "Chisholm, A.S.",
+        "Contino, R.",
+        "Costa, A.J.",
+        "Covarelli, R.",
+        "Craig, N.",
+        "Curtin, D.",
+        "D'Eramo, L.",
+        "Dührssen, M.",
+        "Dang, N.P.",
+        "Das, P.",
+        "Dawson, S.",
+        "De Aguiar Francisco, O.A.",
+        "de Blas, J.",
+        "De Curtis, S.",
+        "De Filippis, N.",
+        "De la Torre, H.",
+        "de Lima, L.",
+        "De Wit, A.",
+        "Delaere, C.",
+        "Delcourt, M.",
+        "Delmastro, M.",
+        "Demers, S.",
+        "Dev, N.",
+        "Di Nardo, R.",
+        "Di Vita, S.",
+        "Dildick, S.",
+        "do Prado, L.A.F.",
+        "Donadelli, M.",
+        "Du, D.",
+        "Durieux, G.",
+        "Eberhardt, O.",
+        "El Morabit, K.",
+        "Elias-Miro, J.",
+        "Ellis, J.",
+        "Englert, C.",
+        "Falke, S.",
+        "Farina, M.",
+        "Ferrari, A.",
+        "Ferroglia, A.",
+        "Fiolhais, M.C.N.",
+        "Flechl, M.",
+        "Folgueras, S.",
+        "Fontanesi, E.",
+        "Francavilla, P.",
+        "Franceschini, R.",
+        "Frederix, R.",
+        "Frixione, S.",
+        "Gómez-Ceballos, G.",
+        "Gabrielli, A.",
+        "Gadatsch, S.",
+        "Gallinaro, M.",
+        "Gandrakota, A.",
+        "Gao, J.",
+        "Garay Walls, F.M.",
+        "Gehrmann, T.",
+        "Gershtein, Y.",
+        "Ghosh, T.",
+        "Gilbert, A.",
+        "Glein, R.",
+        "Glover, E.W.N.",
+        "Gomez-Ambrosio, R.",
+        "Gonçalo, R.",
+        "Gonçalves, D.",
+        "Gorbahn, M.",
+        "Gouveia, E.",
+        "Gouzevitch, M.",
+        "Govoni, P.",
+        "Grazzini, M.",
+        "Greenberg, B.",
+        "Grimm, K.",
+        "Gritsan, A.V.",
+        "Grohsjean, A.",
+        "Grojean, C.",
+        "Gu, J.",
+        "Gugel, R.",
+        "Gupta, R.S.",
+        "Gwilliam, C.B.",
+        "Höche, S.",
+        "Haacke, M.",
+        "Haddad, Y.",
+        "Haisch, U.",
+        "Hamity, G.N.",
+        "Han, T.",
+        "Harland-Lang, L.A.",
+        "Harnik, R.",
+        "Heinemeyer, S.",
+        "Heinrich, G.",
+        "Henning, B.",
+        "Hirschi, V.",
+        "Hoepfner, K.",
+        "Hogan, J.M.",
+        "Homiller, S.",
+        "Huang, Y.",
+        "Huss, A.",
+        "Jézéquel, S.",
+        "Jain, Sa.",
+        "Jones, S.P.",
+        "Köneke, K.",
+        "Kalinowski, J.",
+        "Kamenik, J.F.",
+        "Kaplan, M.",
+        "Karlberg, A.",
+        "Kaur, M.",
+        "Keicher, P.",
+        "Kerner, M.",
+        "Khanov, A.",
+        "Kieseler, J.",
+        "Kim, J.H.",
+        "Kim, M.",
+        "Klijnsma, T.",
+        "Kling, F.",
+        "Klute, M.",
+        "Komaragiri, J.R.",
+        "Kong, K.",
+        "Kozaczuk, J.",
+        "Kozow, P",
+        "Krause, C.",
+        "Lai, S.",
+        "Langford, J.",
+        "Le, B.",
+        "Lechner, L.",
+        "Leight, W.A.",
+        "Leney, K.J.C.",
+        "Lenz, T.",
+        "Li, C-Q.",
+        "Li, H.",
+        "Li, Q.",
+        "Liebler, S.",
+        "Lindert, J.",
+        "Liu, D.",
+        "Liu, J.",
+        "Liu, Y.",
+        "Liu, Z.",
+        "Lombardo, D.",
+        "Long, A.",
+        "Long, K.",
+        "Low, I.",
+        "Luisoni, G.",
+        "Ma, L.L.",
+        "Magnan, A.-M.",
+        "Majumder, D.",
+        "Malinauskas, A.",
+        "Maltoni, F.",
+        "Mangano, M.L.",
+        "Marchiori, G.",
+        "Marini, A.C.",
+        "Martin, A.",
+        "Marzani, S.",
+        "Massironi, A.",
+        "Matchev, K.T.",
+        "Matheus, R.D.",
+        "Mazumdar, K.",
+        "Mazzitelli, J.",
+        "Mcdougall, A.E.",
+        "Meade, P.",
+        "Meridiani, P.",
+        "Meyer, A.B.",
+        "Michielin, E.",
+        "Milenovic, P.",
+        "Milosevic, V.",
+        "Mimasu, K.",
+        "Mistlberger, B.",
+        "Mlynarikova, M.",
+        "Mondragon, M.",
+        "Monni, P.F.",
+        "Montagna, G.",
+        "Monti, F.",
+        "Moreno Llacer, M.",
+        "Mueck, A.",
+        "Muiño, P.C.",
+        "Murphy, C.",
+        "Murray, W.J.",
+        "Musella, P.",
+        "Narain, M.",
+        "Naranjo Garcia, R.F.",
+        "Nath, P.",
+        "Neubert, M.",
+        "Nicrosini, O.",
+        "Nikolopoulos, K.",
+        "Nisati, A.",
+        "No, J.M.",
+        "Ojeda, M.L.",
+        "Olivares Pino, S.A.",
+        "Onofre, A.",
+        "Ortona, G.",
+        "Pagan Griso, S.",
+        "Pagani, D.",
+        "Palencia Cortezon, E.",
+        "Palmer, C.",
+        "Pandini, C.",
+        "Panico, G.",
+        "Panwar, L.",
+        "Pappadopulo, D.",
+        "Park, M.",
+        "Patel, R.",
+        "Paucar-Velasquez, F.",
+        "Pedro, K.",
+        "Pernie, L.",
+        "Perrozzi, L.",
+        "Petersen, B.A.",
+        "Petit, E.",
+        "Petrucciani, G.",
+        "Piacquadio, G.",
+        "Piccinini, F.",
+        "Pieri, M.",
+        "Plehn, T.",
+        "Pokorski, S.",
+        "Pomarol, A.",
+        "Ponton, E.",
+        "Pozzorini, S.",
+        "Prestel, S.",
+        "Prokofiev, K.",
+        "Ramsey-Musolf, M.",
+        "Re, E.",
+        "Readioff, N.P.",
+        "Redigolo, D.",
+        "Reina, L.",
+        "Reynolds, E.",
+        "Riembau, M.",
+        "Rikkert, F.",
+        "Robens, T.",
+        "Roentsch, R.",
+        "Rojo, J.",
+        "Rompotis, N.",
+        "Rorie, J.",
+        "Rosiek, J.",
+        "Roskes, J.",
+        "Ruderman, J.T.",
+        "Sahoo, N.",
+        "Saito, S.",
+        "Salerno, R.",
+        "Sales De Bruin, P.H.",
+        "Salvucci, A.",
+        "Sandeep, K.",
+        "Santiago, J.",
+        "Santo, R.",
+        "Sanz, V.",
+        "Sarica, U.",
+        "Savin, A.",
+        "Savoy-Navarro, A.",
+        "Sawant, S.",
+        "Schaffer, A.C.",
+        "Schlaffer, M.",
+        "Schmidt, A.",
+        "Schneider, B.",
+        "Schoefbeck, R.",
+        "Schröder, M.",
+        "Scodeggio, M.",
+        "Scott, E.",
+        "Scyboz, L.",
+        "Selvaggi, M.",
+        "Sestini, L.",
+        "Shao, H.-S.",
+        "Shivaji, A.",
+        "Silvestrini, L.",
+        "Simon, L.",
+        "Sinha, K.",
+        "Soreq, Y.",
+        "Spannowsky, M.",
+        "Spira, M.",
+        "Spitzbart, D.",
+        "Stamou, E.",
+        "Stark, J.",
+        "Stefaniak, T.",
+        "Stieger, B.",
+        "Strong, G.",
+        "Szleper, M.",
+        "Tackmann, K.",
+        "Takeuchi, M.",
+        "Taroni, S.",
+        "Testa, M.",
+        "Thamm, A.",
+        "Theeuwes, V.",
+        "Thomsen, L.A.",
+        "Tkaczyk, S.",
+        "Torre, R.",
+        "Tramontano, F.",
+        "Ulmer, K.A.",
+        "Vantalon, T.",
+        "Vecchi, L.",
+        "Vega-Morales, R.",
+        "Venturini, E.",
+        "Verducci, M.",
+        "Vernieri, C.",
+        "Vickey, T.",
+        "Vidal Marono, M.",
+        "Vischia, P.",
+        "Vryonidou, E.",
+        "Walbrecht, V.M.",
+        "Wang, L.-T.",
+        "Wardle, N.",
+        "Wardrope, D.R.",
+        "Weiglein, G.",
+        "Wertz, S.",
+        "Wielers, M.",
+        "Williams, Mike",
+        "Wolf, R.",
+        "Wulzer, A.",
+        "Xiao, M.",
+        "Yang, H.T.",
+        "Yazgan, E.",
+        "Yin, Z.",
+        "You, T.",
+        "Yu, F.",
+        "Zanderighi, G.",
+        "Zanzi, D.",
+        "Zaro, M.",
+        "Zenz, S.C.",
+        "Zerwas, D.",
+        "Zgubič, M.",
+        "Zhang, J.",
+        "Zhang, L.",
+        "Zhang, W.",
+        "Zhao, X.",
+        "Zhong, Y.-M."
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "CERN Yellow Rep.Monogr. 7 (2019) 221",
+      "doi": "10.23731/CYRM-2019-007.221",
+      "arxiv": "1902.00134",
+      "citations": 1016,
+      "types": [
+        "book chapter"
+      ],
+      "url": "https://inspirehep.net/literature/1718163",
+      "bibtex_url": "https://inspirehep.net/api/literature/1718163?format=bibtex"
+    },
+    {
+      "id": 1711839,
+      "title": "Five-loop contributions to low-N non-singlet anomalous dimensions in QCD",
+      "date": "2018-12-31",
+      "year": 2018,
+      "authors": [
+        "Herzog, F.",
+        "Moch, S.",
+        "Ruijl, B.",
+        "Ueda, T.",
+        "Vermaseren, J.A.M.",
+        "Vogt, A."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "Phys.Lett.B 790 (2019) 436",
+      "doi": "10.1016/j.physletb.2019.01.060",
+      "arxiv": "1812.11818",
+      "citations": 100,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1711839",
+      "bibtex_url": "https://inspirehep.net/api/literature/1711839?format=bibtex"
+    },
+    {
+      "id": 1699827,
+      "title": "Games and loop integrals",
+      "date": "2018-10-18",
+      "year": 2018,
+      "authors": [
+        "Ruijl, Ben"
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "J.Phys.Conf.Ser. 1085 (2018) 022007",
+      "doi": "10.1088/1742-6596/1085/2/022007",
+      "citations": 0,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1699827",
+      "bibtex_url": "https://inspirehep.net/api/literature/1699827?format=bibtex"
+    },
+    {
+      "id": 1691751,
+      "title": "Anomalous dimensions and splitting functions beyond the next-to-next-to-leading order",
+      "date": "2018-08-27",
+      "year": 2018,
+      "authors": [
+        "Vogt, A.",
+        "Herzog, F.",
+        "Moch, S.",
+        "Ruijl, B.",
+        "Ueda, T.",
+        "Vermaseren, J.A.M."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "PoS LL2018 (2018) 050",
+      "doi": "10.22323/1.303.0050",
+      "arxiv": "1808.08981",
+      "citations": 29,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1691751",
+      "bibtex_url": "https://inspirehep.net/api/literature/1691751?format=bibtex"
+    },
+    {
+      "id": 1697626,
+      "title": "Automated extraction of UV counterterms for arbitrary local operators",
+      "date": "2018-08-15",
+      "year": 2018,
+      "authors": [
+        "Ruijl, Ben"
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "PoS LL2018 (2018) 066",
+      "doi": "10.22323/1.303.0066",
+      "citations": 0,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1697626",
+      "bibtex_url": "https://inspirehep.net/api/literature/1697626?format=bibtex"
+    },
+    {
+      "id": 1677700,
+      "title": "Constraining anomalous gluon self-interactions at the LHC: a reappraisal",
+      "date": "2018-06-12",
+      "year": 2018,
+      "authors": [
+        "Hirschi, Valentin",
+        "Maltoni, Fabio",
+        "Tsinikos, Ioannis",
+        "Vryonidou, Eleni"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "JHEP 07 (2018) 093",
+      "doi": "10.1007/JHEP07(2018)093",
+      "arxiv": "1806.04696",
+      "citations": 49,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1677700",
+      "bibtex_url": "https://inspirehep.net/api/literature/1677700?format=bibtex"
+    },
+    {
+      "id": 1676831,
+      "title": "Numerical Methods and the 4-point 2-loop Higgs amplitudes",
+      "date": "2018-06-07",
+      "year": 2018,
+      "authors": [
+        "Jones, S.P.",
+        "Ruijl, B."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "J.Phys.Conf.Ser. 1085 (2018) 052009",
+      "doi": "10.1088/1742-6596/1085/5/052009",
+      "arxiv": "1806.02593",
+      "citations": 0,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1676831",
+      "bibtex_url": "https://inspirehep.net/api/literature/1676831?format=bibtex"
+    },
+    {
+      "id": 1674736,
+      "title": "On quartic colour factors in splitting functions and the gluon cusp anomalous dimension",
+      "date": "2018-05-24",
+      "year": 2018,
+      "authors": [
+        "Moch, S.",
+        "Ruijl, B.",
+        "Ueda, T.",
+        "Vermaseren, J.A. M.",
+        "Vogt, A."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "Phys.Lett.B 782 (2018) 627",
+      "doi": "10.1016/j.physletb.2018.06.017",
+      "arxiv": "1805.09638",
+      "citations": 166,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1674736",
+      "bibtex_url": "https://inspirehep.net/api/literature/1674736?format=bibtex"
+    },
+    {
+      "id": 1670211,
+      "title": "The automation of next-to-leading order electroweak calculations",
+      "date": "2018-04-26",
+      "year": 2018,
+      "authors": [
+        "Frederix, R.",
+        "Frixione, S.",
+        "Hirschi, V.",
+        "Pagani, D.",
+        "Shao, H.-S.",
+        "Zaro, M."
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "JHEP 11 (2021) 085",
+      "doi": "10.1007/JHEP11(2021)085",
+      "arxiv": "1804.10017",
+      "citations": 555,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1670211",
+      "bibtex_url": "https://inspirehep.net/api/literature/1670211?format=bibtex"
+    },
+    {
+      "id": 1663483,
+      "title": "Les Houches 2017: Physics at TeV Colliders Standard Model Working Group Report",
+      "date": "2018-03-21",
+      "year": 2018,
+      "authors": [
+        "Andersen, J.R.",
+        "Bellm, J.",
+        "Bendavid, J.",
+        "Berger, N.",
+        "Bhatia, D.",
+        "Biedermann, B.",
+        "Bräuer, S.",
+        "Britzger, D.",
+        "Buckley, A.G.",
+        "Camacho, R.",
+        "Caola, F.",
+        "Chachamis, G.",
+        "Chatterjee, S.",
+        "Chen, X.",
+        "Chiesa, M.",
+        "Ciulli, V.",
+        "Currie, J.R.",
+        "Denner, A.",
+        "Dreyer, F.",
+        "Driencourt-Mangin, F.",
+        "Forte, S.",
+        "Garzelli, M.V.",
+        "Gehrmann, T.",
+        "Gieseke, S.",
+        "Glover, E.W.N.",
+        "Gras, P.",
+        "Greiner, N.",
+        "Gütschow, C.",
+        "Gwenlan, C.",
+        "Harlander, R.",
+        "Heil, M.",
+        "Heinrich, G.",
+        "Herndon, M.",
+        "Hirschi, V.",
+        "Hoang, A.H.",
+        "Höche, S.",
+        "Huss, A.",
+        "Huston, J.",
+        "Jones, S.P.",
+        "Kallweit, S.",
+        "Kar, D.",
+        "Karlberg, A.",
+        "Kassabov, Z.",
+        "Kerner, M.",
+        "Klappert, J.",
+        "Kuttimalai, S.",
+        "Lang, J.-N.",
+        "Larkoski, A.",
+        "Lindert, J.M.",
+        "Loch, P.",
+        "Long, K.",
+        "Lönnblad, L.",
+        "Luisoni, G.",
+        "Maier, A.",
+        "Maierhöfer, P.",
+        "Maître, D.",
+        "Marzani, S.",
+        "McFayden, J.A.",
+        "Moult, I.",
+        "Mozer, M.",
+        "Mrenna, S.",
+        "Nachman, B.",
+        "Napoletano, D.",
+        "Pandini, C.",
+        "Papaefstathiou, A.",
+        "Pellen, M.",
+        "Perrozzi, L.",
+        "Pires, J.",
+        "Plätzer, S.",
+        "Pozzorini, S.",
+        "Prestel, S.",
+        "Quackenbush, S.",
+        "Rabbertz, K.",
+        "Rauch, M.",
+        "Re, E.",
+        "Reuschle, C.",
+        "Richardson, P.",
+        "Gehrmann-De Ridder, A.",
+        "Rodrigo, G.",
+        "Rojo, J.",
+        "Röntsch, R.",
+        "Rottoli, L.",
+        "Samitz, D.",
+        "Samui, T.",
+        "Sborlini, G.",
+        "Schönherr, M.",
+        "Schumann, S.",
+        "Scyboz, L.",
+        "Seth, S.",
+        "Shao, H.-S.",
+        "Siódmok, A.",
+        "Skands, P.Z.",
+        "Smillie, J.M.",
+        "Soyez, G.",
+        "Sun, P.",
+        "Sutton, M.R.",
+        "Tackmann, F.J.",
+        "Tackmann, K.",
+        "Thaler, J.",
+        "Theofilatos, K.",
+        "Uccirati, S.",
+        "Weinzierl, S.",
+        "Yazgan, E.",
+        "Yuan, C.-P.",
+        "Yuan, F."
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "arxiv": "1803.07977",
+      "citations": 170,
+      "types": [
+        "proceedings"
+      ],
+      "url": "https://inspirehep.net/literature/1663483",
+      "bibtex_url": "https://inspirehep.net/api/literature/1663483?format=bibtex"
+    },
+    {
+      "id": 1648790,
+      "title": "The R∗-operation and five-loop calculations",
+      "date": "2018-01-18",
+      "year": 2018,
+      "authors": [
+        "Ruijl, Ben",
+        "Herzog, Franz",
+        "Ueda, Takahiro",
+        "Vermaseren, Jos A.M.",
+        "Vogt, Andreas"
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "PoS RADCOR2017 (2018) 011",
+      "doi": "10.22323/1.290.0011",
+      "arxiv": "1801.06084",
+      "citations": 18,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1648790",
+      "bibtex_url": "https://inspirehep.net/api/literature/1648790?format=bibtex"
+    },
+    {
+      "id": 1648791,
+      "title": "Four-loop results on anomalous dimensions and splitting functions in QCD",
+      "date": "2018-01-10",
+      "year": 2018,
+      "authors": [
+        "Vogt, Andreas",
+        "Moch, Sven-Olaf",
+        "Ruijl, B.",
+        "Ueda, Takahiro",
+        "Vermaseren, J.A.M."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "PoS RADCOR2017 (2018) 046",
+      "doi": "10.22323/1.290.0046",
+      "arxiv": "1801.06085",
+      "citations": 8,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1648791",
+      "bibtex_url": "https://inspirehep.net/api/literature/1648791?format=bibtex"
+    },
+    {
+      "id": 1700703,
+      "title": "Automated Computation of One-Loop Amplitudes",
+      "date": "2018",
+      "year": 2018,
+      "authors": [
+        "Degrande, Celine",
+        "Hirschi, Valentin",
+        "Mattelaer, Olivier"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "Ann.Rev.Nucl.Part.Sci. 68 (2018) 291",
+      "doi": "10.1146/annurev-nucl-101917-020959",
+      "citations": 8,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1700703",
+      "bibtex_url": "https://inspirehep.net/api/literature/1700703?format=bibtex"
+    },
+    {
+      "id": 1635999,
+      "title": "Efficient reduction of four-loop massless propagators",
+      "date": "2017-11-09",
+      "year": 2017,
+      "authors": [
+        "Ueda, T.",
+        "Ruijl, B.",
+        "Vermaseren, J.A.M."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "J.Phys.Conf.Ser. 920 (2017) 012002",
+      "doi": "10.1088/1742-6596/920/1/012002",
+      "citations": 0,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1635999",
+      "bibtex_url": "https://inspirehep.net/api/literature/1635999?format=bibtex"
+    },
+    {
+      "id": 1648646,
+      "title": "Advances in computational methods for Quantum Field Theory calculations",
+      "date": "2017-11-02",
+      "year": 2017,
+      "authors": [
+        "Ruijl, B.J.G."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "citations": 0,
+      "types": [
+        "thesis"
+      ],
+      "url": "https://inspirehep.net/literature/1648646",
+      "bibtex_url": "https://inspirehep.net/api/literature/1648646?format=bibtex"
+    },
+    {
+      "id": 1664719,
+      "title": "The QCD beta function at five loops",
+      "date": "2017-10-30",
+      "year": 2017,
+      "authors": [
+        "Herzog, Franz",
+        "Ruijl, Ben",
+        "Ueda, Takahiro",
+        "Vermaseren, Jos",
+        "Vogt, Andreas"
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "PoS EPS-HEP2017 (2017) 380",
+      "doi": "10.22323/1.314.0380",
+      "citations": 1,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1664719",
+      "bibtex_url": "https://inspirehep.net/api/literature/1664719?format=bibtex"
+    },
+    {
+      "id": 1611689,
+      "title": "Four-Loop Non-Singlet Splitting Functions in the Planar Limit and Beyond",
+      "date": "2017-07-26",
+      "year": 2017,
+      "authors": [
+        "Moch, S.",
+        "Ruijl, B.",
+        "Ueda, T.",
+        "Vermaseren, J.A.M.",
+        "Vogt, A."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "JHEP 10 (2017) 041",
+      "doi": "10.1007/JHEP10(2017)041",
+      "arxiv": "1707.08315",
+      "citations": 292,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1611689",
+      "bibtex_url": "https://inspirehep.net/api/literature/1611689?format=bibtex"
+    },
+    {
+      "id": 1610864,
+      "title": "FORM version 4.2",
+      "date": "2017-07-20",
+      "year": 2017,
+      "authors": [
+        "Ruijl, Ben",
+        "Ueda, Takahiro",
+        "Vermaseren, Jos"
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "arxiv": "1707.06453",
+      "citations": 425,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1610864",
+      "bibtex_url": "https://inspirehep.net/api/literature/1610864?format=bibtex"
+    },
+    {
+      "id": 1608630,
+      "title": "On Higgs decays to hadrons and the R-ratio at N⁴LO",
+      "date": "2017-07-04",
+      "year": 2017,
+      "authors": [
+        "Herzog, F.",
+        "Ruijl, B.",
+        "Ueda, T.",
+        "Vermaseren, J.A.M.",
+        "Vogt, A."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "JHEP 08 (2017) 113",
+      "doi": "10.1007/JHEP08(2017)113",
+      "arxiv": "1707.01044",
+      "citations": 139,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1608630",
+      "bibtex_url": "https://inspirehep.net/api/literature/1608630?format=bibtex"
+    },
+    {
+      "id": 1593949,
+      "title": "Forcer, a FORM program for the parametric reduction of four-loop massless propagator diagrams",
+      "date": "2017-04-21",
+      "year": 2017,
+      "authors": [
+        "Ruijl, B.",
+        "Ueda, T.",
+        "Vermaseren, J.A.M."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "Comput.Phys.Commun. 253 (2020) 107198",
+      "doi": "10.1016/j.cpc.2020.107198",
+      "arxiv": "1704.06650",
+      "citations": 155,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1593949",
+      "bibtex_url": "https://inspirehep.net/api/literature/1593949?format=bibtex"
+    },
+    {
+      "id": 1519183,
+      "title": "Four-loop QCD propagators and vertices with one vanishing external momentum",
+      "date": "2017-03-24",
+      "year": 2017,
+      "authors": [
+        "Ruijl, B.",
+        "Ueda, T.",
+        "Vermaseren, J.A.M.",
+        "Vogt, A."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "JHEP 06 (2017) 040",
+      "doi": "10.1007/JHEP06(2017)040",
+      "arxiv": "1703.08532",
+      "citations": 56,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1519183",
+      "bibtex_url": "https://inspirehep.net/api/literature/1519183?format=bibtex"
+    },
+    {
+      "id": 1516935,
+      "title": "The R*-operation for Feynman graphs with generic numerators",
+      "date": "2017-03-10",
+      "year": 2017,
+      "authors": [
+        "Herzog, Franz",
+        "Ruijl, Ben"
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "JHEP 05 (2017) 037",
+      "doi": "10.1007/JHEP05(2017)037",
+      "arxiv": "1703.03776",
+      "citations": 74,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1516935",
+      "bibtex_url": "https://inspirehep.net/api/literature/1516935?format=bibtex"
+    },
+    {
+      "id": 1507902,
+      "title": "The five-loop beta function of Yang-Mills theory with fermions",
+      "date": "2017-01-05",
+      "year": 2017,
+      "authors": [
+        "Herzog, F.",
+        "Ruijl, B.",
+        "Ueda, T.",
+        "Vermaseren, J.A.M.",
+        "Vogt, A."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "JHEP 02 (2017) 090",
+      "doi": "10.1007/JHEP02(2017)090",
+      "arxiv": "1701.01404",
+      "citations": 492,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1507902",
+      "bibtex_url": "https://inspirehep.net/api/literature/1507902?format=bibtex"
+    },
+    {
+      "id": 1505201,
+      "title": "The complete NLO corrections to dijet hadroproduction",
+      "date": "2016-12-20",
+      "year": 2016,
+      "authors": [
+        "Frederix, Rikkert",
+        "Frixione, Stefano",
+        "Hirschi, Valentin",
+        "Pagani, Davide",
+        "Shao, Hua-Sheng",
+        "Zaro, Marco"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "JHEP 04 (2017) 076",
+      "doi": "10.1007/JHEP04(2017)076",
+      "arxiv": "1612.06548",
+      "citations": 75,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1505201",
+      "bibtex_url": "https://inspirehep.net/api/literature/1505201?format=bibtex"
+    },
+    {
+      "id": 1494411,
+      "title": "Handbook of LHC Higgs Cross Sections: 4. Deciphering the Nature of the Higgs Sector",
+      "date": "2016-10-25",
+      "year": 2016,
+      "authors": [
+        "de Florian, D.",
+        "Grojean, C.",
+        "Maltoni, F.",
+        "Mariotti, C.",
+        "Nikitenko, A.",
+        "Pieri, M.",
+        "Savard, P.",
+        "Schumacher, M.",
+        "Tanaka, R.",
+        "Aggleton, R.",
+        "Ahmad, M.",
+        "Allanach, B.",
+        "Anastasiou, C.",
+        "Astill, W.",
+        "Badger, S.",
+        "Badziak, M.",
+        "Baglio, J.",
+        "Bagnaschi, E.",
+        "Ballestrero, A.",
+        "Banfi, A.",
+        "Barducci, D.",
+        "Beckingham, M.",
+        "Becot, C.",
+        "Bélanger, G.",
+        "Bellm, J.",
+        "Belyaev, N.",
+        "Bernlochner, F.U.",
+        "Beskidt, C.",
+        "Biekötter, A.",
+        "Bishara, F.",
+        "Bizon, W.",
+        "Bomark, N.E.",
+        "Bonvini, M.",
+        "Borowka, S.",
+        "Bortolotto, V.",
+        "Boselli, S.",
+        "Botella, F.J.",
+        "Boughezal, R.",
+        "Branco, G.C.",
+        "Brehmer, J.",
+        "Brenner, L.",
+        "Bressler, S.",
+        "Brivio, I.",
+        "Broggio, A.",
+        "Brun, H.",
+        "Buchalla, G.",
+        "Burgard, C.D.",
+        "Calandri, A.",
+        "Caminada, L.",
+        "Caminal Armadans, R.",
+        "Campanario, F.",
+        "Campbell, J.",
+        "Caola, F.",
+        "Carloni Calame, C.M.",
+        "Carrazza, S.",
+        "Carvalho, A.",
+        "Casolino, M.",
+        "Cata, O.",
+        "Celis, A.",
+        "Cerutti, F.",
+        "Chanon, N.",
+        "Chen, M.",
+        "Chen, X.",
+        "Chokoufé Nejad, B.",
+        "Christensen, N.",
+        "Ciuchini, M.",
+        "Contino, R.",
+        "Corbett, T.",
+        "Costa, Raul",
+        "Curtin, D.",
+        "Dall'Osso, M.",
+        "David, A.",
+        "Dawson, S.",
+        "de Blas, J.",
+        "de Boer, W.",
+        "de Castro Manzano, P.",
+        "Degrande, C.",
+        "Delgado, R.L.",
+        "Demartin, F.",
+        "Denner, A.",
+        "Di Micco, B.",
+        "Di Nardo, R.",
+        "Dittmaier, S.",
+        "Dobado, A.",
+        "Dorigo, T.",
+        "Dreyer, F.A.",
+        "Dührssen, M.",
+        "Duhr, C.",
+        "Dulat, F.",
+        "Ecker, K.",
+        "Ellis, K.",
+        "Ellwanger, U.",
+        "Englert, C.",
+        "Espriu, D.",
+        "Falkowski, A.",
+        "Fayard, L.",
+        "Feger, R.",
+        "Ferrera, G.",
+        "Ferroglia, A.",
+        "Fidanza, N.",
+        "Figy, T.",
+        "Flechl, M.",
+        "Fontes, D.",
+        "Forte, S.",
+        "Francavilla, P.",
+        "Franco, E.",
+        "Frederix, R.",
+        "Freitas, A.",
+        "Freitas, F.F.",
+        "Frensch, F.",
+        "Frixione, S.",
+        "Fuks, B.",
+        "Furlan, E.",
+        "Gadatsch, S.",
+        "Gao, J.",
+        "Gao, Y.",
+        "Garzelli, M.V.",
+        "Gehrmann, T.",
+        "Gerosa, R.",
+        "Ghezzi, M.",
+        "Ghosh, D.",
+        "Gieseke, S.",
+        "Gillberg, D.",
+        "Giudice, G.F.",
+        "Glover, E.W.N.",
+        "Goertz, F.",
+        "Gonçalves, D.",
+        "Gonzalez-Fraile, J.",
+        "Gorbahn, M.",
+        "Gori, S.",
+        "Gottardo, C.A.",
+        "Gouzevitch, M.",
+        "Govoni, P.",
+        "Gray, D.",
+        "Grazzini, M.",
+        "Greiner, N.",
+        "Greljo, A.",
+        "Grigo, J.",
+        "Gritsan, A.V.",
+        "Gröber, R.",
+        "Guindon, S.",
+        "Haber, H.E.",
+        "Han, C.",
+        "Han, T.",
+        "Harlander, R.",
+        "Harrendorf, M.A.",
+        "Hartanto, H.B.",
+        "Hays, C.",
+        "Heinemeyer, S.",
+        "Heinrich, G.",
+        "Herrero, M.",
+        "Herzog, F.",
+        "Hespel, B.",
+        "Hirschi, V.",
+        "Hoeche, S.",
+        "Honeywell, S.",
+        "Huber, S.J.",
+        "Hugonie, C.",
+        "Huston, J.",
+        "Ilnicka, A.",
+        "Isidori, G.",
+        "Jäger, B.",
+        "Jaquier, M.",
+        "Jones, S.P.",
+        "Juste, A.",
+        "Kallweit, S.",
+        "Kaluza, A.",
+        "Kardos, A.",
+        "Karlberg, A.",
+        "Kassabov, Z.",
+        "Kauer, N.",
+        "Kazakov, D.I.",
+        "Kerner, M.",
+        "Kilian, W.",
+        "Kling, F.",
+        "Köneke, K.",
+        "Kogler, R.",
+        "Konoplich, R.",
+        "Kortner, S.",
+        "Kraml, S.",
+        "Krause, C.",
+        "Krauss, F.",
+        "Krawczyk, M.",
+        "Kulesza, A.",
+        "Kuttimalai, S.",
+        "Lane, R.",
+        "Lazopoulos, A.",
+        "Lee, G.",
+        "Lenzi, P.",
+        "Lewis, I.M.",
+        "Li, Y.",
+        "Liebler, S.",
+        "Lindert, J.",
+        "Liu, X.",
+        "Liu, Z.",
+        "Llanes-Estrada, F.J.",
+        "Logan, H.E.",
+        "Lopez-Val, D.",
+        "Low, I.",
+        "Luisoni, G.",
+        "Maierhöfer, P.",
+        "Maina, E.",
+        "Mansoulié, B.",
+        "Mantler, H.",
+        "Mantoani, M.",
+        "Marini, A.C.",
+        "Martinez Outschoorn, V.I.",
+        "Marzani, S.",
+        "Marzocca, D.",
+        "Massironi, A.",
+        "Mawatari, K.",
+        "Mazzitelli, J.",
+        "McCarn, A.",
+        "Mellado, B.",
+        "Melnikov, K.",
+        "Menari, S.B.",
+        "Merlo, L.",
+        "Meyer, C.",
+        "Milenovic, P.",
+        "Mimasu, K.",
+        "Mishima, S.",
+        "Mistlberger, B.",
+        "Moch, S.-O.",
+        "Mohammadi, A.",
+        "Monni, P.F.",
+        "Montagna, G.",
+        "Moreno Llácer, M.",
+        "Moretti, N.",
+        "Moretti, S.",
+        "Motyka, L.",
+        "Mück, A.",
+        "Mühlleitner, M.",
+        "Munir, S.",
+        "Musella, P.",
+        "Nadolsky, P.",
+        "Napoletano, D.",
+        "Nebot, M.",
+        "Neu, C.",
+        "Neubert, M.",
+        "Nevzorov, R.",
+        "Nicrosini, O.",
+        "Nielsen, J.",
+        "Nikolopoulos, K.",
+        "No, J.M.",
+        "O'Brien, C.",
+        "Ohl, T.",
+        "Oleari, C.",
+        "Orimoto, T.",
+        "Pagani, D.",
+        "Pandini, C.E.",
+        "Papaefstathiou, A.",
+        "Papanastasiou, A.S.",
+        "Passarino, G.",
+        "Pecjak, B.D.",
+        "Pelliccioni, M.",
+        "Perez, G.",
+        "Perrozzi, L.",
+        "Petriello, F.",
+        "Petrucciani, G.",
+        "Pianori, E.",
+        "Piccinini, F.",
+        "Pierini, M.",
+        "Pilkington, A.",
+        "Plätzer, S.",
+        "Plehn, T.",
+        "Podskubka, R.",
+        "Potter, C.T.",
+        "Pozzorini, S.",
+        "Prokofiev, K.",
+        "Pukhov, A.",
+        "Puljak, I.",
+        "Queitsch-Maitland, M.",
+        "Quevillon, J.",
+        "Rathlev, D.",
+        "Rauch, M.",
+        "Re, E.",
+        "Rebelo, M.N.",
+        "Rebuzzi, D.",
+        "Reina, L.",
+        "Reuschle, C.",
+        "Reuter, J.",
+        "Riembau, M.",
+        "Riva, F.",
+        "Rizzi, A.",
+        "Robens, T.",
+        "Röntsch, R.",
+        "Rojo, J.",
+        "Romão, J.C.",
+        "Rompotis, N.",
+        "Roskes, J.",
+        "Roth, R.",
+        "Salam, G.P.",
+        "Salerno, R.",
+        "Sampaio, M.O.P.",
+        "Santos, R.",
+        "Sanz, V.",
+        "Sanz-Cillero, J.J.",
+        "Sargsyan, H.",
+        "Sarica, U.",
+        "Schichtel, P.",
+        "Schlenk, J.",
+        "Schmidt, T.",
+        "Schmitt, C.",
+        "Schönherr, M.",
+        "Schubert, U.",
+        "Schulze, M.",
+        "Sekula, S.",
+        "Sekulla, M.",
+        "Shabalina, E.",
+        "Shao, H.S.",
+        "Shelton, J.",
+        "Shepherd-Themistocleous, C.H.",
+        "Shim, S.Y.",
+        "Siegert, F.",
+        "Signer, A.",
+        "Silva, J.P.",
+        "Silvestrini, L.",
+        "Sjodahl, M.",
+        "Slavich, P.",
+        "Slawinska, M.",
+        "Soffi, L.",
+        "Spannowsky, M.",
+        "Speckner, C.",
+        "Sperka, D.M.",
+        "Spira, M.",
+        "Stål, O.",
+        "Staub, F.",
+        "Stebel, T.",
+        "Stefaniak, T.",
+        "Steinhauser, M.",
+        "Stewart, I.W.",
+        "Strassler, M.J.",
+        "Streicher, J.",
+        "Strom, D.M.",
+        "Su, S.",
+        "Sun, X.",
+        "Tackmann, F.J.",
+        "Tackmann, K.",
+        "Teixeira, A.M.",
+        "Teixeira de Lima, R.",
+        "Theeuwes, V.",
+        "Thorne, R.",
+        "Tommasini, D.",
+        "Torrielli, P.",
+        "Tosi, M.",
+        "Tramontano, F.",
+        "Trócsányi, Z.",
+        "Trott, M.",
+        "Tsinikos, I.",
+        "Ubiali, M.",
+        "Vanlaer, P.",
+        "Verkerke, W.",
+        "Vicini, A.",
+        "Viliani, L.",
+        "Vryonidou, E.",
+        "Wackeroth, D.",
+        "Wagner, C.E.M.",
+        "Wang, J.",
+        "Wayand, S.",
+        "Weiglein, G.",
+        "Weiss, C.",
+        "Wiesemann, M.",
+        "Williams, C.",
+        "Winter, J.",
+        "Winterbottom, D.",
+        "Wolf, R.",
+        "Xiao, M.",
+        "Yang, L.L.",
+        "Yohay, R.",
+        "Yuen, S.P.Y.",
+        "Zanderighi, G.",
+        "Zaro, M.",
+        "Zeppenfeld, D.",
+        "Ziegler, R.",
+        "Zirke, T.",
+        "Zupan, J."
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "CERN Yellow Rep.Monogr. 2 (2017) 1",
+      "doi": "10.23731/CYRM-2017-002",
+      "arxiv": "1610.07922",
+      "citations": 2876,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1494411",
+      "bibtex_url": "https://inspirehep.net/api/literature/1494411?format=bibtex"
+    },
+    {
+      "id": 1494088,
+      "title": "Large-nf contributions to the four-loop splitting functions in QCD",
+      "date": "2016-10-24",
+      "year": 2016,
+      "authors": [
+        "Davies, J.",
+        "Vogt, A.",
+        "Ruijl, B.",
+        "Ueda, T.",
+        "Vermaseren, J.A.M."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "Nucl.Phys.B 915 (2017) 13946",
+      "doi": "10.1016/j.nuclphysb.2016.12.012",
+      "arxiv": "1610.07477",
+      "citations": 157,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1494088",
+      "bibtex_url": "https://inspirehep.net/api/literature/1494088?format=bibtex"
+    },
+    {
+      "id": 1477022,
+      "title": "Accurate predictions for charged Higgs production: Closing the mₕ±∼ mₜ window",
+      "date": "2016-07-18",
+      "year": 2016,
+      "authors": [
+        "Degrande, Celine",
+        "Frederix, Rikkert",
+        "Hirschi, Valentin",
+        "Ubiali, Maria",
+        "Wiesemann, Marius",
+        "Zaro, Marco"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "Phys.Lett.B 772 (2017) 87",
+      "doi": "10.1016/j.physletb.2017.06.037",
+      "arxiv": "1607.05291",
+      "citations": 78,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1477022",
+      "bibtex_url": "https://inspirehep.net/api/literature/1477022?format=bibtex"
+    },
+    {
+      "id": 1474391,
+      "title": "Physics at a 100 TeV pp Collider: Standard Model Processes",
+      "date": "2016-07-06",
+      "year": 2016,
+      "authors": [
+        "Mangano, M.L.",
+        "Zanderighi, G.",
+        "Aguilar-Saavedra, Juan Antonio",
+        "Alekhin, S.",
+        "Badger, S.",
+        "Bauer, C.W.",
+        "Becher, T.",
+        "Bertone, V.",
+        "Bonvini, M.",
+        "Boselli, S.",
+        "Bothmann, E.",
+        "Boughezal, R.",
+        "Cacciari, M.",
+        "Carloni Calame, C.M.",
+        "Caola, F.",
+        "Campbell, J.M.",
+        "Carrazza, S.",
+        "Chiesa, M.",
+        "Cieri, L.",
+        "Cimaglia, F.",
+        "Febres Cordero, F.",
+        "Ferrarese, P.",
+        "D'Enterria, D.",
+        "Ferrera, G.",
+        "Garcia i Tormo, X.",
+        "Garzelli, M.V.",
+        "Germann, E.",
+        "Hirschi, V.",
+        "Han, T.",
+        "Ita, H.",
+        "Jäger, B.",
+        "Kallweit, S.",
+        "Karlberg, A.",
+        "Kuttimalai, S.",
+        "Krauss, F.",
+        "Larkoski, A.J.",
+        "Lindert, J.",
+        "Luisoni, G.",
+        "Maierhöfer, P.",
+        "Mattelaer, O.",
+        "Martinez, H.",
+        "Moch, S.",
+        "Montagna, G.",
+        "Moretti, M.",
+        "Nason, P.",
+        "Nicrosini, O.",
+        "Oleari, C.",
+        "Pagani, D.",
+        "Papaefstathiou, A.",
+        "Petriello, F.",
+        "Piccinini, F.",
+        "Pierini, M.",
+        "Pierog, T.",
+        "Pozzorini, S.",
+        "Re, E.",
+        "Robens, T.",
+        "Rojo, J.",
+        "Ruiz, R.",
+        "Sakurai, K.",
+        "Salam, G.P.",
+        "Salfelder, L.",
+        "Schönherr, M.",
+        "Schulze, M.",
+        "Schumann, S.",
+        "Selvaggi, M.",
+        "Shivaji, A.",
+        "Siodmok, A.",
+        "Skands, P.",
+        "Torrielli, P.",
+        "Tramontano, F.",
+        "Tsinikos, I.",
+        "Tweedie, B.",
+        "Vicini, A.",
+        "Westhoff, S.",
+        "Zaro, M.",
+        "Zeppenfeld, D."
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "CERN Yellow Rep. (2017) 1",
+      "doi": "10.23731/CYRM-2017-003.1",
+      "arxiv": "1607.01831",
+      "citations": 209,
+      "types": [
+        "report"
+      ],
+      "url": "https://inspirehep.net/literature/1474391",
+      "bibtex_url": "https://inspirehep.net/api/literature/1474391?format=bibtex"
+    },
+    {
+      "id": 1479766,
+      "title": "FORM, Diagrams and Topologies",
+      "date": "2016-06-30",
+      "year": 2016,
+      "authors": [
+        "Herzog, Franz",
+        "Ruijl, Ben",
+        "Ueda, Takahiro",
+        "Vermaseren, J.A.M.",
+        "Vogt, Andreas"
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "PoS LL2016 (2016) 073",
+      "doi": "10.22323/1.260.0073",
+      "arxiv": "1608.01834",
+      "citations": 22,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1479766",
+      "bibtex_url": "https://inspirehep.net/api/literature/1479766?format=bibtex"
+    },
+    {
+      "id": 1477842,
+      "title": "Forcer: a FORM program for 4-loop massless propagators",
+      "date": "2016-06-30",
+      "year": 2016,
+      "authors": [
+        "Ueda, T.",
+        "Ruijl, B.",
+        "Vermaseren, J.A.M."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "PoS LL2016 (2016) 070",
+      "doi": "10.22323/1.260.0070",
+      "arxiv": "1607.07318",
+      "citations": 43,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1477842",
+      "bibtex_url": "https://inspirehep.net/api/literature/1477842?format=bibtex"
+    },
+    {
+      "id": 1473190,
+      "title": "Physics at a 100 TeV pp collider: Higgs and EW symmetry breaking studies",
+      "date": "2016-06-30",
+      "year": 2016,
+      "authors": [
+        "Contino, R.",
+        "Curtin, D.",
+        "Katz, A.",
+        "Mangano, M.L.",
+        "Panico, G.",
+        "Ramsey-Musolf, M.J.",
+        "Zanderighi, G.",
+        "Anastasiou, C.",
+        "Astill, W.",
+        "Bambhaniya, G.",
+        "Behr, J.K.",
+        "Bizon, W.",
+        "Dev, P.S. Bhupal",
+        "Bortoletto, D.",
+        "Buttazzo, D.",
+        "Cao, Q.-H.",
+        "Caola, F.",
+        "Chakrabortty, J.",
+        "Chen, C.Y.",
+        "Chen, S.L.",
+        "de Florian, D.",
+        "Dulat, F.",
+        "Englert, C.",
+        "Frost, J.A.",
+        "Fuks, B.",
+        "Gherghetta, T.",
+        "Giudice, G.",
+        "Gluza, J.",
+        "Greiner, N.",
+        "Gray, H.",
+        "Hartland, N.P.",
+        "Hirschi, V.",
+        "Issever, C.",
+        "Jelinski, T.",
+        "Karlberg, A.",
+        "Kim, J.H.",
+        "Kling, F.",
+        "Lazopoulos, A.",
+        "Lee, S.J.",
+        "Liu, Y.",
+        "Luisoni, G.",
+        "Mattelaer, O.",
+        "Mazzitelli, J.",
+        "Mistlberger, B.",
+        "Monni, P.",
+        "Nikolopoulos, K.",
+        "Mohapatra, R.N.",
+        "Papaefstathiou, A.",
+        "Perelstein, M.",
+        "Petriello, F.",
+        "Plehn, T.",
+        "Reimitz, P.",
+        "Ren, J.",
+        "Rojo, J.",
+        "Sakurai, K.",
+        "Schell, T.",
+        "Sala, F.",
+        "Selvaggi, M.",
+        "Shao, H.S.",
+        "Son, M.",
+        "Spannowsky, M.",
+        "Srivastava, T.",
+        "Su, S.F.",
+        "Szafron, R.",
+        "Tait, T.",
+        "Tesi, A.",
+        "Thamm, A.",
+        "Torrielli, P.",
+        "Tramontano, F.",
+        "Winter, J.",
+        "Wulzer, A.",
+        "Yan, Q.S.",
+        "Yao, W.M.",
+        "Zhang, Y.C.",
+        "Zhao, X.",
+        "Zhao, Z.",
+        "Zhong, Yi-Ming"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "CERN Yellow Rep. (2017) 255",
+      "doi": "10.23731/CYRM-2017-003.255",
+      "arxiv": "1606.09408",
+      "citations": 239,
+      "types": [
+        "report"
+      ],
+      "url": "https://inspirehep.net/literature/1473190",
+      "bibtex_url": "https://inspirehep.net/api/literature/1473190?format=bibtex"
+    },
+    {
+      "id": 1466303,
+      "title": "NLO predictions for the production of a spin-two particle at the LHC",
+      "date": "2016-05-30",
+      "year": 2016,
+      "authors": [
+        "Das, Goutam",
+        "Degrande, Celine",
+        "Hirschi, Valentin",
+        "Maltoni, Fabio",
+        "Shao, Hua-Sheng"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "Phys.Lett.B 770 (2017) 507",
+      "doi": "10.1016/j.physletb.2017.05.007",
+      "arxiv": "1605.09359",
+      "citations": 44,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1466303",
+      "bibtex_url": "https://inspirehep.net/api/literature/1466303?format=bibtex"
+    },
+    {
+      "id": 1465859,
+      "title": "First Forcer results on deep-inelastic scattering and related quantities",
+      "date": "2016-05-26",
+      "year": 2016,
+      "authors": [
+        "Ruijl, B.",
+        "Ueda, T.",
+        "Vermaseren, J.A.M.",
+        "Davies, J.",
+        "Vogt, A."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "PoS LL2016 (2016) 071",
+      "doi": "10.22323/1.260.0071",
+      "arxiv": "1605.08408",
+      "citations": 57,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1465859",
+      "bibtex_url": "https://inspirehep.net/api/literature/1465859?format=bibtex"
+    },
+    {
+      "id": 1454087,
+      "title": "Calculating four-loop massless propagators with Forcer",
+      "date": "2016-04-29",
+      "year": 2016,
+      "authors": [
+        "Ueda, T.",
+        "Ruijl, B.",
+        "Vermaseren, J.A.M."
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "J.Phys.Conf.Ser. 762 (2016) 012060",
+      "doi": "10.1088/1742-6596/762/1/012060",
+      "arxiv": "1604.08767",
+      "citations": 21,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1454087",
+      "bibtex_url": "https://inspirehep.net/api/literature/1454087?format=bibtex"
+    },
+    {
+      "id": 1442384,
+      "title": "Tensor integrand reduction via Laurent expansion",
+      "date": "2016-04-05",
+      "year": 2016,
+      "authors": [
+        "Hirschi, Valentin",
+        "Peraro, Tiziano"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "JHEP 06 (2016) 060",
+      "doi": "10.1007/JHEP06(2016)060",
+      "arxiv": "1604.01363",
+      "citations": 56,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1442384",
+      "bibtex_url": "https://inspirehep.net/api/literature/1442384?format=bibtex"
+    },
+    {
+      "id": 1395961,
+      "title": "Matching next-to-leading order predictions to parton showers in supersymmetric QCD",
+      "date": "2015-10-01",
+      "year": 2015,
+      "authors": [
+        "Degrande, Celine",
+        "Fuks, Benjamin",
+        "Hirschi, Valentin",
+        "Proudom, Josselin",
+        "Shao, Hua-Sheng"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "Phys.Lett.B 755 (2016) 82",
+      "doi": "10.1016/j.physletb.2016.01.067",
+      "arxiv": "1510.00391",
+      "citations": 23,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1395961",
+      "bibtex_url": "https://inspirehep.net/api/literature/1395961?format=bibtex"
+    },
+    {
+      "id": 1392042,
+      "title": "Spin Polarisation of tt̅γγ production at NLO+PS with GoSam interfaced to MadGraph5_aMC@NLO",
+      "date": "2015-09-07",
+      "year": 2015,
+      "authors": [
+        "van Deurzen, Hans",
+        "Frederix, Rikkert",
+        "Hirschi, Valentin",
+        "Luisoni, Gionata",
+        "Mastrolia, Pierpaolo",
+        "Ossola, Giovanni"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "Eur.Phys.J.C 76 (2016) 221",
+      "doi": "10.1140/epjc/s10052-016-4048-2",
+      "arxiv": "1509.02077",
+      "citations": 20,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1392042",
+      "bibtex_url": "https://inspirehep.net/api/literature/1392042?format=bibtex"
+    },
+    {
+      "id": 1383120,
+      "title": "Locally Causal Dynamical Triangulations in Two Dimensions",
+      "date": "2015-07-16",
+      "year": 2015,
+      "authors": [
+        "Loll, Renate",
+        "Ruijl, Ben"
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "Phys.Rev.D 92 (2015) 084002",
+      "doi": "10.1103/PhysRevD.92.084002",
+      "arxiv": "1507.04566",
+      "citations": 15,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1383120",
+      "bibtex_url": "https://inspirehep.net/api/literature/1383120?format=bibtex"
+    },
+    {
+      "id": 1380608,
+      "title": "Automated event generation for loop-induced processes",
+      "date": "2015-06-30",
+      "year": 2015,
+      "authors": [
+        "Hirschi, Valentin",
+        "Mattelaer, Olivier"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "JHEP 10 (2015) 146",
+      "doi": "10.1007/JHEP10(2015)146",
+      "arxiv": "1507.00020",
+      "citations": 212,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1380608",
+      "bibtex_url": "https://inspirehep.net/api/literature/1380608?format=bibtex"
+    },
+    {
+      "id": 1365572,
+      "title": "The diamond rule for multi-loop Feynman diagrams",
+      "date": "2015-04-30",
+      "year": 2015,
+      "authors": [
+        "Ruijl, Ben",
+        "Ueda, Takahiro",
+        "Vermaseren, Jos"
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "venue": "Phys.Lett.B 746 (2015) 347",
+      "doi": "10.1016/j.physletb.2015.05.015",
+      "arxiv": "1504.08258",
+      "citations": 15,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1365572",
+      "bibtex_url": "https://inspirehep.net/api/literature/1365572?format=bibtex"
+    },
+    {
+      "id": 1359461,
+      "title": "Electroweak and QCD corrections to top-pair hadroproduction in association with heavy bosons",
+      "date": "2015-04-14",
+      "year": 2015,
+      "authors": [
+        "Frixione, S.",
+        "Hirschi, V.",
+        "Pagani, D.",
+        "Shao, H. -S.",
+        "Zaro, M."
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "JHEP 06 (2015) 184",
+      "doi": "10.1007/JHEP06(2015)184",
+      "arxiv": "1504.03446",
+      "citations": 429,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1359461",
+      "bibtex_url": "https://inspirehep.net/api/literature/1359461?format=bibtex"
+    },
+    {
+      "id": 1334936,
+      "title": "Automated next-to-leading order predictions for new physics at the LHC: the case of colored scalar pair production",
+      "date": "2014-12-17",
+      "year": 2014,
+      "authors": [
+        "Degrande, Céline",
+        "Fuks, Benjamin",
+        "Hirschi, Valentin",
+        "Proudom, Josselin",
+        "Shao, Hua-Sheng"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "Phys.Rev.D 91 (2015) 094005",
+      "doi": "10.1103/PhysRevD.91.094005",
+      "arxiv": "1412.5589",
+      "citations": 44,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1334936",
+      "bibtex_url": "https://inspirehep.net/api/literature/1334936?format=bibtex"
+    },
+    {
+      "id": 1317932,
+      "title": "Why Local Search Excels in Expression Simplification",
+      "date": "2014-09-18",
+      "year": 2014,
+      "authors": [
+        "Ruijl, Ben",
+        "Plaat, Aske",
+        "Vermaseren, Jos",
+        "van den Herik, Jaap"
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "arxiv": "1409.5223",
+      "citations": 11,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1317932",
+      "bibtex_url": "https://inspirehep.net/api/literature/1317932?format=bibtex"
+    },
+    {
+      "id": 1317896,
+      "title": "Higgs production in association with bottom quarks",
+      "date": "2014-09-18",
+      "year": 2014,
+      "authors": [
+        "Wiesemann, M.",
+        "Frederix, R.",
+        "Frixione, S.",
+        "Hirschi, V.",
+        "Maltoni, F.",
+        "Torrielli, P."
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "JHEP 02 (2015) 132",
+      "doi": "10.1007/JHEP02(2015)132",
+      "arxiv": "1409.5301",
+      "citations": 183,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1317896",
+      "bibtex_url": "https://inspirehep.net/api/literature/1317896?format=bibtex"
+    },
+    {
+      "id": 1304696,
+      "title": "Weak corrections to Higgs hadroproduction in association with a top-quark pair",
+      "date": "2014-07-03",
+      "year": 2014,
+      "authors": [
+        "Frixione, S.",
+        "Hirschi, V.",
+        "Pagani, D.",
+        "Shao, H.S.",
+        "Zaro, M."
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "JHEP 09 (2014) 065",
+      "doi": "10.1007/JHEP09(2014)065",
+      "arxiv": "1407.0823",
+      "citations": 206,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1304696",
+      "bibtex_url": "https://inspirehep.net/api/literature/1304696?format=bibtex"
+    },
+    {
+      "id": 1298109,
+      "title": "HEPGAME and the Simplification of Expressions",
+      "date": "2014-05-25",
+      "year": 2014,
+      "authors": [
+        "Ruijl, Ben",
+        "Vermaseren, Jos",
+        "Plaat, Aske",
+        "Herik, Jaap van den"
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "arxiv": "1405.6369",
+      "citations": 6,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1298109",
+      "bibtex_url": "https://inspirehep.net/api/literature/1298109?format=bibtex"
+    },
+    {
+      "id": 1293923,
+      "title": "The automated computation of tree-level and next-to-leading order differential cross sections, and their matching to parton shower simulations",
+      "date": "2014-05-01",
+      "year": 2014,
+      "authors": [
+        "Alwall, J.",
+        "Frederix, R.",
+        "Frixione, S.",
+        "Hirschi, V.",
+        "Maltoni, F.",
+        "Mattelaer, O.",
+        "Shao, H. -S.",
+        "Stelzer, T.",
+        "Torrielli, P.",
+        "Zaro, M."
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "JHEP 07 (2014) 079",
+      "doi": "10.1007/JHEP07(2014)079",
+      "arxiv": "1405.0301",
+      "citations": 10706,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1293923",
+      "bibtex_url": "https://inspirehep.net/api/literature/1293923?format=bibtex"
+    },
+    {
+      "id": 1279493,
+      "title": "Higgs pair production at the LHC with NLO and parton-shower effects",
+      "date": "2014-01-28",
+      "year": 2014,
+      "authors": [
+        "Frederix, R.",
+        "Frixione, S.",
+        "Hirschi, V.",
+        "Maltoni, F.",
+        "Mattelaer, O.",
+        "Torrielli, P.",
+        "Vryonidou, E.",
+        "Zaro, M."
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "Phys.Lett.B 732 (2014) 30073",
+      "doi": "10.1016/j.physletb.2014.03.026",
+      "arxiv": "1401.7340",
+      "citations": 331,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1279493",
+      "bibtex_url": "https://inspirehep.net/api/literature/1279493?format=bibtex"
+    },
+    {
+      "id": 1267894,
+      "title": "Combining Simulated Annealing and Monte Carlo Tree Search for Expression Simplification",
+      "date": "2013-12-03",
+      "year": 2013,
+      "authors": [
+        "Ruijl, Ben",
+        "Vermaseren, Jos",
+        "Plaat, Aske",
+        "Herik, Jaap van den"
+      ],
+      "people": [
+        "ben-ruijl"
+      ],
+      "arxiv": "1312.0841",
+      "citations": 7,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1267894",
+      "bibtex_url": "https://inspirehep.net/api/literature/1267894?format=bibtex"
+    },
+    {
+      "id": 1247987,
+      "title": "Update of the Binoth Les Houches Accord for a standard interface between Monte Carlo tools and one-loop programs",
+      "date": "2013-08-15",
+      "year": 2013,
+      "authors": [
+        "Alioli, S.",
+        "Badger, S.",
+        "Bellm, J.",
+        "Biedermann, B.",
+        "Boudjema, F.",
+        "Cullen, G.",
+        "Denner, A.",
+        "Van Deurzen, H.",
+        "Dittmaier, S.",
+        "Frederix, R.",
+        "Frixione, S.",
+        "Garzelli, M.V.",
+        "Gieseke, S.",
+        "Glover, E.W.N.",
+        "Greiner, N.",
+        "Heinrich, G.",
+        "Hirschi, V.",
+        "Höche, S.",
+        "Huston, J.",
+        "Ita, H.",
+        "Kauer, N.",
+        "Krauss, F.",
+        "Luisoni, G.",
+        "Maitre, D.",
+        "Maltoni, F.",
+        "Nason, P.",
+        "Oleari, C.",
+        "Pittau, R.",
+        "Plätzer, S.",
+        "Pozzorini, S.",
+        "Reina, L.",
+        "Reuschle, C.",
+        "Robens, T.",
+        "Schlenk, J.",
+        "Schönherr, M.",
+        "Siegert, F.",
+        "Von Soden-Fraunhofen, J.F.",
+        "Tackmann, F.",
+        "Tramontano, F.",
+        "Uwer, P.",
+        "Salam, G.",
+        "Skands, P.",
+        "Weinzierl, S.",
+        "Winter, J.",
+        "Yundin, V.",
+        "Zanderighi, G.",
+        "Zaro, M."
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "Comput.Phys.Commun. 185 (2014) 560",
+      "doi": "10.1016/j.cpc.2013.10.020",
+      "arxiv": "1308.3462",
+      "citations": 126,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1247987",
+      "bibtex_url": "https://inspirehep.net/api/literature/1247987?format=bibtex"
+    },
+    {
+      "id": 1236225,
+      "title": "Single-top t-channel production with off-shell and non-resonant effects",
+      "date": "2013-05-30",
+      "year": 2013,
+      "authors": [
+        "Papanastasiou, A.S.",
+        "Frederix, R.",
+        "Frixione, S.",
+        "Hirschi, V.",
+        "Maltoni, F."
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "Phys.Lett.B 726 (2013) 223",
+      "doi": "10.1016/j.physletb.2013.07.062",
+      "arxiv": "1305.7088",
+      "citations": 35,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/1236225",
+      "bibtex_url": "https://inspirehep.net/api/literature/1236225?format=bibtex"
+    },
+    {
+      "id": 1725901,
+      "title": "Automation of One-Loop Computations for Scattering Amplitudes and Applications to Collider Phenomenology",
+      "date": "2013",
+      "year": 2013,
+      "authors": [
+        "Hirschi, Valentin"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "doi": "10.5075/epfl-thesis-5736",
+      "citations": 0,
+      "types": [
+        "thesis"
+      ],
+      "url": "https://inspirehep.net/literature/1725901",
+      "bibtex_url": "https://inspirehep.net/api/literature/1725901?format=bibtex"
+    },
+    {
+      "id": 1095506,
+      "title": "The SM and NLO Multileg and SM MC Working Groups: Summary Report",
+      "date": "2012-03",
+      "year": 2012,
+      "authors": [
+        "Alcaraz Maestre, J.",
+        "Heinrich, G.",
+        "Huston, J.",
+        "Krauss, F.",
+        "Maitre, D.",
+        "Nurse, E.",
+        "Pittau, R.",
+        "Alioli, S.",
+        "Andersen, J.R.",
+        "Ball, R.D.",
+        "Buckley, A.",
+        "Cacciari, M.",
+        "Campanario, F.",
+        "Chanon, N.",
+        "Chachamis, G.",
+        "Ciulli, V.",
+        "Cossutti, F.",
+        "Cullen, G.",
+        "Denner, A.",
+        "Dittmaier, S.",
+        "Fleischer, J.",
+        "Frederix, R.",
+        "Frixione, S.",
+        "Gao, J.",
+        "Garren, L.",
+        "Gascon-Shotkin, S.",
+        "Greiner, N.",
+        "Guillet, J.P.",
+        "Hapola, T.",
+        "Hartland, N.P.",
+        "Hesketh, G.",
+        "Hirschi, V.",
+        "Hoeth, H.",
+        "Jezo, T.",
+        "Kallweit, S.",
+        "Kovarik, K.",
+        "Kusina, A.",
+        "Liang, Z.",
+        "Lenzi, P.",
+        "Lonnblad, L.",
+        "Lopez-Villarejo, J.J.",
+        "Luisoni, G.",
+        "Maltoni, F.",
+        "Mastrolia, P.",
+        "Nadolsky, P.M.",
+        "Oleari, C.",
+        "Olness, F.I.",
+        "Ossola, G.",
+        "Pilon, E.",
+        "Platzer, S.",
+        "Pozzorini, S.",
+        "Prestel, S.",
+        "Re, E.",
+        "Reiter, T.",
+        "Riemann, T.",
+        "Rojo, J.",
+        "Salam, G.P.",
+        "Sapeta, S.",
+        "Schienbein, I.",
+        "Schonherr, M.",
+        "Schulz, H.",
+        "Schulze, M.",
+        "Schwoerer, M.",
+        "Skands, P.",
+        "Smillie, J.M.",
+        "Somogyi, G.",
+        "Soyez, G.",
+        "Stavreva, T.",
+        "Stewart, I.W.",
+        "Stockton, M.",
+        "Szor, Z.",
+        "Tackmann, F.J.",
+        "Torrielli, P.",
+        "Tramontano, F.",
+        "Tripiana, M.",
+        "Trocsanyi, Z.",
+        "Ubiali, M.",
+        "Yundin, V.",
+        "Weinzierl, S.",
+        "Winter, J.",
+        "Yu, J.Y.",
+        "Zapp, K."
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "arxiv": "1203.6803",
+      "citations": 140,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/1095506",
+      "bibtex_url": "https://inspirehep.net/api/literature/1095506?format=bibtex"
+    },
+    {
+      "id": 945512,
+      "title": "New developments in MadLoop",
+      "date": "2011-11",
+      "year": 2011,
+      "authors": [
+        "Hirschi, Valentin"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "PoS RADCOR2011 (2011) 018",
+      "doi": "10.22323/1.145.0018",
+      "arxiv": "1111.2708",
+      "citations": 10,
+      "types": [
+        "conference paper"
+      ],
+      "url": "https://inspirehep.net/literature/945512",
+      "bibtex_url": "https://inspirehep.net/api/literature/945512?format=bibtex"
+    },
+    {
+      "id": 942748,
+      "title": "aMC@NLO predictions for Wjj production at the Tevatron",
+      "date": "2011-10",
+      "year": 2011,
+      "authors": [
+        "Frederix, Rikkert",
+        "Frixione, Stefano",
+        "Hirschi, Valentin",
+        "Maltoni, Fabio",
+        "Pittau, Roberto",
+        "Torrielli, Paolo"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "JHEP 02 (2012) 048",
+      "doi": "10.1007/JHEP02(2012)048",
+      "arxiv": "1110.5502",
+      "citations": 46,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/942748",
+      "bibtex_url": "https://inspirehep.net/api/literature/942748?format=bibtex"
+    },
+    {
+      "id": 940815,
+      "title": "Four-lepton production at hadron colliders: aMC@NLO predictions with theoretical uncertainties",
+      "date": "2011-10",
+      "year": 2011,
+      "authors": [
+        "Frederix, Rikkert",
+        "Frixione, Stefano",
+        "Hirschi, Valentin",
+        "Maltoni, Fabio",
+        "Pittau, Roberto",
+        "Torrielli, Paolo"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "JHEP 02 (2012) 099",
+      "doi": "10.1007/JHEP02(2012)099",
+      "arxiv": "1110.4738",
+      "citations": 183,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/940815",
+      "bibtex_url": "https://inspirehep.net/api/literature/940815?format=bibtex"
+    },
+    {
+      "id": 916196,
+      "title": "W and Z/γ* boson production in association with a bottom-antibottom pair",
+      "date": "2011-06",
+      "year": 2011,
+      "authors": [
+        "Frederix, Rikkert",
+        "Frixione, Stefano",
+        "Hirschi, Valentin",
+        "Maltoni, Fabio",
+        "Pittau, Roberto",
+        "Torrielli, Paolo"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "JHEP 09 (2011) 061",
+      "doi": "10.1007/JHEP09(2011)061",
+      "arxiv": "1106.6019",
+      "citations": 111,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/916196",
+      "bibtex_url": "https://inspirehep.net/api/literature/916196?format=bibtex"
+    },
+    {
+      "id": 897698,
+      "title": "Scalar and pseudoscalar Higgs production in association with a top–antitop pair",
+      "date": "2011-04",
+      "year": 2011,
+      "authors": [
+        "Frederix, Rikkert",
+        "Frixione, Stefano",
+        "Hirschi, Valentin",
+        "Maltoni, Fabio",
+        "Pittau, Roberto",
+        "Torrielli, Paolo"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "Phys.Lett.B 701 (2011) 427",
+      "doi": "10.1016/j.physletb.2011.06.012",
+      "arxiv": "1104.5613",
+      "citations": 206,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/897698",
+      "bibtex_url": "https://inspirehep.net/api/literature/897698?format=bibtex"
+    },
+    {
+      "id": 891365,
+      "title": "Automation of one-loop QCD corrections",
+      "date": "2011-03",
+      "year": 2011,
+      "authors": [
+        "Hirschi, Valentin",
+        "Frederix, Rikkert",
+        "Frixione, Stefano",
+        "Garzelli, Maria Vittoria",
+        "Maltoni, Fabio",
+        "Pittau, Roberto"
+      ],
+      "people": [
+        "valentin-hirschi"
+      ],
+      "venue": "JHEP 05 (2011) 044",
+      "doi": "10.1007/JHEP05(2011)044",
+      "arxiv": "1103.0621",
+      "citations": 545,
+      "types": [
+        "article"
+      ],
+      "url": "https://inspirehep.net/literature/891365",
+      "bibtex_url": "https://inspirehep.net/api/literature/891365?format=bibtex"
+    }
+  ]
+}

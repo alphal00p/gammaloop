@@ -1,0 +1,519 @@
+name: Documentation Pages
+
+on:
+  schedule:
+    - cron: '17 4 * * 1'
+  push:
+    branches:
+      - main
+      # Temporary live publisher while pull request 96 develops the new site.
+      # The publication selector below disables this exception once that pull
+      # request is no longer open.
+      - docs
+    tags:
+      - 'v*'
+      - 'gammaloop-v*'
+      - 'gammalooprs-v*'
+      - 'gammaloop-api-v*'
+      - 'gammaloop-python-v*'
+      - 'linnet-v*'
+      - 'linnet-py-v*'
+      - 'spenso-v*'
+      - 'spenso-macros-v*'
+      - 'spenso-hep-lib-v*'
+      - 'spynso3-v*'
+      - 'idenso-v*'
+      - 'idenso-community-v*'
+      - 'vakint-v*'
+      - 'vakint-community-v*'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/docs-pages.yml'
+      - '**/*.[tT][yY][pP]'
+      - '**/*.[mM][dD]'
+      - '**/*.[mM][dD][xX]'
+      - '**/*.[mM][dD][oO][wW][nN]'
+      - '**/*.[mM][kK][dD]'
+      - '**/*.[mM][aA][rR][kK][dD][oO][wW][nN]'
+      - '**/*.[hH][tT][mM]'
+      - '**/*.[hH][tT][mM][lL]'
+      - '**/*.[xX][hH][tT][mM][lL]'
+      - '**/*.[sS][hH][tT][mM][lL]'
+      - '**/*.[rR][sS][tT]'
+      - '**/*.[rR][eE][sS][tT]'
+      - '**/*.[aA][dD][oO][cC]'
+      - '**/*.[aA][sS][cC][iI][iI][dD][oO][cC]'
+      - '**/*.[oO][rR][gG]'
+      - '.cargo/**'
+      - '.config/**'
+      - 'Cargo.lock'
+      - 'Cargo.toml'
+      - 'LICENSE'
+      - 'assets/**'
+      - 'build.rs'
+      - 'crates/**'
+      - 'docs/**'
+      - 'examples/cli/**'
+      - 'flake.lock'
+      - 'flake.nix'
+      - 'justfile'
+      - 'pyproject.toml'
+      - 'scripts/render-docs-svg-assets.sh'
+      - 'scripts/check-docs-html.py'
+      - 'scripts/update-docs-pages.sh'
+      - 'scripts/update-publications.py'
+      - 'tests/resources/graphs/**'
+      - 'tests/Cargo.toml'
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Documentation channel to publish
+        required: true
+        default: latest
+        type: choice
+        options:
+          - latest
+          - snapshot
+      snapshot_tag:
+        description: Existing release tag (required for a manual snapshot)
+        required: false
+        type: string
+      publish:
+        description: Publish the completed build to GitHub Pages
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  # Let Hestia finish its post-job upload before a later PR revision starts.
+  # Main, the temporary docs publisher, tags, schedules, and manual publication
+  # runs share one serial group so gh-pages updates cannot race.
+  group: documentation-${{ github.event_name == 'pull_request' && github.ref || 'publication' }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # Independent workflows replace ref-scoped Hestia roots, so keep the Pages
+  # closure separate from the broader Nix producer set.
+  HESTIA_CACHE_VERSION_SALT: gammaloop-docs-no-closure-v1
+  HESTIA_DRAIN_TIMEOUT: 7200
+  SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE || 'GAMMALOOP_USER' }}
+
+jobs:
+  build:
+    name: Documentation quality
+    # A push to the in-repository docs branch already runs this revision with
+    # publication rights. Skip its duplicate pull-request event; the push check
+    # is attached to the same head revision in pull request 96.
+    if: ${{ github.event_name != 'pull_request' || github.head_ref != 'docs' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    outputs:
+      publish: ${{ steps.release.outputs.publish }}
+      channel: ${{ steps.release.outputs.channel }}
+      snapshot_tag: ${{ steps.release.outputs.snapshot_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: NixOS/nix-installer-action@main
+
+      - uses: Mic92/hestia@v3
+        with:
+          version: v3.0.0
+          drain-timeout: ${{ env.HESTIA_DRAIN_TIMEOUT }}
+          no-closure: true
+          upstream-cache-filter: true
+
+      - id: release
+        name: Select publication channel
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANUAL_CHANNEL: ${{ inputs.channel }}
+          MANUAL_SNAPSHOT_TAG: ${{ inputs.snapshot_tag }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            channel=snapshot
+            snapshot_tag=$GITHUB_REF_NAME
+            publish=true
+          elif [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            channel=$MANUAL_CHANNEL
+            snapshot_tag=$MANUAL_SNAPSHOT_TAG
+            publish=${{ inputs.publish }}
+          elif [ "$GITHUB_EVENT_NAME" = schedule ] \
+            || [ "$GITHUB_EVENT_NAME:$GITHUB_REF" = push:refs/heads/main ]; then
+            channel=latest
+            snapshot_tag=
+            publish=true
+          elif [ "$GITHUB_EVENT_NAME:$GITHUB_REF" = push:refs/heads/docs ]; then
+            channel=latest
+            snapshot_tag=
+            if pull_request_authority=$(gh api \
+              "repos/$GITHUB_REPOSITORY/pulls/96" \
+              --jq '[.state, .head.ref, (.head.repo.full_name // ""), .base.ref, .head.sha] | join("|")') \
+              && [ "$pull_request_authority" = "open|docs|$GITHUB_REPOSITORY|main|$GITHUB_SHA" ]; then
+              publish=true
+              echo "Temporary docs-branch publication is enabled while pull request 96 is open"
+            else
+              publish=false
+              echo "::warning::Pull request 96 does not authorize this docs revision; only main may publish latest"
+            fi
+          else
+            channel=latest
+            snapshot_tag=
+            publish=false
+          fi
+
+          if [ "$channel" = snapshot ] && [ -z "$snapshot_tag" ]; then
+            echo "A snapshot tag is required for a snapshot publication" >&2
+            exit 2
+          fi
+          if [ "$channel" = latest ] && [ -n "$snapshot_tag" ]; then
+            echo "A snapshot tag cannot be supplied for a latest publication" >&2
+            exit 2
+          fi
+          if [ "$publish" = true ] && [ "$channel" = latest ] \
+            && [ "$GITHUB_REF" != refs/heads/main ] \
+            && [ "$GITHUB_REF" != refs/heads/docs ]; then
+            echo "Mutable latest documentation can only be published from main or the temporary docs branch" >&2
+            exit 2
+          fi
+          if [ "$publish" = true ] && [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] \
+            && [ "$GITHUB_REF" != refs/heads/main ]; then
+            echo "Manual documentation publication can only be dispatched from main" >&2
+            exit 2
+          fi
+
+          {
+            echo "channel=$channel"
+            echo "snapshot_tag=$snapshot_tag"
+            echo "publish=$publish"
+          } >> "$GITHUB_OUTPUT"
+
+      - id: snapshot_source
+        name: Check out manual snapshot tag
+        if: github.event_name == 'workflow_dispatch' && steps.release.outputs.channel == 'snapshot'
+        env:
+          SNAPSHOT_TAG: ${{ steps.release.outputs.snapshot_tag }}
+        run: |
+          set -euo pipefail
+          git check-ref-format "refs/tags/$SNAPSHOT_TAG"
+          git rev-parse --verify "refs/tags/$SNAPSHOT_TAG^{commit}"
+          for required in \
+            crates/alphal00p-docs-builder/Cargo.toml \
+            docs/products/registry.toml \
+            docs/assets/typst/portal-graphs/figure.typ \
+            scripts/render-docs-svg-assets.sh \
+            justfile; do
+            if ! git cat-file -e "$SNAPSHOT_TAG^{commit}:$required"; then
+              echo "::error::Snapshot tag $SNAPSHOT_TAG predates the five-product Typst documentation toolchain and cannot be rebuilt faithfully." >&2
+              exit 2
+            fi
+          done
+          git checkout --detach "refs/tags/$SNAPSHOT_TAG"
+          if grep -q '"alphal00p-docs-pages"' flake.nix; then
+            echo "cacheable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cacheable=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Refresh publication catalogue
+        if: steps.release.outputs.channel == 'latest'
+        run: |
+          set -euo pipefail
+          nix develop --command \
+            python3 scripts/update-publications.py --keep-existing-on-error
+
+      - id: docs
+        name: Build all five sites
+        env:
+          CACHEABLE_SNAPSHOT: ${{ steps.snapshot_source.outputs.cacheable }}
+          CHANNEL: ${{ steps.release.outputs.channel }}
+          SNAPSHOT_TAG: ${{ steps.release.outputs.snapshot_tag }}
+        run: |
+          set -euo pipefail
+          build_started=$SECONDS
+          ALPHAL00P_DOCS_GIT_COMMIT="$(git rev-parse HEAD)"
+          ALPHAL00P_DOCS_GIT_TIMESTAMP="$(git log -1 --format=%ct)"
+          ALPHAL00P_DOCS_CHANNEL=$CHANNEL
+          ALPHAL00P_DOCS_SNAPSHOT_TAG=$SNAPSHOT_TAG
+          export \
+            ALPHAL00P_DOCS_CHANNEL \
+            ALPHAL00P_DOCS_GIT_COMMIT \
+            ALPHAL00P_DOCS_GIT_TIMESTAMP \
+            ALPHAL00P_DOCS_SNAPSHOT_TAG
+
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] \
+            && [ "$CHANNEL" = snapshot ] \
+            && [ "$CACHEABLE_SNAPSHOT" = false ]; then
+            # Historical five-product tags predate the cacheable Pages output.
+            nix develop --command \
+              just docs-site all "$CHANNEL" "$SNAPSHOT_TAG" target/alphal00p-docs
+            docs_path=$PWD/target/alphal00p-docs
+            cargo_producer=historical-build
+          else
+            nix_log=$RUNNER_TEMP/alphal00p-docs-nix.log
+            docs_path=$(
+              nix build \
+                --impure \
+                --no-link \
+                --print-build-logs \
+                --print-out-paths \
+                .#packages.x86_64-linux.alphal00p-docs-pages \
+                2> >(tee "$nix_log" >&2)
+            )
+            if grep -Eq "building '.+-alphal00p-docs-cargo-[^']+\\.drv'" "$nix_log"; then
+              cargo_producer=rebuilt
+            elif grep -Eq "copying path '.+-alphal00p-docs-cargo-[^']+'" "$nix_log"; then
+              cargo_producer=restored
+            else
+              cargo_producer=already-present
+            fi
+          fi
+          test -d "$docs_path"
+          build_seconds=$((SECONDS - build_started))
+          {
+            echo "path=$docs_path"
+            echo "seconds=$build_seconds"
+            echo "cargo_producer=$cargo_producer"
+          } >> "$GITHUB_OUTPUT"
+          echo "Reusable Cargo producer: $cargo_producer; five-site build: ${build_seconds}s"
+
+      - name: Summarize documentation quality
+        env:
+          CARGO_PRODUCER: ${{ steps.docs.outputs.cargo_producer }}
+          CHANNEL: ${{ steps.release.outputs.channel }}
+          DOCS_PATH: ${{ steps.docs.outputs.path }}
+          PUBLISH: ${{ steps.release.outputs.publish }}
+          SECONDS_ELAPSED: ${{ steps.docs.outputs.seconds }}
+        run: |
+          set -euo pipefail
+          pages=$(find "$DOCS_PATH" -type f -name index.html | wc -l)
+          links=$(grep -rho 'href="' "$DOCS_PATH" --include='*.html' | wc -l)
+          search_entries=0
+          while IFS= read -r -d '' index; do
+            count=$(jq 'length' "$index")
+            search_entries=$((search_entries + count))
+          done < <(find "$DOCS_PATH" -type f -name search-index.json -print0)
+          developer_records=$({ grep -rho 'class="developer-record-meta"' "$DOCS_PATH/developers" 2>/dev/null || true; } | wc -l)
+          unassigned_records=$({ grep -rho '>Ownership decision required<' "$DOCS_PATH/developers" 2>/dev/null || true; } | wc -l)
+          stale_records=$({ grep -rho 'data-freshness="\(stale\|unreviewed\|disposition-due\)"' "$DOCS_PATH/developers" 2>/dev/null || true; } | wc -l)
+          verified_scopes=$({ grep -rho 'digest <code>' "$DOCS_PATH/developers" 2>/dev/null || true; } | wc -l)
+          legacy_sources=$(awk '/^  "/ { count++ } END { print count + 0 }' docs/legacy-prose.toml)
+          cli_commands=$(jq '[.commands[] | select(.hidden == false and .generated_help == false)] | length' docs/api/generated/gammaloop-reference.json)
+          cli_commands_missing_docs=$(jq '[.commands[] | select(.hidden == false and .generated_help == false and (.about | length == 0))] | length' docs/api/generated/gammaloop-reference.json)
+          cli_arguments=$(jq '[.commands[] | select(.generated_help == false) | .arguments[] | select(.hidden == false)] | length' docs/api/generated/gammaloop-reference.json)
+          cli_arguments_missing_docs=$(jq '[.commands[] | select(.generated_help == false) | .arguments[] | select(.hidden == false and (.help | length == 0))] | length' docs/api/generated/gammaloop-reference.json)
+          settings=$(jq '.settings | length' docs/api/generated/gammaloop-reference.json)
+          settings_missing_docs=$(jq '[.settings[] | select(.description | length == 0)] | length' docs/api/generated/gammaloop-reference.json)
+          generated_help_nodes=$(jq '[.commands[] | select(.generated_help)] | length' docs/api/generated/gammaloop-reference.json)
+          example_run=$({ grep -rho '// docs-example: run' docs/products --include='*.typ' || true; } | wc -l)
+          example_compile=$({ grep -rho '// docs-example: compile' docs/products --include='*.typ' || true; } | wc -l)
+          example_syntax=$({ grep -rho '// docs-example: syntax' docs/products --include='*.typ' || true; } | wc -l)
+          canonical_examples=$(grep -c '^\[\[example\]\]' docs/examples.toml)
+          pull_request_examples=$(grep -c '^tier = "pull-request"' docs/examples.toml)
+          scheduled_examples=$({ grep -c '^tier = "scheduled"' docs/examples.toml || true; })
+          python_supported=0
+          python_supported_incomplete=0
+          python_members=0
+          python_members_missing_docs=0
+          python_help_placeholders=0
+          while IFS= read -r -d '' catalog; do
+            language=$(jq -r '.component.language' "$catalog")
+            if [ "$language" != python ]; then
+              continue
+            fi
+            count=$(jq '[.. | objects | select(has("supported") and .supported == true)] | length' "$catalog")
+            python_supported=$((python_supported + count))
+            count=$(jq '[.. | objects | select(has("supported") and .supported == true and ((.docs.body? // "" | length) == 0 or (.summary? // "" | length) == 0 or (.signature? // "" | length) == 0))] | length' "$catalog")
+            python_supported_incomplete=$((python_supported_incomplete + count))
+            count=$(jq '[.. | objects | .members? // empty | .[]] | length' "$catalog")
+            python_members=$((python_members + count))
+            count=$(jq '[.. | objects | .members? // empty | .[] | select((.docs.body? // "" | length) == 0)] | length' "$catalog")
+            python_members_missing_docs=$((python_members_missing_docs + count))
+            count=$(jq '[.. | objects | .examples? // empty | .[] | select(.code | contains("help("))] | length' "$catalog")
+            python_help_placeholders=$((python_help_placeholders + count))
+          done < <(find "$DOCS_PATH" -type f -path '*/catalogs/*.json' -print0)
+          {
+            echo "### Documentation quality"
+            echo
+            echo "| Measure | Result |"
+            echo "| --- | ---: |"
+            echo "| Channel | $CHANNEL |"
+            echo "| Production publication | $PUBLISH |"
+            echo "| Rendered page routes | $pages |"
+            echo "| Local/reference link occurrences | $links |"
+            echo "| Search entries | $search_entries |"
+            echo "| Classified developer records | $developer_records |"
+            echo "| Verified developer code scopes | $verified_scopes |"
+            echo "| Records awaiting named ownership | $unassigned_records |"
+            echo "| Stale/unreviewed current records | $stale_records |"
+            echo "| Remaining declared legacy prose sources | $legacy_sources |"
+            echo "| Public CLI commands missing descriptions | $cli_commands_missing_docs / $cli_commands |"
+            echo "| Public CLI arguments missing descriptions | $cli_arguments_missing_docs / $cli_arguments |"
+            echo "| Settings missing descriptions | $settings_missing_docs / $settings |"
+            echo "| Generated help nodes de-ranked from the CLI reference | $generated_help_nodes |"
+            echo "| Supported Python exports missing core fields | $python_supported_incomplete / $python_supported |"
+            echo "| Python members missing documentation | $python_members_missing_docs / $python_members |"
+            echo "| Introspection scaffolds (not meaningful examples) | $python_help_placeholders |"
+            echo "| Manual example modes | $example_run run · $example_compile compile · $example_syntax syntax |"
+            echo "| Canonical example journeys | $canonical_examples |"
+            echo "| Canonical verification tiers | $pull_request_examples pull request · $scheduled_examples scheduled |"
+            echo "| Reusable Cargo producer | $CARGO_PRODUCER |"
+            echo "| Five-site build | ${SECONDS_ELAPSED}s |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain publication input
+        if: steps.release.outputs.publish == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-publication-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.docs.outputs.path }}
+          include-hidden-files: true
+          retention-days: 1
+
+      - name: Retain complete documentation preview
+        if: steps.release.outputs.publish != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: documentation-preview-${{ github.sha }}
+          path: ${{ steps.docs.outputs.path }}
+          include-hidden-files: true
+          retention-days: 14
+
+  publish:
+    name: Publish documentation history
+    needs: build
+    if: needs.build.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    outputs:
+      ready: ${{ steps.history.outputs.ready }}
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download reviewed site
+        uses: actions/download-artifact@v4
+        with:
+          name: documentation-publication-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/documentation-publication
+
+      - id: history
+        name: Merge into persistent Pages history
+        env:
+          CHANNEL: ${{ needs.build.outputs.channel }}
+          DOCS_PATH: ${{ runner.temp }}/documentation-publication
+          GH_TOKEN: ${{ github.token }}
+          SNAPSHOT_TAG: ${{ needs.build.outputs.snapshot_tag }}
+        run: |
+          set -euo pipefail
+          pages_root=$RUNNER_TEMP/gh-pages
+
+          authorize_temporary_docs_publication() {
+            local pull_request_authority
+            if ! pull_request_authority=$(gh api \
+              "repos/$GITHUB_REPOSITORY/pulls/96" \
+              --jq '[.state, .head.ref, (.head.repo.full_name // ""), .base.ref, .head.sha] | join("|")'); then
+              echo "Could not revalidate temporary docs-branch publication" >&2
+              return 2
+            fi
+            [ "$pull_request_authority" = "open|docs|$GITHUB_REPOSITORY|main|$GITHUB_SHA" ]
+          }
+
+          skip_superseded_docs_publication() {
+            echo "::notice::Skipping Pages publication because this docs run is no longer the open pull request 96 head"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          }
+
+          require_current_docs_publication() {
+            local authorization_status
+            if authorize_temporary_docs_publication; then
+              return 0
+            else
+              authorization_status=$?
+            fi
+            if [ "$authorization_status" -eq 1 ]; then
+              skip_superseded_docs_publication
+            fi
+            return "$authorization_status"
+          }
+
+          if [ "$GITHUB_REF" = refs/heads/docs ]; then
+            require_current_docs_publication
+          fi
+
+          if git fetch origin gh-pages:refs/remotes/origin/gh-pages; then
+            git worktree add --detach "$pages_root" refs/remotes/origin/gh-pages
+          else
+            git worktree add --detach "$pages_root" HEAD
+            git -C "$pages_root" switch --orphan gh-pages
+          fi
+
+          publish_args=(
+            "$CHANNEL"
+            "$DOCS_PATH"
+            "$pages_root"
+          )
+          if [ "$CHANNEL" = snapshot ]; then
+            publish_args+=("$SNAPSHOT_TAG")
+          fi
+          scripts/update-docs-pages.sh "${publish_args[@]}"
+
+          git -C "$pages_root" config user.name github-actions[bot]
+          git -C "$pages_root" config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git -C "$pages_root" add -A
+          if ! git -C "$pages_root" diff --cached --quiet; then
+            git -C "$pages_root" commit -m "publish documentation ($CHANNEL${SNAPSHOT_TAG:+: $SNAPSHOT_TAG})"
+          fi
+          if [ "$GITHUB_REF" = refs/heads/docs ]; then
+            # Close the build-time authorization window before mutating the
+            # persistent branch. Superseded serial builds retain their cache,
+            # but only the current pull-request head may update Pages. Main,
+            # tags, and manual runs do not use this temporary exception.
+            require_current_docs_publication
+          fi
+          git -C "$pages_root" push origin HEAD:gh-pages
+          {
+            echo "path=$pages_root"
+            echo "ready=true"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Configure GitHub Pages
+        if: steps.history.outputs.ready == 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        if: steps.history.outputs.ready == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ steps.history.outputs.path }}
+
+  deploy:
+    name: Deploy documentation Pages
+    needs: [build, publish]
+    if: needs.build.outputs.publish == 'true' && needs.publish.outputs.ready == 'true'
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
+    steps:
+      - id: deployment
+        name: Deploy GitHub Pages
+        uses: actions/deploy-pages@v4

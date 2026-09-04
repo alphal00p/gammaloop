@@ -326,7 +326,7 @@ where
 
 /// Fundamental SU(3) generators in the normalization `Tr(T^a T^b)=1/2 delta^{ab}`.
 ///
-/// The index order follows [`CS.t_strct`]: adjoint, fundamental, anti-fundamental.
+/// The index order follows `CS.t_strct`: adjoint, fundamental, anti-fundamental.
 pub fn su3_generator_data<N>(structure: N) -> SparseTensor<Complex<f64>, N>
 where
     N: TensorStructure,

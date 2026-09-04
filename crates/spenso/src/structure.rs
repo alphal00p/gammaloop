@@ -353,18 +353,42 @@ impl From<SlotIndex> for usize {
     }
 }
 
+/// Ordered structural metadata for a tensor's external coordinates.
+///
+/// Each external slot combines a representation, its dimension, and an
+/// abstract index. Iterator and coordinate arguments use the same slot order.
+/// The default flattening is row-major: for shape `[d0, d1, ..., dn]`, the last
+/// coordinate varies fastest. Consequently [`Self::flat_index`] and
+/// [`Self::expanded_index`] are inverse mappings in that order.
+///
+/// Contraction is structural rather than positional. A slot in one operand is
+/// removed only when the other operand contains the same abstract index in the
+/// dual representation and with the same dimension. All other slots remain
+/// free and form the output structure. Dummy indices obey the same equality
+/// rule as named indices; a freshly allocated dummy does not match every other
+/// dummy.
+///
+/// Constructors such as [`OrderedStructure::new`] may canonicalize an unsorted
+/// slot list and return a [`PermutedStructure`] recording that permutation.
+/// Component data must follow the finalized structure order, not the caller's
+/// original slot order.
 pub trait TensorStructure {
+    /// Abstract slot type used for the structure's external indices.
     type Slot: IsAbstractSlot + DualSlotTo<Dual = Self::Slot>;
+    /// Structure type produced after assigning new abstract indices.
     type Indexed: TensorStructure<Indexed = Self::Indexed, Slot = Self::Slot>;
     // type R: Rep;
     //
 
+    /// Replaces the slot indices in order and records any resulting permutations.
     fn reindex(
         self,
         indices: &[<Self::Slot as IsAbstractSlot>::Aind],
     ) -> Result<PermutedStructure<Self::Indexed>, StructureError>;
+    /// Returns this structure with every external slot dualized.
     fn dual(self) -> Self;
 
+    /// Concatenates the display representation of all external slots.
     fn string_rep(&self) -> String {
         self.external_structure_iter()
             .map(|s| s.to_string())
@@ -372,26 +396,36 @@ pub trait TensorStructure {
             .join("")
     }
 
+    /// Iterates over external slots in structure order.
     fn external_structure_iter(&self) -> impl Iterator<Item = Self::Slot>;
+    /// Iterates over the dimensions of external slots in structure order.
     fn external_dims_iter(&self) -> impl Iterator<Item = Dimension>;
+    /// Iterates over the representations of external slots in structure order.
     fn external_reps_iter(
         &self,
     ) -> impl Iterator<Item = Representation<<Self::Slot as IsAbstractSlot>::R>>;
 
+    /// Iterates over the abstract indices of external slots in structure order.
     fn external_indices_iter(&self) -> impl Iterator<Item = <Self::Slot as IsAbstractSlot>::Aind>;
+    /// Returns the abstract index at a slot position, if it exists.
     fn get_aind(&self, i: impl Into<SlotIndex>) -> Option<<Self::Slot as IsAbstractSlot>::Aind>;
+    /// Returns the representation at a slot position, if it exists.
     fn get_rep(
         &self,
         i: impl Into<SlotIndex>,
     ) -> Option<Representation<<Self::Slot as IsAbstractSlot>::R>>;
+    /// Returns the dimension at a slot position, if it exists.
     fn get_dim(&self, i: impl Into<SlotIndex>) -> Option<Dimension>;
+    /// Returns the external slot at a position, if it exists.
     fn get_slot(&self, i: impl Into<SlotIndex>) -> Option<Self::Slot>;
+    /// Returns the number of external slots.
     fn order(&self) -> usize;
     /// returns the list of slots that are the external indices of the tensor
     fn external_structure(&self) -> Vec<Self::Slot> {
         self.external_structure_iter().collect()
     }
 
+    /// Wraps this structure as a data-free tensor shell.
     fn to_shell(self) -> TensorShell<Self>
     where
         Self: Sized,
@@ -399,14 +433,17 @@ pub trait TensorStructure {
         TensorShell::new(self)
     }
 
+    /// Reports whether an external slot matches the supplied slot.
     fn contains_matching(&self, slot: &Self::Slot) -> bool {
         self.external_structure_iter().any(|s| s.matches(slot))
     }
 
+    /// Collects the external representations in structure order.
     fn external_reps(&self) -> Vec<Representation<<Self::Slot as IsAbstractSlot>::R>> {
         self.external_reps_iter().collect()
     }
 
+    /// Collects the external abstract indices in structure order.
     fn external_indices(&self) -> Vec<<Self::Slot as IsAbstractSlot>::Aind> {
         self.external_indices_iter().collect()
     }
@@ -508,6 +545,7 @@ pub trait TensorStructure {
         self.external_dims_iter().collect()
     }
 
+    /// Collects the external representations in structure order.
     fn reps(&self) -> Vec<Representation<<Self::Slot as IsAbstractSlot>::R>> {
         self.external_reps_iter().collect()
     }
@@ -566,7 +604,7 @@ pub trait TensorStructure {
         // Ok(permutation)
     }
 
-    /// yields the strides of the tensor in column major order
+    /// Returns column-major strides for the external dimensions.
     fn strides_column_major(&self) -> Result<Vec<usize>> {
         let mut strides: Vec<usize> = vec![1; self.order()];
 
@@ -581,7 +619,9 @@ pub trait TensorStructure {
         Ok(strides)
     }
 
-    /// yields the strides of the tensor in row major order
+    /// Returns row-major strides for the external dimensions.
+    ///
+    /// The last external coordinate has stride one.
     fn strides_row_major(&self) -> Result<Vec<usize>> {
         let mut strides = vec![1; self.order()];
         if self.order() == 0 {
@@ -595,7 +635,9 @@ pub trait TensorStructure {
         Ok(strides)
     }
 
-    /// By default, the strides are row major
+    /// Returns the flat-index strides used by this structure.
+    ///
+    /// The default is [`Self::strides_row_major`].
     fn strides(&self) -> Result<Vec<usize>> {
         self.strides_row_major()
     }
@@ -634,7 +676,7 @@ pub trait TensorStructure {
         Ok(())
     }
 
-    /// yields the flat index of the tensor given a list of indices
+    /// Flattens one concrete coordinate in external-slot order.
     ///
     /// # Errors
     ///
@@ -650,7 +692,7 @@ pub trait TensorStructure {
         Ok(idx.into())
     }
 
-    /// yields the expanded index of the tensor given a flat index
+    /// Expands a flat component index into coordinates in external-slot order.
     ///
     /// # Errors
     ///
@@ -669,6 +711,7 @@ pub trait TensorStructure {
         }
     }
 
+    /// Expands a flat index while retaining each representation's dual orientation.
     fn co_expanded_index(&self, flat_index: FlatIndex) -> Result<DualConciousExpandedIndex> {
         let mut indices = vec![];
 
@@ -700,6 +743,7 @@ pub trait TensorStructure {
         self.order() == 0
     }
 
+    /// Reports whether every external representation is self-dual.
     fn is_fully_self_dual(&self) -> bool;
 
     // /// get the metric along the i-th index

@@ -48,6 +48,7 @@ pub struct Run {
     #[arg(value_name = "BLOCK_NAME")]
     pub(crate) block_names: Vec<String>,
 
+    /// Semicolon-separated inline commands executed after the named blocks.
     #[arg(short = 'c', long)]
     pub(crate) commands: Option<String>,
 }

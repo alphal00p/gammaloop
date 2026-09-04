@@ -78,8 +78,17 @@
   )
 }
 
+#let manual-example(code, scope: (:)) = context {
+  if target() == "paged" {
+    tidy.show-example.show-example(code, scope: scope)
+  } else {
+    code
+  }
+}
+
 = kurvst Typst API
 
+#let manual = [
 `kurvst` is a Typst package backed by `kurvst.wasm`, a small Kurbo-based
 plugin. Its public API is path-based: construct a path dictionary, pass that
 path into transforms, and draw the returned path.
@@ -91,6 +100,20 @@ It exposes Bezier utilities that are awkward or unavailable in native Typst:
 - generating sampled path patterns,
 - fitting Kurbo offset/parallel paths,
 - converting returned path geometry to CeTZ drawing commands.
+
+== Choose an import path
+
+Kurvst is currently a bundled source package, not a Typst Universe package. A
+Clinnet run writes it below `build/templates/crates/kurvst/typst/`; a custom
+template in `build/templates/` can therefore import it with:
+
+```typ
+#import "crates/kurvst/typst/src/lib.typ" as kurvst
+```
+
+Repository examples live one directory beside `src/` and instead use
+`#import "../src/lib.typ" as kurvst`. Keep `kurvst.wasm`, `typst.toml`, and the
+`src/` tree together when copying the package to another Typst project.
 
 Path geometry points are two-item tuples:
 
@@ -349,7 +372,7 @@ style that requested the layer.
 Kurvst returns dictionaries and arrays. The core geometry can be drawn without
 CeTZ by emitting native `curve` content:
 
-#tidy.show-example.show-example(
+#manual-example(
   ```typ
   #kurvst.to-native(kurvst.from-cubic(segment), unit: 36pt, stroke: black + 0.7pt)
   ```,
@@ -366,7 +389,7 @@ The CeTZ helpers are thin adapters over the same returned geometry. Use them
 when the surrounding document already lives in a CeTZ canvas, or when you want
 CeTZ path merging and styling:
 
-#tidy.show-example.show-example(
+#manual-example(
   ```typ
   #cetz.canvas({
     let base = kurvst.from-cubic(segment)
@@ -386,24 +409,28 @@ CeTZ path merging and styling:
 
 == Generated Reference
 
-#let tidy-style = dictionary(tidy.styles.default)
-#let _ = tidy-style.insert("show-example", tidy-style.show-example.with(scale-preview: 100%))
+#context {
+  let tidy-style = dictionary(tidy.styles.default)
+  let _ = tidy-style.insert("show-example", tidy-style.show-example.with(scale-preview: 100%))
+  let docs = tidy.parse-module(
+    read("../src/lib.typ"),
+    name: "kurvst",
+    scope: (
+      cetz: cetz,
+      kurvst: kurvst,
+      demo-segment: demo-segment,
+      demo-start: demo-start,
+      demo-through: demo-through,
+      demo-end: demo-end,
+      native-scene: native-scene,
+      native-cubic: native-cubic,
+      native-cubics: native-cubics,
+      native-polyline: native-polyline,
+      native-dot: native-dot,
+    ),
+  )
+  [#tidy.show-module(docs, style: tidy-style, enable-cross-references: false)]
+}
+]
 
-#let docs = tidy.parse-module(
-  read("../src/lib.typ"),
-  name: "kurvst",
-  scope: (
-    cetz: cetz,
-    kurvst: kurvst,
-    demo-segment: demo-segment,
-    demo-start: demo-start,
-    demo-through: demo-through,
-    demo-end: demo-end,
-    native-scene: native-scene,
-    native-cubic: native-cubic,
-    native-cubics: native-cubics,
-    native-polyline: native-polyline,
-    native-dot: native-dot,
-  ),
-)
-#tidy.show-module(docs, style: tidy-style)
+#manual

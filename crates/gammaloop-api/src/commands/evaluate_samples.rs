@@ -19,18 +19,81 @@ use symbolica::numerical_integration::Sample;
 
 use crate::state::{ProcessRef, State};
 
+/// Evaluate one or more integrand inputs through the ordinary `f64` result boundary.
+///
+/// Each row of [`Self::points`] has one of two layouts:
+///
+/// - with [`Self::momentum_space`] set to `false`, the row contains integration-space
+///   coordinates and must have the dimension selected by the integrand and
+///   [`Self::discrete_dims`];
+/// - with [`Self::momentum_space`] set to `true`, the row contains exactly one
+///   `(px, py, pz)` triplet per independent loop momentum. The flattened order is
+///   `[k1x, k1y, k1z, k2x, k2y, k2z, ...]`. Energies and external momenta are not
+///   inputs to this interface.
+///
+/// A momentum-space row whose length is not a multiple of three is rejected before
+/// evaluation. The selected integrand, graph, or graph group determines the required
+/// number of loop momenta and rejects the wrong number of complete triplets.
+///
+/// [`Self::use_arb_prec`] forces arbitrary-precision internal evaluation, using the
+/// configured Arb stability level when one exists and a default Arb level otherwise.
+/// It does not change this type's `f64` output contract. Use [`EvaluateSamplesPrecise`]
+/// when the caller must retain an `f64`, `f128`, or arbitrary-precision result.
+///
+/// The [GammaLoop sample-evaluation contract](https://alphal00p.github.io/gammaloop/products/gammaloop/latest/reference/interfaces/#sample-evaluation-contract)
+/// connects this request to the CLI and Python interfaces and to the maintained
+/// checked example.
+///
+/// # Example
+///
+/// ```rust
+/// use gammaloop_api::commands::evaluate_samples::EvaluateSamples;
+/// use ndarray::arr2;
+///
+/// let loop_momenta = arr2(&[[
+///     0.11, -0.07, 0.19, // k1 = (px, py, pz)
+///     -0.13, 0.05, 0.29, // k2 = (px, py, pz)
+/// ]]);
+/// let request = EvaluateSamples {
+///     process_id: Some(0),
+///     integrand_name: None,
+///     use_arb_prec: true,
+///     minimal_output: true,
+///     return_generated_events: None,
+///     momentum_space: true,
+///     points: loop_momenta.view(),
+///     integrator_weights: None,
+///     discrete_dims: None,
+///     graph_names: None,
+///     orientations: None,
+/// };
+///
+/// assert_eq!(request.points.ncols(), 2 * 3);
+/// assert!(request.momentum_space);
+/// ```
 #[derive(Debug, Clone)]
 pub struct EvaluateSamples<'a> {
+    /// Process containing the integrand; required when process selection is ambiguous.
     pub process_id: Option<usize>,
+    /// Integrand to evaluate; required when the selected process has multiple candidates.
     pub integrand_name: Option<String>,
+    /// Force Arb internal evaluation instead of the configured stability ladder.
     pub use_arb_prec: bool,
+    /// Omit optional evaluation metadata from each returned sample.
     pub minimal_output: bool,
+    /// Temporary event-generation override restored after this evaluation.
     pub return_generated_events: Option<bool>,
+    /// Interpret rows as consecutive spatial loop-momentum `(px, py, pz)` triplets.
     pub momentum_space: bool,
+    /// Two-dimensional inputs with one integration or momentum-space sample per row.
     pub points: ArrayView2<'a, f64>,
+    /// Optional weight for each sample row; omitted weights default to one.
     pub integrator_weights: Option<ArrayView1<'a, f64>>,
+    /// Optional discrete integration coordinates with one row per sample.
     pub discrete_dims: Option<ArrayView2<'a, usize>>,
+    /// Optional momentum-space graph selection for each sample.
     pub graph_names: Option<Vec<Option<String>>>,
+    /// Optional momentum-space orientation selection for each sample.
     pub orientations: Option<Vec<Option<usize>>>,
 }
 
@@ -69,8 +132,8 @@ impl<'a> EvaluateSamples<'a> {
                         || orientations.iter().any(Option::is_some))
                 {
                     return Err(eyre!(
-                    "Graph and orientation selection are only supported in momentum-space evaluation."
-                ));
+                        "Graph and orientation selection are only supported in momentum-space evaluation."
+                    ));
                 }
 
                 if let Some(discrete_dims) = &self.discrete_dims {
@@ -136,18 +199,36 @@ impl<'a> EvaluateSamples<'a> {
     }
 }
 
+/// Evaluate inputs while preserving the numeric type used by the final stability level.
+///
+/// Coordinate layouts and validation are identical to [`EvaluateSamples`]. With
+/// [`Self::use_arb_prec`] set to `false`, the configured stability ladder may return
+/// an `f64`, `f128`, or arbitrary-precision result. Setting it to `true` forces Arb,
+/// using the configured Arb level when available and a default Arb level otherwise.
+/// Unlike [`EvaluateSamples`], this request retains that active result type.
 #[derive(Debug, Clone)]
 pub struct EvaluateSamplesPrecise<'a> {
+    /// Process containing the integrand; required when process selection is ambiguous.
     pub process_id: Option<usize>,
+    /// Integrand to evaluate; required when the selected process has multiple candidates.
     pub integrand_name: Option<String>,
+    /// Force Arb evaluation instead of the configured stability ladder.
     pub use_arb_prec: bool,
+    /// Omit optional evaluation metadata from each returned sample.
     pub minimal_output: bool,
+    /// Temporary event-generation override restored after this evaluation.
     pub return_generated_events: Option<bool>,
+    /// Interpret rows as consecutive spatial loop-momentum `(px, py, pz)` triplets.
     pub momentum_space: bool,
+    /// Two-dimensional inputs with one integration or momentum-space sample per row.
     pub points: ArrayView2<'a, f64>,
+    /// Optional weight for each sample row; omitted weights default to one.
     pub integrator_weights: Option<ArrayView1<'a, f64>>,
+    /// Optional discrete integration coordinates with one row per sample.
     pub discrete_dims: Option<ArrayView2<'a, usize>>,
+    /// Optional momentum-space graph selection for each sample.
     pub graph_names: Option<Vec<Option<String>>>,
+    /// Optional momentum-space orientation selection for each sample.
     pub orientations: Option<Vec<Option<usize>>>,
 }
 
@@ -250,6 +331,9 @@ impl<'a> EvaluateSamplesPrecise<'a> {
     }
 }
 
+/// Evaluate a batch while retaining each sample's active numeric result type.
+///
+/// See [`EvaluateSamplesPrecise`] for the coordinate, validation, and precision contract.
 pub fn evaluate_samples_precise<'a>(
     state: &mut State,
     request: &EvaluateSamplesPrecise<'a>,
@@ -257,6 +341,10 @@ pub fn evaluate_samples_precise<'a>(
     request.run(state)
 }
 
+/// Evaluate exactly one sample while retaining its active numeric result type.
+///
+/// This rejects requests whose [`EvaluateSamplesPrecise::points`] view does not have
+/// exactly one row. See [`EvaluateSamplesPrecise`] for the remaining contract.
 pub fn evaluate_sample_precise<'a>(
     state: &mut State,
     request: &EvaluateSamplesPrecise<'a>,
@@ -274,6 +362,9 @@ pub fn evaluate_sample_precise<'a>(
     })
 }
 
+/// Evaluate a batch through the ordinary `f64` result boundary.
+///
+/// See [`EvaluateSamples`] for the coordinate, validation, and precision contract.
 pub fn evaluate_samples<'a>(
     state: &mut State,
     request: &EvaluateSamples<'a>,
@@ -281,6 +372,10 @@ pub fn evaluate_samples<'a>(
     request.run(state)
 }
 
+/// Evaluate exactly one sample through the ordinary `f64` result boundary.
+///
+/// This rejects requests whose [`EvaluateSamples::points`] view does not have exactly
+/// one row. See [`EvaluateSamples`] for the remaining contract.
 pub fn evaluate_sample<'a>(
     state: &mut State,
     request: &EvaluateSamples<'a>,
@@ -411,13 +506,15 @@ pub(crate) fn build_momentum_input(
 ) -> Result<MomentumSpaceEvaluationInput> {
     if !point.len().is_multiple_of(3) {
         return Err(eyre!(
-            "Momentum-space evaluation expects a multiple of 3 coordinates, got {}.",
+            "Momentum-space evaluation expects flattened (px, py, pz) triplets, so the coordinate count must be a multiple of 3; got {}.",
             point.len()
         ));
     }
 
     let loop_momenta = point
-        .chunks_exact(3)
+        .as_chunks::<3>()
+        .0
+        .iter()
         .map(|coords| ThreeMomentum {
             px: F(coords[0]),
             py: F(coords[1]),

@@ -118,8 +118,10 @@ impl Display for UVOrchestrator {
 )]
 #[serde(default, deny_unknown_fields)]
 pub struct CTIdentifier {
+    /// Signed PDG identifiers on the counterterm's external boundary.
     #[serde(skip_serializing_if = "BTreeSet::is_empty")]
     pub external_pdg_set: BTreeSet<isize>,
+    /// Optional internal PDG identifiers; omitting them makes the rule match any internal set.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub internal_pdg_set: Option<BTreeSet<isize>>,
 }
@@ -151,7 +153,9 @@ impl CTIdentifier {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CTRenormalizationRule {
+    /// Particle-content pattern that selects the counterterms to which this rule applies.
     pub ct_identifier: CTIdentifier,
+    /// Approximation that replaces the default prescription for matching counterterms.
     pub prescription: ApproximationType,
 }
 
@@ -171,12 +175,16 @@ impl CTRenormalizationRule {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct RenormalizationPrescriptionSettings {
+    /// Approximation applied to logarithmically divergent ultraviolet counterterms.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub log_divergent: ApproximationType,
+    /// Approximation applied to power-divergent counterterms with massive external structure.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub massive_power_divergent: ApproximationType,
+    /// Approximation applied to power-divergent counterterms with massless external structure.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub massless_power_divergent: ApproximationType,
+    /// Counterterm-specific prescription rules evaluated before the divergence-class defaults.
     #[serde(
         default,
         skip_serializing_if = "IsDefault::is_default",
@@ -233,12 +241,16 @@ impl RenormalizationPrescriptionSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct MATADSettings {
+    /// Expand MATAD master-integral abbreviations before returning the result.
     #[serde(skip_serializing_if = "is_true")]
     pub expand_masters: bool,
+    /// Substitute MATAD master integrals by their known analytic expressions.
     #[serde(skip_serializing_if = "is_true")]
     pub susbstitute_masters: bool,
+    /// Substitute harmonic polylogarithms produced by MATAD where formulas are available.
     #[serde(skip_serializing_if = "is_true")]
     pub substitute_hpls: bool,
+    /// Numerically substitute constants directly in the MATAD result.
     #[serde(skip_serializing_if = "is_true")]
     pub direct_numerical_substition: bool,
 }
@@ -258,6 +270,7 @@ impl Default for MATADSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct AlphaLoopSettings {
+    /// Substitute AlphaLoop master integrals by their registered expressions.
     #[serde(skip_serializing_if = "is_true")]
     pub susbstitute_masters: bool,
 }
@@ -274,8 +287,10 @@ impl Default for AlphaLoopSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct FMFTSettings {
+    /// Expand FMFT master-integral abbreviations before returning the result.
     #[serde(skip_serializing_if = "is_true")]
     pub expand_masters: bool,
+    /// Substitute FMFT master integrals by their known analytic expressions.
     #[serde(skip_serializing_if = "is_true")]
     pub susbstitute_masters: bool,
 }
@@ -292,14 +307,19 @@ impl Default for FMFTSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct PySecDecSettings {
+    /// Suppress pySecDec progress output while Vakint evaluates an integral.
     #[serde(skip_serializing_if = "is_true")]
     pub quiet: bool,
+    /// Requested relative precision for the pySecDec numerical integration.
     #[serde(skip_serializing_if = "is_default_pysecdec_relative_precision")]
     pub relative_precision: f64,
+    /// Minimum pySecDec sample count before a precision-based stop is accepted.
     #[serde(skip_serializing_if = "is_usize::<10_000>")]
     pub min_n_evals: usize,
+    /// Maximum pySecDec sample count before the numerical integration stops.
     #[serde(skip_serializing_if = "is_usize::<1_000_000_000_000>")]
     pub max_n_evals: usize,
+    /// Existing pySecDec output directory to reuse instead of regenerating integration code.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub reuse_existing_output: Option<String>,
 }
@@ -320,28 +340,40 @@ impl Default for PySecDecSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct VakintSettings {
+    /// FORM executable used by analytic Vakint evaluation backends.
     #[serde(skip_serializing_if = "is_default_form_path")]
     pub form_exe_path: String,
+    /// Python interpreter used to invoke pySecDec.
     #[serde(skip_serializing_if = "is_default_python_path")]
     pub python_exe_path: String,
+    /// Ordered Vakint evaluation backends tried for each matched vacuum integral.
     #[serde(skip_serializing_if = "is_default_vakint_evaluation_methods")]
     pub evaluation_methods: Vec<String>,
+    /// MATAD-specific master-integral and substitution controls.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub matad: MATADSettings,
+    /// AlphaLoop-specific master-integral substitution controls.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub alphaloop: AlphaLoopSettings,
+    /// FMFT-specific master-integral expansion and substitution controls.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub fmft: FMFTSettings,
+    /// pySecDec precision, sample, and output-reuse controls.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub pysecdec: PySecDecSettings,
+    /// Decimal precision used when substituting backend results at run time.
     #[serde(skip_serializing_if = "is_usize::<16>")]
     pub run_time_decimal_precision: usize,
+    /// Remove Vakint's temporary backend directory after a successful evaluation.
     #[serde(skip_serializing_if = "is_true")]
     pub clean_tmp_dir: bool,
+    /// Parent directory for temporary Vakint backend files; the system default is used when absent.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub temporary_directory: Option<String>,
+    /// Named normalization convention applied to matched vacuum integrals.
     #[serde(skip_serializing_if = "is_default_vakint_normalization")]
     pub normalization: String,
+    /// Extra symbolic normalization factor multiplied into every Vakint result.
     #[serde(skip_serializing_if = "is_minus_one_string")]
     pub additional_normalization: String,
 }
@@ -454,24 +486,34 @@ impl Display for FinalIntegrandDimension {
 )]
 #[serde(default, deny_unknown_fields)]
 pub struct UVgenerationSettings {
+    /// Generate soft ultraviolet counterterms where required by the selected prescription.
     #[serde(skip_serializing_if = "is_true")]
     pub softct: bool,
+    /// Generate analytically integrated ultraviolet counterterms.
     #[serde(skip_serializing_if = "is_true")]
     pub generate_integrated: bool,
+    /// Subtract generated ultraviolet counterterms from the final integrand.
     #[serde(skip_serializing_if = "is_true")]
     pub subtract_uv: bool,
+    /// Dimensional representation used for the final locally subtracted integrand.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub final_integrand: FinalIntegrandDimension,
+    /// Insert explicit marker functions around generated ultraviolet counterterms.
     #[serde(skip_serializing_if = "is_false")]
     pub add_marker: bool,
+    /// Preserve ultraviolet marker functions after counterterm orchestration.
     #[serde(skip_serializing_if = "is_true")]
     pub keep_marker: bool,
+    /// Rewrite Lorentz contractions into scalar inner products during ultraviolet processing.
     #[serde(skip_serializing_if = "is_true")]
     pub inner_products: bool,
+    /// Algorithm used to enumerate and combine nested ultraviolet counterterms.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub orchestrator: UVOrchestrator,
+    /// Default and counterterm-specific renormalization approximation schemes.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub renormalization_prescription: RenormalizationPrescriptionSettings,
+    /// Vakint backend configuration for integrated ultraviolet counterterms.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub vakint: VakintSettings,
 }

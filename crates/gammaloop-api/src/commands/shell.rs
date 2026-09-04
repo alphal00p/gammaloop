@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Args, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
 pub struct Shell {
     // Capture everything after '!' as raw tokens
+    /// Command and arguments passed to the user's login shell.
     #[arg(
         trailing_var_arg = true,
         allow_hyphen_values = true,

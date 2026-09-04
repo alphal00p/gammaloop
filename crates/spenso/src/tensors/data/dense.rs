@@ -46,9 +46,18 @@ use std::{
 #[cfg(feature = "shadowing")]
 use symbolica::{atom::Atom, atom::Symbol};
 
+/// Contiguous tensor components paired with their structural coordinate map.
+///
+/// `data` follows [`TensorStructure::strides`], which is row-major by default:
+/// coordinates are given in external-slot order and the last coordinate varies
+/// fastest. [`Self::from_data`] validates the component count but does not
+/// permute values if the supplied structure was created from an unsorted slot
+/// list.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, Hash, Eq, Encode, Decode)]
 pub struct DenseTensor<T, S = OrderedStructure> {
+    /// Components in the flat order defined by `structure`.
     pub data: Vec<T>,
+    /// Tensor structure that maps external slots to flat component indices.
     pub structure: S,
 }
 
@@ -471,7 +480,12 @@ impl<T: Clone, I> DenseTensor<T, I>
 where
     I: TensorStructure,
 {
-    /// Generates a new dense tensor from the given data and structure
+    /// Creates a dense tensor whose components follow `structure`'s flat order.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `data.len()` differs from the structure size. A
+    /// scalar structure accepts exactly one component.
     pub fn from_data(data: Vec<T>, structure: I) -> Result<Self> {
         if data.len() != structure.size()? && !(data.len() == 1 && structure.is_scalar()) {
             return Err(eyre!("Data length does not match shape"));

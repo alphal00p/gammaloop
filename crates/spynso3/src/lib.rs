@@ -50,7 +50,7 @@ use symbolica::{
 use symbolica::api::python::PythonExpression;
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::{PyStubType, TypeInfo, define_stub_info_gatherer, derive::*};
+use pyo3_stub_gen::{PyStubType, TypeInfo, derive::*};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass_enum, gen_stub_pyfunction};
@@ -64,6 +64,40 @@ trait ModuleInit: PyClass {
     fn init(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m.add_class::<Self>()
     }
+}
+
+#[cfg(feature = "python_stubgen")]
+/// The Python names that must be present in Spenso's generated stub.
+///
+/// `registered` is the actual community-module surface. `returned_opaque`
+/// contains classes that are not module attributes but are returned by that
+/// surface and therefore need public type declarations.
+pub struct PythonStubSurface {
+    pub registered: &'static [&'static str],
+    pub returned_opaque: &'static [&'static str],
+}
+
+macro_rules! define_spenso_python_surface {
+    (
+        registered_classes: [$($class:ty),+ $(,)?],
+        registered_functions: [$($function:ident => $function_name:literal),+ $(,)?],
+        returned_opaque_classes: [$($opaque:ty),* $(,)?],
+    ) => {
+        pub(crate) fn initialize_spenso(m: &Bound<'_, PyModule>) -> PyResult<()> {
+            $(<$class as ModuleInit>::init(m)?;)+
+            $(m.add_function(wrap_pyfunction!($function, m)?)?;)+
+            Ok(())
+        }
+
+        #[cfg(feature = "python_stubgen")]
+        pub const PYTHON_STUB_SURFACE: PythonStubSurface = PythonStubSurface {
+            registered: &[
+                $(<$class as PyClass>::NAME,)+
+                $($function_name,)+
+            ],
+            returned_opaque: &[$(<$opaque as PyClass>::NAME,)*],
+        };
+    };
 }
 
 pub struct SpensoModule;
@@ -80,6 +114,8 @@ pub enum SymbolicParallelism {
     /// Force Rayon without `Auto`'s Symbolica license safety check.
     Parallel,
 }
+
+impl ModuleInit for SymbolicParallelism {}
 
 impl From<SymbolicParallelism> for spenso::symbolic_parallelism::SymbolicParallelism {
     fn from(value: SymbolicParallelism) -> Self {
@@ -126,20 +162,27 @@ impl SymbolicaCommunityModule for SpensoModule {
     }
 }
 
-pub(crate) fn initialize_spenso(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    use library_tensor::LibrarySpensor;
-    use network::ExecutionMode;
-
-    // m.add_function(?)?;
-    SpensoNet::init(m)?;
-    ExecutionMode::init(m)?;
-    m.add_class::<SymbolicParallelism>()?;
-    m.add_function(wrap_pyfunction!(set_symbolica_rayon_enabled, m)?)?;
-    Spensor::init(m)?;
-    LibrarySpensor::init(m)?;
-    SpensoIndices::init(m)?;
-    SpensorLibrary::init(m)?;
-    Ok(())
+define_spenso_python_surface! {
+    registered_classes: [
+        SpensoNet,
+        network::ExecutionMode,
+        SymbolicParallelism,
+        Spensor,
+        library_tensor::LibrarySpensor,
+        SpensoIndices,
+        structure::SpensoName,
+        structure::SpensoSlot,
+        structure::SpensoStructure,
+        structure::SpensoRepresentation,
+        SpensorLibrary,
+    ],
+    registered_functions: [
+        set_symbolica_rayon_enabled => "set_symbolica_rayon_enabled",
+    ],
+    returned_opaque_classes: [
+        SpensoExpressionEvaluator,
+        SpensoCompiledExpressionEvaluator,
+    ],
 }
 
 /// A tensor class that can be either dense or sparse with flexible data types.
@@ -1157,4 +1200,9 @@ Examples
 }
 
 #[cfg(feature = "python_stubgen")]
-define_stub_info_gatherer!(stub_info);
+pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
+    pyo3_stub_gen::StubInfo::from_project_root(
+        "symbolica.community.spenso".to_owned(),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")),
+    )
+}

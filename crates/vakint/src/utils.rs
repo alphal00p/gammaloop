@@ -58,7 +58,7 @@ pub(crate) mod vakint_macros {
 #[macro_export]
 macro_rules! vakint_parse {
     ($s: expr) => {{ symbolica::try_parse!($s, default_namespace = $crate::NAMESPACE) }};
-    ($s: expr, $ns: expr) => {{ symbolica::try_parse!($sm, default_namespace = $ns) }};
+    ($s: expr, $ns: expr) => {{ symbolica::try_parse!($s, default_namespace = $ns) }};
 }
 
 // #[macro_export]

@@ -33,6 +33,8 @@ environment:
 steps:
   - name: "Run Linux Nix CI"
     command: |
+      set -euo pipefail
+
       # Tangled runs these Nix builds without sandboxing, and stdenv expects the
       # fallback HOME path to be absent in that mode.
       rm -rf /homeless-shelter
@@ -44,4 +46,6 @@ steps:
       nix build --impure ".#checks.${system}.gammaloop-nextest" --print-build-logs
       nix build --impure ".#checks.${system}.gammaloop-doctest" --print-build-logs
       nix build ".#checks.${system}.gammaloop-doc" --print-build-logs
+      nix build ".#checks.${system}.alphal00p-docs" --print-build-logs
+      nix develop --command just docs-linnet-python-check
       nix build ".#packages.${system}.gammaloop-llvm-coverage" --print-build-logs

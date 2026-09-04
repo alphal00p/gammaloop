@@ -28,6 +28,7 @@ use tracing::info;
 
 use crate::{
     commands::evaluate_samples::{build_havana_sample, build_momentum_input},
+    commands::CliArgumentMetadataExt,
     completion::CompletionArgExt,
     state::{ProcessRef, State},
     CLISettings,
@@ -35,7 +36,7 @@ use crate::{
 
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq, Default)]
 pub struct Approach {
-    /// Process reference: #<id>, name:<name>, or <id>/<name>
+    /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`
     #[arg(
         short = 'p',
         long = "process",
@@ -53,7 +54,7 @@ pub struct Approach {
     )]
     pub integrand_name: Option<String>,
 
-    /// The midpoint to inspect (x y) or (p0 px ...)
+    /// Integration coordinates, or flattened loop momenta `(px, py, pz) ...` with `--momentum-space`
     #[arg(
         short = 'x',
         long = "point",
@@ -64,7 +65,7 @@ pub struct Approach {
     )]
     pub point: Vec<f64>,
 
-    /// Direction vector for one approach axis, as comma-separated components
+    /// Direction vector in the same coordinate layout and dimension as `--point`
     #[arg(
         long = "approach-axis",
         value_name = "AXIS",
@@ -97,11 +98,11 @@ pub struct Approach {
     #[arg(long = "n-cores", value_name = "N")]
     pub n_cores: Option<usize>,
 
-    /// Evaluate in f128 precision
+    /// Force arbitrary-precision (Arb) internal evaluation; results remain f64
     #[arg(short = 'f', long = "use_arb_prec")]
     pub use_arb_prec: bool,
 
-    /// Interpret point as momentum-space coordinates
+    /// Interpret `--point` and every axis as spatial loop-momentum triplets
     #[arg(short = 'm', long)]
     pub momentum_space: bool,
 
@@ -124,12 +125,12 @@ pub struct Approach {
     #[arg(
         long = "orientation-id",
         value_name = "ORIENTATION_ID",
-        requires = "graph_id",
+        cli_requires("graph_id"),
         conflicts_with = "discrete_dim"
     )]
     pub orientation_id: Option<usize>,
 
-    /// Path to the JSON output file
+    /// Write sampled approach points and run metadata to this JSON file
     #[arg(long = "output-results", value_hint = clap::ValueHint::FilePath)]
     pub output_results: Option<PathBuf>,
 }

@@ -5,6 +5,9 @@ use pyo3::{
     prelude::*,
 };
 
+#[cfg(not(feature = "python_stubgen"))]
+use pyo3_stub_gen_derive::remove_gen_stub;
+
 use spenso::{
     iterators::IteratableTensor,
     network::{
@@ -37,26 +40,38 @@ use super::ModuleInit;
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::{PyStubType, derive::*};
 
-/// A tensor network representing computational graphs of tensor operations.
+/// A graph of tensor operations that can be simplified and executed.
 ///
-/// A tensor network is a graph-based representation of tensor computations where
-/// nodes represent tensors and operations, edges represent tensor contractions and
-/// data flow, and the network can be optimized and executed to compute results.
-///
-/// Tensor networks are particularly useful for symbolic manipulation of complex
-/// tensor expressions, optimization of tensor contraction orders, efficient
-/// evaluation of large tensor computations, and physics calculations involving
-/// many-body systems.
+/// Named tensor expressions are resolved through a `TensorLibrary`. Register concrete data
+/// before constructing and executing a network; an expression alone supplies structure, not
+/// component values.
 ///
 /// Examples
 /// --------
-/// >>> import symbolica as sp
-/// >>> from symbolica.community.spenso import TensorNetwork, Tensor, TensorIndices
-/// >>> x = sp.symbol('x')
-/// >>> expr = x * sp.symbol('T')(sp.symbol('mu'), sp.symbol('nu'))
-/// >>> network = TensorNetwork(expr)
-/// >>> network.execute()
-/// >>> result = network.result_tensor()
+/// >>> from symbolica.community.spenso import (
+/// ...     ExecutionMode,
+/// ...     LibraryTensor,
+/// ...     Representation,
+/// ...     TensorLibrary,
+/// ...     TensorName,
+/// ...     TensorNetwork,
+/// ...     TensorStructure,
+/// ... )
+/// >>> rep = Representation.euc(2)
+/// >>> A = TensorName("A")
+/// >>> structure = TensorStructure(rep, rep, name=A)
+/// >>> library = TensorLibrary()
+/// >>> library.register(
+/// ...     LibraryTensor.dense(structure, [1.0, 0.0, 0.0, 1.0])
+/// ... )
+/// >>> network = TensorNetwork(
+/// ...     A(rep("i"), rep("j")),
+/// ...     library=library,
+/// ... )
+/// >>> network.execute(library=library, mode=ExecutionMode.All)
+/// >>> result = network.result_tensor(library=library)
+/// >>> len(result)
+/// 4
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     from_py_object,
@@ -127,7 +142,7 @@ fn insert_function_values<'a>(
 ///
 /// Variants
 /// --------
-/// Single : Execute one contraction at a time, useful for debugging
+/// Single : Select one smallest-degree rewrite per step; without `n_steps`, continue until no work remains
 /// Scalar : Only contract scalar operations, leaving tensor structure intact
 /// All : Execute all possible contractions for complete evaluation
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
@@ -208,6 +223,7 @@ impl PyStubType for ConvertibleToSpensoNet {
 // #[gen_stub_pymethods]
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
 impl SpensoNet {
     #[new]
@@ -498,10 +514,13 @@ impl SpensoNet {
     /// ----------
     /// library : TensorLibrary, optional
     ///     Optional tensor library for resolving tensor operations
+    /// function_library : None, optional
+    ///     Reserved for an internally supplied function library
     /// n_steps : int, optional
     ///     Maximum number of execution steps (None for complete execution)
     /// mode : ExecutionMode, optional
-    ///     Execution strategy (ExecutionMode.All, ExecutionMode.Scalar, or ExecutionMode.Single)
+    ///     Execution strategy. ExecutionMode.Single selects one smallest-degree rewrite per
+    ///     step; use n_steps to bound how many steps run.
     ///
     /// Examples
     /// --------
@@ -516,7 +535,9 @@ impl SpensoNet {
     fn execute(
         &mut self,
         library: Option<&SpensorLibrary>,
-        function_library: Option<&SpensorFunctionLibrary>,
+        #[gen_stub(override_type(type_repr = "None"))] function_library: Option<
+            &SpensorFunctionLibrary,
+        >,
         n_steps: Option<usize>,
         mode: ExecutionMode,
     ) -> PyResult<()> {

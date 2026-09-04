@@ -1,0 +1,153 @@
+schema = 3
+
+[[product]]
+id = "gammaloop"
+title = "GammaLoop"
+tagline = "Differential cross-sections with Local Unitarity"
+logo = "gammaloop"
+source = "docs/products/gammaloop/main.typ"
+citation = { title = "γLoop: Automated numerical calculations in perturbative quantum field theory with Local Unitarity", creators = ["Zeno Capatti", "Mathijs Fraaije", "Valentin Hirschi", "Lucien Huber", "Ben Ruijl"], year = 2023, repository = "https://github.com/alphal00p/gammaloop" }
+pages = [
+  { id = "overview", title = "Overview", summary = "What GammaLoop computes, how stateful runs fit together, and where the surrounding libraries begin.", source = "docs/products/gammaloop/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
+  { id = "quickstart", title = "Your first GammaLoop calculation", summary = "Choose the CLI, Python, or Rust route to generate and evaluate the same scalar one-loop graph.", source = "docs/products/gammaloop/content/quickstart.typ", symbol = "quickstart", route = "quickstart/", group = "Start here" },
+  { id = "quickstart-cli", title = "Using GammaLoop from the command line", summary = "Install the GammaLoop executable, generate a scalar one-loop graph, persist it, and evaluate one point.", source = "docs/products/gammaloop/content/quickstart-cli.typ", symbol = "quickstart-cli", route = "quickstart/cli/", group = "Getting started" },
+  { id = "quickstart-python", title = "Using GammaLoop from Python", summary = "Generate and evaluate the scalar one-loop graph through GammaLoop's stateful Python API.", source = "docs/products/gammaloop/content/quickstart-python.typ", symbol = "quickstart-python", route = "quickstart/python/", group = "Getting started" },
+  { id = "quickstart-rust", title = "Using GammaLoop from Rust", summary = "Embed GammaLoop, drive its command session, and evaluate the scalar one-loop graph from Rust.", source = "docs/products/gammaloop/content/quickstart-rust.typ", symbol = "quickstart-rust", route = "quickstart/rust/", group = "Getting started" },
+  { id = "physics-scope", title = "Physics scope and Local Unitarity", summary = "How Local Unitarity combines contributions, which claims belong to the formal method, and what GammaLoop currently supports.", source = "docs/products/gammaloop/content/physics-scope.typ", symbol = "physics-scope", route = "physics/", group = "Start here" },
+  { id = "conventions", title = "Kinematics, normalization, and weights", summary = "Four-vectors, momentum flow, helicity and color ownership, flux, units, sample weights, and explicitly unverified factors.", source = "docs/products/gammaloop/content/conventions.typ", symbol = "conventions", route = "guides/conventions/", group = "Start here" },
+  { id = "tutorial", title = "Create your first state", summary = "Build GammaLoop, generate a maintained example process, inspect its persisted state, and resume it.", source = "docs/products/gammaloop/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
+  { id = "process-generation", title = "Process generation", summary = "Process grammar, generation modes, filters, grouping, and the path from diagrams to evaluation.", source = "docs/products/gammaloop/content/process-generation.typ", symbol = "process-generation", route = "guides/process-generation/", aliases = ["manual/process-generation/"], group = "Guides" },
+  { id = "events", title = "Events and observables", summary = "Inspect generated cut events, selectors, single-sample results, and batch-level histogram snapshots through real Python and Rust journeys.", source = "docs/products/gammaloop/content/events.typ", symbol = "events", route = "guides/events-and-observables/", group = "Guides" },
+  { id = "interfaces", title = "CLI, Rust, and Python APIs", summary = "Choose an interface, understand precision behavior, and find the relevant API reference.", source = "docs/products/gammaloop/content/api.typ", symbol = "api", route = "reference/interfaces/", aliases = ["manual/interfaces/"], group = "Reference" },
+  { id = "diagnostics", title = "Logging and diagnostics", summary = "Startup precedence, filter syntax, stable pipeline tags, sink routing, and focused troubleshooting workflows.", source = "docs/products/gammaloop/content/diagnostics.typ", symbol = "diagnostics", route = "guides/diagnostics/", aliases = ["manual/diagnostics/"], group = "Advanced" },
+  { id = "kurvst", title = "Kurvst curve and path API", summary = "Bezier and Hobby paths, trimming, patterns, parallel curves, and CeTZ conversion for GammaLoop drawing templates.", source = "docs/products/gammaloop/content/kurvst.typ", symbol = "kurvst", route = "guides/kurvst/", aliases = ["manual/kurvst/"], group = "Companion tools" },
+  { id = "releases", title = "Version history", summary = "Release-note coverage, component versions, compatibility risks, and practical upgrade checks.", source = "docs/products/gammaloop/content/changelog.typ", symbol = "changelog", route = "version-history/", aliases = ["manual/releases/"], group = "Version history" },
+]
+related = ["linnet", "spenso", "idenso", "vakint"]
+rust_components = [
+  { id = "gammalooprs", package = "gammalooprs", kind = "library", version_source = "crates/gammalooprs/Cargo.toml" },
+  { id = "gammaloop-api", package = "gammaloop-api", kind = "library-and-cli", version_source = "crates/gammaloop-api/Cargo.toml", features = ["cli"] },
+]
+python_components = [
+  { id = "gammaloop-python", package = "gammaloop", kind = "maturin-distribution", version_source = "pyproject.toml", module = "gammaloop._gammaloop", features = ["python_api", "python_abi", "python_stubgen"] },
+]
+
+[[product]]
+id = "linnet"
+title = "Linnet"
+tagline = "Half-edge graphs and subgraph-first algorithms"
+source = "docs/products/linnet/main.typ"
+citation = { title = "Linnet", creators = ["Lucien Huber", "Mathijs Fraaije"], year = 2026, repository = "https://github.com/alphal00p/linnet", doi = "10.5281/zenodo.18429583" }
+pages = [
+  { id = "overview", title = "Overview", summary = "Half-edge graphs, subgraph-first operations, typed indices, and the boundaries of the Linnet ecosystem.", source = "docs/products/linnet/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
+  { id = "quickstart", title = "Build your first Linnet graph", summary = "Choose Rust, Python, or Typst to construct and inspect the same boundary-aware graph model.", source = "docs/products/linnet/content/quickstart.typ", symbol = "quickstart", route = "quickstart/", group = "Start here" },
+  { id = "quickstart-rust", title = "Using Linnet from Rust", summary = "Build and validate a boundary-aware half-edge graph with the published Linnet crate.", source = "docs/products/linnet/content/quickstart-rust.typ", symbol = "quickstart-rust", route = "quickstart/rust/", group = "Getting started" },
+  { id = "quickstart-python", title = "Using Linnet from Python", summary = "Build the preview Python binding from source and inspect a DOT-backed Linnet graph.", source = "docs/products/linnet/content/quickstart-python.typ", symbol = "quickstart-python", route = "quickstart/python/", group = "Getting started" },
+  { id = "quickstart-typst", title = "Using Linnet from Typst", summary = "Use the bundled Linnest package to construct, lay out, and draw a graph in Typst.", source = "docs/products/linnet/content/quickstart-typst.typ", symbol = "quickstart-typst", route = "quickstart/typst/", group = "Getting started" },
+  { id = "tutorial", title = "Build and explore a graph", summary = "Construct a small graph, inspect its half-edges, and apply a first subgraph-aware operation.", source = "docs/products/linnet/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
+  { id = "algorithms", title = "Graph algorithms", summary = "Traversal, connectivity, cycles, cuts, mutation boundaries, DOT interchange, and drawing.", source = "docs/products/linnet/content/algorithms.typ", symbol = "algorithms", route = "guides/algorithms/", aliases = ["manual/algorithms/"], group = "Guides" },
+  { id = "clinnet", title = "Clinnet DOT rendering", summary = "Install the Linnet CLI, render DOT trees with Typst, understand cache invalidation, customize templates, and make targeted rebuilds.", source = "docs/products/linnet/content/clinnet.typ", symbol = "clinnet", route = "guides/clinnet/", group = "Guides" },
+  { id = "linnest", title = "Build and draw with Linnest", summary = "Construct a graph in Typst, run layout, draw it with CeTZ, and choose the next focused API page.", source = "docs/products/linnet/content/linnest.typ", symbol = "linnest", route = "guides/linnest/", group = "Guides" },
+  { id = "interfaces", title = "Rust, Python, and Typst interfaces", summary = "Choose a language surface, then follow its conventions and complete reference.", source = "docs/products/linnet/content/api.typ", symbol = "api", route = "reference/interfaces/", aliases = ["manual/interfaces/"], group = "Reference" },
+  { id = "typst-reference", title = "Linnest Typst API", summary = "The supported Linnest surface, its import taxonomy, and routes to focused Typst reference pages.", source = "docs/products/linnet/content/typst-reference.typ", symbol = "typst-reference", route = "reference/typst/", aliases = ["manual/linnest/"], group = "Typst API" },
+  { id = "typst-graph", title = "graph module", summary = "Graph construction, DOT parsing, data transforms, queries, joins, cycles, and forests.", source = "docs/products/linnet/content/typst-graph.typ", symbol = "typst-graph", route = "reference/typst/graph/", group = "Typst API" },
+  { id = "typst-layout", title = "Layout functions", summary = "Placements, layout models, and the layout and layout-sequence function reference.", source = "docs/products/linnet/content/typst-layout.typ", symbol = "typst-layout", route = "reference/typst/layout/", group = "Typst API" },
+  { id = "typst-drawing", title = "Drawing functions", summary = "CeTZ drawing, edge styling, geometry helpers, and rendering callbacks.", source = "docs/products/linnet/content/typst-drawing.typ", symbol = "typst-drawing", route = "reference/typst/drawing/", group = "Typst API" },
+  { id = "typst-physics", title = "physics module", summary = "Particle-line styles, fermion-flow marks, momentum arrows, and label callbacks.", source = "docs/products/linnet/content/typst-physics.typ", symbol = "typst-physics", route = "reference/typst/physics/", group = "Typst API" },
+  { id = "typst-subgraph", title = "subgraph module", summary = "Construct and inspect zero-copy subgraph values for queries, layout, and drawing.", source = "docs/products/linnet/content/typst-subgraph.typ", symbol = "typst-subgraph", route = "reference/typst/subgraph/", group = "Typst API" },
+  { id = "releases", title = "Version history", summary = "Release-note coverage, component versions, compatibility risks, and practical upgrade checks.", source = "docs/products/linnet/content/changelog.typ", symbol = "changelog", route = "version-history/", aliases = ["manual/releases/"], group = "Version history" },
+  { id = "linnet-releases", title = "Linnet versions", summary = "Canonical release notes for the core Linnet graph library.", source = "docs/products/linnet/content/linnet-releases.typ", symbol = "linnet-releases", route = "version-history/linnet/", group = "Version history" },
+  { id = "clinnet-releases", title = "Clinnet versions", summary = "Canonical release notes for the independently versioned Clinnet command-line renderer.", source = "docs/products/linnet/content/clinnet-releases.typ", symbol = "clinnet-releases", route = "version-history/clinnet/", aliases = ["manual/clinnet-releases/"], group = "Version history" },
+]
+changelog = "crates/linnet/CHANGELOG.typ"
+related = ["spenso", "gammaloop"]
+rust_components = [
+  { id = "linnet", package = "linnet", kind = "library", version_source = "crates/linnet/Cargo.toml", features = ["nodestore-vec", "serde", "bincode", "drawing", "symbolica"] },
+]
+python_components = [
+  { id = "linnet-py", package = "linnet-py", kind = "maturin-distribution", version_source = "crates/linnet-py/pyproject.toml", module = "linnet_py", features = ["extension-module", "abi3-py310"] },
+]
+
+[[product]]
+id = "spenso"
+title = "Spenso"
+tagline = "Typed tensors, symbolic structures, and executable tensor networks"
+logo = "spenso"
+source = "docs/products/spenso/main.typ"
+citation = { title = "Spenso", creators = ["Lucien Huber", "Valentin Hirschi", "Ben Ruijl", "Mathijs Fraaije"], year = 2026, repository = "https://github.com/alphal00p/spenso", doi = "10.5281/zenodo.18248388" }
+pages = [
+  { id = "overview", title = "Overview", summary = "Typed tensor structures, data representations, contractions, networks, and companion packages.", source = "docs/products/spenso/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
+  { id = "quickstart", title = "Build your first Spenso tensor", summary = "Choose Python or Rust and reach a checked representation-aware tensor result.", source = "docs/products/spenso/content/quickstart.typ", symbol = "quickstart", route = "quickstart/", group = "Start here" },
+  { id = "quickstart-python", title = "Using Spenso from Python", summary = "Install Symbolica, import its Spenso community module, and construct a typed dense tensor.", source = "docs/products/spenso/content/quickstart-python.typ", symbol = "quickstart-python", route = "quickstart/python/", group = "Getting started" },
+  { id = "quickstart-rust", title = "Using Spenso from Rust", summary = "Add the published Spenso crate and perform one checked tensor contraction.", source = "docs/products/spenso/content/quickstart-rust.typ", symbol = "quickstart-rust", route = "quickstart/rust/", group = "Getting started" },
+  { id = "tutorial", title = "Your first tensor workflow", summary = "Define tensor structure, attach data, and inspect a first pairwise contraction before moving to networks.", source = "docs/products/spenso/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
+  { id = "networks", title = "Tensor networks", summary = "Dense and sparse data, contraction planning, Symbolica shadowing, representations, and HEP helpers.", source = "docs/products/spenso/content/networks.typ", symbol = "networks", route = "guides/networks/", aliases = ["manual/networks/"], group = "Guides" },
+  { id = "python", title = "Python tensor workflows", summary = "Construct tensors, register reusable data, execute networks, and evaluate symbolic batches through the Spenso community module.", source = "docs/products/spenso/content/python.typ", symbol = "python", route = "guides/python/", group = "Guides" },
+  { id = "interfaces", title = "Rust, macros, and Python", summary = "Core Rust APIs, derive macros, HEP helpers, feature flags, and Python bindings.", source = "docs/products/spenso/content/api.typ", symbol = "api", route = "reference/interfaces/", aliases = ["manual/interfaces/"], group = "Reference" },
+  { id = "releases", title = "Version history", summary = "Release-note coverage, component versions, compatibility risks, and practical upgrade checks.", source = "docs/products/spenso/content/changelog.typ", symbol = "changelog", route = "version-history/", aliases = ["manual/releases/"], group = "Version history" },
+  { id = "spenso-releases", title = "Spenso versions", summary = "Canonical release notes for the core Spenso tensor library.", source = "docs/products/spenso/content/spenso-releases.typ", symbol = "spenso-releases", route = "version-history/spenso/", group = "Version history" },
+  { id = "spenso-macros-releases", title = "Spenso macros versions", summary = "Canonical release notes for the independently versioned Spenso procedural macros.", source = "docs/products/spenso/content/spenso-macros-releases.typ", symbol = "spenso-macros-releases", route = "version-history/spenso-macros/", aliases = ["manual/spenso-macros-releases/"], group = "Version history" },
+  { id = "spenso-hep-lib-releases", title = "Spenso HEP library versions", summary = "Canonical release notes for the independently versioned high-energy-physics helper library.", source = "docs/products/spenso/content/spenso-hep-lib-releases.typ", symbol = "spenso-hep-lib-releases", route = "version-history/spenso-hep-lib/", aliases = ["manual/spenso-hep-lib-releases/"], group = "Version history" },
+  { id = "spynso3-releases", title = "Spynso3 versions", summary = "Canonical release notes for the independently versioned Symbolica community Python adapter.", source = "docs/products/spenso/content/spynso3-releases.typ", symbol = "spynso3-releases", route = "version-history/spynso3/", aliases = ["manual/spynso3-releases/"], group = "Version history" },
+]
+changelog = "crates/spenso/CHANGELOG.typ"
+related = ["linnet", "idenso", "gammaloop"]
+rust_components = [
+  { id = "spenso", package = "spenso", kind = "library", version_source = "crates/spenso/Cargo.toml", features = ["shadowing"] },
+  { id = "spenso-macros", package = "spenso-macros", kind = "proc-macro-library", version_source = "crates/spenso-macros/Cargo.toml", features = ["shadowing"] },
+  { id = "spenso-hep-lib", package = "spenso-hep-lib", kind = "domain-library", version_source = "crates/spenso-hep-lib/Cargo.toml" },
+]
+python_components = [
+  { id = "spynso3", package = "spynso3", kind = "symbolica-community-module", version_source = "crates/spynso3/Cargo.toml", module = "symbolica.community.spenso", features = ["python_stubgen"] },
+]
+
+[[product]]
+id = "idenso"
+title = "Idenso"
+tagline = "Symbolic tensor identities for Spenso and Symbolica"
+source = "docs/products/idenso/main.typ"
+citation = { title = "Idenso", creators = ["Lucien Huber", "Valentin Hirschi", "Ben Ruijl", "Mathijs Fraaije"], year = 2026, repository = "https://github.com/alphal00p/spenso", doi = "10.5281/zenodo.18248409" }
+pages = [
+  { id = "overview", title = "Overview", summary = "Symbolic tensor identities, controlled rewrite stages, representation setup, and reversible cooking.", source = "docs/products/idenso/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
+  { id = "quickstart", title = "Simplify your first tensor expression", summary = "Choose Python or Rust to apply an Idenso identity while preserving the free-index structure.", source = "docs/products/idenso/content/quickstart.typ", symbol = "quickstart", route = "quickstart/", group = "Start here" },
+  { id = "quickstart-python", title = "Using Idenso from Python", summary = "Import Idenso's Symbolica community module and simplify one indexed metric contraction.", source = "docs/products/idenso/content/quickstart-python.typ", symbol = "quickstart-python", route = "quickstart/python/", group = "Getting started" },
+  { id = "quickstart-rust", title = "Using Idenso from Rust", summary = "Add Idenso and apply a representation-aware metric simplification from Rust.", source = "docs/products/idenso/content/quickstart-rust.typ", symbol = "quickstart-rust", route = "quickstart/rust/", group = "Getting started" },
+  { id = "tutorial", title = "A controlled identity pass", summary = "Construct representation-aware indices, apply a focused rewrite, and verify the result.", source = "docs/products/idenso/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
+  { id = "algebra", title = "Algebra and rewrites", summary = "Index tooling, cooking, metric, epsilon, Dirac, color, and Schoonschip network parsing.", source = "docs/products/idenso/content/algebra.typ", symbol = "algebra", route = "guides/algebra/", aliases = ["manual/algebra/"], group = "Guides" },
+  { id = "form-color-dirac", title = "Shipped color and Dirac rules", summary = "Dimension, gamma-five, epsilon, color-normalization, and partial-normal-form conventions for Idenso's implemented simplifiers.", source = "docs/products/idenso/content/form-symbolica-color-and-dirac.typ", symbol = "form-color-dirac", route = "reference/form-color-dirac/", aliases = ["manual/form-color-dirac/"], group = "Reference" },
+  { id = "interfaces", title = "Rust and Python interfaces", summary = "Rewrite families, macros, feature flags, and the Symbolica Python module.", source = "docs/products/idenso/content/api.typ", symbol = "api", route = "reference/interfaces/", aliases = ["manual/interfaces/"], group = "Reference" },
+  { id = "releases", title = "Version history", summary = "Release-note coverage, component versions, compatibility risks, and practical upgrade checks.", source = "docs/products/idenso/content/changelog.typ", symbol = "changelog", route = "version-history/", aliases = ["manual/releases/"], group = "Version history" },
+  { id = "idenso-releases", title = "Idenso versions", summary = "Canonical release notes for the core Idenso symbolic-identity library.", source = "docs/products/idenso/content/idenso-releases.typ", symbol = "idenso-releases", route = "version-history/idenso/", group = "Version history" },
+]
+changelog = "crates/idenso/CHANGELOG.typ"
+related = ["spenso", "gammaloop"]
+rust_components = [
+  { id = "idenso", package = "idenso", kind = "library", version_source = "crates/idenso/Cargo.toml", features = ["bincode", "reference-cases"] },
+]
+python_components = [
+  { id = "idenso-community", package = "idenso", kind = "symbolica-community-module", version_source = "crates/idenso/Cargo.toml", module = "symbolica.community.idenso", features = ["python", "python_stubgen"] },
+]
+
+[[product]]
+id = "vakint"
+title = "Vakint"
+tagline = "Single-scale vacuum-integral matching and evaluation"
+source = "docs/products/vakint/main.typ"
+citation = { title = "Vakint", creators = ["Lucien Huber", "Valentin Hirschi"], year = 2026, repository = "https://github.com/alphal00p/vakint" }
+pages = [
+  { id = "overview", title = "Overview", summary = "Topology matching, canonicalization, tensor reduction, evaluation backends, and reproducibility.", source = "docs/products/vakint/content/overview.typ", symbol = "overview", route = "", group = "Start here" },
+  { id = "quickstart", title = "Canonicalize your first Vakint integral", summary = "Choose Python or Rust to recognize the same one-loop vacuum topology without evaluation backends.", source = "docs/products/vakint/content/quickstart.typ", symbol = "quickstart", route = "quickstart/", group = "Start here" },
+  { id = "quickstart-python", title = "Using Vakint from Python", summary = "Import Vakint's Symbolica community module and canonicalize a one-loop vacuum integral.", source = "docs/products/vakint/content/quickstart-python.typ", symbol = "quickstart-python", route = "quickstart/python/", group = "Getting started" },
+  { id = "quickstart-rust", title = "Using Vakint from Rust", summary = "Add the Vakint crate and canonicalize a one-loop vacuum topology without external backends.", source = "docs/products/vakint/content/quickstart-rust.typ", symbol = "quickstart-rust", route = "quickstart/rust/", group = "Getting started" },
+  { id = "tutorial", title = "Match your first integral", summary = "Configure a matching-only engine, parse a vacuum integral, canonicalize it, and inspect the match.", source = "docs/products/vakint/content/tutorial.typ", symbol = "tutorial", route = "tutorial/", group = "Tutorial" },
+  { id = "evaluation", title = "Matching and evaluation", summary = "Parsing, topology matching, normalization, tensor reduction, and backend selection.", source = "docs/products/vakint/content/evaluation.typ", symbol = "evaluation", route = "guides/evaluation/", aliases = ["manual/evaluation/"], group = "Guides" },
+  { id = "interfaces", title = "Rust and Python interfaces", summary = "Engine types, settings, expression formats, and the Symbolica Python module.", source = "docs/products/vakint/content/api.typ", symbol = "api", route = "reference/interfaces/", aliases = ["manual/interfaces/"], group = "Reference" },
+  { id = "releases", title = "Version history", summary = "Release-note coverage, component versions, compatibility risks, and practical upgrade checks.", source = "docs/products/vakint/content/changelog.typ", symbol = "changelog", route = "version-history/", aliases = ["manual/releases/"], group = "Version history" },
+]
+related = ["gammaloop"]
+rust_components = [
+  { id = "vakint", package = "vakint", kind = "library", version_source = "crates/vakint/Cargo.toml" },
+]
+python_components = [
+  { id = "vakint-community", package = "vakint", kind = "symbolica-community-module", version_source = "crates/vakint/Cargo.toml", module = "symbolica.community.vakint", features = ["symbolica_community_module", "python_stubgen"] },
+]
