@@ -689,7 +689,7 @@ status = "Living engineering record"
 lifecycle = "current"
 owner = "unassigned"
 reviewed_at = "2026-09-04"
-review_ref = "zzmvlsnr"
+review_ref = "vtlnkvvr"
 products = ["gammaloop"]
 topics = ["nix", "ci", "cache", "documentation"]
 review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/**", "crates/gammaloop-workspace-hack/**", "crates/alphal00p-docs-builder/**", "justfile"]
@@ -698,10 +698,10 @@ review_triggers = ["flake.nix", "flake.lock", "nix-ci.nix", ".github/workflows/*
 path = "flake.nix"
 symbol = "alphal00pDocsCargoArtifacts"
 anchor = "alphal00pDocsCargoArtifacts = craneLib.mkCargoDerivation"
-# Reviewed after the terminal nextest archives switched to writable inherited
-# artifacts. The docs renderer remains pinned, and these stay isolated artifact
-# families despite the shared archive-construction helper changing.
-digest = "c3cda94526b396741b4091ebe37ea9e66ddf4c3e"
+# Reviewed after terminal archives gained writable artifacts and runtime Cargo
+# gained the same vendored graph as their compile phase. The docs renderer stays
+# pinned and these remain isolated artifact families.
+digest = "bcce578a85452ff7ee20c6e8578bec0d632b1c58"
 
 [[section.note.scope]]
 path = "crates/alphal00p-docs-builder/src/typst_render.rs"

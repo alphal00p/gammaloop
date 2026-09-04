@@ -19,7 +19,11 @@ mod catalog_examples {
     fn shell_catalog_examples_parse_without_execution() {
         let output = Command::new("bash")
             .arg("-n")
-            .arg(concat!(env!("OUT_DIR"), "/shell_catalog_examples.sh"))
+            .arg("-c")
+            .arg(include_str!(concat!(
+                env!("OUT_DIR"),
+                "/shell_catalog_examples.sh"
+            )))
             .output()
             .expect("failed to start bash for catalog syntax validation");
         assert!(
@@ -33,7 +37,11 @@ mod catalog_examples {
     fn python_catalog_examples_compile_without_importing_products() {
         let python = python_interpreter();
         let output = Command::new(&python)
-            .arg(concat!(env!("OUT_DIR"), "/python_catalog_examples.py"))
+            .arg("-c")
+            .arg(include_str!(concat!(
+                env!("OUT_DIR"),
+                "/python_catalog_examples.py"
+            )))
             .output()
             .unwrap_or_else(|error| {
                 panic!(

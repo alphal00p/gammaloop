@@ -3195,21 +3195,14 @@
               ${alphal00pDocsValidationCommands}
 
               docs_first="$TMPDIR/alphal00p-docs-first"
-              docs_second="$TMPDIR/alphal00p-docs-second"
               docs_snapshot="$TMPDIR/alphal00p-docs-snapshot"
+              docs_snapshot_first="$TMPDIR/alphal00p-docs-snapshot-first"
               cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- \
                 build \
                 --product all \
                 --channel latest \
                 --output "$docs_first" \
                 --rustdoc-target-root "$docs_rustdoc"
-              cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- \
-                build \
-                --product all \
-                --channel latest \
-                --output "$docs_second" \
-                --rustdoc-target-root "$docs_rustdoc"
-              diff --recursive --brief "$docs_first" "$docs_second"
               python3 scripts/check-docs-html.py "$docs_first"
 
               cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- \
@@ -3219,6 +3212,7 @@
                 --snapshot-tag v0.3.4 \
                 --output "$docs_snapshot" \
                 --rustdoc-target-root "$docs_rustdoc"
+              cp -R "$docs_snapshot" "$docs_snapshot_first"
               cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- \
                 build \
                 --product all \
@@ -3226,6 +3220,7 @@
                 --snapshot-tag v0.3.4 \
                 --output "$docs_snapshot" \
                 --rustdoc-target-root "$docs_rustdoc"
+              diff --recursive --brief "$docs_snapshot_first" "$docs_snapshot"
 
               docs_pages_test="$TMPDIR/alphal00p-docs-pages-test"
               mkdir -p "$docs_pages_test/products/gammaloop/snapshots/legacy"
@@ -3853,6 +3848,13 @@
                 cp -R ${nextestRuntimeSrcFor target}/. /build/source/
                 chmod -R u+w /build/source
                 cd /build/source
+                # Tests such as trybuild invoke Cargo again at runtime. Point
+                # those nested invocations at the same vendored dependency
+                # graph used to compile the archived test binaries.
+                export CARGO_HOME="$PWD/.cargo-home"
+                mkdir -p "$CARGO_HOME"
+                cp ${cargoVendorDir}/config.toml "$CARGO_HOME/config.toml"
+                export CARGO_NET_OFFLINE=true
                 # Workspace-root discovery checks these directories even for test
                 # targets that do not consume any files from them.
                 mkdir -p tests/resources examples/cli

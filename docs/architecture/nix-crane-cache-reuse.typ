@@ -2,7 +2,7 @@
 <nixcrane-cargo-artifact-reuse>
 #quote(block: true)[
 #strong[Status:] Living engineering record reviewed 2026-09-04 against
-`zzmvlsnr`
+`vtlnkvvr`
 
 This is a chronological investigation, not a uniformly current
 specification. Sections explicitly labelled “Historical” are superseded;
@@ -1675,6 +1675,23 @@ The self-contained archive compaction step uses mtime epoch 1, matching
 Crane\'s artifact installer and Nix source timestamps. Using epoch 0 for
 the compacted target made Cargo treat every inherited artifact as older
 than its source when a consumer skipped the materializing merge layer.
+
+Nextest archives must also contain everything their tests need after the
+build directory has disappeared. Generated shell and Python catalogue
+fixtures are therefore embedded in the docs-example test binary with
+`include_str!` rather than opened through `OUT_DIR` at runtime. Tests such
+as `trybuild` deliberately launch Cargo again; the archive runner gives
+those nested invocations an offline `CARGO_HOME` containing the same
+vendored Cargo configuration used to compile the archive.
+
+The full documentation check renders the latest route once, validates its
+HTML, then renders the same historical snapshot twice and compares the
+complete copied outputs. This keeps both latest-route coverage and
+snapshot determinism while avoiding a fourth all-product render that
+exceeded NixCI\'s per-job runtime limit. Comparing two complete snapshot
+trees also exercises the immutable historical routes, portal pages,
+developer pages, and generated API material rather than narrowing the
+idempotence check to a subset.
 
 The static graph and derivation shapes can be checked without building
 the cold Cargo closure:
