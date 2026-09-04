@@ -2,9 +2,9 @@ use std::{collections::BTreeMap, fs};
 
 use figment::providers::Serialized;
 use figment::{Figment, Profile};
-use linnet::half_edge::involution::EdgeIndex;
 use linnet::half_edge::layout::spring::{Constraint, ShiftDirection};
 use linnet::half_edge::swap::Swap;
+use linnet::half_edge::{involution::EdgeIndex, NodeIndex};
 use linnet::{dot, parser::set::DotGraphSet};
 use serde::{Deserialize, Serialize};
 
@@ -1617,6 +1617,62 @@ fn test_graph_structural_statement_patch_preserves_grouped_edge_constraints() {
         panic!("external edges lost their shared row constraint");
     };
     assert_eq!(left_row, right_row);
+}
+
+#[test]
+fn label_position_patch_preserves_solved_group_positions() {
+    let parsed = parse_dot_graphs_bytes(
+        br#"digraph {
+            ext [style=invis]
+            ext -> a [id=0 pin="x:@-external"]
+            ext -> b [id=1 pin="x:@-external"]
+            a -> b [id=2]
+        }"#,
+    )
+    .unwrap();
+    let graph = decode_graphs(&parsed).remove(0);
+    let laid_out = layout_parsed_graph_bytes(
+        &graph,
+        &encode_cbor(&BTreeMap::from([
+            ("layout-algo".to_string(), "tree".to_string()),
+            ("label-steps".to_string(), "0".to_string()),
+        ])),
+    )
+    .unwrap();
+    let before: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&laid_out).unwrap());
+    assert_ne!(before[0].pos.as_ref().unwrap().x, 0.0);
+
+    let patched = graph_apply_structural_patches_bytes(
+        &laid_out,
+        &encode_cbor(&TestStructuralPatch {
+            nodes: Vec::new(),
+            edges: vec![TestEdgeStructuralPatch {
+                index: 0,
+                pos: None,
+                label_pos: Some((2.5, -1.0)),
+                bend: None,
+                statements: BTreeMap::new(),
+            }],
+            hedges: Vec::new(),
+        }),
+    )
+    .unwrap();
+    let after: Vec<TypstDotEdge> = decode_cbor(&graph_edges_bytes(&patched).unwrap());
+
+    assert_eq!(
+        before
+            .iter()
+            .map(|edge| edge.pos.clone())
+            .collect::<Vec<_>>(),
+        after
+            .iter()
+            .map(|edge| edge.pos.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        after[0].label_pos,
+        Some(crate::TypstPoint { x: 2.5, y: -1.0 })
+    );
 }
 
 #[test]
@@ -3649,6 +3705,32 @@ fn grouped_directional_constraints_enforce_pin_side_after_layout() {
 
     assert!(edge_positions[EdgeIndex(0)].x >= 0.0);
     assert!(edge_positions[EdgeIndex(1)].x <= 0.0);
+}
+
+#[test]
+fn node_and_edge_groups_share_their_axis() {
+    let typst_graph = TypstGraph::from_dot(
+        dot!(digraph {
+            helper [id=0 pin="x:@-left"]
+            a [id=1]
+            b [id=2]
+            a -> b [id=0 pin="x:@-left"]
+        })
+        .unwrap(),
+        &test_figment(),
+    );
+    let (mut node_positions, mut edge_positions) =
+        typst_graph.new_positions(TreeInitCfg { dx: 1.0, dy: 1.0 });
+
+    node_positions[NodeIndex(0)].x = -2.0;
+    edge_positions[EdgeIndex(0)].x = -8.0;
+    typst_graph.apply_grouped_constraints(&mut node_positions, &mut edge_positions);
+
+    assert_eq!(
+        node_positions[NodeIndex(0)].x,
+        edge_positions[EdgeIndex(0)].x
+    );
+    assert_eq!(edge_positions[EdgeIndex(0)].x, -5.0);
 }
 
 #[test]

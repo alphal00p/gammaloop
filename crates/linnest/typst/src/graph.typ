@@ -684,7 +684,8 @@
 ///
 /// `side: "+"` keeps the solved coordinate non-negative and `side: "-"`
 /// keeps it non-positive. Groups are layout constraints and therefore require
-/// pin placement, which is the @pos default.
+/// pin placement, which is the @pos default. Node and edge coordinates with
+/// the same group name and side share the final axis coordinate.
 ///
 /// ```example
 /// #group("right", side: "+")
