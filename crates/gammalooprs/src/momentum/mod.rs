@@ -23,8 +23,8 @@ use spenso::{
     iterators::IteratableTensor,
     shadowing::Shadowable,
     structure::{
-        CastStructure, IndexLess, NamedStructure, OrderedStructure, PermutedStructure,
-        TensorStructure, ToSymbolic,
+        Canonicalized, CastStructure, IndexLess, NamedStructure, OrderedStructure,
+        TensorDataLayout, TensorStructure, ToSymbolic,
         abstract_index::AbstractIndex,
         representation::{BaseRepName, Euclidean, LibraryRep, Minkowski, RepName},
         slot::{DualSlotTo, Slot},
@@ -510,8 +510,8 @@ impl<T> ThreeMomentum<T> {
         T: Clone,
     {
         let structure =
-            PermutedStructure::from_iter(vec![Euclidean {}.new_slot(3, index)]).structure;
-        DenseTensor::from_data(vec![self.px, self.py, self.pz], structure).unwrap()
+            Canonicalized::from_iter(vec![Euclidean {}.new_slot(3, index)]).into_canonical();
+        DenseTensor::from_storage_data(vec![self.px, self.py, self.pz], structure).unwrap()
     }
 
     pub(crate) fn into_dense_param(self, index: AbstractIndex) -> DenseTensor<T, OrderedStructure>
@@ -519,8 +519,8 @@ impl<T> ThreeMomentum<T> {
         T: Clone,
     {
         let structure =
-            PermutedStructure::from_iter(vec![Euclidean {}.new_slot(3, index)]).structure;
-        DenseTensor::from_data(vec![self.px, self.py, self.pz], structure).unwrap()
+            Canonicalized::from_iter(vec![Euclidean {}.new_slot(3, index)]).into_canonical();
+        DenseTensor::from_storage_data(vec![self.px, self.py, self.pz], structure).unwrap()
     }
 }
 
@@ -1711,9 +1711,9 @@ impl<T> FourMomentum<T, T> {
         T: Clone,
     {
         let structure =
-            PermutedStructure::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)])
-                .structure;
-        DenseTensor::from_data(
+            Canonicalized::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)])
+                .into_canonical();
+        DenseTensor::from_storage_data(
             vec![
                 self.temporal.value,
                 self.spatial.px,
@@ -1734,14 +1734,14 @@ impl<T> FourMomentum<T, T> {
     where
         T: Clone,
     {
-        let structure = PermutedStructure::<OrderedStructure>::from_iter([LibraryRep::new_slot(
+        let structure = Canonicalized::<OrderedStructure>::from_iter([LibraryRep::new_slot(
             Minkowski {}.into(),
             4,
             index,
         )])
-        .structure
+        .into_canonical()
         .to_named(name, Some(num));
-        DenseTensor::from_data(
+        DenseTensor::from_storage_data(
             vec![
                 self.temporal.value,
                 self.spatial.px,
@@ -2550,8 +2550,8 @@ impl<T> FourMomentum<T, Atom> {
         T: Clone + Into<Coefficient> + Exponent,
     {
         let structure =
-            PermutedStructure::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)])
-                .structure;
+            Canonicalized::from_iter([LibraryRep::new_slot(Minkowski {}.into(), 4, index)])
+                .into_canonical();
         let energy = self
             .temporal
             .value
@@ -2564,7 +2564,7 @@ impl<T> FourMomentum<T, Atom> {
         let pz =
             Atom::num(self.spatial.pz).to_polynomial(&RationalField::new(IntegerRing {}), None);
 
-        DenseTensor::from_data(vec![energy, px, py, pz], structure).unwrap()
+        DenseTensor::from_storage_data(vec![energy, px, py, pz], structure).unwrap()
     }
 }
 
@@ -2864,10 +2864,9 @@ impl Rotation {
         let al = Minkowski::slot(4, 3);
         let mud = mu.dual();
 
-        let shadow: NamedStructure<String, ()> =
-            PermutedStructure::<OrderedStructure>::from_iter([mu])
-                .structure
-                .to_named("eps".to_string(), None);
+        let shadow: NamedStructure<String, ()> = Canonicalized::<OrderedStructure>::from_iter([mu])
+            .into_canonical()
+            .to_named("eps".to_string(), None);
         let shadow_t: MixedTensor<_, OrderedStructure> =
             ParamOrConcrete::param(shadow.to_shell().expanded_shadow().unwrap().into())
                 .cast_structure();
@@ -2901,10 +2900,9 @@ impl Rotation {
 
         let j = GR.bis.new_slot(4, 3);
 
-        let shadow: NamedStructure<String, ()> =
-            PermutedStructure::from_iter([i.cast::<LibraryRep>()])
-                .structure
-                .to_named("u".to_string(), None);
+        let shadow: NamedStructure<String, ()> = Canonicalized::from_iter([i.cast::<LibraryRep>()])
+            .into_canonical()
+            .to_named("u".to_string(), None);
         let shadow_t: MixedTensor<_, OrderedStructure> =
             ParamOrConcrete::param(shadow.to_shell().expanded_shadow().unwrap().into())
                 .cast_structure();
@@ -2947,44 +2945,89 @@ impl RotationMethod {
         i: AbstractIndex,
         j: AbstractIndex,
     ) -> DataTensor<f64, OrderedStructure> {
-        let structure = PermutedStructure::from_iter([
+        let structure = Canonicalized::from_iter([
             LibraryRep::new_slot(Minkowski {}.into(), 4, i),
             LibraryRep::new_slot(Minkowski {}.into(), 4, j),
-        ])
-        .structure;
+        ]);
+        let layout = TensorDataLayout::from_canonicalized(&structure)
+            .expect("rotation generators have concrete dimensions");
         let zero = 0.;
         match self {
             RotationMethod::Identity => {
-                let omega = SparseTensor::empty(structure, zero);
+                let omega = SparseTensor::empty(structure.into_canonical(), zero);
                 omega.into()
             }
             RotationMethod::Pi2X => {
-                let mut omega = SparseTensor::empty(structure, zero);
-                omega.set(&[2, 3], -zero.PIHALF()).unwrap();
-                omega.set(&[3, 2], zero.PIHALF()).unwrap();
+                let mut omega = SparseTensor::empty(structure.into_canonical(), zero);
+                omega
+                    .set(
+                        &layout
+                            .logical_expanded_to_storage_expanded(&[2, 3])
+                            .unwrap(),
+                        -zero.PIHALF(),
+                    )
+                    .unwrap();
+                omega
+                    .set(
+                        &layout
+                            .logical_expanded_to_storage_expanded(&[3, 2])
+                            .unwrap(),
+                        zero.PIHALF(),
+                    )
+                    .unwrap();
                 omega.into()
             }
             RotationMethod::Pi2Y => {
-                let mut omega = SparseTensor::empty(structure, zero);
-                omega.set(&[1, 3], zero.PIHALF()).unwrap();
-                omega.set(&[3, 1], -zero.PIHALF()).unwrap();
+                let mut omega = SparseTensor::empty(structure.into_canonical(), zero);
+                omega
+                    .set(
+                        &layout
+                            .logical_expanded_to_storage_expanded(&[1, 3])
+                            .unwrap(),
+                        zero.PIHALF(),
+                    )
+                    .unwrap();
+                omega
+                    .set(
+                        &layout
+                            .logical_expanded_to_storage_expanded(&[3, 1])
+                            .unwrap(),
+                        -zero.PIHALF(),
+                    )
+                    .unwrap();
                 omega.into()
             }
             RotationMethod::Pi2Z => {
-                let mut omega = SparseTensor::empty(structure, zero);
-                omega.set(&[1, 2], -zero.PIHALF()).unwrap();
-                omega.set(&[2, 1], zero.PIHALF()).unwrap();
+                let mut omega = SparseTensor::empty(structure.into_canonical(), zero);
+                omega
+                    .set(
+                        &layout
+                            .logical_expanded_to_storage_expanded(&[1, 2])
+                            .unwrap(),
+                        -zero.PIHALF(),
+                    )
+                    .unwrap();
+                omega
+                    .set(
+                        &layout
+                            .logical_expanded_to_storage_expanded(&[2, 1])
+                            .unwrap(),
+                        zero.PIHALF(),
+                    )
+                    .unwrap();
                 omega.into()
             }
-            RotationMethod::EulerAngles(alpha, beta, gamma) => DenseTensor::from_data(
-                vec![
-                    // row 0
-                    zero, zero, zero, zero, // row 1
-                    zero, zero, -gamma, *beta, // row 2
-                    zero, *gamma, zero, -alpha, // row 3
-                    zero, -beta, *alpha, zero,
-                ],
-                structure,
+            RotationMethod::EulerAngles(alpha, beta, gamma) => DenseTensor::from_storage_data(
+                layout
+                    .reorder_to_storage(vec![
+                        // row 0
+                        zero, zero, zero, zero, // row 1
+                        zero, zero, -gamma, *beta, // row 2
+                        zero, *gamma, zero, -alpha, // row 3
+                        zero, -beta, *alpha, zero,
+                    ])
+                    .unwrap(),
+                structure.into_canonical(),
             )
             .unwrap()
             .into(),
@@ -2996,89 +3039,101 @@ impl RotationMethod {
         i: Slot<Minkowski>,
         j: Slot<Minkowski>,
     ) -> DataTensor<f64, OrderedStructure> {
-        let structure = PermutedStructure::from_iter([i.cast::<LibraryRep>(), j.cast()]).structure;
+        let structure = Canonicalized::from_iter([i.cast::<LibraryRep>(), j.cast()]);
+        let layout = TensorDataLayout::from_canonicalized(&structure)
+            .expect("Lorentz rotations have concrete dimensions");
 
         match self {
             RotationMethod::Identity => {
-                let rot = DenseTensor::from_data(
-                    vec![
-                        1., 0., 0., 0., // row 1
-                        0., -1., 0., 0., // row 2
-                        0., 0., -1., 0., // row 3
-                        0., 0., 0., -1.,
-                    ],
-                    structure,
+                let rot = DenseTensor::from_storage_data(
+                    layout
+                        .reorder_to_storage(vec![
+                            1., 0., 0., 0., // row 1
+                            0., -1., 0., 0., // row 2
+                            0., 0., -1., 0., // row 3
+                            0., 0., 0., -1.,
+                        ])
+                        .unwrap(),
+                    structure.into_canonical(),
                 )
                 .unwrap();
                 rot.into()
             }
             RotationMethod::Pi2X => {
-                let rot = DenseTensor::from_data(
-                    vec![
-                        1., 0., 0., 0., // row 1
-                        0., -1., 0., 0., // row 2
-                        0., 0., 0., -1., // row 3
-                        0., 0., 1., 0.,
-                    ],
-                    structure,
+                let rot = DenseTensor::from_storage_data(
+                    layout
+                        .reorder_to_storage(vec![
+                            1., 0., 0., 0., // row 1
+                            0., -1., 0., 0., // row 2
+                            0., 0., 0., -1., // row 3
+                            0., 0., 1., 0.,
+                        ])
+                        .unwrap(),
+                    structure.into_canonical(),
                 )
                 .unwrap();
                 rot.into()
             }
             RotationMethod::Pi2Y => {
-                let rot = DenseTensor::from_data(
-                    vec![
-                        1., 0., 0., 0., // row 1
-                        0., 0., 0., 1., // row 2
-                        0., 0., -1., 0., // row 3
-                        0., -1., 0., 0.,
-                    ],
-                    structure,
+                let rot = DenseTensor::from_storage_data(
+                    layout
+                        .reorder_to_storage(vec![
+                            1., 0., 0., 0., // row 1
+                            0., 0., 0., 1., // row 2
+                            0., 0., -1., 0., // row 3
+                            0., -1., 0., 0.,
+                        ])
+                        .unwrap(),
+                    structure.into_canonical(),
                 )
                 .unwrap();
                 rot.into()
             }
             RotationMethod::Pi2Z => {
-                let rot = DenseTensor::from_data(
-                    vec![
-                        1., 0., 0., 0., // row 1
-                        0., 0., -1., 0., // row 2
-                        0., 1., 0., 0., // row 3
-                        0., 0., 0., -1.,
-                    ],
-                    structure,
+                let rot = DenseTensor::from_storage_data(
+                    layout
+                        .reorder_to_storage(vec![
+                            1., 0., 0., 0., // row 1
+                            0., 0., -1., 0., // row 2
+                            0., 1., 0., 0., // row 3
+                            0., 0., 0., -1.,
+                        ])
+                        .unwrap(),
+                    structure.into_canonical(),
                 )
                 .unwrap();
                 rot.into()
             }
-            RotationMethod::EulerAngles(alpha, beta, gamma) => DenseTensor::from_data(
-                vec![
-                    // row 0
-                    1.,
-                    0.,
-                    0.,
-                    0.,
-                    // row 1
-                    0.,
-                    -gamma.cos() * beta.cos(),
-                    alpha.sin() * beta.sin() * gamma.cos() - alpha.cos() * gamma.sin(),
-                    alpha.sin() * gamma.sin() + alpha.cos() * beta.sin() * gamma.cos(),
-                    // row 2
-                    0.,
-                    gamma.sin() * beta.cos(),
-                    -alpha.cos() * gamma.cos() - alpha.sin() * beta.sin() * gamma.sin(),
-                    -alpha.sin() * gamma.cos() + alpha.cos() * beta.sin() * gamma.sin(),
-                    // row 3
-                    0.,
-                    -beta.sin(),
-                    alpha.sin() * beta.cos(),
-                    -alpha.cos() * beta.cos(),
-                ],
-                structure,
+            RotationMethod::EulerAngles(alpha, beta, gamma) => DenseTensor::from_storage_data(
+                layout
+                    .reorder_to_storage(vec![
+                        // row 0
+                        1.,
+                        0.,
+                        0.,
+                        0.,
+                        // row 1
+                        0.,
+                        -gamma.cos() * beta.cos(),
+                        alpha.sin() * beta.sin() * gamma.cos() - alpha.cos() * gamma.sin(),
+                        alpha.sin() * gamma.sin() + alpha.cos() * beta.sin() * gamma.cos(),
+                        // row 2
+                        0.,
+                        gamma.sin() * beta.cos(),
+                        -alpha.cos() * gamma.cos() - alpha.sin() * beta.sin() * gamma.sin(),
+                        -alpha.sin() * gamma.cos() + alpha.cos() * beta.sin() * gamma.sin(),
+                        // row 3
+                        0.,
+                        -beta.sin(),
+                        alpha.sin() * beta.cos(),
+                        -alpha.cos() * beta.cos(),
+                    ])
+                    .unwrap(),
+                structure.into_canonical(),
             )
             .unwrap()
             .into(),
-            // Rotation::EulerAngles(alpha, beta, gamma) => DenseTensor::from_data(
+            // Rotation::EulerAngles(alpha, beta, gamma) => DenseTensor::from_storage_data(
             //     vec![
             //         // row 0
             //         zero.one(),
@@ -3113,62 +3168,69 @@ impl RotationMethod {
         i: Slot<LibraryRep>,
         j: Slot<LibraryRep>,
     ) -> DataTensor<Complex<f64>, OrderedStructure> {
-        let structure = PermutedStructure::from_iter([i.cast::<LibraryRep>(), j.cast()]).structure;
+        let structure = Canonicalized::from_iter([i.cast::<LibraryRep>(), j.cast()]);
+        let layout = TensorDataLayout::from_canonicalized(&structure)
+            .expect("bispinor rotations have concrete dimensions");
+        let storage_indices = |logical: &[usize]| {
+            layout
+                .logical_expanded_to_storage_expanded(logical)
+                .expect("hard-coded bispinor coordinates are in bounds")
+        };
         let zero = 0.; // F::new_zero();
         let zeroc = Complex::new_re(zero);
 
         match self {
             RotationMethod::Identity => {
-                let mut rot = SparseTensor::empty(structure, zeroc);
-                rot.set(&[0, 0], zeroc.one()).unwrap();
-                rot.set(&[1, 1], zeroc.one()).unwrap();
-                rot.set(&[2, 2], zeroc.one()).unwrap();
-                rot.set(&[3, 3], zeroc.one()).unwrap();
+                let mut rot = SparseTensor::empty(structure.into_canonical(), zeroc);
+                rot.set(&storage_indices(&[0, 0]), zeroc.one()).unwrap();
+                rot.set(&storage_indices(&[1, 1]), zeroc.one()).unwrap();
+                rot.set(&storage_indices(&[2, 2]), zeroc.one()).unwrap();
+                rot.set(&storage_indices(&[3, 3]), zeroc.one()).unwrap();
                 rot.into()
             }
             RotationMethod::Pi2X => {
-                let mut rot = SparseTensor::empty(structure, zeroc);
+                let mut rot = SparseTensor::empty(structure.into_canonical(), zeroc);
                 let sqrt2_half = zero.SQRT_2_HALF();
                 let sqrt2_halfim = Complex::new_im(sqrt2_half);
                 let sqrt2_halfre = Complex::new_re(sqrt2_half);
 
-                rot.set(&[0, 0], sqrt2_halfim).unwrap();
-                rot.set(&[0, 1], sqrt2_halfim).unwrap();
-                rot.set(&[1, 0], sqrt2_halfim).unwrap();
-                rot.set(&[1, 1], sqrt2_halfre).unwrap();
-                rot.set(&[2, 2], sqrt2_halfim).unwrap();
-                rot.set(&[2, 3], sqrt2_halfim).unwrap();
-                rot.set(&[3, 2], sqrt2_halfim).unwrap();
-                rot.set(&[3, 3], sqrt2_halfre).unwrap();
+                rot.set(&storage_indices(&[0, 0]), sqrt2_halfim).unwrap();
+                rot.set(&storage_indices(&[0, 1]), sqrt2_halfim).unwrap();
+                rot.set(&storage_indices(&[1, 0]), sqrt2_halfim).unwrap();
+                rot.set(&storage_indices(&[1, 1]), sqrt2_halfre).unwrap();
+                rot.set(&storage_indices(&[2, 2]), sqrt2_halfim).unwrap();
+                rot.set(&storage_indices(&[2, 3]), sqrt2_halfim).unwrap();
+                rot.set(&storage_indices(&[3, 2]), sqrt2_halfim).unwrap();
+                rot.set(&storage_indices(&[3, 3]), sqrt2_halfre).unwrap();
                 rot.into()
             }
             RotationMethod::Pi2Y => {
-                let mut rot = SparseTensor::empty(structure, zeroc);
+                let mut rot = SparseTensor::empty(structure.into_canonical(), zeroc);
                 let sqrt2_half = zero.SQRT_2_HALF();
                 let sqrt2_halfim = Complex::new_im(sqrt2_half);
                 let sqrt2_halfre = Complex::new_re(sqrt2_half);
                 let nsqrt2_half = -sqrt2_halfre;
 
-                rot.set(&[0, 0], sqrt2_halfim).unwrap();
-                rot.set(&[0, 1], nsqrt2_half).unwrap();
-                rot.set(&[1, 0], nsqrt2_half).unwrap();
-                rot.set(&[1, 1], sqrt2_halfre).unwrap();
-                rot.set(&[2, 2], sqrt2_halfim).unwrap();
-                rot.set(&[2, 3], nsqrt2_half).unwrap();
-                rot.set(&[3, 2], nsqrt2_half).unwrap();
-                rot.set(&[3, 3], sqrt2_halfre).unwrap();
+                rot.set(&storage_indices(&[0, 0]), sqrt2_halfim).unwrap();
+                rot.set(&storage_indices(&[0, 1]), nsqrt2_half).unwrap();
+                rot.set(&storage_indices(&[1, 0]), nsqrt2_half).unwrap();
+                rot.set(&storage_indices(&[1, 1]), sqrt2_halfre).unwrap();
+                rot.set(&storage_indices(&[2, 2]), sqrt2_halfim).unwrap();
+                rot.set(&storage_indices(&[2, 3]), nsqrt2_half).unwrap();
+                rot.set(&storage_indices(&[3, 2]), nsqrt2_half).unwrap();
+                rot.set(&storage_indices(&[3, 3]), sqrt2_halfre).unwrap();
                 rot.into()
             }
             RotationMethod::Pi2Z => {
-                let mut rot = SparseTensor::empty(structure, zeroc);
+                let mut rot = SparseTensor::empty(structure.into_canonical(), zeroc);
                 let sqrt2_half = zero.SQRT_2_HALF();
                 let sqrt2_halfc = Complex::new(sqrt2_half, sqrt2_half);
                 let sqrt2_halfcc = sqrt2_halfc.conj();
 
-                rot.set(&[0, 0], sqrt2_halfc).unwrap();
-                rot.set(&[1, 1], sqrt2_halfcc).unwrap();
-                rot.set(&[2, 2], sqrt2_halfc).unwrap();
-                rot.set(&[3, 3], sqrt2_halfcc).unwrap();
+                rot.set(&storage_indices(&[0, 0]), sqrt2_halfc).unwrap();
+                rot.set(&storage_indices(&[1, 1]), sqrt2_halfcc).unwrap();
+                rot.set(&storage_indices(&[2, 2]), sqrt2_halfc).unwrap();
+                rot.set(&storage_indices(&[3, 3]), sqrt2_halfcc).unwrap();
                 rot.into()
             }
             RotationMethod::EulerAngles(alpha, beta, gamma) => {
@@ -3181,15 +3243,17 @@ impl RotationMethod {
 
                     let e = Complex::new(cos_phihalf, sin_phihalf);
                     let econj = e.conj();
-                    return DenseTensor::from_data(
-                        vec![
-                            // row 0
-                            e, zeroc, zeroc, zeroc, // row 1
-                            zeroc, econj, zeroc, zeroc, // row 2
-                            zeroc, zeroc, e, zeroc, // row 3
-                            zeroc, zeroc, zeroc, econj,
-                        ],
-                        structure,
+                    return DenseTensor::from_storage_data(
+                        layout
+                            .reorder_to_storage(vec![
+                                // row 0
+                                e, zeroc, zeroc, zeroc, // row 1
+                                zeroc, econj, zeroc, zeroc, // row 2
+                                zeroc, zeroc, e, zeroc, // row 3
+                                zeroc, zeroc, zeroc, econj,
+                            ])
+                            .unwrap(),
+                        structure.into_canonical(),
                     )
                     .unwrap()
                     .into();
@@ -3207,15 +3271,17 @@ impl RotationMethod {
                 let a_10 = complex_phi * Complex::new_im(sin_phihalf / norm);
                 let a_11 = Complex::new(cos_phihalf, -gamma / norm * sin_phihalf);
 
-                DenseTensor::from_data(
-                    vec![
-                        // row 0
-                        a_00, a_01, zeroc, zeroc, // row 1
-                        a_10, a_11, zeroc, zeroc, // row 2
-                        zeroc, zeroc, a_00, a_01, // row 3
-                        zeroc, zeroc, a_10, a_11,
-                    ],
-                    structure,
+                DenseTensor::from_storage_data(
+                    layout
+                        .reorder_to_storage(vec![
+                            // row 0
+                            a_00, a_01, zeroc, zeroc, // row 1
+                            a_10, a_11, zeroc, zeroc, // row 2
+                            zeroc, zeroc, a_00, a_01, // row 3
+                            zeroc, zeroc, a_10, a_11,
+                        ])
+                        .unwrap(),
+                    structure.into_canonical(),
                 )
                 .unwrap()
                 .into()
@@ -3910,7 +3976,7 @@ helicities = [1, "minus", "zero", "summed", "summed_averaged"]
     //     let theta_y = parse!("theta_y").unwrap();
     //     let theta_z = parse!("theta_z").unwrap();
 
-    //     let omega = DenseTensor::from_data(
+    //     let omega = DenseTensor::from_storage_data(
     //         vec![
     //             zero.clone(),
     //             zero.clone(),

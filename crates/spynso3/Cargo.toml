@@ -6,7 +6,7 @@ description = "Pyo3 bindings for spenso"
 
 [dependencies]
 ahash = { workspace = true, features = ["serde"] }
-idenso = { workspace = true }
+idenso = { workspace = true, features = ["python"] }
 spenso = { workspace = true, features = ["python", "shadowing"] }
 spenso-hep-lib = { workspace = true }
 spenso-macros = { workspace = true }
@@ -16,8 +16,9 @@ eyre = { workspace = true }
 pyo3 = { workspace = true, features = ["eyre"] }
 
 itertools = "0.14.0"
-pyo3-stub-gen = { workspace = true, default-features = false, optional = true }
+pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
 pyo3-stub-gen-derive = { workspace = true }
+tabled = { workspace = true }
 thiserror = { workspace = true }
 
 [dependencies.symbolica]
@@ -28,6 +29,7 @@ features = ["bincode", "python_export", "serde"]
 [features]
 python_stubgen = [
   "dep:pyo3-stub-gen",
+  "idenso/python_stubgen",
   "spenso/python_stubgen",
   "symbolica/python_stubgen",
 ]

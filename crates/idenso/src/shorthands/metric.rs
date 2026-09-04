@@ -1,6 +1,7 @@
 use std::collections::HashSet;
 
 use crate::{
+    IndexToolingError,
     shorthands::schoonschip::DotNormalizer,
     tensor::{SymbolicNetParse, SymbolicTensor, remove_antisymmetric_zero_terms},
 };
@@ -16,9 +17,8 @@ use spenso::{
     },
     shadowing::TensorCollectExt,
     structure::{
-        HasName, PermutedStructure, TensorStructure, ToSymbolic,
+        HasName, Reindexed, TensorStructure, ToSymbolic,
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
-        permuted::Perm,
         representation::{LibraryRep, LibrarySlot, RepName},
         slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind},
     },
@@ -153,26 +153,37 @@ pub fn wrap_indices_impl(view: AtomView, header: Symbol) -> Atom {
     expr
 }
 
-pub fn list_dangling_impl<Aind: ParseableAind + AbsInd + DummyAind>(view: AtomView) -> Vec<Atom> {
+fn dangling_indices<Aind: ParseableAind + AbsInd + DummyAind>(
+    view: AtomView,
+) -> Result<Vec<Atom>, String> {
     let a = view
         .parse_to_symbolic_net::<Aind>(&ParseSettings {
             take_first_term_from_sum: true,
             ..Default::default()
         })
-        .unwrap();
+        .map_err(|error| error.to_string())?;
 
-    a.graph
+    Ok(a.graph
         .dangling_indices()
         .into_iter()
         .map(|a| a.to_atom())
-        .collect()
+        .collect())
+}
+
+pub fn list_dangling_impl<Aind: ParseableAind + AbsInd + DummyAind>(
+    view: AtomView,
+) -> Result<Vec<Atom>, IndexToolingError> {
+    dangling_indices::<Aind>(view).map_err(|reason| IndexToolingError::ListDangling { reason })
 }
 
 pub fn wrap_dummies_impl<Aind: ParseableAind + AbsInd + DummyAind>(
     view: AtomView,
     header: Symbol,
-) -> Atom {
-    let externals: HashSet<_> = list_dangling_impl::<Aind>(view).into_iter().collect();
+) -> Result<Atom, IndexToolingError> {
+    let externals: HashSet<_> = dangling_indices::<Aind>(view)
+        .map_err(|reason| IndexToolingError::WrapDummies { reason })?
+        .into_iter()
+        .collect();
 
     let mut expr = view.to_owned();
     let settings = MatchSettings::new().level_range((0, Some(0)));
@@ -216,7 +227,7 @@ pub fn wrap_dummies_impl<Aind: ParseableAind + AbsInd + DummyAind>(
         });
     }
 
-    expr
+    Ok(expr)
 }
 
 pub fn not_slot(sym: Symbol) -> Condition<PatternRestriction> {
@@ -480,15 +491,15 @@ pub trait PermuteWithMetric {
     fn permute_with_metric(self) -> Atom;
 }
 
-impl<N, Aind: AbsInd + DummyAind + ParseableAind> PermuteWithMetric for PermutedStructure<N>
+impl<N, Aind: AbsInd + DummyAind + ParseableAind> PermuteWithMetric for Reindexed<N>
 where
     N: ToSymbolic + HasName + TensorStructure<Slot = LibrarySlot<Aind>>,
     N::Name: IntoSymbol + Clone,
     N::Args: IntoArgs,
 {
     fn permute_with_metric(self) -> Atom {
-        self.map_structure(|a| SymbolicTensor::from_named(&a).unwrap())
-            .permute_inds()
+        self.map_target(|a| SymbolicTensor::from_named(&a).unwrap())
+            .apply()
             .expression
             .simplify_metrics()
     }
@@ -507,7 +518,6 @@ mod test {
         structure::{
             IndexlessNamedStructure,
             abstract_index::AbstractIndex,
-            permuted::Perm,
             representation::{Euclidean, Lorentz},
         },
     };
@@ -550,31 +560,36 @@ mod test {
             ],
             symbol!("test"),
             None,
-        )
-        .clone()
-        .reindex([6, 4, 5, 2, 3, 1, 0])
-        .unwrap()
-        .map_structure(|a| SymbolicTensor::from_named(&a).unwrap());
-
-        let f_p = f.clone().permute_inds();
-
-        let simplified = f_p.expression.simplify_metrics();
-        let f_parsed = ShadowedStructure::<AbstractIndex>::parse(simplified.as_view()).unwrap();
-
-        assert_eq!(
-            f.structure.structure.order(),
-            f_parsed.structure.structure.order()
         );
-        assert!(f_parsed.rep_permutation.is_identity());
+        let logical_indices: [AbstractIndex; 7] = [
+            6.into(),
+            4.into(),
+            5.into(),
+            2.into(),
+            3.into(),
+            1.into(),
+            0.into(),
+        ];
+        let storage_indices = f.layout().logical_to_canonical(&logical_indices);
+        let layout = f.layout().clone();
+        let order = f.canonical().order();
+        let f = f
+            .into_canonical()
+            .reindex_storage(&storage_indices)
+            .unwrap()
+            .map_target(|a| SymbolicTensor::from_named(&a).unwrap());
 
-        let f_p = f.clone().permute_reps_wrapped().permute_inds();
+        let f_p = f.apply();
 
         let simplified = f_p.expression.simplify_metrics();
         let f_parsed = ShadowedStructure::<AbstractIndex>::parse(simplified.as_view()).unwrap();
 
+        assert_eq!(order, f_parsed.canonical().order());
+        let logical_positions = (0..order).collect::<Vec<_>>();
+        let canonical_positions = layout.logical_to_canonical(&logical_positions);
         assert_eq!(
-            f.structure.structure.order(),
-            f_parsed.structure.structure.order()
+            layout.canonical_to_logical(&canonical_positions),
+            logical_positions
         );
     }
 

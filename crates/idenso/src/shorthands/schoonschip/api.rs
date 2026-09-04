@@ -11,6 +11,7 @@ use spenso::{
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
 use crate::{
+    NetworkToolingError,
     shorthands::{metric::MetricSimplifier, schoonschip::with_settings::SchoonschipWithSettings},
     tensor::{SymbolicNetParse, SymbolicTensor},
 };
@@ -37,7 +38,9 @@ pub trait Schoonschip {
 
     fn to_dots(&self) -> Atom;
 
-    fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(&self) -> Atom;
+    fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError>;
 
     fn schoonschip_with_net<
         const EXPANDSUMS: bool,
@@ -45,11 +48,11 @@ pub trait Schoonschip {
     >(
         &self,
         settings: &SchoonschipSettings,
-    ) -> Atom;
+    ) -> Result<Atom, NetworkToolingError>;
 
     fn schoonschip_with_net_full<Aind: AbsInd + DummyAind + ParseableAind + 'static>(
         &self,
-    ) -> Atom {
+    ) -> Result<Atom, NetworkToolingError> {
         let settings = SchoonschipSettings::default().with_expanded_contracted_sums();
         self.schoonschip_with_net::<true, Aind>(&settings)
     }
@@ -72,7 +75,9 @@ impl Schoonschip for Atom {
         self.as_view().to_dots()
     }
 
-    fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(&self) -> Atom {
+    fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError> {
         self.as_view().schoonschip_net::<Aind>()
     }
 
@@ -82,7 +87,7 @@ impl Schoonschip for Atom {
     >(
         &self,
         settings: &SchoonschipSettings,
-    ) -> Atom {
+    ) -> Result<Atom, NetworkToolingError> {
         self.as_view()
             .schoonschip_with_net::<EXPANDSUMS, Aind>(settings)
     }
@@ -93,29 +98,36 @@ struct NetworkSchoonschip<'a> {
 }
 
 impl NetworkSchoonschip<'_> {
-    fn run<const EXPANDSUMS: bool, Aind>(&self, view: AtomView<'_>) -> Atom
+    fn run<const EXPANDSUMS: bool, Aind>(
+        &self,
+        view: AtomView<'_>,
+    ) -> Result<Atom, NetworkToolingError>
     where
         Aind: AbsInd + DummyAind + ParseableAind + 'static,
     {
         let mut current = view.to_owned();
         loop {
-            let next = self.apply::<EXPANDSUMS, Aind>(current.as_view());
+            let next = self.apply::<EXPANDSUMS, Aind>(current.as_view())?;
             if self.settings.mode == SchoonschipMode::SinglePass || next == current {
-                return next;
+                return Ok(next);
             }
             current = next;
         }
     }
 
-    fn apply<const EXPANDSUMS: bool, Aind>(&self, view: AtomView<'_>) -> Atom
+    fn apply<const EXPANDSUMS: bool, Aind>(
+        &self,
+        view: AtomView<'_>,
+    ) -> Result<Atom, NetworkToolingError>
     where
         Aind: AbsInd + DummyAind + ParseableAind + 'static,
     {
         if let AtomView::Add(add) = view {
-            return add
-                .iter()
-                .map(|term| self.apply::<EXPANDSUMS, Aind>(term))
-                .fold(Atom::Zero, |sum, term| sum + term);
+            let mut sum = Atom::Zero;
+            for term in add.iter() {
+                sum += self.apply::<EXPANDSUMS, Aind>(term)?;
+            }
+            return Ok(sum);
         }
 
         let new = match (self.settings.expand_contracted_sums, self.settings.mode) {
@@ -135,7 +147,7 @@ impl NetworkSchoonschip<'_> {
             (false, SchoonschipMode::Recursive(SchoonschipTraversal::BreadthFirst)) => {
                 self.run_once::<EXPANDSUMS, true, false, Aind>(view)
             }
-        };
+        }?;
 
         if TRACE_SCHOONSCHIP {
             println!(
@@ -144,13 +156,13 @@ impl NetworkSchoonschip<'_> {
             );
         }
 
-        new.normalize_dots()
+        Ok(new.normalize_dots())
     }
 
     fn run_once<const EXPANDSUMS: bool, const RECURSE: bool, const DEPTH_FIRST: bool, Aind>(
         &self,
         view: AtomView<'_>,
-    ) -> Atom
+    ) -> Result<Atom, NetworkToolingError>
     where
         Aind: AbsInd + DummyAind + ParseableAind + 'static,
     {
@@ -166,10 +178,12 @@ impl NetworkSchoonschip<'_> {
                 parse_composite_scalars_as_tensors: RECURSE,
                 ..Default::default()
             })
-            .unwrap();
+            .map_err(|error| NetworkToolingError::Parse {
+                reason: error.to_string(),
+            })?;
         let lib = DummyLibrary::<SymbolicTensor<Aind>>::new();
 
-        match self.settings.contraction_order {
+        let execution = match self.settings.contraction_order {
             SchoonschipContractionOrder::SmallestDegree => net
                 .execute::<
                     Sequential,
@@ -177,8 +191,7 @@ impl NetworkSchoonschip<'_> {
                     _,
                     _,
                     _,
-                >(&lib, &Wrap {})
-                .unwrap(),
+                >(&lib, &Wrap {}),
             SchoonschipContractionOrder::LargestDegree => net
                 .execute::<
                     Sequential,
@@ -186,8 +199,7 @@ impl NetworkSchoonschip<'_> {
                     _,
                     _,
                     _,
-                >(&lib, &Wrap {})
-                .unwrap(),
+                >(&lib, &Wrap {}),
             SchoonschipContractionOrder::MinLargestOperandBytes => net
                 .execute::<
                     Sequential,
@@ -200,8 +212,7 @@ impl NetworkSchoonschip<'_> {
                     _,
                     _,
                     _,
-                >(&lib, &Wrap {})
-                .unwrap(),
+                >(&lib, &Wrap {}),
             SchoonschipContractionOrder::MinProductTerms => net
                 .execute::<
                     Sequential,
@@ -214,8 +225,7 @@ impl NetworkSchoonschip<'_> {
                     _,
                     _,
                     _,
-                >(&lib, &Wrap {})
-                .unwrap(),
+                >(&lib, &Wrap {}),
             SchoonschipContractionOrder::MinProductBytes => net
                 .execute::<
                     Sequential,
@@ -228,8 +238,7 @@ impl NetworkSchoonschip<'_> {
                     _,
                     _,
                     _,
-                >(&lib, &Wrap {})
-                .unwrap(),
+                >(&lib, &Wrap {}),
             SchoonschipContractionOrder::SmallestDegreeMinLargestOperandBytes => net
                 .execute::<
                     Sequential,
@@ -242,8 +251,7 @@ impl NetworkSchoonschip<'_> {
                     _,
                     _,
                     _,
-                >(&lib, &Wrap {})
-                .unwrap(),
+                >(&lib, &Wrap {}),
             SchoonschipContractionOrder::SmallestDegreeMinProductTerms => net
                 .execute::<
                     Sequential,
@@ -256,8 +264,7 @@ impl NetworkSchoonschip<'_> {
                     _,
                     _,
                     _,
-                >(&lib, &Wrap {})
-                .unwrap(),
+                >(&lib, &Wrap {}),
             SchoonschipContractionOrder::SmallestDegreeMinProductBytes => net
                 .execute::<
                     Sequential,
@@ -270,15 +277,23 @@ impl NetworkSchoonschip<'_> {
                     _,
                     _,
                     _,
-                >(&lib, &Wrap {})
-                .unwrap(),
+                >(&lib, &Wrap {}),
         };
+        execution.map_err(|error| NetworkToolingError::Execute {
+            reason: error.to_string(),
+        })?;
 
-        match net.result_tensor(&lib).unwrap() {
-            ExecutionResult::One => Atom::num(1),
-            ExecutionResult::Zero => Atom::Zero,
-            ExecutionResult::Val(tensor) => tensor.expression.clone(),
-        }
+        Ok(
+            match net
+                .result_tensor(&lib)
+                .map_err(|error| NetworkToolingError::Result {
+                    reason: error.to_string(),
+                })? {
+                ExecutionResult::One => Atom::num(1),
+                ExecutionResult::Zero => Atom::Zero,
+                ExecutionResult::Val(tensor) => tensor.expression.clone(),
+            },
+        )
     }
 }
 
@@ -300,7 +315,9 @@ impl Schoonschip for AtomView<'_> {
             .metric_shorthand_to_dot()
     }
 
-    fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(&self) -> Atom {
+    fn schoonschip_net<Aind: AbsInd + DummyAind + ParseableAind + 'static>(
+        &self,
+    ) -> Result<Atom, NetworkToolingError> {
         self.schoonschip_with_net::<false, Aind>(&SchoonschipSettings::default_network())
     }
 
@@ -310,7 +327,7 @@ impl Schoonschip for AtomView<'_> {
     >(
         &self,
         settings: &SchoonschipSettings,
-    ) -> Atom {
+    ) -> Result<Atom, NetworkToolingError> {
         NetworkSchoonschip { settings }.run::<EXPANDSUMS, Aind>(*self)
     }
 }

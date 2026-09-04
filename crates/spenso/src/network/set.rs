@@ -6,8 +6,8 @@ use crate::{
         algebraic_traits::{One, Zero},
     },
     structure::{
-        PermutedStructure,
-        permuted::PermuteTensor,
+        Canonicalized,
+        permuted::ApplyPendingIndexPermutation,
         slot::{AbsInd, IsAbstractSlot},
     },
 };
@@ -140,7 +140,7 @@ impl<
     pub fn result(
         &self,
     ) -> Result<
-        Vec<ExecutionResult<TensorOrScalarOrKey<&T, &S, &PermutedStructure<K>, Aind>>>,
+        Vec<ExecutionResult<TensorOrScalarOrKey<&T, &S, &Canonicalized<K>, Aind>>>,
         TensorNetworkError<K, FK>,
     >
     where
@@ -150,7 +150,7 @@ impl<
     }
 
     #[allow(clippy::type_complexity, clippy::result_large_err)]
-    pub fn result_tensor<'a, LT, L: Library<T::Structure, Key = K, Value = PermutedStructure<LT>>>(
+    pub fn result_tensor<'a, LT, L: Library<T::Structure, Key = K, Value = Canonicalized<LT>>>(
         &'a self,
         lib: &L,
     ) -> Result<Vec<ExecutionResult<Cow<'a, T>>>, TensorNetworkError<K, FK>>
@@ -166,7 +166,7 @@ impl<
         S: Clone + Into<T::Scalar>,
         T::Scalar: One + Zero,
         LT: TensorStructure<Indexed = T> + Clone + LibraryTensor<WithIndices = T>,
-        T: PermuteTensor<Permuted = T>,
+        T: ApplyPendingIndexPermutation<Output = T>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
         T::Slot: IsAbstractSlot<Aind = Aind>,
@@ -263,8 +263,11 @@ impl<
                                 atoms.push(a);
                             }
                             DataTensor::Dense(
-                                DenseTensor::from_data(Vec::from_iter(oldid..tensor_id), structure)
-                                    .expect("Failed to create DenseTensor"),
+                                DenseTensor::from_storage_data(
+                                    Vec::from_iter(oldid..tensor_id),
+                                    structure,
+                                )
+                                .expect("Failed to create DenseTensor"),
                             )
                         }
                         DataTensor::Sparse(s) => {
@@ -386,7 +389,9 @@ impl<
                             for (_, &a) in d.flat_iter() {
                                 t_data.push(data[a].clone());
                             }
-                            DataTensor::Dense(DenseTensor::from_data(t_data, structure).unwrap())
+                            DataTensor::Dense(
+                                DenseTensor::from_storage_data(t_data, structure).unwrap(),
+                            )
                         }
                         DataTensor::Sparse(s) => {
                             let mut t = SparseTensor::empty(structure, T::new_zero());
@@ -443,7 +448,9 @@ impl<
                             for (_, &a) in d.flat_iter() {
                                 t_data.push(data[a].clone());
                             }
-                            DataTensor::Dense(DenseTensor::from_data(t_data, structure).unwrap())
+                            DataTensor::Dense(
+                                DenseTensor::from_storage_data(t_data, structure).unwrap(),
+                            )
                         }
                         DataTensor::Sparse(s) => {
                             let mut t = SparseTensor::empty(structure, T::new_zero());
@@ -557,7 +564,9 @@ impl<
                             for (_, &a) in d.flat_iter() {
                                 t_data.push(data[a]);
                             }
-                            DataTensor::Dense(DenseTensor::from_data(t_data, structure).unwrap())
+                            DataTensor::Dense(
+                                DenseTensor::from_storage_data(t_data, structure).unwrap(),
+                            )
                         }
                         DataTensor::Sparse(s) => {
                             let mut t = SparseTensor::empty(structure, Complex::new_zero());

@@ -10,6 +10,9 @@ pub mod test {
         test_initialize();
         let expr = g!(mink!(4, mu), mink!(4, nu)) * p!(mink!(4, nu));
 
-        assert_eq!(expr.schoonschip_net::<AbstractIndex>(), p!(mink!(4, mu)));
+        assert_eq!(
+            expr.schoonschip_net::<AbstractIndex>().unwrap(),
+            p!(mink!(4, mu))
+        );
     }
 }

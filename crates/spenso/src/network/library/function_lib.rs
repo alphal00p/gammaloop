@@ -74,7 +74,14 @@ crate::symbolica_init_lazy_static! {
 }
 
 pub struct SymbolLib<T, Missing> {
-    pub functions: HashMap<Symbol, Box<dyn Fn(T) -> T + Send + Sync>>,
+    #[allow(clippy::type_complexity)]
+    pub functions:
+        HashMap<Symbol, Box<dyn Fn(T) -> Result<T, FunctionLibraryError<Symbol>> + Send + Sync>>,
+    #[allow(clippy::type_complexity)]
+    pub scalar_functions: HashMap<
+        Symbol,
+        Box<dyn Fn(Atom) -> Result<Atom, FunctionLibraryError<Symbol>> + Send + Sync>,
+    >,
     pub _missing: Missing,
 }
 
@@ -83,7 +90,21 @@ impl<T, Missing> SymbolLib<T, Missing> {
     where
         F: Fn(T) -> T + Send + Sync + 'static,
     {
+        self.insert_fallible(key, move |tensor| Ok(func(tensor)));
+    }
+
+    pub fn insert_fallible<F>(&mut self, key: Symbol, func: F)
+    where
+        F: Fn(T) -> Result<T, FunctionLibraryError<Symbol>> + Send + Sync + 'static,
+    {
         self.functions.insert(key, Box::new(func));
+    }
+
+    pub fn insert_scalar_fallible<F>(&mut self, key: Symbol, func: F)
+    where
+        F: Fn(Atom) -> Result<Atom, FunctionLibraryError<Symbol>> + Send + Sync + 'static,
+    {
+        self.scalar_functions.insert(key, Box::new(func));
     }
 }
 
@@ -92,6 +113,7 @@ impl Panic {
     pub fn new_lib<T>() -> SymbolLib<T, Self> {
         SymbolLib {
             functions: HashMap::new(),
+            scalar_functions: HashMap::new(),
             _missing: Self,
         }
     }
@@ -108,7 +130,7 @@ impl<S: TensorStructure> FunctionLibrary<ParamTensor<S>, Atom>
         tensor: ParamTensor<S>,
     ) -> Result<ParamTensor<S>, FunctionLibraryError<Symbol>> {
         if let Some(func) = self.functions.get(key) {
-            Ok(func(tensor))
+            func(tensor)
         } else {
             Err(FunctionLibraryError::NotFound(*key))
         }
@@ -119,7 +141,11 @@ impl<S: TensorStructure> FunctionLibrary<ParamTensor<S>, Atom>
         key: &Self::Key,
         scalar: Atom,
     ) -> eyre::Result<Atom, FunctionLibraryError<Self::Key>> {
-        Ok(function!(*key, scalar))
+        if let Some(function) = self.scalar_functions.get(key) {
+            function(scalar)
+        } else {
+            Ok(function!(*key, scalar))
+        }
     }
 }
 
@@ -128,6 +154,7 @@ impl Wrap {
     pub fn new_lib<T>() -> SymbolLib<T, Self> {
         SymbolLib {
             functions: HashMap::new(),
+            scalar_functions: HashMap::new(),
             _missing: Self,
         }
     }
@@ -142,11 +169,11 @@ impl<S: TensorStructure + Clone> FunctionLibrary<ParamTensor<S>, Atom>
         key: &Self::Key,
         tensor: ParamTensor<S>,
     ) -> Result<ParamTensor<S>, FunctionLibraryError<Symbol>> {
-        Ok(if let Some(func) = self.functions.get(key) {
+        if let Some(func) = self.functions.get(key) {
             func(tensor)
         } else {
-            tensor.map_data_self(|a| function!(*key, a))
-        })
+            Ok(tensor.map_data_self(|a| function!(*key, a)))
+        }
     }
 
     fn apply_scalar(
@@ -154,7 +181,11 @@ impl<S: TensorStructure + Clone> FunctionLibrary<ParamTensor<S>, Atom>
         key: &Self::Key,
         scalar: Atom,
     ) -> eyre::Result<Atom, FunctionLibraryError<Self::Key>> {
-        Ok(function!(*key, scalar))
+        if let Some(function) = self.scalar_functions.get(key) {
+            function(scalar)
+        } else {
+            Ok(function!(*key, scalar))
+        }
     }
 }
 
@@ -171,7 +202,7 @@ impl<S: TensorStructure + Clone, C: ToParam + HasStructure<Structure = S>>
         Ok(match tensor {
             ParamOrConcrete::Concrete(c) => {
                 if let Some(func) = self.functions.get(key) {
-                    ParamOrConcrete::Concrete(func(c))
+                    ParamOrConcrete::Concrete(func(c)?)
                 } else {
                     ParamOrConcrete::Param(c.to_param().map_data_self(|a| function!(*key, a)))
                 }
@@ -187,7 +218,11 @@ impl<S: TensorStructure + Clone, C: ToParam + HasStructure<Structure = S>>
         key: &Self::Key,
         scalar: Atom,
     ) -> eyre::Result<Atom, FunctionLibraryError<Self::Key>> {
-        Ok(function!(*key, scalar))
+        if let Some(function) = self.scalar_functions.get(key) {
+            function(scalar)
+        } else {
+            Ok(function!(*key, scalar))
+        }
     }
 }
 
@@ -196,6 +231,7 @@ impl PanicMissingConcrete {
     pub fn new_lib<T>() -> SymbolLib<T, Self> {
         SymbolLib {
             functions: HashMap::new(),
+            scalar_functions: HashMap::new(),
             _missing: Self,
         }
     }
@@ -214,9 +250,11 @@ impl<S: TensorStructure + Clone, C: ToParam + HasStructure<Structure = S>>
         match tensor {
             ParamOrConcrete::Concrete(c) => {
                 if let Some(func) = self.functions.get(key) {
-                    Ok(ParamOrConcrete::Concrete(func(c)))
+                    Ok(ParamOrConcrete::Concrete(func(c)?))
                 } else {
-                    Err(FunctionLibraryError::NotFound(*key))
+                    Err(FunctionLibraryError::Other(eyre!(
+                        "no concrete callback registered for broadcast function `{key}`"
+                    )))
                 }
             }
             ParamOrConcrete::Param(p) => Ok(ParamOrConcrete::Param(
@@ -230,7 +268,15 @@ impl<S: TensorStructure + Clone, C: ToParam + HasStructure<Structure = S>>
         key: &Self::Key,
         scalar: Atom,
     ) -> eyre::Result<Atom, FunctionLibraryError<Self::Key>> {
-        Ok(function!(*key, scalar))
+        if let Some(function) = self.scalar_functions.get(key) {
+            function(scalar)
+        } else if symbolica::domains::float::Complex::<f64>::try_from(scalar.as_view()).is_ok() {
+            Err(FunctionLibraryError::Other(eyre!(
+                "no concrete callback registered for broadcast function `{key}`"
+            )))
+        } else {
+            Ok(function!(*key, scalar))
+        }
     }
 }
 
@@ -246,14 +292,16 @@ impl<S: TensorStructure + Clone, C: ToParam + HasStructure<Structure = S>>
     ) -> Result<ParamOrConcrete<C, S>, FunctionLibraryError<Symbol>> {
         if let Some(func) = self.functions.get(key) {
             if let ParamOrConcrete::Concrete(c) = tensor {
-                Ok(ParamOrConcrete::Concrete(func(c)))
+                Ok(ParamOrConcrete::Concrete(func(c)?))
             } else {
                 Err(FunctionLibraryError::Other(eyre!(
                     "Cannot map parametric tensor"
                 )))
             }
         } else {
-            Err(FunctionLibraryError::NotFound(*key))
+            Err(FunctionLibraryError::Other(eyre!(
+                "no concrete callback registered for broadcast function `{key}`"
+            )))
         }
     }
 
@@ -262,7 +310,11 @@ impl<S: TensorStructure + Clone, C: ToParam + HasStructure<Structure = S>>
         key: &Self::Key,
         scalar: Atom,
     ) -> eyre::Result<Atom, FunctionLibraryError<Self::Key>> {
-        Ok(function!(*key, scalar))
+        if let Some(function) = self.scalar_functions.get(key) {
+            function(scalar)
+        } else {
+            Ok(function!(*key, scalar))
+        }
     }
 }
 
@@ -276,17 +328,17 @@ impl<S: TensorStructure + Clone, C: ToParam + HasStructure<Structure = S>>
         key: &Self::Key,
         tensor: ParamOrConcrete<C, S>,
     ) -> Result<ParamOrConcrete<C, S>, FunctionLibraryError<Symbol>> {
-        Ok(if let Some(func) = self.functions.get(key) {
+        if let Some(func) = self.functions.get(key) {
             func(tensor)
         } else {
-            ParamOrConcrete::Param(
+            Ok(ParamOrConcrete::Param(
                 match tensor {
                     ParamOrConcrete::Concrete(c) => c.to_param(),
                     ParamOrConcrete::Param(p) => p,
                 }
                 .map_data_self(|a| function!(*key, a)),
-            )
-        })
+            ))
+        }
     }
 
     fn apply_scalar(
@@ -294,7 +346,11 @@ impl<S: TensorStructure + Clone, C: ToParam + HasStructure<Structure = S>>
         key: &Self::Key,
         scalar: Atom,
     ) -> eyre::Result<Atom, FunctionLibraryError<Self::Key>> {
-        Ok(function!(*key, scalar))
+        if let Some(function) = self.scalar_functions.get(key) {
+            function(scalar)
+        } else {
+            Ok(function!(*key, scalar))
+        }
     }
 }
 
@@ -309,7 +365,7 @@ impl<S: TensorStructure + Clone, C> FunctionLibrary<ParamOrConcrete<C, S>, Atom>
         tensor: ParamOrConcrete<C, S>,
     ) -> Result<ParamOrConcrete<C, S>, FunctionLibraryError<Symbol>> {
         if let Some(func) = self.functions.get(key) {
-            Ok(func(tensor))
+            func(tensor)
         } else if let ParamOrConcrete::Param(p) = tensor {
             Ok(ParamOrConcrete::Param(
                 p.map_data_self(|a| function!(*key, a)),
@@ -324,7 +380,15 @@ impl<S: TensorStructure + Clone, C> FunctionLibrary<ParamOrConcrete<C, S>, Atom>
         key: &Self::Key,
         scalar: Atom,
     ) -> eyre::Result<Atom, FunctionLibraryError<Self::Key>> {
-        Ok(function!(*key, scalar))
+        if let Some(function) = self.scalar_functions.get(key) {
+            function(scalar)
+        } else if symbolica::domains::float::Complex::<f64>::try_from(scalar.as_view()).is_ok() {
+            Err(FunctionLibraryError::Other(eyre!(
+                "no concrete callback registered for broadcast function `{key}`"
+            )))
+        } else {
+            Ok(function!(*key, scalar))
+        }
     }
 }
 
@@ -338,7 +402,7 @@ impl<S: TensorStructure + Clone, C: ToParam + HasStructure<Structure = S>>
         tensor: ParamOrConcrete<C, S>,
     ) -> Result<ParamOrConcrete<C, S>, FunctionLibraryError<Symbol>> {
         if let Some(func) = self.functions.get(key) {
-            Ok(func(tensor))
+            func(tensor)
         } else {
             Err(FunctionLibraryError::NotFound(*key))
         }
@@ -349,11 +413,38 @@ impl<S: TensorStructure + Clone, C: ToParam + HasStructure<Structure = S>>
         key: &Self::Key,
         scalar: Atom,
     ) -> eyre::Result<Atom, FunctionLibraryError<Self::Key>> {
-        Ok(function!(*key, scalar))
+        if let Some(function) = self.scalar_functions.get(key) {
+            function(scalar)
+        } else {
+            Ok(function!(*key, scalar))
+        }
     }
 }
 
 #[test]
 fn conj_construction() {
     // let a=  symbol!("spenso::conj", tag = SPENSO_TAG.tag);
+}
+
+#[test]
+fn infallible_function_adapter_preserves_results() {
+    let key = symbol!("spenso::test_infallible_function_adapter");
+    let mut library = Panic::new_lib();
+    library.insert(key, |value: i32| value + 1);
+
+    assert_eq!(library.functions[&key](1).unwrap(), 2);
+}
+
+#[test]
+fn fallible_function_adapter_preserves_errors() {
+    let key = symbol!("spenso::test_fallible_function_adapter");
+    let mut library = Panic::new_lib();
+    library.insert_fallible(key, |_value: i32| {
+        Err(FunctionLibraryError::Other(eyre!("callback failed")))
+    });
+
+    assert_eq!(
+        library.functions[&key](1).unwrap_err().to_string(),
+        "callback failed"
+    );
 }

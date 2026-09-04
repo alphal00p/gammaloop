@@ -2,7 +2,6 @@
 
 use std::collections::BTreeMap;
 
-use eyre::eyre;
 use linnet::half_edge::subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike};
 use shorthands::metric::{list_dangling_impl, wrap_dummies_impl, wrap_indices_impl};
 use spenso::{
@@ -155,6 +154,37 @@ macro_rules! coad {
     };
 }
 
+/// Errors produced while inspecting or rewriting tensor indices.
+#[derive(Debug, Error)]
+pub enum IndexToolingError {
+    #[error("cannot list dangling indices: {reason}")]
+    ListDangling { reason: String },
+    #[error("cannot wrap dummy indices: {reason}")]
+    WrapDummies { reason: String },
+}
+
+/// Errors produced while parsing or evaluating symbolic tensor networks.
+#[derive(Debug, Error)]
+pub enum NetworkToolingError {
+    #[error("cannot parse tensor network: {reason}")]
+    Parse { reason: String },
+    #[error("cannot execute tensor network: {reason}")]
+    Execute { reason: String },
+    #[error("cannot extract tensor-network result: {reason}")]
+    Result { reason: String },
+}
+
+/// Errors produced while canonicalizing a symbolic tensor expression.
+#[derive(Debug, Error)]
+pub enum CanonicalizationError {
+    #[error(transparent)]
+    Network(#[from] NetworkToolingError),
+    #[error("cannot prepare tensor for canonicalization: {reason}")]
+    Prepare { reason: String },
+    #[error("cannot canonicalize tensor indices: {reason}")]
+    Indices { reason: String },
+}
+
 /// Defines operations related to manipulating abstract indices within symbolic expressions,
 /// particularly relevant for physics calculations involving tensor structures and diagrams.
 ///
@@ -164,7 +194,7 @@ pub trait IndexTooling {
     fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(
         &self,
         new_dummy: impl FnMut(usize) -> Aind,
-    ) -> Atom;
+    ) -> Result<Atom, CanonicalizationError>;
     /// Wraps all abstract indices within the expression using a specified header symbol.
     ///
     /// This transforms indices like `mink(dim,idx)` into `mink(dim,header(idx))`. Useful for distinguishing
@@ -189,8 +219,12 @@ pub trait IndexTooling {
     /// * `header` - The [`Symbol`] to use as the wrapping function name for dummy indices.
     ///
     /// # Returns
-    /// A new [`Atom`] with only dummy indices wrapped.
-    fn wrap_dummies<Aind: AbsInd + DummyAind + ParseableAind>(&self, header: Symbol) -> Atom;
+    /// A new [`Atom`] with only dummy indices wrapped, or an error when the expression cannot be
+    /// parsed as a tensor network.
+    fn wrap_dummies<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+        header: Symbol,
+    ) -> Result<Atom, IndexToolingError>;
 
     /// Computes the physics-aware conjugate of the expression.
     ///
@@ -200,7 +234,8 @@ pub trait IndexTooling {
     ///
     /// # Returns
     /// A new [`Atom`] representing the conjugated expression.
-    fn dirac_adjoint<Aind: DummyAind + ParseableAind + AbsInd>(&self) -> eyre::Result<Atom>;
+    fn dirac_adjoint<Aind: DummyAind + ParseableAind + AbsInd>(&self)
+    -> Result<Atom, AdjointError>;
 
     fn conjugate_transpose(&self, rep: impl RepName) -> Atom;
 
@@ -210,8 +245,11 @@ pub trait IndexTooling {
     /// as `Atom`s. Note that dual indices might be represented wrapped in a `dind` function.
     ///
     /// # Returns
-    /// A `Vec<Atom>` where each `Atom` represents a dangling index.
-    fn list_dangling<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Vec<Atom>;
+    /// A `Vec<Atom>` where each `Atom` represents a dangling index, or an error when the
+    /// expression cannot be parsed as a tensor network.
+    fn list_dangling<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Vec<Atom>, IndexToolingError>;
 
     fn alias_subtensors(&self, tensor_name: &str) -> AliasedAtom;
 }
@@ -220,7 +258,7 @@ impl IndexTooling for Atom {
     fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(
         &self,
         new_dummy: impl FnMut(usize) -> Aind,
-    ) -> Atom {
+    ) -> Result<Atom, CanonicalizationError> {
         self.as_view().canonize(new_dummy)
     }
 
@@ -238,17 +276,24 @@ impl IndexTooling for Atom {
     fn wrap_indices(&self, header: Symbol) -> Atom {
         self.as_view().wrap_indices(header)
     }
-    fn wrap_dummies<Aind: AbsInd + DummyAind + ParseableAind>(&self, header: Symbol) -> Atom {
+    fn wrap_dummies<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+        header: Symbol,
+    ) -> Result<Atom, IndexToolingError> {
         self.as_view().wrap_dummies::<Aind>(header)
     }
-    fn dirac_adjoint<Aind: DummyAind + ParseableAind + AbsInd>(&self) -> eyre::Result<Atom> {
+    fn dirac_adjoint<Aind: DummyAind + ParseableAind + AbsInd>(
+        &self,
+    ) -> Result<Atom, AdjointError> {
         self.as_view().dirac_adjoint::<Aind>()
     }
 
     fn conjugate_transpose(&self, rep: impl RepName) -> Atom {
         self.as_view().conjugate_transpose(rep)
     }
-    fn list_dangling<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Vec<Atom> {
+    fn list_dangling<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Vec<Atom>, IndexToolingError> {
         self.as_view().list_dangling::<Aind>()
     }
 }
@@ -287,6 +332,14 @@ mod syntax_macro_tests {
 pub enum AdjointError {
     #[error("Dummies already present:{0}")]
     DummiesAlready(Atom),
+    #[error(transparent)]
+    Network(#[from] NetworkToolingError),
+    #[error(
+        "cannot construct Dirac adjoint: bispinor component has {count} dangling indices (expected at most 2)"
+    )]
+    TooManyDanglingBispinors { count: usize },
+    #[error("cannot rewrite conjugated gamma matrices: {reason}")]
+    GammaConjugation { reason: String },
 }
 
 impl IndexTooling for AtomView<'_> {
@@ -302,7 +355,7 @@ impl IndexTooling for AtomView<'_> {
                 match a.infer_structure::<OrderedStructure>(
                     spenso::network::parsing::StructureInferenceMode::Fast,
                 ) {
-                    Ok(a) => Some(a.structure.to_symbolic_with(
+                    Ok(a) => Some(a.to_symbolic_with(
                         tensor_symbol,
                         &[Atom::num(i), Atom::num(_count)],
                         None,
@@ -316,12 +369,14 @@ impl IndexTooling for AtomView<'_> {
     fn canonize<Aind: AbsInd + ParseableAind + DummyAind>(
         &self,
         mut new_dummy: impl FnMut(usize) -> Aind,
-    ) -> Atom {
+    ) -> Result<Atom, CanonicalizationError> {
         let filtered = remove_antisymmetric_zero_terms::<Aind>(*self);
         let mut net = filtered
             .as_view()
             .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
-            .unwrap();
+            .map_err(|error| NetworkToolingError::Parse {
+                reason: error.to_string(),
+            })?;
 
         // println!("{}", net.dot_pretty());
 
@@ -330,7 +385,10 @@ impl IndexTooling for AtomView<'_> {
         for t in net.store.tensors.iter_mut() {
             let mut reps = vec![];
 
-            let mut pat = FunctionBuilder::new(t.name().unwrap());
+            let name = t.name().ok_or_else(|| CanonicalizationError::Prepare {
+                reason: format!("tensor `{}` has no function name", t.expression),
+            })?;
+            let mut pat = FunctionBuilder::new(name);
             let mut rhs = pat.clone();
             for (i, s) in t.structure.external_structure_iter().enumerate() {
                 if !s.rep_name().is_self_dual() && s.rep_name().is_dual() {
@@ -368,8 +426,12 @@ impl IndexTooling for AtomView<'_> {
             }
         }
 
-        let expr = net.simple_execute::<()>();
-        let a = expr.canonize_tensors(dummies).unwrap();
+        let expr = net.simple_execute::<()>()?;
+        let a = expr
+            .canonize_tensors(dummies)
+            .map_err(|error| CanonicalizationError::Indices {
+                reason: error.to_string(),
+            })?;
 
         let mut reps = vec![];
 
@@ -380,9 +442,9 @@ impl IndexTooling for AtomView<'_> {
             ));
         }
 
-        a.canonical_form
+        Ok(a.canonical_form
             .replace_multiple(&reps)
-            .replace_multiple(&redual_reps)
+            .replace_multiple(&redual_reps))
     }
     fn spenso_conj(&self) -> Atom {
         self.conj()
@@ -411,13 +473,17 @@ impl IndexTooling for AtomView<'_> {
         self.conj().replace(transpose_pat).with(transpose_rhs)
     }
 
-    fn dirac_adjoint<Aind: DummyAind + ParseableAind + AbsInd>(&self) -> eyre::Result<Atom> {
+    fn dirac_adjoint<Aind: DummyAind + ParseableAind + AbsInd>(
+        &self,
+    ) -> Result<Atom, AdjointError> {
         let net = self
             .parse_to_symbolic_net::<Aind>(&ParseSettings {
                 take_first_term_from_sum: true,
                 ..Default::default()
             })
-            .unwrap();
+            .map_err(|error| NetworkToolingError::Parse {
+                reason: error.to_string(),
+            })?;
 
         let bis_dangling: Vec<_> = net
             .graph
@@ -478,14 +544,16 @@ impl IndexTooling for AtomView<'_> {
                     ]);
                 }
                 _ => {
-                    return Err(eyre!(
-                        "Too many dangling bispinors for complex conjugation {}",
-                        net.dot_pretty()
-                    ));
+                    return Err(AdjointError::TooManyDanglingBispinors {
+                        count: dangling.n_included(),
+                    });
                 }
             }
         }
-        Ok(a.simplify_gamma_conj::<Aind>()?
+        Ok(a.simplify_gamma_conj::<Aind>()
+            .map_err(|error| AdjointError::GammaConjugation {
+                reason: error.to_string(),
+            })?
             .simplify_gamma0()
             .simplify_metrics())
     }
@@ -493,10 +561,15 @@ impl IndexTooling for AtomView<'_> {
     fn wrap_indices(&self, header: Symbol) -> Atom {
         wrap_indices_impl(*self, header)
     }
-    fn wrap_dummies<Aind: AbsInd + DummyAind + ParseableAind>(&self, header: Symbol) -> Atom {
+    fn wrap_dummies<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+        header: Symbol,
+    ) -> Result<Atom, IndexToolingError> {
         wrap_dummies_impl::<Aind>(*self, header)
     }
-    fn list_dangling<Aind: AbsInd + DummyAind + ParseableAind>(&self) -> Vec<Atom> {
+    fn list_dangling<Aind: AbsInd + DummyAind + ParseableAind>(
+        &self,
+    ) -> Result<Vec<Atom>, IndexToolingError> {
         list_dangling_impl::<Aind>(*self)
     }
 }
@@ -504,11 +577,57 @@ impl IndexTooling for AtomView<'_> {
 #[cfg(test)]
 pub mod test {
     use insta::assert_snapshot;
-    use spenso::{p, slot, structure::abstract_index::AbstractIndex};
-    use symbolica::{atom::AtomCore, parse_lit, printer::CanonicalOrderingSettings};
+    use spenso::{network::tags::SPENSO_TAG, p, slot, structure::abstract_index::AbstractIndex};
+    use symbolica::{
+        atom::{Atom, AtomCore, FunctionBuilder},
+        parse_lit,
+        printer::CanonicalOrderingSettings,
+        symbol,
+    };
     use symbolica_utils::AtomPrintExt;
 
-    use crate::{Cookable, IndexTooling, gamma, test_support::test_initialize, u};
+    use crate::{
+        AdjointError, CanonicalizationError, Cookable, IndexTooling, NetworkToolingError, gamma,
+        test_support::test_initialize, u,
+    };
+
+    #[test]
+    fn malformed_dirac_adjoint_returns_a_parse_error() {
+        test_initialize();
+        let malformed = FunctionBuilder::new(SPENSO_TAG.dot)
+            .add_arg(Atom::var(symbol!("malformed_adjoint_operand")))
+            .finish();
+
+        let error = malformed
+            .dirac_adjoint::<AbstractIndex>()
+            .expect_err("one-argument dot notation should not have a Dirac adjoint");
+
+        assert!(matches!(
+            &error,
+            AdjointError::Network(NetworkToolingError::Parse { reason })
+                if reason.contains("Invalid dot function")
+        ));
+        assert!(error.to_string().contains("cannot parse tensor network"));
+    }
+
+    #[test]
+    fn malformed_canonicalization_returns_a_parse_error() {
+        test_initialize();
+        let malformed = FunctionBuilder::new(SPENSO_TAG.dot)
+            .add_arg(Atom::var(symbol!("malformed_canonicalization_operand")))
+            .finish();
+
+        let error = malformed
+            .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .expect_err("one-argument dot notation should not canonicalize");
+
+        assert!(matches!(
+            &error,
+            CanonicalizationError::Network(NetworkToolingError::Parse { reason })
+                if reason.contains("Invalid dot function")
+        ));
+        assert!(error.to_string().contains("cannot parse tensor network"));
+    }
 
     #[test]
     fn gamma_conj() {
@@ -529,6 +648,7 @@ pub mod test {
             ubgu.dirac_adjoint::<AbstractIndex>()
                 .unwrap()
                 .canonize(AbstractIndex::Dummy)
+                .expect("test expression should canonicalize")
                 .to_canonically_ordered_string(
                     CanonicalOrderingSettings::new()
                         .include_attributes(false)
@@ -555,7 +675,9 @@ pub mod test {
         let can = expr.cook_indices();
 
         println!("{}", can);
-        let can = can.canonize::<AbstractIndex>(AbstractIndex::Dummy);
+        let can = can
+            .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .expect("test expression should canonicalize");
 
         assert_snapshot!(
             can.to_bare_ordered_string(),@"-1*f(coad(8,d_0),coad(8,d_1),coad(8,d_2))*t(coad(8,d_0),cof(3,d_3),dind(cof(3,d_4)))*t(coad(8,d_1),cof(3,d_5),dind(cof(3,d_3)))*t(coad(8,d_2),cof(3,d_4),dind(cof(3,d_5)))"

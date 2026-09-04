@@ -10,12 +10,13 @@ use symbolica::{
     atom::{Atom, AtomView, MulView, PowView, Symbol, representation::FunView},
     domains::rational::Rational,
 };
+use thiserror::Error;
 
 use super::{NetworkParse, ParseSettings, ShadowedStructure, ShorthandParsing, StrictTensorFilter};
 use crate::network::library::symbolic::ETS;
 use crate::structure::{
-    HasName, NamedStructure, OrderedStructure, PermutedStructure, StructureContract,
-    StructureError, TensorStructure,
+    Canonicalized, HasName, NamedStructure, OrderedStructure, StructureContract, StructureError,
+    TensorStructure,
     abstract_index::AIND_SYMBOLS,
     representation::LibraryRep,
     slot::{AbsInd, DummyAind, ParseableAind, Slot, SlotError},
@@ -31,6 +32,19 @@ pub enum StructureInferenceMode {
     Expanded,
 }
 
+/// A chain or trace found inside another chain or trace.
+///
+/// Both shorthands use the same global `in` and `out` symbols, so treating a
+/// nested shorthand as an independent placeholder scope would be ambiguous.
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+#[error(
+    "`{inner}` cannot be nested inside `{outer}` because chain and trace share one global `in`/`out` placeholder scope"
+)]
+pub struct ChainNestingError {
+    outer: Symbol,
+    inner: Symbol,
+}
+
 pub trait StructureFromAtom: Sized {
     /// Infer the permuted tensor structure exposed by `value`.
     ///
@@ -39,10 +53,10 @@ pub trait StructureFromAtom: Sized {
     fn structure_from_atom(
         value: AtomView<'_>,
         mode: StructureInferenceMode,
-    ) -> Result<PermutedStructure<Self>, StructureError>;
+    ) -> Result<Canonicalized<Self>, StructureError>;
 
     /// Infer structure with the default fast syntactic mode.
-    fn parse(value: AtomView<'_>) -> Result<PermutedStructure<Self>, StructureError> {
+    fn parse(value: AtomView<'_>) -> Result<Canonicalized<Self>, StructureError> {
         Self::structure_from_atom(value, StructureInferenceMode::Fast)
     }
 }
@@ -52,7 +66,10 @@ pub trait AtomStructureExt {
     fn infer_structure<S: StructureFromAtom>(
         &self,
         mode: StructureInferenceMode,
-    ) -> Result<PermutedStructure<S>, StructureError>;
+    ) -> Result<Canonicalized<S>, StructureError>;
+
+    /// Reject more than one chain/trace placeholder consumer on any expression path.
+    fn validate_chain_like_nesting(&self) -> Result<(), ChainNestingError>;
 
     /// Return true when this expression is valid tensor parser syntax at its root.
     ///
@@ -69,8 +86,12 @@ impl AtomStructureExt for Atom {
     fn infer_structure<S: StructureFromAtom>(
         &self,
         mode: StructureInferenceMode,
-    ) -> Result<PermutedStructure<S>, StructureError> {
+    ) -> Result<Canonicalized<S>, StructureError> {
         self.as_view().infer_structure(mode)
+    }
+
+    fn validate_chain_like_nesting(&self) -> Result<(), ChainNestingError> {
+        self.as_view().validate_chain_like_nesting()
     }
 
     fn is_tensorial(&self, filter: StrictTensorFilter) -> bool {
@@ -82,8 +103,14 @@ impl AtomStructureExt for AtomView<'_> {
     fn infer_structure<S: StructureFromAtom>(
         &self,
         mode: StructureInferenceMode,
-    ) -> Result<PermutedStructure<S>, StructureError> {
+    ) -> Result<Canonicalized<S>, StructureError> {
+        self.validate_chain_like_nesting()
+            .map_err(|error| StructureError::ParsingError(error.to_string()))?;
         S::structure_from_atom(*self, mode)
+    }
+
+    fn validate_chain_like_nesting(&self) -> Result<(), ChainNestingError> {
+        TensorialSyntax::validate_chain_like_nesting(*self, None)
     }
 
     fn is_tensorial(&self, filter: StrictTensorFilter) -> bool {
@@ -101,6 +128,45 @@ impl AtomStructureExt for AtomView<'_> {
 pub(crate) struct TensorialSyntax;
 
 impl TensorialSyntax {
+    fn validate_chain_like_nesting(
+        value: AtomView<'_>,
+        owner: Option<Symbol>,
+    ) -> Result<(), ChainNestingError> {
+        match value {
+            AtomView::Add(sum) => {
+                for term in sum.iter() {
+                    Self::validate_chain_like_nesting(term, owner)?;
+                }
+            }
+            AtomView::Mul(product) => {
+                for factor in product.iter() {
+                    Self::validate_chain_like_nesting(factor, owner)?;
+                }
+            }
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                Self::validate_chain_like_nesting(base, owner)?;
+                Self::validate_chain_like_nesting(exponent, owner)?;
+            }
+            AtomView::Fun(function) => {
+                let symbol = function.get_symbol();
+                let chain_like = symbol == SPENSO_TAG.chain || symbol == SPENSO_TAG.trace;
+                if chain_like && let Some(outer) = owner {
+                    return Err(ChainNestingError {
+                        outer,
+                        inner: symbol,
+                    });
+                }
+                let owner = if chain_like { Some(symbol) } else { owner };
+                for argument in function.iter() {
+                    Self::validate_chain_like_nesting(argument, owner)?;
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
     pub(crate) fn function_is_tensorial(fun: FunView<'_>, filter: StrictTensorFilter) -> bool {
         let symbol = fun.get_symbol();
 
@@ -133,7 +199,8 @@ impl TensorialSyntax {
             StrictTensorFilter::Tagged => symbol.has_tag(&SPENSO_TAG.tensor),
             StrictTensorFilter::TaggedChecked => {
                 symbol.has_tag(&SPENSO_TAG.tensor)
-                    && fun.iter().any(Self::contains_representation_syntax)
+                    && (fun.get_nargs() == 0
+                        || fun.iter().any(Self::contains_representation_syntax))
             }
             StrictTensorFilter::ContainsReps => {
                 fun.iter().any(Self::contains_representation_syntax)
@@ -162,7 +229,9 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom
     fn structure_from_atom(
         value: AtomView<'_>,
         mode: StructureInferenceMode,
-    ) -> Result<PermutedStructure<Self>, StructureError> {
+    ) -> Result<Canonicalized<Self>, StructureError> {
+        TensorialSyntax::validate_chain_like_nesting(value, None)
+            .map_err(|error| StructureError::ParsingError(error.to_string()))?;
         match mode {
             StructureInferenceMode::Fast => Self::leaf_structure_from_atom(value),
             StructureInferenceMode::Expanded => Self::expanded_shorthand_structure_from_atom(value),
@@ -179,7 +248,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// syntactic tensor parsing.
     fn leaf_structure_from_atom(
         value: AtomView<'_>,
-    ) -> Result<PermutedStructure<Self>, StructureError> {
+    ) -> Result<Canonicalized<Self>, StructureError> {
         match value {
             AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.chain => {
                 Self::chain_structure_from_fun(fun)
@@ -187,7 +256,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
             AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.trace => {
                 Self::trace_structure_from_fun(fun)
             }
-            _ => Self::from_syntactic_atom(value).map(PermutedStructure::identity),
+            _ => Self::from_syntactic_atom(value).map(Canonicalized::identity),
         }
     }
 
@@ -281,7 +350,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
             for arg in fun.iter() {
                 slots.push(arg.try_into()?);
             }
-            return Ok(OrderedStructure::new(slots).structure);
+            return Ok(OrderedStructure::new(slots).into_canonical());
         }
 
         let mut slots = Vec::new();
@@ -302,7 +371,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
             }
         }
 
-        Ok(OrderedStructure::new(slots).structure)
+        Ok(OrderedStructure::new(slots).into_canonical())
     }
 
     /// Infer an `OrderedStructure` from expanded shorthand by reading graph dangling slots.
@@ -312,7 +381,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// external slots.
     fn expanded_shorthand_structure_from_atom(
         value: AtomView<'_>,
-    ) -> Result<PermutedStructure<Self>, StructureError>
+    ) -> Result<Canonicalized<Self>, StructureError>
     where
         Aind: DummyAind,
     {
@@ -332,9 +401,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// may contain other external slots, so they are scanned recursively. The
     /// symbolic placeholders `in` and `out` are just wiring labels and are not
     /// materialized as dummies in this mode.
-    fn chain_structure_from_fun(
-        fun: FunView<'_>,
-    ) -> Result<PermutedStructure<Self>, StructureError> {
+    fn chain_structure_from_fun(fun: FunView<'_>) -> Result<Canonicalized<Self>, StructureError> {
         let args = fun.iter().collect::<Vec<_>>();
         if args.len() < 2 {
             return Err(StructureError::WrongNumberOfArguments(args.len(), 2));
@@ -356,9 +423,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// `args[0]` is the traced representation, not an exposed slot. The factors
     /// are scanned for any non-placeholder slots that remain external to the
     /// trace shorthand.
-    fn trace_structure_from_fun(
-        fun: FunView<'_>,
-    ) -> Result<PermutedStructure<Self>, StructureError> {
+    fn trace_structure_from_fun(fun: FunView<'_>) -> Result<Canonicalized<Self>, StructureError> {
         let args = fun.iter().collect::<Vec<_>>();
         if args.is_empty() {
             return Err(StructureError::WrongNumberOfArguments(0, 1));
@@ -378,7 +443,7 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
     /// `EmptyStructure` instead of an explicit scalar structure.
     fn from_slots(
         slots: Vec<Slot<LibraryRep, Aind>>,
-    ) -> Result<PermutedStructure<Self>, StructureError> {
+    ) -> Result<Canonicalized<Self>, StructureError> {
         if slots.is_empty() {
             Err(StructureError::EmptyStructure(SlotError::EmptyStructure))
         } else {
@@ -403,7 +468,9 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom for ShadowedStr
     fn structure_from_atom(
         value: AtomView<'_>,
         mode: StructureInferenceMode,
-    ) -> Result<PermutedStructure<Self>, StructureError> {
+    ) -> Result<Canonicalized<Self>, StructureError> {
+        TensorialSyntax::validate_chain_like_nesting(value, None)
+            .map_err(|error| StructureError::ParsingError(error.to_string()))?;
         match mode {
             StructureInferenceMode::Fast => Self::from_fast_atom(value),
             StructureInferenceMode::Expanded => {
@@ -416,12 +483,14 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom for ShadowedStr
 
 impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind> {
     /// Infer a named structure with the fast syntactic conventions.
-    fn from_fast_atom(value: AtomView<'_>) -> Result<PermutedStructure<Self>, StructureError> {
+    fn from_fast_atom(value: AtomView<'_>) -> Result<Canonicalized<Self>, StructureError> {
         match value {
             AtomView::Fun(fun)
                 if fun.get_symbol() != SPENSO_TAG.chain && fun.get_symbol() != SPENSO_TAG.trace =>
             {
-                OrderedStructure::<LibraryRep, Aind>::from_syntactic_atom(value)?;
+                if !fun.get_symbol().has_tag(&SPENSO_TAG.tensor) {
+                    OrderedStructure::<LibraryRep, Aind>::from_syntactic_atom(value)?;
+                }
                 Self::from_fast_function(fun)
             }
             _ => OrderedStructure::<LibraryRep, Aind>::leaf_structure_from_atom(value)
@@ -432,9 +501,10 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
     /// Infer a named structure from an ordinary function leaf.
     ///
     /// Direct slot arguments define the exposed structure. Nested `aind(...)`
-    /// bundles are flattened, while non-structural arguments are retained as
-    /// metadata on the named leaf.
-    fn from_fast_function(value: FunView<'_>) -> Result<PermutedStructure<Self>, StructureError> {
+    /// bundles are flattened and malformed bundles return their slot parsing
+    /// error, while non-structural arguments are retained as metadata on the
+    /// named leaf.
+    fn from_fast_function(value: FunView<'_>) -> Result<Canonicalized<Self>, StructureError> {
         match value.get_symbol() {
             s if s == AIND_SYMBOLS.aind => {
                 let mut structure = Vec::new();
@@ -442,7 +512,7 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
                     structure.push(arg.try_into()?);
                 }
 
-                Ok(OrderedStructure::new(structure).map_structure(Into::into))
+                Ok(OrderedStructure::new(structure).map_canonical(Into::into))
             }
             name => {
                 let mut args = Vec::new();
@@ -459,15 +529,11 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
                         Err(err) => {
                             if let AtomView::Fun(fun) = arg
                                 && fun.get_symbol() == AIND_SYMBOLS.aind
-                                && let Ok(structure) = Self::from_fast_function(fun)
                             {
-                                let mut internal_slots = structure.structure.structure.structure;
-                                structure
-                                    .index_permutation
-                                    .apply_slice_in_place_inv(&mut internal_slots);
-                                structure
-                                    .rep_permutation
-                                    .apply_slice_in_place_inv(&mut internal_slots);
+                                let structure = Self::from_fast_function(fun)?;
+                                let internal_slots = structure.layout().canonical_to_logical(
+                                    &structure.canonical().external_structure(),
+                                );
                                 slots.extend(internal_slots);
                                 is_structure = None;
                                 continue;
@@ -480,17 +546,20 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
                     }
                 }
 
-                if let Some(err) = is_structure {
+                if let Some(err) = is_structure
+                    && !name.has_tag(&SPENSO_TAG.tensor)
+                {
                     return Err(err);
                 }
 
-                let mut structure: PermutedStructure<Self> =
-                    OrderedStructure::new(slots).map_structure(Into::into);
-                structure.structure.set_name(name);
-                if !args.is_empty() {
-                    structure.structure.additional_args = Some(args);
-                }
-                Ok(structure)
+                Ok(OrderedStructure::new(slots).map_canonical(|structure| {
+                    let mut structure: Self = structure.into();
+                    structure.set_name(name);
+                    if !args.is_empty() {
+                        structure.additional_args = Some(args);
+                    }
+                    structure
+                }))
             }
         }
     }
@@ -498,9 +567,9 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
     /// Wrap an inferred ordered structure with the original symbolic leaf name.
     fn from_ordered_atom(
         value: AtomView<'_>,
-        structure: PermutedStructure<OrderedStructure<LibraryRep, Aind>>,
-    ) -> PermutedStructure<Self> {
-        structure.map_structure(|structure| {
+        structure: Canonicalized<OrderedStructure<LibraryRep, Aind>>,
+    ) -> Canonicalized<Self> {
+        structure.map_canonical(|structure| {
             let mut named = NamedStructure::from(structure);
             if let AtomView::Fun(fun) = value {
                 named.global_name = Some(fun.get_symbol());
@@ -576,6 +645,8 @@ mod tests {
         let scalar = function!(symbol!("f"), Atom::num(1));
         let scalar_with_tensor_arg = function!(symbol!("f"), rep.to_symbolic([]));
         let tagged_scalar = function!(tensor_symbol!(structure_inference_t), Atom::num(1));
+        let tagged_rank_zero =
+            FunctionBuilder::new(tensor_symbol!(structure_inference_scalar)).finish();
         let bracketed = bracket!(compact.clone());
         let nested = scalar.clone() + compact.clone().pow(2);
 
@@ -588,10 +659,30 @@ mod tests {
         assert!(!scalar_with_tensor_arg.is_tensorial(StrictTensorFilter::Tagged));
 
         assert!(!tagged_scalar.is_tensorial(StrictTensorFilter::TaggedChecked));
+        assert!(tagged_rank_zero.is_tensorial(StrictTensorFilter::TaggedChecked));
         assert!(compact.is_tensorial(StrictTensorFilter::TaggedChecked));
 
         assert!(scalar_with_tensor_arg.is_tensorial(StrictTensorFilter::ContainsReps));
         assert!(!scalar.is_tensorial(StrictTensorFilter::ContainsReps));
+    }
+
+    #[test]
+    fn tagged_tensor_rejects_malformed_aind_bundle() {
+        let malformed_aind = FunctionBuilder::new(AIND_SYMBOLS.aind)
+            .add_arg(Atom::num(1))
+            .finish();
+        let expression = FunctionBuilder::new(tensor_symbol!(malformed_aind_tensor))
+            .add_arg(malformed_aind)
+            .finish();
+
+        let error = expression
+            .infer_structure::<ShadowedStructure<AbstractIndex>>(StructureInferenceMode::Fast)
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            StructureError::SlotError(SlotError::Composite)
+        ));
     }
 
     #[test]
@@ -641,7 +732,7 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(fast.structure.order(), expanded.structure.order());
+        assert_eq!(fast.canonical().order(), expanded.canonical().order());
     }
 
     #[test]
@@ -666,7 +757,7 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(fast.structure.order(), expanded.structure.order());
+        assert_eq!(fast.canonical().order(), expanded.canonical().order());
     }
 
     #[test]
@@ -700,6 +791,6 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(fast.structure.order(), expanded.structure.order());
+        assert_eq!(fast.canonical().order(), expanded.canonical().order());
     }
 }

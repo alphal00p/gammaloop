@@ -14,8 +14,8 @@ use spenso::{
     },
     shadowing::TensorCollectExt,
     structure::{
-        OrderedStructure, SlotIndex, StructureContract, TensorStructure,
-        permuted::PermuteTensor,
+        ApplyPendingIndexPermutation, Canonicalized, OrderedStructure, SlotIndex,
+        StructureContract, TensorStructure,
         representation::{LibraryRep, LibrarySlot},
         slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind},
     },
@@ -69,7 +69,7 @@ fn parse_tensor_factor<Aind: AbsInd + DummyAind + ParseableAind>(
 ) -> Option<SymbolicTensor<Aind>> {
     SymbolicTensor::parse(factor.as_view())
         .ok()
-        .map(|parsed| parsed.structure)
+        .map(Canonicalized::into_canonical)
 }
 
 fn direct_contract_factor_replacement<Aind: AbsInd + ParseableAind>(
@@ -460,7 +460,7 @@ fn direct_contract_expanded_sum_side<Aind: AbsInd + DummyAind + ParseableAind + 
                 let cleaned = if residual_contract_slots(&pattern_cleaned, slot_pairs).is_empty() {
                     pattern_cleaned
                 } else {
-                    recursive_schoonschip::<true, false, Aind>(&reconstructed)
+                    recursive_schoonschip::<true, false, Aind>(&reconstructed).ok()?
                 };
                 if let Some(start) = fallback_cleanup_start {
                     eprintln!(
@@ -471,7 +471,7 @@ fn direct_contract_expanded_sum_side<Aind: AbsInd + DummyAind + ParseableAind + 
                         start.elapsed()
                     );
                 }
-                (reconstructed, cleaned)
+                Some((reconstructed, cleaned))
             };
 
             if let Some(locally_cleaned_target) = cleanup_residual_target_boundaries(
@@ -500,10 +500,10 @@ fn direct_contract_expanded_sum_side<Aind: AbsInd + DummyAind + ParseableAind + 
                 if local_residual_slots.is_empty() {
                     (local_reconstructed, local_cleaned)
                 } else {
-                    fallback_distribute()
+                    fallback_distribute()?
                 }
             } else {
-                fallback_distribute()
+                fallback_distribute()?
             }
         };
         if let Some(start) = term_start {
@@ -709,9 +709,9 @@ impl<const EXPANDSUMS: bool, const RECURSE: bool, const DEPTH_FIRST: bool>
 {
     fn simplify_scalar_tensors<Aind: AbsInd + DummyAind + ParseableAind + 'static>(
         executor: &mut NetworkStore<SymbolicTensor<Aind>, Atom>,
-    ) {
+    ) -> Result<(), ContractionError> {
         if !RECURSE {
-            return;
+            return Ok(());
         }
 
         let settings = if DEPTH_FIRST {
@@ -725,11 +725,13 @@ impl<const EXPANDSUMS: bool, const RECURSE: bool, const DEPTH_FIRST: bool>
             if tensor.structure.is_scalar() && tensor.is_composite {
                 tensor.expression = tensor
                     .expression
-                    .schoonschip_with_net::<EXPANDSUMS, Aind>(&settings);
+                    .schoonschip_with_net::<EXPANDSUMS, Aind>(&settings)
+                    .map_err(|error| ContractionError::Other(eyre::Report::new(error)))?;
                 tensor.is_composite = false;
                 tensor.is_metric = false;
             }
         }
+        Ok(())
     }
 }
 
@@ -748,7 +750,7 @@ impl<
     > for SchoonschipSmallestDegree<EXPANDSUMS, RECURSE, DEPTH_FIRST>
 where
     SymbolicTensor<Aind>: ScalarMul<Atom, Output = SymbolicTensor<Aind>>
-        + PermuteTensor<Permuted = SymbolicTensor<Aind>>,
+        + ApplyPendingIndexPermutation<Output = SymbolicTensor<Aind>>,
 {
     fn contract(
         executor: &mut NetworkStore<SymbolicTensor<Aind>, Atom>,
@@ -759,7 +761,7 @@ where
     {
         let trace = trace_contraction_ordering();
         let start = trace.then(Instant::now);
-        Self::simplify_scalar_tensors(executor);
+        Self::simplify_scalar_tensors(executor)?;
         if let Some(start) = start {
             eprintln!(
                 "smallest_degree phase=pre_simplify_scalars elapsed={:.3?}",
@@ -805,7 +807,7 @@ where
         }
 
         let start = trace.then(Instant::now);
-        Self::simplify_scalar_tensors(executor);
+        Self::simplify_scalar_tensors(executor)?;
         if let Some(start) = start {
             eprintln!(
                 "smallest_degree phase=post_simplify_scalars elapsed={:.3?}",
@@ -901,7 +903,7 @@ impl<
     > for SchoonschipExpressionOrder<METRIC, EXPANDSUMS, RECURSE, DEPTH_FIRST>
 where
     SymbolicTensor<Aind>: ScalarMul<Atom, Output = SymbolicTensor<Aind>>
-        + PermuteTensor<Permuted = SymbolicTensor<Aind>>,
+        + ApplyPendingIndexPermutation<Output = SymbolicTensor<Aind>>,
 {
     fn contract(
         executor: &mut NetworkStore<SymbolicTensor<Aind>, Atom>,
@@ -912,7 +914,7 @@ where
     {
         SchoonschipSmallestDegree::<EXPANDSUMS, RECURSE, DEPTH_FIRST>::simplify_scalar_tensors(
             executor,
-        );
+        )?;
         let mut product = ProductContraction::from_operation(graph, operation)?;
         product.contract_scalars(executor, graph, lib)?;
 
@@ -974,7 +976,7 @@ where
 
         SchoonschipSmallestDegree::<EXPANDSUMS, RECURSE, DEPTH_FIRST>::simplify_scalar_tensors(
             executor,
-        );
+        )?;
         product.contract_scalars(executor, graph, lib)?;
 
         product.finish(executor, graph, lib)
@@ -996,7 +998,7 @@ impl<
     > for SchoonschipLargestDegree<EXPANDSUMS, RECURSE, DEPTH_FIRST>
 where
     SymbolicTensor<Aind>: ScalarMul<Atom, Output = SymbolicTensor<Aind>>
-        + PermuteTensor<Permuted = SymbolicTensor<Aind>>,
+        + ApplyPendingIndexPermutation<Output = SymbolicTensor<Aind>>,
 {
     fn contract(
         executor: &mut NetworkStore<SymbolicTensor<Aind>, Atom>,
@@ -1007,7 +1009,7 @@ where
     {
         SchoonschipSmallestDegree::<EXPANDSUMS, RECURSE, DEPTH_FIRST>::simplify_scalar_tensors(
             executor,
-        );
+        )?;
         let mut product = ProductContraction::from_operation(graph, operation)?;
         product.contract_scalars(executor, graph, lib)?;
 
@@ -1029,7 +1031,7 @@ where
 
         SchoonschipSmallestDegree::<EXPANDSUMS, RECURSE, DEPTH_FIRST>::simplify_scalar_tensors(
             executor,
-        );
+        )?;
         product.contract_scalars(executor, graph, lib)?;
 
         product.finish(executor, graph, lib)
@@ -1050,10 +1052,11 @@ fn recursive_schoonschip<
     Aind: AbsInd + DummyAind + ParseableAind + 'static,
 >(
     expr: &Atom,
-) -> Atom {
+) -> Result<Atom, ContractionError> {
     expr.schoonschip_with_net::<EXPANDSUMS, Aind>(
         &recursive_schoonschip_settings::<DEPTH_FIRST>().into_single_pass(),
     )
+    .map_err(|error| ContractionError::Other(eyre::Report::new(error)))
 }
 
 fn finish_contract<
@@ -1069,7 +1072,7 @@ fn finish_contract<
     if recurse_result {
         let start = trace.then(Instant::now);
         result.expression =
-            recursive_schoonschip::<EXPANDSUMS, DEPTH_FIRST, Aind>(&result.expression);
+            recursive_schoonschip::<EXPANDSUMS, DEPTH_FIRST, Aind>(&result.expression)?;
         if let Some(start) = start {
             eprintln!(
                 "finish_contract recursive terms={} bytes={} elapsed={:.3?}",
@@ -1209,8 +1212,8 @@ impl<
 
         let (sexpr, oexpr) = if RECURSE && DEPTH_FIRST {
             (
-                recursive_schoonschip::<EXPANDSUMS, DEPTH_FIRST, Aind>(&self.expression),
-                recursive_schoonschip::<EXPANDSUMS, DEPTH_FIRST, Aind>(&other.expression),
+                recursive_schoonschip::<EXPANDSUMS, DEPTH_FIRST, Aind>(&self.expression)?,
+                recursive_schoonschip::<EXPANDSUMS, DEPTH_FIRST, Aind>(&other.expression)?,
             )
         } else {
             (self.expression.clone(), other.expression.clone())
@@ -1237,8 +1240,8 @@ impl<
         if self.structure.is_scalar() || other.structure.is_scalar() {
             let (sexpr, oexpr) = if RECURSE && !DEPTH_FIRST {
                 (
-                    recursive_schoonschip::<EXPANDSUMS, DEPTH_FIRST, Aind>(&self.expression),
-                    recursive_schoonschip::<EXPANDSUMS, DEPTH_FIRST, Aind>(&other.expression),
+                    recursive_schoonschip::<EXPANDSUMS, DEPTH_FIRST, Aind>(&self.expression)?,
+                    recursive_schoonschip::<EXPANDSUMS, DEPTH_FIRST, Aind>(&other.expression)?,
                 )
             } else {
                 (sexpr, oexpr)
@@ -1375,7 +1378,8 @@ impl<
                 let fallback_start = trace.then(Instant::now);
                 let settings = recursive_schoonschip_settings::<DEPTH_FIRST>().into_single_pass();
                 let result = distribute_smallest_expanded_sum_side(&oexpr, &sexpr)
-                    .schoonschip_with_net::<false, Aind>(&settings);
+                    .schoonschip_with_net::<false, Aind>(&settings)
+                    .map_err(|error| ContractionError::Other(eyre::Report::new(error)))?;
                 if let Some(start) = fallback_start {
                     let residual_removed = removed_slots_still_in_expression(
                         self, other, &pos_self, &pos_other, &structure, &result,

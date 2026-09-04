@@ -1,8 +1,7 @@
 use idenso::{
     dirac::AGS,
     representations::{Bispinor, initialize},
-    shorthands::metric::{MetricSimplifier, PermuteWithMetric},
-    tensor::SymbolicTensor,
+    shorthands::metric::PermuteWithMetric,
 };
 use spenso::{
     network::{
@@ -11,9 +10,8 @@ use spenso::{
         parsing::{ParseSettings, StrictTensorFilter},
     },
     structure::{
-        IndexlessNamedStructure, ScalarTensor,
+        IndexlessNamedStructure, ScalarTensor, TensorStructure,
         abstract_index::AbstractIndex,
-        permuted::Perm,
         representation::{Minkowski, RepName},
     },
     tensors::parametric::ParamTensor,
@@ -25,7 +23,8 @@ use symbolica::{
 };
 
 pub fn test_initialize() {
-    let _a = HEP_LIB.get(&AGS.gamma_strct(4)).unwrap();
+    let gamma = AGS.gamma_strct(4);
+    let _a = HEP_LIB.get(gamma.canonical()).unwrap();
 
     initialize();
 }
@@ -96,13 +95,13 @@ pub fn A(
         symbol!("A"),
         None,
     );
+    let logical_indices: [AbstractIndex; 3] = [i.into(), j.into(), k.into()];
+    let storage_indices = a_strct.layout().logical_to_canonical(&logical_indices);
     a_strct
-        .reindex([i.into(), j.into(), k.into()])
+        .into_canonical()
+        .reindex_storage(&storage_indices)
         .unwrap()
-        .map_structure(|a| SymbolicTensor::from_named(&a).unwrap())
-        .permute_inds()
-        .expression
-        .simplify_metrics()
+        .permute_with_metric()
 }
 #[allow(unused)]
 #[allow(non_snake_case)]
@@ -120,13 +119,13 @@ pub fn B(
         symbol!("B"),
         None,
     );
+    let logical_indices: [AbstractIndex; 3] = [i.into(), j.into(), k.into()];
+    let storage_indices = a_strct.layout().logical_to_canonical(&logical_indices);
     a_strct
-        .reindex([i.into(), j.into(), k.into()])
+        .into_canonical()
+        .reindex_storage(&storage_indices)
         .unwrap()
-        .map_structure(|a| SymbolicTensor::from_named(&a).unwrap())
-        .permute_inds()
-        .expression
-        .simplify_metrics()
+        .permute_with_metric()
 }
 
 #[allow(unused)]
@@ -144,8 +143,11 @@ pub fn gamma(
         AGS.gamma,
         None,
     );
+    let logical_indices: [AbstractIndex; 3] = [i.into(), j.into(), mu.into()];
+    let storage_indices = gamma_strct.layout().logical_to_canonical(&logical_indices);
     gamma_strct
-        .reindex([i.into(), j.into(), mu.into()])
+        .into_canonical()
+        .reindex_storage(&storage_indices)
         .unwrap()
         .permute_with_metric()
 }
@@ -164,8 +166,11 @@ pub fn gammaadj(
         AGS.gammaadj,
         None,
     );
+    let logical_indices: [AbstractIndex; 3] = [i.into(), j.into(), mu.into()];
+    let storage_indices = gamma_strct.layout().logical_to_canonical(&logical_indices);
     gamma_strct
-        .reindex([i.into(), j.into(), mu.into()])
+        .into_canonical()
+        .reindex_storage(&storage_indices)
         .unwrap()
         .permute_with_metric()
 }
@@ -180,8 +185,11 @@ pub fn gamma0(i: impl Into<AbstractIndex>, j: impl Into<AbstractIndex>) -> Atom 
         AGS.gamma0,
         None,
     );
+    let logical_indices: [AbstractIndex; 2] = [i.into(), j.into()];
+    let storage_indices = gamma_strct.layout().logical_to_canonical(&logical_indices);
     gamma_strct
-        .reindex([i.into(), j.into()])
+        .into_canonical()
+        .reindex_storage(&storage_indices)
         .unwrap()
         .permute_with_metric()
 }
@@ -200,8 +208,11 @@ pub fn gammaconj(
         AGS.gammaconj,
         None,
     );
+    let logical_indices: [AbstractIndex; 3] = [i.into(), j.into(), mu.into()];
+    let storage_indices = gamma_strct.layout().logical_to_canonical(&logical_indices);
     gamma_strct
-        .reindex([i.into(), j.into(), mu.into()])
+        .into_canonical()
+        .reindex_storage(&storage_indices)
         .unwrap()
         .permute_with_metric()
 }

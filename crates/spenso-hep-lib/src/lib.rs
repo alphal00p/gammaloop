@@ -1,6 +1,6 @@
 use std::{ops::Neg, sync::LazyLock};
 
-use idenso::{color::CS, dirac::AGS, representations::initialize};
+use idenso::{IndexTooling, color::CS, dirac::AGS, representations::initialize};
 
 use spenso::{
     algebra::complex::Complex,
@@ -14,7 +14,10 @@ use spenso::{
         parsing::ShadowedStructure,
         store::NetworkStore,
     },
-    structure::{PermutedStructure, TensorStructure, abstract_index::AbstractIndex, slot::AbsInd},
+    structure::{
+        Canonicalized, TensorDataLayout, TensorStructure, abstract_index::AbstractIndex,
+        slot::AbsInd,
+    },
     tensors::{
         complex::RealOrComplexTensor,
         data::{SetTensorData, SparseTensor, StorageTensor},
@@ -26,8 +29,49 @@ use symbolica::{
     parse_lit,
 };
 
+struct LogicalSparseInput<T, N> {
+    layout: TensorDataLayout,
+    storage: SparseTensor<T, N>,
+}
+
+impl<T, N: TensorStructure> LogicalSparseInput<T, N> {
+    fn set(&mut self, indices: &[usize], value: T) -> Result<(), &'static str> {
+        let storage_indices = self
+            .layout
+            .logical_expanded_to_storage_expanded(indices)
+            .map_err(|_| "hard-coded logical coordinate must be in bounds")?;
+        self.storage
+            .set(&storage_indices, value)
+            .map_err(|_| "translated storage coordinate must be in bounds")
+    }
+}
+
+fn sparse_from_logical<T, N>(
+    structure: Canonicalized<N>,
+    zero: T,
+    build: impl FnOnce(&mut LogicalSparseInput<T, N>),
+) -> Canonicalized<SparseTensor<T, N>>
+where
+    N: TensorStructure,
+{
+    let layout = TensorDataLayout::from_canonicalized(&structure)
+        .expect("hard-coded tensor data requires concrete dimensions");
+    structure.map_canonical(|structure| {
+        let mut input = LogicalSparseInput {
+            layout,
+            storage: SparseTensor::empty(structure, zero),
+        };
+        build(&mut input);
+        input.storage
+    })
+}
+
 #[allow(clippy::similar_names)]
-pub fn gamma_data_dirac<T, N>(structure: N, one: T, zero: T) -> SparseTensor<Complex<T>, N>
+pub fn gamma_data_dirac<T, N>(
+    structure: Canonicalized<N>,
+    one: T,
+    zero: T,
+) -> Canonicalized<SparseTensor<Complex<T>, N>>
 where
     T: Clone + Neg<Output = T>,
     N: TensorStructure,
@@ -37,36 +81,41 @@ where
     let cn1 = Complex::<T>::new(-one.clone(), zero.clone());
     let ci = Complex::<T>::new(zero.clone(), one.clone());
     let cni = Complex::<T>::new(zero.clone(), -one.clone());
-    let mut gamma = SparseTensor::empty(structure, z);
-    // ! No check on actual structure, should expext mink,bis,bis
+    sparse_from_logical(structure, z, |gamma| {
+        // ! No check on actual structure, should expext mink,bis,bis
 
-    // dirac gamma matrices
+        // dirac gamma matrices
 
-    gamma.set(&[0, 0, 0], c1.clone()).unwrap();
-    gamma.set(&[0, 1, 1], c1.clone()).unwrap();
-    gamma.set(&[0, 2, 2], cn1.clone()).unwrap();
-    gamma.set(&[0, 3, 3], cn1.clone()).unwrap();
+        gamma.set(&[0, 0, 0], c1.clone()).unwrap();
+        gamma.set(&[0, 1, 1], c1.clone()).unwrap();
+        gamma.set(&[0, 2, 2], cn1.clone()).unwrap();
+        gamma.set(&[0, 3, 3], cn1.clone()).unwrap();
 
-    gamma.set(&[1, 0, 3], c1.clone()).unwrap();
-    gamma.set(&[1, 1, 2], c1.clone()).unwrap();
-    gamma.set(&[1, 2, 1], cn1.clone()).unwrap();
-    gamma.set(&[1, 3, 0], cn1.clone()).unwrap();
+        gamma.set(&[1, 0, 3], c1.clone()).unwrap();
+        gamma.set(&[1, 1, 2], c1.clone()).unwrap();
+        gamma.set(&[1, 2, 1], cn1.clone()).unwrap();
+        gamma.set(&[1, 3, 0], cn1.clone()).unwrap();
 
-    gamma.set(&[2, 0, 3], cni.clone()).unwrap();
-    gamma.set(&[2, 1, 2], ci.clone()).unwrap();
-    gamma.set(&[2, 2, 1], ci.clone()).unwrap();
-    gamma.set(&[2, 3, 0], cni.clone()).unwrap();
+        gamma.set(&[2, 0, 3], cni.clone()).unwrap();
+        gamma.set(&[2, 1, 2], ci.clone()).unwrap();
+        gamma.set(&[2, 2, 1], ci.clone()).unwrap();
+        gamma.set(&[2, 3, 0], cni.clone()).unwrap();
 
-    gamma.set(&[3, 0, 2], c1.clone()).unwrap();
-    gamma.set(&[3, 1, 3], cn1.clone()).unwrap();
-    gamma.set(&[3, 2, 0], cn1.clone()).unwrap();
-    gamma.set(&[3, 3, 1], c1.clone()).unwrap();
+        gamma.set(&[3, 0, 2], c1.clone()).unwrap();
+        gamma.set(&[3, 1, 3], cn1.clone()).unwrap();
+        gamma.set(&[3, 2, 0], cn1.clone()).unwrap();
+        gamma.set(&[3, 3, 1], c1.clone()).unwrap();
 
-    gamma //.to_dense()
+        // gamma.to_dense()
+    })
 }
 
 #[allow(clippy::similar_names)]
-pub fn gamma_data_weyl<T, N>(structure: N, one: T, zero: T) -> SparseTensor<Complex<T>, N>
+pub fn gamma_data_weyl<T, N>(
+    structure: Canonicalized<N>,
+    one: T,
+    zero: T,
+) -> Canonicalized<SparseTensor<Complex<T>, N>>
 where
     T: Neg<Output = T> + Clone,
     N: TensorStructure,
@@ -76,36 +125,41 @@ where
     let cn1 = Complex::<T>::new(-one.clone(), zero.clone());
     let ci = Complex::<T>::new(zero.clone(), one.clone());
     let cni = Complex::<T>::new(zero.clone(), -one.clone());
-    let mut gamma = SparseTensor::empty(structure, z);
-    // ! No check on actual structure, should expext mink,bis,bis
+    sparse_from_logical(structure, z, |gamma| {
+        // ! No check on actual structure, should expext mink,bis,bis
 
-    // dirac gamma matrices
+        // dirac gamma matrices
 
-    gamma.set(&[0, 2, 0], c1.clone()).unwrap();
-    gamma.set(&[1, 3, 0], c1.clone()).unwrap();
-    gamma.set(&[2, 0, 0], c1.clone()).unwrap();
-    gamma.set(&[3, 1, 0], c1.clone()).unwrap();
+        gamma.set(&[0, 0, 2], c1.clone()).unwrap();
+        gamma.set(&[0, 1, 3], c1.clone()).unwrap();
+        gamma.set(&[0, 2, 0], c1.clone()).unwrap();
+        gamma.set(&[0, 3, 1], c1.clone()).unwrap();
 
-    gamma.set(&[0, 3, 1], c1.clone()).unwrap();
-    gamma.set(&[1, 2, 1], c1.clone()).unwrap();
-    gamma.set(&[2, 1, 1], cn1.clone()).unwrap();
-    gamma.set(&[3, 0, 1], cn1.clone()).unwrap();
+        gamma.set(&[1, 0, 3], c1.clone()).unwrap();
+        gamma.set(&[1, 1, 2], c1.clone()).unwrap();
+        gamma.set(&[1, 2, 1], cn1.clone()).unwrap();
+        gamma.set(&[1, 3, 0], cn1.clone()).unwrap();
 
-    gamma.set(&[0, 3, 2], cni.clone()).unwrap();
-    gamma.set(&[1, 2, 2], ci.clone()).unwrap();
-    gamma.set(&[2, 1, 2], ci.clone()).unwrap();
-    gamma.set(&[3, 0, 2], cni.clone()).unwrap();
+        gamma.set(&[2, 0, 3], cni.clone()).unwrap();
+        gamma.set(&[2, 1, 2], ci.clone()).unwrap();
+        gamma.set(&[2, 2, 1], ci.clone()).unwrap();
+        gamma.set(&[2, 3, 0], cni.clone()).unwrap();
 
-    gamma.set(&[0, 2, 3], c1.clone()).unwrap();
-    gamma.set(&[1, 3, 3], cn1.clone()).unwrap();
-    gamma.set(&[2, 0, 3], cn1.clone()).unwrap();
-    gamma.set(&[3, 1, 3], c1.clone()).unwrap();
+        gamma.set(&[3, 0, 2], c1.clone()).unwrap();
+        gamma.set(&[3, 1, 3], cn1.clone()).unwrap();
+        gamma.set(&[3, 2, 0], cn1.clone()).unwrap();
+        gamma.set(&[3, 3, 1], c1.clone()).unwrap();
 
-    gamma //.to_dense()
+        // gamma.to_dense()
+    })
 }
 
 #[allow(clippy::similar_names)]
-pub fn gamma_transpose_weyl<T, N>(structure: N, one: T, zero: T) -> SparseTensor<Complex<T>, N>
+pub fn gamma_transpose_weyl<T, N>(
+    structure: Canonicalized<N>,
+    one: T,
+    zero: T,
+) -> Canonicalized<SparseTensor<Complex<T>, N>>
 where
     T: Neg<Output = T> + Clone,
     N: TensorStructure,
@@ -115,79 +169,99 @@ where
     let cn1 = Complex::<T>::new(-one.clone(), zero.clone());
     let ci = Complex::<T>::new(zero.clone(), one.clone());
     let cni = Complex::<T>::new(zero.clone(), -one.clone());
-    let mut gamma = SparseTensor::empty(structure, z);
-    // ! No check on actual structure, should expext mink,bis,bis
+    sparse_from_logical(structure, z, |gamma| {
+        // ! No check on actual structure, should expext mink,bis,bis
 
-    // dirac gamma matrices
+        // dirac gamma matrices
 
-    gamma.set(&[2, 0, 0], c1.clone()).unwrap();
-    gamma.set(&[3, 1, 0], c1.clone()).unwrap();
-    gamma.set(&[0, 2, 0], c1.clone()).unwrap();
-    gamma.set(&[1, 3, 0], c1.clone()).unwrap();
+        gamma.set(&[0, 2, 0], c1.clone()).unwrap();
+        gamma.set(&[0, 3, 1], c1.clone()).unwrap();
+        gamma.set(&[0, 0, 2], c1.clone()).unwrap();
+        gamma.set(&[0, 1, 3], c1.clone()).unwrap();
 
-    gamma.set(&[3, 0, 1], c1.clone()).unwrap();
-    gamma.set(&[2, 1, 1], c1.clone()).unwrap();
-    gamma.set(&[1, 2, 1], cn1.clone()).unwrap();
-    gamma.set(&[0, 3, 1], cn1.clone()).unwrap();
+        gamma.set(&[1, 3, 0], c1.clone()).unwrap();
+        gamma.set(&[1, 2, 1], c1.clone()).unwrap();
+        gamma.set(&[1, 1, 2], cn1.clone()).unwrap();
+        gamma.set(&[1, 0, 3], cn1.clone()).unwrap();
 
-    gamma.set(&[3, 0, 2], cni.clone()).unwrap();
-    gamma.set(&[2, 1, 2], ci.clone()).unwrap();
-    gamma.set(&[1, 2, 2], ci.clone()).unwrap();
-    gamma.set(&[0, 3, 2], cni.clone()).unwrap();
+        gamma.set(&[2, 3, 0], cni.clone()).unwrap();
+        gamma.set(&[2, 2, 1], ci.clone()).unwrap();
+        gamma.set(&[2, 1, 2], ci.clone()).unwrap();
+        gamma.set(&[2, 0, 3], cni.clone()).unwrap();
 
-    gamma.set(&[2, 0, 3], c1.clone()).unwrap();
-    gamma.set(&[3, 1, 3], cn1.clone()).unwrap();
-    gamma.set(&[0, 2, 3], cn1.clone()).unwrap();
-    gamma.set(&[1, 3, 3], c1.clone()).unwrap();
+        gamma.set(&[3, 2, 0], c1.clone()).unwrap();
+        gamma.set(&[3, 3, 1], cn1.clone()).unwrap();
+        gamma.set(&[3, 0, 2], cn1.clone()).unwrap();
+        gamma.set(&[3, 1, 3], c1.clone()).unwrap();
 
-    gamma //.to_dense()
-}
-
-#[allow(clippy::similar_names)]
-pub fn gamma_conj_data_weyl<T, N>(structure: N, one: T, zero: T) -> SparseTensor<Complex<T>, N>
-where
-    T: Neg<Output = T> + Clone,
-    N: TensorStructure,
-{
-    gamma_data_weyl(structure, one, zero).map_data(|a| {
-        let Complex { re, im } = a;
-        Complex { re, im: -im }
+        // gamma.to_dense()
     })
 }
 
 #[allow(clippy::similar_names)]
-pub fn gamma_adj_data_weyl<T, N>(structure: N, one: T, zero: T) -> SparseTensor<Complex<T>, N>
+pub fn gamma_conj_data_weyl<T, N>(
+    structure: Canonicalized<N>,
+    one: T,
+    zero: T,
+) -> Canonicalized<SparseTensor<Complex<T>, N>>
 where
     T: Neg<Output = T> + Clone,
     N: TensorStructure,
 {
-    gamma_transpose_weyl(structure, one, zero).map_data(|a| {
-        let Complex { re, im } = a;
-        Complex { re, im: -im }
+    gamma_data_weyl(structure, one, zero).map_canonical(|tensor| {
+        tensor.map_data(|a| {
+            let Complex { re, im } = a;
+            Complex { re, im: -im }
+        })
     })
 }
 
-pub fn gamma0_weyl<T, N>(structure: N, one: T, zero: T) -> SparseTensor<Complex<T>, N>
+#[allow(clippy::similar_names)]
+pub fn gamma_adj_data_weyl<T, N>(
+    structure: Canonicalized<N>,
+    one: T,
+    zero: T,
+) -> Canonicalized<SparseTensor<Complex<T>, N>>
+where
+    T: Neg<Output = T> + Clone,
+    N: TensorStructure,
+{
+    gamma_transpose_weyl(structure, one, zero).map_canonical(|tensor| {
+        tensor.map_data(|a| {
+            let Complex { re, im } = a;
+            Complex { re, im: -im }
+        })
+    })
+}
+
+pub fn gamma0_weyl<T, N>(
+    structure: Canonicalized<N>,
+    one: T,
+    zero: T,
+) -> Canonicalized<SparseTensor<Complex<T>, N>>
 where
     T: Clone,
     N: TensorStructure,
 {
     let c1 = Complex::<T>::new(one, zero.clone());
     let z = Complex::<T>::new(zero.clone(), zero.clone());
-    let mut gamma0 = SparseTensor::empty(structure, z);
-    // ! No check on actual structure, should expext bis,bis,lor
+    sparse_from_logical(structure, z, |gamma0| {
+        // ! No check on actual structure, should expext bis,bis,lor
 
-    // dirac gamma0 matrices
+        // dirac gamma0 matrices
 
-    gamma0.set(&[0, 2], c1.clone()).unwrap();
-    gamma0.set(&[1, 3], c1.clone()).unwrap();
-    gamma0.set(&[2, 0], c1.clone()).unwrap();
-    gamma0.set(&[3, 1], c1.clone()).unwrap();
-
-    gamma0
+        gamma0.set(&[0, 2], c1.clone()).unwrap();
+        gamma0.set(&[1, 3], c1.clone()).unwrap();
+        gamma0.set(&[2, 0], c1.clone()).unwrap();
+        gamma0.set(&[3, 1], c1.clone()).unwrap();
+    })
 }
 
-pub fn gamma5_dirac_data<T, N>(structure: N, one: T, zero: T) -> SparseTensor<Complex<T>, N>
+pub fn gamma5_dirac_data<T, N>(
+    structure: Canonicalized<N>,
+    one: T,
+    zero: T,
+) -> Canonicalized<SparseTensor<Complex<T>, N>>
 where
     T: Clone,
     N: TensorStructure,
@@ -195,17 +269,19 @@ where
     let c1 = Complex::<T>::new(one, zero.clone());
 
     let z = Complex::<T>::new(zero.clone(), zero.clone());
-    let mut gamma5 = SparseTensor::empty(structure, z);
-
-    gamma5.set(&[0, 2], c1.clone()).unwrap();
-    gamma5.set(&[1, 3], c1.clone()).unwrap();
-    gamma5.set(&[2, 0], c1.clone()).unwrap();
-    gamma5.set(&[3, 1], c1.clone()).unwrap();
-
-    gamma5
+    sparse_from_logical(structure, z, |gamma5| {
+        gamma5.set(&[0, 2], c1.clone()).unwrap();
+        gamma5.set(&[1, 3], c1.clone()).unwrap();
+        gamma5.set(&[2, 0], c1.clone()).unwrap();
+        gamma5.set(&[3, 1], c1.clone()).unwrap();
+    })
 }
 
-pub fn gamma5_weyl_data<T, N>(structure: N, one: T, zero: T) -> SparseTensor<Complex<T>, N>
+pub fn gamma5_weyl_data<T, N>(
+    structure: Canonicalized<N>,
+    one: T,
+    zero: T,
+) -> Canonicalized<SparseTensor<Complex<T>, N>>
 where
     T: Clone + Neg<Output = T>,
     N: TensorStructure,
@@ -213,18 +289,20 @@ where
     let z = Complex::<T>::new(zero.clone(), zero.clone());
     let c1 = Complex::<T>::new(one, zero);
 
-    let mut gamma5 = SparseTensor::empty(structure, z);
-
-    gamma5.set(&[0, 0], -c1.clone()).unwrap();
-    gamma5.set(&[1, 1], -c1.clone()).unwrap();
-    gamma5.set(&[2, 2], c1.clone()).unwrap();
-    gamma5.set(&[3, 3], c1.clone()).unwrap();
-
-    gamma5
+    sparse_from_logical(structure, z, |gamma5| {
+        gamma5.set(&[0, 0], -c1.clone()).unwrap();
+        gamma5.set(&[1, 1], -c1.clone()).unwrap();
+        gamma5.set(&[2, 2], c1.clone()).unwrap();
+        gamma5.set(&[3, 3], c1.clone()).unwrap();
+    })
 }
 
 #[allow(clippy::similar_names)]
-pub fn proj_m_data_dirac<T, N>(structure: N, half: T, zero: T) -> SparseTensor<Complex<T>, N>
+pub fn proj_m_data_dirac<T, N>(
+    structure: Canonicalized<N>,
+    half: T,
+    zero: T,
+) -> Canonicalized<SparseTensor<Complex<T>, N>>
 where
     T: Clone + Neg<Output = T>,
     N: TensorStructure,
@@ -235,23 +313,25 @@ where
     let chalf = Complex::<T>::new(half.clone(), zero.clone());
     let cnhalf = Complex::<T>::new(-half, zero);
 
-    let mut proj_m = SparseTensor::empty(structure, z);
+    sparse_from_logical(structure, z, |proj_m| {
+        proj_m.set(&[0, 0], chalf.clone()).unwrap();
+        proj_m.set(&[1, 1], chalf.clone()).unwrap();
+        proj_m.set(&[2, 2], chalf.clone()).unwrap();
+        proj_m.set(&[3, 3], chalf.clone()).unwrap();
 
-    proj_m.set(&[0, 0], chalf.clone()).unwrap();
-    proj_m.set(&[1, 1], chalf.clone()).unwrap();
-    proj_m.set(&[2, 2], chalf.clone()).unwrap();
-    proj_m.set(&[3, 3], chalf.clone()).unwrap();
-
-    proj_m.set(&[0, 2], cnhalf.clone()).unwrap();
-    proj_m.set(&[1, 3], cnhalf.clone()).unwrap();
-    proj_m.set(&[2, 0], cnhalf.clone()).unwrap();
-    proj_m.set(&[3, 1], cnhalf.clone()).unwrap();
-
-    proj_m
+        proj_m.set(&[0, 2], cnhalf.clone()).unwrap();
+        proj_m.set(&[1, 3], cnhalf.clone()).unwrap();
+        proj_m.set(&[2, 0], cnhalf.clone()).unwrap();
+        proj_m.set(&[3, 1], cnhalf.clone()).unwrap();
+    })
 }
 
 #[allow(clippy::similar_names)]
-pub fn proj_m_data_weyl<T, N>(structure: N, one: T, zero: T) -> SparseTensor<Complex<T>, N>
+pub fn proj_m_data_weyl<T, N>(
+    structure: Canonicalized<N>,
+    one: T,
+    zero: T,
+) -> Canonicalized<SparseTensor<Complex<T>, N>>
 where
     T: Clone,
     N: TensorStructure,
@@ -259,15 +339,17 @@ where
     let z = Complex::<T>::new(zero.clone(), zero.clone());
     // ProjM(1,2) Left chirality projector (( 1−γ5)/ 2 )_s1_s2
     let c1 = Complex::<T>::new(one, zero);
-    let mut proj_m = SparseTensor::empty(structure, z);
-
-    proj_m.set(&[0, 0], c1.clone()).unwrap();
-    proj_m.set(&[1, 1], c1.clone()).unwrap();
-
-    proj_m
+    sparse_from_logical(structure, z, |proj_m| {
+        proj_m.set(&[0, 0], c1.clone()).unwrap();
+        proj_m.set(&[1, 1], c1.clone()).unwrap();
+    })
 }
 
-pub fn proj_p_data_dirac<T, N>(structure: N, half: T, zero: T) -> SparseTensor<Complex<T>, N>
+pub fn proj_p_data_dirac<T, N>(
+    structure: Canonicalized<N>,
+    half: T,
+    zero: T,
+) -> Canonicalized<SparseTensor<Complex<T>, N>>
 where
     T: Clone,
     N: TensorStructure,
@@ -276,39 +358,41 @@ where
     // ProjP(1,2) Right chirality projector (( 1+γ5)/ 2 )_s1_s2
     let chalf = Complex::<T>::new(half, zero);
 
-    let mut proj_p = SparseTensor::empty(structure, z);
+    sparse_from_logical(structure, z, |proj_p| {
+        proj_p
+            .set(&[0, 0], chalf.clone())
+            .unwrap_or_else(|_| unreachable!());
+        proj_p
+            .set(&[1, 1], chalf.clone())
+            .unwrap_or_else(|_| unreachable!());
+        proj_p
+            .set(&[2, 2], chalf.clone())
+            .unwrap_or_else(|_| unreachable!());
+        proj_p
+            .set(&[3, 3], chalf.clone())
+            .unwrap_or_else(|_| unreachable!());
 
-    proj_p
-        .set(&[0, 0], chalf.clone())
-        .unwrap_or_else(|_| unreachable!());
-    proj_p
-        .set(&[1, 1], chalf.clone())
-        .unwrap_or_else(|_| unreachable!());
-    proj_p
-        .set(&[2, 2], chalf.clone())
-        .unwrap_or_else(|_| unreachable!());
-    proj_p
-        .set(&[3, 3], chalf.clone())
-        .unwrap_or_else(|_| unreachable!());
-
-    proj_p
-        .set(&[0, 2], chalf.clone())
-        .unwrap_or_else(|_| unreachable!());
-    proj_p
-        .set(&[1, 3], chalf.clone())
-        .unwrap_or_else(|_| unreachable!());
-    proj_p
-        .set(&[2, 0], chalf.clone())
-        .unwrap_or_else(|_| unreachable!());
-    proj_p
-        .set(&[3, 1], chalf.clone())
-        .unwrap_or_else(|_| unreachable!());
-
-    proj_p
+        proj_p
+            .set(&[0, 2], chalf.clone())
+            .unwrap_or_else(|_| unreachable!());
+        proj_p
+            .set(&[1, 3], chalf.clone())
+            .unwrap_or_else(|_| unreachable!());
+        proj_p
+            .set(&[2, 0], chalf.clone())
+            .unwrap_or_else(|_| unreachable!());
+        proj_p
+            .set(&[3, 1], chalf.clone())
+            .unwrap_or_else(|_| unreachable!());
+    })
 }
 
 #[allow(clippy::similar_names)]
-pub fn proj_p_data_weyl<T, N>(structure: N, one: T, zero: T) -> SparseTensor<Complex<T>, N>
+pub fn proj_p_data_weyl<T, N>(
+    structure: Canonicalized<N>,
+    one: T,
+    zero: T,
+) -> Canonicalized<SparseTensor<Complex<T>, N>>
 where
     T: Clone,
     N: TensorStructure,
@@ -316,63 +400,64 @@ where
     let z = Complex::<T>::new(zero.clone(), zero.clone());
     // ProjM(1,2) Left chirality projector (( 1−γ5)/ 2 )_s1_s2
     let c1 = Complex::<T>::new(one, zero);
-    let mut proj_p = SparseTensor::empty(structure, z);
-
-    proj_p.set(&[2, 2], c1.clone()).unwrap();
-    proj_p.set(&[3, 3], c1.clone()).unwrap();
-
-    proj_p
+    sparse_from_logical(structure, z, |proj_p| {
+        proj_p.set(&[2, 2], c1.clone()).unwrap();
+        proj_p.set(&[3, 3], c1.clone()).unwrap();
+    })
 }
 
 /// Fundamental SU(3) generators in the normalization `Tr(T^a T^b)=1/2 delta^{ab}`.
 ///
 /// The index order follows [`CS.t_strct`]: adjoint, fundamental, anti-fundamental.
-pub fn su3_generator_data<N>(structure: N) -> SparseTensor<Complex<f64>, N>
+pub fn su3_generator_data<N>(
+    structure: Canonicalized<N>,
+) -> Canonicalized<SparseTensor<Complex<f64>, N>>
 where
     N: TensorStructure,
 {
     let z = Complex::new(0., 0.);
-    let mut t = SparseTensor::empty(structure, z);
     let h = 0.5;
     let s = 1. / (2. * 3_f64.sqrt());
+    sparse_from_logical(structure, z, |t| {
+        t.set(&[0, 0, 1], Complex::new(h, 0.)).unwrap();
+        t.set(&[0, 1, 0], Complex::new(h, 0.)).unwrap();
 
-    t.set(&[0, 0, 1], Complex::new(h, 0.)).unwrap();
-    t.set(&[0, 1, 0], Complex::new(h, 0.)).unwrap();
+        t.set(&[1, 0, 1], Complex::new(0., -h)).unwrap();
+        t.set(&[1, 1, 0], Complex::new(0., h)).unwrap();
 
-    t.set(&[1, 0, 1], Complex::new(0., -h)).unwrap();
-    t.set(&[1, 1, 0], Complex::new(0., h)).unwrap();
+        t.set(&[2, 0, 0], Complex::new(h, 0.)).unwrap();
+        t.set(&[2, 1, 1], Complex::new(-h, 0.)).unwrap();
 
-    t.set(&[2, 0, 0], Complex::new(h, 0.)).unwrap();
-    t.set(&[2, 1, 1], Complex::new(-h, 0.)).unwrap();
+        t.set(&[3, 0, 2], Complex::new(h, 0.)).unwrap();
+        t.set(&[3, 2, 0], Complex::new(h, 0.)).unwrap();
 
-    t.set(&[3, 0, 2], Complex::new(h, 0.)).unwrap();
-    t.set(&[3, 2, 0], Complex::new(h, 0.)).unwrap();
+        t.set(&[4, 0, 2], Complex::new(0., -h)).unwrap();
+        t.set(&[4, 2, 0], Complex::new(0., h)).unwrap();
 
-    t.set(&[4, 0, 2], Complex::new(0., -h)).unwrap();
-    t.set(&[4, 2, 0], Complex::new(0., h)).unwrap();
+        t.set(&[5, 1, 2], Complex::new(h, 0.)).unwrap();
+        t.set(&[5, 2, 1], Complex::new(h, 0.)).unwrap();
 
-    t.set(&[5, 1, 2], Complex::new(h, 0.)).unwrap();
-    t.set(&[5, 2, 1], Complex::new(h, 0.)).unwrap();
+        t.set(&[6, 1, 2], Complex::new(0., -h)).unwrap();
+        t.set(&[6, 2, 1], Complex::new(0., h)).unwrap();
 
-    t.set(&[6, 1, 2], Complex::new(0., -h)).unwrap();
-    t.set(&[6, 2, 1], Complex::new(0., h)).unwrap();
-
-    t.set(&[7, 0, 0], Complex::new(s, 0.)).unwrap();
-    t.set(&[7, 1, 1], Complex::new(s, 0.)).unwrap();
-    t.set(&[7, 2, 2], Complex::new(-2. * s, 0.)).unwrap();
-
-    t
+        t.set(&[7, 0, 0], Complex::new(s, 0.)).unwrap();
+        t.set(&[7, 1, 1], Complex::new(s, 0.)).unwrap();
+        t.set(&[7, 2, 2], Complex::new(-2. * s, 0.)).unwrap();
+    })
 }
 
 /// SU(3) structure constants for `[T^a,T^b]=i f^{abc} T^c`.
-pub fn su3_structure_f_data<N>(structure: N) -> SparseTensor<f64, N>
+pub fn su3_structure_f_data<N>(structure: Canonicalized<N>) -> Canonicalized<SparseTensor<f64, N>>
 where
     N: TensorStructure,
 {
-    let mut f = SparseTensor::empty(structure, 0.);
-
-    fn set_antisymmetric<N>(f: &mut SparseTensor<f64, N>, a: usize, b: usize, c: usize, value: f64)
-    where
+    fn set_antisymmetric<N>(
+        f: &mut LogicalSparseInput<f64, N>,
+        a: usize,
+        b: usize,
+        c: usize,
+        value: f64,
+    ) where
         N: TensorStructure,
     {
         f.set(&[a, b, c], value).unwrap();
@@ -383,66 +468,66 @@ where
         f.set(&[c, b, a], -value).unwrap();
     }
 
-    set_antisymmetric(&mut f, 0, 1, 2, 1.);
-    set_antisymmetric(&mut f, 0, 3, 6, 0.5);
-    set_antisymmetric(&mut f, 0, 4, 5, -0.5);
-    set_antisymmetric(&mut f, 1, 3, 5, 0.5);
-    set_antisymmetric(&mut f, 1, 4, 6, 0.5);
-    set_antisymmetric(&mut f, 2, 3, 4, 0.5);
-    set_antisymmetric(&mut f, 2, 5, 6, -0.5);
-    set_antisymmetric(&mut f, 3, 4, 7, 3_f64.sqrt() / 2.);
-    set_antisymmetric(&mut f, 5, 6, 7, 3_f64.sqrt() / 2.);
-
-    f
+    sparse_from_logical(structure, 0., |f| {
+        set_antisymmetric(f, 0, 1, 2, 1.);
+        set_antisymmetric(f, 0, 3, 6, 0.5);
+        set_antisymmetric(f, 0, 4, 5, -0.5);
+        set_antisymmetric(f, 1, 3, 5, 0.5);
+        set_antisymmetric(f, 1, 4, 6, 0.5);
+        set_antisymmetric(f, 2, 3, 4, 0.5);
+        set_antisymmetric(f, 2, 5, 6, -0.5);
+        set_antisymmetric(f, 3, 4, 7, 3_f64.sqrt() / 2.);
+        set_antisymmetric(f, 5, 6, 7, 3_f64.sqrt() / 2.);
+    })
 }
 
 /// Exact Atom-backed SU(3) generators, useful for symbolic tensor libraries.
-pub fn su3_generator_data_atom<N>(structure: N) -> SparseTensor<Atom, N>
+pub fn su3_generator_data_atom<N>(
+    structure: Canonicalized<N>,
+) -> Canonicalized<SparseTensor<Atom, N>>
 where
     N: TensorStructure,
 {
-    let mut t = SparseTensor::empty(structure, Atom::Zero);
     let half = Atom::num(1) / Atom::num(2);
     let sqrt3 = parse_lit!(sqrt(3));
     let t8 = sqrt3.clone() / Atom::num(6);
+    sparse_from_logical(structure, Atom::Zero, |t| {
+        t.set(&[0, 0, 1], half.clone()).unwrap();
+        t.set(&[0, 1, 0], half.clone()).unwrap();
 
-    t.set(&[0, 0, 1], half.clone()).unwrap();
-    t.set(&[0, 1, 0], half.clone()).unwrap();
+        t.set(&[1, 0, 1], -Atom::i() * half.clone()).unwrap();
+        t.set(&[1, 1, 0], Atom::i() * half.clone()).unwrap();
 
-    t.set(&[1, 0, 1], -Atom::i() * half.clone()).unwrap();
-    t.set(&[1, 1, 0], Atom::i() * half.clone()).unwrap();
+        t.set(&[2, 0, 0], half.clone()).unwrap();
+        t.set(&[2, 1, 1], -half.clone()).unwrap();
 
-    t.set(&[2, 0, 0], half.clone()).unwrap();
-    t.set(&[2, 1, 1], -half.clone()).unwrap();
+        t.set(&[3, 0, 2], half.clone()).unwrap();
+        t.set(&[3, 2, 0], half.clone()).unwrap();
 
-    t.set(&[3, 0, 2], half.clone()).unwrap();
-    t.set(&[3, 2, 0], half.clone()).unwrap();
+        t.set(&[4, 0, 2], -Atom::i() * half.clone()).unwrap();
+        t.set(&[4, 2, 0], Atom::i() * half.clone()).unwrap();
 
-    t.set(&[4, 0, 2], -Atom::i() * half.clone()).unwrap();
-    t.set(&[4, 2, 0], Atom::i() * half.clone()).unwrap();
+        t.set(&[5, 1, 2], half.clone()).unwrap();
+        t.set(&[5, 2, 1], half.clone()).unwrap();
 
-    t.set(&[5, 1, 2], half.clone()).unwrap();
-    t.set(&[5, 2, 1], half.clone()).unwrap();
+        t.set(&[6, 1, 2], -Atom::i() * half).unwrap();
+        t.set(&[6, 2, 1], Atom::i() / Atom::num(2)).unwrap();
 
-    t.set(&[6, 1, 2], -Atom::i() * half).unwrap();
-    t.set(&[6, 2, 1], Atom::i() / Atom::num(2)).unwrap();
-
-    t.set(&[7, 0, 0], t8.clone()).unwrap();
-    t.set(&[7, 1, 1], t8.clone()).unwrap();
-    t.set(&[7, 2, 2], -sqrt3 / Atom::num(3)).unwrap();
-
-    t
+        t.set(&[7, 0, 0], t8.clone()).unwrap();
+        t.set(&[7, 1, 1], t8.clone()).unwrap();
+        t.set(&[7, 2, 2], -sqrt3 / Atom::num(3)).unwrap();
+    })
 }
 
 /// Exact Atom-backed SU(3) structure constants.
-pub fn su3_structure_f_data_atom<N>(structure: N) -> SparseTensor<Atom, N>
+pub fn su3_structure_f_data_atom<N>(
+    structure: Canonicalized<N>,
+) -> Canonicalized<SparseTensor<Atom, N>>
 where
     N: TensorStructure,
 {
-    let mut f = SparseTensor::empty(structure, Atom::Zero);
-
     fn set_antisymmetric<N>(
-        f: &mut SparseTensor<Atom, N>,
+        f: &mut LogicalSparseInput<Atom, N>,
         a: usize,
         b: usize,
         c: usize,
@@ -461,21 +546,25 @@ where
     let half = Atom::num(1) / Atom::num(2);
     let sqrt3_half = parse_lit!(sqrt(3)) / Atom::num(2);
 
-    set_antisymmetric(&mut f, 0, 1, 2, Atom::num(1));
-    set_antisymmetric(&mut f, 0, 3, 6, half.clone());
-    set_antisymmetric(&mut f, 0, 4, 5, -half.clone());
-    set_antisymmetric(&mut f, 1, 3, 5, half.clone());
-    set_antisymmetric(&mut f, 1, 4, 6, half.clone());
-    set_antisymmetric(&mut f, 2, 3, 4, half.clone());
-    set_antisymmetric(&mut f, 2, 5, 6, -half);
-    set_antisymmetric(&mut f, 3, 4, 7, sqrt3_half.clone());
-    set_antisymmetric(&mut f, 5, 6, 7, sqrt3_half);
-
-    f
+    sparse_from_logical(structure, Atom::Zero, |f| {
+        set_antisymmetric(f, 0, 1, 2, Atom::num(1));
+        set_antisymmetric(f, 0, 3, 6, half.clone());
+        set_antisymmetric(f, 0, 4, 5, -half.clone());
+        set_antisymmetric(f, 1, 3, 5, half.clone());
+        set_antisymmetric(f, 1, 4, 6, half.clone());
+        set_antisymmetric(f, 2, 3, 4, half.clone());
+        set_antisymmetric(f, 2, 5, 6, -half);
+        set_antisymmetric(f, 3, 4, 7, sqrt3_half.clone());
+        set_antisymmetric(f, 5, 6, 7, sqrt3_half);
+    })
 }
 
 #[allow(clippy::similar_names)]
-pub fn sigma_data<T, N>(structure: N, one: T, zero: T) -> SparseTensor<Complex<T>, N>
+pub fn sigma_data<T, N>(
+    structure: Canonicalized<N>,
+    one: T,
+    zero: T,
+) -> Canonicalized<SparseTensor<Complex<T>, N>>
 where
     T: Clone + Neg<Output = T>,
     N: TensorStructure,
@@ -486,57 +575,56 @@ where
     let ci = Complex::<T>::new(zero.clone(), one.clone());
     let cni = Complex::<T>::new(zero.clone(), -one.clone());
 
-    let mut sigma = SparseTensor::empty(structure, z);
-    sigma.set(&[0, 2, 0, 1], c1.clone()).unwrap();
-    sigma.set(&[0, 2, 3, 0], c1.clone()).unwrap();
-    sigma.set(&[0, 3, 1, 2], c1.clone()).unwrap();
-    sigma.set(&[1, 0, 2, 2], c1.clone()).unwrap();
-    sigma.set(&[1, 1, 1, 2], c1.clone()).unwrap();
-    sigma.set(&[1, 3, 0, 2], c1.clone()).unwrap();
-    sigma.set(&[2, 2, 1, 0], c1.clone()).unwrap();
-    sigma.set(&[2, 2, 2, 1], c1.clone()).unwrap();
-    sigma.set(&[2, 3, 3, 2], c1.clone()).unwrap();
-    sigma.set(&[3, 0, 0, 2], c1.clone()).unwrap();
-    sigma.set(&[3, 3, 2, 2], c1.clone()).unwrap();
-    sigma.set(&[3, 1, 3, 2], c1.clone()).unwrap();
-    sigma.set(&[0, 1, 3, 0], ci.clone()).unwrap();
-    sigma.set(&[0, 3, 1, 1], ci.clone()).unwrap();
-    sigma.set(&[0, 3, 2, 0], ci.clone()).unwrap();
-    sigma.set(&[1, 0, 3, 3], ci.clone()).unwrap();
-    sigma.set(&[1, 1, 0, 3], ci.clone()).unwrap();
-    sigma.set(&[1, 1, 2, 0], ci.clone()).unwrap();
-    sigma.set(&[2, 1, 1, 0], ci.clone()).unwrap();
-    sigma.set(&[2, 3, 0, 0], ci.clone()).unwrap();
-    sigma.set(&[2, 3, 3, 1], ci.clone()).unwrap();
-    sigma.set(&[3, 0, 1, 3], ci.clone()).unwrap();
-    sigma.set(&[3, 1, 0, 0], ci.clone()).unwrap();
-    sigma.set(&[3, 1, 2, 3], ci.clone()).unwrap();
-    sigma.set(&[0, 0, 3, 2], cn1.clone()).unwrap();
-    sigma.set(&[0, 1, 0, 2], cn1.clone()).unwrap();
-    sigma.set(&[0, 2, 1, 3], cn1.clone()).unwrap();
-    sigma.set(&[1, 2, 0, 3], cn1.clone()).unwrap();
-    sigma.set(&[1, 2, 1, 1], cn1.clone()).unwrap();
-    sigma.set(&[1, 2, 2, 0], cn1.clone()).unwrap();
-    sigma.set(&[2, 0, 1, 2], cn1.clone()).unwrap();
-    sigma.set(&[2, 1, 2, 2], cn1.clone()).unwrap();
-    sigma.set(&[2, 2, 3, 3], cn1.clone()).unwrap();
-    sigma.set(&[3, 2, 0, 0], cn1.clone()).unwrap();
-    sigma.set(&[3, 2, 2, 3], cn1.clone()).unwrap();
-    sigma.set(&[3, 2, 3, 1], cn1.clone()).unwrap();
-    sigma.set(&[0, 0, 2, 3], cni.clone()).unwrap();
-    sigma.set(&[0, 0, 3, 1], cni.clone()).unwrap();
-    sigma.set(&[0, 1, 1, 3], cni.clone()).unwrap();
-    sigma.set(&[1, 0, 2, 1], cni.clone()).unwrap();
-    sigma.set(&[1, 3, 0, 1], cni.clone()).unwrap();
-    sigma.set(&[1, 3, 3, 0], cni.clone()).unwrap();
-    sigma.set(&[2, 0, 0, 3], cni.clone()).unwrap();
-    sigma.set(&[2, 0, 1, 1], cni.clone()).unwrap();
-    sigma.set(&[2, 1, 3, 3], cni.clone()).unwrap();
-    sigma.set(&[3, 0, 0, 1], cni.clone()).unwrap();
-    sigma.set(&[3, 3, 1, 0], cni.clone()).unwrap();
-    sigma.set(&[3, 3, 2, 1], cni.clone()).unwrap();
-
-    sigma
+    sparse_from_logical(structure, z, |sigma| {
+        sigma.set(&[0, 2, 0, 1], c1.clone()).unwrap();
+        sigma.set(&[0, 2, 3, 0], c1.clone()).unwrap();
+        sigma.set(&[0, 3, 1, 2], c1.clone()).unwrap();
+        sigma.set(&[1, 0, 2, 2], c1.clone()).unwrap();
+        sigma.set(&[1, 1, 1, 2], c1.clone()).unwrap();
+        sigma.set(&[1, 3, 0, 2], c1.clone()).unwrap();
+        sigma.set(&[2, 2, 1, 0], c1.clone()).unwrap();
+        sigma.set(&[2, 2, 2, 1], c1.clone()).unwrap();
+        sigma.set(&[2, 3, 3, 2], c1.clone()).unwrap();
+        sigma.set(&[3, 0, 0, 2], c1.clone()).unwrap();
+        sigma.set(&[3, 3, 2, 2], c1.clone()).unwrap();
+        sigma.set(&[3, 1, 3, 2], c1.clone()).unwrap();
+        sigma.set(&[0, 1, 3, 0], ci.clone()).unwrap();
+        sigma.set(&[0, 3, 1, 1], ci.clone()).unwrap();
+        sigma.set(&[0, 3, 2, 0], ci.clone()).unwrap();
+        sigma.set(&[1, 0, 3, 3], ci.clone()).unwrap();
+        sigma.set(&[1, 1, 0, 3], ci.clone()).unwrap();
+        sigma.set(&[1, 1, 2, 0], ci.clone()).unwrap();
+        sigma.set(&[2, 1, 1, 0], ci.clone()).unwrap();
+        sigma.set(&[2, 3, 0, 0], ci.clone()).unwrap();
+        sigma.set(&[2, 3, 3, 1], ci.clone()).unwrap();
+        sigma.set(&[3, 0, 1, 3], ci.clone()).unwrap();
+        sigma.set(&[3, 1, 0, 0], ci.clone()).unwrap();
+        sigma.set(&[3, 1, 2, 3], ci.clone()).unwrap();
+        sigma.set(&[0, 0, 3, 2], cn1.clone()).unwrap();
+        sigma.set(&[0, 1, 0, 2], cn1.clone()).unwrap();
+        sigma.set(&[0, 2, 1, 3], cn1.clone()).unwrap();
+        sigma.set(&[1, 2, 0, 3], cn1.clone()).unwrap();
+        sigma.set(&[1, 2, 1, 1], cn1.clone()).unwrap();
+        sigma.set(&[1, 2, 2, 0], cn1.clone()).unwrap();
+        sigma.set(&[2, 0, 1, 2], cn1.clone()).unwrap();
+        sigma.set(&[2, 1, 2, 2], cn1.clone()).unwrap();
+        sigma.set(&[2, 2, 3, 3], cn1.clone()).unwrap();
+        sigma.set(&[3, 2, 0, 0], cn1.clone()).unwrap();
+        sigma.set(&[3, 2, 2, 3], cn1.clone()).unwrap();
+        sigma.set(&[3, 2, 3, 1], cn1.clone()).unwrap();
+        sigma.set(&[0, 0, 2, 3], cni.clone()).unwrap();
+        sigma.set(&[0, 0, 3, 1], cni.clone()).unwrap();
+        sigma.set(&[0, 1, 1, 3], cni.clone()).unwrap();
+        sigma.set(&[1, 0, 2, 1], cni.clone()).unwrap();
+        sigma.set(&[1, 3, 0, 1], cni.clone()).unwrap();
+        sigma.set(&[1, 3, 3, 0], cni.clone()).unwrap();
+        sigma.set(&[2, 0, 0, 3], cni.clone()).unwrap();
+        sigma.set(&[2, 0, 1, 1], cni.clone()).unwrap();
+        sigma.set(&[2, 1, 3, 3], cni.clone()).unwrap();
+        sigma.set(&[3, 0, 0, 1], cni.clone()).unwrap();
+        sigma.set(&[3, 3, 1, 0], cni.clone()).unwrap();
+        sigma.set(&[3, 3, 2, 1], cni.clone()).unwrap();
+    })
 }
 
 pub fn hep_lib<Aind: AbsInd, T: TensorLibraryData + Clone + Default>(
@@ -549,40 +637,35 @@ where
     initialize();
     weyl.update_ids();
 
-    let gamma_key = PermutedStructure::identity(
-        gamma_data_weyl(AGS.gamma_strct::<Aind>(4), one.clone(), zero.clone()).into(),
-    );
-    // println!("permutation{}", gamma_key.rep_permutation);
+    let gamma_key = gamma_data_weyl(AGS.gamma_strct::<Aind>(4), one.clone(), zero.clone())
+        .map_canonical(Into::into);
+    // println!("layout{:?}", gamma_key.layout());
     weyl.insert_explicit(gamma_key);
-    let gamma_conj_key = PermutedStructure::identity(
-        gamma_conj_data_weyl(AGS.gamma_conj_strct::<Aind>(4), one.clone(), zero.clone()).into(),
-    );
-    // println!("permutation{}", gamma_key.rep_permutation);
+    let gamma_conj_key =
+        gamma_conj_data_weyl(AGS.gamma_conj_strct::<Aind>(4), one.clone(), zero.clone())
+            .map_canonical(Into::into);
+    // println!("layout{:?}", gamma_key.layout());
     weyl.insert_explicit(gamma_conj_key);
-    let gamma_adj_key = PermutedStructure::identity(
-        gamma_adj_data_weyl(AGS.gamma_adj_strct::<Aind>(4), one.clone(), zero.clone()).into(),
-    );
-    // println!("permutation{}", gamma_key.rep_permutation);
+    let gamma_adj_key =
+        gamma_adj_data_weyl(AGS.gamma_adj_strct::<Aind>(4), one.clone(), zero.clone())
+            .map_canonical(Into::into);
+    // println!("layout{:?}", gamma_key.layout());
     weyl.insert_explicit(gamma_adj_key);
-    let gamma0_key = PermutedStructure::identity(
-        gamma0_weyl(AGS.gamma0_strct::<Aind>(4), one.clone(), zero.clone()).into(),
-    );
-    // println!("permutation{}", gamma_key.rep_permutation);
+    let gamma0_key = gamma0_weyl(AGS.gamma0_strct::<Aind>(4), one.clone(), zero.clone())
+        .map_canonical(Into::into);
+    // println!("layout{:?}", gamma_key.layout());
     weyl.insert_explicit(gamma0_key);
 
-    let gamma5_key = PermutedStructure::identity(
-        gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), one.clone(), zero.clone()).into(),
-    );
+    let gamma5_key = gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), one.clone(), zero.clone())
+        .map_canonical(Into::into);
     weyl.insert_explicit(gamma5_key);
 
-    let projm_key = PermutedStructure::identity(
-        proj_m_data_weyl(AGS.projm_strct::<Aind>(4), one.clone(), zero.clone()).into(),
-    );
+    let projm_key = proj_m_data_weyl(AGS.projm_strct::<Aind>(4), one.clone(), zero.clone())
+        .map_canonical(Into::into);
     weyl.insert_explicit(projm_key);
 
-    let projp_key = PermutedStructure::identity(
-        proj_p_data_weyl(AGS.projp_strct::<Aind>(4), one.clone(), zero.clone()).into(),
-    );
+    let projp_key = proj_p_data_weyl(AGS.projp_strct::<Aind>(4), one.clone(), zero.clone())
+        .map_canonical(Into::into);
     weyl.insert_explicit(projp_key);
 
     weyl
@@ -593,10 +676,10 @@ pub fn insert_su3_color_tensors<Aind: AbsInd>(
 ) {
     initialize();
 
-    let t_key = PermutedStructure::identity(su3_generator_data(CS.t_strct::<Aind>(3, 8)).into());
+    let t_key = su3_generator_data(CS.t_strct::<Aind>(3, 8)).map_canonical(Into::into);
     lib.insert_explicit(t_key);
 
-    let f_key = PermutedStructure::identity(su3_structure_f_data(CS.f_strct::<Aind>(8)).into());
+    let f_key = su3_structure_f_data(CS.f_strct::<Aind>(8)).map_canonical(Into::into);
     lib.insert_explicit(f_key);
 }
 
@@ -617,64 +700,57 @@ where
     let one = Atom::one();
     let zero = Atom::Zero;
 
-    let gamma_key = PermutedStructure::identity(ParamOrConcrete::param(
-        gamma_data_weyl(AGS.gamma_strct::<Aind>(4), one.clone(), zero.clone())
-            .map_data(|a| a.re + a.im * Atom::i())
-            .into(),
-    ));
-    // println!("permutation{}", gamma_key.rep_permutation);
+    let gamma_key = gamma_data_weyl(AGS.gamma_strct::<Aind>(4), one.clone(), zero.clone())
+        .map_canonical(|tensor| {
+            ParamOrConcrete::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into())
+        });
+    // println!("layout{:?}", gamma_key.layout());
     weyl.insert_explicit(gamma_key);
-    let gamma_conj_key = PermutedStructure::identity(ParamOrConcrete::param(
+    let gamma_conj_key =
         gamma_conj_data_weyl(AGS.gamma_conj_strct::<Aind>(4), one.clone(), zero.clone())
-            .map_data(|a| a.re + a.im * Atom::i())
-            .into(),
-    ));
-    // println!("permutation{}", gamma_key.rep_permutation);
+            .map_canonical(|tensor| {
+                ParamOrConcrete::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into())
+            });
+    // println!("layout{:?}", gamma_key.layout());
     weyl.insert_explicit(gamma_conj_key);
-    let gamma_adj_key = PermutedStructure::identity(ParamOrConcrete::param(
+    let gamma_adj_key =
         gamma_adj_data_weyl(AGS.gamma_adj_strct::<Aind>(4), one.clone(), zero.clone())
-            .map_data(|a| a.re + a.im * Atom::i())
-            .into(),
-    ));
-    // println!("permutation{}", gamma_key.rep_permutation);
+            .map_canonical(|tensor| {
+                ParamOrConcrete::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into())
+            });
+    // println!("layout{:?}", gamma_key.layout());
     weyl.insert_explicit(gamma_adj_key);
-    let gamma0_key = PermutedStructure::identity(ParamOrConcrete::param(
-        gamma0_weyl(AGS.gamma0_strct::<Aind>(4), one.clone(), zero.clone())
-            .map_data(|a| a.re + a.im * Atom::i())
-            .into(),
-    ));
-    // println!("permutation{}", gamma_key.rep_permutation);
+    let gamma0_key = gamma0_weyl(AGS.gamma0_strct::<Aind>(4), one.clone(), zero.clone())
+        .map_canonical(|tensor| {
+            ParamOrConcrete::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into())
+        });
+    // println!("layout{:?}", gamma_key.layout());
     weyl.insert_explicit(gamma0_key);
 
-    let gamma5_key = PermutedStructure::identity(ParamOrConcrete::param(
-        gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), one.clone(), zero.clone())
-            .map_data(|a| a.re + a.im * Atom::i())
-            .into(),
-    ));
+    let gamma5_key = gamma5_weyl_data(AGS.gamma5_strct::<Aind>(4), one.clone(), zero.clone())
+        .map_canonical(|tensor| {
+            ParamOrConcrete::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into())
+        });
     weyl.insert_explicit(gamma5_key);
 
-    let projm_key = PermutedStructure::identity(ParamOrConcrete::param(
-        proj_m_data_weyl(AGS.projm_strct::<Aind>(4), one.clone(), zero.clone())
-            .map_data(|a| a.re + a.im * Atom::i())
-            .into(),
-    ));
+    let projm_key = proj_m_data_weyl(AGS.projm_strct::<Aind>(4), one.clone(), zero.clone())
+        .map_canonical(|tensor| {
+            ParamOrConcrete::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into())
+        });
     weyl.insert_explicit(projm_key);
 
-    let projp_key = PermutedStructure::identity(ParamOrConcrete::param(
-        proj_p_data_weyl(AGS.projp_strct::<Aind>(4), one.clone(), zero.clone())
-            .map_data(|a| a.re + a.im * Atom::i())
-            .into(),
-    ));
+    let projp_key = proj_p_data_weyl(AGS.projp_strct::<Aind>(4), one.clone(), zero.clone())
+        .map_canonical(|tensor| {
+            ParamOrConcrete::param(tensor.map_data(|a| a.re + a.im * Atom::i()).into())
+        });
     weyl.insert_explicit(projp_key);
 
-    let color_t_key = PermutedStructure::identity(ParamOrConcrete::param(
-        su3_generator_data_atom(CS.t_strct::<Aind>(3, 8)).into(),
-    ));
+    let color_t_key = su3_generator_data_atom(CS.t_strct::<Aind>(3, 8))
+        .map_canonical(|tensor| ParamOrConcrete::param(tensor.into()));
     weyl.insert_explicit(color_t_key);
 
-    let color_f_key = PermutedStructure::identity(ParamOrConcrete::param(
-        su3_structure_f_data_atom(CS.f_strct::<Aind>(8)).into(),
-    ));
+    let color_f_key = su3_structure_f_data_atom(CS.f_strct::<Aind>(8))
+        .map_canonical(|tensor| ParamOrConcrete::param(tensor.into()));
     weyl.insert_explicit(color_f_key);
 
     weyl
@@ -697,6 +773,7 @@ pub static FUN_LIB: LazyLock<
         RealOrComplexTensor::Complex(c) => RealOrComplexTensor::Complex(c.map_data(|x| x.conj())),
         RealOrComplexTensor::Real(r) => RealOrComplexTensor::Real(r),
     });
+    lib.insert_scalar_fallible(INBUILTS.conj, |scalar| Ok(scalar.spenso_conj()));
     lib
 });
 
@@ -705,7 +782,8 @@ mod tests {
 
     use spenso::{
         network::{
-            Network, SingleSmallestDegree, SmallestDegreeIter, Steps,
+            ExecutionResult, Network, Sequential, SingleSmallestDegree, SmallestDegree,
+            SmallestDegreeIter, Steps,
             parsing::{ParseSettings, ShadowedStructure, StrictTensorFilter},
             store::NetworkStore,
         },
@@ -719,9 +797,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn scalar_conjugation_execution_preserves_exact_coefficients() {
+        initialize();
+        let mut network =
+            HepNet::<AbstractIndex>::from_scalar(parse!("1/3 + 2i/7")).fun(INBUILTS.conj);
+        network
+            .execute::<Sequential, SmallestDegree, _, _, _>(&*HEP_LIB, &*FUN_LIB)
+            .unwrap();
+        let ExecutionResult::Val(conjugated) = network.result_scalar().unwrap() else {
+            panic!("conjugation should produce a scalar value")
+        };
+
+        assert_eq!(conjugated.into_owned(), parse!("1/3 - 2i/7"));
+    }
+
+    #[test]
     fn simple_scalar() {
         initialize();
-        let _a = HEP_LIB.get(&AGS.gamma_strct(4)).unwrap();
+        let gamma = AGS.gamma_strct(4);
+        let _a = HEP_LIB.get(gamma.canonical()).unwrap();
 
         let expr = parse!("gamma(bis(4,l_5),bis(4,l_4),mink(4,l_4))*gamma(bis(4,l_6),bis(4,l_5),mink(4,l_4))*gamma(bis(4,l_4),bis(4,l_6),mink(4,l_5))*p(mink(4,l_5))
             ",default_namespace="spenso");
@@ -807,7 +901,8 @@ mod tests {
     // #[should_panic]
     fn parse_problem() {
         initialize();
-        let _a = HEP_LIB.get(&AGS.gamma_strct(4)).unwrap();
+        let gamma = AGS.gamma_strct(4);
+        let _a = HEP_LIB.get(gamma.canonical()).unwrap();
 
         let expr = parse_lit!(
             (-1 * G

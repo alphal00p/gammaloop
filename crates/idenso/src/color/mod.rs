@@ -5,7 +5,7 @@ use spenso::{
     network::{library::symbolic::ExplicitKey, tags::SPENSO_TAG as T},
     shadowing::{Collectable, IntoAtom, TensorCollectExt, symbolica_utils::SpensoPrintSettings},
     structure::{
-        TensorStructure,
+        Canonicalized, TensorStructure,
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         dimension::Dimension,
         representation::RepName,
@@ -18,7 +18,7 @@ use symbolica::{
     coefficient::CoefficientView,
     domains::rational::Rational,
     function,
-    printer::{PrintOptions, PrintState, PrintUserData},
+    printer::{PrintOptions, PrintState},
     symbol,
 };
 
@@ -51,11 +51,9 @@ pub struct ColorSymbols {
     pub fundamental_rep: Symbol,
     /// Symbol backing the color adjoint representation function.
     pub adjoint_rep: Symbol,
-    /// The adjoint representation dimension symbol, i.e. NA = Nc^2 - 1.
-    pub na: Symbol,
     /// The adjoint Casimir symbol, i.e. CA = Nc
     pub ca: Symbol,
-    /// The fundamental Casimir symbol. T^a_ij T^a_jk = CF delta_ik -> CF = TR (na/nc)
+    /// The fundamental Casimir symbol. T^a_ij T^a_jk = CF delta_ik -> CF = T_F d_A/d_F.
     pub cf: Symbol,
     /// The generator symbol
     pub t: Symbol,
@@ -175,9 +173,9 @@ impl ColorSymbols {
         &self,
         fundimd: impl Into<Dimension>,
         adim: impl Into<Dimension>,
-    ) -> ExplicitKey<Aind> {
+    ) -> Canonicalized<ExplicitKey<Aind>> {
         let nc = fundimd.into();
-        let res = ExplicitKey::from_iter(
+        ExplicitKey::from_iter(
             [
                 ColorAdjoint {}.new_rep(adim).cast(),
                 ColorFundamental {}.new_rep(nc).to_lib(),
@@ -185,9 +183,7 @@ impl ColorSymbols {
             ],
             self.t,
             None,
-        );
-        debug_assert!(res.rep_permutation.is_identity());
-        res.structure
+        )
     }
     pub fn t_pattern(
         &self,
@@ -197,15 +193,22 @@ impl ColorSymbols {
         i: impl Into<AbstractIndex>,
         j: impl Into<AbstractIndex>,
     ) -> Atom {
-        self.t_strct(fundimd, adim)
-            .reindex(&[a.into(), i.into(), j.into()])
+        let structure = self.t_strct::<AbstractIndex>(fundimd, adim);
+        let logical_indices = [a.into(), i.into(), j.into()];
+        let storage_indices = structure.layout().logical_to_canonical(&logical_indices);
+        structure
+            .into_canonical()
+            .reindex_storage(&storage_indices)
             .unwrap()
             .permute_with_metric()
     }
 
-    pub fn f_strct<Aind: AbsInd>(&self, adim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+    pub fn f_strct<Aind: AbsInd>(
+        &self,
+        adim: impl Into<Dimension>,
+    ) -> Canonicalized<ExplicitKey<Aind>> {
         let adim = adim.into();
-        let res = ExplicitKey::from_iter(
+        ExplicitKey::from_iter(
             [
                 ColorAdjoint {}.new_rep(adim),
                 ColorAdjoint {}.new_rep(adim),
@@ -213,9 +216,7 @@ impl ColorSymbols {
             ],
             self.f,
             None,
-        );
-        debug_assert!(res.rep_permutation.is_identity());
-        res.structure
+        )
     }
 
     pub fn f_pattern(
@@ -225,8 +226,12 @@ impl ColorSymbols {
         b: impl Into<AbstractIndex>,
         c: impl Into<AbstractIndex>,
     ) -> Atom {
-        self.f_strct(adim)
-            .reindex(&[a.into(), b.into(), c.into()])
+        let structure = self.f_strct::<AbstractIndex>(adim);
+        let logical_indices = [a.into(), b.into(), c.into()];
+        let storage_indices = structure.layout().logical_to_canonical(&logical_indices);
+        structure
+            .into_canonical()
+            .reindex_storage(&storage_indices)
             .unwrap()
             .permute_with_metric()
     }
@@ -244,14 +249,14 @@ fn print_color_invariant(
     opt: &PrintOptions,
     kind: ColorInvariantPrintKind,
 ) -> Option<String> {
-    match opt.custom_print_mode.get("spenso") {
-        Some(PrintUserData::Integer(i)) => {
+    match SpensoPrintSettings::resolve(opt) {
+        Some(resolved) => {
             let SpensoPrintSettings {
                 parens,
                 symbol_scripts,
                 commas,
                 ..
-            } = SpensoPrintSettings::from(*i as usize);
+            } = resolved.presentation;
 
             let AtomView::Fun(f) = atom else {
                 return None;
@@ -387,13 +392,14 @@ pub static CS, CS_INNER: ColorSymbols = || {
     ColorSymbols {
         t: tensor_symbol!("spenso::t"; Real; print = |a, opt, _state| {
 
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(i))=>{
+            match SpensoPrintSettings::resolve(opt) {
+                Some(resolved)=>{
+                    let (script_open, script_close) = resolved.script_delimiters();
                     let SpensoPrintSettings{
                         parens,
                         symbol_scripts,
                         commas,..
-                    } = SpensoPrintSettings::from(*i as usize);
+                    } = resolved.presentation;
 
 
                     let AtomView::Fun(f)=a else {
@@ -416,7 +422,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
                     }
 
                     if parens{
-                        out.push('(');
+                        out.push(script_open);
                     }
                     a.format(&mut out, opt, PrintState::new()).unwrap();
                     if commas{
@@ -426,7 +432,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
                     }
                     b.format(&mut out, opt, PrintState::new()).unwrap();
                     if parens{
-                        out.push(')');
+                        out.push(script_close);
                     }
                     if symbol_scripts{
                         out.push('_');
@@ -434,7 +440,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
 
 
                     if parens{
-                        out.push('(');
+                        out.push(script_open);
                     }else if !symbol_scripts{
                         out.push(' ');
                     }
@@ -451,7 +457,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
                     c = f.iter().next().unwrap();
                     c.format(&mut out, opt, PrintState::new()).unwrap();
                     if parens{
-                        out.push(')');
+                        out.push(script_close);
                     }
                     Some(out)
                 }
@@ -460,13 +466,14 @@ pub static CS, CS_INNER: ColorSymbols = || {
         }),
         f: tensor_symbol!("spenso::f"; Real, Antisymmetric; print = |a, opt, _state| {
 
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(i))=>{
+            match SpensoPrintSettings::resolve(opt) {
+                Some(resolved)=>{
+                    let (script_open, script_close) = resolved.script_delimiters();
                     let SpensoPrintSettings{
                         parens,
                         symbol_scripts,
                         commas,..
-                    } = SpensoPrintSettings::from(*i as usize);
+                    } = resolved.presentation;
 
 
                     let AtomView::Fun(f)=a else {
@@ -489,7 +496,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
                     }
 
                     if parens{
-                        out.push('(');
+                        out.push(script_open);
                     }
                     a.format(&mut out, opt, PrintState::new()).unwrap();
                     if commas{
@@ -505,7 +512,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
                     }
                     c.format(&mut out, opt, PrintState::new()).unwrap();
                     if parens{
-                        out.push(')');
+                        out.push(script_close);
                     }
                     Some(out)
                 }
@@ -531,7 +538,6 @@ pub static CS, CS_INNER: ColorSymbols = || {
         adjoint_rep: representation_symbol(ColorAdjoint {}.to_symbolic(std::iter::empty::<Atom>())),
         adj_: symbol!("adj_"),
         nc_: symbol!("nc_"),
-        na: symbol!("NA";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
         tr: symbol!("spenso::TR";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(1,2).to_multi_prec_float(prec).into()))),
         nc: symbol!("spenso::Nc";Real;eval = EvaluationInfo::constant(|_tags, prec| Ok(Rational::new(3,1).to_multi_prec_float(prec).into()))),
     }
@@ -583,28 +589,31 @@ impl ColorSimplifySettings {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ColorCasimirSettings {
-    /// Rewrite the fundamental dimension `Nc` using `CA = Nc`.
-    pub rewrite_nc: bool,
-    /// Rewrite the adjoint dimension `NA` using `NA = Nc^2 - 1 = 2 CA CF`.
-    pub rewrite_na: bool,
-    /// Substitute the common fundamental normalization `TR = 1/2`.
-    pub substitute_tr: bool,
+    /// Rewrite the explicit fundamental dimension using `d_F = C_A`.
+    pub rewrite_fundamental_dimension: bool,
+    /// Substitute the common fundamental normalization `T_F = 1/2`.
+    pub substitute_fundamental_index: bool,
 }
 
 impl Default for ColorCasimirSettings {
     fn default() -> Self {
         Self {
-            rewrite_nc: true,
-            rewrite_na: true,
-            substitute_tr: false,
+            rewrite_fundamental_dimension: true,
+            substitute_fundamental_index: false,
         }
     }
 }
 
 impl ColorCasimirSettings {
-    /// Also apply the standard fundamental trace normalization `TR = 1/2`.
-    pub fn with_trace_normalization(mut self) -> Self {
-        self.substitute_tr = true;
+    /// Keep `d_F` explicit instead of applying the SU(N) relation `d_F = C_A`.
+    pub fn without_fundamental_dimension_rewrite(mut self) -> Self {
+        self.rewrite_fundamental_dimension = false;
+        self
+    }
+
+    /// Apply the standard fundamental index normalization `T_F = 1/2`.
+    pub fn with_fundamental_index_normalization(mut self) -> Self {
+        self.substitute_fundamental_index = true;
         self
     }
 }
@@ -630,11 +639,16 @@ pub trait ColorSimplifier {
     /// Simplifies color structures with explicit chain/trace settings.
     fn simplify_color_with(&self, settings: ColorSimplifySettings) -> Atom;
 
-    /// Rewrites `Nc`/`NA` scalar factors into the `CA`, `CF` Casimir basis.
-    fn to_color_casimir(&self) -> Atom;
+    /// Rewrites the explicit representation dimensions into a Casimir basis.
+    fn to_color_casimir(&self, fundamental_rep: AtomView<'_>, adjoint_rep: AtomView<'_>) -> Atom;
 
-    /// Rewrites color scalar factors with explicit control over normalization choices.
-    fn to_color_casimir_with(&self, settings: ColorCasimirSettings) -> Atom;
+    /// Rewrites explicit dimensions with control over SU(N) normalization choices.
+    fn to_color_casimir_with(
+        &self,
+        fundamental_rep: AtomView<'_>,
+        adjoint_rep: AtomView<'_>,
+        settings: ColorCasimirSettings,
+    ) -> Atom;
 
     /// Rewrites supported `cof(N)` invariant factors into explicit dimension formulas.
     fn to_cof_dimension_invariants(&self) -> Atom;
@@ -660,12 +674,26 @@ impl ColorSimplifier for Atom {
         self.as_view().simplify_color_with(settings)
     }
 
-    fn to_color_casimir(&self) -> Atom {
-        self.to_color_casimir_with(ColorCasimirSettings::default())
+    fn to_color_casimir(&self, fundamental_rep: AtomView<'_>, adjoint_rep: AtomView<'_>) -> Atom {
+        self.to_color_casimir_with(
+            fundamental_rep,
+            adjoint_rep,
+            ColorCasimirSettings::default(),
+        )
     }
 
-    fn to_color_casimir_with(&self, settings: ColorCasimirSettings) -> Atom {
-        casimir::color_casimir_basis_impl(self.as_atom_view(), settings)
+    fn to_color_casimir_with(
+        &self,
+        fundamental_rep: AtomView<'_>,
+        adjoint_rep: AtomView<'_>,
+        settings: ColorCasimirSettings,
+    ) -> Atom {
+        casimir::color_casimir_basis_impl(
+            self.as_atom_view(),
+            fundamental_rep,
+            adjoint_rep,
+            settings,
+        )
     }
 
     fn to_cof_dimension_invariants(&self) -> Atom {
@@ -720,12 +748,26 @@ impl ColorSimplifier for AtomView<'_> {
         ])
     }
 
-    fn to_color_casimir(&self) -> Atom {
-        self.to_color_casimir_with(ColorCasimirSettings::default())
+    fn to_color_casimir(&self, fundamental_rep: AtomView<'_>, adjoint_rep: AtomView<'_>) -> Atom {
+        self.to_color_casimir_with(
+            fundamental_rep,
+            adjoint_rep,
+            ColorCasimirSettings::default(),
+        )
     }
 
-    fn to_color_casimir_with(&self, settings: ColorCasimirSettings) -> Atom {
-        casimir::color_casimir_basis_impl(self.as_atom_view(), settings)
+    fn to_color_casimir_with(
+        &self,
+        fundamental_rep: AtomView<'_>,
+        adjoint_rep: AtomView<'_>,
+        settings: ColorCasimirSettings,
+    ) -> Atom {
+        casimir::color_casimir_basis_impl(
+            self.as_atom_view(),
+            fundamental_rep,
+            adjoint_rep,
+            settings,
+        )
     }
 
     fn to_cof_dimension_invariants(&self) -> Atom {

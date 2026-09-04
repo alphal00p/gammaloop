@@ -6,8 +6,9 @@ use spenso::{
         library::symbolic::{ETS, ExplicitKey},
         tags::SPENSO_TAG,
     },
-    shadowing::symbolica_utils::SpensoPrintSettings,
+    shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings},
     structure::{
+        Canonicalized,
         dimension::Dimension,
         representation::{LibraryRep, Minkowski, RepName},
         slot::{AbsInd, DummyAind, ParseableAind},
@@ -17,7 +18,7 @@ use spenso::{
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
     function,
-    printer::{PrintState, PrintUserData},
+    printer::PrintState,
     symbol,
 };
 
@@ -45,14 +46,15 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
     gamma: spenso::tensor_symbol!(
         "spenso::gamma"; Linear;
         print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(i)) => {
+            match SpensoPrintSettings::resolve(opt) {
+                Some(resolved) => {
+                    let (script_open, script_close) = resolved.script_delimiters();
                     let SpensoPrintSettings {
                         parens,
                         symbol_scripts,
                         commas,
                         ..
-                    } = SpensoPrintSettings::from(*i as usize);
+                    } = resolved.presentation;
 
                     let AtomView::Fun(f) = a else {
                         return None;
@@ -65,7 +67,11 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                     let j = argitem.next().unwrap();
                     let mu = argitem.next().unwrap();
 
-                    let mut out = "γ".to_string();
+                    let mut out = match resolved.backend {
+                        SpensoPrintBackend::Latex => r"\gamma",
+                        SpensoPrintBackend::Plain | SpensoPrintBackend::Typst => "γ",
+                    }
+                    .to_string();
                     if symbol_scripts {
                         out.push('^');
                     }
@@ -74,7 +80,7 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                     }
 
                     if parens {
-                        out.push('(');
+                        out.push(script_open);
                     }
                     mu.format(&mut out, opt, PrintState::new()).unwrap();
 
@@ -103,7 +109,7 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                         j.format(&mut out, opt, PrintState::new()).unwrap();
                     }
                     if parens {
-                        out.push(')');
+                        out.push(script_close);
                     }
 
                     Some(out)
@@ -116,16 +122,15 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
     projp: spenso::tensor_symbol!(
         "spenso::projp",
         print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(i)) => {
-                    let settings = SpensoPrintSettings::from(*i as usize);
-                    let is_typst = settings.is_typst();
+            match SpensoPrintSettings::resolve(opt) {
+                Some(resolved) => {
+                    let (script_open, script_close) = resolved.script_delimiters();
                     let SpensoPrintSettings {
                         parens,
                         symbol_scripts,
                         commas,
                         ..
-                    } = settings;
+                    } = resolved.presentation;
 
                     let AtomView::Fun(f) = a else {
                         return None;
@@ -137,7 +142,12 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                     let i = argitem.next().unwrap();
                     let j = argitem.next().unwrap();
 
-                    let mut out = if is_typst { "ℙ_p" } else { "ℙₚ" }.to_string();
+                    let mut out = match resolved.backend {
+                        SpensoPrintBackend::Latex => r"\mathbb{P}_{+}",
+                        SpensoPrintBackend::Typst => "ℙ_p",
+                        SpensoPrintBackend::Plain => "ℙₚ",
+                    }
+                    .to_string();
 
                     if symbol_scripts {
                         out.push('^');
@@ -147,7 +157,7 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                     }
 
                     if parens {
-                        out.push('(');
+                        out.push(script_open);
                     }
                     i.format(&mut out, opt, PrintState::new()).unwrap();
                     if commas {
@@ -157,7 +167,7 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                     }
                     j.format(&mut out, opt, PrintState::new()).unwrap();
                     if parens {
-                        out.push(')');
+                        out.push(script_close);
                     }
 
                     Some(out)
@@ -169,16 +179,15 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
     projm: spenso::tensor_symbol!(
         "spenso::projm",
         print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(i)) => {
-                    let settings = SpensoPrintSettings::from(*i as usize);
-                    let is_typst = settings.is_typst();
+            match SpensoPrintSettings::resolve(opt) {
+                Some(resolved) => {
+                    let (script_open, script_close) = resolved.script_delimiters();
                     let SpensoPrintSettings {
                         parens,
                         symbol_scripts,
                         commas,
                         ..
-                    } = settings;
+                    } = resolved.presentation;
 
                     let AtomView::Fun(f) = a else {
                         return None;
@@ -189,7 +198,12 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                     let mut argitem = f.iter();
                     let i = argitem.next().unwrap();
                     let j = argitem.next().unwrap();
-                    let mut out = if is_typst { "ℙ_m" } else { "ℙₘ" }.to_string();
+                    let mut out = match resolved.backend {
+                        SpensoPrintBackend::Latex => r"\mathbb{P}_{-}",
+                        SpensoPrintBackend::Typst => "ℙ_m",
+                        SpensoPrintBackend::Plain => "ℙₘ",
+                    }
+                    .to_string();
 
                     if symbol_scripts {
                         out.push('^');
@@ -199,7 +213,7 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                     }
 
                     if parens {
-                        out.push('(');
+                        out.push(script_open);
                     }
                     i.format(&mut out, opt, PrintState::new()).unwrap();
                     if commas {
@@ -209,7 +223,7 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                     }
                     j.format(&mut out, opt, PrintState::new()).unwrap();
                     if parens {
-                        out.push(')');
+                        out.push(script_close);
                     }
 
                     Some(out)
@@ -221,16 +235,15 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
     gamma5: spenso::tensor_symbol!(
         "spenso::gamma5",
         print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(i)) => {
-                    let settings = SpensoPrintSettings::from(*i as usize);
-                    let is_typst = settings.is_typst();
+            match SpensoPrintSettings::resolve(opt) {
+                Some(resolved) => {
+                    let (script_open, script_close) = resolved.script_delimiters();
                     let SpensoPrintSettings {
                         parens,
                         symbol_scripts,
                         commas,
                         ..
-                    } = settings;
+                    } = resolved.presentation;
 
                     let AtomView::Fun(f) = a else {
                         return None;
@@ -242,12 +255,11 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                     let i = argitem.next().unwrap();
                     let j = argitem.next().unwrap();
 
-                    let mut out = "γ".to_string();
-                    if is_typst {
-                        out.push_str("_5");
-                    } else {
-                        out.push_str(&to_superscript(5));
-                    }
+                    let mut out = match resolved.backend {
+                        SpensoPrintBackend::Latex => r"\gamma_{5}".to_string(),
+                        SpensoPrintBackend::Typst => "γ_5".to_string(),
+                        SpensoPrintBackend::Plain => format!("γ{}", to_superscript(5)),
+                    };
                     if symbol_scripts {
                         out.push('^');
                     }
@@ -256,7 +268,7 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                     }
 
                     if parens {
-                        out.push('(');
+                        out.push(script_open);
                     }
                     i.format(&mut out, opt, PrintState::new()).unwrap();
                     if commas {
@@ -266,7 +278,7 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                     }
                     j.format(&mut out, opt, PrintState::new()).unwrap();
                     if parens {
-                        out.push(')');
+                        out.push(script_close);
                     }
 
                     Some(out)
@@ -277,16 +289,15 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
     ),
     sigma: spenso::tensor_symbol!("spenso::sigma"),
     gamma0: spenso::tensor_symbol!("spenso::gamma0"; Real, Symmetric; print = |a, opt, _state| {
-        match opt.custom_print_mode.get("spenso") {
-            Some(PrintUserData::Integer(i)) => {
-                let settings = SpensoPrintSettings::from(*i as usize);
-                let is_typst = settings.is_typst();
+        match SpensoPrintSettings::resolve(opt) {
+            Some(resolved) => {
+                let (script_open, script_close) = resolved.script_delimiters();
                 let SpensoPrintSettings {
                     parens,
                     symbol_scripts,
                     commas,
                     ..
-                } = settings;
+                } = resolved.presentation;
 
                 let AtomView::Fun(f) = a else {
                     return None;
@@ -298,12 +309,11 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                 let i = argitem.next().unwrap();
                 let j = argitem.next().unwrap();
 
-                let mut out = "γ".to_string();
-                if is_typst {
-                    out.push_str("_0");
-                } else {
-                    out.push_str(&to_superscript(0));
-                }
+                let mut out = match resolved.backend {
+                    SpensoPrintBackend::Latex => r"\gamma_{0}".to_string(),
+                    SpensoPrintBackend::Typst => "γ_0".to_string(),
+                    SpensoPrintBackend::Plain => format!("γ{}", to_superscript(0)),
+                };
                 if symbol_scripts {
                     out.push('^');
                 }
@@ -312,7 +322,7 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                 }
 
                 if parens {
-                    out.push('(');
+                    out.push(script_open);
                 }
                 i.format(&mut out, opt, PrintState::new()).unwrap();
                 if commas {
@@ -322,7 +332,7 @@ pub static AGS, AGS_INNER: GammaLibrary = || GammaLibrary {
                 }
                 j.format(&mut out, opt, PrintState::new()).unwrap();
                 if parens {
-                    out.push(')');
+                    out.push(script_close);
                 }
 
                 Some(out)
@@ -344,20 +354,19 @@ impl GammaLibrary {
 fn spinor_matrix_structure<Aind: AbsInd>(
     symbol: Symbol,
     dim: impl Into<Dimension>,
-) -> ExplicitKey<Aind> {
+) -> Canonicalized<ExplicitKey<Aind>> {
     let dim = dim.into();
     ExplicitKey::from_iter(
         [Bispinor {}.new_rep(dim), Bispinor {}.new_rep(dim)],
         symbol,
         None,
     )
-    .structure
 }
 
 fn gamma_matrix_structure<Aind: AbsInd>(
     symbol: Symbol,
     dim: impl Into<Dimension>,
-) -> ExplicitKey<Aind> {
+) -> Canonicalized<ExplicitKey<Aind>> {
     ExplicitKey::from_iter(
         [
             LibraryRep::from(Minkowski {}).new_rep(dim),
@@ -367,13 +376,15 @@ fn gamma_matrix_structure<Aind: AbsInd>(
         symbol,
         None,
     )
-    .structure
 }
 
 macro_rules! gamma_matrix_structure_methods {
     ($($structure:ident, $field:ident;)*) => {
         $(
-            pub fn $structure<Aind: AbsInd>(&self, dim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+            pub fn $structure<Aind: AbsInd>(
+                &self,
+                dim: impl Into<Dimension>,
+            ) -> Canonicalized<ExplicitKey<Aind>> {
                 gamma_matrix_structure(self.$field, dim)
             }
         )*
@@ -387,20 +398,51 @@ impl GammaLibrary {
         gamma_adj_strct, gammaadj;
     }
 
-    pub fn gamma0_strct<Aind: AbsInd>(&self, dim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+    pub fn gamma0_strct<Aind: AbsInd>(
+        &self,
+        dim: impl Into<Dimension>,
+    ) -> Canonicalized<ExplicitKey<Aind>> {
         spinor_matrix_structure(self.gamma0, dim)
     }
 
-    pub fn projm_strct<Aind: AbsInd>(&self, dim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+    pub fn projm_strct<Aind: AbsInd>(
+        &self,
+        dim: impl Into<Dimension>,
+    ) -> Canonicalized<ExplicitKey<Aind>> {
         spinor_matrix_structure(self.projm, dim)
     }
 
-    pub fn projp_strct<Aind: AbsInd>(&self, dim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+    pub fn projp_strct<Aind: AbsInd>(
+        &self,
+        dim: impl Into<Dimension>,
+    ) -> Canonicalized<ExplicitKey<Aind>> {
         spinor_matrix_structure(self.projp, dim)
     }
 
-    pub fn gamma5_strct<Aind: AbsInd>(&self, dim: impl Into<Dimension>) -> ExplicitKey<Aind> {
+    pub fn gamma5_strct<Aind: AbsInd>(
+        &self,
+        dim: impl Into<Dimension>,
+    ) -> Canonicalized<ExplicitKey<Aind>> {
         spinor_matrix_structure(self.gamma5, dim)
+    }
+
+    /// Canonicalizes sigma while retaining the logical port order
+    /// `[mink(dim), mink(dim), bis(4), bis(4)]` in its layout.
+    pub fn sigma_strct<Aind: AbsInd>(
+        &self,
+        dim: impl Into<Dimension>,
+    ) -> Canonicalized<ExplicitKey<Aind>> {
+        let dim = dim.into();
+        ExplicitKey::from_iter(
+            [
+                LibraryRep::from(Minkowski {}).new_rep(dim),
+                LibraryRep::from(Minkowski {}).new_rep(dim),
+                Bispinor {}.new_rep(4).cast(),
+                Bispinor {}.new_rep(4).cast(),
+            ],
+            self.sigma,
+            None,
+        )
     }
 }
 

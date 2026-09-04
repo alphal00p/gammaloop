@@ -220,7 +220,8 @@ impl IntegrandMapComparison<'_> {
     fn compare(&self) -> Result<()> {
         self.legacy
             .checked_zip(self.hedge, |key, legacy_expr, hedge_expr| {
-                if !ComparableExpr::new(legacy_expr).equivalent_to(&ComparableExpr::new(hedge_expr))
+                if !ComparableExpr::new(legacy_expr)
+                    .equivalent_to(&ComparableExpr::new(hedge_expr))?
                 {
                     return Err(eyre!(
                         "UV orchestrator compare mismatch at cut {} residue {:?}",
@@ -249,7 +250,7 @@ struct RenormalizationComparison<'a> {
 impl RenormalizationComparison<'_> {
     fn compare(&self) -> Result<()> {
         if !ComparableExpr::new(&self.legacy.expression)
-            .equivalent_to(&ComparableExpr::new(&self.hedge.expression))
+            .equivalent_to(&ComparableExpr::new(&self.hedge.expression))?
         {
             return Err(eyre!(
                 "UV orchestrator compare mismatch in integrated renormalization part"
@@ -268,14 +269,17 @@ impl<'a> ComparableExpr<'a> {
         Self { atom }
     }
 
-    fn equivalent_to(&self, other: &Self) -> bool {
+    fn equivalent_to(&self, other: &Self) -> Result<bool> {
         let left = self.normalized();
         let right = other.normalized();
 
         // Backend-local topology labels may differ on contracted indices.
-        left.collect_factors() == right.collect_factors()
-            || left.canonize(Aind::Dummy).collect_factors()
-                == right.canonize(Aind::Dummy).collect_factors()
+        if left.collect_factors() == right.collect_factors() {
+            return Ok(true);
+        }
+
+        Ok(left.canonize(Aind::Dummy)?.collect_factors()
+            == right.canonize(Aind::Dummy)?.collect_factors())
     }
 
     fn normalized(&self) -> Atom {
@@ -318,6 +322,10 @@ mod tests {
         let hedge = ComparableExpr::new(&hedge);
 
         assert_ne!(legacy.normalized(), hedge.normalized());
-        assert!(legacy.equivalent_to(&hedge));
+        assert!(
+            legacy
+                .equivalent_to(&hedge)
+                .expect("test expressions should canonicalize")
+        );
     }
 }

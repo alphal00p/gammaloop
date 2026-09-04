@@ -35,9 +35,9 @@ fn validate() {
         symbol!("spenso::p"),
         None,
     )
-    .structure
+    .into_canonical()
     .to_shell()
-    .concretize(None);
+    .concretize();
 
     for (i, a) in pt.iter_flat() {
         const_map.insert(
@@ -51,9 +51,9 @@ fn validate() {
         symbol!("spenso::q"),
         None,
     )
-    .structure
+    .into_canonical()
     .to_shell()
-    .concretize(None);
+    .concretize();
 
     for (i, a) in qt.iter_flat() {
         const_map.insert(
@@ -62,7 +62,7 @@ fn validate() {
         );
     }
 
-    // gamma.reindex([1,2,3]).unwrap().map_structure(|a|)
+    // gamma.reindex_storage(&[1, 2, 3]).unwrap().apply()
 
     let expr =
         p(1) * (p(3) + q(3)) * gamma(1, 2, 1) * gamma(2, 3, 2) * gamma(3, 4, 3) * gamma(4, 1, 4);
@@ -142,12 +142,12 @@ fn validate() {
     // assert_eq!(pt, qt);
 
     // let a: DataTensor<_, _> = DenseTensor::fill(
-    //     OrderedStructure::<Bispinor>::from_iter([Bispinor {}.new_slot(2, 2)]).structure,
+    //     OrderedStructure::<Bispinor>::from_iter([Bispinor {}.new_slot(2, 2)]).into_canonical(),
     //     Complex::new(-1., 0.),
     // )
     // .into();
     // let b: DataTensor<_, _> = DenseTensor::fill(
-    //     OrderedStructure::<Bispinor>::from_iter([Bispinor {}.new_slot(2, 2)]).structure,
+    //     OrderedStructure::<Bispinor>::from_iter([Bispinor {}.new_slot(2, 2)]).into_canonical(),
     //     Complex::new(1., 0.),
     // )
     // .into();
@@ -223,9 +223,9 @@ mod failing {
             symbol!("spenso::P"),
             Some(vec![Atom::num(0)]),
         )
-        .structure
+        .into_canonical()
         .to_shell()
-        .concretize(None);
+        .concretize();
 
         for (i, a) in pt.iter_flat() {
             const_map.insert(
@@ -239,9 +239,9 @@ mod failing {
             symbol!("spenso::K"),
             Some(vec![Atom::num(1)]),
         )
-        .structure
+        .into_canonical()
         .to_shell()
-        .concretize(None);
+        .concretize();
 
         for (i, a) in pt.iter_flat() {
             const_map.insert(
@@ -255,9 +255,9 @@ mod failing {
             symbol!("spenso::K"),
             Some(vec![Atom::num(0)]),
         )
-        .structure
+        .into_canonical()
         .to_shell()
-        .concretize(None);
+        .concretize();
 
         for (i, a) in pt.iter_flat() {
             const_map.insert(
